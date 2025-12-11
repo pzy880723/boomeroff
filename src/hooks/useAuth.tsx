@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { AppRole } from '@/types';
@@ -20,26 +20,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const isFetchingRef = useRef(false);
+
+  const fetchUserRole = async (userId: string) => {
+    // 防止竞态条件：如果已经在获取角色，跳过
+    if (isFetchingRef.current) {
+      console.log('[Auth] Already fetching role, skipping...');
+      return;
+    }
+    isFetchingRef.current = true;
+    console.log('[Auth] Fetching role for user:', userId);
+
+    // 5秒超时保护
+    const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 5000)
+    );
+
+    try {
+      const queryPromise = supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
+      console.log('[Auth] Role query result:', { data, error });
+
+      if (error) {
+        console.error('[Auth] Error fetching user role:', error);
+        setRole('anchor'); // 默认角色
+      } else if (data && 'role' in data) {
+        setRole(data.role as AppRole);
+        console.log('[Auth] Role set to:', data.role);
+      } else {
+        console.log('[Auth] No role data, using default');
+        setRole('anchor');
+      }
+    } catch (error) {
+      console.error('[Auth] Unexpected error fetching role:', error);
+      setRole('anchor');
+    } finally {
+      console.log('[Auth] Setting loading to false');
+      setLoading(false);
+      isFetchingRef.current = false;
+    }
+  };
 
   useEffect(() => {
+    console.log('[Auth] Initializing auth state...');
+    
     // 获取初始会话
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('[Auth] Initial session:', session ? 'exists' : 'null');
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchUserRole(session.user.id);
       } else {
+        console.log('[Auth] No session, setting loading to false');
         setLoading(false);
       }
     });
 
     // 监听认证状态变化
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
+        console.log('[Auth] Auth state changed:', _event);
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          await fetchUserRole(session.user.id);
+          // 使用 setTimeout(0) 避免死锁
+          setTimeout(() => {
+            fetchUserRole(session.user.id);
+          }, 0);
         } else {
           setRole(null);
           setLoading(false);
@@ -49,28 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  const fetchUserRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching user role:', error);
-        setRole('anchor'); // 默认角色
-      } else {
-        setRole(data.role as AppRole);
-      }
-    } catch (error) {
-      console.error('Error fetching user role:', error);
-      setRole('anchor');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
