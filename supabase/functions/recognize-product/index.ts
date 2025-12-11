@@ -89,132 +89,15 @@ serve(async (req) => {
     }
 
     console.log('[Recognition] Starting for user:', user.id);
+    const startTime = Date.now();
 
-    // 第一步：快速生成图像特征用于匹配
-    const featurePrompt = `看这张商品图片，用20个字以内描述其核心特征（类型+材质+特点），直接返回特征描述文字，不要JSON。`;
-    
-    const featureResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
-        messages: [
-          { role: 'system', content: featurePrompt },
-          { 
-            role: 'user', 
-            content: [
-              { type: 'text', text: '描述特征：' },
-              { 
-                type: 'image_url', 
-                image_url: { 
-                  url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}` 
-                } 
-              }
-            ]
-          }
-        ],
-      }),
-    });
+    // 单阶段识别：使用 gemini-2.5-flash 一次性完成识别和特征提取
+    const systemPrompt = `日本杂货识别。30字内返回JSON，不要思考。
 
-    if (!featureResponse.ok) {
-      throw new Error('特征提取失败');
-    }
+格式：
+{"name":"名称","category":"porcelain/incense/stationery/lacquerware/bronze/woodcraft/textile/jewelry/painting/other","era":"年代","material":"材质","craft":"工艺","dimensions":"尺寸","condition":"品相","description":"特点20字","scripts":{"professional":"专业10字","sales":"卖点30字","cultural":"文化30字"},"suggestedPriceRange":{"min":0,"max":0,"average":0},"imageHash":"类型+材质+特点10字"}`;
 
-    const featureData = await featureResponse.json();
-    const imageHash = featureData.choices?.[0]?.message?.content?.trim() || '';
-    console.log('[Recognition] Image hash:', imageHash);
-
-    // 第二步：查询知识库是否有相似商品（使用关键词ilike匹配）
-    if (imageHash) {
-      // 提取关键词进行模糊匹配
-      const keywords = imageHash.split(/[\s,，、]+/).filter((k: string) => k.length > 1).slice(0, 3);
-      console.log('[Match] Searching with keywords:', keywords);
-
-      let existingProducts = null;
-      
-      if (keywords.length > 0) {
-        // 构建OR条件的ilike查询
-        const orConditions = keywords.map((k: string) => `image_hash.ilike.%${k}%`).join(',');
-        console.log('[Match] Query conditions:', orConditions);
-        
-        const { data, error } = await adminClient
-          .from('products')
-          .select('*')
-          .not('image_hash', 'is', null)
-          .or(orConditions)
-          .limit(5);
-        
-        if (error) {
-          console.error('[Match] Query error:', error);
-        } else {
-          existingProducts = data;
-          console.log('[Match] Found products:', data?.length || 0);
-        }
-      }
-
-      // 如果找到相似商品，直接返回
-      if (existingProducts && existingProducts.length > 0) {
-        const match = existingProducts[0];
-        console.log('[Match] Cache hit! Product:', match.name, 'Hash:', match.image_hash);
-        
-        const scripts = match.scripts as Record<string, string> || {};
-        return new Response(
-          JSON.stringify({
-            name: match.name,
-            category: match.category,
-            era: match.era,
-            material: match.material,
-            craft: match.craft,
-            dimensions: match.dimensions,
-            condition: match.condition,
-            description: match.description,
-            scripts: {
-              professional: scripts.professional || '',
-              sales: scripts.sales || '',
-              cultural: scripts.cultural || '',
-            },
-            suggestedPriceRange: null,
-            confidence: 0.9,
-            fromCache: true,
-            imageHash,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      console.log('[Match] No cache match found');
-    }
-
-    // 第三步：知识库未命中，进行完整识别（使用最强模型）
-    console.log('[Recognition] No cache match, performing full recognition...');
-    
-    const systemPrompt = `你是日本回流杂项直播助手。快速识别商品，生成10秒内能说完的卖点话术。
-
-要求：
-1. 直接简洁，不要深度分析
-2. sales话术控制在30-50字，10秒能说完
-3. 突出：品类、材质、年代、亮点
-4. 立即返回JSON
-
-返回格式（严格JSON）：
-{
-  "name": "商品名（简洁）",
-  "category": "porcelain/incense/stationery/lacquerware/bronze/woodcraft/textile/jewelry/painting/other",
-  "era": "年代",
-  "material": "材质",
-  "craft": "工艺",
-  "dimensions": "尺寸估计",
-  "condition": "品相",
-  "description": "特点描述（30字内）",
-  "scripts": {
-    "professional": "专业话术（20字）",
-    "sales": "卖点话术（30-50字，10秒能说完）",
-    "cultural": "文化话术（50字）"
-  },
-  "suggestedPriceRange": {"min": 数字, "max": 数字, "average": 数字}
-}`;
+    const imageUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -223,24 +106,22 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
             content: [
-              { type: 'text', text: '识别并生成话术：' },
-              { 
-                type: 'image_url', 
-                image_url: { 
-                  url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}` 
-                } 
-              }
+              { type: 'text', text: '识别：' },
+              { type: 'image_url', image_url: { url: imageUrl } }
             ]
           }
         ],
       }),
     });
+
+    const aiTime = Date.now() - startTime;
+    console.log('[Recognition] AI response time:', aiTime, 'ms');
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -280,7 +161,7 @@ serve(async (req) => {
         throw new Error('No JSON found in response');
       }
     } catch (parseError) {
-      console.error('[Recognition] Failed to parse AI response:', parseError);
+      console.error('[Recognition] Failed to parse AI response:', parseError, 'Content:', content);
       return new Response(
         JSON.stringify({ 
           rawContent: content,
@@ -290,11 +171,58 @@ serve(async (req) => {
       );
     }
 
-    // 添加图像特征到结果
-    result.imageHash = imageHash;
-    result.fromCache = false;
+    // 检查知识库是否有相似商品
+    const imageHash = result.imageHash || '';
+    if (imageHash) {
+      const keywords = imageHash.split(/[\s,，、]+/).filter((k: string) => k.length > 1).slice(0, 3);
+      
+      if (keywords.length > 0) {
+        const orConditions = keywords.map((k: string) => `image_hash.ilike.%${k}%`).join(',');
+        
+        const { data: existingProducts } = await adminClient
+          .from('products')
+          .select('*')
+          .not('image_hash', 'is', null)
+          .or(orConditions)
+          .limit(1);
+        
+        if (existingProducts && existingProducts.length > 0) {
+          const match = existingProducts[0];
+          console.log('[Match] Cache hit! Product:', match.name);
+          
+          const scripts = match.scripts as Record<string, string> || {};
+          const totalTime = Date.now() - startTime;
+          console.log('[Recognition] Total time (cache hit):', totalTime, 'ms');
+          
+          return new Response(
+            JSON.stringify({
+              name: match.name,
+              category: match.category,
+              era: match.era,
+              material: match.material,
+              craft: match.craft,
+              dimensions: match.dimensions,
+              condition: match.condition,
+              description: match.description,
+              scripts: {
+                professional: scripts.professional || '',
+                sales: scripts.sales || '',
+                cultural: scripts.cultural || '',
+              },
+              suggestedPriceRange: result.suggestedPriceRange || null,
+              confidence: 0.9,
+              fromCache: true,
+              imageHash,
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    }
 
-    console.log('[Recognition] Product recognized:', result.name, 'by user:', user.id);
+    result.fromCache = false;
+    const totalTime = Date.now() - startTime;
+    console.log('[Recognition] Product recognized:', result.name, 'Total time:', totalTime, 'ms');
 
     return new Response(
       JSON.stringify(result),

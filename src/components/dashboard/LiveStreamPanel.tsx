@@ -120,16 +120,55 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
+  // 压缩图片以加速上传和识别
+  const compressImage = (imageData: string, maxWidth: number = 800): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // 按比例缩小
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        } else {
+          resolve(imageData);
+        }
+      };
+      img.src = imageData;
+    });
+  };
+
   const captureAndRecognize = async () => {
     if (!videoRef.current) return;
 
     const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
+    // 直接压缩到较小尺寸
+    const maxWidth = 800;
+    let width = videoRef.current.videoWidth;
+    let height = videoRef.current.videoHeight;
+    
+    if (width > maxWidth) {
+      height = (height * maxWidth) / width;
+      width = maxWidth;
+    }
+    
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      ctx.drawImage(videoRef.current, 0, 0);
-      const imageData = canvas.toDataURL('image/jpeg', 0.8);
+      ctx.drawImage(videoRef.current, 0, 0, width, height);
+      const imageData = canvas.toDataURL('image/jpeg', 0.7);
       setCapturedImage(imageData);
       await handleRecognition(imageData);
     }
@@ -150,7 +189,9 @@ export function LiveStreamPanel() {
 
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const imageData = event.target?.result as string;
+      const rawImage = event.target?.result as string;
+      // 压缩图片
+      const imageData = await compressImage(rawImage);
       setCapturedImage(imageData);
       await handleRecognition(imageData);
     };
