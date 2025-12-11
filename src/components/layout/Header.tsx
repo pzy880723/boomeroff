@@ -10,7 +10,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LogOut, User, Settings, Shield } from 'lucide-react';
+import { LogOut, User, Settings, Shield, History } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
 
 export function Header() {
@@ -37,10 +38,18 @@ export function Header() {
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between">
         <div className="flex items-center gap-4">
-          <h1 className="font-bold text-lg">直播间商品识别助手</h1>
+          <Link to="/" className="font-bold text-lg hover:text-primary transition-colors">
+            直播间商品识别助手
+          </Link>
           <Badge variant="outline" className="hidden sm:inline-flex">
             日本回流杂项
           </Badge>
+          <Link to="/history">
+            <Button variant="ghost" size="sm" className="gap-1.5">
+              <History className="h-4 w-4" />
+              <span className="hidden sm:inline">历史记录</span>
+            </Button>
+          </Link>
         </div>
 
         <DropdownMenu>
