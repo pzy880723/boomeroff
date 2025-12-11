@@ -27,7 +27,35 @@ export function RecognitionPanel() {
     
     if (recognitionResult && user) {
       try {
-        // 保存商品到数据库
+        // 1. 将 base64 转换为 Blob 并上传到 Storage
+        let imageUrl: string | null = null;
+        try {
+          const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'image/jpeg' });
+          
+          const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+          
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('product-images')
+            .upload(fileName, blob, { contentType: 'image/jpeg' });
+          
+          if (!uploadError && uploadData) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('product-images')
+              .getPublicUrl(fileName);
+            imageUrl = publicUrl;
+          }
+        } catch (uploadErr) {
+          console.error('Image upload error:', uploadErr);
+        }
+
+        // 2. 保存商品到数据库
         const { data: productData, error } = await supabase
           .from('products')
           .insert([{
@@ -39,7 +67,7 @@ export function RecognitionPanel() {
             craft: recognitionResult.craft,
             dimensions: recognitionResult.dimensions,
             condition: recognitionResult.condition,
-            image_url: imageBase64,
+            image_url: imageUrl,
             scripts: JSON.parse(JSON.stringify(recognitionResult.scripts)),
             ai_analysis: JSON.parse(JSON.stringify(recognitionResult)),
             created_by: user.id,
