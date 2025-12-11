@@ -30,6 +30,7 @@ interface Product {
   description: string | null;
   created_at: string;
   scripts: Json | null;
+  image_url: string | null;
 }
 
 export default function History() {
@@ -69,7 +70,7 @@ export default function History() {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('id, name, category, era, material, craft, description, created_at, scripts')
+        .select('id, name, category, era, material, craft, description, created_at, scripts, image_url')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -174,7 +175,17 @@ export default function History() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredProducts.map((product) => (
-              <Card key={product.id} className="hover:shadow-md transition-shadow">
+              <Card key={product.id} className="hover:shadow-md transition-shadow overflow-hidden">
+                {/* 商品图片 */}
+                {product.image_url && (
+                  <div className="aspect-square w-full overflow-hidden bg-muted">
+                    <img 
+                      src={product.image_url} 
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base line-clamp-1">
