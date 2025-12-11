@@ -463,7 +463,7 @@ export function LiveStreamPanel() {
         )}
 
         {/* 摄像头控制按钮 */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3">
+        <div className="absolute bottom-4 left-4 right-4 flex flex-wrap justify-center gap-2 sm:gap-3">
           {!isStreaming && !capturedImage && (
             <>
               <Button size="lg" onClick={() => startCamera()} className="gap-2">
