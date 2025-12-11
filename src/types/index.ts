@@ -87,6 +87,8 @@ export interface RecognitionResult {
     average: number;
   };
   confidence?: number;
+  imageHash?: string;
+  fromCache?: boolean;
 }
 
 export const CATEGORY_LABELS: Record<ProductCategory, string> = {
