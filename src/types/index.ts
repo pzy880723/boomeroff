@@ -1,4 +1,4 @@
-export type AppRole = 'admin' | 'operator' | 'assistant' | 'anchor';
+export type AppRole = 'admin' | 'anchor';
 
 export type ProductCategory = 
   | 'porcelain'
@@ -110,7 +110,5 @@ export const SCRIPT_STYLE_LABELS: Record<ScriptStyle, string> = {
 
 export const ROLE_LABELS: Record<AppRole, string> = {
   admin: '管理员',
-  operator: '操作员',
-  assistant: '小助理',
   anchor: '主播',
 };

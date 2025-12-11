@@ -22,7 +22,7 @@ export function PriceDisplay({ result, productId }: PriceDisplayProps) {
   const { role } = useAuth();
   const { toast } = useToast();
 
-  const canEditPrice = role === 'admin' || role === 'assistant';
+  const canEditPrice = role === 'admin' || role === 'anchor';
 
   useEffect(() => {
     if (productId) {
