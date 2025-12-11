@@ -66,23 +66,43 @@ async function callLovableAI(imageBase64: string, systemPrompt: string, apiKey: 
   return response;
 }
 
-// 解析豆包响应
+// 解析豆包响应 - doubao-seed 推理模型返回 output 数组
 function parseDoubaoResponse(data: any): string | null {
-  // 豆包响应格式：output.choices[0].message.content 或 output[0].content
   try {
+    // doubao-seed 模型响应格式: output 是数组，包含 reasoning 和 message 类型
+    if (Array.isArray(data.output)) {
+      for (const item of data.output) {
+        // 查找 message 类型的输出（包含实际结果）
+        if (item.type === 'message' && item.content) {
+          // content 可能是数组
+          if (Array.isArray(item.content)) {
+            const textItem = item.content.find((c: any) => c.type === 'output_text');
+            if (textItem?.text) {
+              console.log('[Doubao] Found output_text in message');
+              return textItem.text;
+            }
+          }
+          // content 可能是字符串
+          if (typeof item.content === 'string') {
+            return item.content;
+          }
+        }
+      }
+      // 如果没有 message，输出完整结构用于调试
+      console.log('[Doubao] Output types:', data.output.map((o: any) => o.type).join(', '));
+    }
+    
+    // 兼容其他可能的响应格式
     if (data.output?.choices?.[0]?.message?.content) {
       return data.output.choices[0].message.content;
-    }
-    if (data.output?.[0]?.content?.[0]?.text) {
-      return data.output[0].content[0].text;
     }
     if (data.choices?.[0]?.message?.content) {
       return data.choices[0].message.content;
     }
-    // 尝试直接获取 output
     if (typeof data.output === 'string') {
       return data.output;
     }
+    
     console.log('[Doubao] Unknown response format:', JSON.stringify(data).slice(0, 500));
     return null;
   } catch (e) {
