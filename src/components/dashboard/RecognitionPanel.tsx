@@ -17,7 +17,7 @@ export function RecognitionPanel() {
   const { user, role } = useAuth();
   const { toast } = useToast();
 
-  const canRecognize = role === 'admin' || role === 'operator';
+  const canRecognize = role === 'admin' || role === 'anchor';
 
   const handleCapture = async (imageBase64: string) => {
     clearResult();
