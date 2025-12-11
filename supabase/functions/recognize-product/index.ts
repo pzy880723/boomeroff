@@ -74,22 +74,38 @@ serve(async (req) => {
     const imageHash = featureData.choices?.[0]?.message?.content?.trim() || '';
     console.log('Image hash:', imageHash);
 
-    // 第二步：查询知识库是否有相似商品
+    // 第二步：查询知识库是否有相似商品（使用关键词ilike匹配）
     if (imageHash) {
-      const { data: existingProducts } = await supabase
-        .from('products')
-        .select('*')
-        .not('image_hash', 'is', null)
-        .textSearch('image_hash', imageHash.split(/\s+/).slice(0, 3).join(' | '), {
-          type: 'plain',
-          config: 'simple'
-        })
-        .limit(5);
+      // 提取关键词进行模糊匹配
+      const keywords = imageHash.split(/[\s,，、]+/).filter((k: string) => k.length > 1).slice(0, 3);
+      console.log('[Match] Searching with keywords:', keywords);
+
+      let existingProducts = null;
+      
+      if (keywords.length > 0) {
+        // 构建OR条件的ilike查询
+        const orConditions = keywords.map((k: string) => `image_hash.ilike.%${k}%`).join(',');
+        console.log('[Match] Query conditions:', orConditions);
+        
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .not('image_hash', 'is', null)
+          .or(orConditions)
+          .limit(5);
+        
+        if (error) {
+          console.error('[Match] Query error:', error);
+        } else {
+          existingProducts = data;
+          console.log('[Match] Found products:', data?.length || 0);
+        }
+      }
 
       // 如果找到相似商品，直接返回
       if (existingProducts && existingProducts.length > 0) {
         const match = existingProducts[0];
-        console.log('Found matching product:', match.name);
+        console.log('[Match] Cache hit! Product:', match.name, 'Hash:', match.image_hash);
         
         const scripts = match.scripts as Record<string, string> || {};
         return new Response(
@@ -115,6 +131,7 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      console.log('[Match] No cache match found');
     }
 
     // 第三步：知识库未命中，进行完整识别（使用最强模型）
