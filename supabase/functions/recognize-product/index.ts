@@ -12,6 +12,64 @@ serve(async (req) => {
   }
 
   try {
+    // 验证用户身份和角色
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('[Auth] No authorization header');
+      return new Response(
+        JSON.stringify({ error: '请先登录' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    // 使用用户的 JWT 创建客户端来验证身份
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    // 获取当前用户
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
+      console.error('[Auth] Invalid user:', userError);
+      return new Response(
+        JSON.stringify({ error: '登录已过期，请重新登录' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[Auth] User authenticated:', user.id);
+
+    // 使用 service role 检查用户角色
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: roleData, error: roleError } = await adminClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single();
+
+    if (roleError || !roleData) {
+      console.error('[Auth] Failed to get user role:', roleError);
+      return new Response(
+        JSON.stringify({ error: '无法获取用户权限' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userRole = roleData.role;
+    if (userRole !== 'admin' && userRole !== 'anchor') {
+      console.error('[Auth] Insufficient permissions, role:', userRole);
+      return new Response(
+        JSON.stringify({ error: '没有识别商品的权限，需要管理员或主播角色' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[Auth] User role verified:', userRole);
+
     const { imageBase64 } = await req.json();
     
     if (!imageBase64) {
@@ -30,12 +88,7 @@ serve(async (req) => {
       );
     }
 
-    // 初始化Supabase客户端
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    console.log('Starting quick product recognition...');
+    console.log('[Recognition] Starting for user:', user.id);
 
     // 第一步：快速生成图像特征用于匹配
     const featurePrompt = `看这张商品图片，用20个字以内描述其核心特征（类型+材质+特点），直接返回特征描述文字，不要JSON。`;
@@ -72,7 +125,7 @@ serve(async (req) => {
 
     const featureData = await featureResponse.json();
     const imageHash = featureData.choices?.[0]?.message?.content?.trim() || '';
-    console.log('Image hash:', imageHash);
+    console.log('[Recognition] Image hash:', imageHash);
 
     // 第二步：查询知识库是否有相似商品（使用关键词ilike匹配）
     if (imageHash) {
@@ -87,7 +140,7 @@ serve(async (req) => {
         const orConditions = keywords.map((k: string) => `image_hash.ilike.%${k}%`).join(',');
         console.log('[Match] Query conditions:', orConditions);
         
-        const { data, error } = await supabase
+        const { data, error } = await adminClient
           .from('products')
           .select('*')
           .not('image_hash', 'is', null)
@@ -135,7 +188,7 @@ serve(async (req) => {
     }
 
     // 第三步：知识库未命中，进行完整识别（使用最强模型）
-    console.log('No cache match, performing full recognition...');
+    console.log('[Recognition] No cache match, performing full recognition...');
     
     const systemPrompt = `你是日本回流杂项直播助手。快速识别商品，生成10秒内能说完的卖点话术。
 
@@ -191,7 +244,7 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
+      console.error('[Recognition] AI gateway error:', response.status, errorText);
       
       if (response.status === 429) {
         return new Response(
@@ -215,7 +268,7 @@ serve(async (req) => {
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
     
-    console.log('AI response received');
+    console.log('[Recognition] AI response received');
 
     // 解析JSON响应
     let result;
@@ -227,7 +280,7 @@ serve(async (req) => {
         throw new Error('No JSON found in response');
       }
     } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
+      console.error('[Recognition] Failed to parse AI response:', parseError);
       return new Response(
         JSON.stringify({ 
           rawContent: content,
@@ -241,7 +294,7 @@ serve(async (req) => {
     result.imageHash = imageHash;
     result.fromCache = false;
 
-    console.log('Product recognized:', result.name);
+    console.log('[Recognition] Product recognized:', result.name, 'by user:', user.id);
 
     return new Response(
       JSON.stringify(result),
@@ -249,7 +302,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error in recognize-product:', error);
+    console.error('[Recognition] Error:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : '识别失败' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
