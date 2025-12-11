@@ -74,22 +74,55 @@ export function LiveStreamPanel() {
 
   const startCamera = async () => {
     try {
+      console.log('[Camera] Requesting camera access...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: 1920, height: 1080 },
       });
+      console.log('[Camera] Stream obtained:', stream.getVideoTracks()[0]?.label);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
-        // 等待视频元数据加载后播放
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(console.error);
-        };
+        
+        // 使用Promise确保视频加载完成后再播放
+        await new Promise<void>((resolve, reject) => {
+          const video = videoRef.current!;
+          
+          video.onloadedmetadata = () => {
+            console.log('[Camera] Metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
+            video.play()
+              .then(() => {
+                console.log('[Camera] Video playing successfully');
+                resolve();
+              })
+              .catch((err) => {
+                console.error('[Camera] Play failed:', err);
+                reject(err);
+              });
+          };
+          
+          video.onerror = (e) => {
+            console.error('[Camera] Video error:', e);
+            reject(e);
+          };
+          
+          // 超时保护
+          setTimeout(() => {
+            if (video.readyState >= 2) {
+              video.play().catch(console.error);
+              resolve();
+            }
+          }, 2000);
+        });
+        
         setIsStreaming(true);
+        console.log('[Camera] Camera started successfully');
       }
     } catch (error) {
+      console.error('[Camera] Error:', error);
       toast({
         title: '无法启动摄像头',
-        description: '请确保已授权摄像头访问权限',
+        description: error instanceof Error ? error.message : '请确保已授权摄像头访问权限',
         variant: 'destructive',
       });
     }
