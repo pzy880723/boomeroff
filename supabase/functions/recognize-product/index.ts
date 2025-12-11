@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, style } = await req.json();
+    const { imageBase64 } = await req.json();
     
     if (!imageBase64) {
       return new Response(
@@ -29,39 +30,121 @@ serve(async (req) => {
       );
     }
 
-    console.log('Starting product recognition...');
+    // 初始化Supabase客户端
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 构建系统提示词
-    const systemPrompt = `你是一位专业的日本回流杂项鉴定专家，精通瓷器、线香、文房四宝、漆器、铜器、木器、织物、首饰、书画等各类古玩杂项。
+    console.log('Starting quick product recognition...');
 
-请仔细观察图片中的商品，并提供以下信息（用JSON格式返回）：
+    // 第一步：快速生成图像特征用于匹配
+    const featurePrompt = `看这张商品图片，用20个字以内描述其核心特征（类型+材质+特点），直接返回特征描述文字，不要JSON。`;
+    
+    const featureResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite',
+        messages: [
+          { role: 'system', content: featurePrompt },
+          { 
+            role: 'user', 
+            content: [
+              { type: 'text', text: '描述特征：' },
+              { 
+                type: 'image_url', 
+                image_url: { 
+                  url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}` 
+                } 
+              }
+            ]
+          }
+        ],
+      }),
+    });
 
+    if (!featureResponse.ok) {
+      throw new Error('特征提取失败');
+    }
+
+    const featureData = await featureResponse.json();
+    const imageHash = featureData.choices?.[0]?.message?.content?.trim() || '';
+    console.log('Image hash:', imageHash);
+
+    // 第二步：查询知识库是否有相似商品
+    if (imageHash) {
+      const { data: existingProducts } = await supabase
+        .from('products')
+        .select('*')
+        .not('image_hash', 'is', null)
+        .textSearch('image_hash', imageHash.split(/\s+/).slice(0, 3).join(' | '), {
+          type: 'plain',
+          config: 'simple'
+        })
+        .limit(5);
+
+      // 如果找到相似商品，直接返回
+      if (existingProducts && existingProducts.length > 0) {
+        const match = existingProducts[0];
+        console.log('Found matching product:', match.name);
+        
+        const scripts = match.scripts as Record<string, string> || {};
+        return new Response(
+          JSON.stringify({
+            name: match.name,
+            category: match.category,
+            era: match.era,
+            material: match.material,
+            craft: match.craft,
+            dimensions: match.dimensions,
+            condition: match.condition,
+            description: match.description,
+            scripts: {
+              professional: scripts.professional || '',
+              sales: scripts.sales || '',
+              cultural: scripts.cultural || '',
+            },
+            suggestedPriceRange: null,
+            confidence: 0.9,
+            fromCache: true,
+            imageHash,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // 第三步：知识库未命中，进行完整识别（使用最强模型）
+    console.log('No cache match, performing full recognition...');
+    
+    const systemPrompt = `你是日本回流杂项直播助手。快速识别商品，生成10秒内能说完的卖点话术。
+
+要求：
+1. 直接简洁，不要深度分析
+2. sales话术控制在30-50字，10秒能说完
+3. 突出：品类、材质、年代、亮点
+4. 立即返回JSON
+
+返回格式（严格JSON）：
 {
-  "name": "商品名称（简洁准确）",
-  "category": "分类（porcelain/incense/stationery/lacquerware/bronze/woodcraft/textile/jewelry/painting/other）",
-  "era": "年代估计（如：昭和时期、明治时期、江户时期等）",
-  "material": "材质（如：陶瓷、黄铜、紫檀木等）",
-  "craft": "工艺特点（如：手绘青花、錾刻工艺等）",
-  "dimensions": "尺寸估计（根据图片估算）",
-  "condition": "品相描述（全品、小磕、有修等）",
-  "description": "商品特点描述（50-100字）",
+  "name": "商品名（简洁）",
+  "category": "porcelain/incense/stationery/lacquerware/bronze/woodcraft/textile/jewelry/painting/other",
+  "era": "年代",
+  "material": "材质",
+  "craft": "工艺",
+  "dimensions": "尺寸估计",
+  "condition": "品相",
+  "description": "特点描述（30字内）",
   "scripts": {
-    "professional": "简洁专业话术（突出材质、工艺、尺寸，约30-50字）",
-    "sales": "销售导向话术（强调价值感、稀缺性、收藏价值，约50-80字）",
-    "cultural": "文化知识话术（历史背景、文化内涵、名家典故，约80-120字）"
+    "professional": "专业话术（20字）",
+    "sales": "卖点话术（30-50字，10秒能说完）",
+    "cultural": "文化话术（50字）"
   },
-  "suggestedPriceRange": {
-    "min": 最低建议价格（数字）,
-    "max": 最高建议价格（数字）,
-    "average": 平均建议价格（数字）
-  },
-  "confidence": 识别置信度（0-1之间的数字）
-}
-
-注意：
-1. 价格单位为人民币元
-2. 话术要适合直播间快节奏使用
-3. 如果无法确定某项信息，给出合理推测并在话术中使用模糊表达`;
+  "suggestedPriceRange": {"min": 数字, "max": 数字, "average": 数字}
+}`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -70,13 +153,13 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
             content: [
-              { type: 'text', text: '请识别这个商品并生成直播话术：' },
+              { type: 'text', text: '识别并生成话术：' },
               { 
                 type: 'image_url', 
                 image_url: { 
@@ -115,12 +198,11 @@ serve(async (req) => {
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
     
-    console.log('AI response received:', content?.substring(0, 200));
+    console.log('AI response received');
 
     // 解析JSON响应
     let result;
     try {
-      // 尝试提取JSON部分
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         result = JSON.parse(jsonMatch[0]);
@@ -129,7 +211,6 @@ serve(async (req) => {
       }
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError);
-      // 返回原始内容让前端处理
       return new Response(
         JSON.stringify({ 
           rawContent: content,
@@ -139,7 +220,11 @@ serve(async (req) => {
       );
     }
 
-    console.log('Product recognized successfully:', result.name);
+    // 添加图像特征到结果
+    result.imageHash = imageHash;
+    result.fromCache = false;
+
+    console.log('Product recognized:', result.name);
 
     return new Response(
       JSON.stringify(result),

@@ -80,6 +80,10 @@ export function LiveStreamPanel() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
+        // 等待视频元数据加载后播放
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(console.error);
+        };
         setIsStreaming(true);
       }
     } catch (error) {
@@ -146,7 +150,15 @@ export function LiveStreamPanel() {
     
     if (recognitionResult && user) {
       try {
-        // 保存产品到数据库
+        // 如果是从缓存命中的，显示快速提示
+        if (recognitionResult.fromCache) {
+          toast({
+            title: '知识库命中',
+            description: `快速识别: ${recognitionResult.name}`,
+          });
+        }
+
+        // 保存产品到数据库（包含image_hash用于后续匹配）
         const { data: productData, error: productError } = await supabase
           .from('products')
           .insert({
@@ -159,6 +171,7 @@ export function LiveStreamPanel() {
             dimensions: recognitionResult.dimensions,
             condition: recognitionResult.condition,
             scripts: recognitionResult.scripts,
+            image_hash: recognitionResult.imageHash,
             created_by: user.id,
           })
           .select()
@@ -181,10 +194,12 @@ export function LiveStreamPanel() {
         // 更新实时会话
         await updateSession(productData.id, user.id);
 
-        toast({
-          title: '识别成功',
-          description: `已识别: ${recognitionResult.name}`,
-        });
+        if (!recognitionResult.fromCache) {
+          toast({
+            title: '识别成功',
+            description: `已识别并保存到知识库: ${recognitionResult.name}`,
+          });
+        }
       } catch (error) {
         console.error('Error saving product:', error);
         toast({
@@ -303,6 +318,7 @@ export function LiveStreamPanel() {
             ref={videoRef}
             autoPlay
             playsInline
+            muted
             className="w-full h-full object-cover"
           />
         ) : (

@@ -80,7 +80,30 @@ export function useRealtimeSession() {
       return;
     }
 
-    setCurrentProduct(data as Product);
+    // Transform database data to expected format
+    const scripts = data.scripts as Record<string, string> | null;
+    const product: Product = {
+      id: data.id,
+      name: data.name,
+      category: data.category,
+      description: data.description || undefined,
+      era: data.era || undefined,
+      material: data.material || undefined,
+      craft: data.craft || undefined,
+      dimensions: data.dimensions || undefined,
+      condition: data.condition || undefined,
+      image_url: data.image_url || undefined,
+      scripts: {
+        professional: scripts?.professional || '',
+        sales: scripts?.sales || '',
+        cultural: scripts?.cultural || '',
+      },
+      ai_analysis: data.ai_analysis as Record<string, unknown> | undefined,
+      created_by: data.created_by || undefined,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    };
+    setCurrentProduct(product);
   };
 
   const updateSession = async (productId: string, operatorId: string) => {

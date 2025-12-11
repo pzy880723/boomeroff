@@ -99,6 +99,7 @@ export type Database = {
           dimensions: string | null
           era: string | null
           id: string
+          image_hash: string | null
           image_url: string | null
           material: string | null
           name: string
@@ -116,6 +117,7 @@ export type Database = {
           dimensions?: string | null
           era?: string | null
           id?: string
+          image_hash?: string | null
           image_url?: string | null
           material?: string | null
           name: string
@@ -133,6 +135,7 @@ export type Database = {
           dimensions?: string | null
           era?: string | null
           id?: string
+          image_hash?: string | null
           image_url?: string | null
           material?: string | null
           name?: string

@@ -51,6 +51,8 @@ export function useProductRecognition() {
         },
         suggestedPriceRange: data.suggestedPriceRange,
         confidence: data.confidence,
+        imageHash: data.imageHash,
+        fromCache: data.fromCache,
       };
 
       setResult(recognitionResult);
