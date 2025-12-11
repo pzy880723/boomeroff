@@ -22,7 +22,8 @@ import {
   TrendingDown,
   Minus,
   Trash2,
-  Edit
+  Edit,
+  SwitchCamera
 } from 'lucide-react';
 import { CATEGORY_LABELS, PriceRecord, RecognitionResult } from '@/types';
 
@@ -36,6 +37,7 @@ export function LiveStreamPanel() {
   const [copiedStyle, setCopiedStyle] = useState<string | null>(null);
   const [recognitionTime, setRecognitionTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -75,11 +77,13 @@ export function LiveStreamPanel() {
     }
   };
 
-  const startCamera = async () => {
+  const startCamera = async (mode?: 'environment' | 'user') => {
+    const targetMode = mode || facingMode;
+    
     try {
-      console.log('[Camera] Requesting camera access...');
+      console.log('[Camera] Requesting camera access with mode:', targetMode);
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: 1920, height: 1080 },
+        video: { facingMode: targetMode, width: 1920, height: 1080 },
       });
       console.log('[Camera] Stream obtained:', stream.getVideoTracks()[0]?.label);
       
@@ -113,6 +117,21 @@ export function LiveStreamPanel() {
         variant: 'destructive',
       });
     }
+  };
+
+  const switchCamera = async () => {
+    // 停止当前摄像头
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    // 切换模式
+    const newMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(newMode);
+    
+    // 用新模式重新启动
+    await startCamera(newMode);
   };
 
   const stopCamera = useCallback(() => {
@@ -436,11 +455,18 @@ export function LiveStreamPanel() {
           </div>
         )}
 
+        {/* 摄像头模式指示 */}
+        {isStreaming && !capturedImage && (
+          <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm">
+            {facingMode === 'environment' ? '后置摄像头' : '前置摄像头'}
+          </div>
+        )}
+
         {/* 摄像头控制按钮 */}
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3">
           {!isStreaming && !capturedImage && (
             <>
-              <Button size="lg" onClick={startCamera} className="gap-2">
+              <Button size="lg" onClick={() => startCamera()} className="gap-2">
                 <Camera className="w-5 h-5" />
                 启动摄像头
               </Button>
@@ -473,6 +499,16 @@ export function LiveStreamPanel() {
               >
                 <Camera className="w-5 h-5" />
                 拍照识别
+              </Button>
+              <Button 
+                size="lg" 
+                variant="outline" 
+                onClick={switchCamera}
+                disabled={isRecognizing}
+                className="bg-background/80"
+                title={facingMode === 'environment' ? '切换到前置摄像头' : '切换到后置摄像头'}
+              >
+                <SwitchCamera className="w-5 h-5" />
               </Button>
               <Button size="lg" variant="outline" onClick={stopCamera} className="bg-background/80">
                 <X className="w-5 h-5" />
