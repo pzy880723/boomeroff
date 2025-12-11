@@ -40,8 +40,8 @@ export function RecognitionPanel() {
             dimensions: recognitionResult.dimensions,
             condition: recognitionResult.condition,
             image_url: imageBase64,
-            scripts: recognitionResult.scripts as unknown as Record<string, unknown>,
-            ai_analysis: recognitionResult as unknown as Record<string, unknown>,
+            scripts: JSON.parse(JSON.stringify(recognitionResult.scripts)),
+            ai_analysis: JSON.parse(JSON.stringify(recognitionResult)),
             created_by: user.id,
           }])
           .select()
