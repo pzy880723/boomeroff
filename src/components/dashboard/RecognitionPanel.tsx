@@ -19,6 +19,42 @@ export function RecognitionPanel() {
 
   const canRecognize = role === 'admin' || role === 'anchor';
 
+  // 异步上传图片（后台静默执行，不阻塞主流程）
+  const uploadImageAsync = async (imageBase64: string, productId: string, userId: string) => {
+    try {
+      const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+      
+      const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(fileName, blob, { contentType: 'image/jpeg' });
+      
+      if (!uploadError && uploadData) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(fileName);
+        
+        // 更新商品的图片URL
+        await supabase
+          .from('products')
+          .update({ image_url: publicUrl })
+          .eq('id', productId);
+        
+        console.log('[Upload] Image uploaded successfully');
+      }
+    } catch (err) {
+      console.error('[Upload] Background image upload error:', err);
+    }
+  };
+
   const handleCapture = async (imageBase64: string) => {
     clearResult();
     setCurrentProductId(null);
@@ -27,35 +63,7 @@ export function RecognitionPanel() {
     
     if (recognitionResult && user) {
       try {
-        // 1. 将 base64 转换为 Blob 并上传到 Storage
-        let imageUrl: string | null = null;
-        try {
-          const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-          const byteCharacters = atob(base64Data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: 'image/jpeg' });
-          
-          const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-          
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('product-images')
-            .upload(fileName, blob, { contentType: 'image/jpeg' });
-          
-          if (!uploadError && uploadData) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('product-images')
-              .getPublicUrl(fileName);
-            imageUrl = publicUrl;
-          }
-        } catch (uploadErr) {
-          console.error('Image upload error:', uploadErr);
-        }
-
-        // 2. 保存商品到数据库
+        // 1. 立即保存商品到数据库（不等待图片上传）
         const { data: productData, error } = await supabase
           .from('products')
           .insert([{
@@ -67,7 +75,7 @@ export function RecognitionPanel() {
             craft: recognitionResult.craft,
             dimensions: recognitionResult.dimensions,
             condition: recognitionResult.condition,
-            image_url: imageUrl,
+            image_url: null, // 图片后台异步上传
             scripts: JSON.parse(JSON.stringify(recognitionResult.scripts)),
             ai_analysis: JSON.parse(JSON.stringify(recognitionResult)),
             created_by: user.id,
@@ -77,27 +85,33 @@ export function RecognitionPanel() {
 
         if (error) {
           console.error('Error saving product:', error);
-        } else if (productData) {
-          setCurrentProductId(productData.id);
-          
-          // 保存AI建议价格
-          if (recognitionResult.suggestedPriceRange) {
-            await supabase.from('price_records').insert({
-              product_id: productData.id,
-              price_type: 'suggested',
-              price: recognitionResult.suggestedPriceRange.average,
-              notes: `AI建议价格区间: ¥${recognitionResult.suggestedPriceRange.min} - ¥${recognitionResult.suggestedPriceRange.max}`,
-            });
-          }
+          return;
+        }
 
-          // 更新实时会话
-          await updateSession(productData.id, user.id);
+        setCurrentProductId(productData.id);
 
-          toast({
-            title: '识别完成',
-            description: `已识别: ${recognitionResult.name}`,
+        // 2. 并行执行：图片上传（后台）+ 价格保存 + 会话更新
+        // 图片上传完全异步，不阻塞
+        void uploadImageAsync(imageBase64, productData.id, user.id);
+
+        // 价格保存和会话更新并行执行
+        const sessionPromise = updateSession(productData.id, user.id);
+
+        if (recognitionResult.suggestedPriceRange) {
+          void supabase.from('price_records').insert({
+            product_id: productData.id,
+            price_type: 'suggested',
+            price: recognitionResult.suggestedPriceRange.average,
+            notes: `AI建议: ¥${recognitionResult.suggestedPriceRange.min}-${recognitionResult.suggestedPriceRange.max}`,
           });
         }
+
+        await sessionPromise;
+
+        toast({
+          title: '识别完成',
+          description: `已识别: ${recognitionResult.name}`,
+        });
       } catch (error) {
         console.error('Error:', error);
       }
