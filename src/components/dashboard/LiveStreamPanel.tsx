@@ -80,43 +80,27 @@ export function LiveStreamPanel() {
       });
       console.log('[Camera] Stream obtained:', stream.getVideoTracks()[0]?.label);
       
+      streamRef.current = stream;
+      
+      // video 元素始终存在，直接设置流
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        streamRef.current = stream;
         
-        // 使用Promise确保视频加载完成后再播放
-        await new Promise<void>((resolve, reject) => {
-          const video = videoRef.current!;
-          
-          video.onloadedmetadata = () => {
-            console.log('[Camera] Metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
-            video.play()
-              .then(() => {
-                console.log('[Camera] Video playing successfully');
-                resolve();
-              })
-              .catch((err) => {
-                console.error('[Camera] Play failed:', err);
-                reject(err);
-              });
-          };
-          
-          video.onerror = (e) => {
-            console.error('[Camera] Video error:', e);
-            reject(e);
-          };
-          
-          // 超时保护
-          setTimeout(() => {
-            if (video.readyState >= 2) {
-              video.play().catch(console.error);
-              resolve();
-            }
-          }, 2000);
-        });
+        videoRef.current.onloadedmetadata = () => {
+          console.log('[Camera] Metadata loaded');
+          videoRef.current?.play().catch(console.error);
+        };
         
         setIsStreaming(true);
         console.log('[Camera] Camera started successfully');
+      } else {
+        console.error('[Camera] videoRef.current is null');
+        stream.getTracks().forEach(track => track.stop());
+        toast({
+          title: '摄像头初始化失败',
+          description: '请刷新页面重试',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('[Camera] Error:', error);
@@ -340,21 +324,26 @@ export function LiveStreamPanel() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* 全屏摄像头区域 */}
       <div className="relative flex-1 bg-black min-h-[50vh]">
-        {capturedImage ? (
+        {/* 摄像头视频流 - 始终渲染，通过CSS控制显示 */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={`w-full h-full object-cover ${isStreaming && !capturedImage ? '' : 'hidden'}`}
+        />
+
+        {/* 捕获的图片 */}
+        {capturedImage && (
           <img
             src={capturedImage}
             alt="Captured"
             className="w-full h-full object-contain"
           />
-        ) : isStreaming ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
-        ) : (
+        )}
+
+        {/* 占位符 - 仅在没有流和图片时显示 */}
+        {!isStreaming && !capturedImage && (
           <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-4">
             <Camera className="w-24 h-24 text-muted-foreground" />
             <p className="text-muted-foreground text-center text-lg">
