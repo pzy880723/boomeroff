@@ -34,6 +34,9 @@ export function LiveStreamPanel() {
   const [livePrice, setLivePrice] = useState('');
   const [saving, setSaving] = useState(false);
   const [copiedStyle, setCopiedStyle] = useState<string | null>(null);
+  const [recognitionTime, setRecognitionTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -203,8 +206,25 @@ export function LiveStreamPanel() {
     setCurrentProductId(null);
     setHistoricalPrices([]);
     setLivePrice('');
+    setRecognitionTime(null);
+    setElapsedTime(0);
+
+    // 启动计时器
+    const startTime = Date.now();
+    timerRef.current = setInterval(() => {
+      setElapsedTime(Date.now() - startTime);
+    }, 100);
 
     const recognitionResult = await recognizeProduct(imageBase64);
+    
+    // 停止计时器并记录最终时间
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    const finalTime = Date.now() - startTime;
+    setElapsedTime(finalTime);
+    setRecognitionTime(finalTime);
     
     if (recognitionResult && user) {
       try {
@@ -393,7 +413,7 @@ export function LiveStreamPanel() {
           </div>
         )}
 
-        {/* 识别中动画 */}
+        {/* 识别中动画 + 计时器 */}
         {isRecognizing && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
             <div className="text-center text-white space-y-4">
@@ -402,7 +422,17 @@ export function LiveStreamPanel() {
                 <Sparkles className="w-5 h-5 animate-pulse" />
                 <span className="text-lg">AI识别中...</span>
               </div>
+              <div className="text-2xl font-mono font-bold">
+                {(elapsedTime / 1000).toFixed(1)}s
+              </div>
             </div>
+          </div>
+        )}
+
+        {/* 识别完成后显示耗时 */}
+        {recognitionTime && !isRecognizing && (
+          <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm font-mono">
+            识别耗时: {(recognitionTime / 1000).toFixed(2)}s
           </div>
         )}
 
