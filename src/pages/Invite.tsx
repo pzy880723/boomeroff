@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, XCircle, Loader2, UserPlus } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole, ROLE_LABELS } from '@/types';
 import logo from '@/assets/boomer-off-logo.png';
@@ -35,6 +35,7 @@ export default function Invite() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
 
   // 验证邀请码
@@ -252,15 +253,25 @@ export default function Invite() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">密码</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="设置密码（至少6位）"
-                  minLength={6}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="设置密码（至少6位）"
+                    minLength={6}
+                    required
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <Button type="submit" disabled={formLoading} className="w-full">
                 {formLoading ? (

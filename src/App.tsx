@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import History from "./pages/History";
 import AdminUsers from "./pages/AdminUsers";
 import Invite from "./pages/Invite";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
             <Route path="/history" element={<History />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/invite/:code" element={<Invite />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
