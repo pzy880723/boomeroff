@@ -39,7 +39,7 @@ export function Header() {
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between">
         <Link to="/" className="hover:opacity-80 transition-opacity">
-          <img src={logo} alt="BOOMER-OFF 智能直播系统" className="h-8" />
+          <img src={logo} alt="BOOMER-OFF 智能直播系统" className="h-8 w-auto object-contain" />
         </Link>
 
         <div className="flex items-center gap-2">
