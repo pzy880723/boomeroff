@@ -1,6 +1,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Header } from '@/components/layout/Header';
 import { UserTable } from '@/components/admin/UserTable';
+import { InviteDialog } from '@/components/admin/InviteDialog';
 import { Navigate } from 'react-router-dom';
 import { Users } from 'lucide-react';
 
@@ -23,9 +24,12 @@ export default function AdminUsers() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container py-6">
-        <div className="flex items-center gap-3 mb-6">
-          <Users className="h-6 w-6" />
-          <h1 className="text-2xl font-bold">用户管理</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Users className="h-6 w-6" />
+            <h1 className="text-2xl font-bold">用户管理</h1>
+          </div>
+          <InviteDialog />
         </div>
         <UserTable />
       </main>
