@@ -8,11 +8,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface LoginFormProps {
-  onToggleMode: () => void;
   onForgotPassword: () => void;
 }
 
-export function LoginForm({ onToggleMode, onForgotPassword }: LoginFormProps) {
+export function LoginForm({ onForgotPassword }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -96,14 +95,7 @@ export function LoginForm({ onToggleMode, onForgotPassword }: LoginFormProps) {
           </Button>
         </form>
         <p className="text-center text-sm text-muted-foreground mt-4">
-          还没有账户？{' '}
-          <button
-            type="button"
-            onClick={onToggleMode}
-            className="text-primary hover:underline"
-          >
-            立即注册
-          </button>
+          需要账户？请联系管理员获取邀请链接
         </p>
       </CardContent>
     </Card>

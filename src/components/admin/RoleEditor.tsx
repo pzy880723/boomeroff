@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 interface RoleEditorProps {
   currentRole: AppRole;
   onRoleChange: (newRole: AppRole) => Promise<boolean>;
+  disabled?: boolean;
 }
 
 const ROLE_OPTIONS: { value: AppRole; label: string; icon: typeof Shield }[] = [
@@ -20,7 +21,7 @@ const ROLE_OPTIONS: { value: AppRole; label: string; icon: typeof Shield }[] = [
   { value: 'anchor', label: ROLE_LABELS.anchor, icon: Mic },
 ];
 
-export function RoleEditor({ currentRole, onRoleChange }: RoleEditorProps) {
+export function RoleEditor({ currentRole, onRoleChange, disabled }: RoleEditorProps) {
   const [loading, setLoading] = useState(false);
 
   const handleRoleChange = async (newRole: AppRole) => {
@@ -44,7 +45,7 @@ export function RoleEditor({ currentRole, onRoleChange }: RoleEditorProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={loading}>
+        <Button variant="outline" size="sm" disabled={loading || disabled}>
           修改角色
           <ChevronDown className="ml-1 h-3 w-3" />
         </Button>

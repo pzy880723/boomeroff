@@ -2,11 +2,13 @@ import { useState, useEffect, useRef, createContext, useContext, ReactNode } fro
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { AppRole } from '@/types';
+import { toast } from 'sonner';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   role: AppRole | null;
+  suspended: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
@@ -19,11 +21,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [suspended, setSuspended] = useState(false);
   const [loading, setLoading] = useState(true);
   const isFetchingRef = useRef(false);
 
   const fetchUserRole = async (userId: string) => {
-    // 防止竞态条件：如果已经在获取角色，跳过
     if (isFetchingRef.current) {
       console.log('[Auth] Already fetching role, skipping...');
       return;
@@ -31,7 +33,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isFetchingRef.current = true;
     console.log('[Auth] Fetching role for user:', userId);
 
-    // 5秒超时保护
     const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
       setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 5000)
     );
@@ -39,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const queryPromise = supabase
         .from('user_roles')
-        .select('role')
+        .select('role, suspended')
         .eq('user_id', userId)
         .single();
 
@@ -49,17 +50,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('[Auth] Error fetching user role:', error);
-        setRole('anchor'); // 默认角色
+        setRole('anchor');
+        setSuspended(false);
       } else if (data && 'role' in data) {
         setRole(data.role as AppRole);
-        console.log('[Auth] Role set to:', data.role);
+        setSuspended(data.suspended || false);
+        console.log('[Auth] Role set to:', data.role, 'Suspended:', data.suspended);
+        
+        // If user is suspended, sign them out
+        if (data.suspended) {
+          console.log('[Auth] User is suspended, signing out...');
+          toast.error('您的账号已被暂停，请联系管理员');
+          await supabase.auth.signOut();
+        }
       } else {
         console.log('[Auth] No role data, using default');
         setRole('anchor');
+        setSuspended(false);
       }
     } catch (error) {
       console.error('[Auth] Unexpected error fetching role:', error);
       setRole('anchor');
+      setSuspended(false);
     } finally {
       console.log('[Auth] Setting loading to false');
       setLoading(false);
@@ -96,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }, 0);
         } else {
           setRole(null);
+          setSuspended(false);
           setLoading(false);
         }
       }
@@ -131,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, suspended, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
