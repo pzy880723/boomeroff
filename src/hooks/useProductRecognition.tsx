@@ -35,32 +35,21 @@ export function useProductRecognition() {
         ? data.category 
         : 'other';
 
-      // 解析深度内容
-      const enrichedContent: EnrichedContent | undefined = data.enrichedContent ? {
-        basicIntro: data.enrichedContent.basicIntro || '',
-        culturalBackground: data.enrichedContent.culturalBackground || '',
-        usageScenario: data.enrichedContent.usageScenario || '',
-      } : undefined;
-
+      // 简化版：单一话术转换为三种风格（复用同一内容）
+      const mainScript = data.script || data.scripts?.sales || '';
+      
       const recognitionResult: RecognitionResult = {
         name: data.name || '未知商品',
         category,
-        subCategory: data.subCategory,
-        vesselType: data.vesselType,
         era: data.era,
         material: data.material,
-        craft: data.craft,
-        dimensions: data.dimensions,
-        condition: data.condition,
-        description: data.description,
-        enrichedContent,
         scripts: {
-          professional: data.scripts?.professional || '',
-          sales: data.scripts?.sales || '',
-          cultural: data.scripts?.cultural || '',
+          professional: mainScript,
+          sales: mainScript,
+          cultural: mainScript,
         },
         suggestedPriceRange: data.suggestedPriceRange,
-        confidence: data.confidence,
+        confidence: data.confidence || 0.85,
         imageHash: data.imageHash,
         fromCache: data.fromCache,
       };
