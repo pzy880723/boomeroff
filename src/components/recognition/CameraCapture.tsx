@@ -17,10 +17,31 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  // 图片压缩函数 - 激进压缩以提升识别速度
+  const compressImage = (imageData: string, maxWidth = 640, quality = 0.5): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ratio = Math.min(maxWidth / img.width, 1);
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } else {
+          resolve(imageData);
+        }
+      };
+      img.src = imageData;
+    });
+  };
+
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: 1280, height: 720 },
+        video: { facingMode: 'environment', width: 640, height: 480 },
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -44,7 +65,7 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
     setIsStreaming(false);
   }, []);
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (!videoRef.current) return;
 
     const canvas = document.createElement('canvas');
@@ -53,13 +74,15 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0);
-      const imageData = canvas.toDataURL('image/jpeg', 0.8);
-      setCapturedImage(imageData);
+      const rawImage = canvas.toDataURL('image/jpeg', 0.6);
+      // 压缩图片以加快识别速度
+      const compressed = await compressImage(rawImage, 640, 0.5);
+      setCapturedImage(compressed);
       stopCamera();
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -73,9 +96,11 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const imageData = event.target?.result as string;
-      setCapturedImage(imageData);
+      // 压缩上传的图片以加快识别速度
+      const compressed = await compressImage(imageData, 640, 0.5);
+      setCapturedImage(compressed);
     };
     reader.readAsDataURL(file);
   };
