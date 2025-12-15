@@ -17,8 +17,8 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // 图片压缩函数 - 激进压缩以提升识别速度
-  const compressImage = (imageData: string, maxWidth = 640, quality = 0.5): Promise<string> => {
+  // 图片压缩函数 - 极限压缩以达成2秒识别
+  const compressImage = (imageData: string, maxWidth = 480, quality = 0.4): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -74,9 +74,9 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0);
-      const rawImage = canvas.toDataURL('image/jpeg', 0.6);
-      // 压缩图片以加快识别速度
-      const compressed = await compressImage(rawImage, 640, 0.5);
+      const rawImage = canvas.toDataURL('image/jpeg', 0.5);
+      // 极限压缩以达成2秒识别
+      const compressed = await compressImage(rawImage, 480, 0.4);
       setCapturedImage(compressed);
       stopCamera();
     }
@@ -98,8 +98,8 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const imageData = event.target?.result as string;
-      // 压缩上传的图片以加快识别速度
-      const compressed = await compressImage(imageData, 640, 0.5);
+      // 极限压缩以达成2秒识别
+      const compressed = await compressImage(imageData, 480, 0.4);
       setCapturedImage(compressed);
     };
     reader.readAsDataURL(file);
@@ -125,7 +125,7 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
           {capturedImage ? (
             <img
               src={capturedImage}
-              alt="Captured"
+              alt="已捕获图片"
               className="w-full h-full object-contain"
             />
           ) : isStreaming ? (

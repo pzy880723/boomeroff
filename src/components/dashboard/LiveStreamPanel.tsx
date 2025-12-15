@@ -158,8 +158,8 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
-  // 极速压缩图片 - 更激进的压缩参数
-  const compressImage = (imageData: string, maxWidth: number = 640): Promise<string> => {
+  // 极限压缩图片 - 480px/0.4质量，目标2秒识别
+  const compressImage = (imageData: string, maxWidth: number = 480): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -167,7 +167,7 @@ export function LiveStreamPanel() {
         let width = img.width;
         let height = img.height;
         
-        // 按比例缩小到640px
+        // 按比例缩小到480px
         if (width > maxWidth) {
           height = (height * maxWidth) / width;
           width = maxWidth;
@@ -178,7 +178,7 @@ export function LiveStreamPanel() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.5)); // 质量降到0.5
+          resolve(canvas.toDataURL('image/jpeg', 0.4)); // 质量降到0.4
         } else {
           resolve(imageData);
         }
@@ -191,8 +191,8 @@ export function LiveStreamPanel() {
     if (!videoRef.current) return;
 
     const canvas = document.createElement('canvas');
-    // 极速压缩 - 640px + 0.5质量
-    const maxWidth = 640;
+    // 极限压缩 - 480px + 0.4质量，目标2秒识别
+    const maxWidth = 480;
     let width = videoRef.current.videoWidth;
     let height = videoRef.current.videoHeight;
     
@@ -206,7 +206,7 @@ export function LiveStreamPanel() {
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0, width, height);
-      const imageData = canvas.toDataURL('image/jpeg', 0.5);
+      const imageData = canvas.toDataURL('image/jpeg', 0.4);
       setCapturedImage(imageData);
       await handleRecognition(imageData);
     }
@@ -441,7 +441,7 @@ export function LiveStreamPanel() {
           {capturedImage && (
             <img
               src={capturedImage}
-              alt="Captured"
+              alt="已捕获图片"
               className="absolute inset-0 w-full h-full object-cover"
             />
           )}
