@@ -86,20 +86,8 @@ export function PriceDisplay({ result, productId }: PriceDisplayProps) {
   const minHistoricalPrice = hasHistoricalData ? Math.min(...soldPrices) : null;
   const maxHistoricalPrice = hasHistoricalData ? Math.max(...soldPrices) : null;
 
-  // 优先使用历史数据，否则使用AI建议
-  const displayPrices = hasHistoricalData
-    ? {
-        min: minHistoricalPrice!,
-        max: maxHistoricalPrice!,
-        average: avgHistoricalPrice!,
-        source: '历史成交',
-      }
-    : result.suggestedPriceRange
-    ? {
-        ...result.suggestedPriceRange,
-        source: 'AI建议',
-      }
-    : null;
+  // AI建议价格
+  const aiPrices = result.suggestedPriceRange;
 
   return (
     <Card>
@@ -110,12 +98,11 @@ export function PriceDisplay({ result, productId }: PriceDisplayProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {displayPrices && (
+        {/* AI建议价格区域 */}
+        {aiPrices && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <Badge variant={hasHistoricalData ? 'default' : 'secondary'}>
-                {displayPrices.source}
-              </Badge>
+              <Badge variant="secondary">AI建议</Badge>
             </div>
             
             <div className="grid grid-cols-3 gap-3 text-center">
@@ -125,7 +112,7 @@ export function PriceDisplay({ result, productId }: PriceDisplayProps) {
                   最低
                 </div>
                 <div className="text-lg font-semibold">
-                  ¥{displayPrices.min.toLocaleString()}
+                  ¥{aiPrices.min.toLocaleString()}
                 </div>
               </div>
               <div className="bg-primary/10 rounded-lg p-3 ring-2 ring-primary/20">
@@ -134,7 +121,7 @@ export function PriceDisplay({ result, productId }: PriceDisplayProps) {
                   建议价
                 </div>
                 <div className="text-xl font-bold text-primary">
-                  ¥{Math.round(displayPrices.average).toLocaleString()}
+                  ¥{Math.round(aiPrices.average).toLocaleString()}
                 </div>
               </div>
               <div className="bg-muted rounded-lg p-3">
@@ -143,23 +130,36 @@ export function PriceDisplay({ result, productId }: PriceDisplayProps) {
                   最高
                 </div>
                 <div className="text-lg font-semibold">
-                  ¥{displayPrices.max.toLocaleString()}
+                  ¥{aiPrices.max.toLocaleString()}
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {!displayPrices && (
-          <p className="text-muted-foreground text-center py-4">暂无价格参考</p>
-        )}
-
-        {/* 历史成交记录 */}
+        {/* 历史成交区域 */}
         {hasHistoricalData && (
-          <div className="border-t pt-3">
-            <p className="text-sm text-muted-foreground mb-2">
-              历史成交记录 ({soldPrices.length}笔)
-            </p>
+          <div className={aiPrices ? "border-t pt-3" : ""}>
+            <div className="flex items-center gap-2 mb-2">
+              <Badge variant="default">历史成交</Badge>
+              <span className="text-sm text-muted-foreground">({soldPrices.length}笔)</span>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-3 text-center mb-3">
+              <div className="bg-muted/50 rounded-lg p-2">
+                <div className="text-xs text-muted-foreground mb-1">最低成交</div>
+                <div className="font-semibold">¥{minHistoricalPrice!.toLocaleString()}</div>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-2">
+                <div className="text-xs text-muted-foreground mb-1">平均成交</div>
+                <div className="font-semibold">¥{Math.round(avgHistoricalPrice!).toLocaleString()}</div>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-2">
+                <div className="text-xs text-muted-foreground mb-1">最高成交</div>
+                <div className="font-semibold">¥{maxHistoricalPrice!.toLocaleString()}</div>
+              </div>
+            </div>
+            
             <div className="flex flex-wrap gap-2">
               {soldPrices.slice(0, 5).map((price, i) => (
                 <Badge key={i} variant="outline">
@@ -171,6 +171,11 @@ export function PriceDisplay({ result, productId }: PriceDisplayProps) {
               )}
             </div>
           </div>
+        )}
+
+        {/* 无数据提示 */}
+        {!aiPrices && !hasHistoricalData && (
+          <p className="text-muted-foreground text-center py-4">暂无价格参考</p>
         )}
 
         {/* 记录成交价 - 仅小助理和管理员可见 */}
