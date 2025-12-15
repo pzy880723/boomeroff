@@ -298,10 +298,12 @@ export function LiveStreamPanel() {
         }, 100);
 
         if (!recognitionResult.fromCache) {
-          toast({
+          const { dismiss } = toast({
             title: '识别成功',
             description: `已识别并保存到知识库: ${recognitionResult.name}`,
           });
+          // 500毫秒后自动关闭
+          setTimeout(() => dismiss(), 500);
         }
       } catch (error) {
         console.error('Error saving product:', error);
