@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Copy, Check, Volume2, Package, BookOpen, Lightbulb } from 'lucide-react';
+import { Copy, Check, Volume2, VolumeX, Package, BookOpen, Lightbulb } from 'lucide-react';
 import { RecognitionResult, ScriptStyle, SCRIPT_STYLE_LABELS, CATEGORY_LABELS } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { useSpeech } from '@/hooks/useSpeech';
 
 interface ScriptDisplayProps {
   result: RecognitionResult;
@@ -14,8 +15,8 @@ interface ScriptDisplayProps {
 export function ScriptDisplay({ result }: ScriptDisplayProps) {
   const [copiedStyle, setCopiedStyle] = useState<ScriptStyle | null>(null);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const { toast } = useToast();
+  const { isSpeaking, speak, stop } = useSpeech();
 
   const copyToClipboard = async (text: string, style: ScriptStyle) => {
     try {
@@ -54,22 +55,7 @@ export function ScriptDisplay({ result }: ScriptDisplayProps) {
   };
 
   const speakText = (text: string) => {
-    if ('speechSynthesis' in window) {
-      if (isSpeaking) {
-        window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-        return;
-      }
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'zh-CN';
-      utterance.rate = 1.1;
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      
-      window.speechSynthesis.speak(utterance);
-      setIsSpeaking(true);
-    }
+    speak(text);
   };
 
   return (
@@ -228,12 +214,22 @@ export function ScriptDisplay({ result }: ScriptDisplayProps) {
                   </div>
                   <div className="absolute top-2 right-2 flex gap-1">
                     <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => speakText(result.scripts[style])}
-                      title={isSpeaking ? '停止播放' : '朗读话术'}
+                      size="sm"
+                      variant={isSpeaking ? 'secondary' : 'ghost'}
+                      onClick={() => isSpeaking ? stop() : speakText(result.scripts[style])}
+                      className="gap-1"
                     >
-                      <Volume2 className={`w-4 h-4 ${isSpeaking ? 'text-primary' : ''}`} />
+                      {isSpeaking ? (
+                        <>
+                          <VolumeX className="w-4 h-4" />
+                          停止
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-4 h-4" />
+                          朗读
+                        </>
+                      )}
                     </Button>
                     <Button
                       size="icon"
