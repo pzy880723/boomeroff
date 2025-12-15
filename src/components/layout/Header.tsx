@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { LogOut, User, Settings, Shield, History } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
+import logo from '@/assets/boomer-off-logo.png';
 
 export function Header() {
   const { user, role, signOut } = useAuth();
@@ -38,8 +39,8 @@ export function Header() {
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link to="/" className="font-bold text-lg hover:text-primary transition-colors">
-            直播间商品识别助手
+          <Link to="/" className="hover:opacity-80 transition-opacity">
+            <img src={logo} alt="BOOMER-OFF" className="h-8" />
           </Link>
           <Badge variant="outline" className="hidden sm:inline-flex">
             日本回流杂项

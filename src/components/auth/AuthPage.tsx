@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
+import logo from '@/assets/boomer-off-logo.png';
 
 export function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -8,7 +9,7 @@ export function AuthPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-br from-background to-muted">
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-primary mb-2">直播间商品识别助手</h1>
+        <img src={logo} alt="BOOMER-OFF" className="h-12 sm:h-16 mx-auto mb-2" />
         <p className="text-muted-foreground">日本回流杂项 · 智能识别 · 话术生成</p>
       </div>
       {isLogin ? (
