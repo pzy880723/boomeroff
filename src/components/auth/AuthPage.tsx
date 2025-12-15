@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { LoginForm } from './LoginForm';
-import { RegisterForm } from './RegisterForm';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
 import logo from '@/assets/boomer-off-logo.png';
 
-type AuthMode = 'login' | 'register' | 'forgot-password';
+type AuthMode = 'login' | 'forgot-password';
 
 export function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
@@ -17,12 +16,8 @@ export function AuthPage() {
       </div>
       {mode === 'login' && (
         <LoginForm 
-          onToggleMode={() => setMode('register')} 
           onForgotPassword={() => setMode('forgot-password')}
         />
-      )}
-      {mode === 'register' && (
-        <RegisterForm onToggleMode={() => setMode('login')} />
       )}
       {mode === 'forgot-password' && (
         <ForgotPasswordForm onBackToLogin={() => setMode('login')} />
