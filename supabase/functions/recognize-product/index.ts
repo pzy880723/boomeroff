@@ -19,7 +19,7 @@ async function callLovableAI(imageBase64: string, systemPrompt: string, apiKey: 
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash-lite',
+      model: 'google/gemini-2.5-flash',
       messages: [
         { role: 'system', content: systemPrompt },
         { 
@@ -122,8 +122,31 @@ serve(async (req) => {
     console.log('[Recognition] Starting for user:', user.id);
     const startTime = Date.now();
 
-    // 精简提示词 - 极速优化
-    const recognitionPrompt = `识别日本杂货,直接返回JSON:{"name":"名称","category":"porcelain/incense/stationery/lacquerware/bronze/woodcraft/textile/jewelry/painting/other","era":"年代","material":"材质","craft":"工艺","description":"20字","scripts":{"sales":"50字卖点"},"suggestedPriceRange":{"min":0,"max":0,"average":0},"imageHash":"特征5字"}`;
+    // 深度识别提示词 - 包含细分类型、器型、文化背景
+    const recognitionPrompt = `你是日本回流杂货鉴定专家。识别图中商品并返回JSON格式：
+{
+  "name": "商品名称(含细分类型和器型)",
+  "category": "porcelain/incense/stationery/lacquerware/bronze/woodcraft/textile/jewelry/painting/other",
+  "subCategory": "细分类型(瓷器:九谷烧/萩烧/备前烧/有田烧/清水烧/美浓烧/信乐烧/伊万里等;漆器:轮岛涂/会津涂/山中涂等;铜器:南部铁器/高冈铜器等)",
+  "vesselType": "器型(茶器:盖碗/主人杯/侧把壶/急须/抹茶碗/建水/�的船/茶托;花器:花入/花瓶;香道:香炉/香合;酒器:德利/盃/片口等)",
+  "era": "年代(明治/大正/昭和/平成/令和)",
+  "material": "材质",
+  "craft": "工艺特点",
+  "description": "30字商品概述",
+  "enrichedContent": {
+    "basicIntro": "80字商品基础介绍：详细描述材质特点、工艺细节、尺寸规格、品相状态、制作特征",
+    "culturalBackground": "100字文化背景：该类型器物的历史渊源(起源年代、发展历程)、产地特色(地理位置、气候影响)、代表名家或窑口、在日本茶道/花道/香道中的地位、收藏价值与市场认可度",
+    "usageScenario": "60字使用场景：适合什么场合使用(日常/待客/收藏)、如何搭配其他器物、养护保养建议"
+  },
+  "scripts": {
+    "professional": "60字专业话术：突出材质工艺特点，适合懂行买家",
+    "sales": "100字销售话术：强调价值、稀缺性、收藏潜力，激发购买欲",
+    "cultural": "100字文化话术：讲述历史故事、名家典故，展现文化底蕴"
+  },
+  "suggestedPriceRange": {"min":0,"max":0,"average":0},
+  "imageHash": "5字核心特征关键词"
+}
+确保subCategory和vesselType准确识别，enrichedContent内容丰富有深度，便于主播讲解。直接返回JSON，不要其他文字。`;
 
     // 调用 Lovable AI (Gemini 2.5 Flash)
     const response = await callLovableAI(imageBase64, recognitionPrompt, LOVABLE_API_KEY);
