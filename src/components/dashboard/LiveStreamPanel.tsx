@@ -25,7 +25,8 @@ import {
   Edit,
   SwitchCamera
 } from 'lucide-react';
-import { CATEGORY_LABELS, PriceRecord, RecognitionResult } from '@/types';
+import { CATEGORY_LABELS, PriceRecord, RecognitionResult, ProductCategory } from '@/types';
+import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 
 export function LiveStreamPanel() {
   const [isStreaming, setIsStreaming] = useState(false);
@@ -38,6 +39,7 @@ export function LiveStreamPanel() {
   const [recognitionTime, setRecognitionTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -51,6 +53,19 @@ export function LiveStreamPanel() {
   const { currentProduct, session, updateSession } = useRealtimeSession();
   
   const isAdmin = role === 'admin';
+
+  // 用于编辑后更新显示的产品信息
+  const [editableProduct, setEditableProduct] = useState<{
+    id: string;
+    name: string;
+    category: ProductCategory;
+    era: string | null;
+    material: string | null;
+    craft: string | null;
+    description: string | null;
+    dimensions: string | null;
+    condition: string | null;
+  } | null>(null);
 
   // 获取历史价格
   useEffect(() => {
@@ -583,7 +598,25 @@ export function LiveStreamPanel() {
                   </div>
                   {isAdmin && currentProductId && (
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => {
+                          // 准备可编辑的产品数据
+                          setEditableProduct({
+                            id: currentProductId,
+                            name: displayResult.name,
+                            category: displayResult.category,
+                            era: displayResult.era || null,
+                            material: displayResult.material || null,
+                            craft: displayResult.craft || null,
+                            description: displayResult.description || null,
+                            dimensions: displayResult.dimensions || null,
+                            condition: displayResult.condition || null,
+                          });
+                          setEditDialogOpen(true);
+                        }}
+                      >
                         <Edit className="w-4 h-4" />
                       </Button>
                       <Button size="sm" variant="destructive" onClick={deleteProduct}>
@@ -709,6 +742,40 @@ export function LiveStreamPanel() {
           </div>
         )}
       </div>
+
+      {/* 产品编辑弹窗 */}
+      <ProductEditDialog
+        product={editableProduct}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSave={async () => {
+          // 重新获取产品信息以更新显示
+          if (currentProductId) {
+            const { data } = await supabase
+              .from('products')
+              .select('*')
+              .eq('id', currentProductId)
+              .maybeSingle();
+            
+            if (data) {
+              // 更新 editableProduct 以反映最新数据
+              setEditableProduct({
+                id: data.id,
+                name: data.name,
+                category: data.category,
+                era: data.era,
+                material: data.material,
+                craft: data.craft,
+                description: data.description,
+                dimensions: data.dimensions,
+                condition: data.condition,
+              });
+            }
+          }
+          setEditDialogOpen(false);
+          toast({ title: '商品信息已更新' });
+        }}
+      />
     </div>
   );
 }
