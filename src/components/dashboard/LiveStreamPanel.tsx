@@ -42,6 +42,7 @@ export function LiveStreamPanel() {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { toast } = useToast();
@@ -291,6 +292,11 @@ export function LiveStreamPanel() {
         // 更新实时会话
         await updateSession(productData.id, user.id);
 
+        // 识别完成后自动滚动到结果区域
+        setTimeout(() => {
+          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+
         if (!recognitionResult.fromCache) {
           toast({
             title: '识别成功',
@@ -535,9 +541,35 @@ export function LiveStreamPanel() {
       </div>
 
       {/* 结果展示区 */}
-      <div className="p-4 space-y-4 bg-background">
+      <div ref={resultRef} className="bg-background">
         {displayResult ? (
-          <>
+          <div className="space-y-4">
+            {/* 继续拍摄按钮 - 固定在结果区顶部 */}
+            <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b p-3">
+              <Button 
+                size="lg" 
+                onClick={() => {
+                  setCapturedImage(null);
+                  clearResult();
+                  setCurrentProductId(null);
+                  setHistoricalPrices([]);
+                  setRecognitionTime(null);
+                  startCamera();
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="w-full gap-2 py-6 text-lg"
+              >
+                <Camera className="w-6 h-6" />
+                继续拍摄下一件商品
+              </Button>
+              {recognitionTime && (
+                <p className="text-center text-sm text-muted-foreground mt-2">
+                  识别耗时: {(recognitionTime / 1000).toFixed(2)}s
+                </p>
+              )}
+            </div>
+
+            <div className="p-4 space-y-4">
             {/* 商品信息 */}
             <Card>
               <CardHeader className="pb-2">
@@ -667,9 +699,10 @@ export function LiveStreamPanel() {
                 )}
               </CardContent>
             </Card>
-          </>
+            </div>
+          </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
+          <div className="text-center py-8 text-muted-foreground p-4">
             <p>拍摄或上传商品图片开始识别</p>
           </div>
         )}
