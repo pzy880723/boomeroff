@@ -122,10 +122,8 @@ serve(async (req) => {
     console.log('[Recognition] Starting for user:', user.id);
     const startTime = Date.now();
 
-    // 精简提示词 - 优化速度
-    const recognitionPrompt = `日本杂货鉴定。返回JSON：
-{"name":"名称","category":"porcelain/incense/stationery/lacquerware/bronze/woodcraft/textile/jewelry/painting/other","subCategory":"细分(九谷烧/萩烧/备前烧/有田烧/轮岛涂/南部铁器等)","vesselType":"器型(盖碗/急须/抹茶碗/香炉等)","era":"年代","material":"材质","craft":"工艺","description":"20字概述","enrichedContent":{"basicIntro":"50字材质工艺介绍","culturalBackground":"60字历史文化背景","usageScenario":"30字使用建议"},"scripts":{"professional":"40字专业话术","sales":"60字销售话术","cultural":"60字文化话术"},"suggestedPriceRange":{"min":0,"max":0,"average":0},"imageHash":"3字特征"}
-直接返回JSON。`;
+    // 极简提示词 - 目标2秒识别
+    const recognitionPrompt = `日本杂货。JSON：{"name":"名","category":"porcelain/incense/lacquerware/bronze/woodcraft/other","subCategory":"类","vesselType":"型","era":"代","material":"材","craft":"工","description":"10字","enrichedContent":{"basicIntro":"30字","culturalBackground":"40字","usageScenario":"20字"},"scripts":{"professional":"30字","sales":"50字","cultural":"50字"},"suggestedPriceRange":{"min":0,"max":0,"average":0},"imageHash":"2字"}`;
 
     // 调用 Lovable AI (Gemini 2.5 Flash)
     const response = await callLovableAI(imageBase64, recognitionPrompt, LOVABLE_API_KEY);
