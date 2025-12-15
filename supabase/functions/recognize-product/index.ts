@@ -122,8 +122,8 @@ serve(async (req) => {
     console.log('[Recognition] Starting for user:', user.id);
     const startTime = Date.now();
 
-    // 极简提示词 - 只要6个核心字段，目标2秒
-    const recognitionPrompt = `识别日本杂货。仅返回JSON:{"name":"商品名称","category":"porcelain/incense/lacquerware/bronze/woodcraft/other","era":"年代","material":"材质","script":"60字直播卖货话术，突出卖点和价值","imageHash":"商品特征关键词"}`;
+    // 极简提示词 - 核心字段+价格参考，目标2秒
+    const recognitionPrompt = `识别日本杂货。仅返回JSON:{"name":"商品名称","category":"porcelain/incense/lacquerware/bronze/woodcraft/other","era":"年代","material":"材质","script":"60字直播卖货话术，突出卖点和价值","suggestedPriceRange":{"min":最低参考价人民币,"max":最高参考价人民币,"average":建议售价人民币},"imageHash":"商品特征关键词"}`;
 
     // 调用 Lovable AI (Gemini 2.5 Flash)
     const response = await callLovableAI(imageBase64, recognitionPrompt, LOVABLE_API_KEY);
