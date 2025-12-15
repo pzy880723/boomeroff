@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useProductRecognition } from '@/hooks/useProductRecognition';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
+import { useSpeech } from '@/hooks/useSpeech';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Camera, 
@@ -14,8 +15,9 @@ import {
   X, 
   Loader2, 
   Sparkles, 
-  Copy, 
+  Copy,
   Volume2,
+  VolumeX,
   Save,
   DollarSign,
   TrendingUp,
@@ -51,6 +53,7 @@ export function LiveStreamPanel() {
   const { user, role } = useAuth();
   const { isRecognizing, result, recognizeProduct, clearResult } = useProductRecognition();
   const { currentProduct, session, updateSession } = useRealtimeSession();
+  const { isSpeaking, speak, stop } = useSpeech();
   
   const isAdmin = role === 'admin';
 
@@ -368,10 +371,7 @@ export function LiveStreamPanel() {
   };
 
   const speakScript = (text: string) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-CN';
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
+    speak(text);
   };
 
   const deleteProduct = async () => {
@@ -655,11 +655,20 @@ export function LiveStreamPanel() {
                   </Button>
                   <Button 
                     size="sm" 
-                    variant="outline"
-                    onClick={() => speakScript(displayResult.scripts?.sales || '')}
+                    variant={isSpeaking ? 'secondary' : 'outline'}
+                    onClick={() => isSpeaking ? stop() : speakScript(displayResult.scripts?.sales || '')}
                   >
-                    <Volume2 className="w-4 h-4 mr-1" />
-                    朗读
+                    {isSpeaking ? (
+                      <>
+                        <VolumeX className="w-4 h-4 mr-1" />
+                        停止
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="w-4 h-4 mr-1" />
+                        朗读
+                      </>
+                    )}
                   </Button>
                 </div>
               </CardContent>

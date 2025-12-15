@@ -12,9 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useSpeech } from '@/hooks/useSpeech';
 import { 
   Copy, 
-  Volume2, 
+  Volume2,
+  VolumeX,
   Edit, 
   Trash2, 
   Calendar,
@@ -57,6 +59,7 @@ export function ProductDetailDialog({
 }: ProductDetailDialogProps) {
   const { role } = useAuth();
   const { toast } = useToast();
+  const { isSpeaking, speak, stop } = useSpeech();
   const [priceRecords, setPriceRecords] = useState<PriceRecord[]>([]);
   const [copiedStyle, setCopiedStyle] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -90,10 +93,7 @@ export function ProductDetailDialog({
   };
 
   const speakScript = (text: string) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-CN';
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
+    speak(text);
   };
 
   const handleDelete = async () => {
@@ -236,11 +236,20 @@ export function ProductDetailDialog({
                               </Button>
                               <Button 
                                 size="sm" 
-                                variant="outline"
-                                onClick={() => speakScript(scripts[key])}
+                                variant={isSpeaking ? 'secondary' : 'outline'}
+                                onClick={() => isSpeaking ? stop() : speakScript(scripts[key])}
                               >
-                                <Volume2 className="w-4 h-4 mr-1" />
-                                朗读
+                                {isSpeaking ? (
+                                  <>
+                                    <VolumeX className="w-4 h-4 mr-1" />
+                                    停止
+                                  </>
+                                ) : (
+                                  <>
+                                    <Volume2 className="w-4 h-4 mr-1" />
+                                    朗读
+                                  </>
+                                )}
                               </Button>
                             </div>
                           </div>
