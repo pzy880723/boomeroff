@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LogOut, User, Settings, Shield, History } from 'lucide-react';
+import { LogOut, User, Settings, Shield, History, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
 import logo from '@/assets/boomer-off-logo.png';
@@ -49,6 +49,15 @@ export function Header() {
               <span className="hidden sm:inline">历史记录</span>
             </Button>
           </Link>
+          
+          {role === 'admin' && (
+            <Link to="/admin/users">
+              <Button variant="ghost" size="sm" className="gap-1.5">
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline">用户管理</span>
+              </Button>
+            </Link>
+          )}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
