@@ -402,133 +402,135 @@ export function LiveStreamPanel() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* 全屏摄像头区域 */}
-      <div className="relative flex-1 bg-black min-h-[50vh]">
-        {/* 摄像头视频流 - 始终渲染，通过CSS控制显示 */}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className={`w-full h-full object-cover ${isStreaming && !capturedImage ? '' : 'hidden'}`}
-        />
-
-        {/* 捕获的图片 */}
-        {capturedImage && (
-          <img
-            src={capturedImage}
-            alt="Captured"
-            className="w-full h-full object-contain"
+      {/* 摄像头预览容器 - 始终正方形居中 */}
+      <div className="flex-1 flex items-center justify-center bg-black p-2 sm:p-4 min-h-[50vh]">
+        <div className="relative aspect-square w-full max-w-[min(100vw-1rem,70vh)] mx-auto bg-black rounded-lg overflow-hidden">
+          {/* 摄像头视频流 - 始终渲染，通过CSS控制显示 */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`absolute inset-0 w-full h-full object-cover ${isStreaming && !capturedImage ? '' : 'hidden'}`}
           />
-        )}
 
-        {/* 占位符 - 仅在没有流和图片时显示 */}
-        {!isStreaming && !capturedImage && (
-          <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-4">
-            <Camera className="w-24 h-24 text-muted-foreground" />
-            <p className="text-muted-foreground text-center text-lg">
-              点击下方按钮启动摄像头或上传图片
-            </p>
-          </div>
-        )}
+          {/* 捕获的图片 */}
+          {capturedImage && (
+            <img
+              src={capturedImage}
+              alt="Captured"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
 
-        {/* 识别中动画 + 计时器 */}
-        {isRecognizing && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="text-center text-white space-y-4">
-              <Loader2 className="w-12 h-12 animate-spin mx-auto" />
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 animate-pulse" />
-                <span className="text-lg">AI识别中...</span>
-              </div>
-              <div className="text-2xl font-mono font-bold">
-                {(elapsedTime / 1000).toFixed(1)}s
+          {/* 占位符 - 仅在没有流和图片时显示 */}
+          {!isStreaming && !capturedImage && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4">
+              <Camera className="w-16 h-16 sm:w-24 sm:h-24 text-muted-foreground" />
+              <p className="text-muted-foreground text-center text-sm sm:text-lg">
+                点击下方按钮启动摄像头或上传图片
+              </p>
+            </div>
+          )}
+
+          {/* 识别中动画 + 计时器 */}
+          {isRecognizing && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <div className="text-center text-white space-y-4">
+                <Loader2 className="w-12 h-12 animate-spin mx-auto" />
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 animate-pulse" />
+                  <span className="text-lg">AI识别中...</span>
+                </div>
+                <div className="text-2xl font-mono font-bold">
+                  {(elapsedTime / 1000).toFixed(1)}s
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 识别完成后显示耗时 */}
-        {recognitionTime && !isRecognizing && (
-          <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm font-mono">
-            识别耗时: {(recognitionTime / 1000).toFixed(2)}s
-          </div>
-        )}
+          {/* 识别完成后显示耗时 */}
+          {recognitionTime && !isRecognizing && (
+            <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm font-mono">
+              识别耗时: {(recognitionTime / 1000).toFixed(2)}s
+            </div>
+          )}
 
-        {/* 摄像头模式指示 */}
-        {isStreaming && !capturedImage && (
-          <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm">
-            {facingMode === 'environment' ? '后置摄像头' : '前置摄像头'}
-          </div>
-        )}
+          {/* 摄像头模式指示 */}
+          {isStreaming && !capturedImage && (
+            <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm">
+              {facingMode === 'environment' ? '后置摄像头' : '前置摄像头'}
+            </div>
+          )}
 
-        {/* 摄像头控制按钮 */}
-        <div className="absolute bottom-4 left-4 right-4 flex flex-wrap justify-center gap-2 sm:gap-3">
-          {!isStreaming && !capturedImage && (
-            <>
-              <Button size="lg" onClick={() => startCamera()} className="gap-2">
-                <Camera className="w-5 h-5" />
-                启动摄像头
-              </Button>
+          {/* 摄像头控制按钮 */}
+          <div className="absolute bottom-4 left-4 right-4 flex flex-wrap justify-center gap-2 sm:gap-3">
+            {!isStreaming && !capturedImage && (
+              <>
+                <Button size="lg" onClick={() => startCamera()} className="gap-2">
+                  <Camera className="w-5 h-5" />
+                  启动摄像头
+                </Button>
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="gap-2 bg-background/80"
+                >
+                  <Upload className="w-5 h-5" />
+                  上传图片
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+              </>
+            )}
+            
+            {isStreaming && (
+              <>
+                <Button 
+                  size="lg" 
+                  onClick={captureAndRecognize} 
+                  disabled={isRecognizing}
+                  className="gap-2"
+                >
+                  <Camera className="w-5 h-5" />
+                  拍照识别
+                </Button>
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  onClick={switchCamera}
+                  disabled={isRecognizing}
+                  className="bg-background/80"
+                  title={facingMode === 'environment' ? '切换到前置摄像头' : '切换到后置摄像头'}
+                >
+                  <SwitchCamera className="w-5 h-5" />
+                </Button>
+                <Button size="lg" variant="outline" onClick={stopCamera} className="bg-background/80">
+                  <X className="w-5 h-5" />
+                </Button>
+              </>
+            )}
+
+            {capturedImage && !isRecognizing && (
               <Button 
                 size="lg" 
                 variant="outline" 
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  setCapturedImage(null);
+                  startCamera();
+                }}
                 className="gap-2 bg-background/80"
               >
-                <Upload className="w-5 h-5" />
-                上传图片
+                继续拍摄
               </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-            </>
-          )}
-          
-          {isStreaming && (
-            <>
-              <Button 
-                size="lg" 
-                onClick={captureAndRecognize} 
-                disabled={isRecognizing}
-                className="gap-2"
-              >
-                <Camera className="w-5 h-5" />
-                拍照识别
-              </Button>
-              <Button 
-                size="lg" 
-                variant="outline" 
-                onClick={switchCamera}
-                disabled={isRecognizing}
-                className="bg-background/80"
-                title={facingMode === 'environment' ? '切换到前置摄像头' : '切换到后置摄像头'}
-              >
-                <SwitchCamera className="w-5 h-5" />
-              </Button>
-              <Button size="lg" variant="outline" onClick={stopCamera} className="bg-background/80">
-                <X className="w-5 h-5" />
-              </Button>
-            </>
-          )}
-
-          {capturedImage && !isRecognizing && (
-            <Button 
-              size="lg" 
-              variant="outline" 
-              onClick={() => {
-                setCapturedImage(null);
-                startCamera();
-              }}
-              className="gap-2 bg-background/80"
-            >
-              继续拍摄
-            </Button>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
