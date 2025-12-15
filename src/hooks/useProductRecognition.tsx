@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { RecognitionResult, ProductCategory } from '@/types';
+import { RecognitionResult, ProductCategory, EnrichedContent } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 export function useProductRecognition() {
@@ -35,15 +35,25 @@ export function useProductRecognition() {
         ? data.category 
         : 'other';
 
+      // 解析深度内容
+      const enrichedContent: EnrichedContent | undefined = data.enrichedContent ? {
+        basicIntro: data.enrichedContent.basicIntro || '',
+        culturalBackground: data.enrichedContent.culturalBackground || '',
+        usageScenario: data.enrichedContent.usageScenario || '',
+      } : undefined;
+
       const recognitionResult: RecognitionResult = {
         name: data.name || '未知商品',
         category,
+        subCategory: data.subCategory,
+        vesselType: data.vesselType,
         era: data.era,
         material: data.material,
         craft: data.craft,
         dimensions: data.dimensions,
         condition: data.condition,
         description: data.description,
+        enrichedContent,
         scripts: {
           professional: data.scripts?.professional || '',
           sales: data.scripts?.sales || '',

@@ -67,15 +67,24 @@ export interface CurrentSession {
   updated_at: string;
 }
 
+export interface EnrichedContent {
+  basicIntro: string;        // 商品基础介绍（材质、工艺、尺寸）
+  culturalBackground: string; // 文化背景（历史渊源、名家典故）
+  usageScenario: string;     // 使用场景（适合什么场合、怎么搭配）
+}
+
 export interface RecognitionResult {
   name: string;
   category: ProductCategory;
+  subCategory?: string;      // 细分类型：九谷烧、萩烧、备前烧等
+  vesselType?: string;       // 器型：盖碗、主人杯、侧把壶等
   era?: string;
   material?: string;
   craft?: string;
   dimensions?: string;
   condition?: string;
   description?: string;
+  enrichedContent?: EnrichedContent;
   scripts: {
     professional: string;
     sales: string;
