@@ -158,8 +158,8 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
-  // 极限压缩图片 - 480px/0.4质量，目标2秒识别
-  const compressImage = (imageData: string, maxWidth: number = 480): Promise<string> => {
+  // 图片压缩 - 800px/0.7质量，保持清晰度
+  const compressImage = (imageData: string, maxWidth: number = 800): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -167,7 +167,6 @@ export function LiveStreamPanel() {
         let width = img.width;
         let height = img.height;
         
-        // 按比例缩小到480px
         if (width > maxWidth) {
           height = (height * maxWidth) / width;
           width = maxWidth;
@@ -178,7 +177,7 @@ export function LiveStreamPanel() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.4)); // 质量降到0.4
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
         } else {
           resolve(imageData);
         }
@@ -191,8 +190,7 @@ export function LiveStreamPanel() {
     if (!videoRef.current) return;
 
     const canvas = document.createElement('canvas');
-    // 极限压缩 - 480px + 0.4质量，目标2秒识别
-    const maxWidth = 480;
+    const maxWidth = 800;
     let width = videoRef.current.videoWidth;
     let height = videoRef.current.videoHeight;
     
@@ -206,7 +204,7 @@ export function LiveStreamPanel() {
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0, width, height);
-      const imageData = canvas.toDataURL('image/jpeg', 0.4);
+      const imageData = canvas.toDataURL('image/jpeg', 0.7);
       setCapturedImage(imageData);
       await handleRecognition(imageData);
     }

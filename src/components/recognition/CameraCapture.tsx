@@ -17,8 +17,8 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // 图片压缩函数 - 极限压缩以达成2秒识别
-  const compressImage = (imageData: string, maxWidth = 480, quality = 0.4): Promise<string> => {
+  // 图片压缩函数 - 800px/0.7质量保持清晰度
+  const compressImage = (imageData: string, maxWidth = 800, quality = 0.7): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -74,9 +74,8 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0);
-      const rawImage = canvas.toDataURL('image/jpeg', 0.5);
-      // 极限压缩以达成2秒识别
-      const compressed = await compressImage(rawImage, 480, 0.4);
+      const rawImage = canvas.toDataURL('image/jpeg', 0.8);
+      const compressed = await compressImage(rawImage, 800, 0.7);
       setCapturedImage(compressed);
       stopCamera();
     }
@@ -98,8 +97,7 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const imageData = event.target?.result as string;
-      // 极限压缩以达成2秒识别
-      const compressed = await compressImage(imageData, 480, 0.4);
+      const compressed = await compressImage(imageData, 800, 0.7);
       setCapturedImage(compressed);
     };
     reader.readAsDataURL(file);
