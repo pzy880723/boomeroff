@@ -142,35 +142,14 @@ export function ProductDetailDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <div className="flex items-start justify-between gap-4 pr-10">
-              <div className="space-y-1">
-                <DialogTitle className="text-xl">{product.name}</DialogTitle>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  {formatDate(product.created_at)}
-                </div>
-              </div>
-              {isAdmin && (
-                <div className="flex gap-2 shrink-0">
-                  <Button size="sm" variant="outline" onClick={() => setEditDialogOpen(true)}>
-                    <Edit className="w-4 h-4 mr-1" />
-                    编辑
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="destructive" 
-                    onClick={handleDelete}
-                    disabled={deleting}
-                  >
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    删除
-                  </Button>
-                </div>
-              )}
+            <DialogTitle className="text-xl">{product.name}</DialogTitle>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Calendar className="h-3 w-3" />
+              {formatDate(product.created_at)}
             </div>
           </DialogHeader>
 
-          <div className="space-y-4 mt-4">
+          <div className="space-y-4">
             {/* 商品图片 */}
             <div className="aspect-square max-w-xs mx-auto overflow-hidden rounded-lg bg-muted">
               {product.image_url ? (
@@ -298,6 +277,25 @@ export function ProductDetailDialog({
                   </div>
                 </CardContent>
               </Card>
+            )}
+
+            {/* 管理员操作按钮 */}
+            {isAdmin && (
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button size="sm" variant="outline" onClick={() => setEditDialogOpen(true)}>
+                  <Edit className="w-4 h-4 mr-1" />
+                  编辑
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="destructive" 
+                  onClick={handleDelete}
+                  disabled={deleting}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  删除
+                </Button>
+              </div>
             )}
           </div>
         </DialogContent>
