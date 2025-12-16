@@ -19,8 +19,8 @@ export function RecognitionPanel() {
 
   const canRecognize = role === 'admin' || role === 'anchor';
 
-  // 异步上传图片（后台静默执行，不阻塞主流程）
-  const uploadImageAsync = async (imageBase64: string, productId: string, userId: string) => {
+  // 上传图片并返回 URL（同步等待结果）
+  const uploadImage = async (imageBase64: string, userId: string): Promise<string | null> => {
     try {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
       const byteCharacters = atob(base64Data);
@@ -37,21 +37,22 @@ export function RecognitionPanel() {
         .from('product-images')
         .upload(fileName, blob, { contentType: 'image/jpeg' });
       
-      if (!uploadError && uploadData) {
+      if (uploadError) {
+        console.error('[Upload] Image upload error:', uploadError);
+        return null;
+      }
+      
+      if (uploadData) {
         const { data: { publicUrl } } = supabase.storage
           .from('product-images')
           .getPublicUrl(fileName);
-        
-        // 更新商品的图片URL
-        await supabase
-          .from('products')
-          .update({ image_url: publicUrl })
-          .eq('id', productId);
-        
-        console.log('[Upload] Image uploaded successfully');
+        console.log('[Upload] Image uploaded successfully:', publicUrl);
+        return publicUrl;
       }
+      return null;
     } catch (err) {
-      console.error('[Upload] Background image upload error:', err);
+      console.error('[Upload] Image upload error:', err);
+      return null;
     }
   };
 
@@ -59,62 +60,73 @@ export function RecognitionPanel() {
     clearResult();
     setCurrentProductId(null);
 
-    const recognitionResult = await recognizeProduct(imageBase64);
-    
-    if (recognitionResult && user) {
-      try {
-        // 1. 立即保存商品到数据库（不等待图片上传）
-        const { data: productData, error } = await supabase
-          .from('products')
-          .insert([{
-            name: recognitionResult.name,
-            category: recognitionResult.category,
-            description: recognitionResult.description,
-            era: recognitionResult.era,
-            material: recognitionResult.material,
-            craft: recognitionResult.craft,
-            dimensions: recognitionResult.dimensions,
-            condition: recognitionResult.condition,
-            image_url: null, // 图片后台异步上传
-            scripts: JSON.parse(JSON.stringify(recognitionResult.scripts)),
-            ai_analysis: JSON.parse(JSON.stringify(recognitionResult)),
-            created_by: user.id,
-          }])
-          .select()
-          .single();
+    if (!user) return;
 
-        if (error) {
-          console.error('Error saving product:', error);
-          return;
-        }
+    // 并行执行：图片上传 + 商品识别
+    const [imageUrl, recognitionResult] = await Promise.all([
+      uploadImage(imageBase64, user.id),
+      recognizeProduct(imageBase64),
+    ]);
 
-        setCurrentProductId(productData.id);
+    if (!recognitionResult) return;
 
-        // 2. 并行执行：图片上传（后台）+ 价格保存 + 会话更新
-        // 图片上传完全异步，不阻塞
-        void uploadImageAsync(imageBase64, productData.id, user.id);
+    // 如果图片上传失败，提示用户但继续保存产品
+    if (!imageUrl) {
+      toast({
+        title: '图片上传失败',
+        description: '商品信息已保存，但图片未能上传',
+        variant: 'destructive',
+      });
+    }
 
-        // 价格保存和会话更新并行执行
-        const sessionPromise = updateSession(productData.id, user.id);
+    try {
+      // 保存商品到数据库（包含完整的 image_url）
+      const { data: productData, error } = await supabase
+        .from('products')
+        .insert([{
+          name: recognitionResult.name,
+          category: recognitionResult.category,
+          description: recognitionResult.description,
+          era: recognitionResult.era,
+          material: recognitionResult.material,
+          craft: recognitionResult.craft,
+          dimensions: recognitionResult.dimensions,
+          condition: recognitionResult.condition,
+          image_url: imageUrl, // 图片 URL 已准备好
+          scripts: JSON.parse(JSON.stringify(recognitionResult.scripts)),
+          ai_analysis: JSON.parse(JSON.stringify(recognitionResult)),
+          created_by: user.id,
+        }])
+        .select()
+        .single();
 
-        if (recognitionResult.suggestedPriceRange) {
-          void supabase.from('price_records').insert({
-            product_id: productData.id,
-            price_type: 'suggested',
-            price: recognitionResult.suggestedPriceRange.average,
-            notes: `AI建议: ¥${recognitionResult.suggestedPriceRange.min}-${recognitionResult.suggestedPriceRange.max}`,
-          });
-        }
-
-        await sessionPromise;
-
-        toast({
-          title: '识别完成',
-          description: `已识别: ${recognitionResult.name}`,
-        });
-      } catch (error) {
-        console.error('Error:', error);
+      if (error) {
+        console.error('Error saving product:', error);
+        return;
       }
+
+      setCurrentProductId(productData.id);
+
+      // 并行执行：价格保存 + 会话更新
+      const sessionPromise = updateSession(productData.id, user.id);
+
+      if (recognitionResult.suggestedPriceRange) {
+        void supabase.from('price_records').insert({
+          product_id: productData.id,
+          price_type: 'suggested',
+          price: recognitionResult.suggestedPriceRange.average,
+          notes: `AI建议: ¥${recognitionResult.suggestedPriceRange.min}-${recognitionResult.suggestedPriceRange.max}`,
+        });
+      }
+
+      await sessionPromise;
+
+      toast({
+        title: '识别完成',
+        description: `已识别: ${recognitionResult.name}`,
+      });
+    } catch (error) {
+      console.error('Error:', error);
     }
   };
 

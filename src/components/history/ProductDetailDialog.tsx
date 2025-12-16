@@ -21,7 +21,8 @@ import {
   Trash2, 
   Calendar,
   DollarSign,
-  Sparkles
+  Sparkles,
+  Package
 } from 'lucide-react';
 import { CATEGORY_LABELS, SCRIPT_STYLE_LABELS, ProductCategory, PriceRecord } from '@/types';
 import type { Json } from '@/integrations/supabase/types';
@@ -171,15 +172,19 @@ export function ProductDetailDialog({
 
           <div className="space-y-4 mt-4">
             {/* 商品图片 */}
-            {product.image_url && (
-              <div className="aspect-square max-w-xs mx-auto overflow-hidden rounded-lg bg-muted">
+            <div className="aspect-square max-w-xs mx-auto overflow-hidden rounded-lg bg-muted">
+              {product.image_url ? (
                 <img 
                   src={product.image_url} 
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
-              </div>
-            )}
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Package className="w-16 h-16 text-muted-foreground/30" />
+                </div>
+              )}
+            </div>
 
             {/* 基本信息 */}
             <div className="flex flex-wrap gap-2">

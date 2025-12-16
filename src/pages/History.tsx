@@ -272,15 +272,19 @@ export default function History() {
                   onClick={() => handleProductClick(product)}
                 >
                   {/* 商品图片 */}
-                  {product.image_url && (
-                    <div className="aspect-square w-full overflow-hidden bg-muted">
+                  <div className="aspect-square w-full overflow-hidden bg-muted">
+                    {product.image_url ? (
                       <img 
                         src={product.image_url} 
                         alt={product.name}
                         className="w-full h-full object-cover"
                       />
-                    </div>
-                  )}
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-12 h-12 text-muted-foreground/30" />
+                      </div>
+                    )}
+                  </div>
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="text-base line-clamp-1">
