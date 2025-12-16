@@ -142,7 +142,7 @@ export function ProductDetailDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between gap-4 pr-10">
               <div className="space-y-1">
                 <DialogTitle className="text-xl">{product.name}</DialogTitle>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
