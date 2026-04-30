@@ -61,7 +61,7 @@ export function AISettingsPanel() {
       .eq('key', 'ai_model')
       .maybeSingle();
     if (data?.value) {
-      const v = data.value as Partial<Settings>;
+      const v = data.value as unknown as Partial<Settings>;
       const merged: Settings = {
         provider: (v.provider as Provider) || 'lovable',
         model: v.model || DEFAULT.model,
