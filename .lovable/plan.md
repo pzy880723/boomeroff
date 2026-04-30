@@ -1,52 +1,57 @@
-## 两个修复
+## 中古圈完善
 
-### 1. 删除卡片上的「移除」按钮
-`src/pages/MyLibrary.tsx`：列表卡片底部只保留商品名，移除按钮只在详情弹窗里保留（已经有了）。
+### 现状问题（src/pages/Community.tsx）
+- **列表名称被截断**：`line-clamp-2`，长名称看不全
+- **详情介绍不完整**：`community_posts` 表只存了 name/era/origin/selling_points/tips，没有 description / material / craft / dimensions / condition；详情面板也只渲染这几个有限字段
+- **缺「收录到官方」按钮**：admin 在中古圈里看到好东西无法一键升级为官方知识；只有「收藏」（个人）
 
-### 2. 修复"已加入但官方库找不到"
+### 修改方案（只改 `src/pages/Community.tsx` 一个文件）
 
-**根因**（已通过数据库核实）：
-- 用户 admin 身份正确
-- `product_knowledge` 里有这条记录但 `is_official=false`
-- `official_knowledge` 中没有对应 `source_product_id` 的记录
+#### 1. 列表名称完整显示
+- 把 `line-clamp-2` 移除或改为 `line-clamp-3`，并允许换行（保留瀑布流，每张卡片高度自适应即可）
 
-→ 这条 product_knowledge 是**旧版本**插入的（旧逻辑没有 admin 同步到 official 的步骤）。
-新版本进入页面时，`useEffect` 检查 `product_knowledge` 已存在，立即 `setKnowledgeAdded(true)`，按钮 disable，admin 永远没机会触发新逻辑。
-
-**还有一个潜在 bug**：`addToKnowledge` 把 `capturedImage`（base64 dataURL）写进 `official_knowledge.cover_url` 和 `gallery`，体积巨大会写入失败/无法显示。
-
-#### 修复 LiveStreamPanel.tsx
-
-**(a) useEffect 同步状态时，admin 必须额外检查 official_knowledge 是否存在**：
+#### 2. 详情打开时回查 products 完整信息
+新增 state：
 ```ts
-// admin 视角：只有 product_knowledge 和 official_knowledge 都存在时才算"已收录"
-const officialOk = isAdmin
-  ? !!(await supabase.from('official_knowledge').select('id')
-        .eq('source_product_id', currentProductId).limit(1).maybeSingle()).data
-  : true;
-setKnowledgeAdded(!!pk && officialOk);
+const [activeDetail, setActiveDetail] = useState<ProductDetail | null>(null);
+const [detailLoading, setDetailLoading] = useState(false);
+const [officialAdded, setOfficialAdded] = useState(false);
 ```
 
-**(b) addToKnowledge 改成幂等"补齐"逻辑**：
-- 不再因为 product_knowledge 已存在就早返回
-- 改为：缺啥补啥
-  - 没有 product_knowledge → insert
-  - admin 且没有 official_knowledge → insert
-  - 都有 → 提示已收录
+在 `openDetail(post)` 里，若 `post.product_id` 存在：
+```ts
+const { data } = await supabase.from('products')
+  .select('description, material, craft, dimensions, condition, selling_points, tips, era, origin')
+  .eq('id', post.product_id).maybeSingle();
+setActiveDetail(data || null);
+```
 
-**(c) cover_url/gallery 用真实上传 URL**：
-insert official_knowledge 前先查 `products.image_url`，用它而不是 `capturedImage`。
+同时若 admin，查 `official_knowledge.source_product_id == post.product_id` 决定 `officialAdded` 初值。
 
-**(d) 旧数据自动修复**：
-admin 触发时若发现 product_knowledge 已存在但 official 缺失 → 直接补建 official_knowledge 并把 product_knowledge.is_official 更新为 true。
+详情面板新增展示模块（在现有 selling_points 之前/之后）：
+- **介绍**：`description`（多行段落，无截断）
+- **规格**：`material / craft / dimensions / condition` 用 2 列网格 KV 展示
 
-## 涉及文件
-- `src/pages/MyLibrary.tsx`：删除卡片上的移除按钮（约 -10 行）
-- `src/components/dashboard/LiveStreamPanel.tsx`：
-  - useEffect 增加 admin 的 official 检查
-  - addToKnowledge 改为幂等补齐 + 用 products.image_url
+并把 selling_points/tips 的数据来源优先用 `activeDetail`，回退到 `active` 自身。
 
-## 验收
-1. 个人知识库列表卡片底部不再有「移除」按钮（详情弹窗内仍有）
-2. admin 现在重新点「直接收录为官方知识」可成功补建 official_knowledge 记录
-3. 在「官方知识库」页面能看到刚收录的商品，且封面图正常显示
+#### 3. 详情底部按钮区
+- 点赞（保留）
+- **收藏到我的学习清单**（保留，文案微调）
+- **直接收录为官方知识**（新增，仅 isAdmin && product_id 时显示）
+  - 复用 LiveStreamPanel 同款逻辑（幂等补齐）：先查 product_knowledge / official_knowledge → 缺啥补啥
+  - cover_url 用 `post.image_url`（已是上传后的 URL）
+  - 成功后显示「已收录为官方知识」+ 禁用按钮
+  - 错误码 42501 → 「权限不足」提示
+
+#### 4. useAuth 引入 role
+`const { user, role } = useAuth(); const isAdmin = role === 'admin';`
+
+### 不动
+- 数据库 schema、RLS、官方/个人知识库页面
+- 列表卡片样式（除文本截断）
+
+### 验收
+1. 列表卡片名称不再被截断
+2. 点开详情可看到完整介绍 / 材质 / 工艺 / 尺寸 / 品相
+3. 普通用户在详情底部看到：点赞、收藏到我的学习清单
+4. admin 额外看到「直接收录为官方知识」按钮，点击后官方知识库出现该商品
