@@ -27,7 +27,7 @@ interface OfficialItem {
   tips: string | null;
 }
 
-const categoriesAll: Array<ProductCategory | 'all'> = ['all', ...Object.keys(CATEGORY_LABELS) as ProductCategory[]];
+const categoriesAll: Array<ProductCategory | 'all'> = ['all', ...CATEGORY_ORDER];
 
 export default function OfficialLibrary() {
   const { user, loading: authLoading } = useAuth();
