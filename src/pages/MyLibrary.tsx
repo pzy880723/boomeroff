@@ -289,7 +289,7 @@ export default function MyLibrary() {
                   variant="outline"
                   size="sm"
                   className="flex-1 gap-1.5"
-                  onClick={() => { navigate('/official-library'); setActive(null); }}
+                  onClick={() => { navigate('/library'); setActive(null); }}
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   去官方知识库
