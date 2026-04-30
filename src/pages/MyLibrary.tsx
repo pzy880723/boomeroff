@@ -186,18 +186,10 @@ export default function MyLibrary() {
                       {TYPE_LABEL[it.source_type] || it.source_type}
                     </Badge>
                   </div>
-                  <div className="p-2.5 space-y-2">
+                  <div className="p-2.5">
                     <p className="text-sm font-medium leading-tight line-clamp-2 min-h-[2.5rem]">
                       {it.snapshot?.name || '未命名'}
                     </p>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="w-full h-7 text-xs text-muted-foreground"
-                      onClick={(e) => remove(it, e)}
-                    >
-                      <Trash2 className="w-3 h-3 mr-1" /> 移除
-                    </Button>
                   </div>
                 </Card>
               );

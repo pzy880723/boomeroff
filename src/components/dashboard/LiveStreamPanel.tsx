@@ -335,77 +335,100 @@ export function LiveStreamPanel() {
     if (!currentProductId || !user || !displayResult) return;
     setSavingKnowledge(true);
     try {
-      // 防并发重复：先查一次
-      const { data: existing } = await supabase
-        .from('product_knowledge')
-        .select('id')
-        .eq('product_id', currentProductId)
-        .limit(1)
-        .maybeSingle();
-      if (existing) {
-        setKnowledgeAdded(true);
-        toast({ title: '已在团队知识库中', description: '无需重复添加' });
-        return;
-      }
-
       const sp = displayResult.sellingPoints || [];
-      const { error } = await supabase.from('product_knowledge').insert({
-        product_id: currentProductId,
-        category: displayResult.category,
-        product_name: displayResult.name,
-        selling_points: sp,
-        tips: displayResult.tips || null,
-        era: displayResult.era || null,
-        origin: displayResult.origin || null,
-        image_url: capturedImage || null,
-        created_by: user.id,
-        is_official: isAdmin, // admin 直接标记为官方推荐
-      });
-      if (error) throw error;
 
-      // admin：同步收录为「官方知识」
-      if (isAdmin) {
-        const { data: dup } = await supabase
+      // 拉取已上传的真实图片 URL（避免把 base64 写进 jsonb/text）
+      const { data: prod } = await supabase
+        .from('products')
+        .select('image_url')
+        .eq('id', currentProductId)
+        .maybeSingle();
+      const coverUrl = prod?.image_url || null;
+
+      // 现状探查
+      const [pkRes, ofRes] = await Promise.all([
+        supabase
+          .from('product_knowledge')
+          .select('id')
+          .eq('product_id', currentProductId)
+          .limit(1)
+          .maybeSingle(),
+        supabase
           .from('official_knowledge')
           .select('id')
           .eq('source_product_id', currentProductId)
           .limit(1)
-          .maybeSingle();
-        if (!dup) {
-          await supabase.from('official_knowledge').insert({
-            name: displayResult.name,
-            category: displayResult.category,
-            summary: displayResult.description || null,
-            content: {
-              material: displayResult.material || null,
-              craft: displayResult.craft || null,
-              dimensions: displayResult.dimensions || null,
-              condition: displayResult.condition || null,
-            },
-            era: displayResult.era || null,
-            origin: displayResult.origin || null,
-            cover_url: capturedImage || null,
-            gallery: capturedImage ? [capturedImage] : [],
-            selling_points: sp,
-            tips: displayResult.tips || null,
-            source_product_id: currentProductId,
-            created_by: user.id,
-          });
-        }
+          .maybeSingle(),
+      ]);
+
+      let didSomething = false;
+
+      // 缺 product_knowledge → 补
+      if (!pkRes.data) {
+        const { error } = await supabase.from('product_knowledge').insert({
+          product_id: currentProductId,
+          category: displayResult.category,
+          product_name: displayResult.name,
+          selling_points: sp,
+          tips: displayResult.tips || null,
+          era: displayResult.era || null,
+          origin: displayResult.origin || null,
+          image_url: coverUrl,
+          created_by: user.id,
+          is_official: isAdmin,
+        });
+        if (error) throw error;
+        didSomething = true;
+      } else if (isAdmin) {
+        // 已存在但旧版未标记 official → 升级
+        await supabase
+          .from('product_knowledge')
+          .update({ is_official: true })
+          .eq('id', pkRes.data.id);
+      }
+
+      // admin 且缺 official_knowledge → 补建
+      if (isAdmin && !ofRes.data) {
+        const { error: ofErr } = await supabase.from('official_knowledge').insert({
+          name: displayResult.name,
+          category: displayResult.category,
+          summary: displayResult.description || null,
+          content: {
+            material: displayResult.material || null,
+            craft: displayResult.craft || null,
+            dimensions: displayResult.dimensions || null,
+            condition: displayResult.condition || null,
+          },
+          era: displayResult.era || null,
+          origin: displayResult.origin || null,
+          cover_url: coverUrl,
+          gallery: coverUrl ? [coverUrl] : [],
+          selling_points: sp,
+          tips: displayResult.tips || null,
+          source_product_id: currentProductId,
+          created_by: user.id,
+        });
+        if (ofErr) throw ofErr;
+        didSomething = true;
       }
 
       setKnowledgeAdded(true);
-      toast({
-        title: isAdmin ? '已收录为官方知识' : '已申请收录',
-        description: isAdmin ? '所有同事都能在「官方知识」看到' : '已加入团队池，等待管理员审核',
-      });
+
+      if (!didSomething) {
+        toast({ title: '已在知识库中', description: '无需重复添加' });
+      } else {
+        toast({
+          title: isAdmin ? '已收录为官方知识' : '已申请收录',
+          description: isAdmin ? '所有同事都能在「官方知识」看到' : '已加入团队池，等待管理员审核',
+        });
+      }
     } catch (e: any) {
       console.error('[Knowledge] insert error:', e);
       const code = e?.code || '';
       if (code === '42501' || /row-level security/i.test(e?.message || '')) {
         toast({ title: '权限不足', description: '需要主播或管理员权限', variant: 'destructive' });
       } else {
-        toast({ title: '加入失败', description: '请稍后重试', variant: 'destructive' });
+        toast({ title: '加入失败', description: e?.message || '请稍后重试', variant: 'destructive' });
       }
     } finally {
       setSavingKnowledge(false);
@@ -490,7 +513,7 @@ export function LiveStreamPanel() {
     }
     let cancelled = false;
     (async () => {
-      const [{ data: pk }, { data: fav }] = await Promise.all([
+      const [pkRes, favRes, ofRes] = await Promise.all([
         supabase
           .from('product_knowledge')
           .select('id')
@@ -505,13 +528,22 @@ export function LiveStreamPanel() {
           .eq('source_id', currentProductId)
           .limit(1)
           .maybeSingle(),
+        // admin 还要确认 official_knowledge 也存在，才算"已收录"
+        isAdmin
+          ? supabase
+              .from('official_knowledge')
+              .select('id')
+              .eq('source_product_id', currentProductId)
+              .limit(1)
+              .maybeSingle()
+          : Promise.resolve({ data: { id: 'skip' } } as any),
       ]);
       if (cancelled) return;
-      setKnowledgeAdded(!!pk);
-      setFavorited(!!fav);
+      setKnowledgeAdded(!!pkRes.data && !!ofRes.data);
+      setFavorited(!!favRes.data);
     })();
     return () => { cancelled = true; };
-  }, [currentProductId, user]);
+  }, [currentProductId, user, isAdmin]);
 
   const switchMode = (mode: CaptureMode) => {
     if (mode === captureMode) return;
