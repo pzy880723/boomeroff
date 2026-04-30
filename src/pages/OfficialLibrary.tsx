@@ -66,6 +66,14 @@ export default function OfficialLibrary() {
     localStorage.setItem('lib_view', view);
   }, [view]);
 
+  useEffect(() => {
+    localStorage.setItem('lib_view', view);
+  }, [view]);
+
+  useEffect(() => {
+    localStorage.setItem('lib_sort', sort);
+  }, [sort]);
+
   // 切换一级类目时重置二级
   useEffect(() => { setSub('all'); }, [cat]);
 
@@ -80,12 +88,32 @@ export default function OfficialLibrary() {
     if (!user) return;
     (async () => {
       setLoading(true);
-      let q = supabase.from('official_knowledge').select('*').order('created_at', { ascending: false });
+      let q = supabase.from('official_knowledge').select('*');
+      // 仅在「全部」类目下应用排序切换；具体类目固定按更新时间倒序
+      if (cat === 'all') {
+        if (sort === 'important') {
+          q = q.order('importance_score', { ascending: false }).order('updated_at', { ascending: false });
+        } else if (sort === 'hot') {
+          // 数据库无法直接 order by 表达式，前端再排；先按更新时间初排
+          q = q.order('updated_at', { ascending: false });
+        } else {
+          q = q.order('updated_at', { ascending: false });
+        }
+      } else {
+        q = q.order('updated_at', { ascending: false });
+      }
       if (cat !== 'all') q = q.eq('category', cat);
       if (sub !== 'all') q = q.eq('ip_name', sub);
       if (keyword.trim()) q = q.or(`name.ilike.%${keyword}%,ip_name.ilike.%${keyword}%,summary.ilike.%${keyword}%`);
       const { data } = await q.limit(120);
-      setItems((data || []) as OfficialItem[]);
+      let list = (data || []) as OfficialItem[];
+      if (cat === 'all' && sort === 'hot') {
+        list = [...list].sort(
+          (a, b) =>
+            (b.favorite_count * 3 + b.view_count) - (a.favorite_count * 3 + a.view_count),
+        );
+      }
+      setItems(list);
       setLoading(false);
 
       const { data: fav } = await supabase
@@ -95,7 +123,7 @@ export default function OfficialLibrary() {
         .eq('source_type', 'official');
       setFavoritedIds(new Set((fav || []).map((f) => f.source_id)));
     })();
-  }, [user, cat, sub, keyword]);
+  }, [user, cat, sub, keyword, sort]);
 
   const toggleFav = async (item: OfficialItem) => {
     if (!user) return;
