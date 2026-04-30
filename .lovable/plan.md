@@ -1,144 +1,93 @@
+# 实现计划
 
-## 改造目标
+## 1. 多图拍摄（两种模式都支持）
 
-把当前系统从「直播话术工具」转型为**中古杂货铺店员销售辅助系统**：拍照 → 1-3 秒内拿到商品详细介绍和卖点 → 自动入库 → 每日生成知识点供店员学习。
+修改 `src/components/dashboard/LiveStreamPanel.tsx`：
 
----
+- 引入 `captureMode: 'single' | 'multi'` 状态，相机预览顶部加分段切换器：「单张快拍」/「多角度合并」
+- **单张模式**：保持现有行为（拍一张立即识别）
+- **多角度模式**：
+  - 新增 `capturedImages: string[]`（最多 5 张），每按拍照按钮把当前帧追加到数组，预览右下角显示横向缩略图条 + 张数徽章（如「3 / 5」）
+  - 缩略图支持点击 × 删除单张
+  - 新按钮「完成识别（N 张）」点击后把整个数组传给识别流程
+  - 切换模式或重置时清空数组
+- 文件上传支持 `multiple` 属性（仅多角度模式下开启）
 
-## 1. 品牌升级
+修改 `supabase/functions/recognize-product/index.ts`：
 
-- 上传新 logo `BO_logo_画板_1_副本_2.png` → `src/assets/boomer-off-vintage-logo.png`
-- 更换 `Header.tsx` 和 `AuthPage.tsx` 中的 logo 引用
-- 文案统一改为「**中古商品实时识别系统**」
-  - `index.html` 的 `<title>` 和 meta description
-  - `AuthPage` 副标题改为「中古杂货 · AI 秒级识别 · 店员销售辅助」
-  - Header alt 文案
-  - README 标题
+- 入参从 `image: string` 扩展为同时接受 `images: string[]`（向后兼容）
+- 多张时把所有图片打包到同一次 Lovable AI Gateway 调用的 `messages[0].content` 数组里，prompt 增加一句「以下为同一件商品的多个角度，请综合判断」
+- 缓存 hash 用第一张图（避免多图组合永远不命中缓存）
+- 上传到 storage 时只存第一张图作为代表图（封面）
 
----
+修改 `src/hooks/useProductRecognition.tsx`：扩展 `recognizeProduct` 支持 `string | string[]`。
 
-## 2. 识别输出重构（核心改动）
+## 2. 手动「加入知识库」按钮
 
-把"10秒卖点"升级为**结构化商品详细介绍**，让没见过该商品的店员也能立即上手介绍。
+修改 `src/components/dashboard/LiveStreamPanel.tsx`：
 
-### 后端改造 `supabase/functions/recognize-product/index.ts`
+- **移除** `handleRecognition` 里的自动 `product_knowledge` 写入（第 256-272 行）
+- 在结果区底部新增按钮「加入知识库」，点击后才执行原写入逻辑
+- 按钮带状态：未入库 → 入库中（loading）→ 已入库（disabled + 勾选图标），同一商品不重复入库
+- 用本地 state `knowledgeAdded: boolean` 跟踪，每次新识别时重置
 
-- 升级模型：`google/gemini-2.5-flash-lite` → **`google/gemini-3-flash-preview`**（最新、速度与质量平衡，仍可保 2 秒级）
-- 重写 prompt，输出 JSON 字段：
-  ```
-  {
-    name,           // 商品名称
-    category,       // 品类
-    era,            // 年份/年代（如「昭和中期 1960s」）
-    origin,         // 产地（如「日本京都 清水烧」）★新增
-    material,       // 材质
-    craft,          // 工艺特点
-    sellingPoints,  // 卖点数组（3-5 条短句，最重要的字段）★新增
-    description,    // 整体介绍（80-120字，店员可直接讲）
-    tips,           // 店员小贴士（保养、辨识真伪、文化背景一两句）★新增
-    imageHash       // 缓存匹配关键词
-  }
-  ```
-- 移除 `suggestedPriceRange`、`scripts.{professional/sales/cultural}` 三种风格
-- 缓存命中时返回新结构
+## 3. 隐藏后台入口（点 logo 5 次 + 独立密码）
 
-### 数据库迁移
+新建 `src/hooks/useAdminPortal.tsx`：
 
-新增 `products` 字段：
-- `origin TEXT` — 产地
-- `selling_points JSONB` — 卖点数组
-- `tips TEXT` — 店员贴士
+- 提供 `tapLogo()` 计数器：3 秒内累计 5 次触发开锁弹窗
+- 提供 `verifyPassword(pwd)` 校验三组硬编码密码（`pzy5565283` / `880723` / `boomer2016`），任一通过即在 `sessionStorage` 写入 `__admin_portal_unlocked = "1"`，并 `navigate('/portal')`
+- 提供 `isPortalUnlocked()` 读 sessionStorage
+- 关闭浏览器/刷新会话后失效（按用户选项「独立后台密码（与账号无关）」，不持久化设备）
 
-保留现有 `description` / `era` / `material` / `craft`，废弃 `scripts` 字段（保留列以兼容旧数据，但前端不再展示三风格 Tab）。
+修改 `src/components/layout/Header.tsx`：
 
-不动 `price_records` 表的 schema（避免破坏旧数据），仅前端不再读写。
+- logo `<Link>` 改为 `<button>` 包裹（保留 to "/" 行为：单击跳首页，连续 5 次触发弹窗）
+- 弹出 `<Dialog>` 含密码输入框 + 错误提示，验证通过后导航到 `/portal`
 
-### 前端识别结果展示
+新建 `src/pages/PortalGuard.tsx`：包装组件，未解锁时 `<Navigate to="/" />`。
 
-- 新组件 `ProductDetailCard.tsx`（替换 `ScriptDisplay`）：
-  - 顶部：商品名 + 品类 + 年代 + 产地 徽章
-  - 「**核心卖点**」高亮区，列表展示每条卖点（最显眼）
-  - 「**详细介绍**」段落，含复制 + 朗读按钮
-  - 「**材质 / 工艺 / 尺寸 / 品相**」信息网格
-  - 「**店员贴士**」浅色提示框
-- `LiveStreamPanel.tsx`：
-  - 删除整个「**价格参考**」区域、`historicalPrices`、`livePrice`、`fetchHistoricalPrices`、`saveLivePrice`
-  - 删除 `PriceDisplay` 组件的引用
-  - 入库逻辑去掉 `price_records` 写入
+新建 `src/pages/Portal.tsx`：后台首页，含侧边导航：
+- 用户管理（迁移自 AdminUsers）
+- 邀请管理
+- （预留）商品/识别历史管理
 
----
+注册路由 `/portal`、`/portal/users` 到 `App.tsx`。
 
-## 3. 历史记录与详情页
+## 4. 前端移除「用户管理」入口
 
-- `History.tsx` 卡片：把"卖点脚本预览"改为展示 `selling_points` 前两条
-- `ProductDetailDialog.tsx`：
-  - 删除「销售话术」三 Tab、删除「价格记录」整块
-  - 改用新的 ProductDetailCard 同款布局：卖点 / 详细介绍 / 贴士
-- `ProductEditDialog.tsx`：增加 `origin`、`selling_points`（多行文本，按行分割）、`tips` 字段编辑
+修改 `src/components/layout/Header.tsx`：
 
----
+- 删除 `role === 'admin'` 时显示的「用户管理」按钮（第 47-54 行）
+- 删除下拉菜单里 admin 的「系统设置」项
 
-## 4. 每日知识点（新功能）
+修改 `src/App.tsx`：
 
-帮助店员在没识别商品时也能学习库存知识。
+- `/admin/users` 路由保留但用 `PortalGuard` 包裹（或直接重定向到 `/portal/users`），避免老链接 404
+- 新增 `/portal` 与 `/portal/users` 路由
 
-### 数据库
+## 技术细节
 
-新建表 `daily_knowledge`：
-```
-id uuid pk
-date date unique
-content jsonb       -- {summary, highlights[], featured_products[]}
-created_at timestamptz
+**密码安全说明**：三个密码只是「软门锁」，用于在共享设备上隐藏后台入口；由于 RLS 仍以 Supabase auth 角色为准，真正的敏感操作（增删用户/角色）依然要求当前登录账号是 admin。如果当前登录账号不是 admin，进入 /portal 后用户管理 API 会被 RLS 拒绝——会在页面顶部显示提示「请使用管理员账号登录后再进行用户操作」。
+
+**多图 token 成本**：Gemini Flash Lite 多图调用按图计费，限制最多 5 张以控制延迟（仍保持 ~2-3 秒目标）。
+
+**布局**：
+
+```text
+[Header  logo(可点5次) ······ 知识 历史 头像]
+[相机预览]
+  [单张快拍 | 多角度合并]   ← 顶部分段
+  [缩略图 1 2 3]            ← 多角度时右下
+  [拍照 / 完成识别(3)]      ← 底部
+[识别结果]
+  ...
+  [加入知识库]              ← 手动按钮
+  [编辑] [删除] (admin only)
 ```
 
-RLS：所有登录用户可读，仅 service role 可写（由 edge function 写入）。
+## 文件清单
 
-### Edge Function `generate-daily-knowledge`
-
-- 触发方式：店员每天首次进入首页时前端检查"今天是否已有"，若无则调用一次（用 unique date 防并发）
-- 逻辑：拉取昨天/最近 7 天新增的商品，调用 `google/gemini-3-flash-preview` 总结生成：
-  - 今日学习要点（3-5 条，跨商品提炼的中古知识）
-  - 重点商品速记（挑 3 件代表，每件 1 句话核心卖点）
-- 写入 `daily_knowledge`
-
-### 前端「每日知识点」卡片
-
-- 在 `Dashboard` 摄像头区**上方**新增可折叠的「📚 今日知识点」卡片
-- 展示当日 summary + highlights + 重点商品缩略图
-- 点击展开/收起，默认展开
-
----
-
-## 5. 用户体验微调
-
-- Auth 副标题与角色保持不变（admin/anchor），但 UI 文案把「主播/直播」类描述替换为「店员/识别」
-- 移除 `RecognitionPanel.tsx`（已未被路由使用，确认后删除）
-- 摄像头按钮文案：「启动摄像头」保持，识别中提示「AI 识别中…」保持
-
----
-
-## 技术细节（开发参考）
-
-**文件改动清单：**
-- 新增：`src/assets/boomer-off-vintage-logo.png`、`src/components/recognition/ProductDetailCard.tsx`、`src/components/dashboard/DailyKnowledgeCard.tsx`、`supabase/functions/generate-daily-knowledge/index.ts`
-- 修改：`Header.tsx`、`AuthPage.tsx`、`index.html`、`LiveStreamPanel.tsx`、`History.tsx`、`ProductDetailDialog.tsx`、`ProductEditDialog.tsx`、`useProductRecognition.tsx`、`types/index.ts`、`supabase/functions/recognize-product/index.ts`、`supabase/config.toml`
-- 删除（或停用）：`RecognitionPanel.tsx`、`PriceDisplay.tsx`（如未在它处引用）、`ScriptDisplay.tsx`
-
-**类型变更：**`RecognitionResult` 新增 `origin/sellingPoints/tips`，移除 `scripts/suggestedPriceRange/enrichedContent/subCategory/vesselType`。
-
-**模型选择：** 识别用 `google/gemini-3-flash-preview`（最新 flash，质量优于 2.5-flash-lite，速度可接受）。每日知识点用同模型，文本任务无压力。
-
-**速度保障：** prompt 仍保持紧凑（≤200 字），输出字段控制在 8 个以内，目标识别 ≤3 秒。
-
----
-
-## 实施顺序
-
-1. 数据库迁移（新字段 + daily_knowledge 表）
-2. logo 资源 + 品牌文案
-3. recognize-product edge function 重写 + 类型更新
-4. ProductDetailCard 新组件 + LiveStreamPanel 移除价格区
-5. History + ProductDetailDialog + ProductEditDialog 适配
-6. generate-daily-knowledge edge function + DailyKnowledgeCard
-7. 清理废弃组件
+- 编辑：`src/components/layout/Header.tsx`、`src/components/dashboard/LiveStreamPanel.tsx`、`src/hooks/useProductRecognition.tsx`、`src/App.tsx`
+- 新建：`src/hooks/useAdminPortal.tsx`、`src/pages/Portal.tsx`、`src/pages/PortalGuard.tsx`
+- 编辑：`supabase/functions/recognize-product/index.ts`
