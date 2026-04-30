@@ -30,7 +30,8 @@ import {
 import { RoleEditor } from './RoleEditor';
 import { ROLE_LABELS, AppRole } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -52,6 +53,7 @@ export function UserTable() {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
+  const [filter, setFilter] = useState<'all' | 'pending'>('all');
   const { user: currentUser } = useAuth();
 
   const fetchUsers = async () => {
