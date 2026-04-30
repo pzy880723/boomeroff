@@ -6,7 +6,7 @@ import { useProductRecognition } from '@/hooks/useProductRecognition';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon,
+  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw,
 } from 'lucide-react';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
@@ -654,8 +654,8 @@ export function LiveStreamPanel() {
                   }}
                   className="gap-2 h-12 px-6 rounded-full bg-white text-neutral-900 hover:bg-white/90"
                 >
-                  <Camera className="w-5 h-5" />
-                  继续拍摄
+                  <RotateCcw className="w-5 h-5" />
+                  重拍这一张
                 </Button>
               )}
             </div>
@@ -684,7 +684,7 @@ export function LiveStreamPanel() {
                   className="w-full gap-2 h-12 rounded-full bg-gradient-primary text-primary-foreground hover:opacity-95 shadow-soft text-base font-medium"
                 >
                   <Camera className="w-5 h-5" />
-                  继续拍摄下一件商品
+                  识别下一件商品
                 </Button>
                 {recognitionTime && (
                   <p className="text-center text-xs text-muted-foreground mt-2 tabular-nums">
