@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { CheckCircle, XCircle, Loader2, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole, ROLE_LABELS } from '@/types';
-import logo from '@/assets/boomer-off-logo.png';
+import logo from '@/assets/boomer-off-vintage-logo.png';
 
 interface InviteData {
   id: string;
