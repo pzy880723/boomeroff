@@ -134,7 +134,7 @@ export default function Me() {
         </Card>
 
         <div className="flex flex-col items-center gap-2 pt-6 pb-4 opacity-70">
-          <img src={logo} alt="BOOMER-OFF" className="h-14 w-14 rounded-lg object-contain" draggable={false} />
+          <img src={logo} alt="BOOMER-OFF" className="h-24 w-24 rounded-xl object-contain" draggable={false} />
           <p className="text-xs text-muted-foreground">BOOMER-OFF · v0.1.0</p>
         </div>
       </div>
