@@ -36,23 +36,27 @@ export function Header() {
   };
 
   return (
-    <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center justify-between">
-        <Link to="/" className="hover:opacity-80 transition-opacity">
-          <img src={logo} alt="中古商品实时识别系统" className="h-8 w-auto object-contain" />
+    <header className="sticky top-0 z-40 border-b border-border/60 glass safe-top">
+      <div className="container flex h-14 items-center justify-between gap-2">
+        <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity min-w-0">
+          <img src={logo} alt="中古商品实时识别系统" className="h-8 w-8 rounded-md object-contain shrink-0" />
+          <div className="hidden sm:flex flex-col leading-tight min-w-0">
+            <span className="font-display text-[15px] font-semibold tracking-tight truncate">中古商品实时识别</span>
+            <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Vintage · AI Assistant</span>
+          </div>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <Link to="/history">
-            <Button variant="ghost" size="sm" className="gap-1.5">
+            <Button variant="ghost" size="sm" className="gap-1.5 h-9 px-2.5 sm:px-3">
               <History className="h-4 w-4" />
               <span className="hidden sm:inline">历史记录</span>
             </Button>
           </Link>
-          
+
           {role === 'admin' && (
             <Link to="/admin/users">
-              <Button variant="ghost" size="sm" className="gap-1.5">
+              <Button variant="ghost" size="sm" className="gap-1.5 h-9 px-2.5 sm:px-3">
                 <Users className="h-4 w-4" />
                 <span className="hidden sm:inline">用户管理</span>
               </Button>
@@ -61,9 +65,9 @@ export function Header() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+              <Button variant="ghost" className="relative h-9 w-9 rounded-full ml-1 ring-1 ring-border/60">
                 <Avatar className="h-9 w-9">
-                  <AvatarFallback>
+                  <AvatarFallback className="bg-gradient-primary text-primary-foreground text-sm font-medium">
                     {user?.email ? getInitials(user.email) : 'U'}
                   </AvatarFallback>
                 </Avatar>
@@ -72,12 +76,9 @@ export function Header() {
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-2">
-                  <p className="text-sm font-medium leading-none">{user?.email}</p>
+                  <p className="text-sm font-medium leading-none truncate">{user?.email}</p>
                   {role && (
-                    <Badge
-                      variant={getRoleBadgeVariant(role)}
-                      className="w-fit"
-                    >
+                    <Badge variant={getRoleBadgeVariant(role)} className="w-fit">
                       <Shield className="w-3 h-3 mr-1" />
                       {ROLE_LABELS[role]}
                     </Badge>
