@@ -286,7 +286,7 @@ export default function OfficialLibrary() {
         ) : view === 'grid' ? (
           <div className="grid grid-cols-2 gap-3">
             {items.map((it) => (
-              <Card key={it.id} className="overflow-hidden cursor-pointer group" onClick={() => setDetail(it)}>
+              <Card key={it.id} className="overflow-hidden cursor-pointer group" onClick={() => openDetail(it)}>
                 <div className="aspect-square bg-muted relative">
                   {it.cover_url ? (
                     <img src={it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" />
@@ -317,7 +317,7 @@ export default function OfficialLibrary() {
               <Card
                 key={it.id}
                 className="flex items-center gap-3 p-2 cursor-pointer hover:bg-accent/50 transition-colors"
-                onClick={() => setDetail(it)}
+                onClick={() => openDetail(it)}
               >
                 <div className="w-14 h-14 rounded-md bg-muted shrink-0 overflow-hidden flex items-center justify-center">
                   {it.cover_url ? (
