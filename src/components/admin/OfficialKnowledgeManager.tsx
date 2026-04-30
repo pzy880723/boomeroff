@@ -106,7 +106,7 @@ export function OfficialKnowledgeManager() {
           <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部品类</SelectItem>
-            {(Object.keys(CATEGORY_LABELS) as ProductCategory[]).map((k) => (
+            {CATEGORY_ORDER.map((k) => (
               <SelectItem key={k} value={k}>{CATEGORY_LABELS[k]}</SelectItem>
             ))}
           </SelectContent>
@@ -191,7 +191,7 @@ export function OfficialKnowledgeManager() {
                   <Select value={editing.category || 'other'} onValueChange={(v) => setEditing({ ...editing, category: v as ProductCategory })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {(Object.keys(CATEGORY_LABELS) as ProductCategory[]).map((k) => (
+                      {CATEGORY_ORDER.map((k) => (
                         <SelectItem key={k} value={k}>{CATEGORY_LABELS[k]}</SelectItem>
                       ))}
                     </SelectContent>
