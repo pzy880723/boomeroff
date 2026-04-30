@@ -262,6 +262,17 @@ export function OfficialKnowledgeManager() {
                 <Label>小贴士</Label>
                 <Textarea rows={2} value={editing.tips || ''} onChange={(e) => setEditing({ ...editing, tips: e.target.value })} />
               </div>
+              <div>
+                <Label>重要程度（0–100）</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={editing.importance_score ?? 0}
+                  onChange={(e) => setEditing({ ...editing, importance_score: Number(e.target.value) })}
+                  placeholder="留空或填 0 表示未评估，可在列表上方一键重算"
+                />
+              </div>
             </div>
           )}
           <DialogFooter>
