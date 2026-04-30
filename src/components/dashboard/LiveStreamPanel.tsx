@@ -490,7 +490,7 @@ export function LiveStreamPanel() {
     }
     let cancelled = false;
     (async () => {
-      const [{ data: pk }, { data: fav }] = await Promise.all([
+      const [pkRes, favRes, ofRes] = await Promise.all([
         supabase
           .from('product_knowledge')
           .select('id')
@@ -505,13 +505,22 @@ export function LiveStreamPanel() {
           .eq('source_id', currentProductId)
           .limit(1)
           .maybeSingle(),
+        // admin 还要确认 official_knowledge 也存在，才算"已收录"
+        isAdmin
+          ? supabase
+              .from('official_knowledge')
+              .select('id')
+              .eq('source_product_id', currentProductId)
+              .limit(1)
+              .maybeSingle()
+          : Promise.resolve({ data: { id: 'skip' } } as any),
       ]);
       if (cancelled) return;
-      setKnowledgeAdded(!!pk);
-      setFavorited(!!fav);
+      setKnowledgeAdded(!!pkRes.data && !!ofRes.data);
+      setFavorited(!!favRes.data);
     })();
     return () => { cancelled = true; };
-  }, [currentProductId, user]);
+  }, [currentProductId, user, isAdmin]);
 
   const switchMode = (mode: CaptureMode) => {
     if (mode === captureMode) return;
