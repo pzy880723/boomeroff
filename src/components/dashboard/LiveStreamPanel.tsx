@@ -422,6 +422,13 @@ export function LiveStreamPanel() {
         setFavorited(false);
         toast({ title: '已取消收藏' });
       } else {
+        // 拉已上传的真实 URL，避免把 base64 dataURL 写进 jsonb
+        const { data: prod } = await supabase
+          .from('products')
+          .select('image_url')
+          .eq('id', currentProductId)
+          .maybeSingle();
+        const coverUrl = prod?.image_url || null;
         const { error } = await supabase.from('user_favorites').insert({
           user_id: user.id,
           source_type: 'recognition',
@@ -429,7 +436,9 @@ export function LiveStreamPanel() {
           snapshot: {
             name: displayResult.name,
             category: displayResult.category,
-            image_url: capturedImage || null,
+            cover_url: coverUrl,
+            image_url: coverUrl,
+            summary: displayResult.description || null,
           },
         });
         if (error && !error.message.includes('duplicate')) throw error;
