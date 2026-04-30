@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { UserTable } from '@/components/admin/UserTable';
 import { InviteDialog } from '@/components/admin/InviteDialog';
+import { KnowledgeManager } from '@/components/admin/KnowledgeManager';
+import { AISettingsPanel } from '@/components/admin/AISettingsPanel';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Shield, Users, LogOut, AlertCircle } from 'lucide-react';
+import { Shield, Users, LogOut, AlertCircle, BookOpen, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
 import { useNavigate } from 'react-router-dom';
@@ -53,11 +54,19 @@ export default function Portal() {
 
         <Card className="overflow-hidden border-border/60 shadow-soft">
           <Tabs value={tab} onValueChange={setTab} className="w-full">
-            <div className="border-b border-border/60 px-3 sm:px-4 pt-3">
+            <div className="border-b border-border/60 px-3 sm:px-4 pt-3 overflow-x-auto">
               <TabsList className="h-10">
                 <TabsTrigger value="users" className="gap-1.5">
                   <Users className="w-4 h-4" />
                   用户管理
+                </TabsTrigger>
+                <TabsTrigger value="knowledge" className="gap-1.5">
+                  <BookOpen className="w-4 h-4" />
+                  知识库
+                </TabsTrigger>
+                <TabsTrigger value="ai" className="gap-1.5">
+                  <Sparkles className="w-4 h-4" />
+                  AI 模型
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -68,6 +77,14 @@ export default function Portal() {
                 <InviteDialog />
               </div>
               <UserTable />
+            </TabsContent>
+
+            <TabsContent value="knowledge" className="p-3 sm:p-5 m-0">
+              <KnowledgeManager />
+            </TabsContent>
+
+            <TabsContent value="ai" className="p-3 sm:p-5 m-0">
+              <AISettingsPanel />
             </TabsContent>
           </Tabs>
         </Card>

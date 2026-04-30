@@ -6,7 +6,50 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function callLovableAI(images: string[], systemPrompt: string, apiKey: string) {
+interface ModelConfig {
+  url: string;
+  apiKey: string;
+  model: string;
+  jsonMode: boolean;
+}
+
+const DEFAULT_LOVABLE_MODEL = 'google/gemini-2.5-flash-lite';
+const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+
+async function resolveModelConfig(adminClient: any): Promise<ModelConfig> {
+  const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
+  const fallback: ModelConfig = {
+    url: LOVABLE_URL, apiKey: lovableKey,
+    model: DEFAULT_LOVABLE_MODEL, jsonMode: true,
+  };
+
+  try {
+    const { data } = await adminClient
+      .from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
+    const v = data?.value;
+    if (!v) return fallback;
+    if (v.provider === 'custom' && v.custom?.baseUrl && v.custom?.apiKey && v.custom?.model) {
+      return {
+        url: `${String(v.custom.baseUrl).replace(/\/+$/, '')}/chat/completions`,
+        apiKey: v.custom.apiKey,
+        model: v.custom.model,
+        // 自定义接口不强制 JSON 模式（兼容性更好）
+        jsonMode: false,
+      };
+    }
+    return {
+      url: LOVABLE_URL,
+      apiKey: lovableKey,
+      model: v.model || DEFAULT_LOVABLE_MODEL,
+      jsonMode: true,
+    };
+  } catch (e) {
+    console.warn('[Recognition] settings load failed, fallback:', e);
+    return fallback;
+  }
+}
+
+async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) {
   const imageUrls = images.map((img) =>
     img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
   );
@@ -20,23 +63,23 @@ async function callLovableAI(images: string[], systemPrompt: string, apiKey: str
     userContent.push({ type: 'image_url', image_url: { url } });
   }
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  const body: any = {
+    model: cfg.model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ],
+  };
+  if (cfg.jsonMode) body.response_format = { type: 'json_object' };
+
+  return await fetch(cfg.url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${cfg.apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash-lite',
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
-
-  return response;
 }
 
 serve(async (req) => {
@@ -95,9 +138,9 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'AI 服务未配置' }), {
+    const modelCfg = await resolveModelConfig(adminClient);
+    if (!modelCfg.apiKey) {
+      return new Response(JSON.stringify({ error: 'AI 服务未配置，请到后台「AI 模型」设置' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -108,8 +151,9 @@ serve(async (req) => {
 {"name":"","category":"porcelain|incense|stationery|lacquerware|bronze|woodcraft|textile|jewelry|painting|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"≤80字介绍","tips":"一句话贴士","imageHash":"3-5关键词空格分隔"}
 sellingPoints要3条短句直击重点。`;
 
-    const response = await callLovableAI(imageList, recognitionPrompt, LOVABLE_API_KEY);
+    const response = await callAI(imageList, recognitionPrompt, modelCfg);
     const aiTime = Date.now() - startTime;
+    console.log('[Recognition] model:', modelCfg.model, 'AI time:', aiTime, 'ms');
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -131,7 +175,7 @@ sellingPoints要3条短句直击重点。`;
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
-    console.log('[Recognition] AI time:', aiTime, 'ms');
+    
 
     if (!content) {
       return new Response(JSON.stringify({ error: 'AI 返回空响应' }), {

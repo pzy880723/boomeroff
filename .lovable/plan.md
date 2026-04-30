@@ -1,93 +1,106 @@
 # 实现计划
 
-## 1. 多图拍摄（两种模式都支持）
+## 1. 数据库变更
 
-修改 `src/components/dashboard/LiveStreamPanel.tsx`：
+### 新表：`app_settings`（全局键值配置，单行）
 
-- 引入 `captureMode: 'single' | 'multi'` 状态，相机预览顶部加分段切换器：「单张快拍」/「多角度合并」
-- **单张模式**：保持现有行为（拍一张立即识别）
-- **多角度模式**：
-  - 新增 `capturedImages: string[]`（最多 5 张），每按拍照按钮把当前帧追加到数组，预览右下角显示横向缩略图条 + 张数徽章（如「3 / 5」）
-  - 缩略图支持点击 × 删除单张
-  - 新按钮「完成识别（N 张）」点击后把整个数组传给识别流程
-  - 切换模式或重置时清空数组
-- 文件上传支持 `multiple` 属性（仅多角度模式下开启）
+```sql
+CREATE TABLE public.app_settings (
+  key text PRIMARY KEY,
+  value jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+-- 所有登录用户可读（识别函数需要读取当前模型）
+CREATE POLICY "Settings readable by authenticated"
+  ON public.app_settings FOR SELECT TO authenticated USING (true);
+-- 仅 admin 可写
+CREATE POLICY "Only admins can write settings"
+  ON public.app_settings FOR ALL TO authenticated
+  USING (has_role(auth.uid(), 'admin'))
+  WITH CHECK (has_role(auth.uid(), 'admin'));
+```
 
-修改 `supabase/functions/recognize-product/index.ts`：
+存储一个 key=`ai_model` 的行，value 形如：
+```json
+{
+  "provider": "lovable" | "custom",
+  "model": "google/gemini-2.5-flash-lite",
+  "custom": { "baseUrl": "", "apiKey": "", "model": "" }
+}
+```
+> 自定义 `apiKey` 写到此表（仅 admin 可读写）。RLS 已限制非 admin 看不到，前端读取时只暴露 `provider/model` 字段；识别函数用 service role 读全部。
 
-- 入参从 `image: string` 扩展为同时接受 `images: string[]`（向后兼容）
-- 多张时把所有图片打包到同一次 Lovable AI Gateway 调用的 `messages[0].content` 数组里，prompt 增加一句「以下为同一件商品的多个角度，请综合判断」
-- 缓存 hash 用第一张图（避免多图组合永远不命中缓存）
-- 上传到 storage 时只存第一张图作为代表图（封面）
+### `product_knowledge` RLS 增加 admin update/delete 已存在 ✅
 
-修改 `src/hooks/useProductRecognition.tsx`：扩展 `recognizeProduct` 支持 `string | string[]`。
+不需新建表。
 
-## 2. 手动「加入知识库」按钮
+## 2. 后台 — 知识库管理 Tab
 
-修改 `src/components/dashboard/LiveStreamPanel.tsx`：
+修改 `src/pages/Portal.tsx`，把单 tab 扩成三个：「用户管理」「知识库」「AI 模型」。
 
-- **移除** `handleRecognition` 里的自动 `product_knowledge` 写入（第 256-272 行）
-- 在结果区底部新增按钮「加入知识库」，点击后才执行原写入逻辑
-- 按钮带状态：未入库 → 入库中（loading）→ 已入库（disabled + 勾选图标），同一商品不重复入库
-- 用本地 state `knowledgeAdded: boolean` 跟踪，每次新识别时重置
+新建 `src/components/admin/KnowledgeManager.tsx`：
 
-## 3. 隐藏后台入口（点 logo 5 次 + 独立密码）
+- 顶部工具栏：品类下拉（带计数）+ 关键词搜索框 + 「新增」按钮 + 「批量删除 (N)」按钮
+- 表格列：缩略图 / 品类（Badge）/ 名称 / 年代·产地 / 创建时间 / 操作（编辑、删除）
+- 每行 checkbox，表头全选；批量删除前 AlertDialog 确认
+- 分页：每页 20 条，上下页按钮
+- 编辑 / 新增使用同一个 `KnowledgeEditDialog`（新建 `src/components/admin/KnowledgeEditDialog.tsx`）：表单含 名称、品类、年代、产地、卖点（多行/数组编辑）、贴士、图片 URL；保存调用 update 或 insert
+- 操作权限：anchor 进入只读（按钮 disabled + 提示）；admin 全功能
 
-新建 `src/hooks/useAdminPortal.tsx`：
+## 3. 后台 — AI 模型设置 Tab
 
-- 提供 `tapLogo()` 计数器：3 秒内累计 5 次触发开锁弹窗
-- 提供 `verifyPassword(pwd)` 校验三组硬编码密码（`pzy5565283` / `880723` / `boomer2016`），任一通过即在 `sessionStorage` 写入 `__admin_portal_unlocked = "1"`，并 `navigate('/portal')`
-- 提供 `isPortalUnlocked()` 读 sessionStorage
-- 关闭浏览器/刷新会话后失效（按用户选项「独立后台密码（与账号无关）」，不持久化设备）
+新建 `src/components/admin/AISettingsPanel.tsx`：
 
-修改 `src/components/layout/Header.tsx`：
+- 单选「使用 Lovable AI」/「使用自定义 OpenAI 兼容接口」
+- Lovable AI 模式：型号下拉（gemini-2.5-flash-lite / flash / pro / gpt-5-mini / gpt-5-nano / gemini-3-flash-preview），并标注「速度/质量」标签
+- 自定义模式：三个输入框 — Base URL（如 `https://ark.cn-beijing.volces.com/api/v3` 或 `https://api.deepseek.com/v1`）、API Key（password 框）、Model 名称
+- 「测试连接」按钮：调用新增的边缘函数 `test-ai-model` 用一张极小测试图打一次，返回 ok/失败
+- 「保存」写入 `app_settings.ai_model` 行
+- 顶部展示当前生效配置；保存成功 Toast「设置已保存，下一次识别即生效」
 
-- logo `<Link>` 改为 `<button>` 包裹（保留 to "/" 行为：单击跳首页，连续 5 次触发弹窗）
-- 弹出 `<Dialog>` 含密码输入框 + 错误提示，验证通过后导航到 `/portal`
+## 4. 边缘函数 `recognize-product` 改造
 
-新建 `src/pages/PortalGuard.tsx`：包装组件，未解锁时 `<Navigate to="/" />`。
+每次调用前读取 `app_settings.ai_model`：
 
-新建 `src/pages/Portal.tsx`：后台首页，含侧边导航：
-- 用户管理（迁移自 AdminUsers）
-- 邀请管理
-- （预留）商品/识别历史管理
+- `provider === 'lovable'`：保持现有 `https://ai.gateway.lovable.dev/v1/chat/completions` + `LOVABLE_API_KEY`，只替换 `model` 字段
+- `provider === 'custom'`：用 `value.custom.baseUrl + '/chat/completions'` + `Authorization: Bearer <apiKey>` + `model: value.custom.model`，请求体保持 OpenAI Chat Completions 兼容格式（已是）
+- 缺省 / 未配置 → 回退默认 `google/gemini-2.5-flash-lite` + Lovable
+- 失败时把 provider 标识写入错误信息，便于调试
 
-注册路由 `/portal`、`/portal/users` 到 `App.tsx`。
+新建边缘函数 `test-ai-model`：接收 `{provider, model, baseUrl?, apiKey?}`，发一条最小请求（"hi" 文本），返回 `{ok:true}` 或 `{ok:false, error:"..."}`，仅 admin 可调。
 
-## 4. 前端移除「用户管理」入口
+## 5. 文件清单
 
-修改 `src/components/layout/Header.tsx`：
-
-- 删除 `role === 'admin'` 时显示的「用户管理」按钮（第 47-54 行）
-- 删除下拉菜单里 admin 的「系统设置」项
-
-修改 `src/App.tsx`：
-
-- `/admin/users` 路由保留但用 `PortalGuard` 包裹（或直接重定向到 `/portal/users`），避免老链接 404
-- 新增 `/portal` 与 `/portal/users` 路由
+- 迁移：新建 `app_settings` 表 + RLS
+- 编辑：`src/pages/Portal.tsx`（加 tabs）
+- 新建：
+  - `src/components/admin/KnowledgeManager.tsx`
+  - `src/components/admin/KnowledgeEditDialog.tsx`
+  - `src/components/admin/AISettingsPanel.tsx`
+- 编辑：`supabase/functions/recognize-product/index.ts`（按 settings 路由 provider）
+- 新建：`supabase/functions/test-ai-model/index.ts`
+- 更新：`mem://index.md` + 新增两条 memory
 
 ## 技术细节
 
-**密码安全说明**：三个密码只是「软门锁」，用于在共享设备上隐藏后台入口；由于 RLS 仍以 Supabase auth 角色为准，真正的敏感操作（增删用户/角色）依然要求当前登录账号是 admin。如果当前登录账号不是 admin，进入 /portal 后用户管理 API 会被 RLS 拒绝——会在页面顶部显示提示「请使用管理员账号登录后再进行用户操作」。
+**安全说明**：自定义 API Key 存到数据库 `app_settings` 表，RLS 限制只有 admin 角色可读；客户端 `AISettingsPanel` 读取时会拿到全部字段（包括 key），但因 RLS 不在 admin 角色的话查询会失败。建议密码框默认显示为 `••••••`（已存在时不回填明文，留 placeholder「已配置，留空则不修改」）。
 
-**多图 token 成本**：Gemini Flash Lite 多图调用按图计费，限制最多 5 张以控制延迟（仍保持 ~2-3 秒目标）。
+**速度承诺**：默认型号仍为 flash-lite，自定义型号速度由用户自负责，UI 上文字提示「flash-lite 最快，1-2 秒；其他型号可能 3-5 秒」。
 
 **布局**：
 
 ```text
-[Header  logo(可点5次) ······ 知识 历史 头像]
-[相机预览]
-  [单张快拍 | 多角度合并]   ← 顶部分段
-  [缩略图 1 2 3]            ← 多角度时右下
-  [拍照 / 完成识别(3)]      ← 底部
-[识别结果]
-  ...
-  [加入知识库]              ← 手动按钮
-  [编辑] [删除] (admin only)
+[Portal Header]
+[Tabs: 用户管理 | 知识库 | AI 模型]
+  └ 知识库
+     [品类▼] [搜索] [新增] [批量删除]
+     ┌─┬───┬────────┬────────┬────────┬────┐
+     │☑│图│ 名称   │ 品类   │ 年代   │操作│
+     └─┴───┴────────┴────────┴────────┴────┘
+  └ AI 模型
+     [○ Lovable AI] [○ 自定义]
+     ...表单...
+     [测试连接] [保存]
 ```
-
-## 文件清单
-
-- 编辑：`src/components/layout/Header.tsx`、`src/components/dashboard/LiveStreamPanel.tsx`、`src/hooks/useProductRecognition.tsx`、`src/App.tsx`
-- 新建：`src/hooks/useAdminPortal.tsx`、`src/pages/Portal.tsx`、`src/pages/PortalGuard.tsx`
-- 编辑：`supabase/functions/recognize-product/index.ts`
