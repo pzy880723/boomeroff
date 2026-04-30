@@ -138,9 +138,9 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'AI 服务未配置' }), {
+    const modelCfg = await resolveModelConfig(adminClient);
+    if (!modelCfg.apiKey) {
+      return new Response(JSON.stringify({ error: 'AI 服务未配置，请到后台「AI 模型」设置' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -151,8 +151,9 @@ serve(async (req) => {
 {"name":"","category":"porcelain|incense|stationery|lacquerware|bronze|woodcraft|textile|jewelry|painting|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"≤80字介绍","tips":"一句话贴士","imageHash":"3-5关键词空格分隔"}
 sellingPoints要3条短句直击重点。`;
 
-    const response = await callLovableAI(imageList, recognitionPrompt, LOVABLE_API_KEY);
+    const response = await callAI(imageList, recognitionPrompt, modelCfg);
     const aiTime = Date.now() - startTime;
+    console.log('[Recognition] model:', modelCfg.model, 'AI time:', aiTime, 'ms');
 
     if (!response.ok) {
       const errorText = await response.text();
