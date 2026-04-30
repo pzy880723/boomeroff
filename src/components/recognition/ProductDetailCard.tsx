@@ -66,15 +66,16 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
             <h2 className="font-display text-2xl sm:text-[26px] leading-tight tracking-tight">
               {result.name}
             </h2>
+            {result.era && (
+              <div className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-accent/25 via-accent/10 to-transparent border border-accent/40 px-3.5 py-2.5 shadow-soft">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-accent font-semibold shrink-0">年代</span>
+                <span className="font-display text-lg leading-none font-semibold text-foreground truncate">{result.era}</span>
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5">
               <Badge className="rounded-full bg-primary text-primary-foreground">
                 {CATEGORY_LABELS[result.category]}
               </Badge>
-              {result.era && (
-                <Badge variant="outline" className="rounded-full border-accent/40 text-accent-foreground bg-accent-soft">
-                  {result.era}
-                </Badge>
-              )}
               {result.origin && (
                 <Badge variant="outline" className="rounded-full">
                   {result.origin}
