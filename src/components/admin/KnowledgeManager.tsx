@@ -76,7 +76,7 @@ export function KnowledgeManager() {
     setSelected(new Set());
     let query = supabase
       .from('product_knowledge')
-      .select('id, product_name, category, era, origin, selling_points, tips, image_url, created_at', { count: 'exact' })
+      .select('id, product_name, category, era, origin, selling_points, tips, image_url, created_at, is_official', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
