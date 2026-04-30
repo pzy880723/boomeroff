@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Header } from '@/components/layout/Header';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -176,7 +176,7 @@ export default function History() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <PageHeader title="历史记录" back="/me" />
       
       <main className="container py-6 space-y-6">
         {/* 页面标题和返回按钮 */}
