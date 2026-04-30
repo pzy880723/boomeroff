@@ -730,6 +730,26 @@ export function LiveStreamPanel() {
                 </div>
               )}
 
+              {/* 收藏到个人知识库 */}
+              {currentProductId && (
+                <div>
+                  <Button
+                    onClick={toggleFavorite}
+                    disabled={savingFav}
+                    variant={favorited ? 'outline' : 'secondary'}
+                    size="lg"
+                    className="w-full h-11 rounded-full gap-2"
+                  >
+                    {savingFav ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <BookmarkPlus className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                    )}
+                    {favorited ? '已收藏到个人知识库' : '收藏到个人知识库'}
+                  </Button>
+                </div>
+              )}
+
               {/* 管理员操作 */}
               {isAdmin && currentProductId && (
                 <div className="flex justify-end gap-2 pt-2">
