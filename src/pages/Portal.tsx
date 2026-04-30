@@ -66,6 +66,14 @@ export default function Portal() {
                   <BookOpen className="w-4 h-4" />
                   知识库
                 </TabsTrigger>
+                <TabsTrigger value="official" className="gap-1.5">
+                  <BadgeCheck className="w-4 h-4" />
+                  官方知识
+                </TabsTrigger>
+                <TabsTrigger value="community" className="gap-1.5">
+                  <MessageSquare className="w-4 h-4" />
+                  中古圈
+                </TabsTrigger>
                 <TabsTrigger value="ai" className="gap-1.5">
                   <Sparkles className="w-4 h-4" />
                   AI 模型
@@ -83,6 +91,14 @@ export default function Portal() {
 
             <TabsContent value="knowledge" className="p-3 sm:p-5 m-0">
               <KnowledgeManager />
+            </TabsContent>
+
+            <TabsContent value="official" className="p-3 sm:p-5 m-0">
+              <OfficialKnowledgeManager />
+            </TabsContent>
+
+            <TabsContent value="community" className="p-3 sm:p-5 m-0">
+              <CommunityModeration />
             </TabsContent>
 
             <TabsContent value="ai" className="p-3 sm:p-5 m-0">
