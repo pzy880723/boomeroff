@@ -300,15 +300,15 @@ export function LiveStreamPanel() {
   } : null);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-[calc(100vh-3.5rem)] bg-gradient-surface flex flex-col">
       {/* 每日知识点 */}
-      <div className="container py-3">
+      <div className="container py-3 sm:py-4 animate-fade-in">
         <DailyKnowledgeCard />
       </div>
 
       {/* 摄像头预览容器 */}
-      <div className="flex-1 flex items-center justify-center bg-black p-2 sm:p-4 min-h-[50vh]">
-        <div className="relative aspect-square w-full max-w-[min(100vw-1rem,70vh)] mx-auto bg-black rounded-lg overflow-hidden">
+      <div className="flex-1 flex items-center justify-center px-3 sm:px-4 pb-4">
+        <div className="relative aspect-square w-full max-w-[min(100vw-1.5rem,68vh)] mx-auto bg-neutral-950 rounded-3xl overflow-hidden shadow-elevated ring-1 ring-border/40 animate-scale-in">
           <video
             ref={videoRef}
             autoPlay
@@ -325,107 +325,143 @@ export function LiveStreamPanel() {
             />
           )}
 
+          {/* 取景框装饰 */}
+          {isStreaming && !capturedImage && !isRecognizing && (
+            <div className="pointer-events-none absolute inset-6 sm:inset-10 border border-white/30 rounded-2xl">
+              <span className="absolute -top-px -left-px w-6 h-6 border-t-2 border-l-2 border-accent rounded-tl-2xl" />
+              <span className="absolute -top-px -right-px w-6 h-6 border-t-2 border-r-2 border-accent rounded-tr-2xl" />
+              <span className="absolute -bottom-px -left-px w-6 h-6 border-b-2 border-l-2 border-accent rounded-bl-2xl" />
+              <span className="absolute -bottom-px -right-px w-6 h-6 border-b-2 border-r-2 border-accent rounded-br-2xl" />
+            </div>
+          )}
+
           {!isStreaming && !capturedImage && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4">
-              <Camera className="w-16 h-16 sm:w-24 sm:h-24 text-muted-foreground" />
-              <p className="text-muted-foreground text-center text-sm sm:text-lg">
-                点击下方按钮启动摄像头或上传图片
-              </p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 p-6 bg-gradient-to-b from-neutral-900 to-neutral-950">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/5 backdrop-blur ring-1 ring-white/10 flex items-center justify-center">
+                <Camera className="w-9 h-9 sm:w-11 sm:h-11 text-accent" strokeWidth={1.5} />
+              </div>
+              <div className="text-center space-y-1.5">
+                <p className="text-white font-display text-lg sm:text-xl tracking-tight">即时识别 · 秒级反馈</p>
+                <p className="text-white/60 text-xs sm:text-sm max-w-[18rem]">
+                  对准商品拍照，AI 自动识别年份、工艺与销售卖点
+                </p>
+              </div>
             </div>
           )}
 
           {isRecognizing && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in">
               <div className="text-center text-white space-y-4">
-                <Loader2 className="w-12 h-12 animate-spin mx-auto" />
-                <div className="flex items-center gap-2 justify-center">
-                  <Sparkles className="w-5 h-5 animate-pulse" />
-                  <span className="text-lg">AI 识别中...</span>
+                <div className="relative w-16 h-16 mx-auto">
+                  <div className="absolute inset-0 rounded-full border-2 border-accent/20" />
+                  <Loader2 className="w-16 h-16 animate-spin text-accent" strokeWidth={1.5} />
                 </div>
-                <div className="text-2xl font-mono font-bold">
-                  {(elapsedTime / 1000).toFixed(1)}s
+                <div className="flex items-center gap-2 justify-center">
+                  <Sparkles className="w-4 h-4 text-accent animate-pulse-glow" />
+                  <span className="text-sm tracking-wide uppercase">AI 识别中</span>
+                </div>
+                <div className="text-3xl font-display font-bold tabular-nums">
+                  {(elapsedTime / 1000).toFixed(1)}<span className="text-base font-sans font-normal text-white/60">s</span>
                 </div>
               </div>
             </div>
           )}
 
-          {recognitionTime && !isRecognizing && (
-            <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm font-mono">
-              识别耗时: {(recognitionTime / 1000).toFixed(2)}s
+          {/* 顶部状态条 */}
+          <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2 pointer-events-none">
+            {isStreaming && !capturedImage && (
+              <div className="px-2.5 py-1 rounded-full bg-black/50 backdrop-blur text-white/90 text-[11px] font-medium flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                {facingMode === 'environment' ? '后置' : '前置'}
+              </div>
+            )}
+            <div className="ml-auto">
+              {recognitionTime && !isRecognizing && (
+                <div className="px-2.5 py-1 rounded-full bg-success/90 backdrop-blur text-success-foreground text-[11px] font-medium tabular-nums">
+                  ⚡ {(recognitionTime / 1000).toFixed(2)}s
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
-          {isStreaming && !capturedImage && (
-            <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-sm">
-              {facingMode === 'environment' ? '后置摄像头' : '前置摄像头'}
+          {/* 底部渐变遮罩 + 操作按钮 */}
+          <div className="absolute inset-x-0 bottom-0 pt-12 pb-3 px-3 bg-gradient-to-t from-black/70 via-black/40 to-transparent">
+            <div className="flex justify-center items-center gap-2.5">
+              {!isStreaming && !capturedImage && (
+                <>
+                  <Button
+                    size="lg"
+                    onClick={() => startCamera()}
+                    className="gap-2 h-12 px-6 rounded-full bg-accent hover:bg-accent/90 text-accent-foreground shadow-glow font-medium"
+                  >
+                    <Camera className="w-5 h-5" />
+                    启动摄像头
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="gap-2 h-12 px-5 rounded-full bg-white/10 backdrop-blur text-white border-white/20 hover:bg-white/20 hover:text-white"
+                  >
+                    <Upload className="w-5 h-5" />
+                    上传
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                </>
+              )}
+
+              {isStreaming && (
+                <>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={switchCamera}
+                    disabled={isRecognizing}
+                    className="h-12 w-12 rounded-full bg-white/10 backdrop-blur text-white border-white/20 hover:bg-white/20 hover:text-white"
+                  >
+                    <SwitchCamera className="w-5 h-5" />
+                  </Button>
+                  {/* 主拍照按钮 - 放大 */}
+                  <Button
+                    onClick={captureAndRecognize}
+                    disabled={isRecognizing}
+                    className="h-16 w-16 rounded-full bg-white hover:bg-white/90 text-neutral-900 shadow-glow ring-4 ring-white/20 p-0"
+                  >
+                    <div className="w-12 h-12 rounded-full border-2 border-neutral-900 flex items-center justify-center">
+                      <Camera className="w-5 h-5" />
+                    </div>
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={stopCamera}
+                    className="h-12 w-12 rounded-full bg-white/10 backdrop-blur text-white border-white/20 hover:bg-white/20 hover:text-white"
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </>
+              )}
+
+              {capturedImage && !isRecognizing && (
+                <Button
+                  size="lg"
+                  onClick={() => {
+                    setCapturedImage(null);
+                    startCamera();
+                  }}
+                  className="gap-2 h-12 px-6 rounded-full bg-white text-neutral-900 hover:bg-white/90"
+                >
+                  <Camera className="w-5 h-5" />
+                  继续拍摄
+                </Button>
+              )}
             </div>
-          )}
-
-          <div className="absolute bottom-4 left-4 right-4 flex flex-wrap justify-center gap-2 sm:gap-3">
-            {!isStreaming && !capturedImage && (
-              <>
-                <Button size="lg" onClick={() => startCamera()} className="gap-2">
-                  <Camera className="w-5 h-5" />
-                  启动摄像头
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="gap-2 bg-background/80"
-                >
-                  <Upload className="w-5 h-5" />
-                  上传图片
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
-              </>
-            )}
-
-            {isStreaming && (
-              <>
-                <Button
-                  size="lg"
-                  onClick={captureAndRecognize}
-                  disabled={isRecognizing}
-                  className="gap-2"
-                >
-                  <Camera className="w-5 h-5" />
-                  拍照识别
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  onClick={switchCamera}
-                  disabled={isRecognizing}
-                  className="bg-background/80"
-                >
-                  <SwitchCamera className="w-5 h-5" />
-                </Button>
-                <Button size="lg" variant="outline" onClick={stopCamera} className="bg-background/80">
-                  <X className="w-5 h-5" />
-                </Button>
-              </>
-            )}
-
-            {capturedImage && !isRecognizing && (
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => {
-                  setCapturedImage(null);
-                  startCamera();
-                }}
-                className="gap-2 bg-background/80"
-              >
-                继续拍摄
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -433,74 +469,75 @@ export function LiveStreamPanel() {
       {/* 结果展示区 */}
       <div ref={resultRef} className="bg-background">
         {displayResult ? (
-          <div>
+          <div className="animate-fade-in">
             {/* 继续拍摄按钮 */}
-            <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b p-3">
-              <Button
-                size="lg"
-                onClick={() => {
-                  setCapturedImage(null);
-                  clearResult();
-                  setCurrentProductId(null);
-                  setRecognitionTime(null);
-                  startCamera();
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="w-full gap-2 py-6 text-lg"
-              >
-                <Camera className="w-6 h-6" />
-                继续拍摄下一件商品
-              </Button>
-              {recognitionTime && (
-                <p className="text-center text-sm text-muted-foreground mt-2">
-                  识别耗时: {(recognitionTime / 1000).toFixed(2)}s
-                </p>
-              )}
+            <div className="sticky top-14 z-20 glass border-b border-border/60 px-3 py-3 safe-bottom">
+              <div className="container px-0">
+                <Button
+                  size="lg"
+                  onClick={() => {
+                    setCapturedImage(null);
+                    clearResult();
+                    setCurrentProductId(null);
+                    setRecognitionTime(null);
+                    startCamera();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="w-full gap-2 h-12 rounded-full bg-gradient-primary text-primary-foreground hover:opacity-95 shadow-soft text-base font-medium"
+                >
+                  <Camera className="w-5 h-5" />
+                  继续拍摄下一件商品
+                </Button>
+                {recognitionTime && (
+                  <p className="text-center text-xs text-muted-foreground mt-2 tabular-nums">
+                    本次识别耗时 <span className="font-medium text-foreground">{(recognitionTime / 1000).toFixed(2)}s</span>
+                  </p>
+                )}
+              </div>
             </div>
 
-            <div className="p-4 space-y-4 container">
+            <div className="container py-4 space-y-4">
               <ProductDetailCard result={displayResult} />
 
               {/* 管理员操作 */}
               {isAdmin && currentProductId && (
-                <Card>
-                  <CardContent className="flex justify-end gap-2 pt-6">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditableProduct({
-                          id: currentProductId,
-                          name: displayResult.name,
-                          category: displayResult.category,
-                          era: displayResult.era || null,
-                          origin: displayResult.origin || null,
-                          material: displayResult.material || null,
-                          craft: displayResult.craft || null,
-                          description: displayResult.description || null,
-                          dimensions: displayResult.dimensions || null,
-                          condition: displayResult.condition || null,
-                          selling_points: displayResult.sellingPoints || [],
-                          tips: displayResult.tips || null,
-                        });
-                        setEditDialogOpen(true);
-                      }}
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      编辑
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={deleteProduct}>
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      删除
-                    </Button>
-                  </CardContent>
-                </Card>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => {
+                      setEditableProduct({
+                        id: currentProductId,
+                        name: displayResult.name,
+                        category: displayResult.category,
+                        era: displayResult.era || null,
+                        origin: displayResult.origin || null,
+                        material: displayResult.material || null,
+                        craft: displayResult.craft || null,
+                        description: displayResult.description || null,
+                        dimensions: displayResult.dimensions || null,
+                        condition: displayResult.condition || null,
+                        selling_points: displayResult.sellingPoints || [],
+                        tips: displayResult.tips || null,
+                      });
+                      setEditDialogOpen(true);
+                    }}
+                  >
+                    <Edit className="w-4 h-4 mr-1" />
+                    编辑
+                  </Button>
+                  <Button size="sm" variant="destructive" className="rounded-full" onClick={deleteProduct}>
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    删除
+                  </Button>
+                </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground p-4">
-            <p>拍摄或上传商品图片开始识别</p>
+          <div className="text-center py-6 text-muted-foreground text-sm px-4">
+            拍摄或上传商品图片开始识别
           </div>
         )}
       </div>
