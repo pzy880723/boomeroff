@@ -19,7 +19,7 @@ export function BottomTabBar() {
       aria-label="底部导航"
     >
       <div className="mx-auto max-w-screen-md px-2">
-        <ul className="flex items-end justify-around h-16 relative">
+        <ul className="flex items-end justify-around h-12 relative">
           {tabs.map(({ to, label, Icon, primary }) => {
             const active = location.pathname === to || (to === '/scan' && location.pathname === '/');
             if (primary) {
