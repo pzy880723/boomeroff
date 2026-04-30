@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { LogOut, User, Settings, Shield, History, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
+import { DailyKnowledgeCard } from '@/components/dashboard/DailyKnowledgeCard';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 
 export function Header() {
