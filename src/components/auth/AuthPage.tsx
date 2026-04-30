@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { LoginForm } from './LoginForm';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
+import { RegisterForm } from './RegisterForm';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 
-type AuthMode = 'login' | 'forgot-password';
+type AuthMode = 'login' | 'forgot-password' | 'register';
 
 export function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
@@ -23,8 +24,14 @@ export function AuthPage() {
           </h1>
           <p className="text-muted-foreground text-sm mt-2">中古杂货 · AI 秒级识别 · 店员销售辅助</p>
         </div>
-        {mode === 'login' && <LoginForm onForgotPassword={() => setMode('forgot-password')} />}
+        {mode === 'login' && (
+          <LoginForm
+            onForgotPassword={() => setMode('forgot-password')}
+            onRegister={() => setMode('register')}
+          />
+        )}
         {mode === 'forgot-password' && <ForgotPasswordForm onBackToLogin={() => setMode('login')} />}
+        {mode === 'register' && <RegisterForm onBackToLogin={() => setMode('login')} />}
       </div>
     </div>
   );

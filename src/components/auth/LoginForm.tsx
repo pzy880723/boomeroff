@@ -9,9 +9,10 @@ import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface LoginFormProps {
   onForgotPassword: () => void;
+  onRegister?: () => void;
 }
 
-export function LoginForm({ onForgotPassword }: LoginFormProps) {
+export function LoginForm({ onForgotPassword, onRegister }: LoginFormProps) {
   const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -100,7 +101,14 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
           </Button>
         </form>
         <p className="text-center text-sm text-muted-foreground mt-4">
-          需要账户？请联系管理员创建
+          还没有账号？{' '}
+          <button
+            type="button"
+            onClick={onRegister}
+            className="text-primary hover:underline font-medium"
+          >
+            注册账号
+          </button>
         </p>
       </CardContent>
     </Card>
