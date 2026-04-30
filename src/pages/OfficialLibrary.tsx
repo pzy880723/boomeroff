@@ -91,17 +91,26 @@ export default function OfficialLibrary() {
             className="pl-9"
           />
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
-          {categoriesAll.map((c) => (
-            <Badge
-              key={c}
-              variant={cat === c ? 'default' : 'outline'}
-              className="cursor-pointer shrink-0 px-3 py-1"
-              onClick={() => setCat(c)}
-            >
-              {c === 'all' ? '全部' : CATEGORY_LABELS[c]}
-            </Badge>
-          ))}
+        <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-9">
+          {categoriesAll.map((c) => {
+            const active = cat === c;
+            const Icon = c === 'all' ? LayoutGrid : CATEGORY_ICONS[c];
+            const label = c === 'all' ? '全部' : CATEGORY_LABELS[c];
+            return (
+              <button
+                key={c}
+                onClick={() => setCat(c)}
+                className={`flex flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 transition-colors ${
+                  active
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-card text-foreground hover:bg-accent'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="text-[10px] leading-tight truncate max-w-full">{label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {loading ? (
