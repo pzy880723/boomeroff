@@ -186,7 +186,7 @@ export default function OfficialLibrary() {
 
         {/* 二级类目 - 上滑时吸顶 */}
         {subList.length > 0 && (
-          <div className="sticky top-0 z-20 -mx-3 px-3 py-2 flex gap-1.5 overflow-x-auto bg-background/95 backdrop-blur border-b border-border scrollbar-none">
+          <div className="sticky top-12 z-20 -mx-3 px-3 py-2 flex gap-1.5 overflow-x-auto bg-background/95 backdrop-blur border-b border-border scrollbar-none">
             <button
               onClick={() => setSub('all')}
               className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
