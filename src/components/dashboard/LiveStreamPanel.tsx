@@ -358,6 +358,38 @@ export function LiveStreamPanel() {
     }
   };
 
+  const toggleFavorite = async () => {
+    if (!currentProductId || !user || !displayResult) return;
+    setSavingFav(true);
+    try {
+      if (favorited) {
+        await supabase.from('user_favorites').delete()
+          .eq('user_id', user.id).eq('source_type', 'recognition').eq('source_id', currentProductId);
+        setFavorited(false);
+        toast({ title: '已取消收藏' });
+      } else {
+        const { error } = await supabase.from('user_favorites').insert({
+          user_id: user.id,
+          source_type: 'recognition',
+          source_id: currentProductId,
+          snapshot: {
+            name: displayResult.name,
+            category: displayResult.category,
+            image_url: capturedImage || null,
+          },
+        });
+        if (error && !error.message.includes('duplicate')) throw error;
+        setFavorited(true);
+        toast({ title: '已收藏到个人知识库' });
+      }
+    } catch (e) {
+      console.error('[Favorite] error:', e);
+      toast({ title: '操作失败', variant: 'destructive' });
+    } finally {
+      setSavingFav(false);
+    }
+  };
+
   const deleteProduct = async () => {
     if (!currentProductId || !isAdmin) return;
     try {
