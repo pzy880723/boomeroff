@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { UserTable } from '@/components/admin/UserTable';
-import { InviteDialog } from '@/components/admin/InviteDialog';
+import { CreateUserDialog } from '@/components/admin/CreateUserDialog';
 import { KnowledgeManager } from '@/components/admin/KnowledgeManager';
 import { OfficialKnowledgeManager } from '@/components/admin/OfficialKnowledgeManager';
 import { CommunityModeration } from '@/components/admin/CommunityModeration';
@@ -84,7 +84,7 @@ export default function Portal() {
             <TabsContent value="users" className="p-3 sm:p-5 m-0 space-y-4">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h2 className="text-base font-semibold">所有用户</h2>
-                <InviteDialog />
+                <CreateUserDialog />
               </div>
               <UserTable />
             </TabsContent>
