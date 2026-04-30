@@ -6,7 +6,7 @@ import { useProductRecognition } from '@/hooks/useProductRecognition';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw,
+  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Award, Star,
 } from 'lucide-react';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
@@ -335,6 +335,19 @@ export function LiveStreamPanel() {
     if (!currentProductId || !user || !displayResult) return;
     setSavingKnowledge(true);
     try {
+      // 防并发重复：先查一次
+      const { data: existing } = await supabase
+        .from('product_knowledge')
+        .select('id')
+        .eq('product_id', currentProductId)
+        .limit(1)
+        .maybeSingle();
+      if (existing) {
+        setKnowledgeAdded(true);
+        toast({ title: '已在团队知识库中', description: '无需重复添加' });
+        return;
+      }
+
       const sp = displayResult.sellingPoints || [];
       const { error } = await supabase.from('product_knowledge').insert({
         product_id: currentProductId,
@@ -346,13 +359,54 @@ export function LiveStreamPanel() {
         origin: displayResult.origin || null,
         image_url: capturedImage || null,
         created_by: user.id,
+        is_official: isAdmin, // admin 直接标记为官方推荐
       });
       if (error) throw error;
+
+      // admin：同步收录为「官方知识」
+      if (isAdmin) {
+        const { data: dup } = await supabase
+          .from('official_knowledge')
+          .select('id')
+          .eq('source_product_id', currentProductId)
+          .limit(1)
+          .maybeSingle();
+        if (!dup) {
+          await supabase.from('official_knowledge').insert({
+            name: displayResult.name,
+            category: displayResult.category,
+            summary: displayResult.description || null,
+            content: {
+              material: displayResult.material || null,
+              craft: displayResult.craft || null,
+              dimensions: displayResult.dimensions || null,
+              condition: displayResult.condition || null,
+            },
+            era: displayResult.era || null,
+            origin: displayResult.origin || null,
+            cover_url: capturedImage || null,
+            gallery: capturedImage ? [capturedImage] : [],
+            selling_points: sp,
+            tips: displayResult.tips || null,
+            source_product_id: currentProductId,
+            created_by: user.id,
+          });
+        }
+      }
+
       setKnowledgeAdded(true);
-      toast({ title: '已加入知识库' });
-    } catch (e) {
+      toast({
+        title: isAdmin ? '已收录为官方知识' : '已申请收录',
+        description: isAdmin ? '所有同事都能在「官方知识」看到' : '已加入团队池，等待管理员审核',
+      });
+    } catch (e: any) {
       console.error('[Knowledge] insert error:', e);
-      toast({ title: '加入失败', description: '请稍后重试', variant: 'destructive' });
+      const code = e?.code || '';
+      if (code === '42501' || /row-level security/i.test(e?.message || '')) {
+        toast({ title: '权限不足', description: '需要主播或管理员权限', variant: 'destructive' });
+      } else {
+        toast({ title: '加入失败', description: '请稍后重试', variant: 'destructive' });
+      }
     } finally {
       setSavingKnowledge(false);
     }
@@ -417,6 +471,38 @@ export function LiveStreamPanel() {
     sellingPoints: currentProduct.selling_points || [],
     tips: currentProduct.tips,
   } : null);
+
+  // 进入已识别商品时，同步「加入知识库」与「收藏」状态，避免重复入库
+  useEffect(() => {
+    if (!currentProductId || !user) {
+      setKnowledgeAdded(false);
+      setFavorited(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const [{ data: pk }, { data: fav }] = await Promise.all([
+        supabase
+          .from('product_knowledge')
+          .select('id')
+          .eq('product_id', currentProductId)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('user_favorites')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('source_type', 'recognition')
+          .eq('source_id', currentProductId)
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (cancelled) return;
+      setKnowledgeAdded(!!pk);
+      setFavorited(!!fav);
+    })();
+    return () => { cancelled = true; };
+  }, [currentProductId, user]);
 
   const switchMode = (mode: CaptureMode) => {
     if (mode === captureMode) return;
@@ -697,9 +783,10 @@ export function LiveStreamPanel() {
             <div className="container py-4 space-y-4">
               <ProductDetailCard result={displayResult} />
 
-              {/* 加入知识库 */}
+              {/* 团队/官方知识库 + 个人收藏 */}
               {currentProductId && (
-                <div className="pt-1">
+                <div className="space-y-2 pt-1">
+                  {/* 主按钮：申请收录 / 直接收录为官方 */}
                   <Button
                     onClick={addToKnowledge}
                     disabled={knowledgeAdded || savingKnowledge}
@@ -713,26 +800,22 @@ export function LiveStreamPanel() {
                     {savingKnowledge ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        正在加入...
+                        正在收录...
                       </>
                     ) : knowledgeAdded ? (
                       <>
                         <Check className="w-5 h-5" />
-                        已加入知识库
+                        {isAdmin ? '已收录为官方知识' : '已申请收录'}
                       </>
                     ) : (
                       <>
-                        <BookmarkPlus className="w-5 h-5" />
-                        加入知识库
+                        <Award className="w-5 h-5" />
+                        {isAdmin ? '直接收录为官方知识' : '申请收录到官方知识库'}
                       </>
                     )}
                   </Button>
-                </div>
-              )}
 
-              {/* 收藏到个人知识库 */}
-              {currentProductId && (
-                <div>
+                  {/* 次按钮：个人收藏 */}
                   <Button
                     onClick={toggleFavorite}
                     disabled={savingFav}
@@ -743,10 +826,15 @@ export function LiveStreamPanel() {
                     {savingFav ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <BookmarkPlus className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                      <Star className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
                     )}
-                    {favorited ? '已收藏到个人知识库' : '收藏到个人知识库'}
+                    {favorited ? '已加入我的学习清单' : '收藏到我的学习清单'}
                   </Button>
+
+                  {/* 引导提示 */}
+                  <p className="text-[11px] text-muted-foreground text-center px-2 leading-relaxed">
+                    收藏只有自己看得到 · {isAdmin ? '收录后所有同事都能学到' : '申请收录会让所有同事都能学到'}
+                  </p>
                 </div>
               )}
 
