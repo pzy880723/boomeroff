@@ -125,7 +125,7 @@ export function UserTable() {
       return;
     }
 
-    toast.success(newSuspendedState ? '用户已暂停' : '用户已恢复');
+    toast.success(newSuspendedState ? '用户已暂停' : '已通过审核，用户可登录');
     fetchUsers();
   };
 
