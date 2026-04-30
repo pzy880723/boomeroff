@@ -141,6 +141,56 @@ export type Database = {
           },
         ]
       }
+      product_knowledge: {
+        Row: {
+          category: Database["public"]["Enums"]["product_category"]
+          created_at: string
+          created_by: string | null
+          era: string | null
+          id: string
+          image_url: string | null
+          origin: string | null
+          product_id: string | null
+          product_name: string
+          selling_points: Json
+          tips: string | null
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["product_category"]
+          created_at?: string
+          created_by?: string | null
+          era?: string | null
+          id?: string
+          image_url?: string | null
+          origin?: string | null
+          product_id?: string | null
+          product_name: string
+          selling_points?: Json
+          tips?: string | null
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["product_category"]
+          created_at?: string
+          created_by?: string | null
+          era?: string | null
+          id?: string
+          image_url?: string | null
+          origin?: string | null
+          product_id?: string | null
+          product_name?: string
+          selling_points?: Json
+          tips?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_knowledge_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           ai_analysis: Json | null

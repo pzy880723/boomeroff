@@ -13,7 +13,7 @@ import {
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
-import { DailyKnowledgeCard } from './DailyKnowledgeCard';
+
 
 export function LiveStreamPanel() {
   const [isStreaming, setIsStreaming] = useState(false);
@@ -252,6 +252,24 @@ export function LiveStreamPanel() {
       if (error) throw error;
       setCurrentProductId(productData.id);
       await updateSession(productData.id, user.id);
+
+      // 自动入库到知识点表（按品类分类，便于聚合学习）
+      const sp = recognitionResult.sellingPoints || [];
+      if (sp.length > 0 || recognitionResult.tips) {
+        supabase.from('product_knowledge').insert({
+          product_id: productData.id,
+          category: recognitionResult.category,
+          product_name: recognitionResult.name,
+          selling_points: sp,
+          tips: recognitionResult.tips || null,
+          era: recognitionResult.era || null,
+          origin: recognitionResult.origin || null,
+          image_url: imageUrl,
+          created_by: user.id,
+        }).then(({ error: kErr }) => {
+          if (kErr) console.warn('[Knowledge] insert error:', kErr);
+        });
+      }
 
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
