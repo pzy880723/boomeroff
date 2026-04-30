@@ -1,28 +1,32 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useProductRecognition } from '@/hooks/useProductRecognition';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera,
+  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon,
 } from 'lucide-react';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
 
+type CaptureMode = 'single' | 'multi';
+const MAX_MULTI_IMAGES = 5;
 
 export function LiveStreamPanel() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
+  const [captureMode, setCaptureMode] = useState<CaptureMode>('single');
   const [currentProductId, setCurrentProductId] = useState<string | null>(null);
   const [recognitionTime, setRecognitionTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [knowledgeAdded, setKnowledgeAdded] = useState(false);
+  const [savingKnowledge, setSavingKnowledge] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -58,7 +62,6 @@ export function LiveStreamPanel() {
     }
   }, [currentProduct, session]);
 
-  // 上传图片到 storage
   const uploadImage = async (imageBase64: string, userId: string): Promise<string | null> => {
     try {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
@@ -152,8 +155,8 @@ export function LiveStreamPanel() {
     });
   };
 
-  const captureAndRecognize = async () => {
-    if (!videoRef.current) return;
+  const grabFrame = (): string | null => {
+    if (!videoRef.current) return null;
     const canvas = document.createElement('canvas');
     const maxWidth = 640;
     let width = videoRef.current.videoWidth;
@@ -165,36 +168,73 @@ export function LiveStreamPanel() {
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(videoRef.current, 0, 0, width, height);
-      const imageData = canvas.toDataURL('image/jpeg', 0.6);
-      setCapturedImage(imageData);
-      await handleRecognition(imageData);
+    if (!ctx) return null;
+    ctx.drawImage(videoRef.current, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', 0.6);
+  };
+
+  const handleCaptureClick = async () => {
+    const frame = grabFrame();
+    if (!frame) return;
+    if (captureMode === 'single') {
+      setCapturedImage(frame);
+      await handleRecognition([frame]);
+    } else {
+      if (capturedImages.length >= MAX_MULTI_IMAGES) {
+        toast({ title: `最多 ${MAX_MULTI_IMAGES} 张` });
+        return;
+      }
+      setCapturedImages((prev) => [...prev, frame]);
     }
+  };
+
+  const finishMultiCapture = async () => {
+    if (capturedImages.length === 0) return;
+    setCapturedImage(capturedImages[0]);
+    await handleRecognition(capturedImages);
+  };
+
+  const removeMultiImage = (index: number) => {
+    setCapturedImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const valid = files.filter((f) => f.type.startsWith('image/'));
+    if (valid.length === 0) {
       toast({ title: '无效文件类型', description: '请上传图片', variant: 'destructive' });
       return;
     }
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const rawImage = event.target?.result as string;
-      const imageData = await compressImage(rawImage);
-      setCapturedImage(imageData);
-      await handleRecognition(imageData);
-    };
-    reader.readAsDataURL(file);
+
+    const readFile = (file: File) =>
+      new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          const raw = ev.target?.result as string;
+          resolve(await compressImage(raw));
+        };
+        reader.readAsDataURL(file);
+      });
+
+    if (captureMode === 'single') {
+      const img = await readFile(valid[0]);
+      setCapturedImage(img);
+      await handleRecognition([img]);
+    } else {
+      const remain = MAX_MULTI_IMAGES - capturedImages.length;
+      const list = await Promise.all(valid.slice(0, remain).map(readFile));
+      setCapturedImages((prev) => [...prev, ...list]);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleRecognition = async (imageBase64: string) => {
+  const handleRecognition = async (imageList: string[]) => {
     clearResult();
     setCurrentProductId(null);
     setRecognitionTime(null);
     setElapsedTime(0);
+    setKnowledgeAdded(false);
 
     const startTime = Date.now();
     timerRef.current = setInterval(() => {
@@ -203,10 +243,9 @@ export function LiveStreamPanel() {
 
     if (!user) return;
 
-    // 并行：上传图片 + 识别
     const [imageUrl, recognitionResult] = await Promise.all([
-      uploadImage(imageBase64, user.id),
-      recognizeProduct(imageBase64),
+      uploadImage(imageList[0], user.id),
+      recognizeProduct(imageList.length > 1 ? imageList : imageList[0]),
     ]);
 
     if (timerRef.current) {
@@ -253,23 +292,8 @@ export function LiveStreamPanel() {
       setCurrentProductId(productData.id);
       await updateSession(productData.id, user.id);
 
-      // 自动入库到知识点表（按品类分类，便于聚合学习）
-      const sp = recognitionResult.sellingPoints || [];
-      if (sp.length > 0 || recognitionResult.tips) {
-        supabase.from('product_knowledge').insert({
-          product_id: productData.id,
-          category: recognitionResult.category,
-          product_name: recognitionResult.name,
-          selling_points: sp,
-          tips: recognitionResult.tips || null,
-          era: recognitionResult.era || null,
-          origin: recognitionResult.origin || null,
-          image_url: imageUrl,
-          created_by: user.id,
-        }).then(({ error: kErr }) => {
-          if (kErr) console.warn('[Knowledge] insert error:', kErr);
-        });
-      }
+      // 多张图清空缓冲
+      setCapturedImages([]);
 
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -278,13 +302,40 @@ export function LiveStreamPanel() {
       if (!recognitionResult.fromCache) {
         const { dismiss } = toast({
           title: '识别成功',
-          description: `已保存到知识库: ${recognitionResult.name}`,
+          description: recognitionResult.name,
         });
         setTimeout(() => dismiss(), 800);
       }
     } catch (error) {
       console.error('Error saving product:', error);
       toast({ title: '保存失败', description: '识别成功但保存出错', variant: 'destructive' });
+    }
+  };
+
+  const addToKnowledge = async () => {
+    if (!currentProductId || !user || !displayResult) return;
+    setSavingKnowledge(true);
+    try {
+      const sp = displayResult.sellingPoints || [];
+      const { error } = await supabase.from('product_knowledge').insert({
+        product_id: currentProductId,
+        category: displayResult.category,
+        product_name: displayResult.name,
+        selling_points: sp,
+        tips: displayResult.tips || null,
+        era: displayResult.era || null,
+        origin: displayResult.origin || null,
+        image_url: capturedImage || null,
+        created_by: user.id,
+      });
+      if (error) throw error;
+      setKnowledgeAdded(true);
+      toast({ title: '已加入知识库' });
+    } catch (e) {
+      console.error('[Knowledge] insert error:', e);
+      toast({ title: '加入失败', description: '请稍后重试', variant: 'destructive' });
+    } finally {
+      setSavingKnowledge(false);
     }
   };
 
@@ -302,7 +353,6 @@ export function LiveStreamPanel() {
     }
   };
 
-  // 显示用结果（识别结果 or 实时同步）
   const displayResult: RecognitionResult | null = result || (currentProduct ? {
     name: currentProduct.name,
     category: currentProduct.category,
@@ -317,8 +367,51 @@ export function LiveStreamPanel() {
     tips: currentProduct.tips,
   } : null);
 
+  const switchMode = (mode: CaptureMode) => {
+    if (mode === captureMode) return;
+    setCaptureMode(mode);
+    setCapturedImages([]);
+  };
+
   return (
     <div className="min-h-[calc(100vh-3.75rem)] bg-gradient-surface flex flex-col">
+      {/* 拍摄模式分段切换 */}
+      {!capturedImage && !isRecognizing && (
+        <div className="px-3 sm:px-4 pt-3">
+          <div className="mx-auto max-w-[min(100vw-1.5rem,68vh)] flex items-center bg-muted/60 rounded-full p-1 ring-1 ring-border/40">
+            <button
+              type="button"
+              onClick={() => switchMode('single')}
+              className={`flex-1 h-9 rounded-full text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
+                captureMode === 'single'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              <ImageIcon className="w-4 h-4" />
+              单张快拍
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('multi')}
+              className={`flex-1 h-9 rounded-full text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
+                captureMode === 'multi'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              多角度合并
+              {capturedImages.length > 0 && (
+                <span className="ml-1 px-1.5 py-px rounded-full bg-accent text-accent-foreground text-[10px] tabular-nums">
+                  {capturedImages.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 摄像头预览容器 */}
       <div className="flex-1 flex items-center justify-center px-3 sm:px-4 pt-3 pb-4">
         <div className="relative aspect-square w-full max-w-[min(100vw-1.5rem,68vh)] mx-auto bg-neutral-950 rounded-3xl overflow-hidden shadow-elevated ring-1 ring-border/40 animate-scale-in">
@@ -356,7 +449,9 @@ export function LiveStreamPanel() {
               <div className="text-center space-y-1.5">
                 <p className="text-white font-display text-lg sm:text-xl tracking-tight">即时识别 · 秒级反馈</p>
                 <p className="text-white/60 text-xs sm:text-sm max-w-[18rem]">
-                  对准商品拍照，AI 自动识别年份、工艺与销售卖点
+                  {captureMode === 'single'
+                    ? '对准商品拍照，AI 自动识别年份、工艺与销售卖点'
+                    : `多角度拍摄（最多 ${MAX_MULTI_IMAGES} 张），合并送 AI 综合识别`}
                 </p>
               </div>
             </div>
@@ -386,6 +481,9 @@ export function LiveStreamPanel() {
               <div className="px-2.5 py-1 rounded-full bg-black/50 backdrop-blur text-white/90 text-[11px] font-medium flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                 {facingMode === 'environment' ? '后置' : '前置'}
+                {captureMode === 'multi' && (
+                  <span className="ml-1 tabular-nums">· {capturedImages.length}/{MAX_MULTI_IMAGES}</span>
+                )}
               </div>
             )}
             <div className="ml-auto">
@@ -396,6 +494,29 @@ export function LiveStreamPanel() {
               )}
             </div>
           </div>
+
+          {/* 多角度缩略图条 */}
+          {captureMode === 'multi' && isStreaming && capturedImages.length > 0 && !capturedImage && (
+            <div className="absolute left-3 right-3 bottom-24 sm:bottom-28 flex gap-1.5 overflow-x-auto pb-1">
+              {capturedImages.map((src, i) => (
+                <div key={i} className="relative shrink-0">
+                  <img
+                    src={src}
+                    alt={`角度 ${i + 1}`}
+                    className="h-14 w-14 rounded-lg object-cover ring-2 ring-white/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeMultiImage(i)}
+                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-black/80 text-white flex items-center justify-center hover:bg-black"
+                    aria-label="删除"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* 底部渐变遮罩 + 操作按钮 */}
           <div className="absolute inset-x-0 bottom-0 pt-12 pb-3 px-3 bg-gradient-to-t from-black/70 via-black/40 to-transparent">
@@ -423,6 +544,7 @@ export function LiveStreamPanel() {
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
+                    multiple={captureMode === 'multi'}
                     className="hidden"
                     onChange={handleFileUpload}
                   />
@@ -440,24 +562,35 @@ export function LiveStreamPanel() {
                   >
                     <SwitchCamera className="w-5 h-5" />
                   </Button>
-                  {/* 主拍照按钮 - 放大 */}
                   <Button
-                    onClick={captureAndRecognize}
-                    disabled={isRecognizing}
+                    onClick={handleCaptureClick}
+                    disabled={isRecognizing || (captureMode === 'multi' && capturedImages.length >= MAX_MULTI_IMAGES)}
                     className="h-16 w-16 rounded-full bg-white hover:bg-white/90 text-neutral-900 shadow-glow ring-4 ring-white/20 p-0"
                   >
                     <div className="w-12 h-12 rounded-full border-2 border-neutral-900 flex items-center justify-center">
                       <Camera className="w-5 h-5" />
                     </div>
                   </Button>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    onClick={stopCamera}
-                    className="h-12 w-12 rounded-full bg-white/10 backdrop-blur text-white border-white/20 hover:bg-white/20 hover:text-white"
-                  >
-                    <X className="w-5 h-5" />
-                  </Button>
+                  {captureMode === 'multi' && capturedImages.length > 0 ? (
+                    <Button
+                      size="lg"
+                      onClick={finishMultiCapture}
+                      disabled={isRecognizing}
+                      className="h-12 px-4 rounded-full bg-accent text-accent-foreground hover:bg-accent/90 gap-1.5"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      识别 ({capturedImages.length})
+                    </Button>
+                  ) : (
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={stopCamera}
+                      className="h-12 w-12 rounded-full bg-white/10 backdrop-blur text-white border-white/20 hover:bg-white/20 hover:text-white"
+                    >
+                      <X className="w-5 h-5" />
+                    </Button>
+                  )}
                 </>
               )}
 
@@ -483,16 +616,17 @@ export function LiveStreamPanel() {
       <div ref={resultRef} className="bg-background">
         {displayResult ? (
           <div className="animate-fade-in">
-            {/* 继续拍摄按钮 */}
             <div className="sticky top-[3.75rem] z-20 glass border-b border-border/60 px-3 py-3 safe-bottom">
               <div className="container px-0">
                 <Button
                   size="lg"
                   onClick={() => {
                     setCapturedImage(null);
+                    setCapturedImages([]);
                     clearResult();
                     setCurrentProductId(null);
                     setRecognitionTime(null);
+                    setKnowledgeAdded(false);
                     startCamera();
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
@@ -511,6 +645,39 @@ export function LiveStreamPanel() {
 
             <div className="container py-4 space-y-4">
               <ProductDetailCard result={displayResult} />
+
+              {/* 加入知识库 */}
+              {currentProductId && (
+                <div className="pt-1">
+                  <Button
+                    onClick={addToKnowledge}
+                    disabled={knowledgeAdded || savingKnowledge}
+                    size="lg"
+                    className={`w-full h-12 rounded-full gap-2 text-base font-medium shadow-soft ${
+                      knowledgeAdded
+                        ? 'bg-success text-success-foreground hover:bg-success'
+                        : 'bg-gradient-accent text-accent-foreground hover:opacity-95'
+                    }`}
+                  >
+                    {savingKnowledge ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        正在加入...
+                      </>
+                    ) : knowledgeAdded ? (
+                      <>
+                        <Check className="w-5 h-5" />
+                        已加入知识库
+                      </>
+                    ) : (
+                      <>
+                        <BookmarkPlus className="w-5 h-5" />
+                        加入知识库
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
 
               {/* 管理员操作 */}
               {isAdmin && currentProductId && (
