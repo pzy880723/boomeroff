@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff, CheckCircle } from 'lucide-react';
-import logo from '@/assets/boomer-off-logo.png';
+import logo from '@/assets/boomer-off-vintage-logo.png';
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('');
