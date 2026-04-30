@@ -98,13 +98,8 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   other: '其他',
 };
 
-export const SCRIPT_STYLE_LABELS: Record<ScriptStyle, string> = {
-  professional: '简洁专业',
-  sales: '销售导向',
-  cultural: '文化知识',
-};
 
 export const ROLE_LABELS: Record<AppRole, string> = {
   admin: '管理员',
-  anchor: '主播',
+  anchor: '店员',
 };
