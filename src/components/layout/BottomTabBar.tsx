@@ -19,7 +19,7 @@ export function BottomTabBar() {
       aria-label="底部导航"
     >
       <div className="mx-auto max-w-screen-md px-2">
-        <ul className="flex items-end justify-around h-16 relative">
+        <ul className="flex items-end justify-around h-12 relative">
           {tabs.map(({ to, label, Icon, primary }) => {
             const active = location.pathname === to || (to === '/scan' && location.pathname === '/');
             if (primary) {
@@ -27,16 +27,16 @@ export function BottomTabBar() {
                 <li key={to} className="flex-1 flex justify-center">
                   <NavLink
                     to={to}
-                    className="flex flex-col items-center justify-center gap-1 h-full pt-1 pb-1"
+                    className="flex flex-col items-center justify-center gap-0.5 h-full pt-0.5 pb-0.5"
                     aria-label={label}
                   >
                     <span
                       className={cn(
-                        'w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-colors',
+                        'w-7 h-7 rounded-full flex items-center justify-center shadow-md transition-colors',
                         active ? 'bg-gradient-primary text-primary-foreground' : 'bg-primary text-primary-foreground'
                       )}
                     >
-                      <Icon className="w-5 h-5" strokeWidth={2} />
+                      <Icon className="w-4 h-4" strokeWidth={2} />
                     </span>
                     <span className={cn('text-[11px] font-medium', active ? 'text-primary' : 'text-foreground')}>{label}</span>
                   </NavLink>
@@ -48,11 +48,11 @@ export function BottomTabBar() {
                 <NavLink
                   to={to}
                   className={cn(
-                    'flex flex-col items-center justify-center gap-1 h-full pt-1.5 pb-1 transition-colors',
+                    'flex flex-col items-center justify-center gap-0.5 h-full pt-0.5 pb-0.5 transition-colors',
                     active ? 'text-primary' : 'text-muted-foreground'
                   )}
                 >
-                  <Icon className="w-5 h-5" strokeWidth={1.75} />
+                  <Icon className="w-4 h-4" strokeWidth={1.75} />
                   <span className="text-[11px] font-medium">{label}</span>
                 </NavLink>
               </li>
