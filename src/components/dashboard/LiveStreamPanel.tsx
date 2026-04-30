@@ -300,7 +300,7 @@ export function LiveStreamPanel() {
   } : null);
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] bg-gradient-surface flex flex-col">
+    <div className="min-h-[calc(100vh-5rem)] bg-gradient-surface flex flex-col">
       {/* 摄像头预览容器 */}
       <div className="flex-1 flex items-center justify-center px-3 sm:px-4 pt-3 pb-4">
         <div className="relative aspect-square w-full max-w-[min(100vw-1.5rem,68vh)] mx-auto bg-neutral-950 rounded-3xl overflow-hidden shadow-elevated ring-1 ring-border/40 animate-scale-in">
@@ -466,7 +466,7 @@ export function LiveStreamPanel() {
         {displayResult ? (
           <div className="animate-fade-in">
             {/* 继续拍摄按钮 */}
-            <div className="sticky top-14 z-20 glass border-b border-border/60 px-3 py-3 safe-bottom">
+            <div className="sticky top-20 z-20 glass border-b border-border/60 px-3 py-3 safe-bottom">
               <div className="container px-0">
                 <Button
                   size="lg"
