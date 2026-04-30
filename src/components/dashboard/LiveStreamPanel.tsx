@@ -294,8 +294,25 @@ export function LiveStreamPanel() {
       setCurrentProductId(productData.id);
       await updateSession(productData.id, user.id);
 
+      // 自动发布到「中古圈」社区（默认公开）
+      supabase.from('community_posts').insert({
+        user_id: user.id,
+        product_id: productData.id,
+        image_url: imageUrl,
+        name: recognitionResult.name,
+        category: recognitionResult.category,
+        era: recognitionResult.era || null,
+        origin: recognitionResult.origin || null,
+        selling_points: recognitionResult.sellingPoints || [],
+        tips: recognitionResult.tips || null,
+        is_public: true,
+      }).then(({ error: pErr }) => {
+        if (pErr) console.warn('[Community] post insert error:', pErr);
+      });
+
       // 多张图清空缓冲
       setCapturedImages([]);
+      setFavorited(false);
 
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
