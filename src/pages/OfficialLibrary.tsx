@@ -142,6 +142,12 @@ export default function OfficialLibrary() {
     }
   };
 
+  const openDetail = (it: OfficialItem) => {
+    setDetail(it);
+    // fire-and-forget：自增浏览数
+    void supabase.rpc('increment_official_view', { _id: it.id });
+  };
+
   const visibleCats = useMemo(
     () => (expanded ? categoriesAll : categoriesAll.slice(0, VISIBLE_COUNT)),
     [expanded],
