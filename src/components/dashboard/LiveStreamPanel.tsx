@@ -783,9 +783,10 @@ export function LiveStreamPanel() {
             <div className="container py-4 space-y-4">
               <ProductDetailCard result={displayResult} />
 
-              {/* 加入知识库 */}
+              {/* 团队/官方知识库 + 个人收藏 */}
               {currentProductId && (
-                <div className="pt-1">
+                <div className="space-y-2 pt-1">
+                  {/* 主按钮：申请收录 / 直接收录为官方 */}
                   <Button
                     onClick={addToKnowledge}
                     disabled={knowledgeAdded || savingKnowledge}
@@ -799,26 +800,22 @@ export function LiveStreamPanel() {
                     {savingKnowledge ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        正在加入...
+                        正在收录...
                       </>
                     ) : knowledgeAdded ? (
                       <>
                         <Check className="w-5 h-5" />
-                        已加入知识库
+                        {isAdmin ? '已收录为官方知识' : '已申请收录'}
                       </>
                     ) : (
                       <>
-                        <BookmarkPlus className="w-5 h-5" />
-                        加入知识库
+                        <Award className="w-5 h-5" />
+                        {isAdmin ? '直接收录为官方知识' : '申请收录到官方知识库'}
                       </>
                     )}
                   </Button>
-                </div>
-              )}
 
-              {/* 收藏到个人知识库 */}
-              {currentProductId && (
-                <div>
+                  {/* 次按钮：个人收藏 */}
                   <Button
                     onClick={toggleFavorite}
                     disabled={savingFav}
@@ -829,10 +826,15 @@ export function LiveStreamPanel() {
                     {savingFav ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <BookmarkPlus className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                      <Star className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
                     )}
-                    {favorited ? '已收藏到个人知识库' : '收藏到个人知识库'}
+                    {favorited ? '已加入我的学习清单' : '收藏到我的学习清单'}
                   </Button>
+
+                  {/* 引导提示 */}
+                  <p className="text-[11px] text-muted-foreground text-center px-2 leading-relaxed">
+                    收藏只有自己看得到 · {isAdmin ? '收录后所有同事都能学到' : '申请收录会让所有同事都能学到'}
+                  </p>
                 </div>
               )}
 
