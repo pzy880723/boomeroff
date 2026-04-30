@@ -192,9 +192,26 @@ export function UserTable() {
     );
   }
 
+  const pendingCount = users.filter((u) => u.suspended).length;
+  const filteredUsers = filter === 'pending' ? users.filter((u) => u.suspended) : users;
+
   return (
     <>
-      <div className="rounded-md border">
+      <Tabs value={filter} onValueChange={(v) => setFilter(v as 'all' | 'pending')}>
+        <TabsList>
+          <TabsTrigger value="all">全部 ({users.length})</TabsTrigger>
+          <TabsTrigger value="pending" className="gap-1.5">
+            待审核
+            {pendingCount > 0 && (
+              <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
+                {pendingCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <div className="rounded-md border mt-4">
         <Table>
           <TableHeader>
             <TableRow>
@@ -221,14 +238,14 @@ export function UserTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.length === 0 ? (
+            {filteredUsers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                  暂无用户
+                  {filter === 'pending' ? '暂无待审核用户' : '暂无用户'}
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
+              filteredUsers.map((user) => (
                 <TableRow key={user.id} className={user.suspended ? 'opacity-50' : ''}>
                   <TableCell>
                     <div className="flex flex-col">
