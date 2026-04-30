@@ -244,8 +244,10 @@ export type Database = {
           created_at: string
           created_by: string | null
           era: string | null
+          favorite_count: number
           gallery: Json
           id: string
+          importance_score: number
           ip_name: string | null
           name: string
           origin: string | null
@@ -254,6 +256,7 @@ export type Database = {
           summary: string | null
           tips: string | null
           updated_at: string
+          view_count: number
         }
         Insert: {
           category?: Database["public"]["Enums"]["product_category"]
@@ -262,8 +265,10 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           era?: string | null
+          favorite_count?: number
           gallery?: Json
           id?: string
+          importance_score?: number
           ip_name?: string | null
           name: string
           origin?: string | null
@@ -272,6 +277,7 @@ export type Database = {
           summary?: string | null
           tips?: string | null
           updated_at?: string
+          view_count?: number
         }
         Update: {
           category?: Database["public"]["Enums"]["product_category"]
@@ -280,8 +286,10 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           era?: string | null
+          favorite_count?: number
           gallery?: Json
           id?: string
+          importance_score?: number
           ip_name?: string | null
           name?: string
           origin?: string | null
@@ -290,6 +298,7 @@ export type Database = {
           summary?: string | null
           tips?: string | null
           updated_at?: string
+          view_count?: number
         }
         Relationships: []
       }
@@ -547,6 +556,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_official_view: { Args: { _id: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "operator" | "assistant" | "anchor"
