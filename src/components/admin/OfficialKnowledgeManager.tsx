@@ -53,6 +53,7 @@ export function OfficialKnowledgeManager() {
   const [open, setOpen] = useState(false);
   const [del, setDel] = useState<Item | null>(null);
   const [pointsText, setPointsText] = useState('');
+  const [computing, setComputing] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -84,6 +85,7 @@ export function OfficialKnowledgeManager() {
       cover_url: editing.cover_url?.trim() || null,
       selling_points: pointsText.split('\n').map((s) => s.trim()).filter(Boolean),
       tips: editing.tips?.trim() || null,
+      importance_score: Math.min(100, Math.max(0, Number(editing.importance_score) || 0)),
     };
     const { error } = editing.id
       ? await supabase.from('official_knowledge').update(payload).eq('id', editing.id)
@@ -92,6 +94,31 @@ export function OfficialKnowledgeManager() {
     toast.success('已保存');
     setOpen(false); setEditing(null);
     void load();
+  };
+
+  const computeImportance = async () => {
+    setComputing(true);
+    try {
+      let totalProcessed = 0;
+      let rounds = 0;
+      // 最多 10 轮（约 300 条），防止意外死循环
+      while (rounds < 10) {
+        const { data, error } = await supabase.functions.invoke('compute-importance', {
+          body: { limit: 30, onlyMissing: true },
+        });
+        if (error) { toast.error('计算失败：' + error.message); break; }
+        const processed = Number(data?.processed ?? 0);
+        const remaining = Number(data?.remaining ?? 0);
+        totalProcessed += processed;
+        toast.message(`已处理 ${totalProcessed} 条，剩余 ${remaining} 条…`);
+        if (processed === 0 || remaining === 0) break;
+        rounds += 1;
+      }
+      toast.success(`重要程度已更新（共 ${totalProcessed} 条）`);
+      void load();
+    } finally {
+      setComputing(false);
+    }
   };
 
   const remove = async () => {
