@@ -127,7 +127,7 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
-  const compressImage = (imageData: string, maxWidth: number = 800): Promise<string> => {
+  const compressImage = (imageData: string, maxWidth: number = 640): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -143,7 +143,7 @@ export function LiveStreamPanel() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
         } else {
           resolve(imageData);
         }
@@ -155,7 +155,7 @@ export function LiveStreamPanel() {
   const captureAndRecognize = async () => {
     if (!videoRef.current) return;
     const canvas = document.createElement('canvas');
-    const maxWidth = 800;
+    const maxWidth = 640;
     let width = videoRef.current.videoWidth;
     let height = videoRef.current.videoHeight;
     if (width > maxWidth) {
@@ -167,7 +167,7 @@ export function LiveStreamPanel() {
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0, width, height);
-      const imageData = canvas.toDataURL('image/jpeg', 0.7);
+      const imageData = canvas.toDataURL('image/jpeg', 0.6);
       setCapturedImage(imageData);
       await handleRecognition(imageData);
     }
