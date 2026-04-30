@@ -1,20 +1,13 @@
-## 优化两个相似按钮的文案与图标
+## 顶部栏高度恢复 + logo 放大溢出
 
-### 改动 `src/components/dashboard/LiveStreamPanel.tsx`
+恢复顶部栏 `h-12`（48px），但保留 logo 80x80。让 logo 通过 `overflow-visible` 向下溢出，不撑高顶部栏。
 
-**1. 第 9 行 import** — 添加 `RotateCcw` 图标
-```
-Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw,
-```
+### `src/components/layout/PageHeader.tsx`
 
-**2. 第 657-658 行**（拍完未识别时显示）
-- 图标：`Camera` → `RotateCcw`（旋转/重做语义）
-- 文案：`继续拍摄` → `重拍这一张`
+1. 第 45 行 `<header>`：加 `overflow-visible`（确保子元素可溢出）
+2. 第 46 行：`h-20` → `h-12`，并加 `overflow-visible`
+3. 第 58-71 行 logo 按钮：
+   - 容器加 `relative`，`button` 改为 `relative -my-4 flex items-center`（向上向下负边距让大 logo 居中溢出）
+   - logo 保持 `h-20 w-20`
 
-**3. 第 686-687 行**（识别完成后吸顶按钮）
-- 图标保持 `Camera`
-- 文案：`继续拍摄下一件商品` → `识别下一件商品`（强调"识别"动作，区别于上面那个"重拍"）
-
-效果：
-- 重拍这一张（白底 + 旋转图标）：当前照片不满意，重新拍
-- 识别下一件商品（渐变色 + 相机图标）：完成本次，开始下一轮
+最终效果：顶部栏视觉高度仍为 48px，但 logo 80px 居中溢出（向下挂出约 16px），不影响布局。
