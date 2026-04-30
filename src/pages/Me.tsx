@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut, ChevronRight, Edit2 } from 'lucide-react';
+import logo from '@/assets/boomer-off-vintage-logo.png';
 import { Link } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
 import {
@@ -131,6 +132,11 @@ export default function Me() {
             <span className="flex-1 text-sm text-left text-destructive">退出登录</span>
           </button>
         </Card>
+
+        <div className="flex flex-col items-center gap-2 pt-6 pb-4 opacity-70">
+          <img src={logo} alt="BOOMER-OFF" className="h-14 w-14 rounded-lg object-contain" draggable={false} />
+          <p className="text-xs text-muted-foreground">BOOMER-OFF · v0.1.0</p>
+        </div>
       </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

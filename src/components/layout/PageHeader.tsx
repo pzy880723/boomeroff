@@ -43,33 +43,32 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 glass safe-top">
-      <div className="container mx-auto max-w-screen-md flex items-center gap-2 h-14 px-3">
-        {back ? (
+      <div className="container mx-auto max-w-screen-md flex items-center gap-2 h-16 px-3">
+        {back && (
           <Link to={back}>
             <Button variant="ghost" size="icon" className="h-9 w-9 -ml-2">
               <ChevronLeft className="w-5 h-5" />
             </Button>
           </Link>
-        ) : (
-          <button
-            type="button"
-            onClick={tap}
-            aria-label="BOOMER-OFF"
-            className="shrink-0 select-none focus:outline-none"
-          >
-            <img
-              src={logo}
-              alt="中古商品实时识别系统"
-              draggable={false}
-              className="h-9 w-9 rounded-md object-contain"
-            />
-          </button>
         )}
         <div className="flex-1 min-w-0">
           <h1 className="text-base font-semibold tracking-tight truncate">{title}</h1>
           {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
         </div>
         {right}
+        <button
+          type="button"
+          onClick={tap}
+          aria-label="BOOMER-OFF"
+          className="shrink-0 select-none focus:outline-none ml-1"
+        >
+          <img
+            src={logo}
+            alt="中古商品实时识别系统"
+            draggable={false}
+            className="h-12 w-12 rounded-lg object-contain"
+          />
+        </button>
       </div>
 
       <Dialog open={pwdOpen} onOpenChange={setPwdOpen}>
