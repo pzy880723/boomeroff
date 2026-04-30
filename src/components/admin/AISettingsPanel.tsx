@@ -95,7 +95,7 @@ export function AISettingsPanel() {
       // 读取已有以保留旧 apiKey（若用户没改）
       const { data: existing } = await supabase
         .from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
-      const existingKey = (existing?.value as Settings | null)?.custom?.apiKey || '';
+      const existingKey = (existing?.value as unknown as Settings | null)?.custom?.apiKey || '';
       const finalKey = settings.custom.apiKey.trim() || existingKey;
 
       const value: Settings = {
@@ -110,7 +110,7 @@ export function AISettingsPanel() {
 
       const { error } = await supabase
         .from('app_settings')
-        .upsert({ key: 'ai_model', value, updated_at: new Date().toISOString() });
+        .upsert([{ key: 'ai_model', value: value as any, updated_at: new Date().toISOString() }]);
       if (error) throw error;
       toast.success('设置已保存，下一次识别即生效');
       setHadStoredKey(!!finalKey);
