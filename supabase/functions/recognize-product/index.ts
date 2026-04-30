@@ -16,13 +16,14 @@ async function callLovableAI(imageBase64: string, systemPrompt: string, apiKey: 
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'google/gemini-3-flash-preview',
+      model: 'google/gemini-2.5-flash-lite',
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
           content: [
-            { type: 'text', text: '识别这件中古商品：' },
+            { type: 'text', text: '识别这件中古商品，仅返回JSON' },
             { type: 'image_url', image_url: { url: imageUrl } },
           ],
         },
@@ -94,20 +95,9 @@ serve(async (req) => {
 
     const startTime = Date.now();
 
-    const recognitionPrompt = `识别中古杂货商品（多为日本回流），帮助门店店员快速了解未知商品。仅返回 JSON：
-{
-  "name": "商品名称（具体到品名）",
-  "category": "porcelain/incense/stationery/lacquerware/bronze/woodcraft/textile/jewelry/painting/other",
-  "era": "年代（如 昭和中期 1960s）",
-  "origin": "产地（如 日本京都 清水烧）",
-  "material": "材质",
-  "craft": "工艺特点（一句话）",
-  "sellingPoints": ["卖点1（短句，最重要）", "卖点2", "卖点3"],
-  "description": "100字内详细介绍，店员可直接讲给顾客（包含历史背景、价值点、适用场景）",
-  "tips": "店员小贴士一句话（保养/辨真/搭配建议任选一）",
-  "imageHash": "商品特征关键词3-5个用空格分隔"
-}
-卖点必须3-5条，每条短句直击重点。`;
+    const recognitionPrompt = `你是中古杂货识别助手。仅返回JSON，简洁不啰嗦：
+{"name":"","category":"porcelain|incense|stationery|lacquerware|bronze|woodcraft|textile|jewelry|painting|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"≤80字介绍","tips":"一句话贴士","imageHash":"3-5关键词空格分隔"}
+sellingPoints要3条短句直击重点。`;
 
     const response = await callLovableAI(imageBase64, recognitionPrompt, LOVABLE_API_KEY);
     const aiTime = Date.now() - startTime;
