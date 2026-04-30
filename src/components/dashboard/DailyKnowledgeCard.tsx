@@ -65,24 +65,26 @@ export function DailyKnowledgeCard() {
   }
 
   return (
-    <Card className="border-primary/20">
-      <CardHeader
-        className="pb-2 cursor-pointer"
+    <Card className="border-border/60 shadow-soft overflow-hidden">
+      <div
+        className="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer select-none hover:bg-muted/40 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BookOpen className="w-4 h-4 text-primary" />
-            今日知识点
-            <span className="text-xs text-muted-foreground font-normal">{today}</span>
-          </CardTitle>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
-            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </Button>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-full bg-gradient-accent flex items-center justify-center shrink-0">
+            <BookOpen className="w-4 h-4 text-accent-foreground" />
+          </div>
+          <div className="min-w-0">
+            <div className="font-display text-[15px] leading-tight">今日知识点</div>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">{today}</div>
+          </div>
         </div>
-      </CardHeader>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </div>
       {expanded && (
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 pt-0 pb-4 animate-fade-in">
           {generating && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -93,7 +95,7 @@ export function DailyKnowledgeCard() {
           {!generating && !content && (
             <div className="text-sm text-muted-foreground">
               <p>暂无今日知识点。识别一些商品后会自动生成。</p>
-              <Button size="sm" variant="outline" className="mt-2" onClick={generate}>
+              <Button size="sm" variant="outline" className="mt-2 rounded-full" onClick={generate}>
                 <Sparkles className="w-3 h-3 mr-1" />
                 立即生成
               </Button>
@@ -101,16 +103,16 @@ export function DailyKnowledgeCard() {
           )}
 
           {content?.summary && (
-            <p className="text-sm leading-relaxed">{content.summary}</p>
+            <p className="text-sm leading-relaxed text-foreground/90">{content.summary}</p>
           )}
 
           {content?.highlights && content.highlights.length > 0 && (
             <div className="space-y-1.5">
-              <div className="text-xs font-medium text-muted-foreground">学习要点</div>
-              <ul className="space-y-1">
+              <div className="text-[10px] uppercase tracking-[0.15em] font-medium text-muted-foreground">学习要点</div>
+              <ul className="space-y-1.5">
                 {content.highlights.map((h, i) => (
-                  <li key={i} className="flex gap-2 text-sm">
-                    <span className="text-primary shrink-0">·</span>
+                  <li key={i} className="flex gap-2 text-sm leading-relaxed">
+                    <span className="text-accent shrink-0 mt-1.5 w-1 h-1 rounded-full bg-accent" />
                     <span>{h}</span>
                   </li>
                 ))}
@@ -120,18 +122,18 @@ export function DailyKnowledgeCard() {
 
           {content?.featured && content.featured.length > 0 && (
             <div className="space-y-1.5">
-              <div className="text-xs font-medium text-muted-foreground">重点商品速记</div>
+              <div className="text-[10px] uppercase tracking-[0.15em] font-medium text-muted-foreground">重点商品速记</div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {content.featured.map((f, i) => (
-                  <div key={i} className="flex gap-2 p-2 bg-muted/50 rounded-md">
+                  <div key={i} className="flex gap-2 p-2 bg-muted/60 rounded-lg hover-lift">
                     {f.image_url && (
                       <img
                         src={f.image_url}
                         alt={f.name}
-                        className="w-12 h-12 rounded object-cover shrink-0"
+                        className="w-12 h-12 rounded-md object-cover shrink-0"
                       />
                     )}
-                    <div className="text-xs min-w-0">
+                    <div className="text-xs min-w-0 flex-1">
                       <div className="font-medium truncate">{f.name}</div>
                       <div className="text-muted-foreground line-clamp-2">{f.point}</div>
                     </div>

@@ -6,7 +6,7 @@ export function Dashboard() {
   const { role } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-gradient-surface flex flex-col">
       <Header />
       <LiveStreamPanel />
     </div>
