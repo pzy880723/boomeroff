@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { RecognitionResult, ProductCategory, EnrichedContent } from '@/types';
+import { RecognitionResult, ProductCategory } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 export function useProductRecognition() {
@@ -17,38 +17,32 @@ export function useProductRecognition() {
         body: { imageBase64 },
       });
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
+      if (data.error) throw new Error(data.error);
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      // 验证并规范化分类
       const validCategories: ProductCategory[] = [
-        'porcelain', 'incense', 'stationery', 'lacquerware', 
+        'porcelain', 'incense', 'stationery', 'lacquerware',
         'bronze', 'woodcraft', 'textile', 'jewelry', 'painting', 'other'
       ];
-      
-      const category = validCategories.includes(data.category) 
-        ? data.category 
-        : 'other';
 
-      // 简化版：单一话术转换为三种风格（复用同一内容）
-      const mainScript = data.script || data.scripts?.sales || '';
-      
+      const category = validCategories.includes(data.category) ? data.category : 'other';
+
+      const sellingPoints: string[] = Array.isArray(data.sellingPoints)
+        ? data.sellingPoints.filter((s: unknown) => typeof s === 'string' && s.trim())
+        : [];
+
       const recognitionResult: RecognitionResult = {
         name: data.name || '未知商品',
         category,
-        era: data.era,
-        material: data.material,
-        scripts: {
-          professional: mainScript,
-          sales: mainScript,
-          cultural: mainScript,
-        },
-        suggestedPriceRange: data.suggestedPriceRange,
+        era: data.era || undefined,
+        origin: data.origin || undefined,
+        material: data.material || undefined,
+        craft: data.craft || undefined,
+        dimensions: data.dimensions || undefined,
+        condition: data.condition || undefined,
+        description: data.description || undefined,
+        sellingPoints,
+        tips: data.tips || undefined,
         confidence: data.confidence || 0.85,
         imageHash: data.imageHash,
         fromCache: data.fromCache,
@@ -69,14 +63,7 @@ export function useProductRecognition() {
     }
   };
 
-  const clearResult = () => {
-    setResult(null);
-  };
+  const clearResult = () => setResult(null);
 
-  return {
-    isRecognizing,
-    result,
-    recognizeProduct,
-    clearResult,
-  };
+  return { isRecognizing, result, recognizeProduct, clearResult };
 }
