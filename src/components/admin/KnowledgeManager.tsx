@@ -284,7 +284,10 @@ export function KnowledgeManager() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium truncate max-w-[180px]">{row.product_name}</div>
+                    <div className="font-medium truncate max-w-[180px] flex items-center gap-1">
+                      {row.product_name}
+                      {row.is_official && <BadgeCheck className="w-3.5 h-3.5 text-primary shrink-0" />}
+                    </div>
                     {row.selling_points?.length > 0 && (
                       <div className="text-[11px] text-muted-foreground truncate max-w-[220px]">
                         {row.selling_points[0]}
@@ -302,6 +305,10 @@ export function KnowledgeManager() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => promoteToOfficial(row)}
+                        disabled={!isAdmin || row.is_official} title={row.is_official ? '已是官方' : '提升为官方'}>
+                        <ArrowUpCircle className={`w-4 h-4 ${row.is_official ? 'text-primary' : ''}`} />
+                      </Button>
                       <Button size="icon" variant="ghost" onClick={() => openEdit(row)} disabled={!isAdmin}>
                         <Edit className="w-4 h-4" />
                       </Button>
