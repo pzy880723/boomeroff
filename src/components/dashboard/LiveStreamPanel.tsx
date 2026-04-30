@@ -418,6 +418,38 @@ export function LiveStreamPanel() {
     tips: currentProduct.tips,
   } : null);
 
+  // 进入已识别商品时，同步「加入知识库」与「收藏」状态，避免重复入库
+  useEffect(() => {
+    if (!currentProductId || !user) {
+      setKnowledgeAdded(false);
+      setFavorited(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const [{ data: pk }, { data: fav }] = await Promise.all([
+        supabase
+          .from('product_knowledge')
+          .select('id')
+          .eq('product_id', currentProductId)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('user_favorites')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('source_type', 'recognition')
+          .eq('source_id', currentProductId)
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (cancelled) return;
+      setKnowledgeAdded(!!pk);
+      setFavorited(!!fav);
+    })();
+    return () => { cancelled = true; };
+  }, [currentProductId, user]);
+
   const switchMode = (mode: CaptureMode) => {
     if (mode === captureMode) return;
     setCaptureMode(mode);
