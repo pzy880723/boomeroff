@@ -145,7 +145,10 @@ export default function OfficialLibrary() {
   const openDetail = (it: OfficialItem) => {
     setDetail(it);
     // fire-and-forget：自增浏览数
-    void supabase.rpc('increment_official_view', { _id: it.id });
+    void (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<unknown>)(
+      'increment_official_view',
+      { _id: it.id },
+    );
   };
 
   const visibleCats = useMemo(
