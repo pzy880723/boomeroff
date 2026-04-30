@@ -158,6 +158,25 @@ export function KnowledgeManager() {
     setBulkOpen(false);
   };
 
+  const promoteToOfficial = async (row: Row) => {
+    if (row.is_official) { toast.info('已是官方'); return; }
+    const { error: insErr } = await supabase.from('official_knowledge').insert({
+      category: row.category,
+      name: row.product_name,
+      summary: Array.isArray(row.selling_points) && row.selling_points[0] ? row.selling_points[0] : null,
+      selling_points: row.selling_points || [],
+      tips: row.tips || null,
+      era: row.era || null,
+      origin: row.origin || null,
+      cover_url: row.image_url || null,
+      source_product_id: row.id,
+    });
+    if (insErr) { toast.error('提升失败：' + insErr.message); return; }
+    await supabase.from('product_knowledge').update({ is_official: true }).eq('id', row.id);
+    toast.success('已提升为官方知识');
+    void loadList();
+  };
+
   const allSelected = rows.length > 0 && selected.size === rows.length;
   const partial = selected.size > 0 && !allSelected;
 
