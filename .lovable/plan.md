@@ -1,96 +1,96 @@
 ## 目标
 
-把官方知识库的「品类」从现有 10 项重构为用户指定的 16 大类，每类配一个 lucide 图标 + 中文名，并为每个类目预填一批官方词条（带封面图、年代、产地、卖点、贴士）。
+1. **主类目折叠**：默认显示 2 行（每行 6 个 = 12 项），点击「展开/收起」按钮显示全部。
+2. **二级类目**：每个一级类目下定义子分类（如「日瓷」→ 品牌、工艺、器型、花纹、年代、场景），选中一级后展示横向滚动子分类筛选条。
+3. **视图切换**：右上角增加「列表 / 大图」切换按钮，记忆用户偏好。
 
-## 新品类清单（16 项 + other 兜底）
+---
 
-| 枚举值 | 中文标签 | 图标 (lucide-react) |
-|---|---|---|
-| `jp_porcelain` | 日瓷 | `Cherry` 或 `CircleDot` |
-| `eu_porcelain` | 欧瓷 | `Crown` |
-| `incense` | 线香 | `Flame` |
-| `antique_art` | 古美术 | `Landmark` |
-| `local_craft` | 本地特色 | `MapPin` |
-| `anime_toy` | 动漫玩具 | `ToyBrick` |
-| `otaku_goods` | 二次元周边 | `Sparkles` |
-| `luxury` | 奢侈品 | `Gem` |
-| `vintage_jewelry` | 中古首饰 | `Diamond` |
-| `game_console` | 游戏机 | `Gamepad2` |
-| `walkman` | 随身听 | `Headphones` |
-| `ccd` | CCD | `Camera` |
-| `media_record` | 音像制品 | `Disc3` |
-| `playback_device` | 播放设备 | `Radio` |
-| `home_appliance` | 家用电器 | `Tv` |
-| `hobby` | 兴趣爱好 | `Puzzle` |
-| `other` | 其他 | `Package` |
+## 一、主类目折叠展开
 
-旧值 `porcelain / stationery / lacquerware / bronze / woodcraft / textile / jewelry / painting` 不再出现在 UI 选择器，但**保留在 PG 枚举里**（PG 不支持移除 enum 值），现有数据不丢失。
+`OfficialLibrary.tsx` 中：
+- `grid-cols-6` 默认渲染前 12 个（含「全部」+ 11 个一级类目），其余隐藏。
+- 末尾或独立位置放一个「展开 ▾ / 收起 ▴」按钮（使用 `ChevronDown`），切换 `expanded` state。
+- 选中折叠区外的类目时自动展开，避免选中态不可见。
 
-## 实施步骤
-
-### 1. 数据库迁移：扩展 `product_category` 枚举
-
-通过迁移工具执行：
-
-```sql
-ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'jp_porcelain';
-ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'eu_porcelain';
-ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'antique_art';
--- ... 其余新值同理
+```text
+┌─────┬─────┬─────┬─────┬─────┬─────┐
+│全部 │日瓷 │欧瓷 │线香 │古美 │本地 │   ← 第 1 行
+├─────┼─────┼─────┼─────┼─────┼─────┤
+│动漫 │二次 │奢侈 │首饰 │游戏 │ ▾   │   ← 第 2 行（展开按钮）
+└─────┴─────┴─────┴─────┴─────┴─────┘
+点击 ▾ 后再多 1-2 行：随身听 / CCD / 音像 / 播放 / 家电 / 兴趣 / 其他
 ```
 
-旧的 `porcelain` 改归 `jp_porcelain`/`eu_porcelain` 时只在新数据上生效，老数据保持不动。
+## 二、二级类目（subcategory）
 
-### 2. 前端类型与图标映射
+### 数据存储
+利用现有 `official_knowledge.ip_name` 字段做二级分类（已是 `selectItem` 用法），无需迁库。
 
-- 改 `src/types/index.ts`：
-  - 扩充 `ProductCategory` 联合类型（追加 16 个新值，保留旧值以兼容历史数据）。
-  - `CATEGORY_LABELS` 追加新值的中文标签；旧值保留以正确显示历史词条。
-  - 新增 `CATEGORY_ORDER: ProductCategory[]` —— UI 只渲染这 16 + `other` 项，旧值不在序列里。
-  - 新增 `CATEGORY_ICONS: Record<ProductCategory, LucideIcon>` 映射。
+### 类型新增
+在 `src/types/index.ts` 中新增 `CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]>`，按品类列出子分类（仅一级里有意义的品类需要，其它使用 `[]`）。示例：
 
-### 3. UI：在「官方知识库」展示图标 + 文字的类目栏
+| 一级 | 二级 |
+|---|---|
+| 日瓷 | 品牌·窑口 / 工艺技法 / 器型用途 / 花纹寓意 / 年代鉴定 / 场景搭配 |
+| 欧瓷 | 品牌 / 工艺 / 器型 / 花纹 / 年代 |
+| 线香 | 品牌 / 香型 / 用途场景 |
+| 古美术 | 书画 / 漆器 / 铜器 / 木器 / 织物 |
+| 动漫玩具 | 高达 / 圣斗士 / 假面骑士 / 战队 / 怪兽 / 食玩 |
+| 二次元周边 | 手办 / 景品 / 徽章 / 挂件 / 同人 |
+| 奢侈品 | 包袋 / 服饰 / 配饰 / 腕表 |
+| 中古首饰 | 项链 / 戒指 / 胸针 / 耳饰 / 手链 |
+| 游戏机 | 任天堂 / 索尼 / 世嘉 / 掌机 / 卡带 |
+| 随身听 | Walkman 磁带 / Discman / MD / 数码 |
+| CCD | 索尼 / 佳能 / 卡西欧 / 富士 / 奥林巴斯 |
+| 音像制品 | 黑胶 / 磁带 / CD / DVD |
+| 播放设备 | 黑胶机 / 卡带机 / CD 机 / 收音机 |
+| 家用电器 | 电视 / 收音 / 厨电 / 灯具 |
+| 兴趣爱好 | 文具 / 香水 / 烟具 / 户外 |
+| 本地特色 | 闽南瓷 / 茶器 / 手作 |
 
-改 `src/pages/OfficialLibrary.tsx`：
-- 顶部把现在横滑 `Badge` 改成 **2 行网格的类目卡片**（icon 在上、中文名在下，选中态高亮），数据源用 `CATEGORY_ORDER`。
-- 选中"全部"显示所有，选中某类目按 `category` 过滤。
-- `OfficialKnowledgeManager` 后台的 Select 也用 `CATEGORY_ORDER`，并在选项里显示 icon。
+### UI 渲染
+- 选中一级类目（且非「全部」、且子类目数 > 0）时，下方出现一行可横向滚动的小芯片：`全部 / 子1 / 子2 …`。
+- 子分类 state 为 `sub: string`，默认 `'all'`。
+- 查询条件叠加：`if (sub !== 'all') q = q.eq('ip_name', sub)`。
+- 切换一级时 `sub` 重置为 `'all'`。
 
-### 4. AI 识别 prompt 同步
+## 三、列表 / 大图视图切换
 
-改 `supabase/functions/recognize-product/index.ts` 第 161 行的 category 候选枚举，改成 16 个新值（防止 AI 仍返回旧的 `porcelain`）。
+- 顶部搜索框右侧增加图标按钮组（`LayoutGrid` 大图、`List` 列表），用 `view: 'grid' | 'list'` state，存入 `localStorage.lib_view`。
+- **大图模式**（默认）：保持现有 `grid-cols-2` 大封面卡片。
+- **列表模式**：单列 `Card`，左侧 56×56 缩略图，右侧名称 + 子标签 + 简介一行截断 + 收藏按钮，紧凑高效便于浏览。
 
-### 5. 批量插入官方词条（每类 4-6 条，共约 70 条）
+```text
+大图(grid)              列表(list)
+┌────┬────┐             ┌────────────────────────────┐
+│ 图 │ 图 │             │[img] 名称       ★         │
+│名称│名称│             │      子类·年代·简介…       │
+├────┼────┤             ├────────────────────────────┤
+│ 图 │ 图 │             │[img] 名称  …               │
+└────┴────┘             └────────────────────────────┘
+```
 
-通过 insert 工具执行一条多值 INSERT，每条含 `name / category / ip_name / summary / era / origin / cover_url / selling_points(JSONB) / tips`。配图优先用 Wikimedia Commons 公共域直链（`upload.wikimedia.org`），找不到稳定公图的留 `null`（前端有"无图"占位）。
+---
 
-按类目预填示例：
+## 技术细节（仅修改前端）
 
-- **日瓷**：伊万里烧、有田烧、九谷烧、清水烧、备前烧、萨摩烧
-- **欧瓷**：Meissen 麦森、Royal Copenhagen、Wedgwood、Herend、Limoges、Royal Albert
-- **线香**：日本香堂"毎日香"、松栄堂、鸠居堂、香十、山田松香木
-- **古美术**：浮世绘、根付、煎茶道具、香炉、文房古玩
-- **本地特色**：江户切子、津轻涂、南部铁器、京友禅、博多织
-- **动漫玩具**：超合金魂、超合金、Bandai 圣斗士圣衣神话、Popy DX、Tomy 变形金刚
-- **二次元周边**：景品手办、吧唧、亚克力立牌、痛包、原画集
-- **奢侈品**：Hermès Birkin、Chanel Classic Flap、LV Monogram、Cartier Love、Rolex Submariner
-- **中古首饰**：Mikimoto 珍珠、Tiffany Open Heart、Cartier Trinity、欧洲 Cameo、和服带留
-- **游戏机**：Famicom、Super Famicom、Game Boy、GBA、NDS、PS1、PSP、Sega Saturn
-- **随身听**：Sony WM-2、WM-DD、CD Walkman D-50、MD MZ-E10、Aiwa HS-PX
-- **CCD**：Sony Cyber-shot DSC-T、Canon IXY、Casio EX-Z、Nikon Coolpix S、富士 FinePix F、Olympus μ
-- **音像制品**：山口百惠 LP、中森明菜 LP、City Pop（山下达郎/大泷詠一）、宫崎骏 OST、坂本龙一 / YMO、镭射影碟
-- **播放设备**：Technics SL-1200 黑胶机、Sony 卡座、Marantz 功放、JBL 古董音箱、收音机 Sony ICF
-- **家用电器**：National 复古风扇、Toshiba 早期电饭煲、Sharp 复古冰箱、Sanyo 录像机、复古电视显像管
-- **兴趣爱好**：胶片相机（FM2 / Leica M）、机械键盘、钓具、模型车、复古自行车
+**文件改动**
+1. `src/types/index.ts`
+   - 新增 `CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]>`。
 
-### 6. 验证
+2. `src/pages/OfficialLibrary.tsx`
+   - 新增 state：`expanded`、`sub`、`view`。
+   - `view` 初始读取 `localStorage.getItem('lib_view') || 'grid'`，set 时写回。
+   - 主类目网格切片：`expanded ? all : all.slice(0, 11)` + 第 12 格放展开/收起按钮。
+   - 当前选中类目若在折叠区外，自动 `setExpanded(true)`。
+   - 子类目 chip row（仅当 `cat !== 'all' && CATEGORY_SUBCATEGORIES[cat]?.length`）。
+   - 查询追加 `ip_name = sub` 过滤；切换 cat 时 `setSub('all')`。
+   - 按 `view` 渲染两套布局（提取 `<GridView />` / `<ListView />` 内联块）。
+   - 顶部搜索条右侧追加视图切换按钮组。
 
-- `/library` 顶部能看到 16 个图标 + 文字的类目，能点击切换并出现对应词条。
-- `/portal → 官方知识库` 后台 Select 显示新品类，可新增/编辑。
-- 历史数据（仍是 `porcelain` 等旧值）以旧标签正常显示，不报错。
+**无后端改动**：依赖现有 `official_knowledge.ip_name` 字段做二级分类匹配；将来管理后台录入时把对应子分类填入 IP 字段即可与筛选对齐。
 
-## 不在范围内
-
-- 不删除旧枚举值（PG 限制 + 保护历史数据）。
-- 不改个人知识库 / 社区 / 识别 UI 之外的卡片设计。
-- 不抓取商业网站图片，仅用公共域 / 留空。
+**移动端适配**（390px）
+- 主类目保持 `grid-cols-6`，子类目 chip 用 `overflow-x-auto` 横向滚动。
+- 列表模式行高 ~72px，一屏可见 6-7 条，满足密集浏览。
