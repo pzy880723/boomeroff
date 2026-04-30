@@ -18,7 +18,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, Edit, Loader2, Search, ImageOff } from 'lucide-react';
+import { Plus, Trash2, Edit, Loader2, Search, ImageOff, Sparkles } from 'lucide-react';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 
@@ -33,12 +33,15 @@ interface Item {
   cover_url: string | null;
   selling_points: string[];
   tips: string | null;
+  importance_score: number;
+  view_count: number;
+  favorite_count: number;
   created_at: string;
 }
 
 const empty = (): Partial<Item> => ({
   category: 'other', ip_name: '', name: '', summary: '', era: '', origin: '',
-  cover_url: '', selling_points: [], tips: '',
+  cover_url: '', selling_points: [], tips: '', importance_score: 0,
 });
 
 export function OfficialKnowledgeManager() {
