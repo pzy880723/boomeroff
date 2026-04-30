@@ -27,6 +27,8 @@ export function LiveStreamPanel() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [knowledgeAdded, setKnowledgeAdded] = useState(false);
   const [savingKnowledge, setSavingKnowledge] = useState(false);
+  const [favorited, setFavorited] = useState(false);
+  const [savingFav, setSavingFav] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
