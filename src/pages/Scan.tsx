@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { Loader2 } from 'lucide-react';
-import { Header } from '@/components/layout/Header';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { LiveStreamPanel } from '@/components/dashboard/LiveStreamPanel';
 
 export default function Scan() {
@@ -19,7 +19,7 @@ export default function Scan() {
 
   return (
     <div className="flex flex-col">
-      <Header />
+      <PageHeader title="AI 识物" />
       <LiveStreamPanel />
     </div>
   );
