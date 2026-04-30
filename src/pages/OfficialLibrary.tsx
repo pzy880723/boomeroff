@@ -7,8 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { CATEGORY_LABELS, ProductCategory } from '@/types';
-import { Loader2, Search, Star } from 'lucide-react';
+import { CATEGORY_LABELS, CATEGORY_ORDER, CATEGORY_ICONS, ProductCategory } from '@/types';
+import { Loader2, Search, Star, LayoutGrid } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
