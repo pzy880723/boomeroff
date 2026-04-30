@@ -145,7 +145,11 @@ export function OfficialKnowledgeManager() {
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜索名称 / IP" className="pl-8 h-9" />
         </div>
-        <Button size="sm" onClick={() => openEdit()} className="ml-auto">
+        <Button size="sm" variant="outline" onClick={computeImportance} disabled={computing} className="ml-auto">
+          {computing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
+          重算重要程度
+        </Button>
+        <Button size="sm" onClick={() => openEdit()}>
           <Plus className="w-4 h-4 mr-1.5" /> 新增
         </Button>
       </div>
