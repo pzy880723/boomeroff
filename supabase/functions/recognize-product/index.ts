@@ -147,9 +147,19 @@ serve(async (req) => {
 
     const startTime = Date.now();
 
-    const recognitionPrompt = `你是中古杂货识别助手。仅返回JSON，简洁不啰嗦：
-{"name":"","category":"porcelain|incense|stationery|lacquerware|bronze|woodcraft|textile|jewelry|painting|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"≤80字介绍","tips":"一句话贴士","imageHash":"3-5关键词空格分隔"}
-sellingPoints要3条短句直击重点。`;
+    const recognitionPrompt = `你是中古杂货识别助手。仅返回JSON，简洁不啰嗦。
+
+【硬性要求·必须遵守】
+所有字段必须使用简体中文输出，严禁出现任何英文单词、英文品牌名、英文型号、拼音或日文假名。
+- 商品名(name)：必须中文。如为外文品牌(例如 Yonex、Lego、Snoopy、NAD+)，必须翻译或音译为中文，例如"尤尼克斯羽毛球拍 天斧88D Pro"应输出"尤尼克斯 天斧88D Pro 羽毛球拍"，"Snoopy"输出"史努比"。型号编号可保留数字+字母。
+- 年代(era)：必须中文，例如"昭和后期(1970年代)""平成初期""1980年代""明治时期"，禁止只写"Showa"等英文。
+- 产地(origin)：必须中文，例如"日本""中国景德镇"。
+- 材质/工艺/描述/卖点/贴士：全部中文。
+- 若无法确定字段，写"不详"，不要留英文占位。
+
+格式：
+{"name":"","category":"porcelain|incense|stationery|lacquerware|bronze|woodcraft|textile|jewelry|painting|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"≤80字中文介绍","tips":"一句话中文贴士","imageHash":"3-5中文关键词空格分隔"}
+sellingPoints要3条短句直击重点，全部中文。`;
 
     const response = await callAI(imageList, recognitionPrompt, modelCfg);
     const aiTime = Date.now() - startTime;
