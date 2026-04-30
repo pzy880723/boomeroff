@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
-import { Heart, MessageCircle, Star, Loader2, Send } from 'lucide-react';
+import { Heart, Star, Loader2, Send, Award, Lightbulb, Check } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
@@ -32,6 +32,19 @@ interface Post {
   is_public: boolean;
 }
 
+interface ProductDetail {
+  description: string | null;
+  material: string | null;
+  craft: string | null;
+  dimensions: string | null;
+  condition: string | null;
+  selling_points: string[];
+  tips: string | null;
+  era: string | null;
+  origin: string | null;
+  image_url: string | null;
+}
+
 interface ProfileLite { user_id: string; display_name: string | null; }
 interface Comment {
   id: string; user_id: string; content: string; created_at: string;
@@ -41,7 +54,8 @@ interface Comment {
 const cats: Array<ProductCategory | 'all'> = ['all', ...Object.keys(CATEGORY_LABELS) as ProductCategory[]];
 
 export default function Community() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
+  const isAdmin = role === 'admin';
   const [posts, setPosts] = useState<Post[]>([]);
   const [profiles, setProfiles] = useState<Record<string, ProfileLite>>({});
   const [likes, setLikes] = useState<Set<string>>(new Set());
@@ -49,6 +63,10 @@ export default function Community() {
   const [loading, setLoading] = useState(true);
   const [cat, setCat] = useState<ProductCategory | 'all'>('all');
   const [active, setActive] = useState<Post | null>(null);
+  const [activeDetail, setActiveDetail] = useState<ProductDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [officialAdded, setOfficialAdded] = useState(false);
+  const [savingOfficial, setSavingOfficial] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
 
@@ -125,26 +143,148 @@ export default function Community() {
     } else {
       await supabase.from('user_favorites').insert({
         user_id: user.id, source_type: 'recognition', source_id: post.product_id,
-        snapshot: { name: post.name, category: post.category, image_url: post.image_url },
+        snapshot: {
+          name: post.name,
+          category: post.category,
+          cover_url: post.image_url,
+          image_url: post.image_url,
+          summary: activeDetail?.description || null,
+        },
       });
       setFavs((s) => new Set(s).add(post.product_id!));
-      toast.success('已收藏');
+      toast.success('已收藏到我的学习清单');
+    }
+  };
+
+  const addToOfficial = async () => {
+    if (!user || !active || !active.product_id || !isAdmin) return;
+    setSavingOfficial(true);
+    try {
+      const sp = (activeDetail?.selling_points && activeDetail.selling_points.length
+        ? activeDetail.selling_points
+        : (Array.isArray(active.selling_points) ? (active.selling_points as string[]) : [])) || [];
+      const era = activeDetail?.era ?? active.era;
+      const origin = activeDetail?.origin ?? active.origin;
+      const tips = activeDetail?.tips ?? active.tips;
+      const summary = activeDetail?.description ?? null;
+      const cover = activeDetail?.image_url ?? active.image_url;
+
+      const [pkRes, ofRes] = await Promise.all([
+        supabase.from('product_knowledge').select('id')
+          .eq('product_id', active.product_id).limit(1).maybeSingle(),
+        supabase.from('official_knowledge').select('id')
+          .eq('source_product_id', active.product_id).limit(1).maybeSingle(),
+      ]);
+
+      let didSomething = false;
+
+      if (!pkRes.data) {
+        const { error } = await supabase.from('product_knowledge').insert({
+          product_id: active.product_id,
+          category: active.category,
+          product_name: active.name,
+          selling_points: sp,
+          tips: tips || null,
+          era: era || null,
+          origin: origin || null,
+          image_url: cover || null,
+          created_by: user.id,
+          is_official: true,
+        });
+        if (error) throw error;
+        didSomething = true;
+      } else {
+        await supabase.from('product_knowledge').update({ is_official: true }).eq('id', pkRes.data.id);
+      }
+
+      if (!ofRes.data) {
+        const { error: ofErr } = await supabase.from('official_knowledge').insert({
+          name: active.name,
+          category: active.category,
+          summary,
+          content: {
+            material: activeDetail?.material || null,
+            craft: activeDetail?.craft || null,
+            dimensions: activeDetail?.dimensions || null,
+            condition: activeDetail?.condition || null,
+          },
+          era: era || null,
+          origin: origin || null,
+          cover_url: cover || null,
+          gallery: cover ? [cover] : [],
+          selling_points: sp,
+          tips: tips || null,
+          source_product_id: active.product_id,
+          created_by: user.id,
+        });
+        if (ofErr) throw ofErr;
+        didSomething = true;
+      }
+
+      setOfficialAdded(true);
+      toast.success(didSomething ? '已收录为官方知识' : '已在官方知识库中');
+    } catch (e: any) {
+      console.error('[Community→Official] error:', e);
+      const code = e?.code || '';
+      if (code === '42501' || /row-level security/i.test(e?.message || '')) {
+        toast.error('权限不足：仅管理员可收录');
+      } else {
+        toast.error(e?.message || '收录失败，请稍后重试');
+      }
+    } finally {
+      setSavingOfficial(false);
     }
   };
 
   const openDetail = async (post: Post) => {
     setActive(post);
     setComments([]);
-    const { data } = await supabase.from('community_comments')
-      .select('*').eq('post_id', post.id).order('created_at', { ascending: true }).limit(100);
-    const list = (data || []) as Comment[];
-    const userIds = Array.from(new Set(list.map((c) => c.user_id))).filter((id) => !profiles[id]);
-    if (userIds.length) {
-      const { data: profs } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
-      (profs || []).forEach((p) => { profiles[p.user_id] = p as ProfileLite; });
-      setProfiles({ ...profiles });
+    setActiveDetail(null);
+    setOfficialAdded(false);
+
+    // 评论
+    supabase.from('community_comments')
+      .select('*').eq('post_id', post.id).order('created_at', { ascending: true }).limit(100)
+      .then(async ({ data }) => {
+        const list = (data || []) as Comment[];
+        const userIds = Array.from(new Set(list.map((c) => c.user_id))).filter((id) => !profiles[id]);
+        if (userIds.length) {
+          const { data: profs } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
+          (profs || []).forEach((p) => { profiles[p.user_id] = p as ProfileLite; });
+          setProfiles({ ...profiles });
+        }
+        setComments(list);
+      });
+
+    // 完整商品信息 + admin 的「已收录」状态
+    if (post.product_id) {
+      setDetailLoading(true);
+      const [{ data: prod }, ofRes] = await Promise.all([
+        supabase.from('products')
+          .select('description, material, craft, dimensions, condition, selling_points, tips, era, origin, image_url')
+          .eq('id', post.product_id).maybeSingle(),
+        isAdmin
+          ? supabase.from('official_knowledge').select('id')
+              .eq('source_product_id', post.product_id).limit(1).maybeSingle()
+          : Promise.resolve({ data: null } as any),
+      ]);
+      if (prod) {
+        setActiveDetail({
+          description: prod.description,
+          material: prod.material,
+          craft: prod.craft,
+          dimensions: prod.dimensions,
+          condition: prod.condition,
+          selling_points: Array.isArray(prod.selling_points) ? prod.selling_points as string[] : [],
+          tips: prod.tips,
+          era: prod.era,
+          origin: prod.origin,
+          image_url: prod.image_url,
+        });
+      }
+      setOfficialAdded(!!ofRes?.data);
+      setDetailLoading(false);
     }
-    setComments(list);
   };
 
   const submitComment = async () => {
@@ -160,6 +300,20 @@ export default function Community() {
 
   if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!user) return <AuthPage />;
+
+  const sellingPoints: string[] = (activeDetail?.selling_points && activeDetail.selling_points.length)
+    ? activeDetail.selling_points
+    : (Array.isArray(active?.selling_points) ? (active!.selling_points as string[]) : []);
+  const tipsText = activeDetail?.tips ?? active?.tips ?? null;
+  const eraText = activeDetail?.era ?? active?.era ?? null;
+  const originText = activeDetail?.origin ?? active?.origin ?? null;
+
+  const specs: Array<{ label: string; value: string | null | undefined }> = [
+    { label: '材质', value: activeDetail?.material },
+    { label: '工艺', value: activeDetail?.craft },
+    { label: '尺寸', value: activeDetail?.dimensions },
+    { label: '品相', value: activeDetail?.condition },
+  ].filter((s) => !!s.value);
 
   return (
     <>
@@ -189,17 +343,17 @@ export default function Community() {
               const faved = p.product_id ? favs.has(p.product_id) : false;
               return (
                 <div key={p.id} className="mb-3 break-inside-avoid">
-                  <div className="rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm" onClick={() => openDetail(p)}>
+                  <div className="rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm cursor-pointer" onClick={() => openDetail(p)}>
                     {p.image_url ? (
                       <img src={p.image_url} alt={p.name} className="w-full object-cover" loading="lazy" />
                     ) : (
                       <div className="aspect-square bg-muted" />
                     )}
                     <div className="p-2.5 space-y-2">
-                      <p className="text-sm font-medium leading-tight line-clamp-2">{p.name}</p>
-                      <div className="flex items-center gap-1">
+                      <p className="text-sm font-medium leading-snug break-words">{p.name}</p>
+                      <div className="flex items-center gap-1 flex-wrap">
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{CATEGORY_LABELS[p.category]}</Badge>
-                        {p.era && <span className="text-[10px] text-muted-foreground truncate">{p.era}</span>}
+                        {p.era && <span className="text-[10px] text-muted-foreground">{p.era}</span>}
                       </div>
                       <div className="flex items-center gap-1.5 pt-1 border-t border-border/40">
                         <Avatar className="h-5 w-5">
@@ -224,35 +378,103 @@ export default function Community() {
       </div>
 
       <Sheet open={!!active} onOpenChange={(o) => !o && setActive(null)}>
-        <SheetContent side="bottom" className="h-[90vh] flex flex-col p-0">
+        <SheetContent side="bottom" className="h-[92vh] flex flex-col p-0">
           {active && (
             <>
               <SheetHeader className="p-4 border-b shrink-0">
-                <SheetTitle className="text-left">{active.name}</SheetTitle>
+                <SheetTitle className="text-left text-base leading-snug break-words">{active.name}</SheetTitle>
               </SheetHeader>
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {active.image_url && <img src={active.image_url} className="w-full rounded-lg" alt={active.name} />}
+
                 <div className="flex flex-wrap gap-1.5">
                   <Badge variant="secondary">{CATEGORY_LABELS[active.category]}</Badge>
-                  {active.era && <Badge variant="outline">{active.era}</Badge>}
-                  {active.origin && <Badge variant="outline">{active.origin}</Badge>}
+                  {eraText && <Badge variant="outline">{eraText}</Badge>}
+                  {originText && <Badge variant="outline">{originText}</Badge>}
                 </div>
-                {Array.isArray(active.selling_points) && (active.selling_points as string[]).length > 0 && (
-                  <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
-                    {(active.selling_points as string[]).map((s, i) => <li key={i}>{s}</li>)}
-                  </ul>
-                )}
-                {active.tips && <div className="bg-muted rounded-lg p-3 text-sm">{active.tips}</div>}
 
-                <div className="flex items-center gap-3 pt-2 border-t">
-                  <Button variant="outline" size="sm" onClick={() => toggleLike(active)}>
-                    <Heart className={cn('w-4 h-4 mr-1', likes.has(active.id) && 'fill-red-500 text-red-500')} />
-                    {active.likes_count}
-                  </Button>
-                  {active.product_id && (
-                    <Button variant="outline" size="sm" onClick={() => toggleFav(active)}>
-                      <Star className={cn('w-4 h-4 mr-1', favs.has(active.product_id) && 'fill-yellow-400 text-yellow-400')} />
-                      收藏
+                {/* 详细介绍 */}
+                {detailLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin" /> 加载完整介绍…</div>
+                ) : activeDetail?.description ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">介绍</p>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{activeDetail.description}</p>
+                  </div>
+                ) : null}
+
+                {/* 规格 */}
+                {specs.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">规格</p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                      {specs.map((s) => (
+                        <div key={s.label} className="flex gap-1.5">
+                          <span className="text-muted-foreground shrink-0">{s.label}:</span>
+                          <span className="break-words">{s.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 卖点 */}
+                {sellingPoints.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">卖点</p>
+                    <ul className="space-y-1.5">
+                      {sellingPoints.map((s, i) => (
+                        <li key={i} className="text-sm flex gap-2">
+                          <span className="text-primary shrink-0">•</span>
+                          <span className="leading-relaxed break-words">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* 小贴士 */}
+                {tipsText && (
+                  <div className="bg-accent/30 rounded-lg p-3 text-sm flex gap-2">
+                    <Lightbulb className="w-4 h-4 shrink-0 mt-0.5 text-accent-foreground" />
+                    <p className="leading-relaxed break-words">{tipsText}</p>
+                  </div>
+                )}
+
+                {/* 操作区 */}
+                <div className="space-y-2 pt-2 border-t">
+                  <div className="flex items-center gap-3">
+                    <Button variant="outline" size="sm" onClick={() => toggleLike(active)}>
+                      <Heart className={cn('w-4 h-4 mr-1', likes.has(active.id) && 'fill-red-500 text-red-500')} />
+                      {active.likes_count}
+                    </Button>
+                    {active.product_id && (
+                      <Button variant="outline" size="sm" onClick={() => toggleFav(active)}>
+                        <Star className={cn('w-4 h-4 mr-1', favs.has(active.product_id) && 'fill-yellow-400 text-yellow-400')} />
+                        {favs.has(active.product_id) ? '已收藏' : '收藏到我的学习清单'}
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* 仅 admin：收录到官方 */}
+                  {isAdmin && active.product_id && (
+                    <Button
+                      onClick={addToOfficial}
+                      disabled={officialAdded || savingOfficial}
+                      className={cn(
+                        'w-full h-10 rounded-full gap-2',
+                        officialAdded
+                          ? 'bg-success text-success-foreground hover:bg-success'
+                          : 'bg-gradient-accent text-accent-foreground hover:opacity-95'
+                      )}
+                    >
+                      {savingOfficial ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> 收录中…</>
+                      ) : officialAdded ? (
+                        <><Check className="w-4 h-4" /> 已收录为官方知识</>
+                      ) : (
+                        <><Award className="w-4 h-4" /> 直接收录为官方知识</>
+                      )}
                     </Button>
                   )}
                 </div>
@@ -269,7 +491,7 @@ export default function Community() {
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-muted-foreground">{profiles[c.user_id]?.display_name || '匿名'}</p>
-                          <p className="text-sm">{c.content}</p>
+                          <p className="text-sm break-words">{c.content}</p>
                         </div>
                       </div>
                     ))
