@@ -36,13 +36,15 @@ interface Product {
   name: string;
   category: ProductCategory;
   era: string | null;
+  origin: string | null;
   material: string | null;
   craft: string | null;
   description: string | null;
   dimensions: string | null;
   condition: string | null;
   created_at: string;
-  scripts: Json | null;
+  selling_points: Json | null;
+  tips: string | null;
   image_url: string | null;
 }
 
@@ -70,7 +72,7 @@ export default function History() {
     try {
       let query = supabase
         .from('products')
-        .select('id, name, category, era, material, craft, description, dimensions, condition, created_at, scripts, image_url')
+        .select('id, name, category, era, origin, material, craft, description, dimensions, condition, created_at, selling_points, tips, image_url')
         .order('created_at', { ascending: false });
 
       // 分类筛选
@@ -326,16 +328,18 @@ export default function History() {
                       </p>
                     )}
 
-                    {/* 卖点脚本预览 */}
-                    {product.scripts && typeof product.scripts === 'object' && !Array.isArray(product.scripts) && (product.scripts as Record<string, string>).sales && (
+                    {/* 卖点预览 */}
+                    {Array.isArray(product.selling_points) && (product.selling_points as string[]).length > 0 && (
                       <div className="bg-muted/50 rounded-lg p-3">
                         <div className="flex items-center gap-1.5 text-xs font-medium text-primary mb-1.5">
                           <Sparkles className="h-3 w-3" />
-                          卖点
+                          核心卖点
                         </div>
-                        <p className="text-xs text-muted-foreground line-clamp-3">
-                          {(product.scripts as Record<string, string>).sales}
-                        </p>
+                        <ul className="space-y-1">
+                          {(product.selling_points as string[]).slice(0, 2).map((p, i) => (
+                            <li key={i} className="text-xs text-muted-foreground line-clamp-1">· {p}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </CardContent>
