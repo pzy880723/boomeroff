@@ -221,6 +221,30 @@ export default function OfficialLibrary() {
           )}
         </div>
 
+        {/* 排序切换 - 仅「全部」类目下显示 */}
+        {cat === 'all' && (
+          <div className="flex gap-1 rounded-md bg-muted p-1">
+            {([
+              { k: 'latest', label: '最新更新', Icon: Clock },
+              { k: 'hot', label: '最热', Icon: Flame },
+              { k: 'important', label: '重要程度', Icon: Award },
+            ] as const).map(({ k, label, Icon }) => (
+              <button
+                key={k}
+                onClick={() => setSort(k)}
+                className={`flex-1 flex items-center justify-center gap-1 h-8 rounded text-xs font-medium transition-colors ${
+                  sort === k
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* 二级类目 - 上滑时吸顶 */}
         {subList.length > 0 && (
           <div className="sticky top-12 z-20 -mx-3 px-3 py-2 flex gap-1.5 overflow-x-auto bg-background/95 backdrop-blur border-b border-border scrollbar-none">
