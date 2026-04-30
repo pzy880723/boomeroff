@@ -175,7 +175,7 @@ sellingPoints要3条短句直击重点。`;
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
-    console.log('[Recognition] AI time:', aiTime, 'ms');
+    
 
     if (!content) {
       return new Response(JSON.stringify({ error: 'AI 返回空响应' }), {
