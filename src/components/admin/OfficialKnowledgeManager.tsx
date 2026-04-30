@@ -19,7 +19,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, Edit, Loader2, Search, ImageOff } from 'lucide-react';
-import { CATEGORY_LABELS, ProductCategory } from '@/types';
+import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 
 interface Item {
