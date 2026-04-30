@@ -18,7 +18,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, Edit, Loader2, Search, ImageOff } from 'lucide-react';
+import { Plus, Trash2, Edit, Loader2, Search, ImageOff, Sparkles } from 'lucide-react';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 
@@ -33,12 +33,15 @@ interface Item {
   cover_url: string | null;
   selling_points: string[];
   tips: string | null;
+  importance_score: number;
+  view_count: number;
+  favorite_count: number;
   created_at: string;
 }
 
 const empty = (): Partial<Item> => ({
   category: 'other', ip_name: '', name: '', summary: '', era: '', origin: '',
-  cover_url: '', selling_points: [], tips: '',
+  cover_url: '', selling_points: [], tips: '', importance_score: 0,
 });
 
 export function OfficialKnowledgeManager() {
@@ -50,6 +53,7 @@ export function OfficialKnowledgeManager() {
   const [open, setOpen] = useState(false);
   const [del, setDel] = useState<Item | null>(null);
   const [pointsText, setPointsText] = useState('');
+  const [computing, setComputing] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -81,6 +85,7 @@ export function OfficialKnowledgeManager() {
       cover_url: editing.cover_url?.trim() || null,
       selling_points: pointsText.split('\n').map((s) => s.trim()).filter(Boolean),
       tips: editing.tips?.trim() || null,
+      importance_score: Math.min(100, Math.max(0, Number(editing.importance_score) || 0)),
     };
     const { error } = editing.id
       ? await supabase.from('official_knowledge').update(payload).eq('id', editing.id)
@@ -89,6 +94,31 @@ export function OfficialKnowledgeManager() {
     toast.success('已保存');
     setOpen(false); setEditing(null);
     void load();
+  };
+
+  const computeImportance = async () => {
+    setComputing(true);
+    try {
+      let totalProcessed = 0;
+      let rounds = 0;
+      // 最多 10 轮（约 300 条），防止意外死循环
+      while (rounds < 10) {
+        const { data, error } = await supabase.functions.invoke('compute-importance', {
+          body: { limit: 30, onlyMissing: true },
+        });
+        if (error) { toast.error('计算失败：' + error.message); break; }
+        const processed = Number(data?.processed ?? 0);
+        const remaining = Number(data?.remaining ?? 0);
+        totalProcessed += processed;
+        toast.message(`已处理 ${totalProcessed} 条，剩余 ${remaining} 条…`);
+        if (processed === 0 || remaining === 0) break;
+        rounds += 1;
+      }
+      toast.success(`重要程度已更新（共 ${totalProcessed} 条）`);
+      void load();
+    } finally {
+      setComputing(false);
+    }
   };
 
   const remove = async () => {
@@ -115,7 +145,11 @@ export function OfficialKnowledgeManager() {
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜索名称 / IP" className="pl-8 h-9" />
         </div>
-        <Button size="sm" onClick={() => openEdit()} className="ml-auto">
+        <Button size="sm" variant="outline" onClick={computeImportance} disabled={computing} className="ml-auto">
+          {computing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
+          重算重要程度
+        </Button>
+        <Button size="sm" onClick={() => openEdit()}>
           <Plus className="w-4 h-4 mr-1.5" /> 新增
         </Button>
       </div>
@@ -227,6 +261,17 @@ export function OfficialKnowledgeManager() {
               <div>
                 <Label>小贴士</Label>
                 <Textarea rows={2} value={editing.tips || ''} onChange={(e) => setEditing({ ...editing, tips: e.target.value })} />
+              </div>
+              <div>
+                <Label>重要程度（0–100）</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={editing.importance_score ?? 0}
+                  onChange={(e) => setEditing({ ...editing, importance_score: Number(e.target.value) })}
+                  placeholder="留空或填 0 表示未评估，可在列表上方一键重算"
+                />
               </div>
             </div>
           )}

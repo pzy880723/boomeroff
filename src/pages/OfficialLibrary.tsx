@@ -13,6 +13,7 @@ import {
 } from '@/types';
 import {
   Loader2, Search, Star, LayoutGrid, ChevronDown, ChevronUp, List, ImageOff,
+  Clock, Flame, Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -30,6 +31,9 @@ interface OfficialItem {
   cover_url: string | null;
   selling_points: unknown;
   tips: string | null;
+  view_count: number;
+  favorite_count: number;
+  importance_score: number;
 }
 
 const categoriesAll: Array<ProductCategory | 'all'> = ['all', ...CATEGORY_ORDER];
@@ -37,6 +41,7 @@ const categoriesAll: Array<ProductCategory | 'all'> = ['all', ...CATEGORY_ORDER]
 const VISIBLE_COUNT = 11;
 
 type ViewMode = 'grid' | 'list';
+type SortKey = 'latest' | 'hot' | 'important';
 
 export default function OfficialLibrary() {
   const { user, loading: authLoading } = useAuth();
@@ -46,6 +51,10 @@ export default function OfficialLibrary() {
   const [cat, setCat] = useState<ProductCategory | 'all'>('all');
   const [sub, setSub] = useState<string>('all');
   const [expanded, setExpanded] = useState(false);
+  const [sort, setSort] = useState<SortKey>(() => {
+    if (typeof window === 'undefined') return 'latest';
+    return (localStorage.getItem('lib_sort') as SortKey) || 'latest';
+  });
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') return 'grid';
     return (localStorage.getItem('lib_view') as ViewMode) || 'grid';
@@ -56,6 +65,14 @@ export default function OfficialLibrary() {
   useEffect(() => {
     localStorage.setItem('lib_view', view);
   }, [view]);
+
+  useEffect(() => {
+    localStorage.setItem('lib_view', view);
+  }, [view]);
+
+  useEffect(() => {
+    localStorage.setItem('lib_sort', sort);
+  }, [sort]);
 
   // 切换一级类目时重置二级
   useEffect(() => { setSub('all'); }, [cat]);
@@ -71,12 +88,32 @@ export default function OfficialLibrary() {
     if (!user) return;
     (async () => {
       setLoading(true);
-      let q = supabase.from('official_knowledge').select('*').order('created_at', { ascending: false });
+      let q = supabase.from('official_knowledge').select('*');
+      // 仅在「全部」类目下应用排序切换；具体类目固定按更新时间倒序
+      if (cat === 'all') {
+        if (sort === 'important') {
+          q = q.order('importance_score', { ascending: false }).order('updated_at', { ascending: false });
+        } else if (sort === 'hot') {
+          // 数据库无法直接 order by 表达式，前端再排；先按更新时间初排
+          q = q.order('updated_at', { ascending: false });
+        } else {
+          q = q.order('updated_at', { ascending: false });
+        }
+      } else {
+        q = q.order('updated_at', { ascending: false });
+      }
       if (cat !== 'all') q = q.eq('category', cat);
       if (sub !== 'all') q = q.eq('ip_name', sub);
       if (keyword.trim()) q = q.or(`name.ilike.%${keyword}%,ip_name.ilike.%${keyword}%,summary.ilike.%${keyword}%`);
       const { data } = await q.limit(120);
-      setItems((data || []) as OfficialItem[]);
+      let list = (data || []) as OfficialItem[];
+      if (cat === 'all' && sort === 'hot') {
+        list = [...list].sort(
+          (a, b) =>
+            (b.favorite_count * 3 + b.view_count) - (a.favorite_count * 3 + a.view_count),
+        );
+      }
+      setItems(list);
       setLoading(false);
 
       const { data: fav } = await supabase
@@ -86,7 +123,7 @@ export default function OfficialLibrary() {
         .eq('source_type', 'official');
       setFavoritedIds(new Set((fav || []).map((f) => f.source_id)));
     })();
-  }, [user, cat, sub, keyword]);
+  }, [user, cat, sub, keyword, sort]);
 
   const toggleFav = async (item: OfficialItem) => {
     if (!user) return;
@@ -103,6 +140,15 @@ export default function OfficialLibrary() {
       setFavoritedIds((s) => new Set(s).add(item.id));
       toast.success('已收藏到个人知识库');
     }
+  };
+
+  const openDetail = (it: OfficialItem) => {
+    setDetail(it);
+    // fire-and-forget：自增浏览数
+    void (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<unknown>)(
+      'increment_official_view',
+      { _id: it.id },
+    );
   };
 
   const visibleCats = useMemo(
@@ -184,6 +230,30 @@ export default function OfficialLibrary() {
           )}
         </div>
 
+        {/* 排序切换 - 仅「全部」类目下显示 */}
+        {cat === 'all' && (
+          <div className="flex gap-1 rounded-md bg-muted p-1">
+            {([
+              { k: 'latest', label: '最新更新', Icon: Clock },
+              { k: 'hot', label: '最热', Icon: Flame },
+              { k: 'important', label: '重要程度', Icon: Award },
+            ] as const).map(({ k, label, Icon }) => (
+              <button
+                key={k}
+                onClick={() => setSort(k)}
+                className={`flex-1 flex items-center justify-center gap-1 h-8 rounded text-xs font-medium transition-colors ${
+                  sort === k
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* 二级类目 - 上滑时吸顶 */}
         {subList.length > 0 && (
           <div className="sticky top-12 z-20 -mx-3 px-3 py-2 flex gap-1.5 overflow-x-auto bg-background/95 backdrop-blur border-b border-border scrollbar-none">
@@ -219,7 +289,7 @@ export default function OfficialLibrary() {
         ) : view === 'grid' ? (
           <div className="grid grid-cols-2 gap-3">
             {items.map((it) => (
-              <Card key={it.id} className="overflow-hidden cursor-pointer group" onClick={() => setDetail(it)}>
+              <Card key={it.id} className="overflow-hidden cursor-pointer group" onClick={() => openDetail(it)}>
                 <div className="aspect-square bg-muted relative">
                   {it.cover_url ? (
                     <img src={it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" />
@@ -250,7 +320,7 @@ export default function OfficialLibrary() {
               <Card
                 key={it.id}
                 className="flex items-center gap-3 p-2 cursor-pointer hover:bg-accent/50 transition-colors"
-                onClick={() => setDetail(it)}
+                onClick={() => openDetail(it)}
               >
                 <div className="w-14 h-14 rounded-md bg-muted shrink-0 overflow-hidden flex items-center justify-center">
                   {it.cover_url ? (
