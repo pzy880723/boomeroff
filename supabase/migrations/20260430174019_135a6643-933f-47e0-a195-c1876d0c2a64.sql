@@ -1,0 +1,15 @@
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'jp_porcelain';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'eu_porcelain';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'antique_art';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'local_craft';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'anime_toy';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'otaku_goods';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'luxury';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'vintage_jewelry';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'game_console';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'walkman';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'ccd';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'media_record';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'playback_device';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'home_appliance';
+ALTER TYPE public.product_category ADD VALUE IF NOT EXISTS 'hobby';
