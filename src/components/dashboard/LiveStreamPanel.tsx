@@ -335,6 +335,19 @@ export function LiveStreamPanel() {
     if (!currentProductId || !user || !displayResult) return;
     setSavingKnowledge(true);
     try {
+      // 防并发重复：先查一次
+      const { data: existing } = await supabase
+        .from('product_knowledge')
+        .select('id')
+        .eq('product_id', currentProductId)
+        .limit(1)
+        .maybeSingle();
+      if (existing) {
+        setKnowledgeAdded(true);
+        toast({ title: '已在团队知识库中', description: '无需重复添加' });
+        return;
+      }
+
       const sp = displayResult.sellingPoints || [];
       const { error } = await supabase.from('product_knowledge').insert({
         product_id: currentProductId,
@@ -346,13 +359,54 @@ export function LiveStreamPanel() {
         origin: displayResult.origin || null,
         image_url: capturedImage || null,
         created_by: user.id,
+        is_official: isAdmin, // admin 直接标记为官方推荐
       });
       if (error) throw error;
+
+      // admin：同步收录为「官方知识」
+      if (isAdmin) {
+        const { data: dup } = await supabase
+          .from('official_knowledge')
+          .select('id')
+          .eq('source_product_id', currentProductId)
+          .limit(1)
+          .maybeSingle();
+        if (!dup) {
+          await supabase.from('official_knowledge').insert({
+            name: displayResult.name,
+            category: displayResult.category,
+            summary: displayResult.description || null,
+            content: {
+              material: displayResult.material || null,
+              craft: displayResult.craft || null,
+              dimensions: displayResult.dimensions || null,
+              condition: displayResult.condition || null,
+            },
+            era: displayResult.era || null,
+            origin: displayResult.origin || null,
+            cover_url: capturedImage || null,
+            gallery: capturedImage ? [capturedImage] : [],
+            selling_points: sp,
+            tips: displayResult.tips || null,
+            source_product_id: currentProductId,
+            created_by: user.id,
+          });
+        }
+      }
+
       setKnowledgeAdded(true);
-      toast({ title: '已加入知识库' });
-    } catch (e) {
+      toast({
+        title: isAdmin ? '已收录为官方知识' : '已申请收录',
+        description: isAdmin ? '所有同事都能在「官方知识」看到' : '已加入团队池，等待管理员审核',
+      });
+    } catch (e: any) {
       console.error('[Knowledge] insert error:', e);
-      toast({ title: '加入失败', description: '请稍后重试', variant: 'destructive' });
+      const code = e?.code || '';
+      if (code === '42501' || /row-level security/i.test(e?.message || '')) {
+        toast({ title: '权限不足', description: '需要主播或管理员权限', variant: 'destructive' });
+      } else {
+        toast({ title: '加入失败', description: '请稍后重试', variant: 'destructive' });
+      }
     } finally {
       setSavingKnowledge(false);
     }
