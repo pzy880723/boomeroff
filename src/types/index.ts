@@ -195,3 +195,33 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   admin: '管理员',
   anchor: '店员',
 };
+
+// 二级类目（基于 official_knowledge.ip_name 字段筛选）
+export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {
+  jp_porcelain: ['品牌窑口', '工艺技法', '器型用途', '花纹寓意', '年代鉴定', '场景搭配'],
+  eu_porcelain: ['品牌', '工艺', '器型', '花纹', '年代'],
+  incense: ['品牌', '香型', '用途场景'],
+  antique_art: ['书画', '漆器', '铜器', '木器', '织物'],
+  local_craft: ['闽南瓷', '茶器', '手作'],
+  anime_toy: ['高达', '圣斗士', '假面骑士', '战队', '怪兽', '食玩'],
+  otaku_goods: ['手办', '景品', '徽章', '挂件', '同人'],
+  luxury: ['包袋', '服饰', '配饰', '腕表'],
+  vintage_jewelry: ['项链', '戒指', '胸针', '耳饰', '手链'],
+  game_console: ['任天堂', '索尼', '世嘉', '掌机', '卡带'],
+  walkman: ['Walkman 磁带', 'Discman', 'MD', '数码'],
+  ccd: ['索尼', '佳能', '卡西欧', '富士', '奥林巴斯'],
+  media_record: ['黑胶', '磁带', 'CD', 'DVD'],
+  playback_device: ['黑胶机', '卡带机', 'CD 机', '收音机'],
+  home_appliance: ['电视', '收音', '厨电', '灯具'],
+  hobby: ['文具', '香水', '烟具', '户外'],
+  other: [],
+  // 旧品类
+  porcelain: [],
+  stationery: [],
+  lacquerware: [],
+  bronze: [],
+  woodcraft: [],
+  textile: [],
+  jewelry: [],
+  painting: [],
+};
