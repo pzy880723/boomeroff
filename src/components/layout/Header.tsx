@@ -38,9 +38,9 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 glass safe-top">
-      <div className="container flex h-32 sm:h-36 items-center justify-between gap-2">
+      <div className="container flex h-20 items-center justify-between gap-2">
         <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity min-w-0 shrink-0">
-          <img src={logo} alt="中古商品实时识别系统" className="h-32 w-32 sm:h-40 sm:w-40 rounded-lg object-contain shrink-0" />
+          <img src={logo} alt="中古商品实时识别系统" className="h-16 w-16 sm:h-20 sm:w-20 rounded-lg object-contain shrink-0" />
         </Link>
 
         <div className="flex items-center gap-1">
