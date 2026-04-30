@@ -19,7 +19,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, Edit, Loader2, Search, ImageOff } from 'lucide-react';
-import { CATEGORY_LABELS, ProductCategory } from '@/types';
+import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 
 interface Item {
@@ -106,7 +106,7 @@ export function OfficialKnowledgeManager() {
           <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部品类</SelectItem>
-            {(Object.keys(CATEGORY_LABELS) as ProductCategory[]).map((k) => (
+            {CATEGORY_ORDER.map((k) => (
               <SelectItem key={k} value={k}>{CATEGORY_LABELS[k]}</SelectItem>
             ))}
           </SelectContent>
@@ -191,7 +191,7 @@ export function OfficialKnowledgeManager() {
                   <Select value={editing.category || 'other'} onValueChange={(v) => setEditing({ ...editing, category: v as ProductCategory })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {(Object.keys(CATEGORY_LABELS) as ProductCategory[]).map((k) => (
+                      {CATEGORY_ORDER.map((k) => (
                         <SelectItem key={k} value={k}>{CATEGORY_LABELS[k]}</SelectItem>
                       ))}
                     </SelectContent>

@@ -158,7 +158,7 @@ serve(async (req) => {
 - 若无法确定字段，写"不详"，不要留英文占位。
 
 格式：
-{"name":"","category":"porcelain|incense|stationery|lacquerware|bronze|woodcraft|textile|jewelry|painting|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"≤80字中文介绍","tips":"一句话中文贴士","imageHash":"3-5中文关键词空格分隔"}
+{"name":"","category":"jp_porcelain|eu_porcelain|incense|antique_art|local_craft|anime_toy|otaku_goods|luxury|vintage_jewelry|game_console|walkman|ccd|media_record|playback_device|home_appliance|hobby|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"≤80字中文介绍","tips":"一句话中文贴士","imageHash":"3-5中文关键词空格分隔"}
 sellingPoints要3条短句直击重点，全部中文。`;
 
     const response = await callAI(imageList, recognitionPrompt, modelCfg);

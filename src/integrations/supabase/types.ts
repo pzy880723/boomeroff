@@ -561,6 +561,21 @@ export type Database = {
         | "jewelry"
         | "painting"
         | "other"
+        | "jp_porcelain"
+        | "eu_porcelain"
+        | "antique_art"
+        | "local_craft"
+        | "anime_toy"
+        | "otaku_goods"
+        | "luxury"
+        | "vintage_jewelry"
+        | "game_console"
+        | "walkman"
+        | "ccd"
+        | "media_record"
+        | "playback_device"
+        | "home_appliance"
+        | "hobby"
       script_style: "professional" | "sales" | "cultural"
     }
     CompositeTypes: {
@@ -701,6 +716,21 @@ export const Constants = {
         "jewelry",
         "painting",
         "other",
+        "jp_porcelain",
+        "eu_porcelain",
+        "antique_art",
+        "local_craft",
+        "anime_toy",
+        "otaku_goods",
+        "luxury",
+        "vintage_jewelry",
+        "game_console",
+        "walkman",
+        "ccd",
+        "media_record",
+        "playback_device",
+        "home_appliance",
+        "hobby",
       ],
       script_style: ["professional", "sales", "cultural"],
     },
