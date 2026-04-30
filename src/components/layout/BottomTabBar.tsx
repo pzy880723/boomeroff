@@ -6,7 +6,7 @@ type Tab = { to: string; label: string; Icon: typeof BookOpen; primary?: boolean
 const tabs: Tab[] = [
   { to: '/library', label: '官方知识', Icon: BookOpen },
   { to: '/my-library', label: '个人知识', Icon: Star },
-  { to: '/scan', label: 'AI 识别', Icon: Camera, primary: true },
+  { to: '/scan', label: 'AI 识物', Icon: Camera, primary: true },
   { to: '/community', label: '中古圈', Icon: Users },
   { to: '/me', label: '我的', Icon: User },
 ];
@@ -27,18 +27,18 @@ export function BottomTabBar() {
                 <li key={to} className="flex-1 flex justify-center">
                   <NavLink
                     to={to}
-                    className="relative -mt-6 flex flex-col items-center"
+                    className="flex flex-col items-center justify-center gap-1 h-full pt-1 pb-1"
                     aria-label={label}
                   >
                     <span
                       className={cn(
-                        'w-16 h-16 rounded-full flex items-center justify-center shadow-elevated ring-4 ring-background transition-transform',
-                        active ? 'bg-gradient-primary text-primary-foreground scale-105' : 'bg-primary text-primary-foreground'
+                        'w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-colors',
+                        active ? 'bg-gradient-primary text-primary-foreground' : 'bg-primary text-primary-foreground'
                       )}
                     >
-                      <Icon className="w-7 h-7" strokeWidth={2} />
+                      <Icon className="w-5 h-5" strokeWidth={2} />
                     </span>
-                    <span className="mt-1 text-[11px] font-medium text-foreground">{label}</span>
+                    <span className={cn('text-[11px] font-medium', active ? 'text-primary' : 'text-foreground')}>{label}</span>
                   </NavLink>
                 </li>
               );
