@@ -4,7 +4,7 @@ import { BottomTabBar } from './BottomTabBar';
 export function MainLayout() {
   return (
     <div className="min-h-screen bg-gradient-surface flex flex-col">
-      <main className="flex-1 pb-20">
+      <main className="flex-1 pb-16">
         <Outlet />
       </main>
       <BottomTabBar />
