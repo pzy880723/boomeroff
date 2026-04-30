@@ -16,13 +16,14 @@ async function callLovableAI(imageBase64: string, systemPrompt: string, apiKey: 
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'google/gemini-3-flash-preview',
+      model: 'google/gemini-2.5-flash-lite',
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
           content: [
-            { type: 'text', text: '识别这件中古商品：' },
+            { type: 'text', text: '识别这件中古商品，仅返回JSON' },
             { type: 'image_url', image_url: { url: imageUrl } },
           ],
         },
