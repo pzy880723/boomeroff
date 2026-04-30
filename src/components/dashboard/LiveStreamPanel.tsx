@@ -13,7 +13,7 @@ import {
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
-import { DailyKnowledgeCard } from './DailyKnowledgeCard';
+
 
 export function LiveStreamPanel() {
   const [isStreaming, setIsStreaming] = useState(false);
