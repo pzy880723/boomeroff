@@ -66,7 +66,7 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
             src={logo}
             alt="中古商品实时识别系统"
             draggable={false}
-            className="h-12 w-12 rounded-lg object-contain"
+            className="h-16 w-16 rounded-lg object-contain"
           />
         </button>
       </div>
