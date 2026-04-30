@@ -13,6 +13,7 @@ import {
 } from '@/types';
 import {
   Loader2, Search, Star, LayoutGrid, ChevronDown, ChevronUp, List, ImageOff,
+  Clock, Flame, Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -30,6 +31,9 @@ interface OfficialItem {
   cover_url: string | null;
   selling_points: unknown;
   tips: string | null;
+  view_count: number;
+  favorite_count: number;
+  importance_score: number;
 }
 
 const categoriesAll: Array<ProductCategory | 'all'> = ['all', ...CATEGORY_ORDER];
@@ -37,6 +41,7 @@ const categoriesAll: Array<ProductCategory | 'all'> = ['all', ...CATEGORY_ORDER]
 const VISIBLE_COUNT = 11;
 
 type ViewMode = 'grid' | 'list';
+type SortKey = 'latest' | 'hot' | 'important';
 
 export default function OfficialLibrary() {
   const { user, loading: authLoading } = useAuth();
@@ -46,6 +51,10 @@ export default function OfficialLibrary() {
   const [cat, setCat] = useState<ProductCategory | 'all'>('all');
   const [sub, setSub] = useState<string>('all');
   const [expanded, setExpanded] = useState(false);
+  const [sort, setSort] = useState<SortKey>(() => {
+    if (typeof window === 'undefined') return 'latest';
+    return (localStorage.getItem('lib_sort') as SortKey) || 'latest';
+  });
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') return 'grid';
     return (localStorage.getItem('lib_view') as ViewMode) || 'grid';
