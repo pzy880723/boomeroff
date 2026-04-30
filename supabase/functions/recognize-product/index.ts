@@ -6,8 +6,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function callLovableAI(imageBase64: string, systemPrompt: string, apiKey: string) {
-  const imageUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+async function callLovableAI(images: string[], systemPrompt: string, apiKey: string) {
+  const imageUrls = images.map((img) =>
+    img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
+  );
+
+  const userText = imageUrls.length > 1
+    ? `以下为同一件中古商品的 ${imageUrls.length} 个角度照片，请综合所有角度判断，仅返回JSON`
+    : '识别这件中古商品，仅返回JSON';
+
+  const userContent: any[] = [{ type: 'text', text: userText }];
+  for (const url of imageUrls) {
+    userContent.push({ type: 'image_url', image_url: { url } });
+  }
 
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -20,13 +31,7 @@ async function callLovableAI(imageBase64: string, systemPrompt: string, apiKey: 
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: '识别这件中古商品，仅返回JSON' },
-            { type: 'image_url', image_url: { url: imageUrl } },
-          ],
-        },
+        { role: 'user', content: userContent },
       ],
     }),
   });
@@ -79,8 +84,12 @@ serve(async (req) => {
       });
     }
 
-    const { imageBase64 } = await req.json();
-    if (!imageBase64) {
+    const body = await req.json();
+    const { imageBase64, images } = body as { imageBase64?: string; images?: string[] };
+    const imageList: string[] = Array.isArray(images) && images.length > 0
+      ? images.slice(0, 5)
+      : (imageBase64 ? [imageBase64] : []);
+    if (imageList.length === 0) {
       return new Response(JSON.stringify({ error: '请提供商品图片' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -99,7 +108,7 @@ serve(async (req) => {
 {"name":"","category":"porcelain|incense|stationery|lacquerware|bronze|woodcraft|textile|jewelry|painting|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"≤80字介绍","tips":"一句话贴士","imageHash":"3-5关键词空格分隔"}
 sellingPoints要3条短句直击重点。`;
 
-    const response = await callLovableAI(imageBase64, recognitionPrompt, LOVABLE_API_KEY);
+    const response = await callLovableAI(imageList, recognitionPrompt, LOVABLE_API_KEY);
     const aiTime = Date.now() - startTime;
 
     if (!response.ok) {

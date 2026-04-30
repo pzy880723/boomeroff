@@ -8,13 +8,16 @@ export function useProductRecognition() {
   const [result, setResult] = useState<RecognitionResult | null>(null);
   const { toast } = useToast();
 
-  const recognizeProduct = async (imageBase64: string) => {
+  const recognizeProduct = async (input: string | string[]) => {
     setIsRecognizing(true);
     setResult(null);
 
     try {
+      const body = Array.isArray(input)
+        ? { imageBase64: input[0], images: input }
+        : { imageBase64: input };
       const { data, error } = await supabase.functions.invoke('recognize-product', {
-        body: { imageBase64 },
+        body,
       });
 
       if (error) throw new Error(error.message);
