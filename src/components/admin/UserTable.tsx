@@ -267,8 +267,8 @@ export function UserTable() {
                   </TableCell>
                   <TableCell>
                     {user.suspended ? (
-                      <Badge variant="outline" className="text-destructive border-destructive">
-                        已暂停
+                      <Badge variant="outline" className="text-amber-600 border-amber-600">
+                        待审核
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-green-600 border-green-600">
@@ -281,6 +281,16 @@ export function UserTable() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      {user.suspended && !isCurrentUser(user.user_id) && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleSuspend(user)}
+                          className="gap-1.5"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          通过审核
+                        </Button>
+                      )}
                       <RoleEditor
                         currentRole={user.role}
                         onRoleChange={(newRole) => handleRoleChange(user.user_id, newRole)}
@@ -297,7 +307,7 @@ export function UserTable() {
                             {user.suspended ? (
                               <>
                                 <PlayCircle className="mr-2 h-4 w-4" />
-                                恢复账号
+                                通过审核 / 恢复账号
                               </>
                             ) : (
                               <>
