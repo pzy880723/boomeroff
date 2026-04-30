@@ -49,6 +49,27 @@ export type Database = {
           },
         ]
       }
+      daily_knowledge: {
+        Row: {
+          content: Json
+          created_at: string
+          date: string
+          id: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          date: string
+          id?: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          date?: string
+          id?: string
+        }
+        Relationships: []
+      }
       invitations: {
         Row: {
           code: string
@@ -136,7 +157,10 @@ export type Database = {
           image_url: string | null
           material: string | null
           name: string
+          origin: string | null
           scripts: Json | null
+          selling_points: Json | null
+          tips: string | null
           updated_at: string
         }
         Insert: {
@@ -154,7 +178,10 @@ export type Database = {
           image_url?: string | null
           material?: string | null
           name: string
+          origin?: string | null
           scripts?: Json | null
+          selling_points?: Json | null
+          tips?: string | null
           updated_at?: string
         }
         Update: {
@@ -172,7 +199,10 @@ export type Database = {
           image_url?: string | null
           material?: string | null
           name?: string
+          origin?: string | null
           scripts?: Json | null
+          selling_points?: Json | null
+          tips?: string | null
           updated_at?: string
         }
         Relationships: []

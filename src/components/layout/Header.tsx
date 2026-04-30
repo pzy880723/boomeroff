@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { LogOut, User, Settings, Shield, History, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
-import logo from '@/assets/boomer-off-logo.png';
+import logo from '@/assets/boomer-off-vintage-logo.png';
 
 export function Header() {
   const { user, role, signOut } = useAuth();
@@ -39,7 +39,7 @@ export function Header() {
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between">
         <Link to="/" className="hover:opacity-80 transition-opacity">
-          <img src={logo} alt="BOOMER-OFF 智能直播系统" className="h-8 w-auto object-contain" />
+          <img src={logo} alt="中古商品实时识别系统" className="h-8 w-auto object-contain" />
         </Link>
 
         <div className="flex items-center gap-2">

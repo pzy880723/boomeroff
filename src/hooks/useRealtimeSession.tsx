@@ -8,21 +8,14 @@ export function useRealtimeSession() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 获取当前活跃的会话
     fetchCurrentSession();
 
-    // 订阅会话变化
     const channel = supabase
       .channel('session-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'current_session',
-        },
+        { event: '*', schema: 'public', table: 'current_session' },
         async (payload) => {
-          console.log('Session changed:', payload);
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const newSession = payload.new as CurrentSession;
             setSession(newSession);
@@ -57,9 +50,7 @@ export function useRealtimeSession() {
 
       if (data) {
         setSession(data);
-        if (data.product_id) {
-          await fetchProduct(data.product_id);
-        }
+        if (data.product_id) await fetchProduct(data.product_id);
       }
     } catch (error) {
       console.error('Error fetching session:', error);
@@ -80,24 +71,21 @@ export function useRealtimeSession() {
       return;
     }
 
-    // Transform database data to expected format
-    const scripts = data.scripts as Record<string, string> | null;
+    const sp = data.selling_points;
     const product: Product = {
       id: data.id,
       name: data.name,
       category: data.category,
       description: data.description || undefined,
       era: data.era || undefined,
+      origin: data.origin || undefined,
       material: data.material || undefined,
       craft: data.craft || undefined,
       dimensions: data.dimensions || undefined,
       condition: data.condition || undefined,
       image_url: data.image_url || undefined,
-      scripts: {
-        professional: scripts?.professional || '',
-        sales: scripts?.sales || '',
-        cultural: scripts?.cultural || '',
-      },
+      selling_points: Array.isArray(sp) ? (sp as string[]) : [],
+      tips: data.tips || undefined,
       ai_analysis: data.ai_analysis as Record<string, unknown> | undefined,
       created_by: data.created_by || undefined,
       created_at: data.created_at,
@@ -108,7 +96,6 @@ export function useRealtimeSession() {
 
   const updateSession = async (productId: string, operatorId: string) => {
     try {
-      // 先检查是否有活跃会话
       const { data: existingSession } = await supabase
         .from('current_session')
         .select('id')
@@ -117,7 +104,6 @@ export function useRealtimeSession() {
         .single();
 
       if (existingSession) {
-        // 更新现有会话
         await supabase
           .from('current_session')
           .update({
@@ -127,7 +113,6 @@ export function useRealtimeSession() {
           })
           .eq('id', existingSession.id);
       } else {
-        // 创建新会话
         await supabase
           .from('current_session')
           .insert({
@@ -141,11 +126,5 @@ export function useRealtimeSession() {
     }
   };
 
-  return {
-    currentProduct,
-    session,
-    loading,
-    updateSession,
-    refetch: fetchCurrentSession,
-  };
+  return { currentProduct, session, loading, updateSession, refetch: fetchCurrentSession };
 }
