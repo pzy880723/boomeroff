@@ -2,13 +2,14 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { BookOpen, Star, Camera, Users, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const tabs = [
+type Tab = { to: string; label: string; Icon: typeof BookOpen; primary?: boolean };
+const tabs: Tab[] = [
   { to: '/library', label: '官方知识', Icon: BookOpen },
   { to: '/my-library', label: '个人知识', Icon: Star },
   { to: '/scan', label: 'AI 识别', Icon: Camera, primary: true },
   { to: '/community', label: '中古圈', Icon: Users },
   { to: '/me', label: '我的', Icon: User },
-] as const;
+];
 
 export function BottomTabBar() {
   const location = useLocation();
