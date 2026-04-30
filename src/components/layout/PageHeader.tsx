@@ -43,7 +43,7 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 glass safe-top">
-      <div className="container mx-auto max-w-screen-md flex items-center gap-2 h-12 px-3">
+      <div className="container mx-auto max-w-screen-md flex items-center gap-2 h-20 px-3">
         {back && (
           <Link to={back}>
             <Button variant="ghost" size="icon" className="h-9 w-9 -ml-2">
@@ -66,7 +66,7 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
             src={logo}
             alt="中古商品实时识别系统"
             draggable={false}
-            className="h-10 w-10 rounded-md object-contain"
+            className="h-20 w-20 rounded-lg object-contain"
           />
         </button>
       </div>
