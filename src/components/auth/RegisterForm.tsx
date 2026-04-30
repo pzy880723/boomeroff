@@ -1,39 +1,75 @@
 import { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 
 interface RegisterFormProps {
-  onToggleMode: () => void;
+  onBackToLogin: () => void;
 }
 
-export function RegisterForm({ onToggleMode }: RegisterFormProps) {
-  const [email, setEmail] = useState('');
+export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { signUp } = useAuth();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
 
+    if (!/^[a-zA-Z0-9_]{3,32}$/.test(username)) {
+      toast({
+        title: '用户名格式错误',
+        description: '仅支持字母、数字、下划线，3-32 位',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (password.length < 6) {
+      toast({
+        title: '密码太短',
+        description: '密码至少 6 位',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast({
+        title: '两次密码不一致',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setLoading(true);
     try {
-      await signUp(email, password, displayName);
+      const { data, error } = await supabase.functions.invoke(
+        'public-register',
+        { body: { username, password } },
+      );
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
       toast({
         title: '注册成功',
-        description: '您的账户已创建，欢迎使用！',
+        description: '账号已提交，等待管理员审核通过后即可登录',
       });
-    } catch (error) {
+      onBackToLogin();
+    } catch (err) {
       toast({
         title: '注册失败',
-        description: error instanceof Error ? error.message : '请稀后重试',
+        description: err instanceof Error ? err.message : '请稍后再试',
         variant: 'destructive',
       });
     } finally {
@@ -44,43 +80,36 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">注册账户</CardTitle>
-        <CardDescription>创建账户以使用商品识别助手</CardDescription>
+        <CardTitle className="text-2xl">注册账号</CardTitle>
+        <CardDescription>
+          注册后需等待管理员审核通过才能登录
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="displayName">昵称</Label>
+            <Label htmlFor="reg-username">用户名</Label>
             <Input
-              id="displayName"
+              id="reg-username"
               type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="请输入您的昵称"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="3-32 位字母、数字、下划线"
+              autoComplete="username"
               required
             />
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="email">邮箱</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="请输入邮箱"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">密码</Label>
+            <Label htmlFor="reg-password">密码</Label>
             <div className="relative">
               <Input
-                id="password"
+                id="reg-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="请设置密码（至少6位）"
-                minLength={6}
+                placeholder="至少 6 位"
+                autoComplete="new-password"
                 required
                 className="pr-10"
               />
@@ -89,25 +118,42 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="reg-confirm">确认密码</Label>
+            <Input
+              id="reg-confirm"
+              type={showPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="再次输入密码"
+              autoComplete="new-password"
+              required
+            />
+          </div>
+
           <Button type="submit" className="w-full" disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            注册
+            提交注册
           </Button>
         </form>
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          已有账户？{' '}
-          <button
-            type="button"
-            onClick={onToggleMode}
-            className="text-primary hover:underline"
-          >
-            立即登录
-          </button>
-        </p>
+
+        <button
+          type="button"
+          onClick={onBackToLogin}
+          className="mt-4 w-full flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          返回登录
+        </button>
       </CardContent>
     </Card>
   );

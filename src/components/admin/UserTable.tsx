@@ -30,7 +30,8 @@ import {
 import { RoleEditor } from './RoleEditor';
 import { ROLE_LABELS, AppRole } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -52,6 +53,7 @@ export function UserTable() {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
+  const [filter, setFilter] = useState<'all' | 'pending'>('all');
   const { user: currentUser } = useAuth();
 
   const fetchUsers = async () => {
@@ -123,7 +125,7 @@ export function UserTable() {
       return;
     }
 
-    toast.success(newSuspendedState ? '用户已暂停' : '用户已恢复');
+    toast.success(newSuspendedState ? '用户已暂停' : '已通过审核，用户可登录');
     fetchUsers();
   };
 
@@ -190,9 +192,26 @@ export function UserTable() {
     );
   }
 
+  const pendingCount = users.filter((u) => u.suspended).length;
+  const filteredUsers = filter === 'pending' ? users.filter((u) => u.suspended) : users;
+
   return (
     <>
-      <div className="rounded-md border">
+      <Tabs value={filter} onValueChange={(v) => setFilter(v as 'all' | 'pending')}>
+        <TabsList>
+          <TabsTrigger value="all">全部 ({users.length})</TabsTrigger>
+          <TabsTrigger value="pending" className="gap-1.5">
+            待审核
+            {pendingCount > 0 && (
+              <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
+                {pendingCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <div className="rounded-md border mt-4">
         <Table>
           <TableHeader>
             <TableRow>
@@ -219,14 +238,14 @@ export function UserTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.length === 0 ? (
+            {filteredUsers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                  暂无用户
+                  {filter === 'pending' ? '暂无待审核用户' : '暂无用户'}
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
+              filteredUsers.map((user) => (
                 <TableRow key={user.id} className={user.suspended ? 'opacity-50' : ''}>
                   <TableCell>
                     <div className="flex flex-col">
@@ -248,8 +267,8 @@ export function UserTable() {
                   </TableCell>
                   <TableCell>
                     {user.suspended ? (
-                      <Badge variant="outline" className="text-destructive border-destructive">
-                        已暂停
+                      <Badge variant="outline" className="text-amber-600 border-amber-600">
+                        待审核
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-green-600 border-green-600">
@@ -262,6 +281,16 @@ export function UserTable() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      {user.suspended && !isCurrentUser(user.user_id) && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleSuspend(user)}
+                          className="gap-1.5"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          通过审核
+                        </Button>
+                      )}
                       <RoleEditor
                         currentRole={user.role}
                         onRoleChange={(newRole) => handleRoleChange(user.user_id, newRole)}
@@ -278,7 +307,7 @@ export function UserTable() {
                             {user.suspended ? (
                               <>
                                 <PlayCircle className="mr-2 h-4 w-4" />
-                                恢复账号
+                                通过审核 / 恢复账号
                               </>
                             ) : (
                               <>
