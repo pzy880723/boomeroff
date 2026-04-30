@@ -12,7 +12,7 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ onForgotPassword }: LoginFormProps) {
-  const [email, setEmail] = useState('');
+  const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -24,7 +24,11 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
     setLoading(true);
 
     try {
-      await signIn(email, password);
+      const trimmed = account.trim();
+      const loginEmail = trimmed.includes('@')
+        ? trimmed
+        : `${trimmed.toLowerCase()}@boomeroff.local`;
+      await signIn(loginEmail, password);
       toast({
         title: '登录成功',
         description: '欢迎回来！',
@@ -32,7 +36,7 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
     } catch (error) {
       toast({
         title: '登录失败',
-        description: error instanceof Error ? error.message : '请检查邮箱和密码',
+        description: error instanceof Error ? error.message : '请检查用户名和密码',
         variant: 'destructive',
       });
     } finally {
@@ -49,13 +53,14 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">邮箱</Label>
+            <Label htmlFor="account">用户名</Label>
             <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="请输入邮箱"
+              id="account"
+              type="text"
+              value={account}
+              onChange={(e) => setAccount(e.target.value)}
+              placeholder="请输入用户名"
+              autoComplete="username"
               required
             />
           </div>
@@ -95,7 +100,7 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
           </Button>
         </form>
         <p className="text-center text-sm text-muted-foreground mt-4">
-          需要账户？请联系管理员获取邀请链接
+          需要账户？请联系管理员创建
         </p>
       </CardContent>
     </Card>
