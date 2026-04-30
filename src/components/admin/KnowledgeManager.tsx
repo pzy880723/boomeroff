@@ -15,7 +15,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Plus, Trash2, Edit, Search, Loader2, ChevronLeft, ChevronRight, ImageOff,
+  Plus, Trash2, Edit, Search, Loader2, ChevronLeft, ChevronRight, ImageOff, ArrowUpCircle, BadgeCheck,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
@@ -27,6 +27,7 @@ const PAGE_SIZE = 20;
 interface Row extends KnowledgeRecord {
   id: string;
   created_at: string;
+  is_official?: boolean;
 }
 
 export function KnowledgeManager() {
