@@ -35,6 +35,118 @@ export type Database = {
         }
         Relationships: []
       }
+      community_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "community_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_likes: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "community_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_posts: {
+        Row: {
+          category: Database["public"]["Enums"]["product_category"]
+          comments_count: number
+          created_at: string
+          era: string | null
+          id: string
+          image_url: string | null
+          is_public: boolean
+          likes_count: number
+          name: string
+          origin: string | null
+          product_id: string | null
+          selling_points: Json
+          tips: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["product_category"]
+          comments_count?: number
+          created_at?: string
+          era?: string | null
+          id?: string
+          image_url?: string | null
+          is_public?: boolean
+          likes_count?: number
+          name: string
+          origin?: string | null
+          product_id?: string | null
+          selling_points?: Json
+          tips?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["product_category"]
+          comments_count?: number
+          created_at?: string
+          era?: string | null
+          id?: string
+          image_url?: string | null
+          is_public?: boolean
+          likes_count?: number
+          name?: string
+          origin?: string | null
+          product_id?: string | null
+          selling_points?: Json
+          tips?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       current_session: {
         Row: {
           id: string
@@ -124,6 +236,63 @@ export type Database = {
         }
         Relationships: []
       }
+      official_knowledge: {
+        Row: {
+          category: Database["public"]["Enums"]["product_category"]
+          content: Json
+          cover_url: string | null
+          created_at: string
+          created_by: string | null
+          era: string | null
+          gallery: Json
+          id: string
+          ip_name: string | null
+          name: string
+          origin: string | null
+          selling_points: Json
+          source_product_id: string | null
+          summary: string | null
+          tips: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["product_category"]
+          content?: Json
+          cover_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          era?: string | null
+          gallery?: Json
+          id?: string
+          ip_name?: string | null
+          name: string
+          origin?: string | null
+          selling_points?: Json
+          source_product_id?: string | null
+          summary?: string | null
+          tips?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["product_category"]
+          content?: Json
+          cover_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          era?: string | null
+          gallery?: Json
+          id?: string
+          ip_name?: string | null
+          name?: string
+          origin?: string | null
+          selling_points?: Json
+          source_product_id?: string | null
+          summary?: string | null
+          tips?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       price_records: {
         Row: {
           created_at: string
@@ -170,6 +339,7 @@ export type Database = {
           era: string | null
           id: string
           image_url: string | null
+          is_official: boolean
           origin: string | null
           product_id: string | null
           product_name: string
@@ -183,6 +353,7 @@ export type Database = {
           era?: string | null
           id?: string
           image_url?: string | null
+          is_official?: boolean
           origin?: string | null
           product_id?: string | null
           product_name: string
@@ -196,6 +367,7 @@ export type Database = {
           era?: string | null
           id?: string
           image_url?: string | null
+          is_official?: boolean
           origin?: string | null
           product_id?: string | null
           product_name?: string
@@ -301,6 +473,33 @@ export type Database = {
           display_name?: string | null
           id?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_favorites: {
+        Row: {
+          created_at: string
+          id: string
+          snapshot: Json
+          source_id: string
+          source_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          snapshot?: Json
+          source_id: string
+          source_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          snapshot?: Json
+          source_id?: string
+          source_type?: string
           user_id?: string
         }
         Relationships: []
