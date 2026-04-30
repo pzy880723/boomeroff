@@ -15,7 +15,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Plus, Trash2, Edit, Search, Loader2, ChevronLeft, ChevronRight, ImageOff,
+  Plus, Trash2, Edit, Search, Loader2, ChevronLeft, ChevronRight, ImageOff, ArrowUpCircle, BadgeCheck,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
@@ -27,6 +27,7 @@ const PAGE_SIZE = 20;
 interface Row extends KnowledgeRecord {
   id: string;
   created_at: string;
+  is_official?: boolean;
 }
 
 export function KnowledgeManager() {
@@ -75,7 +76,7 @@ export function KnowledgeManager() {
     setSelected(new Set());
     let query = supabase
       .from('product_knowledge')
-      .select('id, product_name, category, era, origin, selling_points, tips, image_url, created_at', { count: 'exact' })
+      .select('id, product_name, category, era, origin, selling_points, tips, image_url, created_at, is_official', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
@@ -155,6 +156,25 @@ export function KnowledgeManager() {
       void loadList(); void loadCounts();
     }
     setBulkOpen(false);
+  };
+
+  const promoteToOfficial = async (row: Row) => {
+    if (row.is_official) { toast.info('已是官方'); return; }
+    const { error: insErr } = await supabase.from('official_knowledge').insert({
+      category: row.category,
+      name: row.product_name,
+      summary: Array.isArray(row.selling_points) && row.selling_points[0] ? row.selling_points[0] : null,
+      selling_points: row.selling_points || [],
+      tips: row.tips || null,
+      era: row.era || null,
+      origin: row.origin || null,
+      cover_url: row.image_url || null,
+      source_product_id: row.id,
+    });
+    if (insErr) { toast.error('提升失败：' + insErr.message); return; }
+    await supabase.from('product_knowledge').update({ is_official: true }).eq('id', row.id);
+    toast.success('已提升为官方知识');
+    void loadList();
   };
 
   const allSelected = rows.length > 0 && selected.size === rows.length;
@@ -264,7 +284,10 @@ export function KnowledgeManager() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium truncate max-w-[180px]">{row.product_name}</div>
+                    <div className="font-medium truncate max-w-[180px] flex items-center gap-1">
+                      {row.product_name}
+                      {row.is_official && <BadgeCheck className="w-3.5 h-3.5 text-primary shrink-0" />}
+                    </div>
                     {row.selling_points?.length > 0 && (
                       <div className="text-[11px] text-muted-foreground truncate max-w-[220px]">
                         {row.selling_points[0]}
@@ -282,6 +305,10 @@ export function KnowledgeManager() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => promoteToOfficial(row)}
+                        disabled={!isAdmin || row.is_official} title={row.is_official ? '已是官方' : '提升为官方'}>
+                        <ArrowUpCircle className={`w-4 h-4 ${row.is_official ? 'text-primary' : ''}`} />
+                      </Button>
                       <Button size="icon" variant="ghost" onClick={() => openEdit(row)} disabled={!isAdmin}>
                         <Edit className="w-4 h-4" />
                       </Button>

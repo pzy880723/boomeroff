@@ -1,9 +1,10 @@
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
-import { Dashboard } from '@/components/dashboard/Dashboard';
 import { Loader2 } from 'lucide-react';
+import { Header } from '@/components/layout/Header';
+import { LiveStreamPanel } from '@/components/dashboard/LiveStreamPanel';
 
-const Index = () => {
+export default function Scan() {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -14,11 +15,12 @@ const Index = () => {
     );
   }
 
-  if (!user) {
-    return <AuthPage />;
-  }
+  if (!user) return <AuthPage />;
 
-  return <Dashboard />;
-};
-
-export default Index;
+  return (
+    <div className="flex flex-col">
+      <Header />
+      <LiveStreamPanel />
+    </div>
+  );
+}

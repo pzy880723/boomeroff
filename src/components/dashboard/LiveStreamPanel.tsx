@@ -27,6 +27,8 @@ export function LiveStreamPanel() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [knowledgeAdded, setKnowledgeAdded] = useState(false);
   const [savingKnowledge, setSavingKnowledge] = useState(false);
+  const [favorited, setFavorited] = useState(false);
+  const [savingFav, setSavingFav] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -292,8 +294,25 @@ export function LiveStreamPanel() {
       setCurrentProductId(productData.id);
       await updateSession(productData.id, user.id);
 
+      // 自动发布到「中古圈」社区（默认公开）
+      supabase.from('community_posts').insert({
+        user_id: user.id,
+        product_id: productData.id,
+        image_url: imageUrl,
+        name: recognitionResult.name,
+        category: recognitionResult.category,
+        era: recognitionResult.era || null,
+        origin: recognitionResult.origin || null,
+        selling_points: recognitionResult.sellingPoints || [],
+        tips: recognitionResult.tips || null,
+        is_public: true,
+      }).then(({ error: pErr }) => {
+        if (pErr) console.warn('[Community] post insert error:', pErr);
+      });
+
       // 多张图清空缓冲
       setCapturedImages([]);
+      setFavorited(false);
 
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -336,6 +355,38 @@ export function LiveStreamPanel() {
       toast({ title: '加入失败', description: '请稍后重试', variant: 'destructive' });
     } finally {
       setSavingKnowledge(false);
+    }
+  };
+
+  const toggleFavorite = async () => {
+    if (!currentProductId || !user || !displayResult) return;
+    setSavingFav(true);
+    try {
+      if (favorited) {
+        await supabase.from('user_favorites').delete()
+          .eq('user_id', user.id).eq('source_type', 'recognition').eq('source_id', currentProductId);
+        setFavorited(false);
+        toast({ title: '已取消收藏' });
+      } else {
+        const { error } = await supabase.from('user_favorites').insert({
+          user_id: user.id,
+          source_type: 'recognition',
+          source_id: currentProductId,
+          snapshot: {
+            name: displayResult.name,
+            category: displayResult.category,
+            image_url: capturedImage || null,
+          },
+        });
+        if (error && !error.message.includes('duplicate')) throw error;
+        setFavorited(true);
+        toast({ title: '已收藏到个人知识库' });
+      }
+    } catch (e) {
+      console.error('[Favorite] error:', e);
+      toast({ title: '操作失败', variant: 'destructive' });
+    } finally {
+      setSavingFav(false);
     }
   };
 
@@ -675,6 +726,26 @@ export function LiveStreamPanel() {
                         加入知识库
                       </>
                     )}
+                  </Button>
+                </div>
+              )}
+
+              {/* 收藏到个人知识库 */}
+              {currentProductId && (
+                <div>
+                  <Button
+                    onClick={toggleFavorite}
+                    disabled={savingFav}
+                    variant={favorited ? 'outline' : 'secondary'}
+                    size="lg"
+                    className="w-full h-11 rounded-full gap-2"
+                  >
+                    {savingFav ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <BookmarkPlus className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                    )}
+                    {favorited ? '已收藏到个人知识库' : '收藏到个人知识库'}
                   </Button>
                 </div>
               )}

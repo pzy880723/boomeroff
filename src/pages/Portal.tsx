@@ -3,12 +3,14 @@ import { Header } from '@/components/layout/Header';
 import { UserTable } from '@/components/admin/UserTable';
 import { InviteDialog } from '@/components/admin/InviteDialog';
 import { KnowledgeManager } from '@/components/admin/KnowledgeManager';
+import { OfficialKnowledgeManager } from '@/components/admin/OfficialKnowledgeManager';
+import { CommunityModeration } from '@/components/admin/CommunityModeration';
 import { AISettingsPanel } from '@/components/admin/AISettingsPanel';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Shield, Users, LogOut, AlertCircle, BookOpen, Sparkles } from 'lucide-react';
+import { Shield, Users, LogOut, AlertCircle, BookOpen, Sparkles, BadgeCheck, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
 import { useNavigate } from 'react-router-dom';
@@ -64,6 +66,14 @@ export default function Portal() {
                   <BookOpen className="w-4 h-4" />
                   知识库
                 </TabsTrigger>
+                <TabsTrigger value="official" className="gap-1.5">
+                  <BadgeCheck className="w-4 h-4" />
+                  官方知识
+                </TabsTrigger>
+                <TabsTrigger value="community" className="gap-1.5">
+                  <MessageSquare className="w-4 h-4" />
+                  中古圈
+                </TabsTrigger>
                 <TabsTrigger value="ai" className="gap-1.5">
                   <Sparkles className="w-4 h-4" />
                   AI 模型
@@ -81,6 +91,14 @@ export default function Portal() {
 
             <TabsContent value="knowledge" className="p-3 sm:p-5 m-0">
               <KnowledgeManager />
+            </TabsContent>
+
+            <TabsContent value="official" className="p-3 sm:p-5 m-0">
+              <OfficialKnowledgeManager />
+            </TabsContent>
+
+            <TabsContent value="community" className="p-3 sm:p-5 m-0">
+              <CommunityModeration />
             </TabsContent>
 
             <TabsContent value="ai" className="p-3 sm:p-5 m-0">
