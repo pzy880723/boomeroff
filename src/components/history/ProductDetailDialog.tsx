@@ -154,16 +154,21 @@ export function ProductDetailDialog({
               </Card>
             )}
 
-            {product.tips && (
+            {tipsObj && (tipsObj.memory || tipsObj.objection) && (
               <Card className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-base text-amber-700 dark:text-amber-400">
                     <Lightbulb className="w-4 h-4" />
-                    店员小贴士
+                    店员小抄
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm leading-relaxed">{product.tips}</p>
+                <CardContent className="space-y-2">
+                  {tipsObj.memory && (
+                    <p className="text-sm leading-relaxed"><span className="font-semibold">记忆口诀：</span>{tipsObj.memory}</p>
+                  )}
+                  {tipsObj.objection && (
+                    <p className="text-sm leading-relaxed"><span className="font-semibold">顾客常问：</span>{tipsObj.objection}</p>
+                  )}
                 </CardContent>
               </Card>
             )}
