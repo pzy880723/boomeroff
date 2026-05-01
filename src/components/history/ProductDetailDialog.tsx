@@ -128,9 +128,11 @@ export function ProductDetailDialog({
                 <CardContent>
                   <ul className="space-y-2">
                     {sellingPoints.map((p, i) => (
-                      <li key={i} className="flex gap-2 leading-relaxed text-sm">
-                        <span className="font-semibold text-primary shrink-0">{i + 1}.</span>
-                        <span>{p}</span>
+                      <li key={i} className="flex gap-2 items-start leading-relaxed text-sm">
+                        <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${SELLING_TAG_STYLE[p.tag]}`}>
+                          {p.tag}
+                        </span>
+                        <span className="flex-1">{p.text}</span>
                       </li>
                     ))}
                   </ul>
