@@ -216,7 +216,7 @@ export function ProductDetailDialog({
           description: product.description,
           dimensions: product.dimensions,
           condition: product.condition,
-          selling_points: sellingPoints,
+          selling_points: flatSellingTexts,
           tips: product.tips ?? null,
         } : null}
         open={editDialogOpen}
