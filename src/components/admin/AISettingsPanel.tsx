@@ -196,7 +196,16 @@ export function AISettingsPanel() {
         <CardContent>
           <RadioGroup
             value={settings.provider}
-            onValueChange={(v) => setSettings((p) => ({ ...p, provider: v as Provider }))}
+            onValueChange={(v) => setSettings((p) => {
+              const np = v as Provider;
+              let model = p.model;
+              if (np === 'doubao' && !DOUBAO_MODELS.some((m) => m.value === model)) {
+                model = DOUBAO_MODELS[0].value;
+              } else if (np === 'lovable' && !LOVABLE_MODELS.some((m) => m.value === model)) {
+                model = DEFAULT.model;
+              }
+              return { ...p, provider: np, model };
+            })}
             className="space-y-3"
             disabled={!isAdmin}
           >
