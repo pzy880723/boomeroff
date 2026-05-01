@@ -826,6 +826,14 @@ export function LiveStreamPanel() {
             <div className="container py-4 space-y-4">
               <ProductDetailCard result={displayResult} />
 
+              {/* 内联 AI 对话：有疑问/纠错都在这里 */}
+              <InlineRefineChat
+                imageUrl={productImageUrl}
+                productId={currentProductId}
+                current={displayResult}
+                onApplied={(next) => setOverriddenResult(next)}
+              />
+
               {/* 团队/官方知识库 + 个人收藏 */}
               {currentProductId && (
                 <div className="space-y-2 pt-1">
