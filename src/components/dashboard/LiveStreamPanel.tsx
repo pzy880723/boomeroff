@@ -490,7 +490,7 @@ export function LiveStreamPanel() {
     }
   };
 
-  const displayResult: RecognitionResult | null = result || (currentProduct ? {
+  const baseResult: RecognitionResult | null = result || (currentProduct ? {
     name: currentProduct.name,
     category: currentProduct.category,
     era: currentProduct.era,
@@ -503,6 +503,7 @@ export function LiveStreamPanel() {
     sellingPoints: currentProduct.selling_points || [],
     tips: currentProduct.tips,
   } : null);
+  const displayResult: RecognitionResult | null = overriddenResult || baseResult;
 
   // 进入已识别商品时，同步「加入知识库」与「收藏」状态，避免重复入库
   useEffect(() => {
