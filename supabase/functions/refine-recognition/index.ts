@@ -55,7 +55,7 @@ const SYSTEM_PROMPT = `你是日本中古杂货资深鉴定师，正在跟一位
 
 第二段：空一行后，紧接一个完整 JSON 代码块（必须用 Markdown \`\`\`json ... \`\`\` 包裹），仅供系统解析，用户看不到。结构如下：
 \`\`\`json
-{"name":"","category":"jp_porcelain|eu_porcelain|incense|antique_art|local_craft|anime_toy|otaku_goods|luxury|vintage_jewelry|game_console|walkman|ccd|media_record|playback_device|home_appliance|hobby|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"","tips":"","confidence":0.0}
+{"name":"","category":"jp_porcelain|eu_porcelain|incense|antique_art|local_craft|anime_toy|otaku_goods|luxury|vintage_jewelry|game_console|walkman|ccd|media_record|playback_device|home_appliance|hobby|other","era":"","origin":"","material":"","craft":"","sellingPoints":[{"tag":"身世|工艺|稀缺|场景","text":"≤18字"}],"pitch":{"opener":"≤22字开场句号","highlight":"≤28字亮点句号"},"description":"≤80字长描述","tips":{"memory":"≤20字记忆口诀","objection":"≤30字顾客常问应答"},"confidence":0.0}
 \`\`\`
 
 即使本轮主要是追问，也要给出当前最佳猜测的 JSON。`;
