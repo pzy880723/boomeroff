@@ -6,12 +6,12 @@ import { useProductRecognition } from '@/hooks/useProductRecognition';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Award, Star, MessageSquareWarning,
+  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Award, Star,
 } from 'lucide-react';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
-import { RefineDialog } from '@/components/recognition/RefineDialog';
+import { InlineRefineChat } from '@/components/recognition/InlineRefineChat';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
 import { serializeTips, normalizeSellingPoints } from '@/lib/script';
 
@@ -32,7 +32,7 @@ export function LiveStreamPanel() {
   const [savingKnowledge, setSavingKnowledge] = useState(false);
   const [favorited, setFavorited] = useState(false);
   const [savingFav, setSavingFav] = useState(false);
-  const [refineOpen, setRefineOpen] = useState(false);
+  
   const [overriddenResult, setOverriddenResult] = useState<RecognitionResult | null>(null);
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -826,6 +826,14 @@ export function LiveStreamPanel() {
             <div className="container py-4 space-y-4">
               <ProductDetailCard result={displayResult} />
 
+              {/* 内联 AI 对话：有疑问/纠错都在这里 */}
+              <InlineRefineChat
+                imageUrl={productImageUrl}
+                productId={currentProductId}
+                current={displayResult}
+                onApplied={(next) => setOverriddenResult(next)}
+              />
+
               {/* 团队/官方知识库 + 个人收藏 */}
               {currentProductId && (
                 <div className="space-y-2 pt-1">
@@ -872,17 +880,6 @@ export function LiveStreamPanel() {
                       <Star className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
                     )}
                     {favorited ? '已加入我的学习清单' : '收藏到我的学习清单'}
-                  </Button>
-
-                  {/* 跟 AI 纠正识别 */}
-                  <Button
-                    onClick={() => setRefineOpen(true)}
-                    variant="outline"
-                    size="lg"
-                    className="w-full h-11 rounded-full gap-2 border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
-                  >
-                    <MessageSquareWarning className="w-4 h-4" />
-                    识别不对？跟 AI 纠正
                   </Button>
 
                   {/* 分享到中古圈 */}
@@ -982,16 +979,6 @@ export function LiveStreamPanel() {
         }}
       />
 
-      {displayResult && (
-        <RefineDialog
-          open={refineOpen}
-          onOpenChange={setRefineOpen}
-          imageUrl={productImageUrl}
-          productId={currentProductId}
-          current={displayResult}
-          onApplied={(next) => setOverriddenResult(next)}
-        />
-      )}
     </div>
   );
 }

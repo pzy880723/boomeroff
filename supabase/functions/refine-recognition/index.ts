@@ -99,11 +99,13 @@ serve(async (req) => {
       messages = [],
       imageBase64,
       imageUrl,
+      extraImages = [],
       originalPayload,
     } = body as {
       messages: Array<{ role: 'user' | 'assistant'; content: string }>;
       imageBase64?: string;
       imageUrl?: string;
+      extraImages?: string[];
       originalPayload?: any;
     };
 
@@ -125,9 +127,14 @@ serve(async (req) => {
       : null;
 
     const firstUserContent: any[] = [
-      { type: 'text', text: `这是上次识别的结果（可能有错）：\n${JSON.stringify(originalPayload || {}, null, 2)}\n\n店员的纠正/提示：${firstHint}\n\n请结合原图重新判断。` },
+      { type: 'text', text: `这是上次识别的结果（可能有错）：\n${JSON.stringify(originalPayload || {}, null, 2)}\n\n店员的纠正/提示：${firstHint}\n\n请结合下方图片重新判断。${extraImages.length ? `\n注意：第一张是原图，后 ${extraImages.length} 张是店员补拍的细节图（底款/侧面/包装等），请重点参考。` : ''}` },
     ];
     if (imgPart) firstUserContent.push(imgPart);
+    for (const b64 of extraImages) {
+      if (!b64) continue;
+      const url = b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
+      firstUserContent.push({ type: 'image_url' as const, image_url: { url } });
+    }
 
     const aiMessages: any[] = [
       { role: 'system', content: SYSTEM_PROMPT },
