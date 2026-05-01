@@ -37,7 +37,7 @@ function extractJSON(text: string): any | null {
   try { return JSON.parse(matches[matches.length - 1][1]); } catch { return null; }
 }
 
-// 渲染前剥离 JSON 代码块和裸露的 JSON，主播只看人话
+// 渲染前剥离 JSON 代码块和裸露的 JSON，店员只看人话
 function stripJSONBlocks(text: string): string {
   let out = text;
   // 1. 去掉所有 ```json ... ``` 代码块（含未闭合的，应对流式中段）
