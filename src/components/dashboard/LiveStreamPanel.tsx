@@ -13,6 +13,7 @@ import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
 import { RefineDialog } from '@/components/recognition/RefineDialog';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
+import { serializeTips, normalizeSellingPoints } from '@/lib/script';
 
 type CaptureMode = 'single' | 'multi';
 const MAX_MULTI_IMAGES = 5;
