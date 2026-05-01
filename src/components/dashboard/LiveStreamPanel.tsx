@@ -404,8 +404,8 @@ export function LiveStreamPanel() {
           origin: displayResult.origin || null,
           cover_url: coverUrl,
           gallery: coverUrl ? [coverUrl] : [],
-          selling_points: sp,
-          tips: displayResult.tips || null,
+          selling_points: sp as any,
+          tips: serializeTips(displayResult.tips ?? null),
           source_product_id: currentProductId,
           created_by: user.id,
         });
