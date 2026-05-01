@@ -11,7 +11,7 @@ import {
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
-import { RefineDialog } from '@/components/recognition/RefineDialog';
+import { InlineRefineChat } from '@/components/recognition/InlineRefineChat';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
 import { serializeTips, normalizeSellingPoints } from '@/lib/script';
 
