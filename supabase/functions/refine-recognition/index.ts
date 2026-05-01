@@ -14,18 +14,25 @@ const PRECISION_MODEL: Record<Precision, string> = {
   high: 'google/gemini-2.5-pro',
 };
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const DOUBAO_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const DOUBAO_DEFAULT_MODEL = 'doubao-seed-1-6-250615';
 
 async function resolveModel(adminClient: any) {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
+  const doubaoKey = Deno.env.get('DOUBAO_API_KEY') || '';
   let precision: Precision = 'high'; // 纠错对话默认走 high，准为先
   let custom: any = null;
-  let provider: 'lovable' | 'custom' = 'lovable';
+  let provider: 'lovable' | 'doubao' | 'custom' = 'lovable';
+  let storedModel: string | null = null;
   try {
     const { data } = await adminClient.from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
     const v = data?.value;
     if (v) {
-      provider = v.provider === 'custom' ? 'custom' : 'lovable';
+      if (v.provider === 'custom') provider = 'custom';
+      else if (v.provider === 'doubao') provider = 'doubao';
+      else provider = 'lovable';
       custom = v.custom || null;
+      storedModel = v.model || null;
     }
   } catch (_) { /* ignore */ }
 
@@ -34,6 +41,13 @@ async function resolveModel(adminClient: any) {
       url: `${String(custom.baseUrl).replace(/\/+$/, '')}/chat/completions`,
       apiKey: custom.apiKey,
       model: custom.model,
+    };
+  }
+  if (provider === 'doubao') {
+    return {
+      url: DOUBAO_URL,
+      apiKey: doubaoKey,
+      model: storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL,
     };
   }
   return { url: LOVABLE_URL, apiKey: lovableKey, model: PRECISION_MODEL[precision] };

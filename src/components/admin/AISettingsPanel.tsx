@@ -15,7 +15,7 @@ import { Loader2, Save, FlaskConical, Sparkles, AlertCircle, CheckCircle2, Eye, 
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
-type Provider = 'lovable' | 'custom';
+type Provider = 'lovable' | 'doubao' | 'custom';
 type Precision = 'economy' | 'standard' | 'high';
 
 interface Settings {
@@ -33,6 +33,12 @@ const LOVABLE_MODELS: { value: string; label: string; tag: string }[] = [
   { value: 'openai/gpt-5-nano', label: 'GPT-5 Nano', tag: '快' },
   { value: 'openai/gpt-5-mini', label: 'GPT-5 Mini', tag: '平衡' },
   { value: 'openai/gpt-5', label: 'GPT-5', tag: '最强' },
+];
+
+const DOUBAO_MODELS: { value: string; label: string; tag: string }[] = [
+  { value: 'doubao-seed-1-6-250615', label: '豆包 Seed 1.6 (视觉)', tag: '最新 · 推荐' },
+  { value: 'doubao-1-5-vision-pro-32k-250115', label: '豆包 1.5 Vision Pro', tag: '稳定' },
+  { value: 'doubao-1-5-vision-lite-32k-250115', label: '豆包 1.5 Vision Lite', tag: '极速' },
 ];
 
 const PRECISION_OPTIONS: { value: Precision; label: string; desc: string }[] = [
@@ -71,8 +77,12 @@ export function AISettingsPanel() {
       .maybeSingle();
     if (data?.value) {
       const v = data.value as unknown as Partial<Settings> & { precision?: Precision };
+      const provider: Provider =
+        v.provider === 'custom' ? 'custom'
+        : v.provider === 'doubao' ? 'doubao'
+        : 'lovable';
       const merged: Settings = {
-        provider: (v.provider as Provider) || 'lovable',
+        provider,
         model: v.model || DEFAULT.model,
         precision: (['economy', 'standard', 'high'] as Precision[]).includes(v.precision as Precision)
           ? (v.precision as Precision) : 'standard',
@@ -190,16 +200,37 @@ export function AISettingsPanel() {
         <CardContent>
           <RadioGroup
             value={settings.provider}
-            onValueChange={(v) => setSettings((p) => ({ ...p, provider: v as Provider }))}
+            onValueChange={(v) => setSettings((p) => {
+              const np = v as Provider;
+              let model = p.model;
+              if (np === 'doubao' && !DOUBAO_MODELS.some((m) => m.value === model)) {
+                model = DOUBAO_MODELS[0].value;
+              } else if (np === 'lovable' && !LOVABLE_MODELS.some((m) => m.value === model)) {
+                model = DEFAULT.model;
+              }
+              return { ...p, provider: np, model };
+            })}
             className="space-y-3"
             disabled={!isAdmin}
           >
             <label className="flex items-start gap-3 p-3 rounded-lg border border-border/60 cursor-pointer hover:bg-muted/40">
               <RadioGroupItem value="lovable" id="r-lovable" className="mt-0.5" />
               <div className="space-y-0.5">
-                <div className="font-medium text-sm">Lovable AI（推荐）</div>
+                <div className="font-medium text-sm">Lovable AI</div>
                 <div className="text-xs text-muted-foreground">
                   内置 Gemini 与 GPT-5 系列，无需额外配置。flash-lite 最快，1-2 秒识别。
+                </div>
+              </div>
+            </label>
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-accent/60 bg-accent/5 cursor-pointer hover:bg-accent/10">
+              <RadioGroupItem value="doubao" id="r-doubao" className="mt-0.5" />
+              <div className="space-y-0.5">
+                <div className="font-medium text-sm flex items-center gap-1.5">
+                  豆包 · 火山方舟
+                  <span className="text-[10px] px-1.5 py-px rounded-full bg-accent text-accent-foreground">中文古玩首选</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  字节自研多模态模型，对汉字落款、日系品牌、动漫 IP 识别准确度极高，2-4 秒。已内置 API Key，开箱即用。
                 </div>
               </div>
             </label>
@@ -208,7 +239,7 @@ export function AISettingsPanel() {
               <div className="space-y-0.5">
                 <div className="font-medium text-sm">自定义 OpenAI 兼容接口</div>
                 <div className="text-xs text-muted-foreground">
-                  接入豆包、DeepSeek、自部署等。需填写 Base URL、API Key 与模型名。
+                  接入 DeepSeek、Qwen、自部署等。需填写 Base URL、API Key 与模型名。
                 </div>
               </div>
             </label>
@@ -216,7 +247,7 @@ export function AISettingsPanel() {
         </CardContent>
       </Card>
 
-      {settings.provider === 'lovable' ? (
+      {settings.provider === 'lovable' && (
         <>
           <Card>
             <CardHeader className="pb-3">
@@ -274,7 +305,40 @@ export function AISettingsPanel() {
             </CardContent>
           </Card>
         </>
-      ) : (
+      )}
+
+      {settings.provider === 'doubao' && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">豆包模型</CardTitle>
+            <CardDescription>选择火山方舟上的豆包视觉模型。API Key 已内置，无需填写。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Select
+              value={DOUBAO_MODELS.some((m) => m.value === settings.model) ? settings.model : DOUBAO_MODELS[0].value}
+              onValueChange={(v) => setSettings((p) => ({ ...p, model: v }))}
+              disabled={!isAdmin}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {DOUBAO_MODELS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    <div className="flex items-center gap-2">
+                      <span>{m.label}</span>
+                      <span className="text-[10px] px-1.5 py-px rounded-full bg-accent/20 text-accent-foreground">{m.tag}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              提示：保存后用下方"测试连接"按钮可以验证豆包是否通畅。
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {settings.provider === 'custom' && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">自定义接口配置</CardTitle>
@@ -313,7 +377,7 @@ export function AISettingsPanel() {
               <Input
                 value={settings.custom.model}
                 onChange={(e) => setSettings((p) => ({ ...p, custom: { ...p.custom, model: e.target.value } }))}
-                placeholder="如：doubao-1-5-vision-pro-32k-250115"
+                placeholder="如：deepseek-vl2"
                 disabled={!isAdmin}
               />
             </div>

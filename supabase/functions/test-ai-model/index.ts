@@ -7,6 +7,8 @@ const corsHeaders = {
 };
 
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const DOUBAO_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const DOUBAO_DEFAULT_MODEL = 'doubao-seed-1-6-250615';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -64,6 +66,15 @@ serve(async (req) => {
       url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
       key = finalKey;
       useModel = model;
+    } else if (provider === 'doubao') {
+      url = DOUBAO_URL;
+      key = Deno.env.get('DOUBAO_API_KEY') || '';
+      useModel = (model && String(model).startsWith('doubao')) ? model : DOUBAO_DEFAULT_MODEL;
+      if (!key) {
+        return new Response(JSON.stringify({ ok: false, error: '豆包未配置 DOUBAO_API_KEY' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     } else {
       url = LOVABLE_URL;
       key = Deno.env.get('LOVABLE_API_KEY') || '';

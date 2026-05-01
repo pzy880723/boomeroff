@@ -11,6 +11,7 @@ interface ModelConfig {
   apiKey: string;
   model: string;
   jsonMode: boolean;
+  supportsTools: boolean;
 }
 
 type Precision = 'economy' | 'standard' | 'high';
@@ -20,12 +21,15 @@ const PRECISION_MODEL: Record<Precision, string> = {
   high: 'google/gemini-2.5-pro',
 };
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const DOUBAO_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const DOUBAO_DEFAULT_MODEL = 'doubao-seed-1-6-250615';
 
 async function resolveModelConfig(adminClient: any, multiImage: boolean): Promise<ModelConfig> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
-  let provider: 'lovable' | 'custom' = 'lovable';
+  const doubaoKey = Deno.env.get('DOUBAO_API_KEY') || '';
+  let provider: 'lovable' | 'doubao' | 'custom' = 'lovable';
   let precision: Precision = 'standard';
-  let lovableModel: string | null = null;
+  let storedModel: string | null = null;
   let custom: any = null;
 
   try {
@@ -33,10 +37,12 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       .from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
     const v = data?.value;
     if (v) {
-      provider = v.provider === 'custom' ? 'custom' : 'lovable';
+      if (v.provider === 'custom') provider = 'custom';
+      else if (v.provider === 'doubao') provider = 'doubao';
+      else provider = 'lovable';
       precision = (['economy', 'standard', 'high'] as Precision[]).includes(v.precision)
         ? v.precision : 'standard';
-      lovableModel = v.model || null;
+      storedModel = v.model || null;
       custom = v.custom || null;
     }
   } catch (e) {
@@ -49,14 +55,25 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       apiKey: custom.apiKey,
       model: custom.model,
       jsonMode: false,
+      supportsTools: true,
+    };
+  }
+
+  if (provider === 'doubao') {
+    return {
+      url: DOUBAO_URL,
+      apiKey: doubaoKey,
+      model: storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL,
+      jsonMode: true,
+      supportsTools: true,
     };
   }
 
   // 多角度模式自动升一档（standard -> high）
   let model: string;
-  if (lovableModel && lovableModel.startsWith('google/gemini')) {
+  if (storedModel && storedModel.startsWith('google/gemini')) {
     // 用户在后台明确选过具体型号 -> 尊重选择
-    model = lovableModel;
+    model = storedModel;
     if (multiImage && model === PRECISION_MODEL.economy) {
       model = PRECISION_MODEL.standard;
     }
@@ -67,8 +84,80 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
     }
   }
 
-  return { url: LOVABLE_URL, apiKey: lovableKey, model, jsonMode: true };
+  return { url: LOVABLE_URL, apiKey: lovableKey, model, jsonMode: true, supportsTools: true };
 }
+
+// 宽容 JSON 解析：自动去尾逗号、去 markdown 代码块、提取 {...}
+function safeParseJSON(raw: string): any | null {
+  if (!raw) return null;
+  let txt = raw.trim();
+  // 去 markdown 代码块
+  txt = txt.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
+  // 提取最外层 {...}
+  const match = txt.match(/\{[\s\S]*\}/);
+  if (match) txt = match[0];
+  // 去尾随逗号 ,} 或 ,]
+  const cleaned = txt.replace(/,(\s*[}\]])/g, '$1');
+  try { return JSON.parse(cleaned); } catch (_) { /* fallthrough */ }
+  // 最后兜底：原始 parse
+  try { return JSON.parse(txt); } catch (_) { return null; }
+}
+
+// Tool calling schema：让模型按结构填参数，杜绝 JSON 格式错误
+const RECOGNITION_TOOL = {
+  type: 'function',
+  function: {
+    name: 'submit_recognition',
+    description: '提交中古商品鉴定结果',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '商品名称（≤12字）' },
+        category: {
+          type: 'string',
+          enum: ['jp_porcelain', 'eu_porcelain', 'incense', 'antique_art', 'local_craft',
+                 'anime_toy', 'otaku_goods', 'luxury', 'vintage_jewelry', 'game_console',
+                 'walkman', 'ccd', 'media_record', 'playback_device', 'home_appliance',
+                 'hobby', 'other'],
+        },
+        era: { type: 'string', description: '年代，未知写"不详"' },
+        origin: { type: 'string', description: '产地/窑口，未知写"不详"' },
+        material: { type: 'string', description: '材质，未知写"不详"' },
+        craft: { type: 'string', description: '工艺，未知写"不详"' },
+        sellingPoints: {
+          type: 'array',
+          maxItems: 3,
+          items: {
+            type: 'object',
+            properties: {
+              tag: { type: 'string', enum: ['身世', '工艺', '稀缺', '场景'] },
+              text: { type: 'string', description: '≤18汉字' },
+            },
+            required: ['tag', 'text'],
+          },
+        },
+        pitch: {
+          type: 'object',
+          properties: {
+            opener: { type: 'string', description: '≤22字开场句，含品类+年代/产地，结尾句号' },
+            highlight: { type: 'string', description: '≤28字亮点句，结尾句号' },
+          },
+          required: ['opener', 'highlight'],
+        },
+        description: { type: 'string', description: '≤80字客观长描述' },
+        tips: {
+          type: 'object',
+          properties: {
+            memory: { type: 'string', description: '≤20字记忆口诀' },
+            objection: { type: 'string', description: '≤30字顾客常问应答' },
+          },
+        },
+        confidence: { type: 'number', description: '自评置信度 0-1' },
+      },
+      required: ['name', 'category', 'pitch', 'confidence'],
+    },
+  },
+};
 
 async function loadKnowledgeContext(adminClient: any): Promise<string> {
   try {
@@ -96,8 +185,8 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
   );
 
   const userText = imageUrls.length > 1
-    ? `以下为同一件中古商品的 ${imageUrls.length} 张多角度照片，请综合判断后仅返回JSON。`
-    : '请鉴定这件中古商品，仅返回JSON。';
+    ? `以下为同一件中古商品的 ${imageUrls.length} 张多角度照片，请综合判断后调用 submit_recognition 工具提交结果。`
+    : '请鉴定这件中古商品，调用 submit_recognition 工具提交结果。';
 
   const userContent: any[] = [{ type: 'text', text: userText }];
   for (const url of imageUrls) {
@@ -111,7 +200,14 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
       { role: 'user', content: userContent },
     ],
   };
-  if (cfg.jsonMode) body.response_format = { type: 'json_object' };
+
+  // 优先用 tool calling（最稳，无 JSON 格式问题）
+  if (cfg.supportsTools) {
+    body.tools = [RECOGNITION_TOOL];
+    body.tool_choice = { type: 'function', function: { name: 'submit_recognition' } };
+  } else if (cfg.jsonMode) {
+    body.response_format = { type: 'json_object' };
+  }
 
   return await fetch(cfg.url, {
     method: 'POST',
@@ -236,8 +332,8 @@ serve(async (req) => {
    - objection ≤30 字，顾客常问应答（如"问真假？盘底落款+金彩磨损是真品标志"）
    无内容的字段省略，不要硬编。
 ${knowledgeContext}
-【输出格式】仅返回如下 JSON，不加任何解释：
-{"name":"","category":"jp_porcelain|eu_porcelain|incense|antique_art|local_craft|anime_toy|otaku_goods|luxury|vintage_jewelry|game_console|walkman|ccd|media_record|playback_device|home_appliance|hobby|other","era":"","origin":"","material":"","craft":"","sellingPoints":[{"tag":"身世","text":""},{"tag":"工艺","text":""},{"tag":"稀缺","text":""}],"pitch":{"opener":"","highlight":""},"description":"","tips":{"memory":"","objection":""},"confidence":0.0}`;
+请调用 submit_recognition 工具提交结果。所有字段必须遵守上述硬性输出规则。`;
+
 
     const response = await callAI(imageList, recognitionPrompt, modelCfg);
     const aiTime = Date.now() - startTime;
@@ -262,24 +358,38 @@ ${knowledgeContext}
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const message = data.choices?.[0]?.message;
 
-    if (!content) {
-      return new Response(JSON.stringify({ error: 'AI 返回空响应' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    let result: any = null;
+
+    // 优先读 tool_calls（结构化输出，最稳）
+    const toolCall = message?.tool_calls?.[0];
+    if (toolCall?.function?.arguments) {
+      result = safeParseJSON(toolCall.function.arguments);
+      if (!result) {
+        console.error('[Recognition] tool_call args parse failed:', toolCall.function.arguments);
+      }
     }
 
-    let result: any;
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      result = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-      if (!result) throw new Error('No JSON');
-    } catch (parseError) {
-      console.error('[Recognition] parse error:', parseError, 'Content:', content);
-      return new Response(JSON.stringify({ rawContent: content, error: '解析失败' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // 回退：从 content 字段解析
+    if (!result) {
+      const content = message?.content;
+      if (!content) {
+        console.error('[Recognition] empty response, raw data:', JSON.stringify(data).slice(0, 500));
+        return new Response(JSON.stringify({ error: 'AI 返回空响应，请重试' }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      result = safeParseJSON(content);
+      if (!result) {
+        console.error('[Recognition] parse failed. Content:', content);
+        return new Response(JSON.stringify({
+          error: `AI 返回格式异常：${String(content).slice(0, 80)}...`,
+          rawContent: content,
+        }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // 兜底：缺字段时写不详
