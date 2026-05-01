@@ -14,7 +14,7 @@ interface ShareToCommunityButtonProps {
   era?: string | null;
   origin?: string | null;
   imageUrl?: string | null;
-  sellingPoints?: Array<string | SellingPoint>;
+  sellingPoints?: Array<string | SellingPoint | { tag: string; text: string }>;
   tips?: string | TipsObj | null;
   variant?: 'default' | 'outline' | 'secondary';
   size?: 'sm' | 'lg' | 'default';
