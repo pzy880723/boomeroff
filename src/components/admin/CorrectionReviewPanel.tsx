@@ -172,7 +172,7 @@ export function CorrectionReviewPanel() {
                     {it.conversation.map((m, i) => (
                       <div key={i} className="text-xs">
                         <span className={`font-medium ${m.role === 'user' ? 'text-primary' : 'text-muted-foreground'}`}>
-                          {m.role === 'user' ? '主播' : 'AI'}：
+                          {m.role === 'user' ? '店员' : 'AI'}：
                         </span>
                         <span className="text-foreground whitespace-pre-wrap">{m.content}</span>
                       </div>

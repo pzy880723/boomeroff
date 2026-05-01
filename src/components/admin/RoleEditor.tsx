@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, Shield, Mic } from 'lucide-react';
+import { ChevronDown, Shield, Store } from 'lucide-react';
 import { AppRole, ROLE_LABELS } from '@/types';
 import { toast } from 'sonner';
 
@@ -18,7 +18,7 @@ interface RoleEditorProps {
 
 const ROLE_OPTIONS: { value: AppRole; label: string; icon: typeof Shield }[] = [
   { value: 'admin', label: ROLE_LABELS.admin, icon: Shield },
-  { value: 'anchor', label: ROLE_LABELS.anchor, icon: Mic },
+  { value: 'anchor', label: ROLE_LABELS.anchor, icon: Store },
 ];
 
 export function RoleEditor({ currentRole, onRoleChange, disabled }: RoleEditorProps) {

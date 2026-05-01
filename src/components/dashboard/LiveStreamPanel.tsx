@@ -426,7 +426,7 @@ export function LiveStreamPanel() {
       console.error('[Knowledge] insert error:', e);
       const code = e?.code || '';
       if (code === '42501' || /row-level security/i.test(e?.message || '')) {
-        toast({ title: '权限不足', description: '需要主播或管理员权限', variant: 'destructive' });
+        toast({ title: '权限不足', description: '需要店员或管理员权限', variant: 'destructive' });
       } else {
         toast({ title: '加入失败', description: e?.message || '请稍后重试', variant: 'destructive' });
       }
