@@ -7,6 +7,8 @@ const corsHeaders = {
 };
 
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const DOUBAO_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const DOUBAO_DEFAULT_MODEL = 'doubao-seed-1-6-250615';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
