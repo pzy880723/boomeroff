@@ -99,11 +99,13 @@ serve(async (req) => {
       messages = [],
       imageBase64,
       imageUrl,
+      extraImages = [],
       originalPayload,
     } = body as {
       messages: Array<{ role: 'user' | 'assistant'; content: string }>;
       imageBase64?: string;
       imageUrl?: string;
+      extraImages?: string[];
       originalPayload?: any;
     };
 
