@@ -358,24 +358,38 @@ ${knowledgeContext}
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const message = data.choices?.[0]?.message;
 
-    if (!content) {
-      return new Response(JSON.stringify({ error: 'AI 返回空响应' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    let result: any = null;
+
+    // 优先读 tool_calls（结构化输出，最稳）
+    const toolCall = message?.tool_calls?.[0];
+    if (toolCall?.function?.arguments) {
+      result = safeParseJSON(toolCall.function.arguments);
+      if (!result) {
+        console.error('[Recognition] tool_call args parse failed:', toolCall.function.arguments);
+      }
     }
 
-    let result: any;
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      result = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-      if (!result) throw new Error('No JSON');
-    } catch (parseError) {
-      console.error('[Recognition] parse error:', parseError, 'Content:', content);
-      return new Response(JSON.stringify({ rawContent: content, error: '解析失败' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // 回退：从 content 字段解析
+    if (!result) {
+      const content = message?.content;
+      if (!content) {
+        console.error('[Recognition] empty response, raw data:', JSON.stringify(data).slice(0, 500));
+        return new Response(JSON.stringify({ error: 'AI 返回空响应，请重试' }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      result = safeParseJSON(content);
+      if (!result) {
+        console.error('[Recognition] parse failed. Content:', content);
+        return new Response(JSON.stringify({
+          error: `AI 返回格式异常：${String(content).slice(0, 80)}...`,
+          rawContent: content,
+        }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // 兜底：缺字段时写不详
