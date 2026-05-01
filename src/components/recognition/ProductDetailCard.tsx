@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Copy, Check, Volume2, VolumeX, Sparkles, Lightbulb, Info, MessageCircleQuestion, Quote } from 'lucide-react';
+import { Copy, Check, Volume2, VolumeX, Sparkles, Lightbulb, Info, Quote } from 'lucide-react';
 import { RecognitionResult, CATEGORY_LABELS } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useSpeech } from '@/hooks/useSpeech';
