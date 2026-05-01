@@ -91,8 +91,12 @@ export interface RecognitionResult {
   dimensions?: string;
   condition?: string;
   description?: string;
-  sellingPoints?: string[];
-  tips?: string;
+  // 新结构：带标签的卖点；老数据可能是 string[]
+  sellingPoints?: Array<string | { tag: string; text: string }>;
+  // 新增：开场+亮点双句模板
+  pitch?: { opener: string; highlight: string };
+  // 新结构：记忆口诀+顾客应答；老数据可能是 string
+  tips?: string | { memory?: string; objection?: string };
   confidence?: number;
   imageHash?: string;
   fromCache?: boolean;
