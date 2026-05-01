@@ -76,10 +76,9 @@ export function ProductDetailDialog({
 
   if (!product) return null;
 
-  const sellingPoints: string[] = Array.isArray(product.selling_points)
-    ? (product.selling_points as string[]).filter(s => typeof s === 'string')
-    : [];
-
+  const sellingPoints = normalizeSellingPoints(product.selling_points);
+  const tipsObj = normalizeTips(product.tips);
+  const flatSellingTexts = sellingPoints.map(s => s.text);
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
