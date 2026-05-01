@@ -106,6 +106,10 @@ export default function Portal() {
               <CommunityModeration />
             </TabsContent>
 
+            <TabsContent value="corrections" className="p-3 sm:p-5 m-0">
+              <CorrectionReviewPanel />
+            </TabsContent>
+
             <TabsContent value="ai" className="p-3 sm:p-5 m-0">
               <AISettingsPanel />
             </TabsContent>
