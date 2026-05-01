@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Share2, Check, Loader2 } from 'lucide-react';
 import type { ProductCategory } from '@/types';
+import { serializeTips, type SellingPoint, type TipsObj } from '@/lib/script';
 
 interface ShareToCommunityButtonProps {
   productId: string;
@@ -13,8 +14,8 @@ interface ShareToCommunityButtonProps {
   era?: string | null;
   origin?: string | null;
   imageUrl?: string | null;
-  sellingPoints?: string[];
-  tips?: string | null;
+  sellingPoints?: Array<string | SellingPoint>;
+  tips?: string | TipsObj | null;
   variant?: 'default' | 'outline' | 'secondary';
   size?: 'sm' | 'lg' | 'default';
   className?: string;
@@ -53,6 +54,7 @@ export function ShareToCommunityButton({
     if (shared) return;
     setBusy(true);
     try {
+      // selling_points 在 community_posts 里仍按 jsonb 存原始结构
       const { error } = await supabase.from('community_posts').insert({
         user_id: user.id,
         product_id: productId,
@@ -61,8 +63,8 @@ export function ShareToCommunityButton({
         category,
         era: era || null,
         origin: origin || null,
-        selling_points: sellingPoints,
-        tips: tips || null,
+        selling_points: sellingPoints as any,
+        tips: serializeTips(tips ?? null),
         is_public: true,
       });
       if (error) throw error;
