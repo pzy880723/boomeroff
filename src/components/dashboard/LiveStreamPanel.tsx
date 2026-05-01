@@ -31,6 +31,9 @@ export function LiveStreamPanel() {
   const [savingKnowledge, setSavingKnowledge] = useState(false);
   const [favorited, setFavorited] = useState(false);
   const [savingFav, setSavingFav] = useState(false);
+  const [refineOpen, setRefineOpen] = useState(false);
+  const [overriddenResult, setOverriddenResult] = useState<RecognitionResult | null>(null);
+  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
