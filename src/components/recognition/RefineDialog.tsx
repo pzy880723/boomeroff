@@ -37,6 +37,29 @@ function extractJSON(text: string): any | null {
   try { return JSON.parse(matches[matches.length - 1][1]); } catch { return null; }
 }
 
+// 渲染前剥离 JSON 代码块和裸露的 JSON，主播只看人话
+function stripJSONBlocks(text: string): string {
+  let out = text;
+  // 1. 去掉所有 ```json ... ``` 代码块（含未闭合的，应对流式中段）
+  out = out.replace(/```json[\s\S]*?(?:```|$)/g, '');
+  // 2. 去掉其它 ``` ... ``` 代码块（防止 AI 用裸 ``` 包 JSON）
+  out = out.replace(/```[\s\S]*?(?:```|$)/g, '');
+  // 3. 去掉裸露的顶层 { ... } JSON 对象（贪婪到最后一个 }）
+  const braceMatch = out.match(/\{[\s\S]*\}/);
+  if (braceMatch) {
+    try {
+      JSON.parse(braceMatch[0]);
+      out = out.replace(braceMatch[0], '');
+    } catch { /* 不是合法 JSON，留着 */ }
+  }
+  // 4. 流式中如果出现 { 但还没闭合，也截掉，避免半截 JSON 闪现
+  const openBrace = out.indexOf('{');
+  if (openBrace !== -1 && !out.slice(openBrace).includes('}')) {
+    out = out.slice(0, openBrace);
+  }
+  return out.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function jsonToResult(j: any, fallback: RecognitionResult): RecognitionResult {
   return {
     ...fallback,
@@ -282,7 +305,9 @@ export function RefineDialog({
                 >
                   {m.role === 'assistant' ? (
                     <div className="prose prose-sm max-w-none dark:prose-invert prose-pre:bg-background/50 prose-pre:text-xs prose-pre:my-2">
-                      <ReactMarkdown>{m.content || '思考中…'}</ReactMarkdown>
+                      <ReactMarkdown>
+                        {stripJSONBlocks(m.content) || (m.content ? 'AI 正在整理结果…' : '思考中…')}
+                      </ReactMarkdown>
                     </div>
                   ) : (
                     <p className="whitespace-pre-wrap break-words">{m.content}</p>
