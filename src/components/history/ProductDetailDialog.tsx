@@ -15,6 +15,7 @@ import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import type { Json } from '@/integrations/supabase/types';
 import { ProductEditDialog } from './ProductEditDialog';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
+import { normalizeSellingPoints, normalizeTips, SELLING_TAG_STYLE } from '@/lib/script';
 
 interface Product {
   id: string;
@@ -75,10 +76,9 @@ export function ProductDetailDialog({
 
   if (!product) return null;
 
-  const sellingPoints: string[] = Array.isArray(product.selling_points)
-    ? (product.selling_points as string[]).filter(s => typeof s === 'string')
-    : [];
-
+  const sellingPoints = normalizeSellingPoints(product.selling_points);
+  const tipsObj = normalizeTips(product.tips);
+  const flatSellingTexts = sellingPoints.map(s => s.text);
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,9 +128,11 @@ export function ProductDetailDialog({
                 <CardContent>
                   <ul className="space-y-2">
                     {sellingPoints.map((p, i) => (
-                      <li key={i} className="flex gap-2 leading-relaxed text-sm">
-                        <span className="font-semibold text-primary shrink-0">{i + 1}.</span>
-                        <span>{p}</span>
+                      <li key={i} className="flex gap-2 items-start leading-relaxed text-sm">
+                        <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${SELLING_TAG_STYLE[p.tag]}`}>
+                          {p.tag}
+                        </span>
+                        <span className="flex-1">{p.text}</span>
                       </li>
                     ))}
                   </ul>
@@ -152,16 +154,21 @@ export function ProductDetailDialog({
               </Card>
             )}
 
-            {product.tips && (
+            {tipsObj && (tipsObj.memory || tipsObj.objection) && (
               <Card className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-base text-amber-700 dark:text-amber-400">
                     <Lightbulb className="w-4 h-4" />
-                    店员小贴士
+                    店员小抄
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm leading-relaxed">{product.tips}</p>
+                <CardContent className="space-y-2">
+                  {tipsObj.memory && (
+                    <p className="text-sm leading-relaxed"><span className="font-semibold">记忆口诀：</span>{tipsObj.memory}</p>
+                  )}
+                  {tipsObj.objection && (
+                    <p className="text-sm leading-relaxed"><span className="font-semibold">顾客常问：</span>{tipsObj.objection}</p>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -209,7 +216,7 @@ export function ProductDetailDialog({
           description: product.description,
           dimensions: product.dimensions,
           condition: product.condition,
-          selling_points: sellingPoints,
+          selling_points: flatSellingTexts,
           tips: product.tips ?? null,
         } : null}
         open={editDialogOpen}

@@ -30,9 +30,32 @@ export function useProductRecognition() {
 
       const category = validCategories.includes(data.category) ? data.category : 'other';
 
-      const sellingPoints: string[] = Array.isArray(data.sellingPoints)
-        ? data.sellingPoints.filter((s: unknown) => typeof s === 'string' && s.trim())
+      // 卖点：兼容字符串 / 带标签对象
+      const sellingPoints: Array<string | { tag: string; text: string }> = Array.isArray(data.sellingPoints)
+        ? data.sellingPoints.filter((s: unknown) => {
+            if (typeof s === 'string') return s.trim();
+            return s && typeof s === 'object' && typeof (s as any).text === 'string' && (s as any).text.trim();
+          })
         : [];
+
+      // pitch（开场+亮点双句模板）
+      const pitch = (data.pitch && typeof data.pitch === 'object')
+        ? {
+            opener: typeof data.pitch.opener === 'string' ? data.pitch.opener : '',
+            highlight: typeof data.pitch.highlight === 'string' ? data.pitch.highlight : '',
+          }
+        : undefined;
+
+      // tips：可能是对象（新）或字符串（旧）
+      let tips: RecognitionResult['tips'];
+      if (data.tips && typeof data.tips === 'object') {
+        tips = {
+          memory: typeof data.tips.memory === 'string' ? data.tips.memory : undefined,
+          objection: typeof data.tips.objection === 'string' ? data.tips.objection : undefined,
+        };
+      } else if (typeof data.tips === 'string') {
+        tips = data.tips;
+      }
 
       const recognitionResult: RecognitionResult = {
         name: data.name || '未知商品',
@@ -45,7 +68,8 @@ export function useProductRecognition() {
         condition: data.condition || undefined,
         description: data.description || undefined,
         sellingPoints,
-        tips: data.tips || undefined,
+        pitch,
+        tips,
         confidence: data.confidence || 0.85,
         imageHash: data.imageHash,
         fromCache: data.fromCache,

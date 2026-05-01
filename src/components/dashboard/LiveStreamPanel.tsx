@@ -13,6 +13,7 @@ import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
 import { RefineDialog } from '@/components/recognition/RefineDialog';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
+import { serializeTips, normalizeSellingPoints } from '@/lib/script';
 
 type CaptureMode = 'single' | 'multi';
 const MAX_MULTI_IMAGES = 5;
@@ -292,8 +293,8 @@ export function LiveStreamPanel() {
           craft: recognitionResult.craft,
           dimensions: recognitionResult.dimensions,
           condition: recognitionResult.condition,
-          selling_points: recognitionResult.sellingPoints || [],
-          tips: recognitionResult.tips,
+          selling_points: (recognitionResult.sellingPoints || []) as any,
+          tips: serializeTips(recognitionResult.tips ?? null),
           image_url: imageUrl,
           image_hash: recognitionResult.imageHash,
           created_by: user.id,
@@ -369,8 +370,8 @@ export function LiveStreamPanel() {
           product_id: currentProductId,
           category: displayResult.category,
           product_name: displayResult.name,
-          selling_points: sp,
-          tips: displayResult.tips || null,
+          selling_points: sp as any,
+          tips: serializeTips(displayResult.tips ?? null),
           era: displayResult.era || null,
           origin: displayResult.origin || null,
           image_url: coverUrl,
@@ -403,8 +404,8 @@ export function LiveStreamPanel() {
           origin: displayResult.origin || null,
           cover_url: coverUrl,
           gallery: coverUrl ? [coverUrl] : [],
-          selling_points: sp,
-          tips: displayResult.tips || null,
+          selling_points: sp as any,
+          tips: serializeTips(displayResult.tips ?? null),
           source_product_id: currentProductId,
           created_by: user.id,
         });
@@ -924,8 +925,8 @@ export function LiveStreamPanel() {
                         description: displayResult.description || null,
                         dimensions: displayResult.dimensions || null,
                         condition: displayResult.condition || null,
-                        selling_points: displayResult.sellingPoints || [],
-                        tips: displayResult.tips || null,
+                        selling_points: normalizeSellingPoints(displayResult.sellingPoints).map(s => s.text),
+                        tips: serializeTips(displayResult.tips ?? null),
                       });
                       setEditDialogOpen(true);
                     }}
