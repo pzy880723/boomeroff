@@ -185,8 +185,8 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
   );
 
   const userText = imageUrls.length > 1
-    ? `以下为同一件中古商品的 ${imageUrls.length} 张多角度照片，请综合判断后仅返回JSON。`
-    : '请鉴定这件中古商品，仅返回JSON。';
+    ? `以下为同一件中古商品的 ${imageUrls.length} 张多角度照片，请综合判断后调用 submit_recognition 工具提交结果。`
+    : '请鉴定这件中古商品，调用 submit_recognition 工具提交结果。';
 
   const userContent: any[] = [{ type: 'text', text: userText }];
   for (const url of imageUrls) {
@@ -200,7 +200,14 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
       { role: 'user', content: userContent },
     ],
   };
-  if (cfg.jsonMode) body.response_format = { type: 'json_object' };
+
+  // 优先用 tool calling（最稳，无 JSON 格式问题）
+  if (cfg.supportsTools) {
+    body.tools = [RECOGNITION_TOOL];
+    body.tool_choice = { type: 'function', function: { name: 'submit_recognition' } };
+  } else if (cfg.jsonMode) {
+    body.response_format = { type: 'json_object' };
+  }
 
   return await fetch(cfg.url, {
     method: 'POST',
