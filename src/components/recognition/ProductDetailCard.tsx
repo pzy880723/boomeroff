@@ -132,44 +132,31 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
         </CardContent>
       </Card>
 
-      {/* 核心卖点 - 最显眼 */}
-      {result.sellingPoints && result.sellingPoints.length > 0 && (
-        <Card className="border-accent/30 bg-accent-soft/40 shadow-soft overflow-hidden">
+      {/* 一句话开场 + 亮点 —— 直接念给客户 */}
+      {pitch && (pitch.opener || pitch.highlight) && (
+        <Card className="border-primary/30 bg-gradient-to-br from-primary/8 via-background to-accent/8 shadow-soft overflow-hidden">
           <CardContent className="pt-5 pb-5 space-y-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-accent flex items-center justify-center shrink-0">
-                <Sparkles className="w-4 h-4 text-accent-foreground" />
+              <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                <Quote className="w-4 h-4 text-primary" />
               </div>
               <div>
-                <h3 className="font-display text-lg leading-none">核心卖点</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">话术参考 · 直接对客户讲</p>
+                <h3 className="font-display text-lg leading-none">张口就讲</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">10 秒讲完 · 直接念给客户</p>
               </div>
             </div>
-            <ul className="space-y-2.5 pl-1">
-              {result.sellingPoints.map((point, i) => (
-                <li key={i} className="flex gap-3 leading-relaxed text-[15px]">
-                  <span className="font-display font-bold text-accent shrink-0 w-6 text-right tabular-nums">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span className="flex-1">{point}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 详细介绍 */}
-      {result.description && (
-        <Card className="border-border/60 shadow-soft">
-          <CardContent className="pt-5 pb-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">商品介绍</h3>
+            <div className="space-y-2">
+              {pitch.opener && (
+                <p className="text-[17px] leading-relaxed font-medium text-foreground">
+                  「{pitch.opener}」
+                </p>
+              )}
+              {pitch.highlight && (
+                <p className="text-[15px] leading-relaxed text-foreground/85">
+                  「{pitch.highlight}」
+                </p>
+              )}
             </div>
-            <p className="leading-relaxed whitespace-pre-wrap text-[15px] text-foreground/90">
-              {result.description}
-            </p>
             <div className="flex gap-2 pt-1">
               <Button size="sm" variant="outline" onClick={copyAll} className="rounded-full">
                 {copied ? <Check className="w-4 h-4 mr-1.5" /> : <Copy className="w-4 h-4 mr-1.5" />}
@@ -178,7 +165,7 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
               <Button
                 size="sm"
                 variant={isSpeaking ? 'secondary' : 'outline'}
-                onClick={() => (isSpeaking ? stop() : speak(fullText))}
+                onClick={() => (isSpeaking ? stop() : speak(speakText))}
                 className="rounded-full"
               >
                 {isSpeaking ? (
@@ -198,19 +185,87 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
         </Card>
       )}
 
-      {/* 店员小贴士 */}
-      {result.tips && (
-        <Card className="border-amber-300/50 dark:border-amber-700/40 bg-gradient-to-br from-amber-50 to-amber-100/40 dark:from-amber-950/30 dark:to-amber-900/10 shadow-soft">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-amber-400/20 flex items-center justify-center shrink-0">
-                <Lightbulb className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+      {/* 核心卖点 - 带分类标签 */}
+      {sellingPoints.length > 0 && (
+        <Card className="border-accent/30 bg-accent-soft/40 shadow-soft overflow-hidden">
+          <CardContent className="pt-5 pb-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-accent flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4 text-accent-foreground" />
               </div>
-              <div className="flex-1 min-w-0 space-y-1">
-                <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">店员小贴士</h3>
-                <p className="text-sm leading-relaxed text-amber-900/90 dark:text-amber-100/90">{result.tips}</p>
+              <div>
+                <h3 className="font-display text-lg leading-none">核心卖点</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">分类速记 · 一眼抓重点</p>
               </div>
             </div>
+            <ul className="space-y-2.5">
+              {sellingPoints.map((point, i) => (
+                <li key={i} className="flex gap-2.5 items-start leading-relaxed">
+                  <span
+                    className={`shrink-0 mt-0.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${SELLING_TAG_STYLE[point.tag]}`}
+                  >
+                    {point.tag}
+                  </span>
+                  <span className="flex-1 text-[15px]">{point.text}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 完整介绍（折叠） */}
+      {result.description && result.description.trim() && result.description !== pitch?.opener && (
+        <Card className="border-border/60 shadow-soft">
+          <CardContent className="pt-4 pb-3">
+            <button
+              type="button"
+              onClick={() => setShowLong(v => !v)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold tracking-wide uppercase text-muted-foreground">
+                <Info className="w-4 h-4" />
+                完整介绍
+              </span>
+              <span className="text-[11px] text-muted-foreground">{showLong ? '收起' : '展开'}</span>
+            </button>
+            {showLong && (
+              <p className="leading-relaxed whitespace-pre-wrap text-[14px] text-foreground/85 mt-3">
+                {result.description}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 店员小贴士 - 记忆口诀 + 顾客常问 */}
+      {tips && (tips.memory || tips.objection) && (
+        <Card className="border-amber-300/50 dark:border-amber-700/40 bg-gradient-to-br from-amber-50 to-amber-100/40 dark:from-amber-950/30 dark:to-amber-900/10 shadow-soft">
+          <CardContent className="pt-4 pb-4 space-y-3">
+            <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2">
+              <Lightbulb className="w-4 h-4" />
+              店员小抄
+            </h3>
+            {tips.memory && (
+              <div className="flex gap-2.5 items-start">
+                <span className="shrink-0 mt-0.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border bg-amber-200/60 text-amber-900 border-amber-300/70 dark:bg-amber-900/40 dark:text-amber-100 dark:border-amber-700/40">
+                  记忆口诀
+                </span>
+                <p className="flex-1 text-[14px] leading-relaxed text-amber-900/95 dark:text-amber-100/95">
+                  {tips.memory}
+                </p>
+              </div>
+            )}
+            {tips.objection && (
+              <div className="flex gap-2.5 items-start">
+                <span className="shrink-0 mt-0.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border bg-rose-200/60 text-rose-900 border-rose-300/70 dark:bg-rose-900/40 dark:text-rose-100 dark:border-rose-700/40">
+                  顾客常问
+                </span>
+                <p className="flex-1 text-[14px] leading-relaxed text-amber-900/95 dark:text-amber-100/95">
+                  {tips.objection}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
