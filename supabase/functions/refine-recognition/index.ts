@@ -48,9 +48,12 @@ const SYSTEM_PROMPT = `你是日本中古杂货资深鉴定师，正在跟一位
 - 如果主播信息还不够，主动追问 1-2 个关键线索（底款？尺寸？侧面？包装？）。
 - 不确定的字段写"不详"，不要瞎编。
 
-【输出格式·每次回复必须包含两部分】
-1. 一段不超过 80 字的中文说明：你做了什么修正、为什么改、还需要什么信息。
-2. 紧接着一个完整 JSON 代码块（Markdown \`\`\`json ... \`\`\` 包裹），结构如下：
+【输出格式·每次回复必须严格按以下两段，顺序不可颠倒】
+第一段：一段不超过 80 字的纯中文说明（你做了什么修正、为什么改、还需要什么信息）。
+  - 这段是给主播看的，必须像聊天，不要复述 JSON 字段名（不要写 "name:"、"era:"、大括号、引号等）。
+  - 不要在这段里贴任何 JSON 或代码。
+
+第二段：空一行后，紧接一个完整 JSON 代码块（必须用 Markdown \`\`\`json ... \`\`\` 包裹），仅供系统解析，主播看不到。结构如下：
 \`\`\`json
 {"name":"","category":"jp_porcelain|eu_porcelain|incense|antique_art|local_craft|anime_toy|otaku_goods|luxury|vintage_jewelry|game_console|walkman|ccd|media_record|playback_device|home_appliance|hobby|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"","tips":"","confidence":0.0}
 \`\`\`
