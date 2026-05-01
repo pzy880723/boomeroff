@@ -925,8 +925,8 @@ export function LiveStreamPanel() {
                         description: displayResult.description || null,
                         dimensions: displayResult.dimensions || null,
                         condition: displayResult.condition || null,
-                        selling_points: displayResult.sellingPoints || [],
-                        tips: displayResult.tips || null,
+                        selling_points: normalizeSellingPoints(displayResult.sellingPoints).map(s => s.text),
+                        tips: serializeTips(displayResult.tips ?? null),
                       });
                       setEditDialogOpen(true);
                     }}
