@@ -15,7 +15,7 @@ import { Loader2, Save, FlaskConical, Sparkles, AlertCircle, CheckCircle2, Eye, 
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
-type Provider = 'lovable' | 'custom';
+type Provider = 'lovable' | 'doubao' | 'custom';
 type Precision = 'economy' | 'standard' | 'high';
 
 interface Settings {
@@ -33,6 +33,12 @@ const LOVABLE_MODELS: { value: string; label: string; tag: string }[] = [
   { value: 'openai/gpt-5-nano', label: 'GPT-5 Nano', tag: '快' },
   { value: 'openai/gpt-5-mini', label: 'GPT-5 Mini', tag: '平衡' },
   { value: 'openai/gpt-5', label: 'GPT-5', tag: '最强' },
+];
+
+const DOUBAO_MODELS: { value: string; label: string; tag: string }[] = [
+  { value: 'doubao-seed-1-6-250615', label: '豆包 Seed 1.6 (视觉)', tag: '最新 · 推荐' },
+  { value: 'doubao-1-5-vision-pro-32k-250115', label: '豆包 1.5 Vision Pro', tag: '稳定' },
+  { value: 'doubao-1-5-vision-lite-32k-250115', label: '豆包 1.5 Vision Lite', tag: '极速' },
 ];
 
 const PRECISION_OPTIONS: { value: Precision; label: string; desc: string }[] = [
