@@ -132,23 +132,27 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
-  const compressImage = (imageData: string, maxWidth: number = 640): Promise<string> => {
+  // 高清压缩：单图 1280px/0.85（保留底款细节），多图 1024px/0.8（控制总体积）
+  const compressImage = (imageData: string, maxWidth?: number, quality?: number): Promise<string> => {
+    const isMulti = captureMode === 'multi';
+    const w = maxWidth ?? (isMulti ? 1024 : 1280);
+    const q = quality ?? (isMulti ? 0.8 : 0.85);
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width;
-          width = maxWidth;
+        if (width > w) {
+          height = (height * w) / width;
+          width = w;
         }
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.6));
+          resolve(canvas.toDataURL('image/jpeg', q));
         } else {
           resolve(imageData);
         }
@@ -159,8 +163,10 @@ export function LiveStreamPanel() {
 
   const grabFrame = (): string | null => {
     if (!videoRef.current) return null;
+    const isMulti = captureMode === 'multi';
+    const maxWidth = isMulti ? 1024 : 1280;
+    const quality = isMulti ? 0.8 : 0.85;
     const canvas = document.createElement('canvas');
-    const maxWidth = 640;
     let width = videoRef.current.videoWidth;
     let height = videoRef.current.videoHeight;
     if (width > maxWidth) {
@@ -172,7 +178,7 @@ export function LiveStreamPanel() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     ctx.drawImage(videoRef.current, 0, 0, width, height);
-    return canvas.toDataURL('image/jpeg', 0.6);
+    return canvas.toDataURL('image/jpeg', quality);
   };
 
   const handleCaptureClick = async () => {

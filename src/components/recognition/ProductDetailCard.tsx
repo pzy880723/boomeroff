@@ -81,9 +81,22 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
                   {result.origin}
                 </Badge>
               )}
-              {result.confidence && (
-                <Badge variant="secondary" className="rounded-full">
-                  置信度 {Math.round(result.confidence * 100)}%
+              {typeof result.confidence === 'number' && (
+                <Badge
+                  className={`rounded-full ${
+                    result.confidence >= 0.8
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                      : result.confidence >= 0.6
+                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                        : 'bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30'
+                  }`}
+                  variant="outline"
+                >
+                  {result.confidence >= 0.8
+                    ? `高置信 ${Math.round(result.confidence * 100)}%`
+                    : result.confidence >= 0.6
+                      ? `中等 ${Math.round(result.confidence * 100)}% · 可参考`
+                      : `低 ${Math.round(result.confidence * 100)}% · 建议补拍`}
                 </Badge>
               )}
             </div>

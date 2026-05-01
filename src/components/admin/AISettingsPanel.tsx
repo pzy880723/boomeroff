@@ -16,16 +16,18 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 type Provider = 'lovable' | 'custom';
+type Precision = 'economy' | 'standard' | 'high';
 
 interface Settings {
   provider: Provider;
   model: string;
+  precision: Precision;
   custom: { baseUrl: string; apiKey: string; model: string };
 }
 
 const LOVABLE_MODELS: { value: string; label: string; tag: string }[] = [
-  { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', tag: '最快 · 默认' },
-  { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', tag: '平衡' },
+  { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', tag: '最快' },
+  { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', tag: '平衡 · 推荐' },
   { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', tag: '新一代' },
   { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', tag: '最强多模态' },
   { value: 'openai/gpt-5-nano', label: 'GPT-5 Nano', tag: '快' },
@@ -33,9 +35,16 @@ const LOVABLE_MODELS: { value: string; label: string; tag: string }[] = [
   { value: 'openai/gpt-5', label: 'GPT-5', tag: '最强' },
 ];
 
+const PRECISION_OPTIONS: { value: Precision; label: string; desc: string }[] = [
+  { value: 'economy', label: '极速', desc: '约 1 秒，适合大量普通商品（lite 模型）' },
+  { value: 'standard', label: '标准（推荐）', desc: '约 2 秒，瓷器/漆器细节可辨（flash 模型）' },
+  { value: 'high', label: '高精度', desc: '约 3-5 秒，复杂鉴定专用（pro 模型）' },
+];
+
 const DEFAULT: Settings = {
   provider: 'lovable',
-  model: 'google/gemini-2.5-flash-lite',
+  model: 'google/gemini-2.5-flash',
+  precision: 'standard',
   custom: { baseUrl: '', apiKey: '', model: '' },
 };
 
@@ -61,10 +70,12 @@ export function AISettingsPanel() {
       .eq('key', 'ai_model')
       .maybeSingle();
     if (data?.value) {
-      const v = data.value as unknown as Partial<Settings>;
+      const v = data.value as unknown as Partial<Settings> & { precision?: Precision };
       const merged: Settings = {
         provider: (v.provider as Provider) || 'lovable',
         model: v.model || DEFAULT.model,
+        precision: (['economy', 'standard', 'high'] as Precision[]).includes(v.precision as Precision)
+          ? (v.precision as Precision) : 'standard',
         custom: {
           baseUrl: v.custom?.baseUrl || '',
           apiKey: '', // 不回填明文
@@ -101,6 +112,7 @@ export function AISettingsPanel() {
       const value: Settings = {
         provider: settings.provider,
         model: settings.model,
+        precision: settings.precision,
         custom: {
           baseUrl: settings.custom.baseUrl.trim(),
           apiKey: finalKey,
@@ -205,33 +217,63 @@ export function AISettingsPanel() {
       </Card>
 
       {settings.provider === 'lovable' ? (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">选择 Lovable AI 模型</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Select
-              value={settings.model}
-              onValueChange={(v) => setSettings((p) => ({ ...p, model: v }))}
-              disabled={!isAdmin}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {LOVABLE_MODELS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    <div className="flex items-center gap-2">
-                      <span>{m.label}</span>
-                      <span className="text-[10px] px-1.5 py-px rounded-full bg-muted text-muted-foreground">{m.tag}</span>
+        <>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">识别精度</CardTitle>
+              <CardDescription>影响识别准确率与速度。多角度模式会自动升一档。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={settings.precision}
+                onValueChange={(v) =>
+                  setSettings((p) => ({ ...p, precision: v as Precision }))
+                }
+                className="space-y-2"
+                disabled={!isAdmin}
+              >
+                {PRECISION_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    className="flex items-start gap-3 p-3 rounded-lg border border-border/60 cursor-pointer hover:bg-muted/40"
+                  >
+                    <RadioGroupItem value={opt.value} className="mt-0.5" />
+                    <div className="space-y-0.5">
+                      <div className="font-medium text-sm">{opt.label}</div>
+                      <div className="text-xs text-muted-foreground">{opt.desc}</div>
                     </div>
-                  </SelectItem>
+                  </label>
                 ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground mt-2">
-              ⚡ flash-lite 平均 1-2 秒；其他型号 2-5 秒，质量更高。
-            </p>
-          </CardContent>
-        </Card>
+              </RadioGroup>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">高级：手动指定模型（可选）</CardTitle>
+              <CardDescription>留作"标准"即按上面精度自动选择；选具体型号则覆盖。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Select
+                value={settings.model}
+                onValueChange={(v) => setSettings((p) => ({ ...p, model: v }))}
+                disabled={!isAdmin}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LOVABLE_MODELS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      <div className="flex items-center gap-2">
+                        <span>{m.label}</span>
+                        <span className="text-[10px] px-1.5 py-px rounded-full bg-muted text-muted-foreground">{m.tag}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+        </>
       ) : (
         <Card>
           <CardHeader className="pb-3">
