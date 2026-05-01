@@ -203,9 +203,21 @@ export function AISettingsPanel() {
             <label className="flex items-start gap-3 p-3 rounded-lg border border-border/60 cursor-pointer hover:bg-muted/40">
               <RadioGroupItem value="lovable" id="r-lovable" className="mt-0.5" />
               <div className="space-y-0.5">
-                <div className="font-medium text-sm">Lovable AI（推荐）</div>
+                <div className="font-medium text-sm">Lovable AI</div>
                 <div className="text-xs text-muted-foreground">
                   内置 Gemini 与 GPT-5 系列，无需额外配置。flash-lite 最快，1-2 秒识别。
+                </div>
+              </div>
+            </label>
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-accent/60 bg-accent/5 cursor-pointer hover:bg-accent/10">
+              <RadioGroupItem value="doubao" id="r-doubao" className="mt-0.5" />
+              <div className="space-y-0.5">
+                <div className="font-medium text-sm flex items-center gap-1.5">
+                  豆包 · 火山方舟
+                  <span className="text-[10px] px-1.5 py-px rounded-full bg-accent text-accent-foreground">中文古玩首选</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  字节自研多模态模型，对汉字落款、日系品牌、动漫 IP 识别准确度极高，2-4 秒。已内置 API Key，开箱即用。
                 </div>
               </div>
             </label>
@@ -214,7 +226,7 @@ export function AISettingsPanel() {
               <div className="space-y-0.5">
                 <div className="font-medium text-sm">自定义 OpenAI 兼容接口</div>
                 <div className="text-xs text-muted-foreground">
-                  接入豆包、DeepSeek、自部署等。需填写 Base URL、API Key 与模型名。
+                  接入 DeepSeek、Qwen、自部署等。需填写 Base URL、API Key 与模型名。
                 </div>
               </div>
             </label>
