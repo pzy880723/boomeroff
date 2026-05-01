@@ -70,10 +70,12 @@ export function AISettingsPanel() {
       .eq('key', 'ai_model')
       .maybeSingle();
     if (data?.value) {
-      const v = data.value as unknown as Partial<Settings>;
+      const v = data.value as unknown as Partial<Settings> & { precision?: Precision };
       const merged: Settings = {
         provider: (v.provider as Provider) || 'lovable',
         model: v.model || DEFAULT.model,
+        precision: (['economy', 'standard', 'high'] as Precision[]).includes(v.precision as Precision)
+          ? (v.precision as Precision) : 'standard',
         custom: {
           baseUrl: v.custom?.baseUrl || '',
           apiKey: '', // 不回填明文
@@ -110,6 +112,7 @@ export function AISettingsPanel() {
       const value: Settings = {
         provider: settings.provider,
         model: settings.model,
+        precision: settings.precision,
         custom: {
           baseUrl: settings.custom.baseUrl.trim(),
           apiKey: finalKey,
