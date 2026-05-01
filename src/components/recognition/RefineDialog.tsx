@@ -5,7 +5,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Sparkles, MessageSquareWarning, Check, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -261,7 +260,7 @@ export function RefineDialog({
         </div>
 
         {/* 对话区 */}
-        <ScrollArea className="flex-1 min-h-0 max-h-[40vh]" viewportRef={scrollRef as any}>
+        <div ref={scrollRef} className="flex-1 min-h-0 max-h-[40vh] overflow-y-auto">
           <div className="px-4 py-3 space-y-3">
             {messages.length === 0 && (
               <div className="text-center text-xs text-muted-foreground py-6 space-y-2">
@@ -300,7 +299,7 @@ export function RefineDialog({
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* 输入区 */}
         <div className="border-t border-border/60 p-3 space-y-2 bg-background">
