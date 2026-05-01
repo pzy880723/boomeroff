@@ -980,6 +980,17 @@ export function LiveStreamPanel() {
           toast({ title: '商品信息已更新' });
         }}
       />
+
+      {displayResult && (
+        <RefineDialog
+          open={refineOpen}
+          onOpenChange={setRefineOpen}
+          imageUrl={productImageUrl}
+          productId={currentProductId}
+          current={displayResult}
+          onApplied={(next) => setOverriddenResult(next)}
+        />
+      )}
     </div>
   );
 }
