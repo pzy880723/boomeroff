@@ -114,7 +114,7 @@ serve(async (req) => {
       });
     }
 
-    // 首条 user 消息：注入原图 + 原识别结果 + 主播提示
+    // 首条 user 消息：注入原图 + 原识别结果 + 店员提示
     const firstHint = messages.find((m) => m.role === 'user')?.content || '请帮我重新识别';
     const restMessages = messages.slice(1);
 
@@ -125,7 +125,7 @@ serve(async (req) => {
       : null;
 
     const firstUserContent: any[] = [
-      { type: 'text', text: `这是上次识别的结果（可能有错）：\n${JSON.stringify(originalPayload || {}, null, 2)}\n\n主播的纠正/提示：${firstHint}\n\n请结合原图重新判断。` },
+      { type: 'text', text: `这是上次识别的结果（可能有错）：\n${JSON.stringify(originalPayload || {}, null, 2)}\n\n店员的纠正/提示：${firstHint}\n\n请结合原图重新判断。` },
     ];
     if (imgPart) firstUserContent.push(imgPart);
 
