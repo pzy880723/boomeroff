@@ -6,7 +6,7 @@ import { useProductRecognition } from '@/hooks/useProductRecognition';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Award, Star, MessageSquareWarning,
+  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Award, Star,
 } from 'lucide-react';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
