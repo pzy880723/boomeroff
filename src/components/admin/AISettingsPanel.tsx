@@ -16,16 +16,18 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 type Provider = 'lovable' | 'custom';
+type Precision = 'economy' | 'standard' | 'high';
 
 interface Settings {
   provider: Provider;
   model: string;
+  precision: Precision;
   custom: { baseUrl: string; apiKey: string; model: string };
 }
 
 const LOVABLE_MODELS: { value: string; label: string; tag: string }[] = [
-  { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', tag: '最快 · 默认' },
-  { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', tag: '平衡' },
+  { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', tag: '最快' },
+  { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', tag: '平衡 · 推荐' },
   { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', tag: '新一代' },
   { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', tag: '最强多模态' },
   { value: 'openai/gpt-5-nano', label: 'GPT-5 Nano', tag: '快' },
@@ -33,9 +35,16 @@ const LOVABLE_MODELS: { value: string; label: string; tag: string }[] = [
   { value: 'openai/gpt-5', label: 'GPT-5', tag: '最强' },
 ];
 
+const PRECISION_OPTIONS: { value: Precision; label: string; desc: string }[] = [
+  { value: 'economy', label: '极速', desc: '约 1 秒，适合大量普通商品（lite 模型）' },
+  { value: 'standard', label: '标准（推荐）', desc: '约 2 秒，瓷器/漆器细节可辨（flash 模型）' },
+  { value: 'high', label: '高精度', desc: '约 3-5 秒，复杂鉴定专用（pro 模型）' },
+];
+
 const DEFAULT: Settings = {
   provider: 'lovable',
-  model: 'google/gemini-2.5-flash-lite',
+  model: 'google/gemini-2.5-flash',
+  precision: 'standard',
   custom: { baseUrl: '', apiKey: '', model: '' },
 };
 
