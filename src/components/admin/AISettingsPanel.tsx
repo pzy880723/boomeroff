@@ -217,33 +217,63 @@ export function AISettingsPanel() {
       </Card>
 
       {settings.provider === 'lovable' ? (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">选择 Lovable AI 模型</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Select
-              value={settings.model}
-              onValueChange={(v) => setSettings((p) => ({ ...p, model: v }))}
-              disabled={!isAdmin}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {LOVABLE_MODELS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    <div className="flex items-center gap-2">
-                      <span>{m.label}</span>
-                      <span className="text-[10px] px-1.5 py-px rounded-full bg-muted text-muted-foreground">{m.tag}</span>
+        <>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">识别精度</CardTitle>
+              <CardDescription>影响识别准确率与速度。多角度模式会自动升一档。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={settings.precision}
+                onValueChange={(v) =>
+                  setSettings((p) => ({ ...p, precision: v as Precision }))
+                }
+                className="space-y-2"
+                disabled={!isAdmin}
+              >
+                {PRECISION_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    className="flex items-start gap-3 p-3 rounded-lg border border-border/60 cursor-pointer hover:bg-muted/40"
+                  >
+                    <RadioGroupItem value={opt.value} className="mt-0.5" />
+                    <div className="space-y-0.5">
+                      <div className="font-medium text-sm">{opt.label}</div>
+                      <div className="text-xs text-muted-foreground">{opt.desc}</div>
                     </div>
-                  </SelectItem>
+                  </label>
                 ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground mt-2">
-              ⚡ flash-lite 平均 1-2 秒；其他型号 2-5 秒，质量更高。
-            </p>
-          </CardContent>
-        </Card>
+              </RadioGroup>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">高级：手动指定模型（可选）</CardTitle>
+              <CardDescription>留作"标准"即按上面精度自动选择；选具体型号则覆盖。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Select
+                value={settings.model}
+                onValueChange={(v) => setSettings((p) => ({ ...p, model: v }))}
+                disabled={!isAdmin}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LOVABLE_MODELS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      <div className="flex items-center gap-2">
+                        <span>{m.label}</span>
+                        <span className="text-[10px] px-1.5 py-px rounded-full bg-muted text-muted-foreground">{m.tag}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+        </>
       ) : (
         <Card>
           <CardHeader className="pb-3">
