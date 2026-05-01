@@ -1,74 +1,148 @@
-## 目标
+## 方案 1：内置豆包 + 修 JSON 解析 Bug
 
-把现有「识别不对？跟 AI 纠正」从弹窗按钮改为**直接嵌在商品详情下方的常驻 AI 对话框**，店员看完识别结果就能直接发问、追加新照片，AI 实时给出更准确的判断；如果产生新结果，仍走管理员审核流程进入官方知识库。
+### 背景
+1. 当前后台 AI 模型只有「Lovable AI」「自定义 OpenAI 接口」两个选项，要用豆包得手填 Base URL/Key/Model，麻烦
+2. 项目里 `DOUBAO_API_KEY` secret 已配置好，可以直接用
+3. 边缘函数日志显示：模型其实 3.6s 就返回了，但因为返回 JSON 末尾多了一个逗号（`"highlight": "...",}`），`JSON.parse` 直接报错→识别失败→用户重试→体感"几十秒"
 
-## 用户体验
+---
 
-```
-┌─────────────────────────────────┐
-│   ProductDetailCard（不变）     │
-│   张口就讲 / 卖点 / 小抄        │
-└─────────────────────────────────┘
-┌─────────────────────────────────┐
-│ 💬 有疑问？或发现识别错误？     │
-│ 直接跟 AI 聊，可补拍新角度      │
-│                                 │
-│  [对话气泡区，初始为空状态提示] │
-│                                 │
-│ ┌─────────────────────────────┐ │
-│ │ 📎 加图  [输入框]      → 发 │ │
-│ └─────────────────────────────┘ │
-│ [若 AI 给出新结果] ✅ 应用并提交 │
-└─────────────────────────────────┘
-[官方收录 / 收藏 / 分享 按钮（不变）]
+### 一、内置豆包为第三档来源
+
+**`AISettingsPanel.tsx` 后台面板新增"豆包（火山方舟）"单选**
+
+```text
+识别模型来源：
+  ○ Lovable AI（Gemini / GPT-5）
+  ○ 豆包 · 火山方舟（中文古玩首选 ⭐ 新）
+  ○ 自定义 OpenAI 兼容接口
 ```
 
-- 默认折叠为一个**轻量入口横条**（"有疑问？跟 AI 聊一聊 ⌄"），点击展开成对话框，避免一进来就被一大块占据屏幕。
-- 展开后即可：
-  - 文字输入提问/纠错；
-  - 点回形针图标追加 1 张以上新照片（侧面、底款、包装等），缩略图显示在输入框上方，可删除；
-  - 发送后流式渲染 AI 回复，已有的 RefineDialog 解析逻辑（提取 JSON、剥离代码块、生成 pendingResult、提交审核）原样复用。
-- 产生新结果时，对话框底部出现绿色"AI 给出新结果"卡 + 「应用新结果，并提交训练样本」按钮（与现弹窗一致）。
+选中"豆包"后：
+- 显示一个豆包专用的模型下拉，预置 3 个推荐型号：
+  - `doubao-seed-1-6-250615` —— 最新视觉模型，2-4s（推荐）
+  - `doubao-1-5-vision-pro-32k-250115` —— 上一代稳定版
+  - `doubao-1-5-vision-lite-32k-250115` —— 极速档
+- 不需要填 Base URL / API Key（用项目内置的 `DOUBAO_API_KEY`）
 
-## 实现步骤
+**`app_settings.ai_model.value` 数据结构扩展**
+```ts
+{
+  provider: 'lovable' | 'doubao' | 'custom',  // 新增 'doubao'
+  model: string,             // lovable/doubao 都用这个字段存型号
+  precision: 'economy'|'standard'|'high',
+  custom: { baseUrl, apiKey, model },
+}
+```
 
-1. **新建 `src/components/recognition/InlineRefineChat.tsx`**
-   - 从 `RefineDialog.tsx` 抽出对话/流式/JSON 解析/提交逻辑（不再用 Dialog 包裹）。
-   - 顶部一个可展开/收起的 header（lucide `MessageSquareWarning` + `ChevronDown`）。
-   - 输入区新增**多图附件**：
-     - 文件 input（`accept="image/*"` `multiple`），点附件按钮触发；
-     - 选中后压缩（复用 `src/lib/imageCompression.ts`，若已存在；否则用 canvas 简单缩到 1280px JPEG）→ 转 base64；
-     - 缩略图条 + ✕ 删除；
-     - 发送时把 base64 列表通过 body 传给 edge function。
+**`recognize-product/index.ts` 的 `resolveModelConfig` 增加 doubao 分支**
+```ts
+if (provider === 'doubao') {
+  return {
+    url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+    apiKey: Deno.env.get('DOUBAO_API_KEY') || '',
+    model: lovableModel || 'doubao-seed-1-6-250615',
+    jsonMode: true,  // 火山方舟支持 response_format
+  };
+}
+```
 
-2. **改造 edge function `supabase/functions/refine-recognition/index.ts`**
-   - body 增加 `extraImages?: string[]`（base64 数组）。
-   - 拼装首条 user message 时，把额外图片以多个 `image_url` part 追加到 content（在原图之后），并在 text 中提示"以下追加图片是店员补拍的细节"。
-   - 其余流式输出/system prompt 保持不变。
+`refine-recognition` 和 `test-ai-model` 同步加 doubao 分支，逻辑一致。
 
-3. **接线 `LiveStreamPanel.tsx`**
-   - 删除"识别不对？跟 AI 纠正"按钮 + `RefineDialog` 渲染 + `refineOpen` state。
-   - 在 `<ProductDetailCard />` 之后、官方收录按钮之前，渲染 `<InlineRefineChat current={displayResult} imageUrl={productImageUrl} productId={currentProductId} onApplied={...} />`。
-   - `onApplied` 沿用现有的 `setDisplayResult` 逻辑。
+---
 
-4. **保留旧 `RefineDialog.tsx`**
-   - 暂不删除，避免破坏可能的其它入口（已 grep 过仅 LiveStreamPanel 用，但留作过渡，下个清理迭代再删）。
+### 二、修复 JSON 解析 Bug（关键）
 
-5. **部署 edge function** `refine-recognition`。
+**问题**：模型偶尔在 JSON 对象最后一个属性后多输出一个逗号（`"x": "y",}`），导致 `JSON.parse` 抛错，整次识别失败。
 
-## 技术细节
+**修复方案**（双保险）：
 
-- 多图发送大小：每张压缩后约 150-300 KB，限制最多 4 张，总 base64 < 2 MB（避免函数 body 过大）。
-- base64 在前端 toast 提示压缩中、压缩失败回退跳过。
-- `extraImages` 仅在当前轮发送时携带，不持久化（与现 `imageBase64` 行为一致）。
-- 发送后清空附件，保持对话气泡对应一次提问。
-- 折叠状态用 `useState(false)`，首次拿到识别结果不自动展开；店员点击才展开。
-- 对话历史在 `displayResult.id` 变化（新识别）时清空。
-- 移动端（440px 视口）：附件缩略图条 48×48，输入区 `gap-2`，整卡 `rounded-2xl border-amber-500/30 bg-amber-50/40 dark:bg-amber-950/20`，与"店员小抄"色系呼应但更克制。
+1. **优先用 tool calling 结构化输出**（彻底杜绝 JSON 错误）
+   - 改造 `recognize-product` 的 prompt，把"输出 JSON"改成"调用 `submit_recognition` 工具"
+   - 在请求体加 `tools` + `tool_choice: { type: 'function', function: { name: 'submit_recognition' } }`
+   - 模型必须按 schema 填参数，结构 100% 合法
+   - Lovable AI / 豆包 / 自定义接口都支持 tool calling
 
-## 文件改动清单
+2. **解析端兜底**：写一个宽容解析器 `safeParseJSON()`
+   - 自动去除 `,}` `,]` 尾随逗号
+   - 自动去除 markdown 代码块包裹（` ```json `）
+   - 解析失败时再用正则提取所有键值对兜底
+   - 用于处理仍然走 JSON mode 的旧路径或自定义模型
 
-- 新建：`src/components/recognition/InlineRefineChat.tsx`
-- 编辑：`src/components/dashboard/LiveStreamPanel.tsx`（移除按钮+Dialog，挂载内联对话）
-- 编辑：`supabase/functions/refine-recognition/index.ts`（支持 `extraImages`）
-- 部署：`refine-recognition`
+3. **错误透传**：解析彻底失败时，把 AI 原始内容打回前端 toast，方便排查（而不是只显示"识别失败"）
+
+---
+
+### 三、文件变更清单
+
+| 文件 | 改动 |
+|---|---|
+| `src/components/admin/AISettingsPanel.tsx` | 新增"豆包"provider 选项 + 豆包专用模型下拉 |
+| `supabase/functions/recognize-product/index.ts` | `resolveModelConfig` 加 doubao 分支；改用 tool calling；加 `safeParseJSON` 兜底 |
+| `supabase/functions/refine-recognition/index.ts` | 同步加 doubao 分支 + safeParseJSON |
+| `supabase/functions/test-ai-model/index.ts` | 加 doubao 分支，"测试连接"按钮可直接验通豆包 |
+| `mem://features/ai-model-settings` | 更新：provider 现支持 lovable/doubao/custom |
+
+---
+
+### 四、技术细节
+
+**火山方舟 API 端点**
+- URL: `https://ark.cn-beijing.volces.com/api/v3/chat/completions`
+- 协议：完全兼容 OpenAI Chat Completions
+- 鉴权：`Authorization: Bearer ${DOUBAO_API_KEY}`
+- 支持 `response_format: { type: 'json_object' }` 和 tool calling
+- 支持多图 vision 输入（`image_url` 数组）
+
+**Tool calling schema 示例**
+```ts
+tools: [{
+  type: 'function',
+  function: {
+    name: 'submit_recognition',
+    description: '提交中古商品鉴定结果',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        category: { type: 'string', enum: ['jp_porcelain', ...] },
+        era: { type: 'string' },
+        // ... 所有字段
+        sellingPoints: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              tag: { type: 'string', enum: ['身世','工艺','稀缺','场景'] },
+              text: { type: 'string' }
+            },
+            required: ['tag', 'text']
+          }
+        },
+        confidence: { type: 'number' }
+      },
+      required: ['name', 'category', 'confidence']
+    }
+  }
+}],
+tool_choice: { type: 'function', function: { name: 'submit_recognition' } }
+```
+
+后端读取 `data.choices[0].message.tool_calls[0].function.arguments`，直接 `JSON.parse`，再无格式问题。
+
+---
+
+### 五、对用户的可见效果
+
+1. 后台「AI 模型」多了一个"豆包"选项，选中后只需选模型型号，**0 配置**
+2. 识别失败率大幅下降（tool calling 保证 JSON 100% 合法）
+3. 用豆包后，中文场景（汉字落款、动漫 IP、日系品牌）识别准确度提升明显，速度 2-4s
+
+---
+
+### 不在本次范围
+- SSE 流式输出（如需要后续单独做）
+- 图像 hash 缓存（之前已有，不动）
+- 默认模型切换（保持 Lovable AI 默认，用户自己去后台切豆包）
+
+确认后开工。
