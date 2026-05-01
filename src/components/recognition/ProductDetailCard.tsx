@@ -27,6 +27,7 @@ interface ProductDetailCardProps {
     | 'condition'
     | 'description'
     | 'sellingPoints'
+    | 'pitch'
     | 'tips'
     | 'confidence'
   >;
@@ -41,16 +42,24 @@ const Meta = ({ label, value }: { label: string; value: string }) => (
 
 export function ProductDetailCard({ result }: ProductDetailCardProps) {
   const [copied, setCopied] = useState(false);
+  const [showLong, setShowLong] = useState(false);
   const { toast } = useToast();
   const { isSpeaking, speak, stop } = useSpeech();
 
+  const sellingPoints = normalizeSellingPoints(result.sellingPoints);
+  const pitch = normalizePitch(result.pitch, result.description);
+  const tips = normalizeTips(result.tips);
+
+  const speakText = buildSpeakText({ pitch, sellingPoints, description: result.description });
+
   const fullText = [
-    result.description,
-    result.sellingPoints?.length ? '卖点：\n' + result.sellingPoints.map((p) => `· ${p}`).join('\n') : '',
-    result.tips ? '小贴士：' + result.tips : '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+    pitch?.opener,
+    pitch?.highlight,
+    sellingPoints.length ? '核心卖点：\n' + sellingPoints.map(p => `· [${p.tag}] ${p.text}`).join('\n') : '',
+    result.description && result.description !== pitch?.opener ? '完整介绍：\n' + result.description : '',
+    tips?.memory ? '记忆口诀：' + tips.memory : '',
+    tips?.objection ? '顾客常问：' + tips.objection : '',
+  ].filter(Boolean).join('\n\n');
 
   const copyAll = async () => {
     try {
