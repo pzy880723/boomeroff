@@ -303,23 +303,12 @@ export function LiveStreamPanel() {
 
       if (error) throw error;
       setCurrentProductId(productData.id);
+      setProductImageUrl(imageUrl);
+      setOverriddenResult(null);
       await updateSession(productData.id, user.id);
 
-      // 自动发布到「中古圈」社区（默认公开）
-      supabase.from('community_posts').insert({
-        user_id: user.id,
-        product_id: productData.id,
-        image_url: imageUrl,
-        name: recognitionResult.name,
-        category: recognitionResult.category,
-        era: recognitionResult.era || null,
-        origin: recognitionResult.origin || null,
-        selling_points: recognitionResult.sellingPoints || [],
-        tips: recognitionResult.tips || null,
-        is_public: true,
-      }).then(({ error: pErr }) => {
-        if (pErr) console.warn('[Community] post insert error:', pErr);
-      });
+      // 不再自动发到中古圈，改为用户在结果卡上手动点「分享到中古圈」按钮
+      // 避免大量错识别污染社区
 
       // 多张图清空缓冲
       setCapturedImages([]);
