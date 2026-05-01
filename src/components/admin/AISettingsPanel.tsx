@@ -234,7 +234,7 @@ export function AISettingsPanel() {
         </CardContent>
       </Card>
 
-      {settings.provider === 'lovable' ? (
+      {settings.provider === 'lovable' && (
         <>
           <Card>
             <CardHeader className="pb-3">
@@ -292,7 +292,40 @@ export function AISettingsPanel() {
             </CardContent>
           </Card>
         </>
-      ) : (
+      )}
+
+      {settings.provider === 'doubao' && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">豆包模型</CardTitle>
+            <CardDescription>选择火山方舟上的豆包视觉模型。API Key 已内置，无需填写。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Select
+              value={DOUBAO_MODELS.some((m) => m.value === settings.model) ? settings.model : DOUBAO_MODELS[0].value}
+              onValueChange={(v) => setSettings((p) => ({ ...p, model: v }))}
+              disabled={!isAdmin}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {DOUBAO_MODELS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    <div className="flex items-center gap-2">
+                      <span>{m.label}</span>
+                      <span className="text-[10px] px-1.5 py-px rounded-full bg-accent/20 text-accent-foreground">{m.tag}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              提示：保存后用下方"测试连接"按钮可以验证豆包是否通畅。
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {settings.provider === 'custom' && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">自定义接口配置</CardTitle>
@@ -331,7 +364,7 @@ export function AISettingsPanel() {
               <Input
                 value={settings.custom.model}
                 onChange={(e) => setSettings((p) => ({ ...p, custom: { ...p.custom, model: e.target.value } }))}
-                placeholder="如：doubao-1-5-vision-pro-32k-250115"
+                placeholder="如：deepseek-vl2"
                 disabled={!isAdmin}
               />
             </div>
