@@ -332,8 +332,8 @@ serve(async (req) => {
    - objection ≤30 字，顾客常问应答（如"问真假？盘底落款+金彩磨损是真品标志"）
    无内容的字段省略，不要硬编。
 ${knowledgeContext}
-【输出格式】仅返回如下 JSON，不加任何解释：
-{"name":"","category":"jp_porcelain|eu_porcelain|incense|antique_art|local_craft|anime_toy|otaku_goods|luxury|vintage_jewelry|game_console|walkman|ccd|media_record|playback_device|home_appliance|hobby|other","era":"","origin":"","material":"","craft":"","sellingPoints":[{"tag":"身世","text":""},{"tag":"工艺","text":""},{"tag":"稀缺","text":""}],"pitch":{"opener":"","highlight":""},"description":"","tips":{"memory":"","objection":""},"confidence":0.0}`;
+请调用 submit_recognition 工具提交结果。所有字段必须遵守上述硬性输出规则。`;
+
 
     const response = await callAI(imageList, recognitionPrompt, modelCfg);
     const aiTime = Date.now() - startTime;
