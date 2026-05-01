@@ -217,19 +217,27 @@ serve(async (req) => {
 
 【硬性输出规则·必须遵守】
 1. 全部字段使用简体中文，禁止出现英文/日文假名/拼音占位。外文品牌必须翻译或音译（Yonex→尤尼克斯、Snoopy→史努比、SONY→索尼），型号编号可保留数字+字母。
-2. **不确定原则**：宁可写"不详"也不要瞎编。
-   - name：只能确定大类时，就写大类，如"青花瓷碗""日本古布丁碗"，不要编年号窑口（不要写"清乾隆景德镇青花缠枝莲纹碗"这种凭空虚构）。
-   - era/origin/material/craft：观察不到明确证据就写"不详"。
-   - 只有底款清晰可辨、或器型/工艺特征非常典型时，才能给出具体窑口/年代。
-3. confidence 必须如实自评：
-   - ≥0.85 = 看到明确底款/铭文/IP 标识
-   - 0.6-0.85 = 工艺/器型特征典型，能判定大类
-   - <0.6 = 仅能识别为某品类的普通商品
-4. sellingPoints：3 条短句，全部中文，直击购买动机（稀缺性/工艺/年代/IP 价值），避免空话。
-5. description ≤80 字，客观描述，不夸张。
+2. **不确定原则**：宁可写"不详"也不要瞎编。name 只能确定大类时就写大类；era/origin/material/craft 观察不到证据写"不详"。
+3. confidence 如实自评：≥0.85 看到明确底款/铭文；0.6-0.85 工艺特征典型；<0.6 仅识别出大类。
+4. **专业用词**：使用行业术语（釉下彩/描金/包浆/落款/限定再版/完品/初版/绝版/未拆封）。**禁用空话黑名单**：非常精美、极具价值、值得收藏、匠心独运、巧夺天工、美轮美奂、独一无二（除非确有"限定 1 件"等证据）。能给数字就给数字（"昭和 40 年代"优于"昭和年间"）。
+5. **sellingPoints**：返回 2-3 条带标签对象，每条 text ≤18 个汉字。tag 必须是以下四类之一：
+   - "身世"：年代/产地/窑口/IP/作家
+   - "工艺"：关键技法/材质亮点
+   - "稀缺"：限定/绝版/存世量/完品标记
+   - "场景"：使用建议/收藏定位/送礼场景
+   无证据的类别**整条省略**，不要凑数，不要硬编。
+6. **pitch**：店员张口就能念的两句口语：
+   - opener ≤22 字，先报身份（含品类+年代/产地，结尾句号）。例「这是昭和年间的九谷烧赤绘小皿。」
+   - highlight ≤28 字，讲为什么值得（具体特征+稀缺度，结尾句号）。例「红绘金彩全手绘，盘底有匠人落款。」
+   两句必须是完整可朗读的句子，不出现冒号/括号/引号/JSON 残片。
+7. **description** ≤80 字客观长描述，仅作为详情页备份，不夸张。
+8. **tips**：返回对象 {memory, objection}：
+   - memory ≤20 字，给店员的记忆口诀（如"认准盘底九谷二字红款"）
+   - objection ≤30 字，顾客常问应答（如"问真假？盘底落款+金彩磨损是真品标志"）
+   无内容的字段省略，不要硬编。
 ${knowledgeContext}
 【输出格式】仅返回如下 JSON，不加任何解释：
-{"name":"","category":"jp_porcelain|eu_porcelain|incense|antique_art|local_craft|anime_toy|otaku_goods|luxury|vintage_jewelry|game_console|walkman|ccd|media_record|playback_device|home_appliance|hobby|other","era":"","origin":"","material":"","craft":"","sellingPoints":["","",""],"description":"","tips":"","confidence":0.0}`;
+{"name":"","category":"jp_porcelain|eu_porcelain|incense|antique_art|local_craft|anime_toy|otaku_goods|luxury|vintage_jewelry|game_console|walkman|ccd|media_record|playback_device|home_appliance|hobby|other","era":"","origin":"","material":"","craft":"","sellingPoints":[{"tag":"身世","text":""},{"tag":"工艺","text":""},{"tag":"稀缺","text":""}],"pitch":{"opener":"","highlight":""},"description":"","tips":{"memory":"","objection":""},"confidence":0.0}`;
 
     const response = await callAI(imageList, recognitionPrompt, modelCfg);
     const aiTime = Date.now() - startTime;
