@@ -882,17 +882,6 @@ export function LiveStreamPanel() {
                     {favorited ? '已加入我的学习清单' : '收藏到我的学习清单'}
                   </Button>
 
-                  {/* 跟 AI 纠正识别 */}
-                  <Button
-                    onClick={() => setRefineOpen(true)}
-                    variant="outline"
-                    size="lg"
-                    className="w-full h-11 rounded-full gap-2 border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
-                  >
-                    <MessageSquareWarning className="w-4 h-4" />
-                    识别不对？跟 AI 纠正
-                  </Button>
-
                   {/* 分享到中古圈 */}
                   <ShareToCommunityButton
                     productId={currentProductId}
