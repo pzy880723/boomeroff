@@ -77,8 +77,12 @@ export function AISettingsPanel() {
       .maybeSingle();
     if (data?.value) {
       const v = data.value as unknown as Partial<Settings> & { precision?: Precision };
+      const provider: Provider =
+        v.provider === 'custom' ? 'custom'
+        : v.provider === 'doubao' ? 'doubao'
+        : 'lovable';
       const merged: Settings = {
-        provider: (v.provider as Provider) || 'lovable',
+        provider,
         model: v.model || DEFAULT.model,
         precision: (['economy', 'standard', 'high'] as Precision[]).includes(v.precision as Precision)
           ? (v.precision as Precision) : 'standard',
