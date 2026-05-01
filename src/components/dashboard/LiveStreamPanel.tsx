@@ -979,16 +979,6 @@ export function LiveStreamPanel() {
         }}
       />
 
-      {displayResult && (
-        <RefineDialog
-          open={refineOpen}
-          onOpenChange={setRefineOpen}
-          imageUrl={productImageUrl}
-          productId={currentProductId}
-          current={displayResult}
-          onApplied={(next) => setOverriddenResult(next)}
-        />
-      )}
     </div>
   );
 }
