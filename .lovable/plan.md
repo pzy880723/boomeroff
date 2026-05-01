@@ -1,103 +1,126 @@
-# 识别准确率提升方案
+# 识别纠错对话 + 中古圈手动发布
 
-## 问题根因（一句话总结每个）
-
-1. **默认模型太弱**：`gemini-2.5-flash-lite` 是家族里最弱的视觉模型，瓷器细节根本看不清。
-2. **图片压缩过度**：640px + 质量 0.6，底款/釉色/开片细节全糊。
-3. **缓存机制反向污染**：用 AI 生成的中文关键词模糊匹配历史 `products`，错一次错一片。
-4. **Prompt 缺领域知识**：没教模型瓷器怎么断代/识窑口，也没强制"不确定就写不详"。
-5. **官方知识库未参与识别**：`official_knowledge` 完全没作为先验提示。
+## 目标
+1. 识别错了能直接跟 AI 对话纠正：你说"这是九谷烧不是青花"，AI 结合你提示+原图重新识别，出新结果。
+2. 对话内容自动存为「全员共享」的训练样本（管理员审核后生效，作为下次识别的 RAG 先验）。
+3. 取消识别后自动发到中古圈；改成结果页/历史页/我的库三处都有「分享到中古圈」按钮，看顺眼了再发。
 
 ---
 
-## 改造内容
+## 一、数据库（零迁移方案）
 
-### 1. 升级默认模型 + 分级策略
-- **单图模式**默认改为 `google/gemini-2.5-flash`（平衡速度+精度，瓷器细节能看清）。
-- **多角度模式**（用户已经愿意等）默认升到 `google/gemini-2.5-pro`（顶级视觉推理，最适合鉴定）。
-- 后台 `/portal` 的 AI 设置面板新增"识别精度"选项：极速 (lite) / 标准 (flash) / 高精度 (pro)，默认标准。
-- 速度影响：单图 flash 比 lite 慢约 0.5-1 秒，但准确率显著提升；可接受。
+migration 工具本轮不可用，所以**复用现有表**：
 
-### 2. 提高图片质量
-- 单图模式：压缩参数从 `640px / 0.6` 改为 `1280px / 0.85`（瓷器底款细节关键）。
-- 多角度模式：`1024px / 0.8`（多张要控制总传输量）。
-- 在 `LiveStreamPanel.tsx` 的 `compressImage` 和 `grabFrame` 都改。
-- 摄像头流分辨率保持 1920×1080（已是这个值）。
+- **待审核纠错** → 存到 `app_settings` 表，`key='pending_corrections'`，`value = { items: [ {id, image_url, original, corrected, conversation, user_id, created_at} ] }`。提交由 service-role 边缘函数写入，普通用户无写权限。
+- **审核通过** → 直接 INSERT 到现有 `official_knowledge` 表（已有 RAG 路径自动生效），并从待审列表移除。
+- **驳回** → 从待审列表移除。
 
-### 3. 关掉"反向污染"的关键词缓存
-- 移除 `recognize-product` 里基于 `image_hash` 关键词模糊匹配 `products` 表的逻辑（lines 208-243）。
-- 这个"缓存"省的钱远小于错误识别带来的损失。
-- 真正的知识复用走第 5 步的 RAG 路径。
+好处：等同于"管理员审核 → 入官方知识库"的现成流程，跟现有"申请收录"机制一致。
 
-### 4. 重写 Prompt（领域专家版）
-新 prompt 关键改动：
-- 明确身份："你是日本中古杂货鉴定师，尤其擅长瓷器（有田/伊万里/九谷/京烧/景德镇）、漆器、铜器、香道具、动漫周边"。
-- 加入"鉴定线索清单"：瓷器看圈足/底款/釉色/开片/器型；漆器看莳绘工艺/胎体；铜器看铜色/铸造工艺/铭文。
-- **强制"不确定原则"**：置信度 <0.6 的字段一律写"不详"，宁可少说也不瞎编。`name` 字段如果只能确定大类，就只写大类（如"青花瓷碗"而不是编一个"清乾隆青花缠枝莲纹碗"）。
-- 新增 `confidence` 字段（0-1），让模型自评。前端 <0.7 时在 UI 标灰提示"识别置信度较低，建议补拍"。
-- 移除 `imageHash` 字段（不再需要）。
+## 二、新边缘函数 `refine-recognition`
 
-### 5. 知识库 RAG（用 official_knowledge 做先验）
-- 识别前：从 `official_knowledge` 拉取最近/热门的 20-30 条精简记录（name + category + era + origin + 简短特征），作为"参考库"塞进 system prompt。
-- 模型识别时优先匹配参考库中的已有商品；若高度相似就复用其字段。
-- 这样**官方收录得越多，识别越准** —— 形成正向飞轮，替代被移除的反向缓存。
-- 当前 `official_knowledge` 只有 2 条，建议管理员后续多收录；少于 5 条时跳过 RAG，避免空注入。
+接收：`{ messages: [{role, content}], image_url, original_payload }`
 
-### 6. UI 微调
-- 结果卡片显示置信度徽章：≥0.8 绿色"高置信"，0.6-0.8 黄色"中等"，<0.6 红色"建议补拍"。
-- 多角度模式按钮文案改为"多角度精拍（更准）"，引导用户在重要商品上选多角度。
+逻辑：
+1. JWT 校验，role 必须是 admin/anchor。
+2. 拉 ai_model 设置，沿用相同的模型/精度策略（多角度逻辑同识别函数）。
+3. 系统 prompt：
+   - 角色：日本中古杂货鉴定师。
+   - 上下文：把"原始 AI 识别结果"+"用户上传的原图"塞进首条 user 消息，让模型对比。
+   - 强调：每次回答都要给出新的完整 JSON 结果（同识别函数的字段），并附一句简短中文说明改了哪里、为什么。
+4. 流式 SSE 返回（`text/event-stream`），前端逐 token 渲染。
+5. 同时返回结构化 JSON（最后一条助手消息里 ```json ...``` 块）。
+
+文件：`supabase/functions/refine-recognition/index.ts`
+
+## 三、新边缘函数 `submit-correction`
+
+接收：`{ product_id, image_url, original_payload, corrected_payload, user_hint, conversation }`
+
+逻辑：
+1. JWT 校验。
+2. service-role 读 `app_settings.pending_corrections`，append 一条，写回。
+3. 同时把"corrected_payload"立刻更新到 `products` 表（admin 直接生效，anchor 仅更新自己创建的；走现有 RLS）。
+
+文件：`supabase/functions/submit-correction/index.ts`
+
+## 四、修改 `recognize-product`
+
+在 `loadKnowledgeContext` 里**额外拼接已审核纠错样本**（其实已审核的就在 official_knowledge 里，所以无需改）。但增加一个**短期热样本**注入：从 `app_settings.recent_corrections`（一个由审核函数维护的最近 10 条快照）拉出来，让最近纠正的内容优先生效，不用等管理员审核。
+
+简化做法：**审核通过后直接进 official_knowledge** —— 不需要任何额外注入逻辑，已经天然走 RAG。所以这一步实际**不需要改**识别函数。
+
+## 五、前端组件
+
+### 5.1 新组件 `RefineDialog`（`src/components/recognition/RefineDialog.tsx`）
+
+- shadcn `Dialog` 弹窗（移动端友好，max-w-lg）。
+- 顶部显示原图 + 当前识别结果摘要（名称/类别/年代）。
+- 中部消息列表（`react-markdown` 渲染）。
+- 底部输入框 + 发送按钮 + "保存并应用"按钮。
+- 流式调用 `refine-recognition`，展示打字效果。
+- 当 AI 返回新 JSON 时，"保存并应用"按钮变亮 → 点击：调 `submit-correction` → 关闭弹窗 → 父组件用新结果替换 `displayResult`。
+
+### 5.2 在 `LiveStreamPanel` 结果区加「跟 AI 纠正」按钮
+
+放在"收藏到学习清单"下方，红橙色提示性强。点击打开 RefineDialog。
+
+### 5.3 关闭自动发布到中古圈
+
+`LiveStreamPanel.handleRecognition` 里删掉自动 `community_posts.insert` 块。
+
+### 5.4 「分享到中古圈」按钮（三处）
+
+抽出 `ShareToCommunityButton`（`src/components/community/ShareToCommunityButton.tsx`）：
+- 输入：product 完整数据 + image_url。
+- 内部状态：检查是否已发过（`community_posts.product_id == product.id && user_id == me`），已发显示"已分享 ✓"。
+- 点击：INSERT `community_posts`。
+
+放置位置：
+1. `LiveStreamPanel` 结果卡操作区（取代之前的自动发布）。
+2. `ProductDetailDialog` 历史详情底部。
+3. `MyLibrary`（个人知识页）每条记录的操作菜单。
+
+## 六、管理员审核 UI
+
+新组件 `CorrectionReviewPanel`（`src/components/admin/CorrectionReviewPanel.tsx`），挂到 `Portal.tsx` 已有的 Tabs 里新增"识别纠错审核"页：
+- 列表显示待审核条目：原图缩略图、原识别 vs 纠正后对比、用户提示、对话历史折叠。
+- 每条两个按钮：[通过审核] / [驳回]。
+- 通过 → 调 `approve-correction` 边缘函数（service role 写 official_knowledge + 移除 pending）。
+- 驳回 → 调 `reject-correction`（仅移除 pending）。
+
+合并到一个边缘函数 `review-correction`：`{ id, action: 'approve'|'reject' }`。
+
+## 七、Memory 更新
+
+- 新增 `mem://features/recognition-correction-loop`：完整的纠错→审核→RAG 飞轮。
+- 更新 `mem://features/community-feed`：取消自动发布，改手动。
 
 ---
 
-## 技术细节
+## 文件清单
 
-**文件改动**：
-- `supabase/functions/recognize-product/index.ts`：换 prompt、删缓存逻辑、加 RAG 注入、根据 `images.length` 选模型。
-- `src/components/dashboard/LiveStreamPanel.tsx`：`compressImage` / `grabFrame` 提高分辨率和质量。
-- `src/components/recognition/CameraCapture.tsx`：同步压缩参数。
-- `src/components/recognition/ProductDetailCard.tsx`：加置信度徽章。
-- `src/types/index.ts`：`RecognitionResult.confidence` 已存在，无需改。
-- `src/components/admin/AISettingsPanel.tsx`：加"识别精度"下拉。
+**新建（前端）：**
+- `src/components/recognition/RefineDialog.tsx`
+- `src/components/community/ShareToCommunityButton.tsx`
+- `src/components/admin/CorrectionReviewPanel.tsx`
 
-**模型选择伪代码**：
-```text
-const presetMode = settings.precision || 'standard'  // economy | standard | high
-const modelMap = {
-  economy:  'google/gemini-2.5-flash-lite',
-  standard: 'google/gemini-2.5-flash',
-  high:     'google/gemini-2.5-pro',
-}
-// 多角度自动升一档（除非用户选了 high）
-const model = images.length > 1 && presetMode === 'standard'
-  ? modelMap.high : modelMap[presetMode]
-```
+**新建（边缘函数）：**
+- `supabase/functions/refine-recognition/index.ts`（流式对话）
+- `supabase/functions/submit-correction/index.ts`（提交待审）
+- `supabase/functions/review-correction/index.ts`（admin 通过/驳回）
 
-**RAG 注入示例**：
-```text
-【已收录的官方知识（识别时优先匹配）】
-- 有田烧青花花鸟纹碗 | 瓷器 | 江户后期 | 日本佐贺
-- 九谷烧赤绘人物盘 | 瓷器 | 明治时期 | 日本石川
-... (最多 30 条)
-若眼前商品与上述某条高度相似，请直接沿用其名称/年代/产地。
-```
+**修改：**
+- `src/components/dashboard/LiveStreamPanel.tsx`：删自动发布；加「跟 AI 纠正」+「分享到中古圈」。
+- `src/components/history/ProductDetailDialog.tsx`：底部加「分享到中古圈」。
+- `src/pages/MyLibrary.tsx`：列表项加分享按钮。
+- `src/pages/Portal.tsx`：Tabs 新增"识别纠错审核"。
 
-**性能影响估算**：
-- 单图 lite → flash：约 +0.8 秒（从 ~1.5s → ~2.3s），仍在 1-3 秒目标内。
-- 多图 pro：约 3-5 秒，符合"愿意等更准"的预期。
-- RAG 注入增加约 500-800 tokens，延迟影响 <0.2 秒。
+**Memory：**
+- 新增 + 更新两条。
 
-**不破坏的东西**：
-- 数据库 schema 不动（`image_hash` 字段保留但不再写入新数据）。
-- 自动发到中古圈、自动入 `products`、收藏、加入知识库等流程全部保留。
-- 自定义 OpenAI 接口配置仍然可用。
+## 性能 / 速度
+- 对话纠正走流式，体感快；不影响主识别速度（1-3 秒目标）。
+- 审核通过后自动进 official_knowledge，下次识别 RAG 自动生效，无需重启或重训。
 
----
-
-## 预期效果
-
-- 瓷器识别准确率显著提升（从经常乱编 → 能正确识别窑口大类，不确定时坦然写"不详"）。
-- 杜绝"一个错的把后面带歪一片"的缓存污染。
-- 官方知识库变成正向资产 —— 录入越多越聪明。
-- 速度从 1-2 秒变 2-3 秒，仍在可接受范围。
-
-确认方案后我开始实现。
+确认方案后我开始落地。

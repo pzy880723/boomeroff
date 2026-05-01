@@ -6,11 +6,13 @@ import { useProductRecognition } from '@/hooks/useProductRecognition';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Award, Star,
+  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Award, Star, MessageSquareWarning,
 } from 'lucide-react';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
+import { RefineDialog } from '@/components/recognition/RefineDialog';
+import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
 
 type CaptureMode = 'single' | 'multi';
 const MAX_MULTI_IMAGES = 5;
@@ -29,6 +31,9 @@ export function LiveStreamPanel() {
   const [savingKnowledge, setSavingKnowledge] = useState(false);
   const [favorited, setFavorited] = useState(false);
   const [savingFav, setSavingFav] = useState(false);
+  const [refineOpen, setRefineOpen] = useState(false);
+  const [overriddenResult, setOverriddenResult] = useState<RecognitionResult | null>(null);
+  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -298,23 +303,12 @@ export function LiveStreamPanel() {
 
       if (error) throw error;
       setCurrentProductId(productData.id);
+      setProductImageUrl(imageUrl);
+      setOverriddenResult(null);
       await updateSession(productData.id, user.id);
 
-      // 自动发布到「中古圈」社区（默认公开）
-      supabase.from('community_posts').insert({
-        user_id: user.id,
-        product_id: productData.id,
-        image_url: imageUrl,
-        name: recognitionResult.name,
-        category: recognitionResult.category,
-        era: recognitionResult.era || null,
-        origin: recognitionResult.origin || null,
-        selling_points: recognitionResult.sellingPoints || [],
-        tips: recognitionResult.tips || null,
-        is_public: true,
-      }).then(({ error: pErr }) => {
-        if (pErr) console.warn('[Community] post insert error:', pErr);
-      });
+      // 不再自动发到中古圈，改为用户在结果卡上手动点「分享到中古圈」按钮
+      // 避免大量错识别污染社区
 
       // 多张图清空缓冲
       setCapturedImages([]);
@@ -496,7 +490,7 @@ export function LiveStreamPanel() {
     }
   };
 
-  const displayResult: RecognitionResult | null = result || (currentProduct ? {
+  const baseResult: RecognitionResult | null = result || (currentProduct ? {
     name: currentProduct.name,
     category: currentProduct.category,
     era: currentProduct.era,
@@ -509,6 +503,7 @@ export function LiveStreamPanel() {
     sellingPoints: currentProduct.selling_points || [],
     tips: currentProduct.tips,
   } : null);
+  const displayResult: RecognitionResult | null = overriddenResult || baseResult;
 
   // 进入已识别商品时，同步「加入知识库」与「收藏」状态，避免重复入库
   useEffect(() => {
@@ -878,6 +873,31 @@ export function LiveStreamPanel() {
                     {favorited ? '已加入我的学习清单' : '收藏到我的学习清单'}
                   </Button>
 
+                  {/* 跟 AI 纠正识别 */}
+                  <Button
+                    onClick={() => setRefineOpen(true)}
+                    variant="outline"
+                    size="lg"
+                    className="w-full h-11 rounded-full gap-2 border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                  >
+                    <MessageSquareWarning className="w-4 h-4" />
+                    识别不对？跟 AI 纠正
+                  </Button>
+
+                  {/* 分享到中古圈 */}
+                  <ShareToCommunityButton
+                    productId={currentProductId}
+                    name={displayResult.name}
+                    category={displayResult.category}
+                    era={displayResult.era}
+                    origin={displayResult.origin}
+                    imageUrl={productImageUrl}
+                    sellingPoints={displayResult.sellingPoints || []}
+                    tips={displayResult.tips}
+                    size="lg"
+                    className="w-full h-11 rounded-full"
+                  />
+
                   {/* 引导提示 */}
                   <p className="text-[11px] text-muted-foreground text-center px-2 leading-relaxed">
                     收藏只有自己看得到 · {isAdmin ? '收录后所有同事都能学到' : '申请收录会让所有同事都能学到'}
@@ -960,6 +980,17 @@ export function LiveStreamPanel() {
           toast({ title: '商品信息已更新' });
         }}
       />
+
+      {displayResult && (
+        <RefineDialog
+          open={refineOpen}
+          onOpenChange={setRefineOpen}
+          imageUrl={productImageUrl}
+          productId={currentProductId}
+          current={displayResult}
+          onApplied={(next) => setOverriddenResult(next)}
+        />
+      )}
     </div>
   );
 }

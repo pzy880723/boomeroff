@@ -14,6 +14,7 @@ import {
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import type { Json } from '@/integrations/supabase/types';
 import { ProductEditDialog } from './ProductEditDialog';
+import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
 
 interface Product {
   id: string;
@@ -164,6 +165,21 @@ export function ProductDetailDialog({
                 </CardContent>
               </Card>
             )}
+
+            <div className="pt-2 border-t border-border/40">
+              <ShareToCommunityButton
+                productId={product.id}
+                name={product.name}
+                category={product.category}
+                era={product.era}
+                origin={product.origin}
+                imageUrl={product.image_url}
+                sellingPoints={sellingPoints}
+                tips={product.tips}
+                size="default"
+                className="w-full rounded-full"
+              />
+            </div>
 
             {isAdmin && (
               <div className="flex justify-end gap-2 pt-4 border-t">
