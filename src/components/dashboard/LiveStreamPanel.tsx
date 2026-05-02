@@ -258,7 +258,7 @@ export function LiveStreamPanel() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleRecognition = async (imageList: string[]) => {
+  const handleRecognition = async (imageList: string[], opts: { forceRefresh?: boolean } = {}) => {
     clearResult();
     setCurrentProductId(null);
     setRecognitionTime(null);
@@ -274,7 +274,7 @@ export function LiveStreamPanel() {
 
     const [imageUrl, recognitionResult] = await Promise.all([
       uploadImage(imageList[0], user.id),
-      recognizeProduct(imageList.length > 1 ? imageList : imageList[0]),
+      recognizeProduct(imageList.length > 1 ? imageList : imageList[0], { forceRefresh: opts.forceRefresh }),
     ]);
 
     if (timerRef.current) {
@@ -292,8 +292,31 @@ export function LiveStreamPanel() {
     }
 
     try {
-      if (recognitionResult.fromCache) {
-        toast({ title: '知识库命中', description: `快速识别: ${recognitionResult.name}` });
+      // ★ 命中缓存且带回 cachedProductId → 直接复用历史 product 行，不再 INSERT
+      if (recognitionResult.fromCache && recognitionResult.cachedProductId) {
+        const sourceLabel = recognitionResult.cacheSource === 'official'
+          ? '官方知识库'
+          : recognitionResult.cacheSource === 'history'
+            ? '历史识别'
+            : '同款照片';
+        toast({ title: `已复用${sourceLabel}`, description: recognitionResult.name });
+
+        setCurrentProductId(recognitionResult.cachedProductId);
+        // 拉历史 product 的封面图（有真实 URL）
+        const { data: prodRow } = await supabase
+          .from('products')
+          .select('image_url')
+          .eq('id', recognitionResult.cachedProductId)
+          .maybeSingle();
+        setProductImageUrl(prodRow?.image_url || imageUrl || null);
+        setOverriddenResult(null);
+        await updateSession(recognitionResult.cachedProductId, user.id);
+        setCapturedImages([]);
+        setFavorited(false);
+        setTimeout(() => {
+          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+        return;
       }
 
       const { data: productData, error } = await supabase
@@ -334,13 +357,11 @@ export function LiveStreamPanel() {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
 
-      if (!recognitionResult.fromCache) {
-        const { dismiss } = toast({
-          title: '识别成功',
-          description: recognitionResult.name,
-        });
-        setTimeout(() => dismiss(), 800);
-      }
+      const { dismiss } = toast({
+        title: '识别成功',
+        description: recognitionResult.name,
+      });
+      setTimeout(() => dismiss(), 800);
     } catch (error) {
       console.error('Error saving product:', error);
       toast({ title: '保存失败', description: '识别成功但保存出错', variant: 'destructive' });
