@@ -625,14 +625,28 @@ ${modelCfg.enableWebSearch ? `
     const data = await response.json();
     const message = data.choices?.[0]?.message;
 
+    // 联网搜索使用情况日志（不暴露给前端）
+    const grounding = message?.grounding_metadata
+      ?? data.choices?.[0]?.grounding_metadata
+      ?? message?.groundingMetadata;
+    let usedWebSearch = false;
+    if (grounding) {
+      usedWebSearch = true;
+      const queries = grounding.web_search_queries
+        ?? grounding.webSearchQueries
+        ?? [];
+      console.log('[Recognition] 🌐 grounded via google_search, queries:', JSON.stringify(queries).slice(0, 200));
+    }
+
     let result: any = null;
 
-    // 优先读 tool_calls（结构化输出，最稳）
-    const toolCall = message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
-      result = safeParseJSON(toolCall.function.arguments);
+    // 优先读 submit_recognition tool_call（结构化输出，最稳）
+    const toolCalls = message?.tool_calls || [];
+    const submitCall = toolCalls.find((tc: any) => tc?.function?.name === 'submit_recognition') || toolCalls[0];
+    if (submitCall?.function?.arguments) {
+      result = safeParseJSON(submitCall.function.arguments);
       if (!result) {
-        console.error('[Recognition] tool_call args parse failed:', toolCall.function.arguments);
+        console.error('[Recognition] tool_call args parse failed:', submitCall.function.arguments);
       }
     }
 
