@@ -12,6 +12,12 @@ interface ModelConfig {
   model: string;
   jsonMode: boolean;
   supportsTools: boolean;
+  enableWebSearch: boolean;
+}
+
+// 是否是支持 Google Search 接地的 Gemini 模型
+function isGeminiModel(model: string): boolean {
+  return model.startsWith('google/gemini');
 }
 
 type Precision = 'economy' | 'standard' | 'high';
