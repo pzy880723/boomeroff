@@ -739,15 +739,56 @@ ${modelCfg.enableWebSearch ? `
 请调用 submit_recognition 工具提交结果。所有字段必须遵守上述硬性输出规则。`;
 
 
-    let response = await callAI(imageList, recognitionPrompt, modelCfg);
+    // 检查最近是否记录到「豆包联网未开通」，若是直接跳过 Responses 路径，避免每次都等 30 秒
+    let webSearchDisabledReason: string | null = null;
+    if (modelCfg.apiStyle === 'responses') {
+      try {
+        const { data: flagRow } = await adminClient
+          .from('app_settings').select('value').eq('key', 'doubao_web_search_status').maybeSingle();
+        const flag = flagRow?.value;
+        if (flag?.disabled === true) {
+          webSearchDisabledReason = flag.reason || '豆包联网搜索未开通';
+          console.warn('[Recognition] doubao web_search marked disabled, skipping Responses API:', webSearchDisabledReason);
+        }
+      } catch (_) { /* noop */ }
+    }
+
+    let activeCfg: ModelConfig = modelCfg;
+    if (webSearchDisabledReason && modelCfg.apiStyle === 'responses') {
+      activeCfg = {
+        ...modelCfg,
+        url: DOUBAO_CHAT_URL,
+        apiStyle: 'chat',
+        searchKind: 'none',
+        enableWebSearch: false,
+        jsonMode: true,
+      };
+    }
+
+    let response = await callAIWithTimeout(imageList, recognitionPrompt, activeCfg, 25000);
     let aiTime = Date.now() - startTime;
-    let activeCfg = modelCfg;
-    console.log('[Recognition] model:', modelCfg.model, 'apiStyle:', modelCfg.apiStyle, 'searchKind:', modelCfg.searchKind, 'multi:', multiImage, 'AI time:', aiTime, 'ms');
+    console.log('[Recognition] model:', activeCfg.model, 'apiStyle:', activeCfg.apiStyle, 'searchKind:', activeCfg.searchKind, 'multi:', multiImage, 'AI time:', aiTime, 'ms');
 
     // 豆包 Responses API 失败 → 自动降级到 chat/completions（不联网，但保住识别）
-    if (!response.ok && modelCfg.apiStyle === 'responses') {
+    if (!response.ok && activeCfg.apiStyle === 'responses') {
       const errText = await response.text();
       console.warn('[Recognition] Doubao Responses failed, fallback to chat/completions:', response.status, errText.slice(0, 300));
+
+      // 识别「web_search 插件未开通」类错误，落库以便后续直接跳过 Responses 路径
+      const looksLikeToolNotOpen = response.status === 404
+        && /ToolNotOpen|web[_ ]?search|activate.*web search/i.test(errText);
+      if (looksLikeToolNotOpen) {
+        webSearchDisabledReason = '豆包账号未开通联网搜索插件，已自动改用普通识别';
+        try {
+          await adminClient.from('app_settings').upsert({
+            key: 'doubao_web_search_status',
+            value: { disabled: true, reason: webSearchDisabledReason, detected_at: new Date().toISOString() },
+          });
+        } catch (e) { console.warn('[Recognition] failed to persist web_search_status:', e); }
+      } else {
+        webSearchDisabledReason = `豆包联网调用失败（${response.status}），已自动改用普通识别`;
+      }
+
       const fallbackCfg: ModelConfig = {
         ...modelCfg,
         url: DOUBAO_CHAT_URL,
@@ -756,7 +797,7 @@ ${modelCfg.enableWebSearch ? `
         enableWebSearch: false,
         jsonMode: true,
       };
-      response = await callAI(imageList, recognitionPrompt, fallbackCfg);
+      response = await callAIWithTimeout(imageList, recognitionPrompt, fallbackCfg, 25000);
       activeCfg = fallbackCfg;
       aiTime = Date.now() - startTime;
     }
