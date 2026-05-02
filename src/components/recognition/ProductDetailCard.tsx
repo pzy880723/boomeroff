@@ -124,13 +124,20 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
         const badge = pipelineBadge(result.__pipeline);
         if (!badge) return null;
         return (
-          <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${badge.cls}`}>
-            <span>{badge.text}</span>
-            {typeof result.__pipeline?.aiTimeMs === 'number' && (
-              <span className="opacity-70">· {(result.__pipeline.aiTimeMs / 1000).toFixed(1)}s</span>
-            )}
-            {result.__pipeline?.degraded && (
-              <span className="opacity-70">· 已降级</span>
+          <div className="space-y-1.5">
+            <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${badge.cls}`}>
+              <span>{badge.text}</span>
+              {typeof result.__pipeline?.aiTimeMs === 'number' && (
+                <span className="opacity-70">· {(result.__pipeline.aiTimeMs / 1000).toFixed(1)}s</span>
+              )}
+              {result.__pipeline?.degraded && (
+                <span className="opacity-70">· 已降级</span>
+              )}
+            </div>
+            {result.__pipeline?.degradedReason && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
+                ⚠️ {result.__pipeline.degradedReason}
+              </p>
             )}
           </div>
         );
