@@ -148,9 +148,11 @@ export function CorrectionReviewPanel() {
                     {CATEGORY_LABELS[c.category as keyof typeof CATEGORY_LABELS] || c.category}
                   </Badge>
                 )}
-                {Array.isArray(c.sellingPoints) && c.sellingPoints.slice(0, 3).map((s: string, i: number) => (
-                  <Badge key={i} variant="outline" className="text-[10px]">{s}</Badge>
-                ))}
+                {Array.isArray(c.sellingPoints) && c.sellingPoints.slice(0, 3).map((s: any, i: number) => {
+                  const text = typeof s === 'string' ? s : (s?.text ?? '');
+                  if (!text) return null;
+                  return <Badge key={i} variant="outline" className="text-[10px]">{text}</Badge>;
+                })}
               </div>
 
               {it.user_hint && (
