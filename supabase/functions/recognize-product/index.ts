@@ -17,6 +17,8 @@ interface ModelConfig {
   apiStyle: 'chat' | 'responses';
   // 联网搜索类型：gemini 走 google_search 接地；doubao 走火山方舟 web_search 内置插件
   searchKind: 'none' | 'google_search' | 'doubao_web_search';
+  // 后台保存的 provider 名称（用于 pipeline 标记 + quick_classify 一致性）
+  provider: 'lovable' | 'doubao' | 'custom';
 }
 
 // 是否是支持 Google Search 接地的 Gemini 模型
