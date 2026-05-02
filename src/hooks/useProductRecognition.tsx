@@ -2,35 +2,46 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { computeImageHash } from '@/lib/imageHash';
+
+interface RecognizeOptions {
+  forceRefresh?: boolean;
+}
 
 export function useProductRecognition() {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [result, setResult] = useState<RecognitionResult | null>(null);
   const { toast } = useToast();
 
-  const recognizeProduct = async (input: string | string[]) => {
+  const recognizeProduct = async (
+    input: string | string[],
+    options: RecognizeOptions = {},
+  ) => {
     setIsRecognizing(true);
     setResult(null);
 
     try {
-      const body = Array.isArray(input)
+      const firstImage = Array.isArray(input) ? input[0] : input;
+      // 前端先算 pHash（多图取第一张），失败不影响主流程
+      const imageHash = firstImage ? await computeImageHash(firstImage) : null;
+
+      const body: Record<string, unknown> = Array.isArray(input)
         ? { imageBase64: input[0], images: input }
         : { imageBase64: input };
-      const { data, error } = await supabase.functions.invoke('recognize-product', {
-        body,
-      });
+      if (imageHash) body.imageHash = imageHash;
+      if (options.forceRefresh) body.forceRefresh = true;
+
+      const { data, error } = await supabase.functions.invoke('recognize-product', { body });
 
       if (error) throw new Error(error.message);
       if (data.error) throw new Error(data.error);
 
       const validCategories: ProductCategory[] = [
         'porcelain', 'incense', 'stationery', 'lacquerware',
-        'bronze', 'woodcraft', 'textile', 'jewelry', 'painting', 'other'
+        'bronze', 'woodcraft', 'textile', 'jewelry', 'painting', 'other',
       ];
-
       const category = validCategories.includes(data.category) ? data.category : 'other';
 
-      // 卖点：兼容字符串 / 带标签对象
       const sellingPoints: Array<string | { tag: string; text: string }> = Array.isArray(data.sellingPoints)
         ? data.sellingPoints.filter((s: unknown) => {
             if (typeof s === 'string') return s.trim();
@@ -38,7 +49,6 @@ export function useProductRecognition() {
           })
         : [];
 
-      // pitch（开场+亮点双句模板）
       const pitch = (data.pitch && typeof data.pitch === 'object')
         ? {
             opener: typeof data.pitch.opener === 'string' ? data.pitch.opener : '',
@@ -46,7 +56,6 @@ export function useProductRecognition() {
           }
         : undefined;
 
-      // tips：可能是对象（新）或字符串（旧）
       let tips: RecognitionResult['tips'];
       if (data.tips && typeof data.tips === 'object') {
         tips = {
@@ -56,6 +65,14 @@ export function useProductRecognition() {
       } else if (typeof data.tips === 'string') {
         tips = data.tips;
       }
+
+      const recentPrice = (data.recentPrice && typeof data.recentPrice === 'object' && typeof data.recentPrice.price === 'number')
+        ? {
+            price: data.recentPrice.price,
+            price_type: typeof data.recentPrice.price_type === 'string' ? data.recentPrice.price_type : null,
+            recorded_at: typeof data.recentPrice.recorded_at === 'string' ? data.recentPrice.recorded_at : null,
+          }
+        : undefined;
 
       const recognitionResult: RecognitionResult = {
         name: data.name || '未知商品',
@@ -71,8 +88,12 @@ export function useProductRecognition() {
         pitch,
         tips,
         confidence: data.confidence || 0.85,
-        imageHash: data.imageHash,
-        fromCache: data.fromCache,
+        imageHash: data.imageHash || imageHash || undefined,
+        fromCache: !!data.fromCache,
+        cacheSource: typeof data.cacheSource === 'string' ? data.cacheSource : undefined,
+        cachedAt: typeof data.cachedAt === 'string' ? data.cachedAt : undefined,
+        cachedProductId: typeof data.cachedProductId === 'string' ? data.cachedProductId : undefined,
+        recentPrice,
       };
 
       setResult(recognitionResult);
