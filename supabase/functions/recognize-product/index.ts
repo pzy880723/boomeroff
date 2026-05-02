@@ -675,10 +675,11 @@ ${modelCfg.enableWebSearch ? `
     if (!result.name) result.name = '未知商品';
     if (typeof result.confidence !== 'number') result.confidence = 0.7;
     result.fromCache = false;
+    result.usedWebSearch = usedWebSearch;
     if (imageHash) result.imageHash = imageHash;
 
     const totalTime = Date.now() - startTime;
-    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'Total:', totalTime, 'ms');
+    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'Total:', totalTime, 'ms');
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
