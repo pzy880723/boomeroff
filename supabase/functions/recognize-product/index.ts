@@ -613,6 +613,7 @@ serve(async (req) => {
       if (hit) {
         const recentPrice = await loadRecentPrice(adminClient, hit.id);
         const cached = productRowToResult(hit);
+        console.log('[Recognition] cache hit (hash) → skip AI');
         return new Response(JSON.stringify({
           ...cached,
           fromCache: true,
@@ -621,6 +622,12 @@ serve(async (req) => {
           cachedProductId: hit.id,
           imageHash,
           recentPrice,
+          __pipeline: {
+            source: 'hash_cache',
+            cacheSource: 'hash',
+            webSearchEnabled: false,
+            webSearchUsed: false,
+          },
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
@@ -630,6 +637,7 @@ serve(async (req) => {
       resolveModelConfig(adminClient, multiImage),
       loadKnowledgeContext(adminClient),
     ]);
+    console.log('[Recognition] resolved provider=', modelCfg.provider, 'model=', modelCfg.model, 'apiStyle=', modelCfg.apiStyle, 'webSearch=', modelCfg.enableWebSearch);
 
     if (!modelCfg.apiKey) {
       return new Response(JSON.stringify({ error: 'AI 服务未配置，请到后台「AI 模型」设置' }), {
@@ -640,13 +648,14 @@ serve(async (req) => {
     // ====== ② 名称+类目模糊命中：用 economy 模型先做 1 次轻量分类 ======
     if (!forceRefresh) {
       try {
-        const quick = await tryQuickClassify(imageList, modelCfg);
+        const quick = await tryQuickClassify(imageList, modelCfg, modelCfg.provider);
         if (quick?.name && quick?.category) {
           const nameMatch = await tryNameMatch(adminClient, quick.name, quick.category);
           if (nameMatch) {
             const recentPrice = nameMatch.product_id
               ? await loadRecentPrice(adminClient, nameMatch.product_id)
               : null;
+            console.log('[Recognition] cache hit (name)', nameMatch.source, '→ skip main AI');
             return new Response(JSON.stringify({
               ...nameMatch.result,
               fromCache: true,
@@ -655,6 +664,13 @@ serve(async (req) => {
               cachedProductId: nameMatch.product_id,
               imageHash,
               recentPrice,
+              __pipeline: {
+                source: 'name_cache',
+                cacheSource: nameMatch.source,
+                quickClassifyProvider: modelCfg.provider,
+                webSearchEnabled: modelCfg.enableWebSearch,
+                webSearchUsed: false,
+              },
             }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
           }
         }
