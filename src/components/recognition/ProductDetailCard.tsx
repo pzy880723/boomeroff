@@ -147,6 +147,15 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
                       : `低 ${Math.round(result.confidence * 100)}% · 建议补拍`}
                 </Badge>
               )}
+              {priceText && (
+                <Badge
+                  variant="outline"
+                  className="rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 gap-1"
+                >
+                  <Coins className="w-3 h-3" />
+                  最近成交 {priceText}{priceDate ? ` · ${priceDate}` : ''}
+                </Badge>
+              )}
             </div>
           </div>
 
