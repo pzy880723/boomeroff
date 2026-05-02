@@ -858,6 +858,13 @@ ${modelCfg.enableWebSearch ? `
       usedWebSearch = parsed.usedWebSearch;
       if (usedWebSearch) {
         console.log('[Recognition] 🌐 grounded via Doubao web_search, tool_usage:', data?.usage?.tool_usage ?? '?');
+        // 真的联网成功 → 清掉之前可能存在的「未开通」标记
+        try {
+          await adminClient.from('app_settings').upsert({
+            key: 'doubao_web_search_status',
+            value: { disabled: false, recovered_at: new Date().toISOString() },
+          });
+        } catch (_) { /* noop */ }
       }
       if (!result) {
         console.error('[Recognition] Doubao Responses parse failed. hint:', parsed.rawHint);
