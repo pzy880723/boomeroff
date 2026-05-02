@@ -11,7 +11,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
-import { Loader2, Save, FlaskConical, Sparkles, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Save, FlaskConical, Sparkles, AlertCircle, CheckCircle2, Eye, EyeOff, Globe } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
