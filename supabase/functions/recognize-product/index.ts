@@ -440,12 +440,21 @@ const QUICK_TOOL = {
   },
 };
 
-async function tryQuickClassify(images: string[], baseCfg: ModelConfig): Promise<{ name: string; category: string; era?: string } | null> {
+async function tryQuickClassify(images: string[], baseCfg: ModelConfig, provider: 'lovable' | 'doubao' | 'custom'): Promise<{ name: string; category: string; era?: string } | null> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
-  // 优先用 lovable economy 模型，省钱够用
-  const cfg: ModelConfig = lovableKey
-    ? { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' }
-    : baseCfg;
+  const doubaoKey = Deno.env.get('DOUBAO_API_KEY') || '';
+  // quick_classify 跟随后台 provider 选择，避免"我选了豆包但缓存判定却用 Lovable"的违和感
+  let cfg: ModelConfig;
+  if (provider === 'doubao' && doubaoKey) {
+    cfg = { url: DOUBAO_CHAT_URL, apiKey: doubaoKey, model: 'doubao-1-5-vision-lite-32k-250115', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' };
+  } else if (provider === 'custom') {
+    // 自定义接口未必兼容 quick_classify，跳过
+    return null;
+  } else if (lovableKey) {
+    cfg = { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' };
+  } else {
+    cfg = baseCfg;
+  }
   const imageUrls = images.slice(0, 1).map((img) =>
     img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
   );
