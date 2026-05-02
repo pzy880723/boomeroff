@@ -20,9 +20,14 @@ export class ErrorBoundary extends Component<Props, State> {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: unknown) {
+  componentDidCatch(error: Error, info: { componentStack?: string }) {
     // eslint-disable-next-line no-console
-    console.error(`[ErrorBoundary${this.props.scope ? `:${this.props.scope}` : ''}]`, error, info);
+    console.error(
+      `[ErrorBoundary${this.props.scope ? `:${this.props.scope}` : ''}]`,
+      error,
+      '\ncomponentStack:',
+      info?.componentStack || '(no stack)',
+    );
   }
 
   handleReload = () => {
