@@ -363,7 +363,7 @@ async function tryQuickClassify(images: string[], baseCfg: ModelConfig): Promise
   const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
   // 优先用 lovable economy 模型，省钱够用
   const cfg: ModelConfig = lovableKey
-    ? { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true }
+    ? { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' }
     : baseCfg;
   const imageUrls = images.slice(0, 1).map((img) =>
     img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
