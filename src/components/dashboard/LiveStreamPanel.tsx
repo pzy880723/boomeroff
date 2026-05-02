@@ -851,9 +851,26 @@ export function LiveStreamPanel() {
                   <Camera className="w-5 h-5" />
                   识别下一件商品
                 </Button>
+                {/* 命中缓存时：允许强制重跑 AI */}
+                {displayResult.fromCache && capturedImage && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={isRecognizing}
+                    onClick={() => {
+                      const list = capturedImages.length > 0 ? capturedImages : [capturedImage];
+                      handleRecognition(list, { forceRefresh: true });
+                    }}
+                    className="w-full mt-2 h-9 gap-1.5 rounded-full text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    结果不准？重新识别这张图
+                  </Button>
+                )}
                 {recognitionTime && (
                   <p className="text-center text-xs text-muted-foreground mt-2 tabular-nums">
                     本次识别耗时 <span className="font-medium text-foreground">{(recognitionTime / 1000).toFixed(2)}s</span>
+                    {displayResult.fromCache && <span className="ml-1">· 来自缓存</span>}
                   </p>
                 )}
               </div>
