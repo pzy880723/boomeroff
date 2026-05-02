@@ -112,6 +112,18 @@ export interface RecognitionResult {
     price_type: string | null;
     recorded_at: string | null;
   };
+  // 路径元数据：本次识别实际走了哪条 AI 链路（缓存/豆包/Gemini/自定义）
+  __pipeline?: {
+    source: 'hash_cache' | 'name_cache' | 'doubao_responses' | 'doubao_chat' | 'lovable_gemini' | 'custom';
+    provider?: 'lovable' | 'doubao' | 'custom';
+    model?: string;
+    cacheSource?: string;
+    quickClassifyProvider?: 'lovable' | 'doubao' | 'custom';
+    webSearchEnabled?: boolean;
+    webSearchUsed?: boolean;
+    aiTimeMs?: number;
+    degraded?: boolean;
+  };
 }
 
 export interface DailyKnowledge {
