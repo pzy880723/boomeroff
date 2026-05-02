@@ -694,7 +694,7 @@ serve(async (req) => {
 ${knowledgeContext}
 ${modelCfg.enableWebSearch ? `
 【联网搜索规则·必须遵守】
-- 你可以调用 google_search 工具来核实事实。**仅在以下情况调用**：
+- 你可以调用 ${modelCfg.searchKind === 'doubao_web_search' ? 'web_search' : 'google_search'} 工具来核实事实。**仅在以下情况调用**：
   · 看到外文品牌名 / 型号编号（SONY WM-XXX、Nikon EM 等）
   · 看到不熟悉的底款铭文 / 作家落款 / 窑口名
   · 看到不确定的动漫 IP / 限定标识 / 联名 logo
