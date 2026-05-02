@@ -126,6 +126,7 @@ export function AISettingsPanel() {
         provider: settings.provider,
         model: settings.model,
         precision: settings.precision,
+        enableWebSearch: settings.enableWebSearch,
         custom: {
           baseUrl: settings.custom.baseUrl.trim(),
           apiKey: finalKey,
