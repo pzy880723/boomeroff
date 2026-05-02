@@ -88,6 +88,7 @@ export function AISettingsPanel() {
         model: v.model || DEFAULT.model,
         precision: (['economy', 'standard', 'high'] as Precision[]).includes(v.precision as Precision)
           ? (v.precision as Precision) : 'standard',
+        enableWebSearch: typeof (v as any).enableWebSearch === 'boolean' ? (v as any).enableWebSearch : true,
         custom: {
           baseUrl: v.custom?.baseUrl || '',
           apiKey: '', // 不回填明文
