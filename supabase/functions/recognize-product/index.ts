@@ -853,8 +853,24 @@ ${modelCfg.enableWebSearch ? `
     result.usedWebSearch = usedWebSearch;
     if (imageHash) result.imageHash = imageHash;
 
+    // 路径元数据：让前端能一眼看到本次到底用了哪条 AI 链路
+    const pipelineSource =
+      activeCfg.apiStyle === 'responses' ? 'doubao_responses'
+      : activeCfg.provider === 'doubao' ? 'doubao_chat'
+      : activeCfg.provider === 'custom' ? 'custom'
+      : 'lovable_gemini';
+    result.__pipeline = {
+      source: pipelineSource,
+      provider: activeCfg.provider,
+      model: activeCfg.model,
+      webSearchEnabled: modelCfg.enableWebSearch,
+      webSearchUsed: usedWebSearch,
+      aiTimeMs: aiTime,
+      degraded: activeCfg !== modelCfg, // 是否走了降级路径
+    };
+
     const totalTime = Date.now() - startTime;
-    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'Total:', totalTime, 'ms');
+    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'pipeline:', pipelineSource, 'Total:', totalTime, 'ms');
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
