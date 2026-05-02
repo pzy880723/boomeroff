@@ -123,6 +123,7 @@ export interface RecognitionResult {
     webSearchUsed?: boolean;
     aiTimeMs?: number;
     degraded?: boolean;
+    degradedReason?: string;
   };
 }
 

@@ -1,93 +1,43 @@
-## 现象与根因（先讲清楚，让你不再怀疑后台是摆设）
+我查到卡住点了：不是前端按钮没生效，也不是后台选择是摆设。当前数据库里确实保存的是「豆包 + 联网搜索」：`provider=doubao`、`enableWebSearch=true`、`model=doubao-seed-1-6-250615`。
 
-### 后台选择**没失效**，数据库里就是 `provider=doubao + enableWebSearch=true`
-（直接查了 `app_settings.ai_model` 确认）
-
-### 但你感觉不到豆包，是因为**两层"捷径"在豆包前面就把识别接走了**：
+真正卡住在后端识别函数调用豆包联网接口时：
 
 ```text
-拍照
- ├─ ① 图片哈希命中（同一张照片以前识别过） ──→ 直接返回缓存，不调 AI
- ├─ ② quick_classify（用 Lovable Gemini-flash-lite 做 1 秒轻分类）
- │      └─ 名字+类目命中历史/官方库 ──→ 返回缓存，不调豆包
- └─ ③ 都没命中 ──→ 这时才真正走"豆包 + Responses API + web_search"
+Doubao Responses failed: 404 ToolNotOpen
+Your account has not activated web search.
 ```
 
-最近那次识别（edge log 显示 200、1939ms）就是**走了 ② 命中缓存**，从头到尾没调豆包，也就更没联网搜索。所以你的"豆包+联网"配置根本没机会生效。
+也就是说，豆包普通识别接口可用，但这个豆包账号/火山方舟侧还没有开通 `web_search` 插件权限。当前代码会先等豆包联网接口超时/失败约 31 秒，再降级到普通豆包识别，导致用户看到“AI 识别中”像卡住；降级后还返回了“未知商品”，所以体验就是无法识别。
 
-### 至于"卡住"那次：
-edge function 日志里**完全没有那次请求的痕迹**，说明请求根本没到达函数（preview 网络抖动/连接中断）。不是函数崩。重新拍一张就好。但下面的修复会让"卡住"几乎不可能再发生。
+修复计划：
 
----
+1. 让“豆包联网未开通”快速失败并自动降级
+   - 在 `recognize-product` 后端函数里识别 `ToolNotOpen`、`web_search` 未开通、404 插件错误。
+   - 不再让用户等几十秒；发现该错误后立即切到豆包普通视觉识别。
+   - 返回 `__pipeline.degradedReason = '豆包联网搜索未开通，已改用普通识别'`，前端能明确显示原因。
 
-## 方案：让后台选择**真的看得见、按得动**
+2. 给豆包联网调用加超时保护
+   - 对豆包 Responses API 增加较短超时，例如 8-10 秒。
+   - 超时后自动降级到普通豆包识别，避免无限“识别中”。
+   - 普通豆包识别也加合理超时，最终失败时给明确错误。
 
-### 1. 在结果里返回真实使用的"路径标签"（后端）
+3. 在识别结果卡上显示真实路径
+   - 如果命中降级，结果卡显示类似：`豆包普通识别 · 联网未开通`。
+   - 如果真正联网成功，显示：`豆包联网核验`。
+   - 如果缓存/名称命中，也继续显示当前已有路径，避免误以为每次都跑了联网。
 
-`supabase/functions/recognize-product/index.ts` 给每条返回都加一个 `__pipeline` 字段：
+4. 在 `/portal` 当前生效配置里增加健康提示
+   - 当选择「豆包 + 联网搜索」时，明确提示：需要火山方舟账号已开通 web_search 插件，否则会自动降级普通识别。
+   - 增加“测试当前配置”按钮的错误解释：如果返回 `ToolNotOpen`，提示不是本应用没调用，而是账号侧未开通联网搜索。
 
-```ts
-__pipeline: {
-  source: 'hash_cache' | 'name_cache' | 'doubao_responses' | 'doubao_chat' | 'lovable_gemini' | 'custom',
-  model: 'doubao-seed-1-6-250615' | 'google/gemini-2.5-flash' | ...,
-  webSearchEnabled: boolean,    // 配置是否打开
-  webSearchUsed: boolean,       // 本次实际是否触发了搜索
-  cacheSource?: 'official' | 'history' | 'hash',
-  aiTimeMs?: number,
-}
-```
+5. 保留后台选择功能的有效性
+   - 后台选择仍然决定主识别模型：豆包就走豆包。
+   - 只是“联网搜索”这个能力依赖豆包账号插件权限；未开通时不能假装联网成功，必须清晰告知并降级。
 
-这样前端随时能看到"这一次到底用了谁"。
+涉及文件：
+- `supabase/functions/recognize-product/index.ts`
+- `src/components/recognition/ProductDetailCard.tsx`
+- `src/components/admin/AISettingsPanel.tsx`
+- 可能补充 `src/types/index.ts` 的 pipeline 元数据字段
 
-### 2. 在识别结果卡片上显示一个"路径徽章"（前端）
-
-`src/components/recognition/ProductDetailCard.tsx` 顶部加一行小徽章：
-
-- 缓存命中 → 灰色：「📦 命中缓存 · 未调用 AI」
-- 豆包联网生效 → 绿色：「🌐 豆包 · 已联网核实」
-- 豆包未联网 → 蓝色：「⚡ 豆包 · 仅模型」
-- Gemini → 紫色：「✨ Gemini 2.5 Flash」
-
-让你**一眼就能验证**后台切换有没有真的生效。
-
-### 3. 在 /portal 加一个"绕过缓存测试"按钮（前端）
-
-`src/components/admin/AISettingsPanel.tsx` 底部新增：
-
-- **「立即用当前配置测试一次」按钮** —— 上传一张测试图，请求带 `forceRefresh=true` 跳过两层缓存，直接走豆包+联网，弹出 toast 显示路径徽章+耗时+是否联网。
-- 这样不用拍真商品，就能验证"豆包+联网"是否真的可用。
-
-### 4. 修复"被缓存抢跑"的体验（后端）
-
-`recognize-product/index.ts` 的 `tryQuickClassify` 现在永远用 Lovable Gemini，即使后台选了豆包。改成：
-
-- 后台选豆包 → quick_classify 也走豆包（用最便宜的 `doubao-1-5-vision-lite`），这样后台配置在缓存判定阶段也是一致的。
-- 后台选 custom → 没有 quick 模式，跳过 quick 直接走主识别（custom 接口可能不支持 quick）。
-- 这条不影响速度（lite 模型同样 1 秒级），但能让"我后台选了豆包"真的从头到尾贯彻。
-
-### 5. 顺手修两件已发现的小事
-
-- **修 React 崩溃**：`src/pages/OfficialLibrary.tsx:372`、`src/pages/MyLibrary.tsx:419`、`src/components/admin/CorrectionReviewPanel.tsx:151` 三处直接把 `selling_points` 当 `string[]` 渲染，遇到新格式 `[{tag,text}]` 必崩。统一改用现有的 `normalizeSellingPoints()`。
-- **加入口日志**：edge function try{} 入口加 `console.log('[Recognition] start provider=...', ...)`，下次卡住能立刻定位是请求挂还是函数挂。
-
----
-
-## 受影响文件
-
-- `supabase/functions/recognize-product/index.ts` — 加 `__pipeline` 元数据；quick_classify 跟随后台 provider；入口日志
-- `src/types/index.ts` — `RecognitionResult` 加 `__pipeline?` 字段
-- `src/components/recognition/ProductDetailCard.tsx` — 渲染路径徽章
-- `src/components/admin/AISettingsPanel.tsx` — 加"立即测试"按钮（拉一张内置测试图，强制 forceRefresh）
-- `src/pages/OfficialLibrary.tsx`、`src/pages/MyLibrary.tsx`、`src/components/admin/CorrectionReviewPanel.tsx` — 修崩溃
-
-不动 DB schema，不动 secrets。
-
----
-
-## 用户验证
-
-1. 进 `/portal` → 当前已是"豆包+联网开"，点"立即用当前配置测试一次" → toast 显示「豆包 Responses · 联网已触发 · 4.2 秒」
-2. 拍一件**全新没拍过**的冷门外文品牌 → 结果卡顶部出现绿色「🌐 豆包 · 已联网核实」
-3. 拍同一张图第二次 → 结果卡顶部变灰色「📦 命中缓存」（这是好事，省钱省时间，但你能一眼看见）
-4. 切回 Lovable AI 保存 → 再拍一件全新商品 → 徽章变紫色「✨ Gemini 2.5 Flash」
-5. 打开"中古圈"或个人/官方知识库详情，原来必崩的页面正常显示带标签的卖点
+完成后我会再查后端日志，确认失败点不再长时间卡在豆包联网接口，并且前端能显示到底是“联网成功”还是“因未开通联网而降级”。

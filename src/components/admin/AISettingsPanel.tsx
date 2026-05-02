@@ -69,16 +69,19 @@ export function AISettingsPanel() {
   const [hadStoredKey, setHadStoredKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [doubaoWebStatus, setDoubaoWebStatus] = useState<{ disabled: boolean; reason?: string; detected_at?: string } | null>(null);
 
   useEffect(() => { void load(); }, []);
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'ai_model')
-      .maybeSingle();
+    const [{ data }, { data: webRow }] = await Promise.all([
+      supabase.from('app_settings').select('value').eq('key', 'ai_model').maybeSingle(),
+      supabase.from('app_settings').select('value').eq('key', 'doubao_web_search_status').maybeSingle(),
+    ]);
+    if (webRow?.value) {
+      setDoubaoWebStatus(webRow.value as any);
+    }
     if (data?.value) {
       const v = data.value as unknown as Partial<Settings> & { precision?: Precision };
       const provider: Provider =
@@ -237,6 +240,17 @@ export function AISettingsPanel() {
                 <p className="text-[11px] text-amber-700 dark:text-amber-300 pt-1.5 border-t border-amber-500/20">
                   ⚠️ 上方表单的修改还没保存，识别仍按当前生效配置走。点底部"保存设置"后生效。
                 </p>
+              )}
+              {s.provider === 'doubao' && webSearchActive && doubaoWebStatus?.disabled && (
+                <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-800 dark:text-amber-200 leading-snug space-y-1">
+                  <p className="font-medium">⚠️ 豆包账号未开通联网搜索插件</p>
+                  <p className="opacity-90">
+                    {doubaoWebStatus.reason || '上次调用返回 ToolNotOpen，识别已自动降级为豆包普通视觉识别。'}
+                  </p>
+                  <p className="opacity-80">
+                    解决：到火山方舟控制台「联网内容插件」开通后，下次识别会自动恢复联网。
+                  </p>
+                </div>
               )}
               <p className="text-[10px] text-muted-foreground pt-1">
                 提示：识别结果卡片顶部会显示本次实际走的链路徽章（缓存 / 豆包联网 / Gemini 等），可直接验证。
