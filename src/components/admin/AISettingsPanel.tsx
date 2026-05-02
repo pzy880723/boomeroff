@@ -75,11 +75,13 @@ export function AISettingsPanel() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'ai_model')
-      .maybeSingle();
+    const [{ data }, { data: webRow }] = await Promise.all([
+      supabase.from('app_settings').select('value').eq('key', 'ai_model').maybeSingle(),
+      supabase.from('app_settings').select('value').eq('key', 'doubao_web_search_status').maybeSingle(),
+    ]);
+    if (webRow?.value) {
+      setDoubaoWebStatus(webRow.value as any);
+    }
     if (data?.value) {
       const v = data.value as unknown as Partial<Settings> & { precision?: Precision };
       const provider: Provider =
