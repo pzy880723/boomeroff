@@ -97,15 +97,30 @@ export function LiveStreamPanel() {
 
   const startCamera = async (mode?: 'environment' | 'user') => {
     const targetMode = mode || facingMode;
+    // 微信 / QQ / 老旧 WebView 里 navigator.mediaDevices 可能不存在
+    const md = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+    if (!md || typeof md.getUserMedia !== 'function') {
+      const isWeChat = typeof navigator !== 'undefined' && /MicroMessenger|QQ\//i.test(navigator.userAgent);
+      toast({
+        title: '当前浏览器不支持摄像头',
+        description: isWeChat
+          ? '请点击右上角「···」选择「在浏览器中打开」，或改用「上传」按钮'
+          : '请改用「上传」按钮选择图片',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await md.getUserMedia({
         video: { facingMode: targetMode, width: 1920, height: 1080 },
       });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(console.error);
+          try {
+            videoRef.current?.play().catch(() => { /* play 在某些浏览器会因策略被打断，忽略 */ });
+          } catch { /* noop */ }
         };
         setIsStreaming(true);
       } else {
