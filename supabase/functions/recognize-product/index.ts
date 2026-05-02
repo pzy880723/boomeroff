@@ -219,6 +219,183 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
   });
 }
 
+// ====== 缓存辅助函数 ======
+
+async function loadRecentPrice(adminClient: any, productId: string) {
+  try {
+    const { data } = await adminClient
+      .from('price_records')
+      .select('price, price_type, created_at')
+      .eq('product_id', productId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return null;
+    return {
+      price: Number(data.price),
+      price_type: data.price_type || null,
+      recorded_at: data.created_at || null,
+    };
+  } catch { return null; }
+}
+
+function productRowToResult(row: any) {
+  let tipsObj: any = undefined;
+  if (typeof row.tips === 'string' && row.tips.trim().startsWith('{')) {
+    try { tipsObj = JSON.parse(row.tips); } catch { tipsObj = row.tips; }
+  } else if (row.tips) {
+    tipsObj = row.tips;
+  }
+  return {
+    name: row.name,
+    category: row.category,
+    era: row.era || undefined,
+    origin: row.origin || undefined,
+    material: row.material || undefined,
+    craft: row.craft || undefined,
+    dimensions: row.dimensions || undefined,
+    condition: row.condition || undefined,
+    description: row.description || undefined,
+    sellingPoints: Array.isArray(row.selling_points) ? row.selling_points : [],
+    tips: tipsObj,
+    confidence: 0.92,
+  };
+}
+
+function officialRowToResult(row: any) {
+  const c = row.content || {};
+  let tipsObj: any = undefined;
+  if (typeof row.tips === 'string' && row.tips.trim().startsWith('{')) {
+    try { tipsObj = JSON.parse(row.tips); } catch { tipsObj = row.tips; }
+  } else if (row.tips) {
+    tipsObj = row.tips;
+  }
+  return {
+    name: row.name,
+    category: row.category,
+    era: row.era || undefined,
+    origin: row.origin || undefined,
+    material: c.material || undefined,
+    craft: c.craft || undefined,
+    dimensions: c.dimensions || undefined,
+    condition: c.condition || undefined,
+    description: row.summary || undefined,
+    sellingPoints: Array.isArray(row.selling_points) ? row.selling_points : [],
+    tips: tipsObj,
+    confidence: 0.95,
+  };
+}
+
+const QUICK_TOOL = {
+  type: 'function',
+  function: {
+    name: 'quick_classify',
+    description: '快速分类：仅返回商品名、类目、年代',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '商品名（≤12字，简体中文）' },
+        category: {
+          type: 'string',
+          enum: ['jp_porcelain', 'eu_porcelain', 'incense', 'antique_art', 'local_craft',
+                 'anime_toy', 'otaku_goods', 'luxury', 'vintage_jewelry', 'game_console',
+                 'walkman', 'ccd', 'media_record', 'playback_device', 'home_appliance',
+                 'hobby', 'other'],
+        },
+        era: { type: 'string', description: '年代，未知写"不详"' },
+      },
+      required: ['name', 'category'],
+    },
+  },
+};
+
+async function tryQuickClassify(images: string[], baseCfg: ModelConfig): Promise<{ name: string; category: string; era?: string } | null> {
+  const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
+  // 优先用 lovable economy 模型，省钱够用
+  const cfg: ModelConfig = lovableKey
+    ? { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true }
+    : baseCfg;
+  const imageUrls = images.slice(0, 1).map((img) =>
+    img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
+  );
+  const userContent: any[] = [
+    { type: 'text', text: '只判断商品的名称、类目、大致年代。调用 quick_classify 工具提交。' },
+  ];
+  for (const url of imageUrls) userContent.push({ type: 'image_url', image_url: { url } });
+  const body: any = {
+    model: cfg.model,
+    messages: [
+      { role: 'system', content: '你是中古商品快速分类器。只返回商品名、类目、年代，不做长描述。' },
+      { role: 'user', content: userContent },
+    ],
+    tools: [QUICK_TOOL],
+    tool_choice: { type: 'function', function: { name: 'quick_classify' } },
+  };
+  const resp = await fetch(cfg.url, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+  if (!args) return null;
+  const parsed = safeParseJSON(args);
+  if (!parsed?.name || !parsed?.category) return null;
+  return { name: String(parsed.name), category: String(parsed.category), era: parsed.era };
+}
+
+async function tryNameMatch(adminClient: any, name: string, category: string): Promise<
+  { result: any; source: 'official' | 'history'; cached_at: string; product_id: string | null } | null
+> {
+  // 关键词：取 name 的前 4-6 个字（中文）做 ILIKE
+  const keyword = name.trim().slice(0, 6);
+  if (keyword.length < 2) return null;
+
+  // 1) 官方知识库
+  try {
+    const { data: ofRow } = await adminClient
+      .from('official_knowledge')
+      .select('*')
+      .eq('category', category)
+      .ilike('name', `%${keyword}%`)
+      .order('importance_score', { ascending: false })
+      .order('view_count', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (ofRow) {
+      return {
+        result: officialRowToResult(ofRow),
+        source: 'official',
+        cached_at: ofRow.updated_at || ofRow.created_at,
+        product_id: ofRow.source_product_id || null,
+      };
+    }
+  } catch (e) { console.warn('[Recognition] official match failed:', e); }
+
+  // 2) 历史 products
+  try {
+    const { data: prodRow } = await adminClient
+      .from('products')
+      .select('*')
+      .eq('category', category)
+      .ilike('name', `%${keyword}%`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (prodRow) {
+      return {
+        result: productRowToResult(prodRow),
+        source: 'history',
+        cached_at: prodRow.created_at,
+        product_id: prodRow.id,
+      };
+    }
+  } catch (e) { console.warn('[Recognition] history match failed:', e); }
+
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
