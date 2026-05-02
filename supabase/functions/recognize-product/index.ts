@@ -311,6 +311,7 @@ async function callDoubaoResponses(
   systemPrompt: string,
   userText: string,
   cfg: ModelConfig,
+  signal?: AbortSignal,
 ): Promise<Response> {
   // Responses API: input 是数组，每条 {role, content:[{type, text|image_url}]}
   const userContent: any[] = [{ type: 'input_text', text: userText }];
@@ -346,6 +347,7 @@ async function callDoubaoResponses(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
+    signal,
   });
 }
 
