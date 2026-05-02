@@ -119,6 +119,23 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
 
   return (
     <div className="space-y-4">
+      {/* 路径徽章：让店员一眼看到本次到底走了缓存还是真 AI、有没有联网 */}
+      {(() => {
+        const badge = pipelineBadge(result.__pipeline);
+        if (!badge) return null;
+        return (
+          <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${badge.cls}`}>
+            <span>{badge.text}</span>
+            {typeof result.__pipeline?.aiTimeMs === 'number' && (
+              <span className="opacity-70">· {(result.__pipeline.aiTimeMs / 1000).toFixed(1)}s</span>
+            )}
+            {result.__pipeline?.degraded && (
+              <span className="opacity-70">· 已降级</span>
+            )}
+          </div>
+        );
+      })()}
+
       {/* 命中缓存横幅 */}
       {result.fromCache && cacheLabel && (
         <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/8 px-3.5 py-2.5 text-sm">
