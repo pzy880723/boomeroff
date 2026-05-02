@@ -265,7 +265,9 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { imageBase64, images } = body as { imageBase64?: string; images?: string[] };
+    const { imageBase64, images, imageHash, forceRefresh } = body as {
+      imageBase64?: string; images?: string[]; imageHash?: string; forceRefresh?: boolean;
+    };
     const imageList: string[] = Array.isArray(images) && images.length > 0
       ? images.slice(0, 5)
       : (imageBase64 ? [imageBase64] : []);
@@ -273,6 +275,30 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: '请提供商品图片' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ====== ① 图像哈希精确命中：直接返回历史 product 行 ======
+    if (!forceRefresh && imageHash) {
+      const { data: hit } = await adminClient
+        .from('products')
+        .select('*')
+        .eq('image_hash', imageHash)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (hit) {
+        const recentPrice = await loadRecentPrice(adminClient, hit.id);
+        const cached = productRowToResult(hit);
+        return new Response(JSON.stringify({
+          ...cached,
+          fromCache: true,
+          cacheSource: 'hash',
+          cachedAt: hit.created_at,
+          cachedProductId: hit.id,
+          imageHash,
+          recentPrice,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
 
     const multiImage = imageList.length > 1;
@@ -285,6 +311,32 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'AI 服务未配置，请到后台「AI 模型」设置' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ====== ② 名称+类目模糊命中：用 economy 模型先做 1 次轻量分类 ======
+    if (!forceRefresh) {
+      try {
+        const quick = await tryQuickClassify(imageList, modelCfg);
+        if (quick?.name && quick?.category) {
+          const nameMatch = await tryNameMatch(adminClient, quick.name, quick.category);
+          if (nameMatch) {
+            const recentPrice = nameMatch.product_id
+              ? await loadRecentPrice(adminClient, nameMatch.product_id)
+              : null;
+            return new Response(JSON.stringify({
+              ...nameMatch.result,
+              fromCache: true,
+              cacheSource: nameMatch.source,
+              cachedAt: nameMatch.cached_at,
+              cachedProductId: nameMatch.product_id,
+              imageHash,
+              recentPrice,
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+        }
+      } catch (e) {
+        console.warn('[Recognition] quick classify failed, fallback to full AI:', e);
+      }
     }
 
     const startTime = Date.now();
