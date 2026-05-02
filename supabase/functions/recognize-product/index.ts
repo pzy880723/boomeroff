@@ -37,6 +37,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
   let precision: Precision = 'standard';
   let storedModel: string | null = null;
   let custom: any = null;
+  let enableWebSearch = true; // 默认开启联网搜索
 
   try {
     const { data } = await adminClient
@@ -50,6 +51,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
         ? v.precision : 'standard';
       storedModel = v.model || null;
       custom = v.custom || null;
+      if (typeof v.enableWebSearch === 'boolean') enableWebSearch = v.enableWebSearch;
     }
   } catch (e) {
     console.warn('[Recognition] settings load failed, using defaults:', e);
@@ -62,6 +64,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       model: custom.model,
       jsonMode: false,
       supportsTools: true,
+      enableWebSearch: false, // 自定义 endpoint 不支持 google_search
     };
   }
 
@@ -72,6 +75,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       model: storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL,
       jsonMode: true,
       supportsTools: true,
+      enableWebSearch: false, // 豆包不支持 google_search
     };
   }
 
@@ -90,7 +94,14 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
     }
   }
 
-  return { url: LOVABLE_URL, apiKey: lovableKey, model, jsonMode: true, supportsTools: true };
+  return {
+    url: LOVABLE_URL,
+    apiKey: lovableKey,
+    model,
+    jsonMode: true,
+    supportsTools: true,
+    enableWebSearch: enableWebSearch && isGeminiModel(model),
+  };
 }
 
 // 宽容 JSON 解析：自动去尾逗号、去 markdown 代码块、提取 {...}
