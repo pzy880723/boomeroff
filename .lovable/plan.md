@@ -1,78 +1,54 @@
-## 问题诊断
+## 目标
+让识别 AI 在「自己拿不准」时自动联网搜，把搜到的真实信息融合进 name / era / origin / selling_points，不再瞎猜。用户感知不到搜索过程，只看到更准的结果。
 
-用户截图：底部 tab 高亮的是「AI 识物」(/scan)，但页面显示「页面出错了」——即 `ErrorBoundary` 被触发。
+## 方案：Gemini 内置 Google Search 接地（grounding）
 
-控制台运行时错误（已抓到）：
-```
-Objects are not valid as a React child (found: object with keys {tag, text})
-```
+Lovable AI Gateway 透传 Google 原生的 `google_search` 工具。在调用 `recognize-product` 时多挂一个工具，让模型自己决定要不要调用，无需新接 API key、无需新连接器。
 
-`{tag, text}` 正是新版 `sellingPoints` 元素的形状。说明 Scan 页（`LiveStreamPanel` → 渲染识别结果或历史 currentProduct）链路里，**有一处把 `selling_points` 数组元素当字符串直接渲染**了，而不是走 `normalizeSellingPoints()`。
-
-已确认安全的位置（都走了 normalize）：
-- `ProductDetailCard.tsx`（line 49）
-- `ProductDetailDialog.tsx`（line 79）
-- `MyLibrary.tsx`（line 420，取 `.text`）
-
-最可疑的 1 个位置 + 2 个隐患：
-
-1. **`LiveStreamPanel.tsx` line 509–521** —— 当 `result` 为空、用 `currentProduct`（DB 行）合成 `baseResult` 时：
-   ```ts
-   sellingPoints: currentProduct.selling_points || [],   // 直接塞入 DB 的 jsonb
-   tips: currentProduct.tips,                             // DB 是字符串/可能是 JSON 字符串
-   ```
-   后续传给 `ProductDetailCard` 的 `result`，理论上 ProductDetailCard 会再 normalize，所以不直接崩。
-   但 `displayResult` 同时也被传给 **`ShareToCommunityButton`** 等子组件，且某些代码路径里数组会被展开渲染。
-
-2. **真正崩点的最大嫌疑：`ShareToCommunityButton` 内部渲染、或 LiveStreamPanel 顶部某个老的 Card 把 `selling_points` 元素直接 `{item}` 渲染**。需要逐一排查 LiveStreamPanel 1–500 行（标签 chips、价格区、上一次结果 preview 等）和 ShareToCommunityButton 的 JSX。
-
-3. ErrorBoundary 弹了之后用户看到的是兜底，没有原始组件树位置——应在 `componentDidCatch` 里把 `info.componentStack` 也打到控制台 + toast 一个简短码，方便下次定位。
-
-## 修复方案
-
-### 一、强化 `LiveStreamPanel` 中 `currentProduct` → `baseResult` 的转换（防御）
-
-在 line 509 处，把 `selling_points` 与 `tips` 直接走 normalize，再传出，避免任何下游误把对象当 React child：
-
-```ts
-import { normalizeSellingPoints, normalizeTips } from '@/lib/script';
-
-const baseResult: RecognitionResult | null = result || (currentProduct ? {
-  ...,
-  sellingPoints: normalizeSellingPoints(currentProduct.selling_points), // ← 已是 {tag,text}[]
-  tips: normalizeTips(currentProduct.tips) ?? undefined,                // ← 已是 {memory,objection} | null
-} : null);
+```text
+图像 → AI 识别 → 模型判断置信度
+                ├─ 高置信度 → 直接出结果（秒出，和现在一样快）
+                └─ 拿不准/有外文品牌/型号编号
+                        → 自动调用 google_search
+                        → 把搜索片段当上下文重新生成
+                        → 出结果（多 1-3 秒）
 ```
 
-### 二、扫一遍 LiveStreamPanel 1–500 行
+## 改动范围
 
-定位任何 `selling_points.map(...)` / `{sp}` / `{tips}` 这种把对象直接当 children 的地方，改为：
-- 卖点：调 `normalizeSellingPoints(...)` 后渲染 `.text`（带 `.tag` chip 可选）
-- tips：调 `normalizeTips(...)` 后渲染 `.memory` / `.objection`
+### 1. `supabase/functions/recognize-product/index.ts`
+- 在工具列表里追加 `{ type: 'google_search' }`（只对 `google/gemini-*` 模型挂；豆包 / 自定义 endpoint 跳过，避免 400）
+- 系统提示词加一段「触发联网」规则：
+  - 看到外文品牌、型号编号、底款铭文、动漫 IP 不确定时 → 调 `google_search` 验证后再填字段
+  - 中文常见品类、底款清晰时 → 不要联网，直接答
+  - 联网得到的事实必须落进字段里，不准复述「根据搜索结果」
+- 模型返回里如果带 `groundingMetadata`，记到日志便于排查；不向前端暴露来源链接（按你选的「只融合」）
+- 缓存逻辑保留：哈希命中 / 名称模糊命中仍优先走缓存，联网只发生在最终全量识别那一步
 
-### 三、`ShareToCommunityButton` 内部 JSX 兜底
+### 2. `supabase/functions/_shared`（如无则就地写在文件内）
+- 加一个小判断：`isGeminiModel(model)` → 决定是否注入 `google_search` 工具
+- 自定义 endpoint / 豆包不开联网（它们不支持这个 tool spec）
 
-在保存到 community_posts 前没问题（line 66 直接当 jsonb 存），但若组件 JSX 内有任何 `{sellingPoints[i]}` 直接渲染需改为 `normalizeSellingPoints(sellingPoints)[i].text`。
+### 3. 后台「AI 模型」设置（`/portal`）
+- 增加一个开关：「允许 AI 联网搜索（仅 Gemini 模型）」，默认开
+- 写入 `app_settings.ai_model.enableWebSearch`
+- 边缘函数读这个开关，关掉就不挂工具
 
-### 四、`ErrorBoundary` 增强诊断
+### 4. 前端无改动
+按你选的「只融合进结果」，UI 不显示参考来源，不加按钮，不加 loading 文案变化。
 
-`src/components/system/ErrorBoundary.tsx`：
-- `componentDidCatch` 里 `console.error` 同时打印 `info.componentStack`
-- UI 错误详情里追加一行 `componentStack` 的前 5 行，便于用户截图反馈
+## 不做的事
+- 不接 Perplexity / Firecrawl（避免再让你配密钥）
+- 不在结果里露出来源链接
+- 不让用户手动触发
+- 不改缓存策略（缓存命中就不联网，省时间）
 
-### 五、（可选）页面级而非应用级兜底
+## 风险与权衡
+- 联网那一次会比纯识别多 1-3 秒，但只在 AI 自己觉得不确定时才会发生，命中缓存或高置信度仍是秒出
+- Google Search 接地按 grounded request 计费，会消耗 Lovable AI 额度多一些；可在后台开关一键关闭
+- 自定义 OpenAI endpoint / 豆包模型不支持，自动降级为不联网
 
-当前 `MainLayout` 的 `ErrorBoundary scope="page"` 包住了所有 tab outlet，单页崩了底部 tab 还在（截图也证实了）。这点保留，但在 fallback 里加一个「切换到其他 Tab 试试」的提示链接。
-
-## 验证
-
-1. 把现有线上用户某个会触发的商品打开 Scan 页 → 不再白屏，看到正常识别结果；
-2. 控制台仍能看到 `[ErrorBoundary:page]` 日志带 componentStack（万一别处再炸有据可查）；
-3. 老版本 `selling_points: string[]` 与新版 `selling_points: {tag,text}[]` 两种数据都能正常渲染；
-4. 老 tips（纯字符串）与新 tips（`{memory,objection}` 或其 JSON 字符串）都能渲染。
-
-## 影响文件
-
-- `src/components/dashboard/LiveStreamPanel.tsx`
-- `src/components/community/ShareToCommunityButton.tsx`（如发现内部直渲染）
-- `src/components/system/ErrorBoundary.tsx`
+## 落地后验证
+- 拍一个明显的外文限定品（例如带 SONY 型号的 Walkman、带 IP logo 的手办）→ 看 name/era 是否比之前更具体
+- 拍一个常见有田烧 → 应该秒出，不联网（看后端日志没有 grounding 记录）
+- 后台关闭开关 → 重拍同一张外文品 → 退化为旧行为
