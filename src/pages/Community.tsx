@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
+import { normalizeSellingPoints, normalizeTips } from '@/lib/script';
 import { Heart, Star, Loader2, Send, Award, Lightbulb, Check } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
@@ -301,10 +302,15 @@ export default function Community() {
   if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!user) return <AuthPage />;
 
-  const sellingPoints: string[] = (activeDetail?.selling_points && activeDetail.selling_points.length)
+  const rawSellingPoints = (activeDetail?.selling_points && (activeDetail.selling_points as any[]).length)
     ? activeDetail.selling_points
-    : (Array.isArray(active?.selling_points) ? (active!.selling_points as string[]) : []);
-  const tipsText = activeDetail?.tips ?? active?.tips ?? null;
+    : (Array.isArray(active?.selling_points) ? active!.selling_points : []);
+  const sellingPoints = normalizeSellingPoints(rawSellingPoints);
+  const rawTips = activeDetail?.tips ?? active?.tips ?? null;
+  const tipsObj = normalizeTips(rawTips);
+  const tipsText = tipsObj
+    ? [tipsObj.memory, tipsObj.objection].filter(Boolean).join('；')
+    : (typeof rawTips === 'string' ? rawTips : null);
   const eraText = activeDetail?.era ?? active?.era ?? null;
   const originText = activeDetail?.origin ?? active?.origin ?? null;
 
@@ -426,7 +432,10 @@ export default function Community() {
                       {sellingPoints.map((s, i) => (
                         <li key={i} className="text-sm flex gap-2">
                           <span className="text-primary shrink-0">•</span>
-                          <span className="leading-relaxed break-words">{s}</span>
+                          <span className="leading-relaxed break-words">
+                            <span className="text-[10px] text-muted-foreground mr-1">[{s.tag}]</span>
+                            {s.text}
+                          </span>
                         </li>
                       ))}
                     </ul>
