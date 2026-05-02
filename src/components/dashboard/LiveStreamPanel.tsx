@@ -258,7 +258,7 @@ export function LiveStreamPanel() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleRecognition = async (imageList: string[]) => {
+  const handleRecognition = async (imageList: string[], opts: { forceRefresh?: boolean } = {}) => {
     clearResult();
     setCurrentProductId(null);
     setRecognitionTime(null);
@@ -274,7 +274,7 @@ export function LiveStreamPanel() {
 
     const [imageUrl, recognitionResult] = await Promise.all([
       uploadImage(imageList[0], user.id),
-      recognizeProduct(imageList.length > 1 ? imageList : imageList[0]),
+      recognizeProduct(imageList.length > 1 ? imageList : imageList[0], { forceRefresh: opts.forceRefresh }),
     ]);
 
     if (timerRef.current) {
@@ -292,8 +292,31 @@ export function LiveStreamPanel() {
     }
 
     try {
-      if (recognitionResult.fromCache) {
-        toast({ title: '知识库命中', description: `快速识别: ${recognitionResult.name}` });
+      // ★ 命中缓存且带回 cachedProductId → 直接复用历史 product 行，不再 INSERT
+      if (recognitionResult.fromCache && recognitionResult.cachedProductId) {
+        const sourceLabel = recognitionResult.cacheSource === 'official'
+          ? '官方知识库'
+          : recognitionResult.cacheSource === 'history'
+            ? '历史识别'
+            : '同款照片';
+        toast({ title: `已复用${sourceLabel}`, description: recognitionResult.name });
+
+        setCurrentProductId(recognitionResult.cachedProductId);
+        // 拉历史 product 的封面图（有真实 URL）
+        const { data: prodRow } = await supabase
+          .from('products')
+          .select('image_url')
+          .eq('id', recognitionResult.cachedProductId)
+          .maybeSingle();
+        setProductImageUrl(prodRow?.image_url || imageUrl || null);
+        setOverriddenResult(null);
+        await updateSession(recognitionResult.cachedProductId, user.id);
+        setCapturedImages([]);
+        setFavorited(false);
+        setTimeout(() => {
+          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+        return;
       }
 
       const { data: productData, error } = await supabase
@@ -334,13 +357,11 @@ export function LiveStreamPanel() {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
 
-      if (!recognitionResult.fromCache) {
-        const { dismiss } = toast({
-          title: '识别成功',
-          description: recognitionResult.name,
-        });
-        setTimeout(() => dismiss(), 800);
-      }
+      const { dismiss } = toast({
+        title: '识别成功',
+        description: recognitionResult.name,
+      });
+      setTimeout(() => dismiss(), 800);
     } catch (error) {
       console.error('Error saving product:', error);
       toast({ title: '保存失败', description: '识别成功但保存出错', variant: 'destructive' });
@@ -830,9 +851,26 @@ export function LiveStreamPanel() {
                   <Camera className="w-5 h-5" />
                   识别下一件商品
                 </Button>
+                {/* 命中缓存时：允许强制重跑 AI */}
+                {displayResult.fromCache && capturedImage && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={isRecognizing}
+                    onClick={() => {
+                      const list = capturedImages.length > 0 ? capturedImages : [capturedImage];
+                      handleRecognition(list, { forceRefresh: true });
+                    }}
+                    className="w-full mt-2 h-9 gap-1.5 rounded-full text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    结果不准？重新识别这张图
+                  </Button>
+                )}
                 {recognitionTime && (
                   <p className="text-center text-xs text-muted-foreground mt-2 tabular-nums">
                     本次识别耗时 <span className="font-medium text-foreground">{(recognitionTime / 1000).toFixed(2)}s</span>
+                    {displayResult.fromCache && <span className="ml-1">· 来自缓存</span>}
                   </p>
                 )}
               </div>
