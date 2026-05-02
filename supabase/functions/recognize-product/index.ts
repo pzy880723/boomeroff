@@ -69,18 +69,36 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       model: custom.model,
       jsonMode: false,
       supportsTools: true,
-      enableWebSearch: false, // 自定义 endpoint 不支持 google_search
+      enableWebSearch: false, // 自定义 endpoint 不支持联网
+      apiStyle: 'chat',
+      searchKind: 'none',
     };
   }
 
   if (provider === 'doubao') {
+    const model = storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL;
+    // 豆包联网必须切到 Responses API
+    if (enableWebSearch) {
+      return {
+        url: DOUBAO_RESPONSES_URL,
+        apiKey: doubaoKey,
+        model,
+        jsonMode: false,
+        supportsTools: true,
+        enableWebSearch: true,
+        apiStyle: 'responses',
+        searchKind: 'doubao_web_search',
+      };
+    }
     return {
-      url: DOUBAO_URL,
+      url: DOUBAO_CHAT_URL,
       apiKey: doubaoKey,
-      model: storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL,
+      model,
       jsonMode: true,
       supportsTools: true,
-      enableWebSearch: false, // 豆包不支持 google_search
+      enableWebSearch: false,
+      apiStyle: 'chat',
+      searchKind: 'none',
     };
   }
 
@@ -99,13 +117,16 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
     }
   }
 
+  const useGoogleSearch = enableWebSearch && isGeminiModel(model);
   return {
     url: LOVABLE_URL,
     apiKey: lovableKey,
     model,
     jsonMode: true,
     supportsTools: true,
-    enableWebSearch: enableWebSearch && isGeminiModel(model),
+    enableWebSearch: useGoogleSearch,
+    apiStyle: 'chat',
+    searchKind: useGoogleSearch ? 'google_search' : 'none',
   };
 }
 
