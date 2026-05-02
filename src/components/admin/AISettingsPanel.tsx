@@ -52,6 +52,7 @@ const DEFAULT: Settings = {
   provider: 'lovable',
   model: 'google/gemini-2.5-flash',
   precision: 'standard',
+  enableWebSearch: true,
   custom: { baseUrl: '', apiKey: '', model: '' },
 };
 
