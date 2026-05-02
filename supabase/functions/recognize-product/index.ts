@@ -74,6 +74,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       enableWebSearch: false, // 自定义 endpoint 不支持联网
       apiStyle: 'chat',
       searchKind: 'none',
+      provider: 'custom',
     };
   }
 
@@ -90,6 +91,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
         enableWebSearch: true,
         apiStyle: 'responses',
         searchKind: 'doubao_web_search',
+        provider: 'doubao',
       };
     }
     return {
@@ -101,6 +103,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       enableWebSearch: false,
       apiStyle: 'chat',
       searchKind: 'none',
+      provider: 'doubao',
     };
   }
 
@@ -129,6 +132,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
     enableWebSearch: useGoogleSearch,
     apiStyle: 'chat',
     searchKind: useGoogleSearch ? 'google_search' : 'none',
+    provider: 'lovable',
   };
 }
 
