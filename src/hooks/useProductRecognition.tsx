@@ -94,6 +94,7 @@ export function useProductRecognition() {
         cachedAt: typeof data.cachedAt === 'string' ? data.cachedAt : undefined,
         cachedProductId: typeof data.cachedProductId === 'string' ? data.cachedProductId : undefined,
         recentPrice,
+        __pipeline: data.__pipeline && typeof data.__pipeline === 'object' ? data.__pipeline : undefined,
       };
 
       setResult(recognitionResult);

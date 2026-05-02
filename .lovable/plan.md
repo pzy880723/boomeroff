@@ -1,65 +1,93 @@
-# 让豆包支持联网搜索
+## 现象与根因（先讲清楚，让你不再怀疑后台是摆设）
 
-## 背景与关键事实
+### 后台选择**没失效**，数据库里就是 `provider=doubao + enableWebSearch=true`
+（直接查了 `app_settings.ai_model` 确认）
 
-- 豆包（火山方舟）有官方 **`web_search` 内置插件**，但它**只通过 Responses API** 提供：`POST https://ark.cn-beijing.volces.com/api/v3/responses`，**不走** `/chat/completions`。
-- 触发由模型自己判断（多轮自动搜索），支持图文混合输入（VLM 兼容），完美匹配本项目"拿不准时联网核实"的需求。
-- 计费按实际触发次数走，可用 `max_keyword` / `max_tool_calls` 控制成本。
-- 默认 5 QPS，足够门店场景。
-- 现项目已有 `DOUBAO_API_KEY` 密钥，无需新增 secret。
-
-## 方案
-
-### 1. 后端：豆包路径新增联网模式（`recognize-product` edge function）
-
-**核心改动**：当 `provider === 'doubao'` 且 `enableWebSearch=true` 时，从 `chat/completions` 切到 `responses` 接口，注入 `web_search` 工具；否则保持原有 `chat/completions` 逻辑（速度快、不烧搜索次数）。
+### 但你感觉不到豆包，是因为**两层"捷径"在豆包前面就把识别接走了**：
 
 ```text
-现状：                          改造后：
-provider=doubao                 provider=doubao + 联网开
-└─ chat/completions             └─ /api/v3/responses
-   └─ tools=[submit_recognition]   └─ tools=[web_search, submit_recognition]
-                                  └─ max_keyword=2, max_tool_calls=2
-                                  └─ 解析 output_item 中的 function_call
-                                
-provider=doubao + 联网关
-└─ chat/completions （保持现状，最快）
+拍照
+ ├─ ① 图片哈希命中（同一张照片以前识别过） ──→ 直接返回缓存，不调 AI
+ ├─ ② quick_classify（用 Lovable Gemini-flash-lite 做 1 秒轻分类）
+ │      └─ 名字+类目命中历史/官方库 ──→ 返回缓存，不调豆包
+ └─ ③ 都没命中 ──→ 这时才真正走"豆包 + Responses API + web_search"
 ```
 
-具体修改：
+最近那次识别（edge log 显示 200、1939ms）就是**走了 ② 命中缓存**，从头到尾没调豆包，也就更没联网搜索。所以你的"豆包+联网"配置根本没机会生效。
 
-- `resolveModelConfig`：新增 `apiStyle: 'chat' | 'responses'` 字段。豆包 + `enableWebSearch=true` → `apiStyle='responses'`，URL 改为 `https://ark.cn-beijing.volces.com/api/v3/responses`，并把 `enableWebSearch` 透传出来（去掉之前"豆包硬关闭"那行）。
-- 新增 `buildDoubaoResponsesBody()`：把现有 messages 转成 Responses API 的 `input` 数组结构（`role` + `content` 数组，图片用 `input_image`，文本用 `input_text`），同时把 `submit_recognition` 工具改成 Responses 的 tool 格式，再追加 `{ type: 'web_search', max_keyword: 2 }`。
-- 新增 `parseDoubaoResponsesResult()`：从 `output[]` 里找 `type === 'function_call'` 且 `name === 'submit_recognition'` 的项，解析 `arguments`；同时检测是否有 `web_search_call` 项以设置 `usedWebSearch=true`（用于日志/诊断）。
-- 系统提示在豆包联网分支末尾追加一段简短的"拿不准时再调用 web_search"指令（参考官方模板，但只 3-4 行，不污染主提示）。
-- 失败兜底：若 Responses 接口报错（4xx/5xx），自动降级到 chat/completions 路径再试一次，不影响门店出单。
+### 至于"卡住"那次：
+edge function 日志里**完全没有那次请求的痕迹**，说明请求根本没到达函数（preview 网络抖动/连接中断）。不是函数崩。重新拍一张就好。但下面的修复会让"卡住"几乎不可能再发生。
 
-### 2. 前端：解锁 /portal 的联网开关
+---
 
-`src/components/admin/AISettingsPanel.tsx`：
+## 方案：让后台选择**真的看得见、按得动**
 
-- 把"联网搜索"卡从"仅 Gemini 模型"区块挪出，**对 Lovable AI 和豆包都显示**；自定义接口仍隐藏（因为不通用）。
-- 卡标题去掉 `(仅 Gemini)`，改成"联网搜索（Gemini / 豆包 支持）"。
-- 文案补充：豆包接 Responses API + 火山方舟联网内容插件，Gemini 接 Google Search 接地。两者都按"模型自行判断"的方式触发。
-- 如果上一条计划（"当前生效"汇总卡）已实现，则把"联网搜索"徽章在豆包 provider 下也亮起来。
+### 1. 在结果里返回真实使用的"路径标签"（后端）
 
-### 3. Memory 更新
+`supabase/functions/recognize-product/index.ts` 给每条返回都加一个 `__pipeline` 字段：
 
-更新 `mem://features/web-search-grounding`：明确"Gemini 走 Google Search、豆包走火山方舟 web_search 插件 + Responses API"，并记录"豆包联网=切换 API endpoint"这一关键差异，避免下次有人误以为加个 tool 就行。
+```ts
+__pipeline: {
+  source: 'hash_cache' | 'name_cache' | 'doubao_responses' | 'doubao_chat' | 'lovable_gemini' | 'custom',
+  model: 'doubao-seed-1-6-250615' | 'google/gemini-2.5-flash' | ...,
+  webSearchEnabled: boolean,    // 配置是否打开
+  webSearchUsed: boolean,       // 本次实际是否触发了搜索
+  cacheSource?: 'official' | 'history' | 'hash',
+  aiTimeMs?: number,
+}
+```
+
+这样前端随时能看到"这一次到底用了谁"。
+
+### 2. 在识别结果卡片上显示一个"路径徽章"（前端）
+
+`src/components/recognition/ProductDetailCard.tsx` 顶部加一行小徽章：
+
+- 缓存命中 → 灰色：「📦 命中缓存 · 未调用 AI」
+- 豆包联网生效 → 绿色：「🌐 豆包 · 已联网核实」
+- 豆包未联网 → 蓝色：「⚡ 豆包 · 仅模型」
+- Gemini → 紫色：「✨ Gemini 2.5 Flash」
+
+让你**一眼就能验证**后台切换有没有真的生效。
+
+### 3. 在 /portal 加一个"绕过缓存测试"按钮（前端）
+
+`src/components/admin/AISettingsPanel.tsx` 底部新增：
+
+- **「立即用当前配置测试一次」按钮** —— 上传一张测试图，请求带 `forceRefresh=true` 跳过两层缓存，直接走豆包+联网，弹出 toast 显示路径徽章+耗时+是否联网。
+- 这样不用拍真商品，就能验证"豆包+联网"是否真的可用。
+
+### 4. 修复"被缓存抢跑"的体验（后端）
+
+`recognize-product/index.ts` 的 `tryQuickClassify` 现在永远用 Lovable Gemini，即使后台选了豆包。改成：
+
+- 后台选豆包 → quick_classify 也走豆包（用最便宜的 `doubao-1-5-vision-lite`），这样后台配置在缓存判定阶段也是一致的。
+- 后台选 custom → 没有 quick 模式，跳过 quick 直接走主识别（custom 接口可能不支持 quick）。
+- 这条不影响速度（lite 模型同样 1 秒级），但能让"我后台选了豆包"真的从头到尾贯彻。
+
+### 5. 顺手修两件已发现的小事
+
+- **修 React 崩溃**：`src/pages/OfficialLibrary.tsx:372`、`src/pages/MyLibrary.tsx:419`、`src/components/admin/CorrectionReviewPanel.tsx:151` 三处直接把 `selling_points` 当 `string[]` 渲染，遇到新格式 `[{tag,text}]` 必崩。统一改用现有的 `normalizeSellingPoints()`。
+- **加入口日志**：edge function try{} 入口加 `console.log('[Recognition] start provider=...', ...)`，下次卡住能立刻定位是请求挂还是函数挂。
+
+---
 
 ## 受影响文件
 
-- `supabase/functions/recognize-product/index.ts` — 新增豆包 Responses 分支与解析
-- `src/components/admin/AISettingsPanel.tsx` — 解锁开关并修文案
-- `mem://features/web-search-grounding` — 更新说明
+- `supabase/functions/recognize-product/index.ts` — 加 `__pipeline` 元数据；quick_classify 跟随后台 provider；入口日志
+- `src/types/index.ts` — `RecognitionResult` 加 `__pipeline?` 字段
+- `src/components/recognition/ProductDetailCard.tsx` — 渲染路径徽章
+- `src/components/admin/AISettingsPanel.tsx` — 加"立即测试"按钮（拉一张内置测试图，强制 forceRefresh）
+- `src/pages/OfficialLibrary.tsx`、`src/pages/MyLibrary.tsx`、`src/components/admin/CorrectionReviewPanel.tsx` — 修崩溃
 
-不动 DB schema、不动 secrets、不动其它前端组件。
+不动 DB schema，不动 secrets。
+
+---
 
 ## 用户验证
 
-1. 进 `/portal` → AI 模型，切到"豆包"
-2. 联网搜索卡现在可见且可开关；开启
-3. 拍一个**冷门外文品牌**或带**型号编号**的小物件
-4. 在 edge function 日志里能看到 `usedWebSearch: true` 的记录，识别结果中"年代/产地/卖点"出现搜索得来的具体事实（如官方品牌史、停产年份）
-5. 拍一个**普通茶杯**（常见品类），日志显示 `usedWebSearch: false`，速度仍然 1-2 秒——说明模型自己会判断
-6. 把开关关掉，再拍同一个外文品牌，对比识别质量下降 / 出现"我不确定"——证明开关真的生效
+1. 进 `/portal` → 当前已是"豆包+联网开"，点"立即用当前配置测试一次" → toast 显示「豆包 Responses · 联网已触发 · 4.2 秒」
+2. 拍一件**全新没拍过**的冷门外文品牌 → 结果卡顶部出现绿色「🌐 豆包 · 已联网核实」
+3. 拍同一张图第二次 → 结果卡顶部变灰色「📦 命中缓存」（这是好事，省钱省时间，但你能一眼看见）
+4. 切回 Lovable AI 保存 → 再拍一件全新商品 → 徽章变紫色「✨ Gemini 2.5 Flash」
+5. 打开"中古圈"或个人/官方知识库详情，原来必崩的页面正常显示带标签的卖点

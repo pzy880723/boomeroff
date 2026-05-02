@@ -65,6 +65,7 @@ export function AISettingsPanel() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT);
+  const [savedSettings, setSavedSettings] = useState<Settings>(DEFAULT); // 已落库的版本，用于"当前生效"展示
   const [hadStoredKey, setHadStoredKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -97,6 +98,7 @@ export function AISettingsPanel() {
         },
       };
       setSettings(merged);
+      setSavedSettings(merged);
       setHadStoredKey(!!v.custom?.apiKey);
     }
     setLoading(false);
@@ -141,6 +143,7 @@ export function AISettingsPanel() {
       if (error) throw error;
       toast.success('设置已保存，下一次识别即生效');
       setHadStoredKey(!!finalKey);
+      setSavedSettings({ ...value, custom: { ...value.custom, apiKey: '' } });
       setSettings((p) => ({ ...p, custom: { ...p.custom, apiKey: '' } }));
     } catch (e) {
       console.error(e);
@@ -193,6 +196,55 @@ export function AISettingsPanel() {
           </AlertDescription>
         </Alert>
       )}
+
+      {/* === 当前生效配置（已落库版本，让用户一眼确认选择真的生效） === */}
+      {(() => {
+        const s = savedSettings;
+        const providerLabel = s.provider === 'doubao' ? '豆包 · 火山方舟' : s.provider === 'custom' ? '自定义接口' : 'Lovable AI';
+        const modelLabel = s.provider === 'custom' ? (s.custom.model || '未配置') : s.model;
+        const webSearchSupported = s.provider === 'doubao' || s.provider === 'lovable';
+        const webSearchActive = webSearchSupported && s.enableWebSearch;
+        const dirty = JSON.stringify(s) !== JSON.stringify({ ...settings, custom: { ...settings.custom, apiKey: '' } });
+        return (
+          <Card className="border-primary/40 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-primary" />
+                当前生效配置
+                {dirty && (
+                  <span className="text-[10px] px-1.5 py-px rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-normal">
+                    有未保存修改
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 pb-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">服务商</span>
+                <span className="font-medium">{providerLabel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">模型</span>
+                <span className="font-mono text-[11px]">{modelLabel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">联网搜索</span>
+                <span className="font-medium">
+                  {!webSearchSupported ? '🚫 当前服务商不支持' : webSearchActive ? '🟢 已开启' : '⚪ 已关闭'}
+                </span>
+              </div>
+              {dirty && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 pt-1.5 border-t border-amber-500/20">
+                  ⚠️ 上方表单的修改还没保存，识别仍按当前生效配置走。点底部"保存设置"后生效。
+                </p>
+              )}
+              <p className="text-[10px] text-muted-foreground pt-1">
+                提示：识别结果卡片顶部会显示本次实际走的链路徽章（缓存 / 豆包联网 / Gemini 等），可直接验证。
+              </p>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <Card>
         <CardHeader className="pb-3">

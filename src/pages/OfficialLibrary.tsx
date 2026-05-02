@@ -369,7 +369,17 @@ export default function OfficialLibrary() {
                 <div className="space-y-1.5">
                   <p className="text-xs font-semibold">核心卖点</p>
                   <ul className="text-sm space-y-1 list-disc list-inside">
-                    {(detail.selling_points as string[]).map((p, i) => <li key={i}>{p}</li>)}
+                    {(detail.selling_points as unknown[]).map((p: any, i) => {
+                      const text = typeof p === 'string' ? p : (p?.text ?? '');
+                      if (!text) return null;
+                      const tag = typeof p === 'object' && p?.tag ? p.tag : null;
+                      return (
+                        <li key={i}>
+                          {tag && <span className="mr-1.5 text-[10px] px-1.5 py-0.5 rounded bg-accent/30 text-accent-foreground">{tag}</span>}
+                          {text}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}

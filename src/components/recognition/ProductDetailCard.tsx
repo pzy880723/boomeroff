@@ -34,7 +34,31 @@ interface ProductDetailCardProps {
     | 'cacheSource'
     | 'cachedAt'
     | 'recentPrice'
+    | '__pipeline'
   >;
+}
+
+// 把 pipeline 元数据翻译成一个店员看得懂的小徽章
+function pipelineBadge(p?: RecognitionResult['__pipeline']) {
+  if (!p) return null;
+  switch (p.source) {
+    case 'hash_cache':
+      return { text: '📦 命中缓存 · 未调用 AI', cls: 'bg-muted text-muted-foreground border-border' };
+    case 'name_cache':
+      return { text: '📦 名称匹配缓存 · 未跑主识别', cls: 'bg-muted text-muted-foreground border-border' };
+    case 'doubao_responses':
+      return p.webSearchUsed
+        ? { text: '🌐 豆包 · 已联网核实', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30' }
+        : { text: '🌐 豆包 · 联网未触发', cls: 'bg-emerald-500/10 text-emerald-700/80 dark:text-emerald-300/80 border-emerald-500/20' };
+    case 'doubao_chat':
+      return { text: '⚡ 豆包 · 仅模型', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30' };
+    case 'lovable_gemini':
+      return { text: `✨ ${p.model || 'Gemini'}`, cls: 'bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30' };
+    case 'custom':
+      return { text: `🔧 自定义 · ${p.model || ''}`, cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30' };
+    default:
+      return null;
+  }
 }
 
 const Meta = ({ label, value }: { label: string; value: string }) => (
@@ -95,6 +119,23 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
 
   return (
     <div className="space-y-4">
+      {/* 路径徽章：让店员一眼看到本次到底走了缓存还是真 AI、有没有联网 */}
+      {(() => {
+        const badge = pipelineBadge(result.__pipeline);
+        if (!badge) return null;
+        return (
+          <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${badge.cls}`}>
+            <span>{badge.text}</span>
+            {typeof result.__pipeline?.aiTimeMs === 'number' && (
+              <span className="opacity-70">· {(result.__pipeline.aiTimeMs / 1000).toFixed(1)}s</span>
+            )}
+            {result.__pipeline?.degraded && (
+              <span className="opacity-70">· 已降级</span>
+            )}
+          </div>
+        );
+      })()}
+
       {/* 命中缓存横幅 */}
       {result.fromCache && cacheLabel && (
         <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/8 px-3.5 py-2.5 text-sm">

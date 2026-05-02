@@ -17,6 +17,8 @@ interface ModelConfig {
   apiStyle: 'chat' | 'responses';
   // 联网搜索类型：gemini 走 google_search 接地；doubao 走火山方舟 web_search 内置插件
   searchKind: 'none' | 'google_search' | 'doubao_web_search';
+  // 后台保存的 provider 名称（用于 pipeline 标记 + quick_classify 一致性）
+  provider: 'lovable' | 'doubao' | 'custom';
 }
 
 // 是否是支持 Google Search 接地的 Gemini 模型
@@ -72,6 +74,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       enableWebSearch: false, // 自定义 endpoint 不支持联网
       apiStyle: 'chat',
       searchKind: 'none',
+      provider: 'custom',
     };
   }
 
@@ -88,6 +91,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
         enableWebSearch: true,
         apiStyle: 'responses',
         searchKind: 'doubao_web_search',
+        provider: 'doubao',
       };
     }
     return {
@@ -99,6 +103,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       enableWebSearch: false,
       apiStyle: 'chat',
       searchKind: 'none',
+      provider: 'doubao',
     };
   }
 
@@ -127,6 +132,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
     enableWebSearch: useGoogleSearch,
     apiStyle: 'chat',
     searchKind: useGoogleSearch ? 'google_search' : 'none',
+    provider: 'lovable',
   };
 }
 
@@ -440,12 +446,21 @@ const QUICK_TOOL = {
   },
 };
 
-async function tryQuickClassify(images: string[], baseCfg: ModelConfig): Promise<{ name: string; category: string; era?: string } | null> {
+async function tryQuickClassify(images: string[], baseCfg: ModelConfig, provider: 'lovable' | 'doubao' | 'custom'): Promise<{ name: string; category: string; era?: string } | null> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
-  // 优先用 lovable economy 模型，省钱够用
-  const cfg: ModelConfig = lovableKey
-    ? { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' }
-    : baseCfg;
+  const doubaoKey = Deno.env.get('DOUBAO_API_KEY') || '';
+  // quick_classify 跟随后台 provider 选择，避免"我选了豆包但缓存判定却用 Lovable"的违和感
+  let cfg: ModelConfig;
+  if (provider === 'doubao' && doubaoKey) {
+    cfg = { url: DOUBAO_CHAT_URL, apiKey: doubaoKey, model: 'doubao-1-5-vision-lite-32k-250115', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' };
+  } else if (provider === 'custom') {
+    // 自定义接口未必兼容 quick_classify，跳过
+    return null;
+  } else if (lovableKey) {
+    cfg = { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' };
+  } else {
+    cfg = baseCfg;
+  }
   const imageUrls = images.slice(0, 1).map((img) =>
     img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
   );
@@ -530,6 +545,7 @@ async function tryNameMatch(adminClient: any, name: string, category: string): P
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  console.log('[Recognition] === request received ===');
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -597,6 +613,7 @@ serve(async (req) => {
       if (hit) {
         const recentPrice = await loadRecentPrice(adminClient, hit.id);
         const cached = productRowToResult(hit);
+        console.log('[Recognition] cache hit (hash) → skip AI');
         return new Response(JSON.stringify({
           ...cached,
           fromCache: true,
@@ -605,6 +622,12 @@ serve(async (req) => {
           cachedProductId: hit.id,
           imageHash,
           recentPrice,
+          __pipeline: {
+            source: 'hash_cache',
+            cacheSource: 'hash',
+            webSearchEnabled: false,
+            webSearchUsed: false,
+          },
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
@@ -614,6 +637,7 @@ serve(async (req) => {
       resolveModelConfig(adminClient, multiImage),
       loadKnowledgeContext(adminClient),
     ]);
+    console.log('[Recognition] resolved provider=', modelCfg.provider, 'model=', modelCfg.model, 'apiStyle=', modelCfg.apiStyle, 'webSearch=', modelCfg.enableWebSearch);
 
     if (!modelCfg.apiKey) {
       return new Response(JSON.stringify({ error: 'AI 服务未配置，请到后台「AI 模型」设置' }), {
@@ -624,13 +648,14 @@ serve(async (req) => {
     // ====== ② 名称+类目模糊命中：用 economy 模型先做 1 次轻量分类 ======
     if (!forceRefresh) {
       try {
-        const quick = await tryQuickClassify(imageList, modelCfg);
+        const quick = await tryQuickClassify(imageList, modelCfg, modelCfg.provider);
         if (quick?.name && quick?.category) {
           const nameMatch = await tryNameMatch(adminClient, quick.name, quick.category);
           if (nameMatch) {
             const recentPrice = nameMatch.product_id
               ? await loadRecentPrice(adminClient, nameMatch.product_id)
               : null;
+            console.log('[Recognition] cache hit (name)', nameMatch.source, '→ skip main AI');
             return new Response(JSON.stringify({
               ...nameMatch.result,
               fromCache: true,
@@ -639,6 +664,13 @@ serve(async (req) => {
               cachedProductId: nameMatch.product_id,
               imageHash,
               recentPrice,
+              __pipeline: {
+                source: 'name_cache',
+                cacheSource: nameMatch.source,
+                quickClassifyProvider: modelCfg.provider,
+                webSearchEnabled: modelCfg.enableWebSearch,
+                webSearchUsed: false,
+              },
             }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
           }
         }
@@ -821,8 +853,24 @@ ${modelCfg.enableWebSearch ? `
     result.usedWebSearch = usedWebSearch;
     if (imageHash) result.imageHash = imageHash;
 
+    // 路径元数据：让前端能一眼看到本次到底用了哪条 AI 链路
+    const pipelineSource =
+      activeCfg.apiStyle === 'responses' ? 'doubao_responses'
+      : activeCfg.provider === 'doubao' ? 'doubao_chat'
+      : activeCfg.provider === 'custom' ? 'custom'
+      : 'lovable_gemini';
+    result.__pipeline = {
+      source: pipelineSource,
+      provider: activeCfg.provider,
+      model: activeCfg.model,
+      webSearchEnabled: modelCfg.enableWebSearch,
+      webSearchUsed: usedWebSearch,
+      aiTimeMs: aiTime,
+      degraded: activeCfg !== modelCfg, // 是否走了降级路径
+    };
+
     const totalTime = Date.now() - startTime;
-    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'Total:', totalTime, 'ms');
+    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'pipeline:', pipelineSource, 'Total:', totalTime, 'ms');
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
