@@ -65,6 +65,7 @@ export function AISettingsPanel() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT);
+  const [savedSettings, setSavedSettings] = useState<Settings>(DEFAULT); // 已落库的版本，用于"当前生效"展示
   const [hadStoredKey, setHadStoredKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -97,6 +98,7 @@ export function AISettingsPanel() {
         },
       };
       setSettings(merged);
+      setSavedSettings(merged);
       setHadStoredKey(!!v.custom?.apiKey);
     }
     setLoading(false);
