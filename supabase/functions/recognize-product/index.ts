@@ -13,6 +13,10 @@ interface ModelConfig {
   jsonMode: boolean;
   supportsTools: boolean;
   enableWebSearch: boolean;
+  // 'chat' = OpenAI 兼容 /chat/completions ; 'responses' = 火山方舟 Responses API（豆包联网专用）
+  apiStyle: 'chat' | 'responses';
+  // 联网搜索类型：gemini 走 google_search 接地；doubao 走火山方舟 web_search 内置插件
+  searchKind: 'none' | 'google_search' | 'doubao_web_search';
 }
 
 // 是否是支持 Google Search 接地的 Gemini 模型
@@ -27,7 +31,8 @@ const PRECISION_MODEL: Record<Precision, string> = {
   high: 'google/gemini-2.5-pro',
 };
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-const DOUBAO_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const DOUBAO_CHAT_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const DOUBAO_RESPONSES_URL = 'https://ark.cn-beijing.volces.com/api/v3/responses';
 const DOUBAO_DEFAULT_MODEL = 'doubao-seed-1-6-250615';
 
 async function resolveModelConfig(adminClient: any, multiImage: boolean): Promise<ModelConfig> {
