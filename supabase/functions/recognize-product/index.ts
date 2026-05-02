@@ -941,10 +941,11 @@ ${modelCfg.enableWebSearch ? `
       webSearchUsed: usedWebSearch,
       aiTimeMs: aiTime,
       degraded: activeCfg !== modelCfg, // 是否走了降级路径
+      degradedReason: webSearchDisabledReason || undefined,
     };
 
     const totalTime = Date.now() - startTime;
-    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'pipeline:', pipelineSource, 'Total:', totalTime, 'ms');
+    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'pipeline:', pipelineSource, 'degradedReason:', webSearchDisabledReason || '-', 'Total:', totalTime, 'ms');
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
