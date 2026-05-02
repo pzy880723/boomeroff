@@ -13,7 +13,7 @@ import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
 import { InlineRefineChat } from '@/components/recognition/InlineRefineChat';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
-import { serializeTips, normalizeSellingPoints } from '@/lib/script';
+import { serializeTips, normalizeSellingPoints, normalizeTips } from '@/lib/script';
 
 type CaptureMode = 'single' | 'multi';
 const MAX_MULTI_IMAGES = 5;
@@ -516,8 +516,8 @@ export function LiveStreamPanel() {
     dimensions: currentProduct.dimensions,
     condition: currentProduct.condition,
     description: currentProduct.description,
-    sellingPoints: currentProduct.selling_points || [],
-    tips: currentProduct.tips,
+    sellingPoints: normalizeSellingPoints(currentProduct.selling_points),
+    tips: normalizeTips(currentProduct.tips) ?? undefined,
   } : null);
   const displayResult: RecognitionResult | null = overriddenResult || baseResult;
 
