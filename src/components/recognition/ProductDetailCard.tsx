@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Copy, Check, Volume2, VolumeX, Sparkles, Lightbulb, Info, Quote } from 'lucide-react';
+import { Copy, Check, Volume2, VolumeX, Sparkles, Lightbulb, Info, Quote, History, Coins } from 'lucide-react';
 import { RecognitionResult, CATEGORY_LABELS } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useSpeech } from '@/hooks/useSpeech';
@@ -30,6 +30,10 @@ interface ProductDetailCardProps {
     | 'pitch'
     | 'tips'
     | 'confidence'
+    | 'fromCache'
+    | 'cacheSource'
+    | 'cachedAt'
+    | 'recentPrice'
   >;
 }
 
@@ -72,8 +76,36 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
     }
   };
 
+  const cacheLabel = result.cacheSource === 'official'
+    ? '匹配到官方知识库'
+    : result.cacheSource === 'history'
+      ? '门店此前识别过同款'
+      : result.cacheSource === 'hash'
+        ? '同一张照片此前识别过'
+        : null;
+  const cachedDate = result.cachedAt
+    ? new Date(result.cachedAt).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    : null;
+  const priceText = result.recentPrice
+    ? `¥${result.recentPrice.price.toLocaleString('zh-CN')}`
+    : null;
+  const priceDate = result.recentPrice?.recorded_at
+    ? new Date(result.recentPrice.recorded_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+    : null;
+
   return (
     <div className="space-y-4">
+      {/* 命中缓存横幅 */}
+      {result.fromCache && cacheLabel && (
+        <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/8 px-3.5 py-2.5 text-sm">
+          <History className="w-4 h-4 text-primary shrink-0" />
+          <div className="min-w-0 flex-1">
+            <span className="text-foreground font-medium">{cacheLabel}</span>
+            {cachedDate && <span className="text-muted-foreground ml-1.5 text-xs">· 入库于 {cachedDate}</span>}
+          </div>
+        </div>
+      )}
+
       {/* 商品标题 */}
       <Card className="overflow-hidden border-border/60 shadow-soft">
         <div className="h-1 bg-gradient-accent" />
