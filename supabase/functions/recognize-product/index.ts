@@ -228,7 +228,7 @@ async function loadKnowledgeContext(adminClient: any): Promise<string> {
   }
 }
 
-async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) {
+async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig, signal?: AbortSignal) {
   const imageUrls = images.map((img) =>
     img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
   );
@@ -239,7 +239,7 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
 
   // ===== 豆包 Responses API 分支（仅联网模式） =====
   if (cfg.apiStyle === 'responses') {
-    return await callDoubaoResponses(imageUrls, systemPrompt, userText, cfg);
+    return await callDoubaoResponses(imageUrls, systemPrompt, userText, cfg, signal);
   }
 
   // ===== 标准 chat/completions 分支 =====
@@ -278,7 +278,31 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
+    signal,
   });
+}
+
+// 包一层超时；超时后伪造一个 504 Response，让上层走降级逻辑
+async function callAIWithTimeout(
+  images: string[],
+  systemPrompt: string,
+  cfg: ModelConfig,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await callAI(images, systemPrompt, cfg, controller.signal);
+  } catch (e) {
+    const isAbort = e instanceof Error && (e.name === 'AbortError' || /aborted/i.test(e.message));
+    console.warn('[Recognition] callAI failed/timeout:', isAbort ? `timeout after ${timeoutMs}ms` : e);
+    return new Response(JSON.stringify({ error: isAbort ? 'timeout' : String(e) }), {
+      status: 504,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // 豆包 Responses API（火山方舟 web_search 内置插件，只在联网模式走这里）
