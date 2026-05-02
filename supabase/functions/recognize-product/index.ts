@@ -545,6 +545,7 @@ async function tryNameMatch(adminClient: any, name: string, category: string): P
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  console.log('[Recognition] === request received ===');
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
