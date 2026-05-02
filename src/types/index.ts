@@ -100,6 +100,18 @@ export interface RecognitionResult {
   confidence?: number;
   imageHash?: string;
   fromCache?: boolean;
+  // 命中来源：'hash' | 'official' | 'history'
+  cacheSource?: string;
+  // 上次入库时间（ISO）
+  cachedAt?: string;
+  // 命中的 product 行 id，便于做"加入知识库/收藏"时复用
+  cachedProductId?: string;
+  // 同款最近一次价格记录
+  recentPrice?: {
+    price: number;
+    price_type: string | null;
+    recorded_at: string | null;
+  };
 }
 
 export interface DailyKnowledge {
