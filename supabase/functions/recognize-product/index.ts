@@ -231,6 +231,12 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
     ? `以下为同一件中古商品的 ${imageUrls.length} 张多角度照片，请综合判断后调用 submit_recognition 工具提交结果。`
     : '请鉴定这件中古商品，调用 submit_recognition 工具提交结果。';
 
+  // ===== 豆包 Responses API 分支（仅联网模式） =====
+  if (cfg.apiStyle === 'responses') {
+    return await callDoubaoResponses(imageUrls, systemPrompt, userText, cfg);
+  }
+
+  // ===== 标准 chat/completions 分支 =====
   const userContent: any[] = [{ type: 'text', text: userText }];
   for (const url of imageUrls) {
     userContent.push({ type: 'image_url', image_url: { url } });
@@ -246,7 +252,7 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
 
   // 优先用 tool calling（最稳，无 JSON 格式问题）
   if (cfg.supportsTools) {
-    if (cfg.enableWebSearch) {
+    if (cfg.searchKind === 'google_search') {
       // 联网模式：挂上 google_search，让模型自己决定先搜还是先答；
       // tool_choice=auto 才能让模型有机会调用 google_search
       body.tools = [RECOGNITION_TOOL, { type: 'google_search' }];
@@ -267,6 +273,81 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
     },
     body: JSON.stringify(body),
   });
+}
+
+// 豆包 Responses API（火山方舟 web_search 内置插件，只在联网模式走这里）
+async function callDoubaoResponses(
+  imageUrls: string[],
+  systemPrompt: string,
+  userText: string,
+  cfg: ModelConfig,
+): Promise<Response> {
+  // Responses API: input 是数组，每条 {role, content:[{type, text|image_url}]}
+  const userContent: any[] = [{ type: 'input_text', text: userText }];
+  for (const url of imageUrls) {
+    userContent.push({ type: 'input_image', image_url: url });
+  }
+
+  // Responses API 的 function tool 是扁平结构（不嵌 function 字段）
+  const recognitionToolFlat = {
+    type: 'function',
+    name: RECOGNITION_TOOL.function.name,
+    description: RECOGNITION_TOOL.function.description,
+    parameters: RECOGNITION_TOOL.function.parameters,
+  };
+
+  const body = {
+    model: cfg.model,
+    input: [
+      { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
+      { role: 'user', content: userContent },
+    ],
+    tools: [
+      { type: 'web_search', max_keyword: 2 },
+      recognitionToolFlat,
+    ],
+    max_tool_calls: 3,
+  };
+
+  return await fetch(cfg.url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${cfg.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+// 解析豆包 Responses API 返回，提取 submit_recognition 参数 + 是否联网
+function parseDoubaoResponses(data: any): { result: any | null; usedWebSearch: boolean; rawHint: string } {
+  let usedWebSearch = false;
+  let result: any = null;
+  const items = Array.isArray(data?.output) ? data.output : [];
+  for (const item of items) {
+    const t = item?.type;
+    if (t === 'web_search_call') {
+      usedWebSearch = true;
+    } else if (t === 'function_call' && item?.name === 'submit_recognition') {
+      const args = typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments || {});
+      const parsed = safeParseJSON(args);
+      if (parsed) result = parsed;
+    } else if (t === 'message' && !result) {
+      // 兜底：若模型没调用工具，直接给了文本，尝试解析
+      const parts = Array.isArray(item.content) ? item.content : [];
+      for (const p of parts) {
+        const txt = p?.text;
+        if (typeof txt === 'string') {
+          const parsed = safeParseJSON(txt);
+          if (parsed) { result = parsed; break; }
+        }
+      }
+    }
+  }
+  // usage 维度兜底判断
+  const toolUsage = data?.usage?.tool_usage;
+  if (typeof toolUsage === 'number' && toolUsage > 0) usedWebSearch = true;
+  return { result, usedWebSearch, rawHint: JSON.stringify(items).slice(0, 300) };
 }
 
 // ====== 缓存辅助函数 ======
