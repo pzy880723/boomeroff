@@ -22,6 +22,7 @@ interface Settings {
   provider: Provider;
   model: string;
   precision: Precision;
+  enableWebSearch: boolean;
   custom: { baseUrl: string; apiKey: string; model: string };
 }
 
