@@ -220,8 +220,15 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
 
   // 优先用 tool calling（最稳，无 JSON 格式问题）
   if (cfg.supportsTools) {
-    body.tools = [RECOGNITION_TOOL];
-    body.tool_choice = { type: 'function', function: { name: 'submit_recognition' } };
+    if (cfg.enableWebSearch) {
+      // 联网模式：挂上 google_search，让模型自己决定先搜还是先答；
+      // tool_choice=auto 才能让模型有机会调用 google_search
+      body.tools = [RECOGNITION_TOOL, { type: 'google_search' }];
+      body.tool_choice = 'auto';
+    } else {
+      body.tools = [RECOGNITION_TOOL];
+      body.tool_choice = { type: 'function', function: { name: 'submit_recognition' } };
+    }
   } else if (cfg.jsonMode) {
     body.response_format = { type: 'json_object' };
   }
