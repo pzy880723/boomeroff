@@ -143,6 +143,7 @@ export function AISettingsPanel() {
       if (error) throw error;
       toast.success('设置已保存，下一次识别即生效');
       setHadStoredKey(!!finalKey);
+      setSavedSettings({ ...value, custom: { ...value.custom, apiKey: '' } });
       setSettings((p) => ({ ...p, custom: { ...p.custom, apiKey: '' } }));
     } catch (e) {
       console.error(e);
