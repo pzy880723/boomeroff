@@ -12,6 +12,12 @@ interface ModelConfig {
   model: string;
   jsonMode: boolean;
   supportsTools: boolean;
+  enableWebSearch: boolean;
+}
+
+// 是否是支持 Google Search 接地的 Gemini 模型
+function isGeminiModel(model: string): boolean {
+  return model.startsWith('google/gemini');
 }
 
 type Precision = 'economy' | 'standard' | 'high';
@@ -31,6 +37,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
   let precision: Precision = 'standard';
   let storedModel: string | null = null;
   let custom: any = null;
+  let enableWebSearch = true; // 默认开启联网搜索
 
   try {
     const { data } = await adminClient
@@ -44,6 +51,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
         ? v.precision : 'standard';
       storedModel = v.model || null;
       custom = v.custom || null;
+      if (typeof v.enableWebSearch === 'boolean') enableWebSearch = v.enableWebSearch;
     }
   } catch (e) {
     console.warn('[Recognition] settings load failed, using defaults:', e);
@@ -56,6 +64,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       model: custom.model,
       jsonMode: false,
       supportsTools: true,
+      enableWebSearch: false, // 自定义 endpoint 不支持 google_search
     };
   }
 
@@ -66,6 +75,7 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       model: storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL,
       jsonMode: true,
       supportsTools: true,
+      enableWebSearch: false, // 豆包不支持 google_search
     };
   }
 
@@ -84,7 +94,14 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
     }
   }
 
-  return { url: LOVABLE_URL, apiKey: lovableKey, model, jsonMode: true, supportsTools: true };
+  return {
+    url: LOVABLE_URL,
+    apiKey: lovableKey,
+    model,
+    jsonMode: true,
+    supportsTools: true,
+    enableWebSearch: enableWebSearch && isGeminiModel(model),
+  };
 }
 
 // 宽容 JSON 解析：自动去尾逗号、去 markdown 代码块、提取 {...}
@@ -203,8 +220,15 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
 
   // 优先用 tool calling（最稳，无 JSON 格式问题）
   if (cfg.supportsTools) {
-    body.tools = [RECOGNITION_TOOL];
-    body.tool_choice = { type: 'function', function: { name: 'submit_recognition' } };
+    if (cfg.enableWebSearch) {
+      // 联网模式：挂上 google_search，让模型自己决定先搜还是先答；
+      // tool_choice=auto 才能让模型有机会调用 google_search
+      body.tools = [RECOGNITION_TOOL, { type: 'google_search' }];
+      body.tool_choice = 'auto';
+    } else {
+      body.tools = [RECOGNITION_TOOL];
+      body.tool_choice = { type: 'function', function: { name: 'submit_recognition' } };
+    }
   } else if (cfg.jsonMode) {
     body.response_format = { type: 'json_object' };
   }
@@ -561,6 +585,18 @@ serve(async (req) => {
    - objection ≤30 字，顾客常问应答（如"问真假？盘底落款+金彩磨损是真品标志"）
    无内容的字段省略，不要硬编。
 ${knowledgeContext}
+${modelCfg.enableWebSearch ? `
+【联网搜索规则·必须遵守】
+- 你可以调用 google_search 工具来核实事实。**仅在以下情况调用**：
+  · 看到外文品牌名 / 型号编号（SONY WM-XXX、Nikon EM 等）
+  · 看到不熟悉的底款铭文 / 作家落款 / 窑口名
+  · 看到不确定的动漫 IP / 限定标识 / 联名 logo
+  · 你的内置知识不足以判断年代或产地
+- 中文常见品类（普通九谷烧/有田烧/南部铁器等）且底款清晰时**不要联网**，直接答，省时间。
+- 搜索关键词用「品牌型号 + 中古 / 年代 / 価格」之类组合，最多搜 2 次。
+- 联网得到的事实必须**直接落进** name / era / origin / sellingPoints 字段，**禁止**在文字里出现"根据搜索结果""网上说""维基百科显示"等字眼。
+- 搜索完后**必须**调用 submit_recognition 工具提交最终结果。
+` : ''}
 请调用 submit_recognition 工具提交结果。所有字段必须遵守上述硬性输出规则。`;
 
 
@@ -589,14 +625,28 @@ ${knowledgeContext}
     const data = await response.json();
     const message = data.choices?.[0]?.message;
 
+    // 联网搜索使用情况日志（不暴露给前端）
+    const grounding = message?.grounding_metadata
+      ?? data.choices?.[0]?.grounding_metadata
+      ?? message?.groundingMetadata;
+    let usedWebSearch = false;
+    if (grounding) {
+      usedWebSearch = true;
+      const queries = grounding.web_search_queries
+        ?? grounding.webSearchQueries
+        ?? [];
+      console.log('[Recognition] 🌐 grounded via google_search, queries:', JSON.stringify(queries).slice(0, 200));
+    }
+
     let result: any = null;
 
-    // 优先读 tool_calls（结构化输出，最稳）
-    const toolCall = message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
-      result = safeParseJSON(toolCall.function.arguments);
+    // 优先读 submit_recognition tool_call（结构化输出，最稳）
+    const toolCalls = message?.tool_calls || [];
+    const submitCall = toolCalls.find((tc: any) => tc?.function?.name === 'submit_recognition') || toolCalls[0];
+    if (submitCall?.function?.arguments) {
+      result = safeParseJSON(submitCall.function.arguments);
       if (!result) {
-        console.error('[Recognition] tool_call args parse failed:', toolCall.function.arguments);
+        console.error('[Recognition] tool_call args parse failed:', submitCall.function.arguments);
       }
     }
 
@@ -625,10 +675,11 @@ ${knowledgeContext}
     if (!result.name) result.name = '未知商品';
     if (typeof result.confidence !== 'number') result.confidence = 0.7;
     result.fromCache = false;
+    result.usedWebSearch = usedWebSearch;
     if (imageHash) result.imageHash = imageHash;
 
     const totalTime = Date.now() - startTime;
-    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'Total:', totalTime, 'ms');
+    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'Total:', totalTime, 'ms');
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

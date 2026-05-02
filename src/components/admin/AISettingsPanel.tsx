@@ -11,7 +11,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
-import { Loader2, Save, FlaskConical, Sparkles, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Save, FlaskConical, Sparkles, AlertCircle, CheckCircle2, Eye, EyeOff, Globe } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
@@ -22,6 +23,7 @@ interface Settings {
   provider: Provider;
   model: string;
   precision: Precision;
+  enableWebSearch: boolean;
   custom: { baseUrl: string; apiKey: string; model: string };
 }
 
@@ -51,6 +53,7 @@ const DEFAULT: Settings = {
   provider: 'lovable',
   model: 'google/gemini-2.5-flash',
   precision: 'standard',
+  enableWebSearch: true,
   custom: { baseUrl: '', apiKey: '', model: '' },
 };
 
@@ -86,6 +89,7 @@ export function AISettingsPanel() {
         model: v.model || DEFAULT.model,
         precision: (['economy', 'standard', 'high'] as Precision[]).includes(v.precision as Precision)
           ? (v.precision as Precision) : 'standard',
+        enableWebSearch: typeof (v as any).enableWebSearch === 'boolean' ? (v as any).enableWebSearch : true,
         custom: {
           baseUrl: v.custom?.baseUrl || '',
           apiKey: '', // 不回填明文
@@ -123,6 +127,7 @@ export function AISettingsPanel() {
         provider: settings.provider,
         model: settings.model,
         precision: settings.precision,
+        enableWebSearch: settings.enableWebSearch,
         custom: {
           baseUrl: settings.custom.baseUrl.trim(),
           apiKey: finalKey,
@@ -302,6 +307,33 @@ export function AISettingsPanel() {
                   ))}
                 </SelectContent>
               </Select>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                联网搜索（仅 Gemini 模型）
+              </CardTitle>
+              <CardDescription>
+                开启后，AI 遇到不熟悉的外文品牌、型号编号、底款铭文、动漫 IP 时，会自动调用 Google 搜索核实事实，再生成识别结果。常见品类仍秒出，不会变慢。
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2.5">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">允许 AI 联网搜索</div>
+                  <div className="text-xs text-muted-foreground">
+                    {settings.enableWebSearch ? '已开启 · 拿不准时自动联网' : '已关闭 · 仅用模型自身知识'}
+                  </div>
+                </div>
+                <Switch
+                  checked={settings.enableWebSearch}
+                  onCheckedChange={(v) => setSettings((p) => ({ ...p, enableWebSearch: v }))}
+                  disabled={!isAdmin}
+                />
+              </div>
             </CardContent>
           </Card>
         </>
