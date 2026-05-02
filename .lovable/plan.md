@@ -1,58 +1,78 @@
-## 个人知识库页面改造
+## 问题诊断
 
-按你的要求重写 `/my-library` 页面，结构由上到下：
+用户截图：底部 tab 高亮的是「AI 识物」(/scan)，但页面显示「页面出错了」——即 `ErrorBoundary` 被触发。
 
-```text
-┌─────────────────────────────┐
-│ PageHeader「个人知识库」       │
-├─────────────────────────────┤
-│ 🌟 今日学习简报（AI 卡片）    │
-│   🏪 全店动态：…             │
-│   👤 给你的建议：…           │
-│   [刷新]                     │
-├─────────────────────────────┤
-│ 我的知识与收藏  共 N 条       │
-│                              │
-│ ◾ 日瓷 (12)                  │
-│   [格子 1][格子 2]…           │
-│ ◾ 动漫玩具 (5)               │
-│   [格子 1][格子 2]…           │
-│ ◾ 奢侈品 (3)                 │
-│   …                          │
-└─────────────────────────────┘
+控制台运行时错误（已抓到）：
+```
+Objects are not valid as a React child (found: object with keys {tag, text})
 ```
 
-### 1. 新增 Edge Function `supabase/functions/personal-daily-summary`
-- 入参：当前用户 JWT
-- 取数：
-  - 全店最近 7 天 `products`（统计件数 + 品类 Top 5）
-  - 当前用户 `user_favorites` + `product_knowledge`（统计件数 + 品类 Top 5）
-- 调 Lovable AI（`gemini-2.5-flash-lite`，response_format json）生成两段：
-  - `team_summary`（≤60字）：本周全店热点 + 重点关注品类
-  - `personal_advice`（≤50字）：针对该店员收藏分布的一句具体建议
-- 兜底：AI 失败时用纯统计文案。
-- 缓存：写入 `app_settings` key = `personal_daily:{user_id}:{YYYY-MM-DD}`，当天再访问直接返回。`force=true` 时跳过缓存重新生成。
-- 100% 中文、用「你」称呼，禁词「主播」。
+`{tag, text}` 正是新版 `sellingPoints` 元素的形状。说明 Scan 页（`LiveStreamPanel` → 渲染识别结果或历史 currentProduct）链路里，**有一处把 `selling_points` 数组元素当字符串直接渲染**了，而不是走 `normalizeSellingPoints()`。
 
-### 2. 重写 `src/pages/MyLibrary.tsx`
-- **顶部卡片**：调 `personal-daily-summary`，渲染全店动态 + 给你的建议；右上角刷新按钮。
-- **数据合并**：
-  - 拉 `user_favorites`（我所有收藏）
-  - 拉 `product_knowledge` where `created_by = me`（我创建/申请的知识）
-  - 统一映射成 `UnifiedItem`（区分 `kind: favorite | knowledge`），按 `created_at` 倒序合并
-- **按品类分组渲染**：用 `Map<category, items[]>`，组内按时间倒序，组之间按数量降序；每组标题带图标、品类名、件数；**全部默认展开**，长滚动。
-- **卡片**：保留原有 2 列网格 + 方形封面；左上角 Badge：
-  - `kind=knowledge` → 「我建的」（primary）
-  - `kind=favorite` → 「官方/识别/历史」（secondary）
-- **详情弹窗**：复用原弹窗逻辑，回查官方/产品/自建知识。自建知识不显示「移除」按钮，提示请联系管理员。
-- 兼容老数据：旧 selling_points 元素可能是 `{tag,text}` 对象，渲染时取 `.text`。
+已确认安全的位置（都走了 normalize）：
+- `ProductDetailCard.tsx`（line 49）
+- `ProductDetailDialog.tsx`（line 79）
+- `MyLibrary.tsx`（line 420，取 `.text`）
 
-### 3. 不动的部分
-- `useAuth`、布局、底部 tab 不变。
-- `generate-daily-knowledge`（旧的 Header Popover「今日知识点」）保持不变。
-- 数据库 schema 不动；缓存复用现有 `app_settings`（已有 RLS，service role 写入，读用 select 策略允许 authenticated）。
+最可疑的 1 个位置 + 2 个隐患：
 
-### 4. 验证
-- 进入 /my-library：顶部卡片几秒内出现两段中文摘要；下面按品类分组列出收藏 + 自建知识。
-- 收藏后刷新：新条目出现在对应品类下；点卡片能看到详情；从收藏移除后该卡消失。
-- 当天再访问：摘要瞬间返回（命中缓存）；点刷新重新生成。
+1. **`LiveStreamPanel.tsx` line 509–521** —— 当 `result` 为空、用 `currentProduct`（DB 行）合成 `baseResult` 时：
+   ```ts
+   sellingPoints: currentProduct.selling_points || [],   // 直接塞入 DB 的 jsonb
+   tips: currentProduct.tips,                             // DB 是字符串/可能是 JSON 字符串
+   ```
+   后续传给 `ProductDetailCard` 的 `result`，理论上 ProductDetailCard 会再 normalize，所以不直接崩。
+   但 `displayResult` 同时也被传给 **`ShareToCommunityButton`** 等子组件，且某些代码路径里数组会被展开渲染。
+
+2. **真正崩点的最大嫌疑：`ShareToCommunityButton` 内部渲染、或 LiveStreamPanel 顶部某个老的 Card 把 `selling_points` 元素直接 `{item}` 渲染**。需要逐一排查 LiveStreamPanel 1–500 行（标签 chips、价格区、上一次结果 preview 等）和 ShareToCommunityButton 的 JSX。
+
+3. ErrorBoundary 弹了之后用户看到的是兜底，没有原始组件树位置——应在 `componentDidCatch` 里把 `info.componentStack` 也打到控制台 + toast 一个简短码，方便下次定位。
+
+## 修复方案
+
+### 一、强化 `LiveStreamPanel` 中 `currentProduct` → `baseResult` 的转换（防御）
+
+在 line 509 处，把 `selling_points` 与 `tips` 直接走 normalize，再传出，避免任何下游误把对象当 React child：
+
+```ts
+import { normalizeSellingPoints, normalizeTips } from '@/lib/script';
+
+const baseResult: RecognitionResult | null = result || (currentProduct ? {
+  ...,
+  sellingPoints: normalizeSellingPoints(currentProduct.selling_points), // ← 已是 {tag,text}[]
+  tips: normalizeTips(currentProduct.tips) ?? undefined,                // ← 已是 {memory,objection} | null
+} : null);
+```
+
+### 二、扫一遍 LiveStreamPanel 1–500 行
+
+定位任何 `selling_points.map(...)` / `{sp}` / `{tips}` 这种把对象直接当 children 的地方，改为：
+- 卖点：调 `normalizeSellingPoints(...)` 后渲染 `.text`（带 `.tag` chip 可选）
+- tips：调 `normalizeTips(...)` 后渲染 `.memory` / `.objection`
+
+### 三、`ShareToCommunityButton` 内部 JSX 兜底
+
+在保存到 community_posts 前没问题（line 66 直接当 jsonb 存），但若组件 JSX 内有任何 `{sellingPoints[i]}` 直接渲染需改为 `normalizeSellingPoints(sellingPoints)[i].text`。
+
+### 四、`ErrorBoundary` 增强诊断
+
+`src/components/system/ErrorBoundary.tsx`：
+- `componentDidCatch` 里 `console.error` 同时打印 `info.componentStack`
+- UI 错误详情里追加一行 `componentStack` 的前 5 行，便于用户截图反馈
+
+### 五、（可选）页面级而非应用级兜底
+
+当前 `MainLayout` 的 `ErrorBoundary scope="page"` 包住了所有 tab outlet，单页崩了底部 tab 还在（截图也证实了）。这点保留，但在 fallback 里加一个「切换到其他 Tab 试试」的提示链接。
+
+## 验证
+
+1. 把现有线上用户某个会触发的商品打开 Scan 页 → 不再白屏，看到正常识别结果；
+2. 控制台仍能看到 `[ErrorBoundary:page]` 日志带 componentStack（万一别处再炸有据可查）；
+3. 老版本 `selling_points: string[]` 与新版 `selling_points: {tag,text}[]` 两种数据都能正常渲染；
+4. 老 tips（纯字符串）与新 tips（`{memory,objection}` 或其 JSON 字符串）都能渲染。
+
+## 影响文件
+
+- `src/components/dashboard/LiveStreamPanel.tsx`
+- `src/components/community/ShareToCommunityButton.tsx`（如发现内部直渲染）
+- `src/components/system/ErrorBoundary.tsx`
