@@ -69,6 +69,7 @@ export function AISettingsPanel() {
   const [hadStoredKey, setHadStoredKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [doubaoWebStatus, setDoubaoWebStatus] = useState<{ disabled: boolean; reason?: string; detected_at?: string } | null>(null);
 
   useEffect(() => { void load(); }, []);
 
