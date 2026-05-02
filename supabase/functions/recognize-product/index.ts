@@ -13,6 +13,10 @@ interface ModelConfig {
   jsonMode: boolean;
   supportsTools: boolean;
   enableWebSearch: boolean;
+  // 'chat' = OpenAI 兼容 /chat/completions ; 'responses' = 火山方舟 Responses API（豆包联网专用）
+  apiStyle: 'chat' | 'responses';
+  // 联网搜索类型：gemini 走 google_search 接地；doubao 走火山方舟 web_search 内置插件
+  searchKind: 'none' | 'google_search' | 'doubao_web_search';
 }
 
 // 是否是支持 Google Search 接地的 Gemini 模型
@@ -27,7 +31,8 @@ const PRECISION_MODEL: Record<Precision, string> = {
   high: 'google/gemini-2.5-pro',
 };
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-const DOUBAO_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const DOUBAO_CHAT_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const DOUBAO_RESPONSES_URL = 'https://ark.cn-beijing.volces.com/api/v3/responses';
 const DOUBAO_DEFAULT_MODEL = 'doubao-seed-1-6-250615';
 
 async function resolveModelConfig(adminClient: any, multiImage: boolean): Promise<ModelConfig> {
@@ -64,18 +69,36 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       model: custom.model,
       jsonMode: false,
       supportsTools: true,
-      enableWebSearch: false, // 自定义 endpoint 不支持 google_search
+      enableWebSearch: false, // 自定义 endpoint 不支持联网
+      apiStyle: 'chat',
+      searchKind: 'none',
     };
   }
 
   if (provider === 'doubao') {
+    const model = storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL;
+    // 豆包联网必须切到 Responses API
+    if (enableWebSearch) {
+      return {
+        url: DOUBAO_RESPONSES_URL,
+        apiKey: doubaoKey,
+        model,
+        jsonMode: false,
+        supportsTools: true,
+        enableWebSearch: true,
+        apiStyle: 'responses',
+        searchKind: 'doubao_web_search',
+      };
+    }
     return {
-      url: DOUBAO_URL,
+      url: DOUBAO_CHAT_URL,
       apiKey: doubaoKey,
-      model: storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL,
+      model,
       jsonMode: true,
       supportsTools: true,
-      enableWebSearch: false, // 豆包不支持 google_search
+      enableWebSearch: false,
+      apiStyle: 'chat',
+      searchKind: 'none',
     };
   }
 
@@ -94,13 +117,16 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
     }
   }
 
+  const useGoogleSearch = enableWebSearch && isGeminiModel(model);
   return {
     url: LOVABLE_URL,
     apiKey: lovableKey,
     model,
     jsonMode: true,
     supportsTools: true,
-    enableWebSearch: enableWebSearch && isGeminiModel(model),
+    enableWebSearch: useGoogleSearch,
+    apiStyle: 'chat',
+    searchKind: useGoogleSearch ? 'google_search' : 'none',
   };
 }
 
@@ -205,6 +231,12 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
     ? `以下为同一件中古商品的 ${imageUrls.length} 张多角度照片，请综合判断后调用 submit_recognition 工具提交结果。`
     : '请鉴定这件中古商品，调用 submit_recognition 工具提交结果。';
 
+  // ===== 豆包 Responses API 分支（仅联网模式） =====
+  if (cfg.apiStyle === 'responses') {
+    return await callDoubaoResponses(imageUrls, systemPrompt, userText, cfg);
+  }
+
+  // ===== 标准 chat/completions 分支 =====
   const userContent: any[] = [{ type: 'text', text: userText }];
   for (const url of imageUrls) {
     userContent.push({ type: 'image_url', image_url: { url } });
@@ -220,7 +252,7 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
 
   // 优先用 tool calling（最稳，无 JSON 格式问题）
   if (cfg.supportsTools) {
-    if (cfg.enableWebSearch) {
+    if (cfg.searchKind === 'google_search') {
       // 联网模式：挂上 google_search，让模型自己决定先搜还是先答；
       // tool_choice=auto 才能让模型有机会调用 google_search
       body.tools = [RECOGNITION_TOOL, { type: 'google_search' }];
@@ -241,6 +273,81 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig) 
     },
     body: JSON.stringify(body),
   });
+}
+
+// 豆包 Responses API（火山方舟 web_search 内置插件，只在联网模式走这里）
+async function callDoubaoResponses(
+  imageUrls: string[],
+  systemPrompt: string,
+  userText: string,
+  cfg: ModelConfig,
+): Promise<Response> {
+  // Responses API: input 是数组，每条 {role, content:[{type, text|image_url}]}
+  const userContent: any[] = [{ type: 'input_text', text: userText }];
+  for (const url of imageUrls) {
+    userContent.push({ type: 'input_image', image_url: url });
+  }
+
+  // Responses API 的 function tool 是扁平结构（不嵌 function 字段）
+  const recognitionToolFlat = {
+    type: 'function',
+    name: RECOGNITION_TOOL.function.name,
+    description: RECOGNITION_TOOL.function.description,
+    parameters: RECOGNITION_TOOL.function.parameters,
+  };
+
+  const body = {
+    model: cfg.model,
+    input: [
+      { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
+      { role: 'user', content: userContent },
+    ],
+    tools: [
+      { type: 'web_search', max_keyword: 2 },
+      recognitionToolFlat,
+    ],
+    max_tool_calls: 3,
+  };
+
+  return await fetch(cfg.url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${cfg.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+// 解析豆包 Responses API 返回，提取 submit_recognition 参数 + 是否联网
+function parseDoubaoResponses(data: any): { result: any | null; usedWebSearch: boolean; rawHint: string } {
+  let usedWebSearch = false;
+  let result: any = null;
+  const items = Array.isArray(data?.output) ? data.output : [];
+  for (const item of items) {
+    const t = item?.type;
+    if (t === 'web_search_call') {
+      usedWebSearch = true;
+    } else if (t === 'function_call' && item?.name === 'submit_recognition') {
+      const args = typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments || {});
+      const parsed = safeParseJSON(args);
+      if (parsed) result = parsed;
+    } else if (t === 'message' && !result) {
+      // 兜底：若模型没调用工具，直接给了文本，尝试解析
+      const parts = Array.isArray(item.content) ? item.content : [];
+      for (const p of parts) {
+        const txt = p?.text;
+        if (typeof txt === 'string') {
+          const parsed = safeParseJSON(txt);
+          if (parsed) { result = parsed; break; }
+        }
+      }
+    }
+  }
+  // usage 维度兜底判断
+  const toolUsage = data?.usage?.tool_usage;
+  if (typeof toolUsage === 'number' && toolUsage > 0) usedWebSearch = true;
+  return { result, usedWebSearch, rawHint: JSON.stringify(items).slice(0, 300) };
 }
 
 // ====== 缓存辅助函数 ======
@@ -337,7 +444,7 @@ async function tryQuickClassify(images: string[], baseCfg: ModelConfig): Promise
   const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
   // 优先用 lovable economy 模型，省钱够用
   const cfg: ModelConfig = lovableKey
-    ? { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true }
+    ? { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' }
     : baseCfg;
   const imageUrls = images.slice(0, 1).map((img) =>
     img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
@@ -587,7 +694,7 @@ serve(async (req) => {
 ${knowledgeContext}
 ${modelCfg.enableWebSearch ? `
 【联网搜索规则·必须遵守】
-- 你可以调用 google_search 工具来核实事实。**仅在以下情况调用**：
+- 你可以调用 ${modelCfg.searchKind === 'doubao_web_search' ? 'web_search' : 'google_search'} 工具来核实事实。**仅在以下情况调用**：
   · 看到外文品牌名 / 型号编号（SONY WM-XXX、Nikon EM 等）
   · 看到不熟悉的底款铭文 / 作家落款 / 窑口名
   · 看到不确定的动漫 IP / 限定标识 / 联名 logo
@@ -600,9 +707,27 @@ ${modelCfg.enableWebSearch ? `
 请调用 submit_recognition 工具提交结果。所有字段必须遵守上述硬性输出规则。`;
 
 
-    const response = await callAI(imageList, recognitionPrompt, modelCfg);
-    const aiTime = Date.now() - startTime;
-    console.log('[Recognition] model:', modelCfg.model, 'multi:', multiImage, 'AI time:', aiTime, 'ms');
+    let response = await callAI(imageList, recognitionPrompt, modelCfg);
+    let aiTime = Date.now() - startTime;
+    let activeCfg = modelCfg;
+    console.log('[Recognition] model:', modelCfg.model, 'apiStyle:', modelCfg.apiStyle, 'searchKind:', modelCfg.searchKind, 'multi:', multiImage, 'AI time:', aiTime, 'ms');
+
+    // 豆包 Responses API 失败 → 自动降级到 chat/completions（不联网，但保住识别）
+    if (!response.ok && modelCfg.apiStyle === 'responses') {
+      const errText = await response.text();
+      console.warn('[Recognition] Doubao Responses failed, fallback to chat/completions:', response.status, errText.slice(0, 300));
+      const fallbackCfg: ModelConfig = {
+        ...modelCfg,
+        url: DOUBAO_CHAT_URL,
+        apiStyle: 'chat',
+        searchKind: 'none',
+        enableWebSearch: false,
+        jsonMode: true,
+      };
+      response = await callAI(imageList, recognitionPrompt, fallbackCfg);
+      activeCfg = fallbackCfg;
+      aiTime = Date.now() - startTime;
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -623,51 +748,69 @@ ${modelCfg.enableWebSearch ? `
     }
 
     const data = await response.json();
-    const message = data.choices?.[0]?.message;
-
-    // 联网搜索使用情况日志（不暴露给前端）
-    const grounding = message?.grounding_metadata
-      ?? data.choices?.[0]?.grounding_metadata
-      ?? message?.groundingMetadata;
-    let usedWebSearch = false;
-    if (grounding) {
-      usedWebSearch = true;
-      const queries = grounding.web_search_queries
-        ?? grounding.webSearchQueries
-        ?? [];
-      console.log('[Recognition] 🌐 grounded via google_search, queries:', JSON.stringify(queries).slice(0, 200));
-    }
 
     let result: any = null;
+    let usedWebSearch = false;
 
-    // 优先读 submit_recognition tool_call（结构化输出，最稳）
-    const toolCalls = message?.tool_calls || [];
-    const submitCall = toolCalls.find((tc: any) => tc?.function?.name === 'submit_recognition') || toolCalls[0];
-    if (submitCall?.function?.arguments) {
-      result = safeParseJSON(submitCall.function.arguments);
-      if (!result) {
-        console.error('[Recognition] tool_call args parse failed:', submitCall.function.arguments);
+    if (activeCfg.apiStyle === 'responses') {
+      // ===== 豆包 Responses API 解析 =====
+      const parsed = parseDoubaoResponses(data);
+      result = parsed.result;
+      usedWebSearch = parsed.usedWebSearch;
+      if (usedWebSearch) {
+        console.log('[Recognition] 🌐 grounded via Doubao web_search, tool_usage:', data?.usage?.tool_usage ?? '?');
       }
-    }
-
-    // 回退：从 content 字段解析
-    if (!result) {
-      const content = message?.content;
-      if (!content) {
-        console.error('[Recognition] empty response, raw data:', JSON.stringify(data).slice(0, 500));
+      if (!result) {
+        console.error('[Recognition] Doubao Responses parse failed. hint:', parsed.rawHint);
         return new Response(JSON.stringify({ error: 'AI 返回空响应，请重试' }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      result = safeParseJSON(content);
+    } else {
+      // ===== 标准 chat/completions 解析 =====
+      const message = data.choices?.[0]?.message;
+
+      // 联网搜索使用情况日志（不暴露给前端）
+      const grounding = message?.grounding_metadata
+        ?? data.choices?.[0]?.grounding_metadata
+        ?? message?.groundingMetadata;
+      if (grounding) {
+        usedWebSearch = true;
+        const queries = grounding.web_search_queries
+          ?? grounding.webSearchQueries
+          ?? [];
+        console.log('[Recognition] 🌐 grounded via google_search, queries:', JSON.stringify(queries).slice(0, 200));
+      }
+
+      // 优先读 submit_recognition tool_call
+      const toolCalls = message?.tool_calls || [];
+      const submitCall = toolCalls.find((tc: any) => tc?.function?.name === 'submit_recognition') || toolCalls[0];
+      if (submitCall?.function?.arguments) {
+        result = safeParseJSON(submitCall.function.arguments);
+        if (!result) {
+          console.error('[Recognition] tool_call args parse failed:', submitCall.function.arguments);
+        }
+      }
+
+      // 回退：从 content 字段解析
       if (!result) {
-        console.error('[Recognition] parse failed. Content:', content);
-        return new Response(JSON.stringify({
-          error: `AI 返回格式异常：${String(content).slice(0, 80)}...`,
-          rawContent: content,
-        }), {
-          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        const content = message?.content;
+        if (!content) {
+          console.error('[Recognition] empty response, raw data:', JSON.stringify(data).slice(0, 500));
+          return new Response(JSON.stringify({ error: 'AI 返回空响应，请重试' }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        result = safeParseJSON(content);
+        if (!result) {
+          console.error('[Recognition] parse failed. Content:', content);
+          return new Response(JSON.stringify({
+            error: `AI 返回格式异常：${String(content).slice(0, 80)}...`,
+            rawContent: content,
+          }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
     }
 

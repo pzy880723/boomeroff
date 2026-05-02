@@ -310,33 +310,42 @@ export function AISettingsPanel() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Globe className="h-4 w-4" />
-                联网搜索（仅 Gemini 模型）
-              </CardTitle>
-              <CardDescription>
-                开启后，AI 遇到不熟悉的外文品牌、型号编号、底款铭文、动漫 IP 时，会自动调用 Google 搜索核实事实，再生成识别结果。常见品类仍秒出，不会变慢。
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2.5">
-                <div className="space-y-0.5">
-                  <div className="text-sm font-medium">允许 AI 联网搜索</div>
-                  <div className="text-xs text-muted-foreground">
-                    {settings.enableWebSearch ? '已开启 · 拿不准时自动联网' : '已关闭 · 仅用模型自身知识'}
-                  </div>
-                </div>
-                <Switch
-                  checked={settings.enableWebSearch}
-                  onCheckedChange={(v) => setSettings((p) => ({ ...p, enableWebSearch: v }))}
-                  disabled={!isAdmin}
-                />
-              </div>
-            </CardContent>
-          </Card>
         </>
+      )}
+
+      {(settings.provider === 'lovable' || settings.provider === 'doubao') && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Globe className="h-4 w-4" />
+              联网搜索
+              <span className="text-[10px] px-1.5 py-px rounded-full bg-muted text-muted-foreground font-normal">
+                Gemini / 豆包 支持
+              </span>
+            </CardTitle>
+            <CardDescription>
+              开启后，AI 遇到不熟悉的外文品牌、型号编号、底款铭文、动漫 IP 时，会自动联网核实事实再生成识别结果。常见品类仍秒出。
+              {settings.provider === 'doubao'
+                ? '（豆包走火山方舟「联网内容插件」，自动判断是否搜索）'
+                : '（Gemini 走 Google Search 接地，自动判断是否搜索）'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2.5">
+              <div className="space-y-0.5">
+                <div className="text-sm font-medium">允许 AI 联网搜索</div>
+                <div className="text-xs text-muted-foreground">
+                  {settings.enableWebSearch ? '已开启 · 拿不准时自动联网' : '已关闭 · 仅用模型自身知识'}
+                </div>
+              </div>
+              <Switch
+                checked={settings.enableWebSearch}
+                onCheckedChange={(v) => setSettings((p) => ({ ...p, enableWebSearch: v }))}
+                disabled={!isAdmin}
+              />
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {settings.provider === 'doubao' && (
