@@ -448,6 +448,7 @@ ${knowledgeContext}
     if (!result.name) result.name = '未知商品';
     if (typeof result.confidence !== 'number') result.confidence = 0.7;
     result.fromCache = false;
+    if (imageHash) result.imageHash = imageHash;
 
     const totalTime = Date.now() - startTime;
     console.log('[Recognition]', result.name, 'conf:', result.confidence, 'Total:', totalTime, 'ms');
