@@ -53,7 +53,8 @@ export function AISettingsPanel() {
       const v = data.value as any;
       const merged: Settings = {
         model: MODELS.some(m => m.value === v.model) ? v.model : DEFAULT.model,
-        enableWebSearch: typeof v.enableWebSearch === 'boolean' ? v.enableWebSearch : true,
+        enableWebSearch: typeof v.enableWebSearch === 'boolean' ? v.enableWebSearch : false,
+        enableQuickMatch: typeof v.enableQuickMatch === 'boolean' ? v.enableQuickMatch : false,
       };
       setSettings(merged);
       setSavedSettings(merged);
