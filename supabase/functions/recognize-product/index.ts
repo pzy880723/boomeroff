@@ -561,9 +561,10 @@ ${modelCfg.enableWebSearch ? `
 ` : ''}
 请调用 submit_recognition 工具提交结果。所有字段必须遵守上述硬性输出规则。`;
 
-    const response = await callAIWithTimeout(imageList, recognitionPrompt, modelCfg, 25000);
-    const aiTime = Date.now() - startTime;
-    console.log('[Recognition] model:', modelCfg.model, 'multi:', multiImage, 'AI time:', aiTime, 'ms');
+    const tAIStart = Date.now();
+    const response = await callAIWithTimeout(imageList, recognitionPrompt, modelCfg, 18000);
+    const aiTime = Date.now() - tAIStart;
+    console.log('[Timing] mainAI:', aiTime, 'ms (model=', modelCfg.model, 'multi=', multiImage, 'web=', modelCfg.enableWebSearch, ')');
 
     if (!response.ok) {
       const errorText = await response.text();
