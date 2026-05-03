@@ -124,15 +124,10 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
               {typeof result.__pipeline?.aiTimeMs === 'number' && (
                 <span className="opacity-70">· {(result.__pipeline.aiTimeMs / 1000).toFixed(1)}s</span>
               )}
-              {result.__pipeline?.degraded && (
-                <span className="opacity-70">· 已降级</span>
-              )}
             </div>
-            {result.__pipeline?.degradedReason && (
-              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
-                ⚠️ {result.__pipeline.degradedReason}
-              </p>
-            )}
+          </div>
+        );
+      })()}
           </div>
         );
       })()}
