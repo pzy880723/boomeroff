@@ -456,12 +456,15 @@ serve(async (req) => {
       }
     }
 
+    const tAfterHash = Date.now();
     const multiImage = imageList.length > 1;
     const [modelCfg, knowledgeContext] = await Promise.all([
       resolveModelConfig(adminClient, multiImage),
       loadKnowledgeContext(adminClient),
     ]);
-    console.log('[Recognition] model=', modelCfg.model, 'webSearch=', modelCfg.enableWebSearch);
+    const tAfterSettings = Date.now();
+    console.log('[Timing] settings+knowledge:', tAfterSettings - tAfterHash, 'ms');
+    console.log('[Recognition] model=', modelCfg.model, 'webSearch=', modelCfg.enableWebSearch, 'quickMatch=', modelCfg.enableQuickMatch);
 
     if (!Deno.env.get('LOVABLE_API_KEY')) {
       return new Response(JSON.stringify({ error: 'AI 服务未配置' }), {
@@ -469,10 +472,12 @@ serve(async (req) => {
       });
     }
 
-    // ② 名称+类目模糊命中
-    if (!forceRefresh) {
+    // ② 名称+类目模糊命中（默认关，可在后台开启）
+    if (!forceRefresh && modelCfg.enableQuickMatch) {
+      const tQ0 = Date.now();
       try {
         const quick = await tryQuickClassify(imageList);
+        console.log('[Timing] quickClassify:', Date.now() - tQ0, 'ms', quick ? `→ ${quick.name}` : '(no result)');
         if (quick?.name && quick?.category) {
           const nameMatch = await tryNameMatch(adminClient, quick.name, quick.category);
           if (nameMatch) {
