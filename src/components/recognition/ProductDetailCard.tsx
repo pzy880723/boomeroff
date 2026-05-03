@@ -35,6 +35,8 @@ interface ProductDetailCardProps {
     | 'cachedAt'
     | 'recentPrice'
     | '__pipeline'
+    | 'enriched'
+    | 'isEnriching'
   >;
 }
 
