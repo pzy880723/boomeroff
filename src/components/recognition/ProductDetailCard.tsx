@@ -334,7 +334,7 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
       )}
 
       {/* 完整介绍（折叠） */}
-      {result.description && result.description.trim() && result.description !== pitch?.opener && (
+      {description && description.trim() && description !== pitch?.opener && (
         <Card className="border-border/60 shadow-soft">
           <CardContent className="pt-4 pb-3">
             <button
@@ -350,7 +350,7 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
             </button>
             {showLong && (
               <p className="leading-relaxed whitespace-pre-wrap text-[14px] text-foreground/85 mt-3">
-                {result.description}
+                {description}
               </p>
             )}
           </CardContent>
