@@ -21,11 +21,13 @@ const LITE_MODEL = 'google/gemini-2.5-flash-lite';
 interface ModelConfig {
   model: string;
   enableWebSearch: boolean;
+  enableQuickMatch: boolean;
 }
 
-async function resolveModelConfig(adminClient: any, multiImage: boolean): Promise<ModelConfig> {
+async function resolveModelConfig(adminClient: any, _multiImage: boolean): Promise<ModelConfig> {
   let model = DEFAULT_MODEL;
-  let enableWebSearch = true;
+  let enableWebSearch = false;     // 默认关：联网会让单次识别多 5-15s
+  let enableQuickMatch = false;    // 默认关：多一次 lite AI 调用，店内大多没有重复
   try {
     const { data } = await adminClient
       .from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
@@ -37,15 +39,15 @@ async function resolveModelConfig(adminClient: any, multiImage: boolean): Promis
       if (typeof v.enableWebSearch === 'boolean') {
         enableWebSearch = v.enableWebSearch;
       }
+      if (typeof v.enableQuickMatch === 'boolean') {
+        enableQuickMatch = v.enableQuickMatch;
+      }
     }
   } catch (e) {
     console.warn('[Recognition] settings load failed, using defaults:', e);
   }
-  // 多角度拍照：lite/flash 自动升一档到 pro
-  if (multiImage && model !== HIGH_MODEL) {
-    model = HIGH_MODEL;
-  }
-  return { model, enableWebSearch };
+  // 多角度拍照不再强制升 pro，保持用户选择的模型；用户主动选 pro 才走 pro
+  return { model, enableWebSearch, enableQuickMatch };
 }
 
 function safeParseJSON(raw: string): any | null {
