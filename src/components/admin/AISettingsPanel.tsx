@@ -18,6 +18,7 @@ type ModelId = 'google/gemini-2.5-flash-lite' | 'google/gemini-2.5-flash' | 'goo
 interface Settings {
   model: ModelId;
   enableWebSearch: boolean;
+  enableQuickMatch: boolean;
 }
 
 const MODELS: { value: ModelId; label: string; tag: string; desc: string }[] = [
@@ -28,7 +29,8 @@ const MODELS: { value: ModelId; label: string; tag: string; desc: string }[] = [
 
 const DEFAULT: Settings = {
   model: 'google/gemini-2.5-flash',
-  enableWebSearch: true,
+  enableWebSearch: false,
+  enableQuickMatch: false,
 };
 
 export function AISettingsPanel() {
