@@ -70,6 +70,12 @@ export function LiveStreamPanel() {
     }
   }, [currentProduct, session]);
 
+  // 进入识别页就预热 edge function，避免冷启动多花 1-2 秒
+  useEffect(() => {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recognize-product`;
+    fetch(url, { method: 'OPTIONS' }).catch(() => { /* noop */ });
+  }, []);
+
   const uploadImage = async (imageBase64: string, userId: string): Promise<string | null> => {
     try {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
@@ -153,11 +159,12 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
-  // 压缩：单图 1024px/0.8（识别足够，体积砍 40%），多图 896px/0.75
+  // 压缩档位再降一档：单图 768/0.72，多图 720/0.7
+  // 中古杂货底款/铭文 768px 完全够看清，base64 体积砍 ~45%，4G 上行省 3-5 秒
   const compressImage = (imageData: string, maxWidth?: number, quality?: number): Promise<string> => {
     const isMulti = captureMode === 'multi';
-    const w = maxWidth ?? (isMulti ? 896 : 1024);
-    const q = quality ?? (isMulti ? 0.75 : 0.8);
+    const w = maxWidth ?? (isMulti ? 720 : 768);
+    const q = quality ?? (isMulti ? 0.7 : 0.72);
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -185,8 +192,8 @@ export function LiveStreamPanel() {
   const grabFrame = (): string | null => {
     if (!videoRef.current) return null;
     const isMulti = captureMode === 'multi';
-    const maxWidth = isMulti ? 896 : 1024;
-    const quality = isMulti ? 0.75 : 0.8;
+    const maxWidth = isMulti ? 720 : 768;
+    const quality = isMulti ? 0.7 : 0.72;
     const canvas = document.createElement('canvas');
     let width = videoRef.current.videoWidth;
     let height = videoRef.current.videoHeight;

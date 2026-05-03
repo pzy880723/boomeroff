@@ -77,6 +77,7 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
   const fullText = [
     pitch?.opener,
     pitch?.highlight,
+    pitch?.story,
     sellingPoints.length ? '核心卖点：\n' + sellingPoints.map(p => `· [${p.tag}] ${p.text}`).join('\n') : '',
     result.description && result.description !== pitch?.opener ? '完整介绍：\n' + result.description : '',
     tips?.memory ? '记忆口诀：' + tips.memory : '',
@@ -217,10 +218,10 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
               </div>
               <div>
                 <h3 className="font-display text-lg leading-none">张口就讲</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">10 秒讲完 · 直接念给客户</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">含完整故事段 · 念给客户 15-20 秒</p>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {pitch.opener && (
                 <p className="text-[17px] leading-relaxed font-medium text-foreground">
                   「{pitch.opener}」
@@ -230,6 +231,14 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
                 <p className="text-[15px] leading-relaxed text-foreground/85">
                   「{pitch.highlight}」
                 </p>
+              )}
+              {pitch.story && (
+                <div className="mt-1 rounded-lg bg-background/60 border border-border/50 px-3.5 py-3">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80 mb-1.5">故事段 · 直接念</div>
+                  <p className="text-[14.5px] leading-[1.7] text-foreground/90 whitespace-pre-wrap">
+                    {pitch.story}
+                  </p>
+                </div>
               )}
             </div>
             <div className="flex gap-2 pt-1">

@@ -18,6 +18,7 @@ export interface SellingPoint {
 export interface Pitch {
   opener: string;
   highlight: string;
+  story?: string;
 }
 
 export interface TipsObj {
@@ -50,10 +51,11 @@ export function normalizeSellingPoints(raw: unknown): SellingPoint[] {
 
 export function normalizePitch(raw: unknown, fallbackDescription?: string): Pitch | null {
   if (raw && typeof raw === 'object') {
-    const obj = raw as { opener?: unknown; highlight?: unknown };
+    const obj = raw as { opener?: unknown; highlight?: unknown; story?: unknown };
     const opener = typeof obj.opener === 'string' ? obj.opener.trim() : '';
     const highlight = typeof obj.highlight === 'string' ? obj.highlight.trim() : '';
-    if (opener || highlight) return { opener, highlight };
+    const story = typeof obj.story === 'string' ? obj.story.trim() : '';
+    if (opener || highlight || story) return { opener, highlight, story: story || undefined };
   }
   // 旧数据兜底：把 description 拆成两句
   const desc = (fallbackDescription || '').trim();
@@ -105,7 +107,8 @@ export function buildSpeakText(opts: {
   const parts: string[] = [];
   if (opts.pitch?.opener) parts.push(opts.pitch.opener);
   if (opts.pitch?.highlight) parts.push(opts.pitch.highlight);
-  if (opts.sellingPoints?.length) {
+  if (opts.pitch?.story) parts.push(opts.pitch.story);
+  if (!opts.pitch?.story && opts.sellingPoints?.length) {
     parts.push(opts.sellingPoints.map(s => s.text).join('，') + '。');
   }
   if (parts.length === 0 && opts.description) parts.push(opts.description);

@@ -56,6 +56,7 @@ export function useProductRecognition() {
         ? {
             opener: typeof data.pitch.opener === 'string' ? data.pitch.opener : '',
             highlight: typeof data.pitch.highlight === 'string' ? data.pitch.highlight : '',
+            story: typeof data.pitch.story === 'string' ? data.pitch.story : undefined,
           }
         : undefined;
 
