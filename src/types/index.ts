@@ -112,7 +112,7 @@ export interface RecognitionResult {
     price_type: string | null;
     recorded_at: string | null;
   };
-  // 路径元数据：本次识别实际走了哪条 AI 链路（缓存/豆包/Gemini/自定义）
+  // 路径元数据：本次识别实际走了哪条 AI 链路（缓存 / Gemini）
   __pipeline?: {
     source: 'hash_cache' | 'name_cache' | 'lovable_gemini';
     model?: string;
