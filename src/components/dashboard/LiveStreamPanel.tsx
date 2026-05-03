@@ -35,6 +35,9 @@ export function LiveStreamPanel() {
   
   const [overriddenResult, setOverriddenResult] = useState<RecognitionResult | null>(null);
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
+  const [enriched, setEnriched] = useState<RecognitionResult['enriched'] | null>(null);
+  const [isEnriching, setIsEnriching] = useState(false);
+  const enrichKeyRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
