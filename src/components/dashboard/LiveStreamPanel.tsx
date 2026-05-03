@@ -406,9 +406,8 @@ export function LiveStreamPanel() {
       resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
 
-    // ⚡ 后台：先并行启动 enrich（不等 productId，少 1-2s）；同时上传 + 入库
-    void triggerEnrich(recognitionResult, null);
-
+    // ⚡ 后台：上传 + 入库；拿到 productId 之后再触发 enrich，
+    // 这样 enrich 完成时能写回 ai_analysis.enriched，下次缓存命中可直接复用
     void (async () => {
       try {
         const tUp = Date.now();
@@ -440,9 +439,14 @@ export function LiveStreamPanel() {
         setCurrentProductId(productData.id);
         if (imageUrl) setProductImageUrl(imageUrl);
         await updateSession(productData.id, user.id);
+
+        // ⚡ 入库后再触发 enrich：UI 已经显示卡片，enrich 不挡首屏
+        void triggerEnrich(recognitionResult, productData.id);
       } catch (error) {
         console.error('[BG] save product error:', error);
         toast({ title: '保存失败', description: '识别成功但保存出错', variant: 'destructive' });
+        // 即使入库失败也补一次 enrich（仅会显示在当前页，不写回库）
+        void triggerEnrich(recognitionResult, null);
       }
     })();
   };
