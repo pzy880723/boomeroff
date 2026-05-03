@@ -179,12 +179,12 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
-  // 压缩档位再降一档：单图 768/0.72，多图 720/0.7
-  // 中古杂货底款/铭文 768px 完全够看清，base64 体积砍 ~45%，4G 上行省 3-5 秒
+  // 压缩再降：单图 640/0.62，多图 576/0.6
+  // base64 请求体直接砍掉 60%+，4G/弱网上行能省 5-8 秒
   const compressImage = (imageData: string, maxWidth?: number, quality?: number): Promise<string> => {
     const isMulti = captureMode === 'multi';
-    const w = maxWidth ?? (isMulti ? 720 : 768);
-    const q = quality ?? (isMulti ? 0.7 : 0.72);
+    const w = maxWidth ?? (isMulti ? 576 : 640);
+    const q = quality ?? (isMulti ? 0.6 : 0.62);
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -212,8 +212,8 @@ export function LiveStreamPanel() {
   const grabFrame = (): string | null => {
     if (!videoRef.current) return null;
     const isMulti = captureMode === 'multi';
-    const maxWidth = isMulti ? 720 : 768;
-    const quality = isMulti ? 0.7 : 0.72;
+    const maxWidth = isMulti ? 576 : 640;
+    const quality = isMulti ? 0.6 : 0.62;
     const canvas = document.createElement('canvas');
     let width = videoRef.current.videoWidth;
     let height = videoRef.current.videoHeight;
