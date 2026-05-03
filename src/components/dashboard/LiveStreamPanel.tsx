@@ -70,6 +70,12 @@ export function LiveStreamPanel() {
     }
   }, [currentProduct, session]);
 
+  // 进入识别页就预热 edge function，避免冷启动多花 1-2 秒
+  useEffect(() => {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recognize-product`;
+    fetch(url, { method: 'OPTIONS' }).catch(() => { /* noop */ });
+  }, []);
+
   const uploadImage = async (imageBase64: string, userId: string): Promise<string | null> => {
     try {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
