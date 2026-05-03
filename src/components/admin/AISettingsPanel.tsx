@@ -1,60 +1,34 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
-import { Loader2, Save, FlaskConical, Sparkles, AlertCircle, CheckCircle2, Eye, EyeOff, Globe } from 'lucide-react';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Loader2, Save, FlaskConical, Sparkles, AlertCircle, CheckCircle2, Globe } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
-type Provider = 'lovable' | 'doubao' | 'custom';
-type Precision = 'economy' | 'standard' | 'high';
+type ModelId = 'google/gemini-2.5-flash-lite' | 'google/gemini-2.5-flash' | 'google/gemini-2.5-pro';
 
 interface Settings {
-  provider: Provider;
-  model: string;
-  precision: Precision;
+  model: ModelId;
   enableWebSearch: boolean;
-  custom: { baseUrl: string; apiKey: string; model: string };
 }
 
-const LOVABLE_MODELS: { value: string; label: string; tag: string }[] = [
-  { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', tag: '最快' },
-  { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', tag: '平衡 · 推荐' },
-  { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', tag: '新一代' },
-  { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', tag: '最强多模态' },
-  { value: 'openai/gpt-5-nano', label: 'GPT-5 Nano', tag: '快' },
-  { value: 'openai/gpt-5-mini', label: 'GPT-5 Mini', tag: '平衡' },
-  { value: 'openai/gpt-5', label: 'GPT-5', tag: '最强' },
-];
-
-const DOUBAO_MODELS: { value: string; label: string; tag: string }[] = [
-  { value: 'doubao-seed-1-6-250615', label: '豆包 Seed 1.6 (视觉)', tag: '最新 · 推荐' },
-  { value: 'doubao-1-5-vision-pro-32k-250115', label: '豆包 1.5 Vision Pro', tag: '稳定' },
-  { value: 'doubao-1-5-vision-lite-32k-250115', label: '豆包 1.5 Vision Lite', tag: '极速' },
-];
-
-const PRECISION_OPTIONS: { value: Precision; label: string; desc: string }[] = [
-  { value: 'economy', label: '极速', desc: '约 1 秒，适合大量普通商品（lite 模型）' },
-  { value: 'standard', label: '标准（推荐）', desc: '约 2 秒，瓷器/漆器细节可辨（flash 模型）' },
-  { value: 'high', label: '高精度', desc: '约 3-5 秒，复杂鉴定专用（pro 模型）' },
+const MODELS: { value: ModelId; label: string; tag: string; desc: string }[] = [
+  { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', tag: '极速', desc: '约 1-2 秒，普通商品够用' },
+  { value: 'google/gemini-2.5-flash',      label: 'Gemini 2.5 Flash',      tag: '推荐', desc: '约 2-3 秒，瓷器/漆器细节可辨' },
+  { value: 'google/gemini-2.5-pro',        label: 'Gemini 2.5 Pro',        tag: '高精度', desc: '约 4-6 秒，复杂鉴定专用（多角度自动用此档）' },
 ];
 
 const DEFAULT: Settings = {
-  provider: 'lovable',
   model: 'google/gemini-2.5-flash',
-  precision: 'standard',
   enableWebSearch: true,
-  custom: { baseUrl: '', apiKey: '', model: '' },
 };
 
 export function AISettingsPanel() {
@@ -65,89 +39,37 @@ export function AISettingsPanel() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT);
-  const [savedSettings, setSavedSettings] = useState<Settings>(DEFAULT); // 已落库的版本，用于"当前生效"展示
-  const [hadStoredKey, setHadStoredKey] = useState(false);
-  const [showKey, setShowKey] = useState(false);
+  const [savedSettings, setSavedSettings] = useState<Settings>(DEFAULT);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const [doubaoWebStatus, setDoubaoWebStatus] = useState<{ disabled: boolean; reason?: string; detected_at?: string } | null>(null);
 
   useEffect(() => { void load(); }, []);
 
   const load = async () => {
     setLoading(true);
-    const [{ data }, { data: webRow }] = await Promise.all([
-      supabase.from('app_settings').select('value').eq('key', 'ai_model').maybeSingle(),
-      supabase.from('app_settings').select('value').eq('key', 'doubao_web_search_status').maybeSingle(),
-    ]);
-    if (webRow?.value) {
-      setDoubaoWebStatus(webRow.value as any);
-    }
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
     if (data?.value) {
-      const v = data.value as unknown as Partial<Settings> & { precision?: Precision };
-      const provider: Provider =
-        v.provider === 'custom' ? 'custom'
-        : v.provider === 'doubao' ? 'doubao'
-        : 'lovable';
+      const v = data.value as any;
       const merged: Settings = {
-        provider,
-        model: v.model || DEFAULT.model,
-        precision: (['economy', 'standard', 'high'] as Precision[]).includes(v.precision as Precision)
-          ? (v.precision as Precision) : 'standard',
-        enableWebSearch: typeof (v as any).enableWebSearch === 'boolean' ? (v as any).enableWebSearch : true,
-        custom: {
-          baseUrl: v.custom?.baseUrl || '',
-          apiKey: '', // 不回填明文
-          model: v.custom?.model || '',
-        },
+        model: MODELS.some(m => m.value === v.model) ? v.model : DEFAULT.model,
+        enableWebSearch: typeof v.enableWebSearch === 'boolean' ? v.enableWebSearch : true,
       };
       setSettings(merged);
       setSavedSettings(merged);
-      setHadStoredKey(!!v.custom?.apiKey);
     }
     setLoading(false);
   };
 
   const save = async () => {
     if (!isAdmin) return;
-    if (settings.provider === 'custom') {
-      if (!settings.custom.baseUrl.trim() || !settings.custom.model.trim()) {
-        toast.error('请填写自定义接口的 Base URL 和模型名称');
-        return;
-      }
-      if (!hadStoredKey && !settings.custom.apiKey.trim()) {
-        toast.error('请填写 API Key');
-        return;
-      }
-    }
-
     setSaving(true);
     try {
-      // 读取已有以保留旧 apiKey（若用户没改）
-      const { data: existing } = await supabase
-        .from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
-      const existingKey = (existing?.value as unknown as Settings | null)?.custom?.apiKey || '';
-      const finalKey = settings.custom.apiKey.trim() || existingKey;
-
-      const value: Settings = {
-        provider: settings.provider,
-        model: settings.model,
-        precision: settings.precision,
-        enableWebSearch: settings.enableWebSearch,
-        custom: {
-          baseUrl: settings.custom.baseUrl.trim(),
-          apiKey: finalKey,
-          model: settings.custom.model.trim(),
-        },
-      };
-
+      const value: Settings = { model: settings.model, enableWebSearch: settings.enableWebSearch };
       const { error } = await supabase
         .from('app_settings')
         .upsert([{ key: 'ai_model', value: value as any, updated_at: new Date().toISOString() }]);
       if (error) throw error;
-      toast.success('设置已保存，下一次识别即生效');
-      setHadStoredKey(!!finalKey);
-      setSavedSettings({ ...value, custom: { ...value.custom, apiKey: '' } });
-      setSettings((p) => ({ ...p, custom: { ...p.custom, apiKey: '' } }));
+      setSavedSettings(value);
+      toast.success('已保存，下一次识别即生效');
     } catch (e) {
       console.error(e);
       toast.error('保存失败：可能权限不足');
@@ -160,19 +82,12 @@ export function AISettingsPanel() {
     setTesting(true);
     setTestResult(null);
     try {
-      const body: any = { provider: settings.provider, model: settings.model };
-      if (settings.provider === 'custom') {
-        body.baseUrl = settings.custom.baseUrl;
-        body.apiKey = settings.custom.apiKey; // 若空则后端使用已存储的
-        body.model = settings.custom.model;
-      }
-      const { data, error } = await supabase.functions.invoke('test-ai-model', { body });
+      const { data, error } = await supabase.functions.invoke('test-ai-model', {
+        body: { model: settings.model },
+      });
       if (error) throw error;
-      if (data?.ok) {
-        setTestResult({ ok: true, message: data.message || '连接成功' });
-      } else {
-        setTestResult({ ok: false, message: data?.error || '测试失败' });
-      }
+      if (data?.ok) setTestResult({ ok: true, message: data.message || '连接成功' });
+      else setTestResult({ ok: false, message: data?.error || '测试失败' });
     } catch (e: any) {
       setTestResult({ ok: false, message: e?.message || '测试失败' });
     } finally {
@@ -189,308 +104,102 @@ export function AISettingsPanel() {
     );
   }
 
+  const modelLabel = MODELS.find(m => m.value === savedSettings.model)?.label || savedSettings.model;
+
   return (
     <div className="space-y-5">
       {!isAdmin && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            仅管理员可修改 AI 模型设置。当前可查看但无法保存。
-          </AlertDescription>
+          <AlertDescription>仅管理员可修改 AI 设置。</AlertDescription>
         </Alert>
       )}
 
-      {/* === 当前生效配置（已落库版本，让用户一眼确认选择真的生效） === */}
-      {(() => {
-        const s = savedSettings;
-        const providerLabel = s.provider === 'doubao' ? '豆包 · 火山方舟' : s.provider === 'custom' ? '自定义接口' : 'Lovable AI';
-        const modelLabel = s.provider === 'custom' ? (s.custom.model || '未配置') : s.model;
-        const webSearchSupported = s.provider === 'doubao' || s.provider === 'lovable';
-        const webSearchActive = webSearchSupported && s.enableWebSearch;
-        const dirty = JSON.stringify(s) !== JSON.stringify({ ...settings, custom: { ...settings.custom, apiKey: '' } });
-        return (
-          <Card className="border-primary/40 bg-primary/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-primary" />
-                当前生效配置
-                {dirty && (
-                  <span className="text-[10px] px-1.5 py-px rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-normal">
-                    有未保存修改
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 pb-3 text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">服务商</span>
-                <span className="font-medium">{providerLabel}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">模型</span>
-                <span className="font-mono text-[11px]">{modelLabel}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">联网搜索</span>
-                <span className="font-medium">
-                  {!webSearchSupported ? '🚫 当前服务商不支持' : webSearchActive ? '🟢 已开启' : '⚪ 已关闭'}
-                </span>
-              </div>
-              {dirty && (
-                <p className="text-[11px] text-amber-700 dark:text-amber-300 pt-1.5 border-t border-amber-500/20">
-                  ⚠️ 上方表单的修改还没保存，识别仍按当前生效配置走。点底部"保存设置"后生效。
-                </p>
-              )}
-              {s.provider === 'doubao' && webSearchActive && doubaoWebStatus?.disabled && (
-                <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-800 dark:text-amber-200 leading-snug space-y-1">
-                  <p className="font-medium">⚠️ 豆包账号未开通联网搜索插件</p>
-                  <p className="opacity-90">
-                    {doubaoWebStatus.reason || '上次调用返回 ToolNotOpen，识别已自动降级为豆包普通视觉识别。'}
-                  </p>
-                  <p className="opacity-80">
-                    解决：到火山方舟控制台「联网内容插件」开通后，下次识别会自动恢复联网。
-                  </p>
-                </div>
-              )}
-              <p className="text-[10px] text-muted-foreground pt-1">
-                提示：识别结果卡片顶部会显示本次实际走的链路徽章（缓存 / 豆包联网 / Gemini 等），可直接验证。
-              </p>
-            </CardContent>
-          </Card>
-        );
-      })()}
+      {/* 当前生效配置 */}
+      <Card className="border-primary/40 bg-primary/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-primary" />
+            当前生效配置
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 pb-3 text-xs space-y-1.5">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">模型</span>
+            <span className="font-medium">{modelLabel}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">联网搜索</span>
+            <span className="font-medium">{savedSettings.enableWebSearch ? '🟢 已开启' : '⚪ 已关闭'}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground pt-1">
+            识别结果卡顶部会显示本次实际链路（缓存命中 / Gemini · 联网核实 等），可直接验证。
+          </p>
+        </CardContent>
+      </Card>
 
+      {/* 模型选择 */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-accent" />
-            识别模型来源
+            识别模型
           </CardTitle>
-          <CardDescription>选择系统识别商品时使用的 AI 模型，全局生效。</CardDescription>
+          <CardDescription>
+            统一使用 Lovable AI（Gemini）。多角度拍照时会自动升档到 Pro。
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <RadioGroup
-            value={settings.provider}
-            onValueChange={(v) => setSettings((p) => {
-              const np = v as Provider;
-              let model = p.model;
-              if (np === 'doubao' && !DOUBAO_MODELS.some((m) => m.value === model)) {
-                model = DOUBAO_MODELS[0].value;
-              } else if (np === 'lovable' && !LOVABLE_MODELS.some((m) => m.value === model)) {
-                model = DEFAULT.model;
-              }
-              return { ...p, provider: np, model };
-            })}
-            className="space-y-3"
+          <Select
+            value={settings.model}
+            onValueChange={(v) => setSettings(p => ({ ...p, model: v as ModelId }))}
             disabled={!isAdmin}
           >
-            <label className="flex items-start gap-3 p-3 rounded-lg border border-border/60 cursor-pointer hover:bg-muted/40">
-              <RadioGroupItem value="lovable" id="r-lovable" className="mt-0.5" />
-              <div className="space-y-0.5">
-                <div className="font-medium text-sm">Lovable AI</div>
-                <div className="text-xs text-muted-foreground">
-                  内置 Gemini 与 GPT-5 系列，无需额外配置。flash-lite 最快，1-2 秒识别。
-                </div>
-              </div>
-            </label>
-            <label className="flex items-start gap-3 p-3 rounded-lg border border-accent/60 bg-accent/5 cursor-pointer hover:bg-accent/10">
-              <RadioGroupItem value="doubao" id="r-doubao" className="mt-0.5" />
-              <div className="space-y-0.5">
-                <div className="font-medium text-sm flex items-center gap-1.5">
-                  豆包 · 火山方舟
-                  <span className="text-[10px] px-1.5 py-px rounded-full bg-accent text-accent-foreground">中文古玩首选</span>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  字节自研多模态模型，对汉字落款、日系品牌、动漫 IP 识别准确度极高，2-4 秒。已内置 API Key，开箱即用。
-                </div>
-              </div>
-            </label>
-            <label className="flex items-start gap-3 p-3 rounded-lg border border-border/60 cursor-pointer hover:bg-muted/40">
-              <RadioGroupItem value="custom" id="r-custom" className="mt-0.5" />
-              <div className="space-y-0.5">
-                <div className="font-medium text-sm">自定义 OpenAI 兼容接口</div>
-                <div className="text-xs text-muted-foreground">
-                  接入 DeepSeek、Qwen、自部署等。需填写 Base URL、API Key 与模型名。
-                </div>
-              </div>
-            </label>
-          </RadioGroup>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {MODELS.map(m => (
+                <SelectItem key={m.value} value={m.value}>
+                  <div className="flex items-center gap-2">
+                    <span>{m.label}</span>
+                    <span className="text-[10px] px-1.5 py-px rounded-full bg-muted text-muted-foreground">{m.tag}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            {MODELS.find(m => m.value === settings.model)?.desc}
+          </p>
         </CardContent>
       </Card>
 
-      {settings.provider === 'lovable' && (
-        <>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">识别精度</CardTitle>
-              <CardDescription>影响识别准确率与速度。多角度模式会自动升一档。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup
-                value={settings.precision}
-                onValueChange={(v) =>
-                  setSettings((p) => ({ ...p, precision: v as Precision }))
-                }
-                className="space-y-2"
-                disabled={!isAdmin}
-              >
-                {PRECISION_OPTIONS.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className="flex items-start gap-3 p-3 rounded-lg border border-border/60 cursor-pointer hover:bg-muted/40"
-                  >
-                    <RadioGroupItem value={opt.value} className="mt-0.5" />
-                    <div className="space-y-0.5">
-                      <div className="font-medium text-sm">{opt.label}</div>
-                      <div className="text-xs text-muted-foreground">{opt.desc}</div>
-                    </div>
-                  </label>
-                ))}
-              </RadioGroup>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">高级：手动指定模型（可选）</CardTitle>
-              <CardDescription>留作"标准"即按上面精度自动选择；选具体型号则覆盖。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select
-                value={settings.model}
-                onValueChange={(v) => setSettings((p) => ({ ...p, model: v }))}
-                disabled={!isAdmin}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {LOVABLE_MODELS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      <div className="flex items-center gap-2">
-                        <span>{m.label}</span>
-                        <span className="text-[10px] px-1.5 py-px rounded-full bg-muted text-muted-foreground">{m.tag}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-
-        </>
-      )}
-
-      {(settings.provider === 'lovable' || settings.provider === 'doubao') && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Globe className="h-4 w-4" />
-              联网搜索
-              <span className="text-[10px] px-1.5 py-px rounded-full bg-muted text-muted-foreground font-normal">
-                Gemini / 豆包 支持
-              </span>
-            </CardTitle>
-            <CardDescription>
-              开启后，AI 遇到不熟悉的外文品牌、型号编号、底款铭文、动漫 IP 时，会自动联网核实事实再生成识别结果。常见品类仍秒出。
-              {settings.provider === 'doubao'
-                ? '（豆包走火山方舟「联网内容插件」，自动判断是否搜索）'
-                : '（Gemini 走 Google Search 接地，自动判断是否搜索）'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2.5">
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">允许 AI 联网搜索</div>
-                <div className="text-xs text-muted-foreground">
-                  {settings.enableWebSearch ? '已开启 · 拿不准时自动联网' : '已关闭 · 仅用模型自身知识'}
-                </div>
+      {/* 联网搜索 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Globe className="h-4 w-4" />
+            联网搜索
+          </CardTitle>
+          <CardDescription>
+            开启后，Gemini 遇到不熟悉的外文品牌、型号编号、底款铭文、动漫 IP 时，会通过 Google 搜索自动核实再回答。常见品类仍秒出。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2.5">
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium">允许 AI 联网搜索</div>
+              <div className="text-xs text-muted-foreground">
+                {settings.enableWebSearch ? '已开启 · 拿不准时自动联网' : '已关闭 · 仅用模型自身知识'}
               </div>
-              <Switch
-                checked={settings.enableWebSearch}
-                onCheckedChange={(v) => setSettings((p) => ({ ...p, enableWebSearch: v }))}
-                disabled={!isAdmin}
-              />
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {settings.provider === 'doubao' && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">豆包模型</CardTitle>
-            <CardDescription>选择火山方舟上的豆包视觉模型。API Key 已内置，无需填写。</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Select
-              value={DOUBAO_MODELS.some((m) => m.value === settings.model) ? settings.model : DOUBAO_MODELS[0].value}
-              onValueChange={(v) => setSettings((p) => ({ ...p, model: v }))}
+            <Switch
+              checked={settings.enableWebSearch}
+              onCheckedChange={(v) => setSettings(p => ({ ...p, enableWebSearch: v }))}
               disabled={!isAdmin}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {DOUBAO_MODELS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    <div className="flex items-center gap-2">
-                      <span>{m.label}</span>
-                      <span className="text-[10px] px-1.5 py-px rounded-full bg-accent/20 text-accent-foreground">{m.tag}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground mt-2">
-              提示：保存后用下方"测试连接"按钮可以验证豆包是否通畅。
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {settings.provider === 'custom' && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">自定义接口配置</CardTitle>
-            <CardDescription>需兼容 OpenAI Chat Completions 格式且支持 vision（图像输入）。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Base URL</Label>
-              <Input
-                value={settings.custom.baseUrl}
-                onChange={(e) => setSettings((p) => ({ ...p, custom: { ...p.custom, baseUrl: e.target.value } }))}
-                placeholder="https://api.deepseek.com/v1"
-                disabled={!isAdmin}
-              />
-              <p className="text-[11px] text-muted-foreground">不要包含 /chat/completions 后缀</p>
-            </div>
-            <div className="space-y-2">
-              <Label>API Key</Label>
-              <div className="relative">
-                <Input
-                  type={showKey ? 'text' : 'password'}
-                  value={settings.custom.apiKey}
-                  onChange={(e) => setSettings((p) => ({ ...p, custom: { ...p.custom, apiKey: e.target.value } }))}
-                  placeholder={hadStoredKey ? '已配置 · 留空则不修改' : 'sk-...'}
-                  disabled={!isAdmin}
-                  className="pr-10"
-                />
-                <button type="button" onClick={() => setShowKey((s) => !s)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>模型名称</Label>
-              <Input
-                value={settings.custom.model}
-                onChange={(e) => setSettings((p) => ({ ...p, custom: { ...p.custom, model: e.target.value } }))}
-                placeholder="如：deepseek-vl2"
-                disabled={!isAdmin}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {testResult && (
         <Alert variant={testResult.ok ? 'default' : 'destructive'}>

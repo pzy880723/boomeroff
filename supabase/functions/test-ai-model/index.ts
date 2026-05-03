@@ -7,8 +7,11 @@ const corsHeaders = {
 };
 
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-const DOUBAO_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
-const DOUBAO_DEFAULT_MODEL = 'doubao-seed-1-6-250615';
+const ALLOWED_MODELS = new Set([
+  'google/gemini-2.5-flash-lite',
+  'google/gemini-2.5-flash',
+  'google/gemini-2.5-pro',
+]);
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -44,50 +47,19 @@ serve(async (req) => {
       });
     }
 
-    const { provider, model, baseUrl, apiKey } = await req.json();
+    const { model } = await req.json().catch(() => ({}));
+    const useModel = (typeof model === 'string' && ALLOWED_MODELS.has(model))
+      ? model : 'google/gemini-2.5-flash-lite';
 
-    let url: string;
-    let key: string;
-    let useModel: string;
-
-    if (provider === 'custom') {
-      // 若 apiKey 留空，则从 settings 取已存储的
-      let finalKey = apiKey;
-      if (!finalKey) {
-        const { data: s } = await adminClient
-          .from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
-        finalKey = (s?.value as any)?.custom?.apiKey || '';
-      }
-      if (!baseUrl || !model || !finalKey) {
-        return new Response(JSON.stringify({ ok: false, error: '请填写 Base URL、模型名和 API Key' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
-      key = finalKey;
-      useModel = model;
-    } else if (provider === 'doubao') {
-      url = DOUBAO_URL;
-      key = Deno.env.get('DOUBAO_API_KEY') || '';
-      useModel = (model && String(model).startsWith('doubao')) ? model : DOUBAO_DEFAULT_MODEL;
-      if (!key) {
-        return new Response(JSON.stringify({ ok: false, error: '豆包未配置 DOUBAO_API_KEY' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    } else {
-      url = LOVABLE_URL;
-      key = Deno.env.get('LOVABLE_API_KEY') || '';
-      useModel = model || 'google/gemini-2.5-flash-lite';
-      if (!key) {
-        return new Response(JSON.stringify({ ok: false, error: 'Lovable AI 未配置' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+    const key = Deno.env.get('LOVABLE_API_KEY') || '';
+    if (!key) {
+      return new Response(JSON.stringify({ ok: false, error: 'Lovable AI 未配置' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const start = Date.now();
-    const resp = await fetch(url, {
+    const resp = await fetch(LOVABLE_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${key}`,
@@ -95,9 +67,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: useModel,
-        messages: [
-          { role: 'user', content: 'ping，请回复 ok' },
-        ],
+        messages: [{ role: 'user', content: 'ping，请回复 ok' }],
         max_tokens: 10,
       }),
     });
