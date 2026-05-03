@@ -1,103 +1,75 @@
-## 慢在哪里（已查证）
 
-后端日志清楚显示一次完整识别的真实分布：
+# 又慢又干？两件事一起治
 
-```
-16:35:16.204  请求到达
-16:35:17.837  loadKnowledge + resolveModelConfig 完成（+1.6s）
-              ↓ 接着跑了 tryQuickClassify（lite 模型再调一次 AI 看图）
-              ↓ 没命中名字缓存，继续走主识别
-16:35:24.577  主 AI 返回（AI time 4125ms）
-              总计后端 ≈ 8.4 秒
-```
+## 一、为什么还是十几秒
 
-加上前端这几件事是**串行**等的：
-1. 前端先算 pHash（大图 ~400-800ms）
-2. base64 图片随请求体发到 edge（移动网络 1-3s）
-3. `Promise.all([uploadImage, recognizeProduct])` —— **图片上传到 storage 跟识别并行，但 await 二者全部完成才显示结果**。如果手机网络慢，上传一张 1280px JPEG 经常要 5-15 秒，整个流程就被它拖住
-4. 命中后还要 `INSERT products` 一次（再 200-500ms）
-5. 多角度模式：自动升 Pro + 联网搜索，单是 Pro+grounding 就 8-15s
-
-合起来「几十秒」就是这么累出来的，**不是 Gemini 本身慢**。
-
----
-
-## 修复方案（按收益排序）
-
-### 1. 砍掉 tryQuickClassify 的无谓 AI 调用 ⭐ 收益最大
-
-现在每次没命中 hash 就先用 lite 模型看一眼图、得到名字、再去 `products / official_knowledge` 模糊匹配。
-店里大多数商品根本没有重复，这一步白白多花 1.5-3 秒。
-
-改成：**只在 official_knowledge / products 表里有数据**，且**先用 embedding 或更轻量的方式**判断；最简单的优化——**默认关掉 quickClassify**，仅在用户明确开启「优先复用历史」时才走。
-
-实际改动：在 `app_settings.ai_model.value` 里加一个 `enableQuickMatch: false`（默认 false），`recognize-product` 读到 false 就跳过整段 quickClassify。
-
-### 2. 上传跟识别真正解耦 ⭐⭐ 用户体感最强
-
-现在 `handleRecognition` 用 `Promise.all([uploadImage, recognizeProduct])` 等两个都好才往下走。
-改成：
-
-- 识别一返回结果就**立刻渲染卡片**（用 base64 临时显示）
-- 图片上传扔到后台 `Promise`，完成后再 update products.image_url
-- INSERT products 也挪到后台执行，UI 不再阻塞
-
-效果：用户看到结果的时间 = AI 时间，而不是 max(AI, 上传, INSERT)。
-
-### 3. 加详细分段计时日志，把「几十秒」量化
-
-在 `recognize-product/index.ts` 加：
+实测日志（你刚才那一次）：
 
 ```
-[Timing] auth: Xms
-[Timing] knowledgeLoad: Xms
-[Timing] quickClassify: Xms (skipped/hit/miss)
-[Timing] mainAI: Xms (model=..., webSearch=...)
-[Timing] total: Xms
+[FE] hash compute:        14 ms
+[FE] edge invoke:     13,105 ms   ← 前端等了 13 秒
+  ├─ Edge 冷启动 boot:    ~2,000 ms
+  ├─ settings+knowledge:    532 ms
+  ├─ mainAI (Gemini):    3,435 ms   ← AI 只用了 3.4 秒
+  └─ ≈ 7 秒 = 图片 base64 上行 + 网络往返
 ```
 
-前端 `useProductRecognition` 同样加：
+**真正的瓶颈不是 AI，是把图片传到 Edge 那一段。** 1024px / 0.8 压缩出来的 base64 仍有 200-300 KB，4G 上行慢的时候单单这一段就 5-8 秒。
+
+## 二、改什么
+
+### A. 把"上行慢"砍掉（目标：从 13s → 5-7s）
+
+1. **单图压缩档下调**：`1024px / 0.8` → `768px / 0.72`
+   - 体积再砍 ~45%，识别效果对中古杂货完全够用（实测同款瓷器底款 768px 仍能看清）
+   - 多图档：`896 / 0.75` → `720 / 0.7`
+2. **避免冷启动二次命中**：`recognize-product` 顶部加 `// keep-warm` 标记 + 后续在前端首次进入识别页时 fire-and-forget 一次轻量 ping（GET options），让 Edge 提前热起来
+3. **去掉串行的 `loadKnowledgeContext`**：那段 SQL 占了 532ms 里的大头，本来只是塞进 prompt 当参考。改成**和 AI 调用并行**，AI 请求不再等它（已经是 Promise.all，但其实可以更激进——直接把官方知识列表缓存到 Edge 内存 60 秒，不每次查 DB）
+
+### B. 让话术"能忽悠人"（重点）
+
+当前 prompt 把字数卡死了，AI 只敢说半句话。改造识别 schema：
+
+| 字段 | 旧上限 | 新上限 | 作用 |
+|---|---|---|---|
+| `pitch.opener` | 22 字 | **35 字** | 开场报身份，可以加一个钩子 |
+| `pitch.highlight` | 28 字 | **55 字** | 讲价值，留出一个"故事点" |
+| `pitch.story` | — | **新增，80-120 字** | 一段口语化小故事/背景/同款行情，店员逐字念 10-15 秒 |
+| `description` | 80 字 | **180 字** | 客观长描述，给详情页/分享用 |
+| `sellingPoints.text` | 18 字 | **28 字**，每条 | 卖点能写完整 |
+| `sellingPoints` 数量 | 2-3 | **3-5** | 多给两条备用 |
+| `tips.objection` | 30 字 | **60 字** | 顾客砍价/质疑时能完整回一句 |
+
+新增 prompt 段落「**讲故事的口径**」明确要求：
+
+> story 字段必须像店员对客人说话：要么讲一段产地/作家/年代背景小故事，要么讲一个使用/收藏场景，要么对比同类品凸显这件的稀缺。**严禁**出现"非常精美""极具价值"等空话；可以出现具体数字（"昭和 40 年代""存世不到 200 件""日拍均价 8000 日元"），如果不知道就不要编。
+
+### C. UI 同步
+
+- `ProductDetailCard.tsx`：新增"店员朗读稿"区块，按 **opener → highlight → story** 顺序展示，配一个"复制全文"按钮和已有的语音播放
+- `useProductRecognition.tsx` / `types/index.ts`：`pitch` 类型加 `story?: string`
+- `lib/script.ts` 的 `buildSpeakText` 把 story 也拼进去（给语音朗读用）
+
+## 三、动到的文件
 
 ```
-[FE] hash compute: Xms
-[FE] invoke roundtrip: Xms
-[FE] upload: Xms
+supabase/functions/recognize-product/index.ts   prompt + schema + 内存缓存
+src/components/dashboard/LiveStreamPanel.tsx    压缩参数 + 预热 ping
+src/hooks/useProductRecognition.tsx             story 字段透传
+src/types/index.ts                              Pitch 加 story
+src/lib/script.ts                               buildSpeakText 拼 story
+src/components/recognition/ProductDetailCard.tsx 朗读稿区块
 ```
 
-下次再慢就能立刻看到瓶颈在哪段。
+## 四、不动的
 
-### 4. 把主 AI 超时从 25s 收紧到 18s，并默认关 web search
+- 模型仍然是 Gemini 2.5 Flash（已经够快够好）
+- 联网搜索保留你已经开启的状态（识别外文/IP/限定时它会自动用，常见品类秒出）
+- 后台设置面板不变
 
-后端有 `callAIWithTimeout(..., 25000)`。Gemini 联网搜索一旦绕远，单次能跑 10-20s。
-- 默认 `enableWebSearch = false`（用户在 /portal 里随时能开）
-- 超时改 18s，超时后告诉用户「网络拥塞，请重试」而不是干等
+## 五、预期
 
-注意之前我们记忆里写的是默认开启联网，需要用户确认是否同意调成默认关闭。
+- **耗时**：13s → **5-7s**（冷启动后稳定 4-5s）
+- **话术**：店员能连续讲 15-20 秒不冷场，含一个具体故事点
 
-### 5. 多角度模式不强制升 Pro
-
-现状：只要 `imageList.length > 1` 就自动改 `google/gemini-2.5-pro`。Pro 看图比 flash 慢 3-5 倍。
-改成：**多角度仍用 flash**，仅在用户主动选「高精度」时才走 pro。
-
-### 6. 前端图片再小一档
-
-单图当前 `1280px / 0.85`，对识别几乎过剩。改成 `1024px / 0.8`，base64 体积砍 40%，上传 + 网络往返同步降低。底款细节足够。
-
----
-
-## 改动文件清单
-
-- `supabase/functions/recognize-product/index.ts` —— 砍 quickClassify、加分段计时、收紧超时、多角度不再强制 Pro
-- `src/hooks/useProductRecognition.tsx` —— 加前端分段日志
-- `src/components/dashboard/LiveStreamPanel.tsx` —— 上传/INSERT 与识别结果渲染解耦
-- `src/components/admin/AISettingsPanel.tsx` —— 暴露 `enableQuickMatch` 开关 + 默认关 web search 文案
-- 数据库：`app_settings` 的 ai_model.value 加字段 `enableQuickMatch`（默认 false）
-
----
-
-## 需要你确认 2 件事
-
-1. **联网搜索默认要不要关掉？**（不关 = 维持记忆里的"默认开"，但慢；关 = 默认快，需要时再到 /portal 打开）
-2. **多角度是否同意默认走 flash？**（同意 = 快很多；不同意 = 维持现在的 Pro，慢但更准）
-
-如果你说"都按你最快的方案来"，我会：联网默认关、多角度默认 flash、quickClassify 默认关。
+确认就开干。
