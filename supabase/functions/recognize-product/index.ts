@@ -6,153 +6,59 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface ModelConfig {
-  url: string;
-  apiKey: string;
-  model: string;
-  jsonMode: boolean;
-  supportsTools: boolean;
-  enableWebSearch: boolean;
-  // 'chat' = OpenAI 兼容 /chat/completions ; 'responses' = 火山方舟 Responses API（豆包联网专用）
-  apiStyle: 'chat' | 'responses';
-  // 联网搜索类型：gemini 走 google_search 接地；doubao 走火山方舟 web_search 内置插件
-  searchKind: 'none' | 'google_search' | 'doubao_web_search';
-  // 后台保存的 provider 名称（用于 pipeline 标记 + quick_classify 一致性）
-  provider: 'lovable' | 'doubao' | 'custom';
-}
-
-// 是否是支持 Google Search 接地的 Gemini 模型
-function isGeminiModel(model: string): boolean {
-  return model.startsWith('google/gemini');
-}
-
-type Precision = 'economy' | 'standard' | 'high';
-const PRECISION_MODEL: Record<Precision, string> = {
-  economy: 'google/gemini-2.5-flash-lite',
-  standard: 'google/gemini-2.5-flash',
-  high: 'google/gemini-2.5-pro',
-};
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-const DOUBAO_CHAT_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
-const DOUBAO_RESPONSES_URL = 'https://ark.cn-beijing.volces.com/api/v3/responses';
-const DOUBAO_DEFAULT_MODEL = 'doubao-seed-1-6-250615';
+
+// 唯一保留的模型来源：Lovable AI Gemini
+const ALLOWED_MODELS = new Set([
+  'google/gemini-2.5-flash-lite',
+  'google/gemini-2.5-flash',
+  'google/gemini-2.5-pro',
+]);
+const DEFAULT_MODEL = 'google/gemini-2.5-flash';
+const HIGH_MODEL = 'google/gemini-2.5-pro';
+const LITE_MODEL = 'google/gemini-2.5-flash-lite';
+
+interface ModelConfig {
+  model: string;
+  enableWebSearch: boolean;
+}
 
 async function resolveModelConfig(adminClient: any, multiImage: boolean): Promise<ModelConfig> {
-  const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
-  const doubaoKey = Deno.env.get('DOUBAO_API_KEY') || '';
-  let provider: 'lovable' | 'doubao' | 'custom' = 'lovable';
-  let precision: Precision = 'standard';
-  let storedModel: string | null = null;
-  let custom: any = null;
-  let enableWebSearch = true; // 默认开启联网搜索
-
+  let model = DEFAULT_MODEL;
+  let enableWebSearch = true;
   try {
     const { data } = await adminClient
       .from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
     const v = data?.value;
     if (v) {
-      if (v.provider === 'custom') provider = 'custom';
-      else if (v.provider === 'doubao') provider = 'doubao';
-      else provider = 'lovable';
-      precision = (['economy', 'standard', 'high'] as Precision[]).includes(v.precision)
-        ? v.precision : 'standard';
-      storedModel = v.model || null;
-      custom = v.custom || null;
-      if (typeof v.enableWebSearch === 'boolean') enableWebSearch = v.enableWebSearch;
+      if (typeof v.model === 'string' && ALLOWED_MODELS.has(v.model)) {
+        model = v.model;
+      }
+      if (typeof v.enableWebSearch === 'boolean') {
+        enableWebSearch = v.enableWebSearch;
+      }
     }
   } catch (e) {
     console.warn('[Recognition] settings load failed, using defaults:', e);
   }
-
-  if (provider === 'custom' && custom?.baseUrl && custom?.apiKey && custom?.model) {
-    return {
-      url: `${String(custom.baseUrl).replace(/\/+$/, '')}/chat/completions`,
-      apiKey: custom.apiKey,
-      model: custom.model,
-      jsonMode: false,
-      supportsTools: true,
-      enableWebSearch: false, // 自定义 endpoint 不支持联网
-      apiStyle: 'chat',
-      searchKind: 'none',
-      provider: 'custom',
-    };
+  // 多角度拍照：lite/flash 自动升一档到 pro
+  if (multiImage && model !== HIGH_MODEL) {
+    model = HIGH_MODEL;
   }
-
-  if (provider === 'doubao') {
-    const model = storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL;
-    // 豆包联网必须切到 Responses API
-    if (enableWebSearch) {
-      return {
-        url: DOUBAO_RESPONSES_URL,
-        apiKey: doubaoKey,
-        model,
-        jsonMode: false,
-        supportsTools: true,
-        enableWebSearch: true,
-        apiStyle: 'responses',
-        searchKind: 'doubao_web_search',
-        provider: 'doubao',
-      };
-    }
-    return {
-      url: DOUBAO_CHAT_URL,
-      apiKey: doubaoKey,
-      model,
-      jsonMode: true,
-      supportsTools: true,
-      enableWebSearch: false,
-      apiStyle: 'chat',
-      searchKind: 'none',
-      provider: 'doubao',
-    };
-  }
-
-  // 多角度模式自动升一档（standard -> high）
-  let model: string;
-  if (storedModel && storedModel.startsWith('google/gemini')) {
-    // 用户在后台明确选过具体型号 -> 尊重选择
-    model = storedModel;
-    if (multiImage && model === PRECISION_MODEL.economy) {
-      model = PRECISION_MODEL.standard;
-    }
-  } else {
-    model = PRECISION_MODEL[precision];
-    if (multiImage && precision === 'standard') {
-      model = PRECISION_MODEL.high;
-    }
-  }
-
-  const useGoogleSearch = enableWebSearch && isGeminiModel(model);
-  return {
-    url: LOVABLE_URL,
-    apiKey: lovableKey,
-    model,
-    jsonMode: true,
-    supportsTools: true,
-    enableWebSearch: useGoogleSearch,
-    apiStyle: 'chat',
-    searchKind: useGoogleSearch ? 'google_search' : 'none',
-    provider: 'lovable',
-  };
+  return { model, enableWebSearch };
 }
 
-// 宽容 JSON 解析：自动去尾逗号、去 markdown 代码块、提取 {...}
 function safeParseJSON(raw: string): any | null {
   if (!raw) return null;
   let txt = raw.trim();
-  // 去 markdown 代码块
   txt = txt.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
-  // 提取最外层 {...}
   const match = txt.match(/\{[\s\S]*\}/);
   if (match) txt = match[0];
-  // 去尾随逗号 ,} 或 ,]
   const cleaned = txt.replace(/,(\s*[}\]])/g, '$1');
   try { return JSON.parse(cleaned); } catch (_) { /* fallthrough */ }
-  // 最后兜底：原始 parse
   try { return JSON.parse(txt); } catch (_) { return null; }
 }
 
-// Tool calling schema：让模型按结构填参数，杜绝 JSON 格式错误
 const RECOGNITION_TOOL = {
   type: 'function',
   function: {
@@ -229,20 +135,14 @@ async function loadKnowledgeContext(adminClient: any): Promise<string> {
 }
 
 async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig, signal?: AbortSignal) {
+  const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
   const imageUrls = images.map((img) =>
     img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
   );
-
   const userText = imageUrls.length > 1
     ? `以下为同一件中古商品的 ${imageUrls.length} 张多角度照片，请综合判断后调用 submit_recognition 工具提交结果。`
     : '请鉴定这件中古商品，调用 submit_recognition 工具提交结果。';
 
-  // ===== 豆包 Responses API 分支（仅联网模式） =====
-  if (cfg.apiStyle === 'responses') {
-    return await callDoubaoResponses(imageUrls, systemPrompt, userText, cfg, signal);
-  }
-
-  // ===== 标准 chat/completions 分支 =====
   const userContent: any[] = [{ type: 'text', text: userText }];
   for (const url of imageUrls) {
     userContent.push({ type: 'image_url', image_url: { url } });
@@ -256,25 +156,19 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig, 
     ],
   };
 
-  // 优先用 tool calling（最稳，无 JSON 格式问题）
-  if (cfg.supportsTools) {
-    if (cfg.searchKind === 'google_search') {
-      // 联网模式：挂上 google_search，让模型自己决定先搜还是先答；
-      // tool_choice=auto 才能让模型有机会调用 google_search
-      body.tools = [RECOGNITION_TOOL, { type: 'google_search' }];
-      body.tool_choice = 'auto';
-    } else {
-      body.tools = [RECOGNITION_TOOL];
-      body.tool_choice = { type: 'function', function: { name: 'submit_recognition' } };
-    }
-  } else if (cfg.jsonMode) {
-    body.response_format = { type: 'json_object' };
+  if (cfg.enableWebSearch) {
+    // 联网模式：让模型自己决定先搜还是先答
+    body.tools = [RECOGNITION_TOOL, { type: 'google_search' }];
+    body.tool_choice = 'auto';
+  } else {
+    body.tools = [RECOGNITION_TOOL];
+    body.tool_choice = { type: 'function', function: { name: 'submit_recognition' } };
   }
 
-  return await fetch(cfg.url, {
+  return await fetch(LOVABLE_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${cfg.apiKey}`,
+      'Authorization': `Bearer ${lovableKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
@@ -282,7 +176,6 @@ async function callAI(images: string[], systemPrompt: string, cfg: ModelConfig, 
   });
 }
 
-// 包一层超时；超时后伪造一个 504 Response，让上层走降级逻辑
 async function callAIWithTimeout(
   images: string[],
   systemPrompt: string,
@@ -305,84 +198,7 @@ async function callAIWithTimeout(
   }
 }
 
-// 豆包 Responses API（火山方舟 web_search 内置插件，只在联网模式走这里）
-async function callDoubaoResponses(
-  imageUrls: string[],
-  systemPrompt: string,
-  userText: string,
-  cfg: ModelConfig,
-  signal?: AbortSignal,
-): Promise<Response> {
-  // Responses API: input 是数组，每条 {role, content:[{type, text|image_url}]}
-  const userContent: any[] = [{ type: 'input_text', text: userText }];
-  for (const url of imageUrls) {
-    userContent.push({ type: 'input_image', image_url: url });
-  }
-
-  // Responses API 的 function tool 是扁平结构（不嵌 function 字段）
-  const recognitionToolFlat = {
-    type: 'function',
-    name: RECOGNITION_TOOL.function.name,
-    description: RECOGNITION_TOOL.function.description,
-    parameters: RECOGNITION_TOOL.function.parameters,
-  };
-
-  const body = {
-    model: cfg.model,
-    input: [
-      { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
-      { role: 'user', content: userContent },
-    ],
-    tools: [
-      { type: 'web_search', max_keyword: 2 },
-      recognitionToolFlat,
-    ],
-    max_tool_calls: 3,
-  };
-
-  return await fetch(cfg.url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${cfg.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
-}
-
-// 解析豆包 Responses API 返回，提取 submit_recognition 参数 + 是否联网
-function parseDoubaoResponses(data: any): { result: any | null; usedWebSearch: boolean; rawHint: string } {
-  let usedWebSearch = false;
-  let result: any = null;
-  const items = Array.isArray(data?.output) ? data.output : [];
-  for (const item of items) {
-    const t = item?.type;
-    if (t === 'web_search_call') {
-      usedWebSearch = true;
-    } else if (t === 'function_call' && item?.name === 'submit_recognition') {
-      const args = typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments || {});
-      const parsed = safeParseJSON(args);
-      if (parsed) result = parsed;
-    } else if (t === 'message' && !result) {
-      // 兜底：若模型没调用工具，直接给了文本，尝试解析
-      const parts = Array.isArray(item.content) ? item.content : [];
-      for (const p of parts) {
-        const txt = p?.text;
-        if (typeof txt === 'string') {
-          const parsed = safeParseJSON(txt);
-          if (parsed) { result = parsed; break; }
-        }
-      }
-    }
-  }
-  // usage 维度兜底判断
-  const toolUsage = data?.usage?.tool_usage;
-  if (typeof toolUsage === 'number' && toolUsage > 0) usedWebSearch = true;
-  return { result, usedWebSearch, rawHint: JSON.stringify(items).slice(0, 300) };
-}
-
-// ====== 缓存辅助函数 ======
+// ====== 缓存辅助 ======
 
 async function loadRecentPrice(adminClient: any, productId: string) {
   try {
@@ -472,21 +288,9 @@ const QUICK_TOOL = {
   },
 };
 
-async function tryQuickClassify(images: string[], baseCfg: ModelConfig, provider: 'lovable' | 'doubao' | 'custom'): Promise<{ name: string; category: string; era?: string } | null> {
+async function tryQuickClassify(images: string[]): Promise<{ name: string; category: string; era?: string } | null> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
-  const doubaoKey = Deno.env.get('DOUBAO_API_KEY') || '';
-  // quick_classify 跟随后台 provider 选择，避免"我选了豆包但缓存判定却用 Lovable"的违和感
-  let cfg: ModelConfig;
-  if (provider === 'doubao' && doubaoKey) {
-    cfg = { url: DOUBAO_CHAT_URL, apiKey: doubaoKey, model: 'doubao-1-5-vision-lite-32k-250115', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' };
-  } else if (provider === 'custom') {
-    // 自定义接口未必兼容 quick_classify，跳过
-    return null;
-  } else if (lovableKey) {
-    cfg = { url: LOVABLE_URL, apiKey: lovableKey, model: 'google/gemini-2.5-flash-lite', jsonMode: true, supportsTools: true, enableWebSearch: false, apiStyle: 'chat', searchKind: 'none' };
-  } else {
-    cfg = baseCfg;
-  }
+  if (!lovableKey) return null;
   const imageUrls = images.slice(0, 1).map((img) =>
     img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
   );
@@ -495,7 +299,7 @@ async function tryQuickClassify(images: string[], baseCfg: ModelConfig, provider
   ];
   for (const url of imageUrls) userContent.push({ type: 'image_url', image_url: { url } });
   const body: any = {
-    model: cfg.model,
+    model: LITE_MODEL,
     messages: [
       { role: 'system', content: '你是中古商品快速分类器。只返回商品名、类目、年代，不做长描述。' },
       { role: 'user', content: userContent },
@@ -503,28 +307,28 @@ async function tryQuickClassify(images: string[], baseCfg: ModelConfig, provider
     tools: [QUICK_TOOL],
     tool_choice: { type: 'function', function: { name: 'quick_classify' } },
   };
-  const resp = await fetch(cfg.url, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) return null;
-  const data = await resp.json();
-  const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-  if (!args) return null;
-  const parsed = safeParseJSON(args);
-  if (!parsed?.name || !parsed?.category) return null;
-  return { name: String(parsed.name), category: String(parsed.category), era: parsed.era };
+  try {
+    const resp = await fetch(LOVABLE_URL, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (!args) return null;
+    const parsed = safeParseJSON(args);
+    if (!parsed?.name || !parsed?.category) return null;
+    return { name: String(parsed.name), category: String(parsed.category), era: parsed.era };
+  } catch (e) {
+    console.warn('[Recognition] quick classify error:', e);
+    return null;
+  }
 }
 
-async function tryNameMatch(adminClient: any, name: string, category: string): Promise<
-  { result: any; source: 'official' | 'history'; cached_at: string; product_id: string | null } | null
-> {
-  // 关键词：取 name 的前 4-6 个字（中文）做 ILIKE
+async function tryNameMatch(adminClient: any, name: string, category: string) {
   const keyword = name.trim().slice(0, 6);
   if (keyword.length < 2) return null;
-
-  // 1) 官方知识库
   try {
     const { data: ofRow } = await adminClient
       .from('official_knowledge')
@@ -538,14 +342,12 @@ async function tryNameMatch(adminClient: any, name: string, category: string): P
     if (ofRow) {
       return {
         result: officialRowToResult(ofRow),
-        source: 'official',
+        source: 'official' as const,
         cached_at: ofRow.updated_at || ofRow.created_at,
         product_id: ofRow.source_product_id || null,
       };
     }
   } catch (e) { console.warn('[Recognition] official match failed:', e); }
-
-  // 2) 历史 products
   try {
     const { data: prodRow } = await adminClient
       .from('products')
@@ -558,13 +360,12 @@ async function tryNameMatch(adminClient: any, name: string, category: string): P
     if (prodRow) {
       return {
         result: productRowToResult(prodRow),
-        source: 'history',
+        source: 'history' as const,
         cached_at: prodRow.created_at,
         product_id: prodRow.id,
       };
     }
   } catch (e) { console.warn('[Recognition] history match failed:', e); }
-
   return null;
 }
 
@@ -596,17 +397,12 @@ serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
     const { data: roleData, error: roleError } = await adminClient
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .single();
-
+      .from('user_roles').select('role').eq('user_id', user.id).single();
     if (roleError || !roleData) {
       return new Response(JSON.stringify({ error: '无法获取权限' }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
     const userRole = roleData.role;
     if (userRole !== 'admin' && userRole !== 'anchor') {
       return new Response(JSON.stringify({ error: '没有识别权限' }), {
@@ -627,7 +423,7 @@ serve(async (req) => {
       });
     }
 
-    // ====== ① 图像哈希精确命中：直接返回历史 product 行 ======
+    // ① 图像哈希精确命中
     if (!forceRefresh && imageHash) {
       const { data: hit } = await adminClient
         .from('products')
@@ -663,18 +459,18 @@ serve(async (req) => {
       resolveModelConfig(adminClient, multiImage),
       loadKnowledgeContext(adminClient),
     ]);
-    console.log('[Recognition] resolved provider=', modelCfg.provider, 'model=', modelCfg.model, 'apiStyle=', modelCfg.apiStyle, 'webSearch=', modelCfg.enableWebSearch);
+    console.log('[Recognition] model=', modelCfg.model, 'webSearch=', modelCfg.enableWebSearch);
 
-    if (!modelCfg.apiKey) {
-      return new Response(JSON.stringify({ error: 'AI 服务未配置，请到后台「AI 模型」设置' }), {
+    if (!Deno.env.get('LOVABLE_API_KEY')) {
+      return new Response(JSON.stringify({ error: 'AI 服务未配置' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // ====== ② 名称+类目模糊命中：用 economy 模型先做 1 次轻量分类 ======
+    // ② 名称+类目模糊命中
     if (!forceRefresh) {
       try {
-        const quick = await tryQuickClassify(imageList, modelCfg, modelCfg.provider);
+        const quick = await tryQuickClassify(imageList);
         if (quick?.name && quick?.category) {
           const nameMatch = await tryNameMatch(adminClient, quick.name, quick.category);
           if (nameMatch) {
@@ -693,7 +489,6 @@ serve(async (req) => {
               __pipeline: {
                 source: 'name_cache',
                 cacheSource: nameMatch.source,
-                quickClassifyProvider: modelCfg.provider,
                 webSearchEnabled: modelCfg.enableWebSearch,
                 webSearchUsed: false,
               },
@@ -724,16 +519,16 @@ serve(async (req) => {
 - 兴趣类：球拍/钓具/相机镜头/钢笔/打火机/古董表
 
 【鉴定线索清单（请观察后判断）】
-- 瓷器：圈足修足是否规整、底款（汉字/落款/印章）、釉色（青白/卵白/影青/红釉）、开片/冰裂、画工笔触、器型（碗/盘/壶/瓶/酒器）、青花发色（明蓝/灰蓝/黑蓝）
-- 漆器：胎体（木/合成）、表面莳绘/雕刻、漆光老化痕迹
-- 铜/铁器：铜色与包浆（红铜/黄铜/青铜/朱泥）、铸造工艺、铭文落款
-- 动漫周边：IP 名称（一拳超人/海贼王/灌篮高手等）、年份、限定标识
+- 瓷器：圈足修足是否规整、底款（汉字/落款/印章）、釉色、开片/冰裂、画工笔触、器型、青花发色
+- 漆器：胎体、表面莳绘/雕刻、漆光老化痕迹
+- 铜/铁器：铜色与包浆、铸造工艺、铭文落款
+- 动漫周边：IP 名称、年份、限定标识
 
 【硬性输出规则·必须遵守】
 1. 全部字段使用简体中文，禁止出现英文/日文假名/拼音占位。外文品牌必须翻译或音译（Yonex→尤尼克斯、Snoopy→史努比、SONY→索尼），型号编号可保留数字+字母。
 2. **不确定原则**：宁可写"不详"也不要瞎编。name 只能确定大类时就写大类；era/origin/material/craft 观察不到证据写"不详"。
 3. confidence 如实自评：≥0.85 看到明确底款/铭文；0.6-0.85 工艺特征典型；<0.6 仅识别出大类。
-4. **专业用词**：使用行业术语（釉下彩/描金/包浆/落款/限定再版/完品/初版/绝版/未拆封）。**禁用空话黑名单**：非常精美、极具价值、值得收藏、匠心独运、巧夺天工、美轮美奂、独一无二（除非确有"限定 1 件"等证据）。能给数字就给数字（"昭和 40 年代"优于"昭和年间"）。
+4. **专业用词**：使用行业术语（釉下彩/描金/包浆/落款/限定再版/完品/初版/绝版/未拆封）。**禁用空话黑名单**：非常精美、极具价值、值得收藏、匠心独运、巧夺天工、美轮美奂、独一无二（除非确有"限定 1 件"等证据）。能给数字就给数字。
 5. **sellingPoints**：返回 2-3 条带标签对象，每条 text ≤18 个汉字。tag 必须是以下四类之一：
    - "身世"：年代/产地/窑口/IP/作家
    - "工艺"：关键技法/材质亮点
@@ -741,96 +536,31 @@ serve(async (req) => {
    - "场景"：使用建议/收藏定位/送礼场景
    无证据的类别**整条省略**，不要凑数，不要硬编。
 6. **pitch**：店员张口就能念的两句口语：
-   - opener ≤22 字，先报身份（含品类+年代/产地，结尾句号）。例「这是昭和年间的九谷烧赤绘小皿。」
-   - highlight ≤28 字，讲为什么值得（具体特征+稀缺度，结尾句号）。例「红绘金彩全手绘，盘底有匠人落款。」
-   两句必须是完整可朗读的句子，不出现冒号/括号/引号/JSON 残片。
-7. **description** ≤80 字客观长描述，仅作为详情页备份，不夸张。
-8. **tips**：返回对象 {memory, objection}：
-   - memory ≤20 字，给店员的记忆口诀（如"认准盘底九谷二字红款"）
-   - objection ≤30 字，顾客常问应答（如"问真假？盘底落款+金彩磨损是真品标志"）
-   无内容的字段省略，不要硬编。
+   - opener ≤22 字，先报身份（含品类+年代/产地，结尾句号）。
+   - highlight ≤28 字，讲为什么值得（具体特征+稀缺度，结尾句号）。
+7. **description** ≤80 字客观长描述。
+8. **tips**：返回对象 {memory, objection}，memory ≤20 字，objection ≤30 字。
 ${knowledgeContext}
 ${modelCfg.enableWebSearch ? `
 【联网搜索规则·必须遵守】
-- 你可以调用 ${modelCfg.searchKind === 'doubao_web_search' ? 'web_search' : 'google_search'} 工具来核实事实。**仅在以下情况调用**：
-  · 看到外文品牌名 / 型号编号（SONY WM-XXX、Nikon EM 等）
+- 你可以调用 google_search 工具来核实事实。**仅在以下情况调用**：
+  · 看到外文品牌名 / 型号编号
   · 看到不熟悉的底款铭文 / 作家落款 / 窑口名
   · 看到不确定的动漫 IP / 限定标识 / 联名 logo
   · 你的内置知识不足以判断年代或产地
-- 中文常见品类（普通九谷烧/有田烧/南部铁器等）且底款清晰时**不要联网**，直接答，省时间。
-- 搜索关键词用「品牌型号 + 中古 / 年代 / 価格」之类组合，最多搜 2 次。
-- 联网得到的事实必须**直接落进** name / era / origin / sellingPoints 字段，**禁止**在文字里出现"根据搜索结果""网上说""维基百科显示"等字眼。
+- 中文常见品类（普通九谷烧/有田烧/南部铁器等）且底款清晰时**不要联网**，直接答。
+- 联网得到的事实必须**直接落进** name / era / origin / sellingPoints 字段，**禁止**在文字里出现"根据搜索结果""网上说"等字眼。
 - 搜索完后**必须**调用 submit_recognition 工具提交最终结果。
 ` : ''}
 请调用 submit_recognition 工具提交结果。所有字段必须遵守上述硬性输出规则。`;
 
-
-    // 检查最近是否记录到「豆包联网未开通」，若是直接跳过 Responses 路径，避免每次都等 30 秒
-    let webSearchDisabledReason: string | null = null;
-    if (modelCfg.apiStyle === 'responses') {
-      try {
-        const { data: flagRow } = await adminClient
-          .from('app_settings').select('value').eq('key', 'doubao_web_search_status').maybeSingle();
-        const flag = flagRow?.value;
-        if (flag?.disabled === true) {
-          webSearchDisabledReason = flag.reason || '豆包联网搜索未开通';
-          console.warn('[Recognition] doubao web_search marked disabled, skipping Responses API:', webSearchDisabledReason);
-        }
-      } catch (_) { /* noop */ }
-    }
-
-    let activeCfg: ModelConfig = modelCfg;
-    if (webSearchDisabledReason && modelCfg.apiStyle === 'responses') {
-      activeCfg = {
-        ...modelCfg,
-        url: DOUBAO_CHAT_URL,
-        apiStyle: 'chat',
-        searchKind: 'none',
-        enableWebSearch: false,
-        jsonMode: true,
-      };
-    }
-
-    let response = await callAIWithTimeout(imageList, recognitionPrompt, activeCfg, 25000);
-    let aiTime = Date.now() - startTime;
-    console.log('[Recognition] model:', activeCfg.model, 'apiStyle:', activeCfg.apiStyle, 'searchKind:', activeCfg.searchKind, 'multi:', multiImage, 'AI time:', aiTime, 'ms');
-
-    // 豆包 Responses API 失败 → 自动降级到 chat/completions（不联网，但保住识别）
-    if (!response.ok && activeCfg.apiStyle === 'responses') {
-      const errText = await response.text();
-      console.warn('[Recognition] Doubao Responses failed, fallback to chat/completions:', response.status, errText.slice(0, 300));
-
-      // 识别「web_search 插件未开通」类错误，落库以便后续直接跳过 Responses 路径
-      const looksLikeToolNotOpen = response.status === 404
-        && /ToolNotOpen|web[_ ]?search|activate.*web search/i.test(errText);
-      if (looksLikeToolNotOpen) {
-        webSearchDisabledReason = '豆包账号未开通联网搜索插件，已自动改用普通识别';
-        try {
-          await adminClient.from('app_settings').upsert({
-            key: 'doubao_web_search_status',
-            value: { disabled: true, reason: webSearchDisabledReason, detected_at: new Date().toISOString() },
-          });
-        } catch (e) { console.warn('[Recognition] failed to persist web_search_status:', e); }
-      } else {
-        webSearchDisabledReason = `豆包联网调用失败（${response.status}），已自动改用普通识别`;
-      }
-
-      const fallbackCfg: ModelConfig = {
-        ...modelCfg,
-        url: DOUBAO_CHAT_URL,
-        apiStyle: 'chat',
-        searchKind: 'none',
-        enableWebSearch: false,
-        jsonMode: true,
-      };
-      response = await callAIWithTimeout(imageList, recognitionPrompt, fallbackCfg, 25000);
-      activeCfg = fallbackCfg;
-      aiTime = Date.now() - startTime;
-    }
+    const response = await callAIWithTimeout(imageList, recognitionPrompt, modelCfg, 25000);
+    const aiTime = Date.now() - startTime;
+    console.log('[Recognition] model:', modelCfg.model, 'multi:', multiImage, 'AI time:', aiTime, 'ms');
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[Recognition] AI error:', response.status, errorText);
+      console.error('[Recognition] AI error:', response.status, errorText.slice(0, 300));
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: '请求过于频繁，请稍后再试' }), {
           status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -847,105 +577,57 @@ ${modelCfg.enableWebSearch ? `
     }
 
     const data = await response.json();
+    const message = data.choices?.[0]?.message;
+
+    let usedWebSearch = false;
+    const grounding = message?.grounding_metadata
+      ?? data.choices?.[0]?.grounding_metadata
+      ?? message?.groundingMetadata;
+    if (grounding) {
+      usedWebSearch = true;
+      const queries = grounding.web_search_queries ?? grounding.webSearchQueries ?? [];
+      console.log('[Recognition] 🌐 grounded via google_search, queries:', JSON.stringify(queries).slice(0, 200));
+    }
 
     let result: any = null;
-    let usedWebSearch = false;
-
-    if (activeCfg.apiStyle === 'responses') {
-      // ===== 豆包 Responses API 解析 =====
-      const parsed = parseDoubaoResponses(data);
-      result = parsed.result;
-      usedWebSearch = parsed.usedWebSearch;
-      if (usedWebSearch) {
-        console.log('[Recognition] 🌐 grounded via Doubao web_search, tool_usage:', data?.usage?.tool_usage ?? '?');
-        // 真的联网成功 → 清掉之前可能存在的「未开通」标记
-        try {
-          await adminClient.from('app_settings').upsert({
-            key: 'doubao_web_search_status',
-            value: { disabled: false, recovered_at: new Date().toISOString() },
-          });
-        } catch (_) { /* noop */ }
-      }
-      if (!result) {
-        console.error('[Recognition] Doubao Responses parse failed. hint:', parsed.rawHint);
+    const toolCalls = message?.tool_calls || [];
+    const submitCall = toolCalls.find((tc: any) => tc?.function?.name === 'submit_recognition') || toolCalls[0];
+    if (submitCall?.function?.arguments) {
+      result = safeParseJSON(submitCall.function.arguments);
+    }
+    if (!result) {
+      const content = message?.content;
+      if (!content) {
+        console.error('[Recognition] empty response, raw:', JSON.stringify(data).slice(0, 500));
         return new Response(JSON.stringify({ error: 'AI 返回空响应，请重试' }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-    } else {
-      // ===== 标准 chat/completions 解析 =====
-      const message = data.choices?.[0]?.message;
-
-      // 联网搜索使用情况日志（不暴露给前端）
-      const grounding = message?.grounding_metadata
-        ?? data.choices?.[0]?.grounding_metadata
-        ?? message?.groundingMetadata;
-      if (grounding) {
-        usedWebSearch = true;
-        const queries = grounding.web_search_queries
-          ?? grounding.webSearchQueries
-          ?? [];
-        console.log('[Recognition] 🌐 grounded via google_search, queries:', JSON.stringify(queries).slice(0, 200));
-      }
-
-      // 优先读 submit_recognition tool_call
-      const toolCalls = message?.tool_calls || [];
-      const submitCall = toolCalls.find((tc: any) => tc?.function?.name === 'submit_recognition') || toolCalls[0];
-      if (submitCall?.function?.arguments) {
-        result = safeParseJSON(submitCall.function.arguments);
-        if (!result) {
-          console.error('[Recognition] tool_call args parse failed:', submitCall.function.arguments);
-        }
-      }
-
-      // 回退：从 content 字段解析
+      result = safeParseJSON(content);
       if (!result) {
-        const content = message?.content;
-        if (!content) {
-          console.error('[Recognition] empty response, raw data:', JSON.stringify(data).slice(0, 500));
-          return new Response(JSON.stringify({ error: 'AI 返回空响应，请重试' }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        result = safeParseJSON(content);
-        if (!result) {
-          console.error('[Recognition] parse failed. Content:', content);
-          return new Response(JSON.stringify({
-            error: `AI 返回格式异常：${String(content).slice(0, 80)}...`,
-            rawContent: content,
-          }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
+        console.error('[Recognition] parse failed. Content:', content);
+        return new Response(JSON.stringify({
+          error: `AI 返回格式异常：${String(content).slice(0, 80)}...`,
+        }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
 
-    // 兜底：缺字段时写不详
     if (!result.name) result.name = '未知商品';
     if (typeof result.confidence !== 'number') result.confidence = 0.7;
     result.fromCache = false;
     result.usedWebSearch = usedWebSearch;
     if (imageHash) result.imageHash = imageHash;
 
-    // 路径元数据：让前端能一眼看到本次到底用了哪条 AI 链路
-    const pipelineSource =
-      activeCfg.apiStyle === 'responses' ? 'doubao_responses'
-      : activeCfg.provider === 'doubao' ? 'doubao_chat'
-      : activeCfg.provider === 'custom' ? 'custom'
-      : 'lovable_gemini';
     result.__pipeline = {
-      source: pipelineSource,
-      provider: activeCfg.provider,
-      model: activeCfg.model,
+      source: 'lovable_gemini',
+      model: modelCfg.model,
       webSearchEnabled: modelCfg.enableWebSearch,
       webSearchUsed: usedWebSearch,
       aiTimeMs: aiTime,
-      degraded: activeCfg !== modelCfg, // 是否走了降级路径
-      degradedReason: webSearchDisabledReason || undefined,
     };
 
     const totalTime = Date.now() - startTime;
-    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'pipeline:', pipelineSource, 'degradedReason:', webSearchDisabledReason || '-', 'Total:', totalTime, 'ms');
+    console.log('[Recognition]', result.name, 'conf:', result.confidence, 'web:', usedWebSearch, 'Total:', totalTime, 'ms');
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
