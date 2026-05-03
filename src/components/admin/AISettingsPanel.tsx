@@ -66,7 +66,7 @@ export function AISettingsPanel() {
     if (!isAdmin) return;
     setSaving(true);
     try {
-      const value: Settings = { model: settings.model, enableWebSearch: settings.enableWebSearch };
+      const value: Settings = { model: settings.model, enableWebSearch: settings.enableWebSearch, enableQuickMatch: settings.enableQuickMatch };
       const { error } = await supabase
         .from('app_settings')
         .upsert([{ key: 'ai_model', value: value as any, updated_at: new Date().toISOString() }]);
