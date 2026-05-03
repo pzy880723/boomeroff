@@ -374,6 +374,9 @@ export function LiveStreamPanel() {
           console.warn('[BG] cache hit followup failed:', e);
         }
       })();
+
+      // 后台：补充深度故事话术（联网核实 + Pro 模型）
+      void triggerEnrich(recognitionResult, recognitionResult.cachedProductId!);
       return;
     }
 
@@ -385,6 +388,9 @@ export function LiveStreamPanel() {
     setTimeout(() => {
       resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
+
+    // ⚡ 后台：先并行启动 enrich（不等 productId，少 1-2s）；同时上传 + 入库
+    void triggerEnrich(recognitionResult, null);
 
     void (async () => {
       try {
