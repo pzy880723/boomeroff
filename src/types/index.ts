@@ -121,6 +121,19 @@ export interface RecognitionResult {
     webSearchUsed?: boolean;
     aiTimeMs?: number;
   };
+  // 后台深度补充结果（identification 后异步生成）
+  enriched?: {
+    story?: string;
+    highlight?: string;
+    description?: string;
+    sellingPoints?: Array<{ tag: string; text: string }>;
+    objection?: string;
+    memory?: string;
+    webSearchUsed?: boolean;
+    updatedAt?: string;
+  };
+  // UI 临时态：是否正在跑后台 enrich
+  isEnriching?: boolean;
 }
 
 export interface DailyKnowledge {
