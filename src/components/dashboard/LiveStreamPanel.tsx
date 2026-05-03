@@ -602,7 +602,10 @@ export function LiveStreamPanel() {
     sellingPoints: normalizeSellingPoints(currentProduct.selling_points),
     tips: normalizeTips(currentProduct.tips) ?? undefined,
   } : null);
-  const displayResult: RecognitionResult | null = overriddenResult || baseResult;
+  const merged: RecognitionResult | null = overriddenResult || baseResult;
+  const displayResult: RecognitionResult | null = merged
+    ? { ...merged, enriched: enriched ?? merged.enriched, isEnriching }
+    : null;
 
   // 进入已识别商品时，同步「加入知识库」与「收藏」状态，避免重复入库
   useEffect(() => {
