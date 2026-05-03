@@ -22,8 +22,9 @@ export function useProductRecognition() {
 
     try {
       const firstImage = Array.isArray(input) ? input[0] : input;
-      // 前端先算 pHash（多图取第一张），失败不影响主流程
+      const tHash = Date.now();
       const imageHash = firstImage ? await computeImageHash(firstImage) : null;
+      console.log('[FE] hash compute:', Date.now() - tHash, 'ms');
 
       const body: Record<string, unknown> = Array.isArray(input)
         ? { imageBase64: input[0], images: input }
@@ -31,7 +32,9 @@ export function useProductRecognition() {
       if (imageHash) body.imageHash = imageHash;
       if (options.forceRefresh) body.forceRefresh = true;
 
+      const tInvoke = Date.now();
       const { data, error } = await supabase.functions.invoke('recognize-product', { body });
+      console.log('[FE] edge invoke:', Date.now() - tInvoke, 'ms');
 
       if (error) throw new Error(error.message);
       if (data.error) throw new Error(data.error);

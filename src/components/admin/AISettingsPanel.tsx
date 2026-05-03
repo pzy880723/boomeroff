@@ -18,6 +18,7 @@ type ModelId = 'google/gemini-2.5-flash-lite' | 'google/gemini-2.5-flash' | 'goo
 interface Settings {
   model: ModelId;
   enableWebSearch: boolean;
+  enableQuickMatch: boolean;
 }
 
 const MODELS: { value: ModelId; label: string; tag: string; desc: string }[] = [
@@ -28,7 +29,8 @@ const MODELS: { value: ModelId; label: string; tag: string; desc: string }[] = [
 
 const DEFAULT: Settings = {
   model: 'google/gemini-2.5-flash',
-  enableWebSearch: true,
+  enableWebSearch: false,
+  enableQuickMatch: false,
 };
 
 export function AISettingsPanel() {
@@ -51,7 +53,8 @@ export function AISettingsPanel() {
       const v = data.value as any;
       const merged: Settings = {
         model: MODELS.some(m => m.value === v.model) ? v.model : DEFAULT.model,
-        enableWebSearch: typeof v.enableWebSearch === 'boolean' ? v.enableWebSearch : true,
+        enableWebSearch: typeof v.enableWebSearch === 'boolean' ? v.enableWebSearch : false,
+        enableQuickMatch: typeof v.enableQuickMatch === 'boolean' ? v.enableQuickMatch : false,
       };
       setSettings(merged);
       setSavedSettings(merged);
@@ -63,7 +66,7 @@ export function AISettingsPanel() {
     if (!isAdmin) return;
     setSaving(true);
     try {
-      const value: Settings = { model: settings.model, enableWebSearch: settings.enableWebSearch };
+      const value: Settings = { model: settings.model, enableWebSearch: settings.enableWebSearch, enableQuickMatch: settings.enableQuickMatch };
       const { error } = await supabase
         .from('app_settings')
         .upsert([{ key: 'ai_model', value: value as any, updated_at: new Date().toISOString() }]);
@@ -201,6 +204,32 @@ export function AISettingsPanel() {
         </CardContent>
       </Card>
 
+      {/* 优先复用历史 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">优先复用历史</CardTitle>
+          <CardDescription>
+            开启后，每次识别会先用极速模型粗判一次，再去库里找同名商品命中复用；店内常有重复款时再开。默认关，省 1.5-3 秒。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2.5">
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium">先粗判再查库</div>
+              <div className="text-xs text-muted-foreground">
+                {settings.enableQuickMatch ? '已开启 · 每次多花 1.5-3 秒做匹配' : '已关闭 · 直接走主识别（更快）'}
+              </div>
+            </div>
+            <Switch
+              checked={settings.enableQuickMatch}
+              onCheckedChange={(v) => setSettings(p => ({ ...p, enableQuickMatch: v }))}
+              disabled={!isAdmin}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 当前生效配置追加显示 */}
       {testResult && (
         <Alert variant={testResult.ok ? 'default' : 'destructive'}>
           {testResult.ok ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}

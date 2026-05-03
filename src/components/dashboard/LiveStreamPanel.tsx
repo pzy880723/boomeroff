@@ -153,11 +153,11 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
-  // 高清压缩：单图 1280px/0.85（保留底款细节），多图 1024px/0.8（控制总体积）
+  // 压缩：单图 1024px/0.8（识别足够，体积砍 40%），多图 896px/0.75
   const compressImage = (imageData: string, maxWidth?: number, quality?: number): Promise<string> => {
     const isMulti = captureMode === 'multi';
-    const w = maxWidth ?? (isMulti ? 1024 : 1280);
-    const q = quality ?? (isMulti ? 0.8 : 0.85);
+    const w = maxWidth ?? (isMulti ? 896 : 1024);
+    const q = quality ?? (isMulti ? 0.75 : 0.8);
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -185,8 +185,8 @@ export function LiveStreamPanel() {
   const grabFrame = (): string | null => {
     if (!videoRef.current) return null;
     const isMulti = captureMode === 'multi';
-    const maxWidth = isMulti ? 1024 : 1280;
-    const quality = isMulti ? 0.8 : 0.85;
+    const maxWidth = isMulti ? 896 : 1024;
+    const quality = isMulti ? 0.75 : 0.8;
     const canvas = document.createElement('canvas');
     let width = videoRef.current.videoWidth;
     let height = videoRef.current.videoHeight;
@@ -272,10 +272,13 @@ export function LiveStreamPanel() {
 
     if (!user) return;
 
-    const [imageUrl, recognitionResult] = await Promise.all([
-      uploadImage(imageList[0], user.id),
-      recognizeProduct(imageList.length > 1 ? imageList : imageList[0], { forceRefresh: opts.forceRefresh }),
-    ]);
+    // ⚡ 识别先跑，不等图片上传——上传慢不该卡识别
+    const tInvoke = Date.now();
+    const recognitionResult = await recognizeProduct(
+      imageList.length > 1 ? imageList : imageList[0],
+      { forceRefresh: opts.forceRefresh },
+    );
+    console.log('[FE] recognize roundtrip:', Date.now() - tInvoke, 'ms');
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -287,85 +290,86 @@ export function LiveStreamPanel() {
 
     if (!recognitionResult) return;
 
-    if (!imageUrl) {
-      toast({ title: '图片上传失败', description: '商品信息已保存', variant: 'destructive' });
-    }
+    // ★ 命中缓存：直接复用历史 product
+    if (recognitionResult.fromCache && recognitionResult.cachedProductId) {
+      const sourceLabel = recognitionResult.cacheSource === 'official'
+        ? '官方知识库'
+        : recognitionResult.cacheSource === 'history'
+          ? '历史识别'
+          : '同款照片';
+      toast({ title: `已复用${sourceLabel}`, description: recognitionResult.name });
 
-    try {
-      // ★ 命中缓存且带回 cachedProductId → 直接复用历史 product 行，不再 INSERT
-      if (recognitionResult.fromCache && recognitionResult.cachedProductId) {
-        const sourceLabel = recognitionResult.cacheSource === 'official'
-          ? '官方知识库'
-          : recognitionResult.cacheSource === 'history'
-            ? '历史识别'
-            : '同款照片';
-        toast({ title: `已复用${sourceLabel}`, description: recognitionResult.name });
-
-        setCurrentProductId(recognitionResult.cachedProductId);
-        // 拉历史 product 的封面图（有真实 URL）
-        const { data: prodRow } = await supabase
-          .from('products')
-          .select('image_url')
-          .eq('id', recognitionResult.cachedProductId)
-          .maybeSingle();
-        setProductImageUrl(prodRow?.image_url || imageUrl || null);
-        setOverriddenResult(null);
-        await updateSession(recognitionResult.cachedProductId, user.id);
-        setCapturedImages([]);
-        setFavorited(false);
-        setTimeout(() => {
-          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
-        return;
-      }
-
-      const { data: productData, error } = await supabase
-        .from('products')
-        .insert({
-          name: recognitionResult.name,
-          category: recognitionResult.category,
-          description: recognitionResult.description,
-          era: recognitionResult.era,
-          origin: recognitionResult.origin,
-          material: recognitionResult.material,
-          craft: recognitionResult.craft,
-          dimensions: recognitionResult.dimensions,
-          condition: recognitionResult.condition,
-          selling_points: (recognitionResult.sellingPoints || []) as any,
-          tips: serializeTips(recognitionResult.tips ?? null),
-          image_url: imageUrl,
-          image_hash: recognitionResult.imageHash,
-          created_by: user.id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      setCurrentProductId(productData.id);
-      setProductImageUrl(imageUrl);
+      setCurrentProductId(recognitionResult.cachedProductId);
+      setProductImageUrl(imageList[0]); // 先用本地图占位
       setOverriddenResult(null);
-      await updateSession(productData.id, user.id);
-
-      // 不再自动发到中古圈，改为用户在结果卡上手动点「分享到中古圈」按钮
-      // 避免大量错识别污染社区
-
-      // 多张图清空缓冲
       setCapturedImages([]);
       setFavorited(false);
-
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
 
-      const { dismiss } = toast({
-        title: '识别成功',
-        description: recognitionResult.name,
-      });
-      setTimeout(() => dismiss(), 800);
-    } catch (error) {
-      console.error('Error saving product:', error);
-      toast({ title: '保存失败', description: '识别成功但保存出错', variant: 'destructive' });
+      // 后台：拉真实封面、更新 session（不阻塞 UI）
+      void (async () => {
+        try {
+          const { data: prodRow } = await supabase
+            .from('products')
+            .select('image_url')
+            .eq('id', recognitionResult.cachedProductId!)
+            .maybeSingle();
+          if (prodRow?.image_url) setProductImageUrl(prodRow.image_url);
+          await updateSession(recognitionResult.cachedProductId!, user.id);
+        } catch (e) {
+          console.warn('[BG] cache hit followup failed:', e);
+        }
+      })();
+      return;
     }
+
+    // ⚡ 立刻显示卡片（base64 占位），上传 + INSERT 全部丢后台
+    setProductImageUrl(imageList[0]);
+    setOverriddenResult(null);
+    setCapturedImages([]);
+    setFavorited(false);
+    setTimeout(() => {
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+
+    void (async () => {
+      try {
+        const tUp = Date.now();
+        const imageUrl = await uploadImage(imageList[0], user.id);
+        console.log('[BG] upload:', Date.now() - tUp, 'ms');
+
+        const { data: productData, error } = await supabase
+          .from('products')
+          .insert({
+            name: recognitionResult.name,
+            category: recognitionResult.category,
+            description: recognitionResult.description,
+            era: recognitionResult.era,
+            origin: recognitionResult.origin,
+            material: recognitionResult.material,
+            craft: recognitionResult.craft,
+            dimensions: recognitionResult.dimensions,
+            condition: recognitionResult.condition,
+            selling_points: (recognitionResult.sellingPoints || []) as any,
+            tips: serializeTips(recognitionResult.tips ?? null),
+            image_url: imageUrl,
+            image_hash: recognitionResult.imageHash,
+            created_by: user.id,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+
+        setCurrentProductId(productData.id);
+        if (imageUrl) setProductImageUrl(imageUrl);
+        await updateSession(productData.id, user.id);
+      } catch (error) {
+        console.error('[BG] save product error:', error);
+        toast({ title: '保存失败', description: '识别成功但保存出错', variant: 'destructive' });
+      }
+    })();
   };
 
   const addToKnowledge = async () => {
