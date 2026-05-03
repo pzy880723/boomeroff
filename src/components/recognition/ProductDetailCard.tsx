@@ -77,6 +77,7 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
   const fullText = [
     pitch?.opener,
     pitch?.highlight,
+    pitch?.story,
     sellingPoints.length ? '核心卖点：\n' + sellingPoints.map(p => `· [${p.tag}] ${p.text}`).join('\n') : '',
     result.description && result.description !== pitch?.opener ? '完整介绍：\n' + result.description : '',
     tips?.memory ? '记忆口诀：' + tips.memory : '',
