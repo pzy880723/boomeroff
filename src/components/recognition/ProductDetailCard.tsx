@@ -128,9 +128,6 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
           </div>
         );
       })()}
-          </div>
-        );
-      })()}
 
       {/* 命中缓存横幅 */}
       {result.fromCache && cacheLabel && (
