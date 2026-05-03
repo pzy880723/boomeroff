@@ -179,12 +179,12 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
-  // 压缩档位再降一档：单图 768/0.72，多图 720/0.7
-  // 中古杂货底款/铭文 768px 完全够看清，base64 体积砍 ~45%，4G 上行省 3-5 秒
+  // 压缩再降：单图 640/0.62，多图 576/0.6
+  // base64 请求体直接砍掉 60%+，4G/弱网上行能省 5-8 秒
   const compressImage = (imageData: string, maxWidth?: number, quality?: number): Promise<string> => {
     const isMulti = captureMode === 'multi';
-    const w = maxWidth ?? (isMulti ? 720 : 768);
-    const q = quality ?? (isMulti ? 0.7 : 0.72);
+    const w = maxWidth ?? (isMulti ? 576 : 640);
+    const q = quality ?? (isMulti ? 0.6 : 0.62);
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -212,8 +212,8 @@ export function LiveStreamPanel() {
   const grabFrame = (): string | null => {
     if (!videoRef.current) return null;
     const isMulti = captureMode === 'multi';
-    const maxWidth = isMulti ? 720 : 768;
-    const quality = isMulti ? 0.7 : 0.72;
+    const maxWidth = isMulti ? 576 : 640;
+    const quality = isMulti ? 0.6 : 0.62;
     const canvas = document.createElement('canvas');
     let width = videoRef.current.videoWidth;
     let height = videoRef.current.videoHeight;
@@ -406,9 +406,8 @@ export function LiveStreamPanel() {
       resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
 
-    // ⚡ 后台：先并行启动 enrich（不等 productId，少 1-2s）；同时上传 + 入库
-    void triggerEnrich(recognitionResult, null);
-
+    // ⚡ 后台：上传 + 入库；拿到 productId 之后再触发 enrich，
+    // 这样 enrich 完成时能写回 ai_analysis.enriched，下次缓存命中可直接复用
     void (async () => {
       try {
         const tUp = Date.now();
@@ -440,9 +439,14 @@ export function LiveStreamPanel() {
         setCurrentProductId(productData.id);
         if (imageUrl) setProductImageUrl(imageUrl);
         await updateSession(productData.id, user.id);
+
+        // ⚡ 入库后再触发 enrich：UI 已经显示卡片，enrich 不挡首屏
+        void triggerEnrich(recognitionResult, productData.id);
       } catch (error) {
         console.error('[BG] save product error:', error);
         toast({ title: '保存失败', description: '识别成功但保存出错', variant: 'destructive' });
+        // 即使入库失败也补一次 enrich（仅会显示在当前页，不写回库）
+        void triggerEnrich(recognitionResult, null);
       }
     })();
   };
