@@ -7,50 +7,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-type Precision = 'economy' | 'standard' | 'high';
-const PRECISION_MODEL: Record<Precision, string> = {
-  economy: 'google/gemini-2.5-flash-lite',
-  standard: 'google/gemini-2.5-flash',
-  high: 'google/gemini-2.5-pro',
-};
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-const DOUBAO_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
-const DOUBAO_DEFAULT_MODEL = 'doubao-seed-1-6-250615';
+const ALLOWED_MODELS = new Set([
+  'google/gemini-2.5-flash-lite',
+  'google/gemini-2.5-flash',
+  'google/gemini-2.5-pro',
+]);
+const REFINE_DEFAULT = 'google/gemini-2.5-pro'; // 纠错对话默认走 pro，准为先
 
 async function resolveModel(adminClient: any) {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
-  const doubaoKey = Deno.env.get('DOUBAO_API_KEY') || '';
-  let precision: Precision = 'high'; // 纠错对话默认走 high，准为先
-  let custom: any = null;
-  let provider: 'lovable' | 'doubao' | 'custom' = 'lovable';
-  let storedModel: string | null = null;
+  let model = REFINE_DEFAULT;
   try {
     const { data } = await adminClient.from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
     const v = data?.value;
-    if (v) {
-      if (v.provider === 'custom') provider = 'custom';
-      else if (v.provider === 'doubao') provider = 'doubao';
-      else provider = 'lovable';
-      custom = v.custom || null;
-      storedModel = v.model || null;
+    // 用户在后台选了具体模型时尊重，否则纠错统一用 pro
+    if (v && typeof v.model === 'string' && ALLOWED_MODELS.has(v.model) && v.model !== 'google/gemini-2.5-flash-lite') {
+      model = v.model;
     }
   } catch (_) { /* ignore */ }
-
-  if (provider === 'custom' && custom?.baseUrl && custom?.apiKey && custom?.model) {
-    return {
-      url: `${String(custom.baseUrl).replace(/\/+$/, '')}/chat/completions`,
-      apiKey: custom.apiKey,
-      model: custom.model,
-    };
-  }
-  if (provider === 'doubao') {
-    return {
-      url: DOUBAO_URL,
-      apiKey: doubaoKey,
-      model: storedModel && storedModel.startsWith('doubao') ? storedModel : DOUBAO_DEFAULT_MODEL,
-    };
-  }
-  return { url: LOVABLE_URL, apiKey: lovableKey, model: PRECISION_MODEL[precision] };
+  return { url: LOVABLE_URL, apiKey: lovableKey, model };
 }
 
 const SYSTEM_PROMPT = `你是日本中古杂货资深鉴定师，正在跟一位门店店员一对一对话纠正一件商品的识别结果。
