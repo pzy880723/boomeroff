@@ -14,7 +14,8 @@ const ALLOWED_MODELS = new Set([
   'google/gemini-2.5-flash',
   'google/gemini-2.5-pro',
 ]);
-const DEFAULT_MODEL = 'google/gemini-2.5-flash';
+// 默认极速档：店内识别 1-3 秒出首屏
+const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 const HIGH_MODEL = 'google/gemini-2.5-pro';
 const LITE_MODEL = 'google/gemini-2.5-flash-lite';
 
