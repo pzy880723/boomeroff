@@ -498,21 +498,20 @@ serve(async (req) => {
 
     const startTime = Date.now();
 
-    const recognitionPrompt = `你是日本中古杂货资深鉴定师。看图后调用 submit_recognition 工具提交结果。
+    const recognitionPrompt = `你是日本中古杂货资深鉴定师。看图后调用 submit_recognition 工具提交。
 
-【硬性规则】
-1. 全部简体中文，外文品牌音译（Sony→索尼）。
-2. 看不清就写"不详"，宁缺勿编。confidence 如实给。
-3. **禁用空话**：非常精美/极具价值/匠心独运/巧夺天工/美轮美奂。能给数字就给数字（年代、存世量、行情价）。
-4. sellingPoints：3-5 条，每条 ≤28 字，tag 必须是 身世/工艺/稀缺/场景 之一。
-5. pitch.opener ≤35 字（品类+年代+钩子）。pitch.highlight ≤55 字（讲为什么值得，给数字）。pitch.story 80-140 字口语化（"您看…""其实当年…"），店员逐字念客人听，10-15 秒讲完，讲产地典故 / 作家背景 / 同款行情 / 当年怎么用，不知道就讲场景类比，不要编。
-6. description 120-200 字客观长描述。
-7. tips.memory ≤25 字记忆口诀；tips.objection ≤60 字砍价应答。
+【硬规则】
+1. 全简体中文，外文品牌音译（Sony→索尼）。
+2. 看不清写"不详"，宁缺勿编。confidence 如实给。
+3. 禁用空话：非常精美/极具价值/匠心独运。
+4. sellingPoints 恰好 3 条，tag 必须是 身世/工艺/稀缺/场景。每条 ≤22 字。
+5. pitch.opener ≤30 字，pitch.highlight ≤45 字。不要写长故事——长故事另有流程补充。
 ${knowledgeContext}
-请直接调用 submit_recognition 提交。`;
+直接调用 submit_recognition。`;
 
     const tAIStart = Date.now();
-    const response = await callAIWithTimeout(imageList, recognitionPrompt, modelCfg, 18000);
+    // 主识别只做鉴别 + 短话术，6 秒超时；超时由前端兜底显示"识别中"
+    const response = await callAIWithTimeout(imageList, recognitionPrompt, modelCfg, 8000);
     const aiTime = Date.now() - tAIStart;
     console.log('[Timing] mainAI:', aiTime, 'ms (model=', modelCfg.model, 'multi=', multiImage, 'web=', modelCfg.enableWebSearch, ')');
 
