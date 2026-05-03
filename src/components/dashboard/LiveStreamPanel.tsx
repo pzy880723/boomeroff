@@ -268,12 +268,54 @@ export function LiveStreamPanel() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // 后台触发深度故事补充：不阻塞 UI，结果回填到当前卡片
+  const triggerEnrich = useCallback(async (
+    base: RecognitionResult,
+    productId: string | null,
+  ) => {
+    const key = `${productId || ''}::${base.name}`;
+    if (enrichKeyRef.current === key) return; // 同一商品避免重复
+    enrichKeyRef.current = key;
+    setEnriched(null);
+    setIsEnriching(true);
+    try {
+      const sp = Array.isArray(base.sellingPoints)
+        ? base.sellingPoints.map((s: any) => typeof s === 'string' ? { tag: '场景', text: s } : s)
+        : [];
+      const { data, error } = await supabase.functions.invoke('enrich-recognition', {
+        body: {
+          productId,
+          name: base.name,
+          category: base.category,
+          era: base.era,
+          origin: base.origin,
+          material: base.material,
+          craft: base.craft,
+          currentDescription: base.description,
+          currentStory: typeof base.pitch === 'object' ? base.pitch?.story : undefined,
+          currentSellingPoints: sp,
+        },
+      });
+      if (error) throw error;
+      if (data?.enriched && enrichKeyRef.current === key) {
+        setEnriched(data.enriched);
+      }
+    } catch (e) {
+      console.warn('[Enrich] failed:', e);
+    } finally {
+      if (enrichKeyRef.current === key) setIsEnriching(false);
+    }
+  }, []);
+
   const handleRecognition = async (imageList: string[], opts: { forceRefresh?: boolean } = {}) => {
     clearResult();
     setCurrentProductId(null);
     setRecognitionTime(null);
     setElapsedTime(0);
     setKnowledgeAdded(false);
+    setEnriched(null);
+    setIsEnriching(false);
+    enrichKeyRef.current = null;
 
     const startTime = Date.now();
     timerRef.current = setInterval(() => {
