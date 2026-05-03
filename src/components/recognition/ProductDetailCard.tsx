@@ -35,6 +35,8 @@ interface ProductDetailCardProps {
     | 'cachedAt'
     | 'recentPrice'
     | '__pipeline'
+    | 'enriched'
+    | 'isEnriching'
   >;
 }
 
@@ -68,18 +70,39 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
   const { toast } = useToast();
   const { isSpeaking, speak, stop } = useSpeech();
 
-  const sellingPoints = normalizeSellingPoints(result.sellingPoints);
-  const pitch = normalizePitch(result.pitch, result.description);
-  const tips = normalizeTips(result.tips);
+  const enriched = result.enriched;
+  const sellingPoints = normalizeSellingPoints(
+    enriched?.sellingPoints && enriched.sellingPoints.length >= 3
+      ? enriched.sellingPoints
+      : result.sellingPoints,
+  );
+  const basePitch = normalizePitch(result.pitch, result.description);
+  const pitch = basePitch
+    ? {
+        ...basePitch,
+        highlight: enriched?.highlight || basePitch.highlight,
+        story: enriched?.story || basePitch.story,
+      }
+    : (enriched?.story || enriched?.highlight)
+      ? { opener: '', highlight: enriched.highlight || '', story: enriched.story }
+      : null;
+  const baseTips = normalizeTips(result.tips);
+  const tips = (enriched?.objection || enriched?.memory)
+    ? {
+        memory: enriched?.memory || baseTips?.memory,
+        objection: enriched?.objection || baseTips?.objection,
+      }
+    : baseTips;
+  const description = enriched?.description || result.description;
 
-  const speakText = buildSpeakText({ pitch, sellingPoints, description: result.description });
+  const speakText = buildSpeakText({ pitch, sellingPoints, description });
 
   const fullText = [
     pitch?.opener,
     pitch?.highlight,
     pitch?.story,
     sellingPoints.length ? '核心卖点：\n' + sellingPoints.map(p => `· [${p.tag}] ${p.text}`).join('\n') : '',
-    result.description && result.description !== pitch?.opener ? '完整介绍：\n' + result.description : '',
+    description && description !== pitch?.opener ? '完整介绍：\n' + description : '',
     tips?.memory ? '记忆口诀：' + tips.memory : '',
     tips?.objection ? '顾客常问：' + tips.objection : '',
   ].filter(Boolean).join('\n\n');
@@ -117,15 +140,27 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
       {/* 路径徽章：让店员一眼看到本次到底走了缓存还是真 AI、有没有联网 */}
       {(() => {
         const badge = pipelineBadge(result.__pipeline);
-        if (!badge) return null;
         return (
-          <div className="space-y-1.5">
-            <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${badge.cls}`}>
-              <span>{badge.text}</span>
-              {typeof result.__pipeline?.aiTimeMs === 'number' && (
-                <span className="opacity-70">· {(result.__pipeline.aiTimeMs / 1000).toFixed(1)}s</span>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {badge && (
+              <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${badge.cls}`}>
+                <span>{badge.text}</span>
+                {typeof result.__pipeline?.aiTimeMs === 'number' && (
+                  <span className="opacity-70">· {(result.__pipeline.aiTimeMs / 1000).toFixed(1)}s</span>
+                )}
+              </div>
+            )}
+            {result.isEnriching && (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                深度故事补充中…
+              </div>
+            )}
+            {!result.isEnriching && enriched?.story && (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                ✨ 已补充深度故事{enriched.webSearchUsed ? ' · 含联网核实' : ''}
+              </div>
+            )}
           </div>
         );
       })()}
@@ -299,7 +334,7 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
       )}
 
       {/* 完整介绍（折叠） */}
-      {result.description && result.description.trim() && result.description !== pitch?.opener && (
+      {description && description.trim() && description !== pitch?.opener && (
         <Card className="border-border/60 shadow-soft">
           <CardContent className="pt-4 pb-3">
             <button
@@ -315,7 +350,7 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
             </button>
             {showLong && (
               <p className="leading-relaxed whitespace-pre-wrap text-[14px] text-foreground/85 mt-3">
-                {result.description}
+                {description}
               </p>
             )}
           </CardContent>

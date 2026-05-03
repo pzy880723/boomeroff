@@ -35,6 +35,9 @@ export function LiveStreamPanel() {
   
   const [overriddenResult, setOverriddenResult] = useState<RecognitionResult | null>(null);
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
+  const [enriched, setEnriched] = useState<RecognitionResult['enriched'] | null>(null);
+  const [isEnriching, setIsEnriching] = useState(false);
+  const enrichKeyRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -69,6 +72,23 @@ export function LiveStreamPanel() {
       setCurrentProductId(session.product_id);
     }
   }, [currentProduct, session]);
+
+  // 加载已保存的 enriched（重新进入页面/切换商品时复用）
+  useEffect(() => {
+    if (!currentProductId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('ai_analysis')
+        .eq('id', currentProductId)
+        .maybeSingle();
+      if (cancelled) return;
+      const e = (data?.ai_analysis as any)?.enriched;
+      if (e?.story) setEnriched(e);
+    })();
+    return () => { cancelled = true; };
+  }, [currentProductId]);
 
   // 进入识别页就预热 edge function，避免冷启动多花 1-2 秒
   useEffect(() => {
@@ -265,12 +285,54 @@ export function LiveStreamPanel() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // 后台触发深度故事补充：不阻塞 UI，结果回填到当前卡片
+  const triggerEnrich = useCallback(async (
+    base: RecognitionResult,
+    productId: string | null,
+  ) => {
+    const key = `${productId || ''}::${base.name}`;
+    if (enrichKeyRef.current === key) return; // 同一商品避免重复
+    enrichKeyRef.current = key;
+    setEnriched(null);
+    setIsEnriching(true);
+    try {
+      const sp = Array.isArray(base.sellingPoints)
+        ? base.sellingPoints.map((s: any) => typeof s === 'string' ? { tag: '场景', text: s } : s)
+        : [];
+      const { data, error } = await supabase.functions.invoke('enrich-recognition', {
+        body: {
+          productId,
+          name: base.name,
+          category: base.category,
+          era: base.era,
+          origin: base.origin,
+          material: base.material,
+          craft: base.craft,
+          currentDescription: base.description,
+          currentStory: typeof base.pitch === 'object' ? base.pitch?.story : undefined,
+          currentSellingPoints: sp,
+        },
+      });
+      if (error) throw error;
+      if (data?.enriched && enrichKeyRef.current === key) {
+        setEnriched(data.enriched);
+      }
+    } catch (e) {
+      console.warn('[Enrich] failed:', e);
+    } finally {
+      if (enrichKeyRef.current === key) setIsEnriching(false);
+    }
+  }, []);
+
   const handleRecognition = async (imageList: string[], opts: { forceRefresh?: boolean } = {}) => {
     clearResult();
     setCurrentProductId(null);
     setRecognitionTime(null);
     setElapsedTime(0);
     setKnowledgeAdded(false);
+    setEnriched(null);
+    setIsEnriching(false);
+    enrichKeyRef.current = null;
 
     const startTime = Date.now();
     timerRef.current = setInterval(() => {
@@ -329,6 +391,9 @@ export function LiveStreamPanel() {
           console.warn('[BG] cache hit followup failed:', e);
         }
       })();
+
+      // 后台：补充深度故事话术（联网核实 + Pro 模型）
+      void triggerEnrich(recognitionResult, recognitionResult.cachedProductId!);
       return;
     }
 
@@ -340,6 +405,9 @@ export function LiveStreamPanel() {
     setTimeout(() => {
       resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
+
+    // ⚡ 后台：先并行启动 enrich（不等 productId，少 1-2s）；同时上传 + 入库
+    void triggerEnrich(recognitionResult, null);
 
     void (async () => {
       try {
@@ -551,7 +619,10 @@ export function LiveStreamPanel() {
     sellingPoints: normalizeSellingPoints(currentProduct.selling_points),
     tips: normalizeTips(currentProduct.tips) ?? undefined,
   } : null);
-  const displayResult: RecognitionResult | null = overriddenResult || baseResult;
+  const merged: RecognitionResult | null = overriddenResult || baseResult;
+  const displayResult: RecognitionResult | null = merged
+    ? { ...merged, enriched: enriched ?? merged.enriched, isEnriching }
+    : null;
 
   // 进入已识别商品时，同步「加入知识库」与「收藏」状态，避免重复入库
   useEffect(() => {
