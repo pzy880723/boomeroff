@@ -153,11 +153,11 @@ export function LiveStreamPanel() {
     setIsStreaming(false);
   }, []);
 
-  // 高清压缩：单图 1280px/0.85（保留底款细节），多图 1024px/0.8（控制总体积）
+  // 压缩：单图 1024px/0.8（识别足够，体积砍 40%），多图 896px/0.75
   const compressImage = (imageData: string, maxWidth?: number, quality?: number): Promise<string> => {
     const isMulti = captureMode === 'multi';
-    const w = maxWidth ?? (isMulti ? 1024 : 1280);
-    const q = quality ?? (isMulti ? 0.8 : 0.85);
+    const w = maxWidth ?? (isMulti ? 896 : 1024);
+    const q = quality ?? (isMulti ? 0.75 : 0.8);
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -185,8 +185,8 @@ export function LiveStreamPanel() {
   const grabFrame = (): string | null => {
     if (!videoRef.current) return null;
     const isMulti = captureMode === 'multi';
-    const maxWidth = isMulti ? 1024 : 1280;
-    const quality = isMulti ? 0.8 : 0.85;
+    const maxWidth = isMulti ? 896 : 1024;
+    const quality = isMulti ? 0.75 : 0.8;
     const canvas = document.createElement('canvas');
     let width = videoRef.current.videoWidth;
     let height = videoRef.current.videoHeight;
