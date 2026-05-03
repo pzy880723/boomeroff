@@ -73,6 +73,23 @@ export function LiveStreamPanel() {
     }
   }, [currentProduct, session]);
 
+  // 加载已保存的 enriched（重新进入页面/切换商品时复用）
+  useEffect(() => {
+    if (!currentProductId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('ai_analysis')
+        .eq('id', currentProductId)
+        .maybeSingle();
+      if (cancelled) return;
+      const e = (data?.ai_analysis as any)?.enriched;
+      if (e?.story) setEnriched(e);
+    })();
+    return () => { cancelled = true; };
+  }, [currentProductId]);
+
   // 进入识别页就预热 edge function，避免冷启动多花 1-2 秒
   useEffect(() => {
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recognize-product`;
