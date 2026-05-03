@@ -70,11 +70,32 @@ export function ProductDetailCard({ result }: ProductDetailCardProps) {
   const { toast } = useToast();
   const { isSpeaking, speak, stop } = useSpeech();
 
-  const sellingPoints = normalizeSellingPoints(result.sellingPoints);
-  const pitch = normalizePitch(result.pitch, result.description);
-  const tips = normalizeTips(result.tips);
+  const enriched = result.enriched;
+  const sellingPoints = normalizeSellingPoints(
+    enriched?.sellingPoints && enriched.sellingPoints.length >= 3
+      ? enriched.sellingPoints
+      : result.sellingPoints,
+  );
+  const basePitch = normalizePitch(result.pitch, result.description);
+  const pitch = basePitch
+    ? {
+        ...basePitch,
+        highlight: enriched?.highlight || basePitch.highlight,
+        story: enriched?.story || basePitch.story,
+      }
+    : (enriched?.story || enriched?.highlight)
+      ? { opener: '', highlight: enriched.highlight || '', story: enriched.story }
+      : null;
+  const baseTips = normalizeTips(result.tips);
+  const tips = (enriched?.objection || enriched?.memory)
+    ? {
+        memory: enriched?.memory || baseTips?.memory,
+        objection: enriched?.objection || baseTips?.objection,
+      }
+    : baseTips;
+  const description = enriched?.description || result.description;
 
-  const speakText = buildSpeakText({ pitch, sellingPoints, description: result.description });
+  const speakText = buildSpeakText({ pitch, sellingPoints, description });
 
   const fullText = [
     pitch?.opener,
