@@ -1,75 +1,53 @@
+我查到这次慢的真实原因了：后台设置里 `联网搜索` 现在是开启的，最近一次日志显示：
 
-# 又慢又干？两件事一起治
+- 前端等待：约 17.2 秒
+- 云函数真实执行：约 8.8 秒
+- AI 主识别：约 6.36 秒
+- 本次链路：`webSearch=true`
+- 后台图片上传另花 5.7 秒，但已经是后台跑，不是主等待
 
-## 一、为什么还是十几秒
+也就是说，现在不是单纯图片上传慢，而是“主识别仍在带联网搜索能力”，再叠加移动网络/函数往返，前端就变成十几秒。
 
-实测日志（你刚才那一次）：
+计划把它改成下面这种更硬的方案：
 
-```
-[FE] hash compute:        14 ms
-[FE] edge invoke:     13,105 ms   ← 前端等了 13 秒
-  ├─ Edge 冷启动 boot:    ~2,000 ms
-  ├─ settings+knowledge:    532 ms
-  ├─ mainAI (Gemini):    3,435 ms   ← AI 只用了 3.4 秒
-  └─ ≈ 7 秒 = 图片 base64 上行 + 网络往返
-```
+1. 立即禁用当前生效的联网搜索默认值
+   - 把 `app_settings.ai_model.enableWebSearch` 改为 `false`。
+   - 后台 UI 不再让“联网搜索”影响首屏识别速度。
+   - 首次识别只走图片 + 内置模型，目标先把结果打出来。
 
-**真正的瓶颈不是 AI，是把图片传到 Edge 那一段。** 1024px / 0.8 压缩出来的 base64 仍有 200-300 KB，4G 上行慢的时候单单这一段就 5-8 秒。
+2. 主识别改成“极速识别优先”
+   - 默认模型改用 `Gemini 2.5 Flash Lite` 或在代码里强制极速主链路。
+   - 单张识别图片继续压缩，但再加体积上限；如果 base64 仍过大，继续降到 640px / 0.65。
+   - 缩短主识别 prompt，去掉过长的全品类说明，避免模型读一大段规则浪费时间。
+   - 主识别只返回：名称、类目、年代/产地、3 条卖点、短话术、置信度。
 
-## 二、改什么
+3. 联网搜索改成“识别后后台补充”
+   - 用户先在 3–5 秒内看到可用结果。
+   - 如果商品置信度低、出现型号/铭文/品牌，后台再触发联网补充。
+   - 联网补充回来后，自动更新详情卡里的“补充依据 / 更丰富话术”，不阻塞第一次出结果。
+   - 这样保留你要求的互联网搜索，但不让它卡住识别按钮。
 
-### A. 把"上行慢"砍掉（目标：从 13s → 5-7s）
+4. 话术改成两段式，避免为了文案拖慢首屏
+   - 首屏先生成“能马上开口说”的短版成交话术。
+   - 后台增强后再补“故事版介绍”。
+   - 这样店员不会干等十几秒，但最终内容仍然能更会卖。
 
-1. **单图压缩档下调**：`1024px / 0.8` → `768px / 0.72`
-   - 体积再砍 ~45%，识别效果对中古杂货完全够用（实测同款瓷器底款 768px 仍能看清）
-   - 多图档：`896 / 0.75` → `720 / 0.7`
-2. **避免冷启动二次命中**：`recognize-product` 顶部加 `// keep-warm` 标记 + 后续在前端首次进入识别页时 fire-and-forget 一次轻量 ping（GET options），让 Edge 提前热起来
-3. **去掉串行的 `loadKnowledgeContext`**：那段 SQL 占了 532ms 里的大头，本来只是塞进 prompt 当参考。改成**和 AI 调用并行**，AI 请求不再等它（已经是 Promise.all，但其实可以更激进——直接把官方知识列表缓存到 Edge 内存 60 秒，不每次查 DB）
+5. 增加前端可见耗时拆分
+   - 结果卡显示：模型耗时、是否联网、是否缓存、是否后台补充中。
+   - 以后你一看就知道慢在 AI、联网、上传还是数据库。
 
-### B. 让话术"能忽悠人"（重点）
+6. 顺手修掉当前控制台警告
+   - `ProductDetailCard` 里有组件 ref 警告，会污染日志；一起修掉，方便之后看性能日志。
 
-当前 prompt 把字数卡死了，AI 只敢说半句话。改造识别 schema：
+涉及文件：
+- `supabase/functions/recognize-product/index.ts`
+- 可能新增一个后台补充函数，例如 `supabase/functions/enrich-recognition/index.ts`
+- `src/hooks/useProductRecognition.tsx`
+- `src/components/dashboard/LiveStreamPanel.tsx`
+- `src/components/recognition/ProductDetailCard.tsx`
+- `src/components/admin/AISettingsPanel.tsx`
 
-| 字段 | 旧上限 | 新上限 | 作用 |
-|---|---|---|---|
-| `pitch.opener` | 22 字 | **35 字** | 开场报身份，可以加一个钩子 |
-| `pitch.highlight` | 28 字 | **55 字** | 讲价值，留出一个"故事点" |
-| `pitch.story` | — | **新增，80-120 字** | 一段口语化小故事/背景/同款行情，店员逐字念 10-15 秒 |
-| `description` | 80 字 | **180 字** | 客观长描述，给详情页/分享用 |
-| `sellingPoints.text` | 18 字 | **28 字**，每条 | 卖点能写完整 |
-| `sellingPoints` 数量 | 2-3 | **3-5** | 多给两条备用 |
-| `tips.objection` | 30 字 | **60 字** | 顾客砍价/质疑时能完整回一句 |
-
-新增 prompt 段落「**讲故事的口径**」明确要求：
-
-> story 字段必须像店员对客人说话：要么讲一段产地/作家/年代背景小故事，要么讲一个使用/收藏场景，要么对比同类品凸显这件的稀缺。**严禁**出现"非常精美""极具价值"等空话；可以出现具体数字（"昭和 40 年代""存世不到 200 件""日拍均价 8000 日元"），如果不知道就不要编。
-
-### C. UI 同步
-
-- `ProductDetailCard.tsx`：新增"店员朗读稿"区块，按 **opener → highlight → story** 顺序展示，配一个"复制全文"按钮和已有的语音播放
-- `useProductRecognition.tsx` / `types/index.ts`：`pitch` 类型加 `story?: string`
-- `lib/script.ts` 的 `buildSpeakText` 把 story 也拼进去（给语音朗读用）
-
-## 三、动到的文件
-
-```
-supabase/functions/recognize-product/index.ts   prompt + schema + 内存缓存
-src/components/dashboard/LiveStreamPanel.tsx    压缩参数 + 预热 ping
-src/hooks/useProductRecognition.tsx             story 字段透传
-src/types/index.ts                              Pitch 加 story
-src/lib/script.ts                               buildSpeakText 拼 story
-src/components/recognition/ProductDetailCard.tsx 朗读稿区块
-```
-
-## 四、不动的
-
-- 模型仍然是 Gemini 2.5 Flash（已经够快够好）
-- 联网搜索保留你已经开启的状态（识别外文/IP/限定时它会自动用，常见品类秒出）
-- 后台设置面板不变
-
-## 五、预期
-
-- **耗时**：13s → **5-7s**（冷启动后稳定 4-5s）
-- **话术**：店员能连续讲 15-20 秒不冷场，含一个具体故事点
-
-确认就开干。
+实施后效果预期：
+- 普通单张识别：优先目标 3–5 秒出首屏结果。
+- 复杂/需要联网的商品：先出初版，再后台补充，不再让用户等联网。
+- 如果移动网络特别差，仍可能超过 5 秒，但不会因为联网搜索固定拖到十几秒。
