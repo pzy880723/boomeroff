@@ -83,12 +83,13 @@ const RECOGNITION_TOOL = {
         craft: { type: 'string', description: '工艺，未知写"不详"' },
         sellingPoints: {
           type: 'array',
-          maxItems: 3,
+          minItems: 3,
+          maxItems: 5,
           items: {
             type: 'object',
             properties: {
               tag: { type: 'string', enum: ['身世', '工艺', '稀缺', '场景'] },
-              text: { type: 'string', description: '≤18汉字' },
+              text: { type: 'string', description: '≤28汉字，写完整一句话' },
             },
             required: ['tag', 'text'],
           },
@@ -96,17 +97,18 @@ const RECOGNITION_TOOL = {
         pitch: {
           type: 'object',
           properties: {
-            opener: { type: 'string', description: '≤22字开场句，含品类+年代/产地，结尾句号' },
-            highlight: { type: 'string', description: '≤28字亮点句，结尾句号' },
+            opener: { type: 'string', description: '≤35字开场句，含品类+年代/产地，可加一个钩子，结尾句号' },
+            highlight: { type: 'string', description: '≤55字亮点句，讲为什么值得，结尾句号' },
+            story: { type: 'string', description: '80-140字口语化故事段，店员逐字念给客人听，10-15秒讲完。讲产地/作家/年代背景，或同款行情对比，必须像真人说话' },
           },
-          required: ['opener', 'highlight'],
+          required: ['opener', 'highlight', 'story'],
         },
-        description: { type: 'string', description: '≤80字客观长描述' },
+        description: { type: 'string', description: '120-200字客观长描述，给详情页用' },
         tips: {
           type: 'object',
           properties: {
-            memory: { type: 'string', description: '≤20字记忆口诀' },
-            objection: { type: 'string', description: '≤30字顾客常问应答' },
+            memory: { type: 'string', description: '≤25字记忆口诀' },
+            objection: { type: 'string', description: '≤60字顾客砍价/质疑应答，要完整一句话' },
           },
         },
         confidence: { type: 'number', description: '自评置信度 0-1' },
@@ -536,17 +538,22 @@ serve(async (req) => {
 2. **不确定原则**：宁可写"不详"也不要瞎编。name 只能确定大类时就写大类；era/origin/material/craft 观察不到证据写"不详"。
 3. confidence 如实自评：≥0.85 看到明确底款/铭文；0.6-0.85 工艺特征典型；<0.6 仅识别出大类。
 4. **专业用词**：使用行业术语（釉下彩/描金/包浆/落款/限定再版/完品/初版/绝版/未拆封）。**禁用空话黑名单**：非常精美、极具价值、值得收藏、匠心独运、巧夺天工、美轮美奂、独一无二（除非确有"限定 1 件"等证据）。能给数字就给数字。
-5. **sellingPoints**：返回 2-3 条带标签对象，每条 text ≤18 个汉字。tag 必须是以下四类之一：
+5. **sellingPoints**：返回 3-5 条带标签对象，每条 text ≤28 个汉字，写完整一句话。tag 必须是以下四类之一：
    - "身世"：年代/产地/窑口/IP/作家
    - "工艺"：关键技法/材质亮点
    - "稀缺"：限定/绝版/存世量/完品标记
    - "场景"：使用建议/收藏定位/送礼场景
-   无证据的类别**整条省略**，不要凑数，不要硬编。
-6. **pitch**：店员张口就能念的两句口语：
-   - opener ≤22 字，先报身份（含品类+年代/产地，结尾句号）。
-   - highlight ≤28 字，讲为什么值得（具体特征+稀缺度，结尾句号）。
-7. **description** ≤80 字客观长描述。
-8. **tips**：返回对象 {memory, objection}，memory ≤20 字，objection ≤30 字。
+   无证据的类别可省略，但**总数必须 ≥3 条**——宁可写场景建议，也不要只给两条。
+6. **pitch**：店员张口就讲的三段，必须像真人说话，能让客人听完心动：
+   - opener ≤35 字：报身份（品类+年代/产地）+ 一个钩子（"懂行的一眼就认得"/"这种现在很难再碰到"），结尾句号。
+   - highlight ≤55 字：讲为什么值得——具体工艺亮点 + 稀缺度，给数字（"昭和 40 年代""存世不到 200 件"），结尾句号。
+   - **story 80-140 字**：一段口语化小故事，店员逐字念 10-15 秒。
+     · 可讲：产地窑口的小典故、作家/IP 背景、同款日拍/二手平台行情、跟普通款的差异、这种器型当年怎么用。
+     · 必须像跟客人聊天，可用"您看……""其实当年……""这种品相现在……"等口语连接词。
+     · **严禁空话**（非常精美/极具价值/巧夺天工/匠心独运）；可以引用具体数字（年代、价格、存世量），不知道就**不要编**，转而讲场景或类比。
+     · 不要用书面词如"综上所述""此件作品"。
+7. **description** 120-200 字客观长描述，给详情页/分享卡用，可写得正式一点。
+8. **tips**：{memory, objection}。memory ≤25 字记忆口诀；objection ≤60 字，针对顾客最可能的砍价或质疑（"是不是仿的""为什么这么贵""有没有瑕疵"），给一句完整应答。
 ${knowledgeContext}
 ${modelCfg.enableWebSearch ? `
 【联网搜索规则·必须遵守】
