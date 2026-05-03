@@ -118,7 +118,11 @@ const RECOGNITION_TOOL = {
   },
 };
 
+// 60 秒内存缓存：官方知识列表，避免每次识别都查 DB（每次约 350-500ms）
+let _kbCache: { text: string; expiresAt: number } | null = null;
 async function loadKnowledgeContext(adminClient: any): Promise<string> {
+  const now = Date.now();
+  if (_kbCache && _kbCache.expiresAt > now) return _kbCache.text;
   try {
     const { data } = await adminClient
       .from('official_knowledge')
@@ -126,12 +130,17 @@ async function loadKnowledgeContext(adminClient: any): Promise<string> {
       .order('importance_score', { ascending: false })
       .order('view_count', { ascending: false })
       .limit(30);
-    if (!data || data.length < 5) return '';
+    if (!data || data.length < 5) {
+      _kbCache = { text: '', expiresAt: now + 60_000 };
+      return '';
+    }
     const lines = data.map((r: any) => {
       const parts = [r.name, r.category, r.era || '', r.origin || ''].filter(Boolean);
       return `- ${parts.join(' | ')}${r.summary ? ` —— ${String(r.summary).slice(0, 40)}` : ''}`;
     });
-    return `\n\n【已收录的官方知识库（识别时优先匹配，若高度相似请直接沿用名称/年代/产地）】\n${lines.join('\n')}\n`;
+    const text = `\n\n【已收录的官方知识库（识别时优先匹配，若高度相似请直接沿用名称/年代/产地）】\n${lines.join('\n')}\n`;
+    _kbCache = { text, expiresAt: now + 60_000 };
+    return text;
   } catch (e) {
     console.warn('[Recognition] knowledge load failed:', e);
     return '';
