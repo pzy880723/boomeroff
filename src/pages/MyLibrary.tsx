@@ -101,6 +101,16 @@ export default function MyLibrary() {
   const [taskMode, setTaskMode] = useState(false);
   const [taskQueue, setTaskQueue] = useState<UnifiedItem[]>([]);
   const [taskIdx, setTaskIdx] = useState(0);
+  const [attemptedToday, setAttemptedToday] = useState<string[]>(() => readAttempted());
+
+  // 跨日清理
+  useEffect(() => {
+    const id = setInterval(() => {
+      const fresh = readAttempted();
+      setAttemptedToday((prev) => (prev.length === fresh.length ? prev : fresh));
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const loadAll = async () => {
     if (!user) return;
