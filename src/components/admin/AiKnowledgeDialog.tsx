@@ -391,7 +391,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         selling_points: sellingPointsJson,
         tips: draft.tips?.trim() || null,
         body: draft.body?.trim() || null,
-        importance_score: Math.min(100, Math.max(0, Number(draft.importance_score) || 0)),
+        importance_score: Math.min(100, Math.max(0, Math.round(Number(draft.importance_score) || 0))),
         cover_url: coverUrl || null,
         content: {
           one_liner: draft.one_liner || null,
