@@ -265,8 +265,11 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
                 上传图片
               </Button>
               <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1"
-                onClick={webSearch} disabled={searching || !draft.name?.trim()}>
-                {searching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
+                onClick={() => {
+                  if (!draft.name?.trim()) { toast.error('请先填写名称'); return; }
+                  setPickerOpen(true);
+                }}>
+                <Globe className="w-3 h-3" />
                 联网搜图
               </Button>
             </div>
