@@ -22,6 +22,7 @@ interface Props {
   onPassed?: (score: number, total: number) => void;
   onAttempt?: (score: number, total: number, passed: boolean) => void;
   title?: string;
+  onExit?: () => void;
 }
 
 export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title }: Props) {
