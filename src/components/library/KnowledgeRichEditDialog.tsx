@@ -306,6 +306,13 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
           </Button>
         </DialogFooter>
       </DialogContent>
+      <WebImagePickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        initialQuery={draft.name || ''}
+        pathPrefix="web-gallery"
+        onConfirm={(urls) => setGallery((prev) => Array.from(new Set([...prev, ...urls])))}
+      />
     </Dialog>
   );
 }
