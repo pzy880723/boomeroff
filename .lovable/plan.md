@@ -1,59 +1,74 @@
-我看了日志，问题已经不是联网搜索了：当前 `recognize-product` 里 `webSearch=false`，但主 AI 仍用了 4.7s；前端看到 `edge invoke` 11.5s。也就是说现在仍然在等“图片视觉大模型完整识别 + 结构化话术”完成，真实网络环境下就会变成十几秒。
+## 目标
 
-要达到门店 1-3 秒体验，不能再把首屏完全押在视觉大模型上。我会改成“先秒出可用卡片，后台再替换成精确识别”的三段式。
+在 `/portal` → 官方知识 标签页里，管理员点「新增」时，除现有的手动表单外，新增一个 **「AI 智能生成」** 入口：管理员用自然语言（或直接贴一张参考图）描述想要的中古商品/IP，AI 自动产出完整的官方词条字段，并自动生成一张封面图，管理员校对后一键入库。
 
-```text
-拍照
-  ↓
-0-1秒：本地立即显示“临时商品卡片”
-      类目=待识别，话术=通用但可直接开口
-  ↓
-后台并行：上传图片 + AI精确识别
-  ↓
-AI返回后：无刷新替换为真实商品名/年代/卖点
-  ↓
-继续后台：enrich 深度故事补充，回填更会卖的话术
-```
+## 用户流程
 
-实施内容：
+1. 进入 后台 → 官方知识 → 点「新增」旁的新按钮 **「AI 生成」**（Sparkles 图标）。
+2. 弹出对话框，包含：
+   - 多轮聊天区（默认欢迎语：「告诉我你想新增的商品，例如：昭和时期的伊万里烧小皿…」）
+   - 输入框 + 可选「上传参考图」按钮
+   - AI 回复后右侧实时渲染一张「待入库卡片」预览（名称/品类/IP/年代/产地/简介/卖点/小贴士/封面图）
+3. 管理员可以继续追问让 AI 修改（「卖点再凝练一些」「换一张更素雅的封面」「改成大正时期」等），卡片字段会被增量更新。
+4. 满意后点 **「保存到官方知识」**：直接 `INSERT` 进 `official_knowledge`，封面图先上传到 `product-images` bucket 再写 `cover_url`。
+5. 关闭对话框后列表自动刷新。
 
-1. 立即出首屏，不再空等 AI
-- 在拍照/上传后马上生成一个“识别中可用卡片”。
-- 显示文案类似：商品识别中、可先用通用开场接待顾客。
-- 计时停止逻辑改成“首屏可见时间”和“AI完成时间”分开，不再让用户感觉一直卡住。
+## 技术实现
 
-2. 精简主识别，让它只做“鉴别”，不做长话术
-- `recognize-product` 的工具 schema 和 prompt 大幅瘦身：只返回商品名、类目、年代、产地、材质、工艺、置信度、3条短卖点。
-- 移除主识别里的长 `description`、长 `pitch.story`、砍价应答等生成任务。
-- 长故事全部交给后台 `enrich-recognition`，避免主识别拖慢首屏。
+### 1. 新 Edge Function：`generate-official-knowledge`
+- 路径：`supabase/functions/generate-official-knowledge/index.ts`
+- 校验 JWT + admin 角色（复用 `has_role` 通过 service role 查 `user_roles`）。
+- 入参：
+  ```ts
+  { messages: ChatMsg[], currentDraft?: Partial<Item>, referenceImageUrl?: string }
+  ```
+- 调用 Lovable AI Gateway，模型 `google/gemini-3-flash-preview`，使用 **tool calling** 强制结构化输出：
+  ```ts
+  tools: [{ type:'function', function:{ name:'upsert_knowledge', parameters:{ /* category/name/ip_name/era/origin/summary/selling_points[]/tips/cover_prompt + assistant_reply */ }}}]
+  tool_choice: { type:'function', function:{ name:'upsert_knowledge' } }
+  ```
+- System prompt：要求基于中古杂货背景、用简体中文（遵守"不使用主播称谓"core rule）、`selling_points` 3–5 条短句、`cover_prompt` 是一句英文图像描述（用于 nano banana）。
+- 返回：`{ reply: string, draft: Partial<Item>, coverPrompt: string }`。
 
-3. 主识别设置硬保护
-- 主识别强制使用 `google/gemini-2.5-flash-lite`。
-- 主识别强制关闭联网搜索和 quick match，避免后台设置误开后再次变慢。
-- 主识别超时缩短到约 6 秒；超时也不让 UI 卡死，卡片保持“待完善”，并提示可重拍或稍后补全。
+### 2. 新 Edge Function：`generate-knowledge-cover`
+- 调用 `google/gemini-2.5-flash-image`（nano banana），`modalities:["image","text"]`，将返回的 base64 解码上传到 `product-images/official-covers/{uuid}.png`，返回 public URL。
+- 单独拆分是因为图像生成 5–10s，不阻塞文本对话。前端在 AI 文本回复落地 + 拿到 `coverPrompt` 后并行触发本函数，封面以「生成中…」骨架显示，完成后无缝替换。
+- 同时支持「重新生成封面」按钮（带额外 prompt 微调）。
 
-4. 后台 enrich 保持自动回填，但不影响首屏
-- 当前 `triggerEnrich` 已是不阻塞调用，我会确保它只在主识别结果出来后跑。
-- enrich 返回后继续无缝合并到当前商品卡片。
-- 如果商品已经入库，再把 enriched 写回 `products.ai_analysis.enriched` 作为下次缓存。
+### 3. 前端：`src/components/admin/AiKnowledgeDialog.tsx`（新文件）
+- Dialog（max-w-3xl，左右两栏，移动端纵向堆叠）
+  - 左：聊天记录 + 输入框 + 「上传参考图」（直接转 base64 传给 edge function 作为 user message 的 image_url）
+  - 右：实时预览的 `OfficialKnowledgeCard`（名称、品类徽章、IP、年代·产地、简介、卖点列表、小贴士、封面图带骨架/重新生成按钮）
+- 状态：`messages`, `draft`, `coverUrl`, `isThinking`, `isPaintingCover`
+- 操作：
+  - 「保存到官方知识」→ `supabase.from('official_knowledge').insert(draft)`，成功后 `onSaved()` 触发列表刷新并关闭。
+  - 「弃用并改回手动表单」→ 关闭本弹窗，打开原 `OfficialKnowledgeManager` 的手动 Dialog（带预填）。
 
-5. 修正后台入库与 enrich 的衔接
-- 现在新商品的 enrich 是在 `productId=null` 时先跑，所以深度结果可能只显示在当前页，不能稳定写回数据库。
-- 我会在产品入库拿到 `productId` 后，如果 enrich 已返回，再补写回数据库；或者再次用缓存方式写入，保证下次打开也有深度故事。
+### 4. 接入 `OfficialKnowledgeManager.tsx`
+- 在「重算重要程度」与「新增」之间加按钮：
+  ```
+  <Button size="sm" variant="outline" onClick={()=>setAiOpen(true)}>
+    <Sparkles className="w-4 h-4 mr-1.5" /> AI 生成
+  </Button>
+  ```
+- 引入 `<AiKnowledgeDialog open={aiOpen} onOpenChange={setAiOpen} onSaved={load} />`。
 
-6. 优化图片体积，减少上传/请求耗时
-- 单图压到 640px、质量 0.65；多图继续降低。
-- 保留底款/铭文可识别的前提下，尽量减少 base64 请求体，降低移动网络 5-10 秒上传风险。
+### 5. 存储
+- 复用现有公开 bucket `product-images`，新增前缀 `official-covers/`。无需建新 bucket。
+- 不新建数据表；直接写入 `official_knowledge`（字段已齐备）。
 
-7. 修复当前 React 警告
-- `ProductDetailCard` 中 `Badge` 被传 ref 的警告会一起修掉，避免控制台噪音影响性能排查。
+## 文件清单
 
-8. 验证方式
-- 用边缘函数日志确认主识别不再做长文本生成。
-- 用前端日志区分：首屏显示耗时、主识别 roundtrip、enrich 回填耗时。
-- 卡片顶部继续显示真实链路，让你能看到到底是临时卡、AI 识别、还是深度补充。
+新增：
+- `supabase/functions/generate-official-knowledge/index.ts`
+- `supabase/functions/generate-knowledge-cover/index.ts`
+- `src/components/admin/AiKnowledgeDialog.tsx`
 
-预期效果：
-- 用户拍照后 0-1 秒看到卡片，不再盯着加载 10几秒。
-- AI 精确结果通常随后 3-6 秒内替换。
-- 深度故事继续后台补充，慢也不挡接待客人。
+修改：
+- `src/components/admin/OfficialKnowledgeManager.tsx`（加入 AI 入口按钮 + dialog 挂载）
+
+## 不在本次范围
+
+- 不改动手动新增/编辑流程，保持作为兜底。
+- 不引入图像编辑（如根据参考图改图）—— 仅支持参考图作为「文本理解辅助」。如后续需要可加 `--edit-image` 类逻辑。
+- 不批量导入。
