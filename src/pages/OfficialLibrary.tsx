@@ -43,13 +43,18 @@ type SortKey = 'latest' | 'hot' | 'important';
 
 export default function OfficialLibrary() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, role, loading: authLoading } = useAuth();
   const isAdmin = role === 'admin';
   const [items, setItems] = useState<OfficialItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [keyword, setKeyword] = useState('');
-  const [cat, setCat] = useState<ProductCategory | 'all'>('all');
-  const [sub, setSub] = useState<string>('all');
+  const [keyword, setKeyword] = useState(() => searchParams.get('q') || '');
+  const [cat, setCat] = useState<ProductCategory | 'all'>(
+    () => (searchParams.get('cat') as ProductCategory | null) || 'all',
+  );
+  const [sub, setSub] = useState<string>(() => searchParams.get('ip') || 'all');
+  const [era, setEra] = useState<string>(() => searchParams.get('era') || '');
+  const [origin, setOrigin] = useState<string>(() => searchParams.get('origin') || '');
   const [expanded, setExpanded] = useState(false);
   const [sort, setSort] = useState<SortKey>(() => {
     if (typeof window === 'undefined') return 'latest';
@@ -61,6 +66,17 @@ export default function OfficialLibrary() {
   });
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(new Set());
   const [reloadKey, setReloadKey] = useState(0);
+
+  // 同步 URL 参数
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (cat !== 'all') params.cat = cat;
+    if (sub !== 'all') params.ip = sub;
+    if (era) params.era = era;
+    if (origin) params.origin = origin;
+    if (keyword.trim()) params.q = keyword.trim();
+    setSearchParams(params, { replace: true });
+  }, [cat, sub, era, origin, keyword, setSearchParams]);
 
   useEffect(() => {
     localStorage.setItem('lib_view', view);
