@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
@@ -11,7 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Upload, Globe, ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Item {
@@ -41,8 +41,11 @@ interface Props {
 export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: Props) {
   const [draft, setDraft] = useState<Item>(item);
   const [pointsText, setPointsText] = useState('');
-  const [galleryText, setGalleryText] = useState('');
+  const [gallery, setGallery] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -52,8 +55,70 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
         ? (item.selling_points as unknown[]).map((p: any) => typeof p === 'string' ? p : (p?.text ?? '')).filter(Boolean).join('\n')
         : '',
     );
-    setGalleryText(Array.isArray(item.gallery) ? (item.gallery as string[]).join('\n') : '');
+    const g = Array.isArray(item.gallery) ? (item.gallery as string[]).filter(Boolean) : [];
+    if (g.length) setGallery(g);
+    else if (item.cover_url) setGallery([item.cover_url]);
+    else setGallery([]);
   }, [open, item]);
+
+  const uploadFiles = async (files: FileList | File[]) => {
+    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (!arr.length) return;
+    setUploading(true);
+    try {
+      const uploaded: string[] = [];
+      for (const f of arr) {
+        if (f.size > 8 * 1024 * 1024) { toast.error(`${f.name} 超过 8MB，已跳过`); continue; }
+        const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `official-gallery/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error } = await supabase.storage.from('product-images').upload(path, f, { contentType: f.type, upsert: false });
+        if (error) { toast.error(`上传失败：${error.message}`); continue; }
+        const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+        if (data?.publicUrl) uploaded.push(data.publicUrl);
+      }
+      if (uploaded.length) {
+        setGallery((prev) => [...prev, ...uploaded]);
+        toast.success(`已上传 ${uploaded.length} 张`);
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const webSearch = async () => {
+    if (!draft.name?.trim()) { toast.error('请先填写名称'); return; }
+    setSearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('web-search-images', {
+        body: { query: draft.name, intent: 'gallery', limit: 4, mirror: true, pathPrefix: 'web-gallery' },
+      });
+      if (error) throw error;
+      const imgs = ((data?.images || []) as Array<{ url: string }>).map((i) => i.url).filter(Boolean);
+      if (imgs.length) {
+        setGallery((prev) => Array.from(new Set([...prev, ...imgs])));
+        toast.success(`联网找到 ${imgs.length} 张`);
+      } else toast.info('暂未搜到合适的图');
+    } catch (e: any) {
+      toast.error('联网搜图失败：' + (e?.message ?? ''));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const removeAt = (i: number) => setGallery((p) => p.filter((_, idx) => idx !== i));
+  const move = (i: number, dir: -1 | 1) => {
+    setGallery((p) => {
+      const j = i + dir;
+      if (j < 0 || j >= p.length) return p;
+      const next = [...p];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  };
+  const setCover = (i: number) => {
+    if (i === 0) return;
+    setGallery((p) => [p[i], ...p.filter((_, idx) => idx !== i)]);
+  };
 
   const save = async () => {
     if (!draft.name?.trim()) { toast.error('名称必填'); return; }
@@ -66,11 +131,11 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
         summary: draft.summary?.trim() || null,
         era: draft.era?.trim() || null,
         origin: draft.origin?.trim() || null,
-        cover_url: draft.cover_url?.trim() || null,
+        cover_url: gallery[0] || null,
+        gallery,
         video_url: draft.video_url?.trim() || null,
         body: draft.body?.trim() || null,
         selling_points: pointsText.split('\n').map((s) => s.trim()).filter(Boolean),
-        gallery: galleryText.split('\n').map((s) => s.trim()).filter(Boolean),
         tips: draft.tips?.trim() || null,
         importance_score: Math.min(100, Math.max(0, Number(draft.importance_score) || 0)),
       }).eq('id', draft.id);
@@ -125,17 +190,89 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
             <Label>简介</Label>
             <Textarea rows={2} value={draft.summary || ''} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
           </div>
+
+          {/* 图片（含主图） */}
           <div>
-            <Label>封面图 URL</Label>
-            <Input value={draft.cover_url || ''} onChange={(e) => setDraft({ ...draft, cover_url: e.target.value })} placeholder="https://..." />
+            <div className="flex items-center justify-between mb-1.5">
+              <Label className="mb-0">
+                图片 {gallery.length > 0 && <span className="text-xs text-muted-foreground font-normal">({gallery.length})</span>}
+                <span className="ml-1 text-[10px] text-muted-foreground font-normal">第一张为主图</span>
+              </Label>
+            </div>
+
+            {gallery.length ? (
+              <div className="grid grid-cols-3 gap-2">
+                {gallery.map((u, i) => (
+                  <div key={u + i} className="relative rounded-md border overflow-hidden bg-muted aspect-square">
+                    <img src={u} alt="" className="w-full h-full object-cover" />
+                    {i === 0 && (
+                      <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium flex items-center gap-0.5">
+                        <Star className="w-2.5 h-2.5 fill-current" /> 主图
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeAt(i)}
+                      className="absolute top-1 right-1 bg-background/90 hover:bg-destructive hover:text-destructive-foreground rounded-full p-1 shadow-sm"
+                      title="删除"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                    <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
+                          className="bg-background/90 disabled:opacity-30 rounded p-0.5" title="前移">
+                          <ArrowLeft className="w-3 h-3" />
+                        </button>
+                        <button type="button" onClick={() => move(i, 1)} disabled={i === gallery.length - 1}
+                          className="bg-background/90 disabled:opacity-30 rounded p-0.5" title="后移">
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                      {i !== 0 && (
+                        <button type="button" onClick={() => setCover(i)}
+                          className="bg-background/90 rounded p-0.5" title="设为主图">
+                          <Star className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-md">
+                {uploading ? '正在上传…' : (searching ? '正在联网搜索…' : '尚无图片，请上传或联网搜图')}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) uploadFiles(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+              <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1"
+                onClick={() => fileRef.current?.click()} disabled={uploading}>
+                {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                上传图片
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1"
+                onClick={webSearch} disabled={searching || !draft.name?.trim()}>
+                {searching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
+                联网搜图
+              </Button>
+            </div>
           </div>
+
           <div>
             <Label>视频 URL（MP4 直链或 YouTube/Bilibili 嵌入链接）</Label>
             <Input value={draft.video_url || ''} onChange={(e) => setDraft({ ...draft, video_url: e.target.value })} placeholder="https://...mp4" />
-          </div>
-          <div>
-            <Label>图集（每行一个 URL）</Label>
-            <Textarea rows={3} value={galleryText} onChange={(e) => setGalleryText(e.target.value)} placeholder="https://..." />
           </div>
           <div>
             <Label>正文（支持 Markdown）</Label>
