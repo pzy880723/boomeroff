@@ -85,17 +85,17 @@ const TOOL = {
               },
             },
             tips: { type: "string", description: "60-120字保养与禁忌。" },
-            importance_score: { type: "number" },
+            importance_score: { type: "integer", minimum: 0, maximum: 100, description: "0-100 整数。" },
           },
-          required: ["name","category","one_liner","quick_facts","customer_pitches","selling_points","comparisons","tips"],
+          required: ["name","category","one_liner","quick_facts","customer_pitches","selling_points","comparisons","tips","importance_score"],
         },
         cover_prompt: {
           type: "string",
           description:
-            "英文 prompt，方形产品封面图。禁止任何品牌/IP/角色/系列/公司/动漫/游戏名（中英日罗马字均禁）；只用通俗外观语言（物体类别+材质+颜色+形状/纹样+拍摄风格）；必须以 'on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo' 收尾。",
+            "英文 prompt，方形产品封面图。禁止任何品牌/IP/角色/系列/公司/动漫/游戏名（中英日罗马字均禁）；只用通俗外观语言（物体类别+材质+颜色+形状/纹样+拍摄风格）；必须以 'on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo' 收尾。已有封面时可不返回。",
         },
       },
-      required: ["reply", "draft", "cover_prompt"],
+      required: ["reply", "draft"],
     },
   },
 } as const;
