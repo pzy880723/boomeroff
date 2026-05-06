@@ -21,6 +21,7 @@ import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { KnowledgeEditDialog, KnowledgeRecord } from './KnowledgeEditDialog';
+import { AutoCategorizeButton } from './AutoCategorizeButton';
 
 const PAGE_SIZE = 20;
 
@@ -219,6 +220,9 @@ export function KnowledgeManager() {
               <Trash2 className="w-4 h-4 mr-1.5" />
               批量删除 ({selected.size})
             </Button>
+          )}
+          {isAdmin && (
+            <AutoCategorizeButton target="personal" onDone={() => { void loadList(); void loadCounts(); }} />
           )}
           {isAdmin && (
             <Button size="sm" onClick={openCreate}>

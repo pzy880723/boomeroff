@@ -70,9 +70,28 @@ export function KnowledgeEditDialog({ record, open, onOpenChange, onSaved }: Pro
     try {
       const sp = form.selling_points
         .split('\n').map((s) => s.trim()).filter(Boolean);
+
+      // AI 自动判定品类（用 AI 判定结果覆盖手选，避免乱归类）
+      let category: ProductCategory = form.category;
+      try {
+        const { data: catData } = await supabase.functions.invoke('auto-categorize-knowledge', {
+          body: {
+            mode: 'single',
+            name: form.product_name.trim(),
+            era: form.era.trim(),
+            origin: form.origin.trim(),
+            selling_points: sp,
+            tips: form.tips.trim(),
+          },
+        });
+        if (catData?.category) category = catData.category as ProductCategory;
+      } catch (e) {
+        console.warn('auto categorize failed, fallback to form value', e);
+      }
+
       const payload = {
         product_name: form.product_name.trim(),
-        category: form.category,
+        category,
         era: form.era.trim() || null,
         origin: form.origin.trim() || null,
         selling_points: sp,

@@ -22,6 +22,7 @@ import { Plus, Trash2, Edit, Loader2, Search, ImageOff, Sparkles, Wand2 } from '
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 import { AiKnowledgeDialog } from './AiKnowledgeDialog';
+import { AutoCategorizeButton } from './AutoCategorizeButton';
 
 interface Item {
   id: string;
@@ -151,6 +152,7 @@ export function OfficialKnowledgeManager() {
           {computing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
           重算重要程度
         </Button>
+        <AutoCategorizeButton target="official" onDone={load} />
         <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}>
           <Wand2 className="w-4 h-4 mr-1.5" /> AI 生成
         </Button>
