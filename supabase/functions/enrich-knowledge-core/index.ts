@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "仅管理员可用" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { currentDraft = null } = await req.json();
+    const { currentDraft = null, needCover = true } = await req.json();
     const chatMessages: any[] = [
       { role: "system", content: SYSTEM },
     ];
@@ -162,10 +162,10 @@ Deno.serve(async (req) => {
         content: `当前草稿（在此基础上把所有核心字段重写补强到最高完成度，未提及字段也要补满；不要返回 body 长正文，本步只产出核心卡片字段）：\n${JSON.stringify(currentDraft, null, 2)}`,
       });
     }
-    chatMessages.push({
-      role: "user",
-      content: "请把这条词条的核心卡片字段全部重写补全到最高完成度：金句更出圈、速记卡 5 条全填、客户话术 3 场景、卖点 4-6 条带 tag/text/detail、对比 ≥3 条、tips 保养与禁忌齐全。",
-    });
+    const userMsg = needCover
+      ? "请把这条词条的核心卡片字段全部重写补全到最高完成度：金句更出圈、速记卡 5 条全填、客户话术 3 场景、卖点 4-6 条带 tag/text/detail、对比 ≥2 条、tips 保养与禁忌齐全；并给出 cover_prompt。"
+      : "请把这条词条的核心卡片字段全部重写补全到最高完成度：金句更出圈、速记卡 5 条全填、客户话术 3 场景、卖点 4-6 条带 tag/text/detail、对比 ≥2 条、tips 保养与禁忌齐全。已有封面，无需返回 cover_prompt。";
+    chatMessages.push({ role: "user", content: userMsg });
 
     const aiResp = await callAI(chatMessages);
     if (!aiResp.ok) {
