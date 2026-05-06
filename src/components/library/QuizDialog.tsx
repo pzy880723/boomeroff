@@ -159,6 +159,9 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
               })}
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { onExit?.(); onOpenChange(false); }} className="flex-1">
+                <LogOut className="w-4 h-4 mr-1.5" /> 结束测试
+              </Button>
               <Button variant="outline" onClick={reset} className="flex-1">
                 <RefreshCw className="w-4 h-4 mr-1.5" /> 再考一次
               </Button>
