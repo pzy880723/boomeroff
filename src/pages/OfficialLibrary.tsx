@@ -60,7 +60,7 @@ export default function OfficialLibrary() {
     return (localStorage.getItem('lib_view') as ViewMode) || 'grid';
   });
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(new Set());
-  const [detail, setDetail] = useState<OfficialItem | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     localStorage.setItem('lib_view', view);
@@ -143,12 +143,7 @@ export default function OfficialLibrary() {
   };
 
   const openDetail = (it: OfficialItem) => {
-    setDetail(it);
-    // fire-and-forget：自增浏览数
-    void (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<unknown>)(
-      'increment_official_view',
-      { _id: it.id },
-    );
+    navigate(`/library/${it.id}`);
   };
 
   const visibleCats = useMemo(
@@ -350,52 +345,7 @@ export default function OfficialLibrary() {
         )}
       </div>
 
-      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          {detail && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{detail.name}</DialogTitle>
-              </DialogHeader>
-              {detail.cover_url && <img src={detail.cover_url} className="w-full rounded-lg aspect-square object-cover" alt={detail.name} />}
-              <div className="flex flex-wrap gap-1.5">
-                <Badge variant="secondary">{CATEGORY_LABELS[detail.category]}</Badge>
-                {detail.ip_name && <Badge variant="outline">{detail.ip_name}</Badge>}
-                {detail.era && <Badge variant="outline">{detail.era}</Badge>}
-                {detail.origin && <Badge variant="outline">{detail.origin}</Badge>}
-              </div>
-              {detail.summary && <p className="text-sm text-muted-foreground">{detail.summary}</p>}
-              {Array.isArray(detail.selling_points) && detail.selling_points.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-semibold">核心卖点</p>
-                  <ul className="text-sm space-y-1 list-disc list-inside">
-                    {(detail.selling_points as unknown[]).map((p: any, i) => {
-                      const text = typeof p === 'string' ? p : (p?.text ?? '');
-                      if (!text) return null;
-                      const tag = typeof p === 'object' && p?.tag ? p.tag : null;
-                      return (
-                        <li key={i}>
-                          {tag && <span className="mr-1.5 text-[10px] px-1.5 py-0.5 rounded bg-accent/30 text-accent-foreground">{tag}</span>}
-                          {text}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-              {detail.tips && (
-                <div className="bg-muted rounded-lg p-3 text-sm">
-                  <span className="font-semibold">小贴士：</span>{detail.tips}
-                </div>
-              )}
-              <Button onClick={() => toggleFav(detail)} className="w-full" variant={favoritedIds.has(detail.id) ? 'outline' : 'default'}>
-                <Star className={`w-4 h-4 mr-2 ${favoritedIds.has(detail.id) ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                {favoritedIds.has(detail.id) ? '已收藏' : '收藏到个人知识库'}
-              </Button>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {isAdmin && <AddOfficialFab onAdded={() => setReloadKey((k) => k + 1)} />}
     </>
   );
 }
