@@ -11,9 +11,17 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
-import { Loader2, Upload, Globe, ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react';
+import { Loader2, Upload, Globe, Star, Trash2, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { WebImagePickerDialog } from './WebImagePickerDialog';
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, arrayMove, rectSortingStrategy, useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Item {
   id: string;
