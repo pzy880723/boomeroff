@@ -1,79 +1,42 @@
-## 问题诊断
+我查到这次失败不是 AI 卡死，而是最后保存失败：AI 返回了 `importance_score: 9.5`，但数据库该字段是整数，保存时 PATCH 报错 `invalid input syntax for type integer: "9.5"`。所以前面核心字段和长正文其实都生成成功了，最后一步失败导致体验像“跑很久后失败”。
 
-当前一键丰富会卡死的根因（已在网络日志验证）：
-
-1. **单次调用太重**：`generate-official-knowledge` 用 `gemini-2.5-pro` 一次性产出 7 个结构化字段 + 800字 body + 封面 prompt，模型实际耗时常常 60–120 秒，超过网关/浏览器等待，前端表现为 `Failed to fetch`。
-2. **封面串在后面**：即使主体生成成功，再串一次封面又要 30–60 秒，整体时间继续叠加。
-3. **进度条是假的**：纯前端按目标值平滑爬，没有真实节点反馈，一旦后端慢就显得"卡住"。
-
-## 解决方案
-
-### 1. 后端拆分为三个轻量函数
-
-新增/拆分 edge function，每个只做一件事，单次都能在 10–25 秒内返回：
-
-- **`enrich-knowledge-core`**（新建）  
-  模型：`google/gemini-2.5-flash`  
-  只产出：`name / category / ip_name / era / origin / summary / one_liner / aliases / pronunciation / quick_facts / customer_pitches / selling_points / comparisons / tips / importance_score / cover_prompt`。  
-  典型耗时 5–12 秒。
-
-- **`enrich-knowledge-body`**（新建）  
-  模型：`google/gemini-2.5-pro`（正文质量优先）  
-  入参：上一步产出的 core draft；只产出 `body`（≥800字 markdown，强制 6 个二级标题）。  
-  典型耗时 20–40 秒，独立调用不会拖累其它步骤。
-
-- **`generate-knowledge-cover`**（已存在，沿用）  
-  仅当 `editingItem.cover_url` 为空时才调用。
-
-> 现有 `generate-official-knowledge`（聊天用的"AI 修改"）保持不变，这次只为一键丰富新建专用函数。
-
-### 2. 前端编排（在 `AiKnowledgeDialog.tsx` 的 `oneClickEnrich` 改写）
-
-真实的 5 段式进度，每段都有真实事件驱动：
-
-```
-collect    0% → 10%   读取 itemToDraft
-core      10% → 45%   await enrich-knowledge-core
-body      45% → 80%   await enrich-knowledge-body
-cover     80% → 92%   仅当无封面时调 generate-knowledge-cover；有封面直接跳过
-save      92% → 100%  写回 official_knowledge
-```
-
-进度条 `STAGE_TARGET` 改为对应阶段的真实终点，每步完成就立刻把进度置到该阶段终点（去掉只靠定时器爬升的假动效，但保留小步缓动 100ms 让数字平滑）。
-
-### 3. 自动重试一次
-
-封装一个小工具：
-
-```ts
-async function withRetry<T>(fn: () => Promise<T>, label: string) {
-  try { return await fn(); }
-  catch (e) {
-    console.warn(`[${label}] retry once`, e);
-    await new Promise(r => setTimeout(r, 800));
-    return await fn();
-  }
-}
-```
-
-`core / body / cover` 三步都用 `withRetry` 包起来，仍失败才 toast 报错并 `resetEnrich()`。
-
-### 4. 失败/取消的 UX
-
-- 任意步失败：toast 显示失败的阶段（"内容生成失败"/"正文生成失败"/"保存失败"），进度条变红 800ms 后回到 idle。
-- 进行中再次点击按钮：已禁用，无副作用。
-- `body` 步骤可选给一个 60 秒前端兜底 `AbortController`，超时则按失败处理。
-
-## 受影响文件
+当前一键丰富实际流程：
 
 ```text
-supabase/functions/enrich-knowledge-core/index.ts   新建
-supabase/functions/enrich-knowledge-body/index.ts   新建
-src/components/admin/AiKnowledgeDialog.tsx          改 oneClickEnrich + 阶段定义
+1. 收集当前词条
+2. 调用 enrich-knowledge-core
+   - 重写名称、分类、简介、金句、速记卡、话术、卖点、对比、tips、重要度、封面提示词
+   - 刚才测试约 61 秒才完成，偏慢
+3. 调用 enrich-knowledge-body
+   - 生成 800 字以上、6 个小标题的长正文
+   - 刚才测试约 1 秒返回，但正文非常长
+4. 如果没有封面，再生成封面
+   - 当前这条已有封面，所以跳过
+5. 保存 official_knowledge
+   - 这里因为 9.5 写入整数列失败
 ```
 
-## 验收
+调整计划：
 
-- 在当前 `/library/1da84972-...` 词条点"一键丰富"，每段进度都能看到真实推进，core 一般 10 秒内、body 一般 30 秒内完成。
-- 已有封面时跳过 cover，整体可在 ~40 秒内结束。
-- 强制断网模拟一次失败，看到自动重试日志后成功；持续失败则 toast 并重置进度。
+1. 先修保存失败
+   - 前端保存前把 `importance_score` 从小数安全转成整数，例如 `Math.round(...)` 后再限制 0-100。
+   - 同时在 `enrich-knowledge-core` 的工具 schema 里把 `importance_score` 改成 integer，并明确只允许 0-100 整数，避免 AI 再返回 9.5。
+
+2. 把一键丰富改成更快的“先保存核心，再后台补正文”体验
+   - 核心字段生成成功后立刻保存核心字段，让用户很快看到词条已更新。
+   - 长正文单独继续生成，生成成功后再二次保存 body。
+   - 这样不会因为长正文慢或失败导致整个一键丰富全部失败。
+
+3. 降低核心字段耗时
+   - `enrich-knowledge-core` 默认模型改为更快的 Lovable AI 默认模型 `google/gemini-3-flash-preview`。
+   - 去掉强制每次返回 `cover_prompt`；已有封面时前端传 `needCover: false`，后端不要求 AI 写封面提示词，减少输出和耗时。
+   - 缩短 prompt：只要求补强核心字段，不要求过长 tips/detail。
+
+4. 降低长正文耗时
+   - `enrich-knowledge-body` 改用更快模型。
+   - 正文目标从“≥800字”调整为“约500-700字、6个小标题完整”，保证详情页够用但少等很多。
+   - 如果用户后续想要超长百科文，再通过单独按钮或 AI 修改指定“正文扩写”。
+
+5. 进度与失败提示变顺畅
+   - 进度文案改成：收集 → 核心生成并保存 → 正文补充 → 封面检查 → 完成。
+   - 任一步失败显示具体原因；核心已保存时，正文失败只提示“核心已保存，正文稍后可重试”，不回滚已成功内容。

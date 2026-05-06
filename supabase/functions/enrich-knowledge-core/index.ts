@@ -85,17 +85,17 @@ const TOOL = {
               },
             },
             tips: { type: "string", description: "60-120字保养与禁忌。" },
-            importance_score: { type: "number" },
+            importance_score: { type: "integer", minimum: 0, maximum: 100, description: "0-100 整数。" },
           },
-          required: ["name","category","one_liner","quick_facts","customer_pitches","selling_points","comparisons","tips"],
+          required: ["name","category","one_liner","quick_facts","customer_pitches","selling_points","comparisons","tips","importance_score"],
         },
         cover_prompt: {
           type: "string",
           description:
-            "英文 prompt，方形产品封面图。禁止任何品牌/IP/角色/系列/公司/动漫/游戏名（中英日罗马字均禁）；只用通俗外观语言（物体类别+材质+颜色+形状/纹样+拍摄风格）；必须以 'on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo' 收尾。",
+            "英文 prompt，方形产品封面图。禁止任何品牌/IP/角色/系列/公司/动漫/游戏名（中英日罗马字均禁）；只用通俗外观语言（物体类别+材质+颜色+形状/纹样+拍摄风格）；必须以 'on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo' 收尾。已有封面时可不返回。",
         },
       },
-      required: ["reply", "draft", "cover_prompt"],
+      required: ["reply", "draft"],
     },
   },
 } as const;
@@ -125,7 +125,7 @@ async function callAI(chatMessages: any[]) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "google/gemini-3-flash-preview",
       messages: chatMessages,
       tools: [TOOL],
       tool_choice: { type: "function", function: { name: "upsert_core" } },
@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "仅管理员可用" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { currentDraft = null } = await req.json();
+    const { currentDraft = null, needCover = true } = await req.json();
     const chatMessages: any[] = [
       { role: "system", content: SYSTEM },
     ];
@@ -162,10 +162,10 @@ Deno.serve(async (req) => {
         content: `当前草稿（在此基础上把所有核心字段重写补强到最高完成度，未提及字段也要补满；不要返回 body 长正文，本步只产出核心卡片字段）：\n${JSON.stringify(currentDraft, null, 2)}`,
       });
     }
-    chatMessages.push({
-      role: "user",
-      content: "请把这条词条的核心卡片字段全部重写补全到最高完成度：金句更出圈、速记卡 5 条全填、客户话术 3 场景、卖点 4-6 条带 tag/text/detail、对比 ≥3 条、tips 保养与禁忌齐全。",
-    });
+    const userMsg = needCover
+      ? "请把这条词条的核心卡片字段全部重写补全到最高完成度：金句更出圈、速记卡 5 条全填、客户话术 3 场景、卖点 4-6 条带 tag/text/detail、对比 ≥2 条、tips 保养与禁忌齐全；并给出 cover_prompt。"
+      : "请把这条词条的核心卡片字段全部重写补全到最高完成度：金句更出圈、速记卡 5 条全填、客户话术 3 场景、卖点 4-6 条带 tag/text/detail、对比 ≥2 条、tips 保养与禁忌齐全。已有封面，无需返回 cover_prompt。";
+    chatMessages.push({ role: "user", content: userMsg });
 
     const aiResp = await callAI(chatMessages);
     if (!aiResp.ok) {
