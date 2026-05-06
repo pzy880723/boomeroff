@@ -13,6 +13,7 @@ import {
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
 import { Loader2, Upload, Globe, ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { WebImagePickerDialog } from './WebImagePickerDialog';
 
 interface Item {
   id: string;
@@ -44,6 +45,7 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
   const [gallery, setGallery] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -82,26 +84,6 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
       }
     } finally {
       setUploading(false);
-    }
-  };
-
-  const webSearch = async () => {
-    if (!draft.name?.trim()) { toast.error('请先填写名称'); return; }
-    setSearching(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('web-search-images', {
-        body: { query: draft.name, intent: 'gallery', limit: 4, mirror: true, pathPrefix: 'web-gallery' },
-      });
-      if (error) throw error;
-      const imgs = ((data?.images || []) as Array<{ url: string }>).map((i) => i.url).filter(Boolean);
-      if (imgs.length) {
-        setGallery((prev) => Array.from(new Set([...prev, ...imgs])));
-        toast.success(`联网找到 ${imgs.length} 张`);
-      } else toast.info('暂未搜到合适的图');
-    } catch (e: any) {
-      toast.error('联网搜图失败：' + (e?.message ?? ''));
-    } finally {
-      setSearching(false);
     }
   };
 
@@ -263,8 +245,11 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
                 上传图片
               </Button>
               <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1"
-                onClick={webSearch} disabled={searching || !draft.name?.trim()}>
-                {searching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
+                onClick={() => {
+                  if (!draft.name?.trim()) { toast.error('请先填写名称'); return; }
+                  setPickerOpen(true);
+                }}>
+                <Globe className="w-3 h-3" />
                 联网搜图
               </Button>
             </div>
@@ -301,6 +286,13 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
           </Button>
         </DialogFooter>
       </DialogContent>
+      <WebImagePickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        initialQuery={draft.name || ''}
+        pathPrefix="web-gallery"
+        onConfirm={(urls) => setGallery((prev) => Array.from(new Set([...prev, ...urls])))}
+      />
     </Dialog>
   );
 }

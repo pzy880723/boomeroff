@@ -197,12 +197,44 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "请求过于频繁，请稍后再试" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { query, intent = "gallery", limit = 3, mirror = true, pathPrefix = "web-images" } = await req.json();
+    const body = await req.json();
+    const {
+      mode = "auto",
+      query,
+      intent = "gallery",
+      limit = 3,
+      mirror = true,
+      pathPrefix = "web-images",
+      urls,
+      exclude,
+    } = body || {};
+
+    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+
+    // === MIRROR 模式：把指定的原始 URL 镜像到 Storage ===
+    if (mode === "mirror") {
+      const list: string[] = Array.isArray(urls) ? urls.filter((u: any) => typeof u === "string") : [];
+      if (list.length === 0) {
+        return new Response(JSON.stringify({ error: "缺少 urls", images: [] }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const settled = await Promise.allSettled(
+        list.slice(0, 30).map((u) => mirrorImage(supabase, u, pathPrefix)),
+      );
+      const out: string[] = [];
+      let failed = 0;
+      for (const s of settled) {
+        if (s.status === "fulfilled" && s.value) out.push(s.value);
+        else failed++;
+      }
+      return new Response(JSON.stringify({ images: out, failed }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === SEARCH / AUTO 模式 ===
     if (!query || typeof query !== "string") {
       return new Response(JSON.stringify({ error: "缺少 query" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
-    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     if (!FIRECRAWL_API_KEY) {
       return new Response(JSON.stringify({ error: "FIRECRAWL_API_KEY 未配置", images: [], reason: "missing_api_key" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -211,16 +243,25 @@ Deno.serve(async (req) => {
       ? `${query} backstamp 底款 mark`
       : query;
 
-    // 1) 主路径：图片搜索
-    let candidates = await searchImages(FIRECRAWL_API_KEY, q, Math.max(12, limit * 4));
+    const wantSearchOnly = mode === "search";
+    const targetCount = wantSearchOnly ? Math.max(20, limit) : limit;
 
-    // 2) 兜底：网页解析
+    // 1) 主路径：图片搜索（多取候选池）
+    let candidates = await searchImages(FIRECRAWL_API_KEY, q, Math.max(targetCount * 2, 30));
+    // 2) 兜底
     if (candidates.length === 0) {
       candidates = await searchViaPages(FIRECRAWL_API_KEY, q);
     }
 
-    // 去重
-    const seen = new Set<string>();
+    // 排除上一批已展示的
+    const excludeSet = new Set<string>();
+    if (Array.isArray(exclude)) {
+      for (const u of exclude) {
+        if (typeof u === "string") excludeSet.add(dedupKey(u));
+      }
+    }
+
+    const seen = new Set<string>(excludeSet);
     const uniq = candidates.filter((c) => {
       const k = dedupKey(c.url);
       if (seen.has(k)) return false;
@@ -234,13 +275,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!mirror) {
-      return new Response(JSON.stringify({ images: uniq.slice(0, limit), found: uniq.length }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // SEARCH 模式：只返回原始 URL，最多 targetCount 张
+    if (wantSearchOnly || !mirror) {
+      return new Response(JSON.stringify({
+        images: uniq.slice(0, targetCount),
+        found: uniq.length,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // 并发镜像下载，多取一些做候选；先到先得，凑够 limit 即可
+    // AUTO 模式（旧行为）：并发镜像下载，凑够 limit
     const pool = uniq.slice(0, Math.max(limit * 3, 9));
     const settled = await Promise.allSettled(
       pool.map((c) => mirrorImage(supabase, c.url, pathPrefix).then((m) => m ? { url: m, source: c.source } : null)),
