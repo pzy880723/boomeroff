@@ -170,6 +170,12 @@ export default function OfficialDetail() {
         {/* 标题区 */}
         <div className="space-y-2">
           <h1 className="text-2xl font-bold leading-tight">{item.name}</h1>
+          {(pronunciation || aliases.length > 0) && (
+            <div className="text-xs text-muted-foreground space-x-2">
+              {pronunciation && <span>{pronunciation}</span>}
+              {aliases.length > 0 && <span>· 别名：{aliases.join(' / ')}</span>}
+            </div>
+          )}
           <div className="flex items-center gap-1.5 flex-wrap">
             <Badge variant="secondary">{CATEGORY_LABELS[item.category]}</Badge>
             {item.ip_name && <Badge variant="outline">{item.ip_name}</Badge>}
@@ -182,9 +188,66 @@ export default function OfficialDetail() {
           </div>
         </div>
 
+        {/* 一句话客户话术金句 */}
+        {oneLiner && (
+          <Card className="p-4 bg-gradient-to-br from-primary/15 via-accent/20 to-background border-primary/30">
+            <div className="flex items-start gap-3">
+              <Quote className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">一句话讲给客人</div>
+                <div className="text-lg font-semibold leading-snug">{oneLiner}</div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => speakOrStop(oneLiner)}>
+                  {isSpeaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copyText(oneLiner)}>
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* 简介 */}
         {item.summary && (
           <p className="text-[15px] leading-relaxed text-foreground/90">{item.summary}</p>
+        )}
+
+        {/* 速记卡 */}
+        {quickFacts.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold mb-2 text-muted-foreground">速记卡</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {quickFacts.map((f, i) => (
+                <div key={i} className="rounded-lg border bg-muted/20 p-2.5">
+                  <div className="text-[10px] text-muted-foreground">{f.label}</div>
+                  <div className="text-sm font-medium leading-tight mt-0.5">{f.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 客户话术 - 三场景 */}
+        {customerPitches.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold mb-2 text-muted-foreground">客户话术</h2>
+            <div className="space-y-2">
+              {customerPitches.map((p, i) => (
+                <Card key={i} className="p-3">
+                  <div className="flex items-start gap-2">
+                    <Badge variant="secondary" className="shrink-0">{p.scene}</Badge>
+                    <div className="flex-1 text-sm leading-relaxed">{p.line}</div>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0"
+                      onClick={() => speakOrStop(p.line)}>
+                      {isSpeaking ? <Square className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* 视频 */}
