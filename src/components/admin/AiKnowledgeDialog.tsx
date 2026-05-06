@@ -133,10 +133,13 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         setMessages([HELLO_EDIT(editingItem.name)]);
         setDraft(itemToDraft(editingItem));
         setCoverUrl(editingItem.cover_url || null);
+        const g = (editingItem as any).gallery;
+        setGallery(Array.isArray(g) ? (g as string[]).filter(Boolean) : []);
       } else {
         setMessages([HELLO_NEW]);
         setDraft({});
         setCoverUrl(null);
+        setGallery([]);
       }
       setInput(''); setPendingImage(null); setCoverPrompt('');
       setThinking(false); setPainting(false); setSaving(false);
