@@ -327,11 +327,24 @@ export default function MyLibrary() {
   };
 
   const startTodayTask = () => {
-    if (todayList.length === 0) return;
-    setTaskQueue(todayList);
+    const queue = remainingToday;
+    if (queue.length === 0) {
+      toast.success('今日任务已完成 🎉');
+      return;
+    }
+    setTaskQueue(queue);
     setTaskIdx(0);
     setTaskMode(true);
-    setQuizItem(todayList[0]);
+    setQuizItem(queue[0]);
+  };
+
+  const markAttempted = (it: UnifiedItem) => {
+    setAttemptedToday((prev) => {
+      if (prev.includes(it.key)) return prev;
+      const next = [...prev, it.key];
+      writeAttempted(next);
+      return next;
+    });
   };
 
   const handlePassed = async (it: UnifiedItem, score: number, total: number) => {
@@ -347,11 +360,14 @@ export default function MyLibrary() {
       last_attempt_at: new Date().toISOString(),
     }, { onConflict: 'user_id,item_kind,item_id' });
     setItems((s) => s.map((x) => x.key === it.key ? { ...x, passed: true } : x));
+    markAttempted(it);
     toast.success('已掌握，归档到个人历史知识 🎉');
   };
 
   const handleAttempt = async (it: UnifiedItem, score: number, total: number, passed: boolean) => {
-    if (passed || !user) return;
+    if (!user) return;
+    markAttempted(it);
+    if (passed) return;
     await supabase.from('knowledge_test_results').upsert({
       user_id: user.id,
       item_kind: itemKindFor(it),
@@ -364,22 +380,24 @@ export default function MyLibrary() {
     }, { onConflict: 'user_id,item_kind,item_id' });
   };
 
+  const exitTask = () => {
+    setTaskMode(false);
+    setTaskQueue([]);
+    setTaskIdx(0);
+    setQuizItem(null);
+  };
+
   const handleQuizClose = (open: boolean) => {
     if (open) return;
-    if (taskMode) {
-      const next = taskIdx + 1;
-      if (next < taskQueue.length) {
-        setTaskIdx(next);
-        // 先关闭再重开，触发重新出题
-        setQuizItem(null);
-        setTimeout(() => setQuizItem(taskQueue[next]), 60);
-        return;
-      }
-      setTaskMode(false);
-      setTaskQueue([]);
-      setTaskIdx(0);
-    }
+    exitTask();
+  };
+
+  const goNextInTask = () => {
+    const next = taskIdx + 1;
+    if (next >= taskQueue.length) { exitTask(); return; }
+    setTaskIdx(next);
     setQuizItem(null);
+    setTimeout(() => setQuizItem(taskQueue[next]), 60);
   };
 
   if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
