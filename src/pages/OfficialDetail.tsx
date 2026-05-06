@@ -17,6 +17,7 @@ import ReactMarkdown from 'react-markdown';
 import { QuizDialog } from '@/components/library/QuizDialog';
 import { KnowledgeRichEditDialog } from '@/components/library/KnowledgeRichEditDialog';
 import { AiKnowledgeDialog } from '@/components/admin/AiKnowledgeDialog';
+import { KnowledgeChatPanel } from '@/components/library/KnowledgeChatPanel';
 import { normalizeTips } from '@/lib/script';
 
 interface Item {
@@ -369,6 +370,17 @@ export default function OfficialDetail() {
             </Card>
           );
         })()}
+
+        {/* AI 聊一聊 */}
+        <KnowledgeChatPanel
+          knowledgeId={item.id}
+          knowledgeName={item.name}
+          suggestions={[
+            '客人嫌贵怎么回？',
+            '怎么辨真假？',
+            comparisons[0] ? `跟 ${comparisons[0].name} 有什么区别？` : '保养有什么禁忌？',
+          ]}
+        />
 
         {(!item.body && points.length === 0 && !item.summary) && (
           <div className="text-center text-muted-foreground text-sm py-8">
