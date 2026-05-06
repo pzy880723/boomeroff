@@ -361,7 +361,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             <Button variant="outline" className="flex-1" onClick={() => setPreviewOpen(false)}>关闭</Button>
             <Button className="flex-1" onClick={async () => { await save(); setPreviewOpen(false); }} disabled={saving || !draft.name}>
               {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-              保存到官方知识
+              {isEdit ? '保存修改' : '保存到官方知识'}
             </Button>
           </DialogFooter>
         </DialogContent>
