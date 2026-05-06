@@ -222,7 +222,11 @@ export default function MyLibrary() {
       (a.created_at || '').localeCompare(b.created_at || '')).slice(0, TODAY_LIMIT),
     [pending],
   );
-  const todayDone = todayList.length === 0 && totalCount > 0;
+  const remainingToday = useMemo(
+    () => todayList.filter((it) => !attemptedToday.includes(it.key)),
+    [todayList, attemptedToday],
+  );
+  const todayDone = (todayList.length === 0 || remainingToday.length === 0) && totalCount > 0;
 
   const groupByCategory = (list: UnifiedItem[]) => {
     const map = new Map<ProductCategory, UnifiedItem[]>();
