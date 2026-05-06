@@ -826,6 +826,9 @@ interface PreviewProps {
   gallery?: string[];
   galleryBusy?: boolean;
   onGenGallery?: () => void;
+  backstampUrl?: string | null;
+  backstampBusy?: boolean;
+  onFetchBackstamp?: () => void;
   large?: boolean;
 }
 
