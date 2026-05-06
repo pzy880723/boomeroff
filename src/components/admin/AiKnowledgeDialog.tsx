@@ -306,34 +306,36 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       setDraft(coreDraft);
       setMessages((m) => [...m, { role: 'assistant', content: (coreData.reply as string) || '已重写核心字段。' }]);
 
-      // ---- Step 1.5: 立刻保存核心字段，避免长正文失败导致整体丢失 ----
+      // ---- Step 1.5: 立刻保存核心字段（仅编辑模式），新增模式只暂存到 draft ----
       const safeCategory: ProductCategory = (VALID_CATEGORIES as string[]).includes(coreDraft.category as string)
         ? (coreDraft.category as ProductCategory) : 'other';
       const sellingPointsJson = (coreDraft.selling_points || []).map((p: any) =>
         typeof p === 'string' ? { text: p } : p,
       );
-      const corePayload: any = {
-        name: coreDraft.name?.trim() || editingItem.name,
-        category: safeCategory,
-        ip_name: coreDraft.ip_name?.trim() || null,
-        era: coreDraft.era?.trim() || null,
-        origin: coreDraft.origin?.trim() || null,
-        summary: coreDraft.summary?.trim() || null,
-        selling_points: sellingPointsJson,
-        tips: coreDraft.tips?.trim() || null,
-        importance_score: Math.min(100, Math.max(0, Math.round(Number(coreDraft.importance_score) || 0))),
-        content: {
-          one_liner: coreDraft.one_liner || null,
-          aliases: coreDraft.aliases || [],
-          pronunciation: coreDraft.pronunciation || null,
-          quick_facts: coreDraft.quick_facts || [],
-          customer_pitches: coreDraft.customer_pitches || [],
-          comparisons: coreDraft.comparisons || [],
-        },
-      };
-      const { error: coreSaveErr } = await supabase.from('official_knowledge').update(corePayload).eq('id', editingItem.id);
-      if (coreSaveErr) throw coreSaveErr;
-      onSaved();
+      if (editingItem) {
+        const corePayload: any = {
+          name: coreDraft.name?.trim() || editingItem.name,
+          category: safeCategory,
+          ip_name: coreDraft.ip_name?.trim() || null,
+          era: coreDraft.era?.trim() || null,
+          origin: coreDraft.origin?.trim() || null,
+          summary: coreDraft.summary?.trim() || null,
+          selling_points: sellingPointsJson,
+          tips: coreDraft.tips?.trim() || null,
+          importance_score: Math.min(100, Math.max(0, Math.round(Number(coreDraft.importance_score) || 0))),
+          content: {
+            one_liner: coreDraft.one_liner || null,
+            aliases: coreDraft.aliases || [],
+            pronunciation: coreDraft.pronunciation || null,
+            quick_facts: coreDraft.quick_facts || [],
+            customer_pitches: coreDraft.customer_pitches || [],
+            comparisons: coreDraft.comparisons || [],
+          },
+        };
+        const { error: coreSaveErr } = await supabase.from('official_knowledge').update(corePayload).eq('id', editingItem.id);
+        if (coreSaveErr) throw coreSaveErr;
+        onSaved();
+      }
 
       // ---- Step 2: long body ----
       setEnrichStage('body');
@@ -350,13 +352,15 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         bodyText = bodyData.body as string;
         setEnrichProgress(80);
         setDraft({ ...coreDraft, body: bodyText });
-        const { error: bodyErr } = await supabase.from('official_knowledge').update({ body: bodyText }).eq('id', editingItem.id);
-        if (bodyErr) throw bodyErr;
-        setMessages((m) => [...m, { role: 'assistant', content: '已撰写长正文。' }]);
-        onSaved();
+        if (editingItem) {
+          const { error: bodyErr } = await supabase.from('official_knowledge').update({ body: bodyText }).eq('id', editingItem.id);
+          if (bodyErr) throw bodyErr;
+          onSaved();
+        }
+        if (!opts.silent) setMessages((m) => [...m, { role: 'assistant', content: '已撰写长正文。' }]);
       } catch (e: any) {
         console.warn('body failed', e);
-        toast.error(`长正文生成失败：${e?.message ?? ''}（核心字段已保存，可稍后重试）`);
+        toast.error(`长正文生成失败：${e?.message ?? ''}`);
       }
 
       // ---- Step 3: cover (skip if already exists) ----
@@ -372,9 +376,11 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
           }, 'cover');
           setCoverUrl(cd.url);
           setCoverPrompt(newPrompt);
-          await supabase.from('official_knowledge').update({ cover_url: cd.url }).eq('id', editingItem.id);
+          if (editingItem) {
+            await supabase.from('official_knowledge').update({ cover_url: cd.url }).eq('id', editingItem.id);
+            onSaved();
+          }
           setEnrichProgress(92);
-          onSaved();
         } catch (e) {
           console.warn('cover failed, continue without it', e);
         }
@@ -382,7 +388,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
 
       setEnrichStage('done');
       setEnrichProgress(100);
-      toast.success('AI 已一键丰富并保存');
+      if (editingItem) toast.success('AI 已一键丰富并保存');
+      else toast.success('已生成完整草稿与主图，请预览后保存');
+      if (opts.openPreviewWhenDone) setPreviewOpen(true);
       resetEnrich();
     } catch (e: any) {
       console.error(e);
