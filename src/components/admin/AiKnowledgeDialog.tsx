@@ -390,6 +390,37 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
               )}
             </div>
             <div className="border-t p-3 space-y-2">
+              {isEdit && (
+                <div className="rounded-md border bg-accent/20 p-2 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-xs font-medium">
+                      <Wand2 className="w-3.5 h-3.5 text-primary" />
+                      AI 一键丰富
+                      <span className="text-muted-foreground font-normal">· 全字段重写并保存</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={oneClickEnrich}
+                      disabled={enrichStage !== 'idle' && enrichStage !== 'done'}
+                    >
+                      {(enrichStage !== 'idle' && enrichStage !== 'done')
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <Sparkles className="w-3 h-3" />}
+                      {(enrichStage !== 'idle' && enrichStage !== 'done') ? '丰富中…' : '一键丰富'}
+                    </Button>
+                  </div>
+                  {enrichStage !== 'idle' && (
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                        <span>{STAGE_LABEL[enrichStage]}</span>
+                        <span>{Math.round(enrichProgress)}%</span>
+                      </div>
+                      <Progress value={enrichProgress} className="h-1" />
+                    </div>
+                  )}
+                </div>
+              )}
               {!!draft.name && !thinking && (
                 <div className="flex flex-wrap gap-1.5">
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('请把正文再扩充一倍，加入更多年份、人名和具体价位行情。')}>
