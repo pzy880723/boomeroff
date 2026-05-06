@@ -829,6 +829,23 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             gallery={gallery}
             galleryBusy={galleryBusy}
             onGenGallery={() => { void generateGallery(coverPrompt, { persist: !!editingItem }); }}
+            onWebSearchGallery={async () => {
+              if (!draft.name) return;
+              setGalleryBusy(true);
+              try {
+                const found = await webSearchImages(draft.name, 'gallery', 4);
+                if (found.length) {
+                  const merged = Array.from(new Set([...(gallery || []), ...found]));
+                  await persistGallery(merged);
+                  toast.success(`联网找到 ${found.length} 张`);
+                } else toast.info('暂未搜到合适的图');
+              } finally { setGalleryBusy(false); }
+            }}
+            onUploadGallery={(files) => { void uploadGalleryFiles(files); }}
+            uploading={uploading}
+            onRemoveGallery={removeGalleryItem}
+            onMoveGallery={moveGalleryItem}
+            onSetCover={setAsCover}
             backstampUrl={backstampUrl}
             backstampBusy={backstampBusy}
             onFetchBackstamp={() => { void fetchBackstamp({ persist: !!editingItem }); }}
