@@ -54,6 +54,19 @@ export default function OfficialDetail() {
   const [aiEditOpen, setAiEditOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [showFullBody, setShowFullBody] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setScrolled(!entry.isIntersecting),
+      { rootMargin: '0px 0px 0px 0px', threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [item?.id]);
 
   const load = async () => {
     if (!id || !user) return;
