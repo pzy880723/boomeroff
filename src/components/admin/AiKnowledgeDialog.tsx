@@ -60,6 +60,7 @@ interface ExistingItem {
   importance_score: number;
   selling_points: unknown;
   content: any;
+  gallery?: unknown;
 }
 
 interface Props {
