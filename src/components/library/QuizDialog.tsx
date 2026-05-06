@@ -16,10 +16,15 @@ interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   knowledgeId: string;
+  kind?: 'official' | 'favorite' | 'knowledge';
   isAdmin?: boolean;
+  passThreshold?: number; // 0-1, 默认 0.8
+  onPassed?: (score: number, total: number) => void;
+  onAttempt?: (score: number, total: number, passed: boolean) => void;
+  title?: string;
 }
 
-export function QuizDialog({ open, onOpenChange, knowledgeId, isAdmin }: Props) {
+export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title }: Props) {
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [step, setStep] = useState(0);
