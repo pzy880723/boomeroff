@@ -65,11 +65,18 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
 
   const finished = answers.length === questions.length && questions.length > 0;
   const score = answers.reduce((acc, a, i) => acc + (a === questions[i]?.correctIndex ? 1 : 0), 0);
-  const verdict =
-    score === questions.length ? '满分通关 · 中古达人'
-    : score >= Math.ceil(questions.length * 0.8) ? '不错 · 已是熟客'
-    : score >= Math.ceil(questions.length * 0.6) ? '及格 · 继续加油'
-    : '再多读一遍吧';
+  const passed = questions.length > 0 && score / questions.length >= passThreshold;
+  const verdict = passed
+    ? (score === questions.length ? '满分通关 · 已掌握，自动归档' : '通过 · 已掌握，自动归档')
+    : '再练一次，争取通过';
+
+  // 通知调用方
+  useEffect(() => {
+    if (!finished) return;
+    onAttempt?.(score, questions.length, passed);
+    if (passed) onPassed?.(score, questions.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished]);
 
   const reset = () => { setStep(0); setAnswers([]); setPicked(null); };
 
