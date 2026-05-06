@@ -25,7 +25,7 @@ interface Props {
   onExit?: () => void;
 }
 
-export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title }: Props) {
+export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title, onExit }: Props) {
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [step, setStep] = useState(0);
