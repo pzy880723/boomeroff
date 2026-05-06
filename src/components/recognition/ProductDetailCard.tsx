@@ -67,7 +67,7 @@ const Meta = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-export function ProductDetailCard({ result }: ProductDetailCardProps) {
+export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetailCardProps) {
   const [copied, setCopied] = useState(false);
   const [showLong, setShowLong] = useState(false);
   const { toast } = useToast();
