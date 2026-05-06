@@ -1,74 +1,91 @@
 ## 目标
 
-在 `/portal` → 官方知识 标签页里，管理员点「新增」时，除现有的手动表单外，新增一个 **「AI 智能生成」** 入口：管理员用自然语言（或直接贴一张参考图）描述想要的中古商品/IP，AI 自动产出完整的官方词条字段，并自动生成一张封面图，管理员校对后一键入库。
+把「官方知识」从后台搬到前台：
+1. 管理员在 `/library` 浏览时随手新增（悬浮 + 按钮，复用已有 `AiKnowledgeDialog`）。
+2. 把简单的 Dialog 详情升级为**独立详情页** `/library/:id`，支持封面、图集、视频、富文本正文、小贴士、卖点等模块。
+3. 详情页底部有「来测一测」入口，AI 自动出题，做完打分。
 
 ## 用户流程
 
-1. 进入 后台 → 官方知识 → 点「新增」旁的新按钮 **「AI 生成」**（Sparkles 图标）。
-2. 弹出对话框，包含：
-   - 多轮聊天区（默认欢迎语：「告诉我你想新增的商品，例如：昭和时期的伊万里烧小皿…」）
-   - 输入框 + 可选「上传参考图」按钮
-   - AI 回复后右侧实时渲染一张「待入库卡片」预览（名称/品类/IP/年代/产地/简介/卖点/小贴士/封面图）
-3. 管理员可以继续追问让 AI 修改（「卖点再凝练一些」「换一张更素雅的封面」「改成大正时期」等），卡片字段会被增量更新。
-4. 满意后点 **「保存到官方知识」**：直接 `INSERT` 进 `official_knowledge`，封面图先上传到 `product-images` bucket 再写 `cover_url`。
-5. 关闭对话框后列表自动刷新。
+### A. 前端新增入口
+- 在 `/library` 页面右下角加一个仅管理员可见的 FAB（圆形按钮，Wand2 图标）。
+- 点击直接打开现有 `AiKnowledgeDialog`，AI 对话生成 → 保存后刷新列表。
+- 管理员同时拥有「编辑」入口：列表卡片上长按或点 ⋯ 菜单进入编辑模式（先简版：详情页里加管理员专用的「编辑」按钮跳到一个 EditPage 或重新打开 AI 对话续聊，本期只做：入口 + 详情页内「编辑封面/正文/视频」按钮，调用现有结构）。
+
+### B. 详情页 `/library/:id`（新页面）
+布局（移动优先，max-w-screen-md）：
+1. **顶部 Hero**：封面大图（4:3），返回按钮、收藏按钮浮在上层。
+2. **标题区**：名称、品类徽章、IP、年代·产地、浏览/收藏数。
+3. **简介**：summary 一段话。
+4. **视频**（若有 `video_url`）：HTML5 `<video>` 自适应宽度，封面图作为 poster。
+5. **图集**（若有 `gallery` ≥1）：横向滚动缩略图，点开放大。
+6. **正文 / 深度内容**（新字段 `body` markdown）：用 `react-markdown` 渲染。
+7. **核心卖点**：图标列表。
+8. **小贴士**：高亮卡片。
+9. **底部「来测一测」按钮**：进入测验弹窗。
+10. 管理员条件渲染「编辑」按钮（顶部右上），点击打开 `KnowledgeRichEditDialog`：可编辑名称/简介/视频URL/正文(textarea markdown)/封面/图集；保存到 `official_knowledge`。
+
+### C. 测验功能
+- 点「来测一测」→ 弹出 `QuizDialog`：
+  - 首次打开调用 edge function `generate-knowledge-quiz`（输入：词条全部内容；输出：5 道单选题，每题 4 选项 + 正确答案 index + 解释）。生成结果缓存到 `official_knowledge.content.quiz` 字段，避免重复消耗。
+  - 题目按一题一屏顺序作答，进度条显示「第 n / 5 题」。
+  - 结束后展示得分（如「4 / 5 · 中古达人」）和每题正确答案+解释，提供「再考一次」（重新洗牌选项序）和「换一套题」（管理员可见，强制重新生成）。
 
 ## 技术实现
 
-### 1. 新 Edge Function：`generate-official-knowledge`
-- 路径：`supabase/functions/generate-official-knowledge/index.ts`
-- 校验 JWT + admin 角色（复用 `has_role` 通过 service role 查 `user_roles`）。
-- 入参：
-  ```ts
-  { messages: ChatMsg[], currentDraft?: Partial<Item>, referenceImageUrl?: string }
-  ```
-- 调用 Lovable AI Gateway，模型 `google/gemini-3-flash-preview`，使用 **tool calling** 强制结构化输出：
-  ```ts
-  tools: [{ type:'function', function:{ name:'upsert_knowledge', parameters:{ /* category/name/ip_name/era/origin/summary/selling_points[]/tips/cover_prompt + assistant_reply */ }}}]
-  tool_choice: { type:'function', function:{ name:'upsert_knowledge' } }
-  ```
-- System prompt：要求基于中古杂货背景、用简体中文（遵守"不使用主播称谓"core rule）、`selling_points` 3–5 条短句、`cover_prompt` 是一句英文图像描述（用于 nano banana）。
-- 返回：`{ reply: string, draft: Partial<Item>, coverPrompt: string }`。
+### 1. 数据库迁移
+```sql
+ALTER TABLE public.official_knowledge
+  ADD COLUMN IF NOT EXISTS video_url text,
+  ADD COLUMN IF NOT EXISTS body text;
+```
+（`gallery` / `content` 已存在；测验 JSON 存在 `content->'quiz'`。）
 
-### 2. 新 Edge Function：`generate-knowledge-cover`
-- 调用 `google/gemini-2.5-flash-image`（nano banana），`modalities:["image","text"]`，将返回的 base64 解码上传到 `product-images/official-covers/{uuid}.png`，返回 public URL。
-- 单独拆分是因为图像生成 5–10s，不阻塞文本对话。前端在 AI 文本回复落地 + 拿到 `coverPrompt` 后并行触发本函数，封面以「生成中…」骨架显示，完成后无缝替换。
-- 同时支持「重新生成封面」按钮（带额外 prompt 微调）。
+### 2. 路由
+- `src/App.tsx` 加 `<Route path="/library/:id" element={<OfficialDetail />} />`。
+- `src/pages/OfficialLibrary.tsx`：把 `openDetail` 从打开 Dialog 改为 `navigate(\`/library/${id}\`)`，删除原 Dialog；保留浏览数自增 RPC。
 
-### 3. 前端：`src/components/admin/AiKnowledgeDialog.tsx`（新文件）
-- Dialog（max-w-3xl，左右两栏，移动端纵向堆叠）
-  - 左：聊天记录 + 输入框 + 「上传参考图」（直接转 base64 传给 edge function 作为 user message 的 image_url）
-  - 右：实时预览的 `OfficialKnowledgeCard`（名称、品类徽章、IP、年代·产地、简介、卖点列表、小贴士、封面图带骨架/重新生成按钮）
-- 状态：`messages`, `draft`, `coverUrl`, `isThinking`, `isPaintingCover`
-- 操作：
-  - 「保存到官方知识」→ `supabase.from('official_knowledge').insert(draft)`，成功后 `onSaved()` 触发列表刷新并关闭。
-  - 「弃用并改回手动表单」→ 关闭本弹窗，打开原 `OfficialKnowledgeManager` 的手动 Dialog（带预填）。
+### 3. 新页面 `src/pages/OfficialDetail.tsx`
+- 拉取 `official_knowledge` 单行 + 用户收藏状态。
+- 渲染所有模块；管理员看到「编辑」按钮。
+- 底部固定「来测一测」按钮（`sticky bottom-16` 兼容 BottomTabBar）。
 
-### 4. 接入 `OfficialKnowledgeManager.tsx`
-- 在「重算重要程度」与「新增」之间加按钮：
+### 4. 组件
+- `src/components/library/QuizDialog.tsx`：调用 `supabase.functions.invoke('generate-knowledge-quiz', { body: { id } })`，渲染答题流程。
+- `src/components/library/KnowledgeRichEditDialog.tsx`：管理员编辑 video_url、body(markdown textarea)、cover_url、gallery（粘贴 URL 列表），其它字段沿用 OfficialKnowledgeManager 的字段集合。
+- `src/components/library/AddOfficialFab.tsx`：仅管理员可见的 FAB，点击挂载已有 `AiKnowledgeDialog`。
+
+### 5. Edge Function `supabase/functions/generate-knowledge-quiz/index.ts`
+- 验证 admin **或者任何登录用户都可生成**（题目对所有人有用，但保存到 `content.quiz` 仅 admin 可写；未登录不生成）。
+- 入参：`{ id }`。先 select 词条，若 `content.quiz` 已存在且 `force !== true` 直接返回。
+- 调用 Lovable AI Gateway `google/gemini-3-flash-preview` + tool calling，输出：
+  ```json
+  { "questions": [
+    { "stem": "...", "options": ["A","B","C","D"], "correctIndex": 2, "explanation": "..." }
+  ] }
   ```
-  <Button size="sm" variant="outline" onClick={()=>setAiOpen(true)}>
-    <Sparkles className="w-4 h-4 mr-1.5" /> AI 生成
-  </Button>
-  ```
-- 引入 `<AiKnowledgeDialog open={aiOpen} onOpenChange={setAiOpen} onSaved={load} />`。
+- 若调用方是 admin，则把结果合并写回 `official_knowledge.content`。
+- 普通用户拿到题目但不写库（或用 service role 写——选后者，避免每次都重生）。
 
-### 5. 存储
-- 复用现有公开 bucket `product-images`，新增前缀 `official-covers/`。无需建新 bucket。
-- 不新建数据表；直接写入 `official_knowledge`（字段已齐备）。
+### 6. 依赖
+- 新增 `react-markdown`（小依赖，用于正文渲染）。
 
 ## 文件清单
 
+数据库：1 个 migration（加 `video_url`, `body`）。
+
 新增：
-- `supabase/functions/generate-official-knowledge/index.ts`
-- `supabase/functions/generate-knowledge-cover/index.ts`
-- `src/components/admin/AiKnowledgeDialog.tsx`
+- `src/pages/OfficialDetail.tsx`
+- `src/components/library/QuizDialog.tsx`
+- `src/components/library/KnowledgeRichEditDialog.tsx`
+- `src/components/library/AddOfficialFab.tsx`
+- `supabase/functions/generate-knowledge-quiz/index.ts`
 
 修改：
-- `src/components/admin/OfficialKnowledgeManager.tsx`（加入 AI 入口按钮 + dialog 挂载）
+- `src/App.tsx`（加路由）
+- `src/pages/OfficialLibrary.tsx`（FAB + 跳转详情、移除旧 Dialog）
 
 ## 不在本次范围
-
-- 不改动手动新增/编辑流程，保持作为兜底。
-- 不引入图像编辑（如根据参考图改图）—— 仅支持参考图作为「文本理解辅助」。如后续需要可加 `--edit-image` 类逻辑。
-- 不批量导入。
+- 不做答题历史排行榜。
+- 不做视频上传，仅支持外链 URL（YouTube/MP4 直链）。
+- `gallery` 编辑器仅支持 URL 文本框，不做拖拽上传。
