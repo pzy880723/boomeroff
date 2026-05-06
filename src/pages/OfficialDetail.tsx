@@ -97,9 +97,31 @@ export default function OfficialDetail() {
     </div>
   );
 
-  const points: Array<{ text: string; tag?: string }> = Array.isArray(item.selling_points)
-    ? (item.selling_points as unknown[]).map((p: any) => typeof p === 'string' ? { text: p } : (p?.text ? { text: p.text, tag: p.tag } : null)).filter(Boolean) as any
+  const points: Array<{ text: string; tag?: string; detail?: string }> = Array.isArray(item.selling_points)
+    ? (item.selling_points as unknown[]).map((p: any) =>
+        typeof p === 'string' ? { text: p } : (p?.text ? { text: p.text, tag: p.tag, detail: p.detail } : null)
+      ).filter(Boolean) as any
     : [];
+  const content = (item.content || {}) as any;
+  const oneLiner: string | null = content.one_liner || null;
+  const pronunciation: string | null = content.pronunciation || null;
+  const aliases: string[] = Array.isArray(content.aliases) ? content.aliases : [];
+  const quickFacts: Array<{ label: string; value: string }> =
+    Array.isArray(content.quick_facts) ? content.quick_facts : [];
+  const customerPitches: Array<{ scene: string; line: string }> =
+    Array.isArray(content.customer_pitches) ? content.customer_pitches : [];
+  const comparisons: Array<{ name: string; diff: string }> =
+    Array.isArray(content.comparisons) ? content.comparisons : [];
+
+  const speakOrStop = (text: string) => {
+    if (isSpeaking) stop(); else speak(text);
+  };
+  const copyText = (text: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => toast.success('已复制'),
+      () => toast.error('复制失败'),
+    );
+  };
   const gallery: string[] = Array.isArray(item.gallery) ? (item.gallery as string[]).filter(Boolean) : [];
   const isYouTube = item.video_url?.includes('youtube.com') || item.video_url?.includes('youtu.be');
   const isBili = item.video_url?.includes('bilibili.com');
