@@ -154,6 +154,25 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
 
         {!loading && finished && (
           <div className="space-y-4">
+            {taskProgress && taskProgress.total > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>今日进度</span>
+                  <span className="tabular-nums">
+                    {taskProgress.current}/{taskProgress.total}
+                    {taskProgress.current < taskProgress.total && (
+                      <span className="ml-1.5 text-primary">· 剩余 {taskProgress.total - taskProgress.current} 个</span>
+                    )}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-500"
+                    style={{ width: `${Math.round((taskProgress.current / taskProgress.total) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
             <div className="text-center py-3">
               <div className="text-3xl font-bold">{score} / {questions.length}</div>
               <div className="text-sm text-muted-foreground mt-1">{verdict}</div>
