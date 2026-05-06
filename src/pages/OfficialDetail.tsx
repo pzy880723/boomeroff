@@ -356,6 +356,17 @@ export default function OfficialDetail() {
           </div>
         )}
 
+        {/* 底款 / 背面 */}
+        {backstampUrl && (
+          <div>
+            <h2 className="text-sm font-semibold mb-2 text-muted-foreground">底款 / 背面</h2>
+            <button onClick={() => setLightbox(backstampUrl)}
+              className="block w-40 h-40 rounded-lg overflow-hidden bg-muted border">
+              <img src={backstampUrl} alt="底款" className="w-full h-full object-cover" loading="lazy" />
+            </button>
+          </div>
+        )}
+
         {/* 卖点（升级版：tag + 主句 + 展开） */}
         {points.length > 0 && (
           <div>
