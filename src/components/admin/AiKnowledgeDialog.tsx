@@ -680,6 +680,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             coverPrompt={coverPrompt}
             painting={painting}
             triggerCover={triggerCover}
+            gallery={gallery}
+            galleryBusy={galleryBusy}
+            onGenGallery={() => { void generateGallery(coverPrompt, { persist: !!editingItem }); }}
             onExpand={() => setPreviewOpen(true)}
           />
         </div>
