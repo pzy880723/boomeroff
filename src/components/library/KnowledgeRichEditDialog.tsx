@@ -294,3 +294,69 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
     </Dialog>
   );
 }
+
+function SortableImage({
+  url, index, isCover, onRemove, onSetCover,
+}: {
+  url: string;
+  index: number;
+  isCover: boolean;
+  onRemove: () => void;
+  onSetCover: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: url });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+    touchAction: 'manipulation',
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="relative rounded-md border overflow-hidden bg-muted aspect-square select-none"
+    >
+      {/* 拖动热区：覆盖整张图，长按触发 */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute inset-0 cursor-grab active:cursor-grabbing"
+        aria-label="长按拖动排序"
+      >
+        <img src={url} alt="" draggable={false} className="w-full h-full object-cover pointer-events-none" />
+      </div>
+      {isCover && (
+        <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium flex items-center gap-0.5 pointer-events-none">
+          <Star className="w-2.5 h-2.5 fill-current" /> 主图
+        </div>
+      )}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={onRemove}
+        className="absolute top-1 right-1 bg-background/90 hover:bg-destructive hover:text-destructive-foreground rounded-full p-1 shadow-sm z-10"
+        title="删除"
+      >
+        <Trash2 className="w-3 h-3" />
+      </button>
+      <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1 z-10">
+        <div className="bg-background/80 rounded p-0.5 pointer-events-none">
+          <GripVertical className="w-3 h-3 text-muted-foreground" />
+        </div>
+        {!isCover && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onSetCover}
+            className="bg-background/90 rounded p-0.5"
+            title="设为主图"
+          >
+            <Star className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
