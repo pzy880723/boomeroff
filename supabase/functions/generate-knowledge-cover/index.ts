@@ -37,20 +37,24 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "缺少 prompt" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [
-          { role: "user", content: `Square product cover, clean background, soft natural light, centered, photorealistic, no text watermark. Subject: ${prompt}` },
-        ],
-        modalities: ["image", "text"],
-      }),
-    });
+    const fullPrompt = `Square product cover, clean white background, soft natural light, centered, photorealistic, no text watermark. Subject: ${prompt}`;
+    const callImage = async (model: string) => {
+      const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: fullPrompt }],
+          modalities: ["image", "text"],
+        }),
+      });
+      return r;
+    };
+
+    let aiResp = await callImage("google/gemini-2.5-flash-image");
     if (!aiResp.ok) {
       const t = await aiResp.text();
       console.error("Image AI error", aiResp.status, t);
@@ -58,10 +62,37 @@ Deno.serve(async (req) => {
       const msg = status === 429 ? "AI 调用频率过高。" : status === 402 ? "AI 额度不足。" : "图像生成失败。";
       return new Response(JSON.stringify({ error: msg }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const data = await aiResp.json();
-    const dataUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url as string | undefined;
+    let data = await aiResp.json();
+    const extractDataUrl = (d: any): string | undefined => {
+      const msg = d?.choices?.[0]?.message;
+      const fromImages = msg?.images?.[0]?.image_url?.url || msg?.images?.[0]?.url;
+      if (typeof fromImages === "string") return fromImages;
+      const c = msg?.content;
+      if (Array.isArray(c)) {
+        for (const part of c) {
+          const u = part?.image_url?.url || part?.url;
+          if (typeof u === "string" && u.startsWith("data:image/")) return u;
+        }
+      }
+      return undefined;
+    };
+    let dataUrl = extractDataUrl(data);
+
+    // Retry once with a different image model if first call returned no image
     if (!dataUrl?.startsWith("data:image/")) {
-      return new Response(JSON.stringify({ error: "未生成图像" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      console.warn("First image call returned no image, retrying with gemini-3.1-flash-image-preview", JSON.stringify(data).slice(0, 500));
+      aiResp = await callImage("google/gemini-3.1-flash-image-preview");
+      if (aiResp.ok) {
+        data = await aiResp.json();
+        dataUrl = extractDataUrl(data);
+      } else {
+        console.error("Retry image AI error", aiResp.status, await aiResp.text());
+      }
+    }
+
+    if (!dataUrl?.startsWith("data:image/")) {
+      console.error("No image in response", JSON.stringify(data).slice(0, 800));
+      return new Response(JSON.stringify({ error: "AI 未返回图像，请稍后再试或更换描述。" }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const [meta, b64] = dataUrl.split(",");
     const mime = meta.match(/data:(image\/[a-zA-Z+]+)/)?.[1] ?? "image/png";
