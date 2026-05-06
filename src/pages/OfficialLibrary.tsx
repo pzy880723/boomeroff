@@ -214,6 +214,30 @@ export default function OfficialLibrary() {
           </div>
         </div>
 
+        {/* 当前筛选 chips（年代/产地） */}
+        {(era || origin) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {era && (
+              <button
+                onClick={() => setEra('')}
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-primary/10 text-primary text-xs hover:bg-primary/20"
+              >
+                年代：{era}
+                <X className="w-3 h-3" />
+              </button>
+            )}
+            {origin && (
+              <button
+                onClick={() => setOrigin('')}
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-primary/10 text-primary text-xs hover:bg-primary/20"
+              >
+                产地：{origin}
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* 主类目网格 */}
         <div className="grid grid-cols-6 gap-1.5">
           {visibleCats.map((c) => {
