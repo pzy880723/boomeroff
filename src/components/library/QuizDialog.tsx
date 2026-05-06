@@ -57,11 +57,28 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
 
   const submit = () => {
     if (picked == null) return;
-    const next = [...answers, picked];
+    const next = [...answers];
+    next[step] = picked;
     setAnswers(next);
-    setPicked(null);
-    if (step + 1 < questions.length) setStep(step + 1);
-    else setStep(questions.length); // 完成
+    if (step + 1 < questions.length) {
+      setStep(step + 1);
+      setPicked(next[step + 1] ?? null);
+    } else {
+      setStep(questions.length); // 完成
+    }
+  };
+
+  const goBack = () => {
+    if (step === 0) return;
+    // 保留当前选择（如已选）
+    if (picked != null) {
+      const next = [...answers];
+      next[step] = picked;
+      setAnswers(next);
+    }
+    const prev = step - 1;
+    setStep(prev);
+    setPicked(answers[prev] ?? null);
   };
 
   const finished = answers.length === questions.length && questions.length > 0;
