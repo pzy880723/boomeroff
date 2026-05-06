@@ -1,57 +1,56 @@
-## 找错地方了，重做计划
+## 问题诊断
 
-之前我改的是 `AiKnowledgeDialog`（"AI 修改"弹窗）。你截图里的是另一个组件 **`KnowledgeRichEditDialog`**（"编辑词条"弹窗），位于 `src/components/library/KnowledgeRichEditDialog.tsx`。
+当前 `web-search-images` 的实现有 3 个明显瓶颈：
 
-## 目标
+1. **搜索方式低效**：用 Firecrawl `/search` 抓 6 个网页的完整 HTML（`scrapeOptions: { formats: ["html"] }`），再用正则从 HTML 里挖 `<img>`。这一步本身就要 5–15 秒，而且很多商品网站会反爬、返回登录页或空 HTML，所以经常挖不到图。
+2. **镜像下载是串行的**：`for` 循环里一张一张 `await mirrorImage(...)`，每张最多 8 秒超时。要凑够 3 张图，最坏就是 24 秒。
+3. **查询词不够精准**：`${query} 商品 真实图` 这种中文 query 在 Google 网页搜索里命中的不一定是图片密集的页面。
 
-把"编辑词条"弹窗里的图片编辑也升级成可视化图集编辑器：
-- 移除原来的「封面图 URL」输入框 + 「图集（每行一个 URL）」textarea
-- 用一个**图集编辑器**取代两者：缩略图网格 + 上传/联网搜图/删除/排序/设为主图
-- 主图 = 图集第一张，保存时自动写回 `cover_url`
+## 改造方案
 
-## 改造内容（KnowledgeRichEditDialog.tsx）
+### 1. 直接走 Firecrawl 图片搜索（核心提速）
 
-### 1. 状态合并
-
-- 删掉 `galleryText` (textarea) 和 `draft.cover_url` 输入
-- 新增 `gallery: string[]` state，初值 = `item.gallery`（若为空且有 cover_url，就 `[item.cover_url]`）
-- 新增 `uploading: boolean`
-
-### 2. UI 替换"封面图 URL" + "图集"两个区块为单一「图片」区块
-
-- 标题：**图片**（说明：第一张为主图）
-- 3 列网格缩略图，每张：
-  - 第一张显示「主图」徽章
-  - 右上角：删除按钮
-  - 底部小工具条：前移 / 后移 / 设为主图
-- 空态提示：「尚无图片，请上传或联网搜图」
-- 操作按钮（按钮组）：
-  - 「上传图片」(`<input multiple>` → `product-images/official-gallery/`)
-  - 「联网搜图」(调 `web-search-images` edge function，复用现有)
-  - （不在这里放 AI 生成，AI 创作留在 `AiKnowledgeDialog`）
-
-### 3. 保存逻辑
+Firecrawl v2 的 `/search` 支持 `sources: ["images"]`，直接返回图片 URL + 来源页 + 标题，**不需要再抓 HTML 也不需要正则解析**。这一步从 5–15 秒降到 ~1–2 秒，且命中率显著提高。
 
 ```ts
-update official_knowledge set
-  cover_url = gallery[0] ?? null,
-  gallery = gallery,
-  ...
+body: JSON.stringify({
+  query: q,
+  limit: 12,            // 多取一些做候选
+  sources: ["images"],  // 关键：图片源
+})
 ```
 
-### 4. 复用代码
+返回结构形如 `{ data: { images: [{ url, title, imageUrl, position }] } }`，直接用 `imageUrl`。
 
-把 `AiKnowledgeDialog` 里写好的上传/排序逻辑抽出共享，或直接复制一份精简版（这里不带 persist-on-change，统一在「保存」按钮提交即可，简单点）。
+保留旧的 HTML 兜底逻辑，只在图片源返回 0 张时再退回去试一次（容错）。
 
-## 不动
+### 2. 镜像下载改成并发
 
-- 视频 URL 输入框保留
-- 「正文 / 卖点 / 小贴士 / 重要程度」保留
-- 数据库结构不变
-- `AiKnowledgeDialog` 保留之前的改动（给 AI 流程用）
+把串行 `for await` 换成 `Promise.allSettled`，一次性发起前 N 张候选的下载（N = `limit * 3`，比如要 3 张就并发拉 9 张），先到先得，凑够 `limit` 张就返回。整体耗时从 N×8s 降到约 1×8s。
 
-## 涉及文件
+```ts
+const tasks = uniq.slice(0, limit * 3).map(c => mirrorImage(...));
+const settled = await Promise.allSettled(tasks);
+const ok = settled.filter(...).slice(0, limit);
+```
 
-- `src/components/library/KnowledgeRichEditDialog.tsx`（主改）
+### 3. 查询词优化 + 失败提示
 
-审批后我直接改。
+- `intent: "gallery"` → 直接用 `query`（图片搜索本身已经够精准，不要加"商品 真实图"这种噪音词）
+- `intent: "backstamp"` → `${query} backstamp 底款`
+- 返回结果里加上 `reason` 字段：当 `images=[]` 时告诉前端是"未搜到"还是"全部下载失败"，方便排查。
+
+### 4. 顺带的小修
+
+- 把 `mirrorImage` 的下载超时从 8s 降到 6s（避免单张拖死整体）。
+- 候选去重时按 URL 的"路径基名"去重，避免同一张图的不同尺寸缩略图占满候选位。
+
+## 改动文件
+
+- `supabase/functions/web-search-images/index.ts` — 按上述 4 点重写搜索 + 下载逻辑，前端无需任何改动（接口 schema `{ images, found }` 不变，只多加一个可选 `reason`）。
+
+## 预期效果
+
+- 平均耗时：**8–20 秒 → 2–5 秒**
+- 命中率：明显提升（不再依赖网页能否被成功抓取并解析出 `<img>`）
+- 用户感知：基本一次就能搜到 3 张图，失败时也有明确原因。
