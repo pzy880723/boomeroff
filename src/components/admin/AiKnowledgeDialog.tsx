@@ -806,6 +806,29 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCo
 
           {draft.summary && <p className={`${t.body} text-muted-foreground leading-relaxed`}>{draft.summary}</p>}
 
+          {/* 图集 */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className={`${t.section} text-muted-foreground`}>图集 {gallery?.length ? `(${gallery.length})` : ''}</div>
+              {onGenGallery && (
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onGenGallery} disabled={galleryBusy || !coverPrompt}>
+                  {galleryBusy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <ImagePlus className="w-3 h-3 mr-1" />}
+                  {gallery?.length ? '再补几张' : '生成图集'}
+                </Button>
+              )}
+            </div>
+            {gallery?.length ? (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {gallery.map((u, i) => (
+                  <img key={i} src={u} alt="" className={`shrink-0 ${large ? 'w-24 h-24' : 'w-20 h-20'} rounded-md object-cover border`} />
+                ))}
+              </div>
+            ) : (
+              <div className={`${t.mini} text-muted-foreground`}>{galleryBusy ? '正在生成图集…' : '尚无图集，可点击右上角生成'}</div>
+            )}
+          </div>
+
+
           {!!draft.quick_facts?.length && (
             <div className={`grid ${large ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'} gap-2`}>
               {draft.quick_facts.map((f, i) => (
