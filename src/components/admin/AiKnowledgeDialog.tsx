@@ -396,12 +396,53 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     }
   };
 
+  const [savingStage, setSavingStage] = useState<'' | 'body' | 'save'>('');
+
+  const generateBody = async (): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('enrich-knowledge-body', {
+        body: { coreDraft: draft },
+      });
+      if (error) throw error;
+      if (!data?.body) throw new Error('body 返回为空');
+      return data.body as string;
+    } catch (e: any) {
+      console.warn('[auto-body] failed', e);
+      toast.warning('深度阅读自动补写失败，将先保存其他字段');
+      return null;
+    }
+  };
+
+  const writeBodyOnly = async () => {
+    if (!draft.name?.trim()) { toast.error('请先让 AI 生成有名称的草稿'); return; }
+    setSavingStage('body');
+    try {
+      const body = await generateBody();
+      if (body) {
+        setDraft((d) => ({ ...d, body }));
+        toast.success('深度阅读已补写，可在预览中查看');
+      }
+    } finally {
+      setSavingStage('');
+    }
+  };
+
   const save = async () => {
     if (!draft.name?.trim()) { toast.error('请先让 AI 生成有名称的草稿'); return; }
     const safeCategory: ProductCategory = (VALID_CATEGORIES as string[]).includes(draft.category as string)
       ? (draft.category as ProductCategory) : 'other';
     setSaving(true);
     try {
+      let bodyText = draft.body?.trim() || null;
+      if (!bodyText) {
+        setSavingStage('body');
+        const generated = await generateBody();
+        if (generated) {
+          bodyText = generated;
+          setDraft((d) => ({ ...d, body: generated }));
+        }
+      }
+      setSavingStage('save');
       const sellingPointsJson = (draft.selling_points || []).map((p) =>
         typeof p === 'string' ? { text: p } : p,
       );
@@ -414,7 +455,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         summary: draft.summary?.trim() || null,
         selling_points: sellingPointsJson,
         tips: draft.tips?.trim() || null,
-        body: draft.body?.trim() || null,
+        body: bodyText,
         importance_score: Math.min(100, Math.max(0, Math.round(Number(draft.importance_score) || 0))),
         cover_url: coverUrl || null,
         content: {
