@@ -761,6 +761,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             gallery={gallery}
             galleryBusy={galleryBusy}
             onGenGallery={() => { void generateGallery(coverPrompt, { persist: !!editingItem }); }}
+            backstampUrl={backstampUrl}
+            backstampBusy={backstampBusy}
+            onFetchBackstamp={() => { void fetchBackstamp({ persist: !!editingItem }); }}
             onExpand={() => setPreviewOpen(true)}
           />
         </div>
