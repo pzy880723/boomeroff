@@ -118,6 +118,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const [previewOpen, setPreviewOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
