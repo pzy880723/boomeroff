@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useSpeech } from '@/hooks/useSpeech';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import {
   Loader2, ArrowLeft, Star, Pencil, Sparkles, Eye, ImageOff,
+  Quote, Volume2, Square, Copy,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
@@ -32,12 +34,14 @@ interface Item {
   video_url: string | null;
   body: string | null;
   gallery: unknown;
+  content: any;
 }
 
 export default function OfficialDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, role, loading: authLoading } = useAuth();
+  const { isSpeaking, speak, stop } = useSpeech();
   const isAdmin = role === 'admin';
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,6 +49,7 @@ export default function OfficialDetail() {
   const [quizOpen, setQuizOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [showFullBody, setShowFullBody] = useState(false);
 
   const load = async () => {
     if (!id || !user) return;
@@ -92,9 +97,31 @@ export default function OfficialDetail() {
     </div>
   );
 
-  const points: Array<{ text: string; tag?: string }> = Array.isArray(item.selling_points)
-    ? (item.selling_points as unknown[]).map((p: any) => typeof p === 'string' ? { text: p } : (p?.text ? { text: p.text, tag: p.tag } : null)).filter(Boolean) as any
+  const points: Array<{ text: string; tag?: string; detail?: string }> = Array.isArray(item.selling_points)
+    ? (item.selling_points as unknown[]).map((p: any) =>
+        typeof p === 'string' ? { text: p } : (p?.text ? { text: p.text, tag: p.tag, detail: p.detail } : null)
+      ).filter(Boolean) as any
     : [];
+  const content = (item.content || {}) as any;
+  const oneLiner: string | null = content.one_liner || null;
+  const pronunciation: string | null = content.pronunciation || null;
+  const aliases: string[] = Array.isArray(content.aliases) ? content.aliases : [];
+  const quickFacts: Array<{ label: string; value: string }> =
+    Array.isArray(content.quick_facts) ? content.quick_facts : [];
+  const customerPitches: Array<{ scene: string; line: string }> =
+    Array.isArray(content.customer_pitches) ? content.customer_pitches : [];
+  const comparisons: Array<{ name: string; diff: string }> =
+    Array.isArray(content.comparisons) ? content.comparisons : [];
+
+  const speakOrStop = (text: string) => {
+    if (isSpeaking) stop(); else speak(text);
+  };
+  const copyText = (text: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => toast.success('已复制'),
+      () => toast.error('复制失败'),
+    );
+  };
   const gallery: string[] = Array.isArray(item.gallery) ? (item.gallery as string[]).filter(Boolean) : [];
   const isYouTube = item.video_url?.includes('youtube.com') || item.video_url?.includes('youtu.be');
   const isBili = item.video_url?.includes('bilibili.com');
@@ -143,6 +170,12 @@ export default function OfficialDetail() {
         {/* 标题区 */}
         <div className="space-y-2">
           <h1 className="text-2xl font-bold leading-tight">{item.name}</h1>
+          {(pronunciation || aliases.length > 0) && (
+            <div className="text-xs text-muted-foreground space-x-2">
+              {pronunciation && <span>{pronunciation}</span>}
+              {aliases.length > 0 && <span>· 别名：{aliases.join(' / ')}</span>}
+            </div>
+          )}
           <div className="flex items-center gap-1.5 flex-wrap">
             <Badge variant="secondary">{CATEGORY_LABELS[item.category]}</Badge>
             {item.ip_name && <Badge variant="outline">{item.ip_name}</Badge>}
@@ -155,9 +188,66 @@ export default function OfficialDetail() {
           </div>
         </div>
 
+        {/* 一句话客户话术金句 */}
+        {oneLiner && (
+          <Card className="p-4 bg-gradient-to-br from-primary/15 via-accent/20 to-background border-primary/30">
+            <div className="flex items-start gap-3">
+              <Quote className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">一句话讲给客人</div>
+                <div className="text-lg font-semibold leading-snug">{oneLiner}</div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => speakOrStop(oneLiner)}>
+                  {isSpeaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copyText(oneLiner)}>
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* 简介 */}
         {item.summary && (
           <p className="text-[15px] leading-relaxed text-foreground/90">{item.summary}</p>
+        )}
+
+        {/* 速记卡 */}
+        {quickFacts.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold mb-2 text-muted-foreground">速记卡</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {quickFacts.map((f, i) => (
+                <div key={i} className="rounded-lg border bg-muted/20 p-2.5">
+                  <div className="text-[10px] text-muted-foreground">{f.label}</div>
+                  <div className="text-sm font-medium leading-tight mt-0.5">{f.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 客户话术 - 三场景 */}
+        {customerPitches.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold mb-2 text-muted-foreground">客户话术</h2>
+            <div className="space-y-2">
+              {customerPitches.map((p, i) => (
+                <Card key={i} className="p-3">
+                  <div className="flex items-start gap-2">
+                    <Badge variant="secondary" className="shrink-0">{p.scene}</Badge>
+                    <div className="flex-1 text-sm leading-relaxed">{p.line}</div>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0"
+                      onClick={() => speakOrStop(p.line)}>
+                      {isSpeaking ? <Square className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* 视频 */}
@@ -193,33 +283,60 @@ export default function OfficialDetail() {
           </div>
         )}
 
-        {/* 正文 */}
-        {item.body && (
-          <Card className="p-4">
-            <h2 className="text-sm font-semibold mb-3 text-muted-foreground">深度阅读</h2>
-            <div className="prose prose-sm max-w-none dark:prose-invert leading-relaxed
-              prose-headings:font-semibold prose-p:my-2 prose-li:my-0.5">
-              <ReactMarkdown>{item.body}</ReactMarkdown>
-            </div>
-          </Card>
-        )}
-
-        {/* 卖点 */}
+        {/* 卖点（升级版：tag + 主句 + 展开） */}
         {points.length > 0 && (
           <div>
             <h2 className="text-sm font-semibold mb-2 text-muted-foreground">核心卖点</h2>
-            <ul className="space-y-2">
+            <ul className="space-y-2.5">
               {points.map((p, i) => (
-                <li key={i} className="flex gap-2 text-[15px]">
-                  <span className="text-primary mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                  <span className="leading-relaxed">
-                    {p.tag && <span className="mr-1.5 text-[10px] px-1.5 py-0.5 rounded bg-accent/30 text-accent-foreground">{p.tag}</span>}
-                    {p.text}
-                  </span>
+                <li key={i} className="rounded-lg border bg-muted/10 p-3">
+                  <div className="flex items-baseline gap-2">
+                    {p.tag && <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/40 text-accent-foreground shrink-0">{p.tag}</span>}
+                    <span className="text-[15px] font-medium leading-snug">{p.text}</span>
+                  </div>
+                  {p.detail && (
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{p.detail}</p>
+                  )}
                 </li>
               ))}
             </ul>
           </div>
+        )}
+
+        {/* 易混对比 */}
+        {comparisons.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold mb-2 text-muted-foreground">易混对比</h2>
+            <div className="space-y-1.5">
+              {comparisons.map((c, i) => (
+                <Card key={i} className="p-3 text-sm">
+                  <span className="font-semibold text-primary">vs {c.name}：</span>
+                  <span className="text-foreground/85 leading-relaxed">{c.diff}</span>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 正文（默认折叠） */}
+        {item.body && (
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-muted-foreground">深度阅读</h2>
+              <Button size="sm" variant="ghost" className="h-7 text-xs"
+                onClick={() => setShowFullBody((v) => !v)}>
+                {showFullBody ? '收起' : `展开完整学习 (${item.body.length} 字)`}
+              </Button>
+            </div>
+            <div className={`prose prose-sm max-w-none dark:prose-invert leading-relaxed
+              prose-headings:font-semibold prose-p:my-2 prose-li:my-0.5
+              ${showFullBody ? '' : 'max-h-40 overflow-hidden relative'}`}>
+              <ReactMarkdown>{item.body}</ReactMarkdown>
+              {!showFullBody && (
+                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+              )}
+            </div>
+          </Card>
         )}
 
         {/* 小贴士 */}
