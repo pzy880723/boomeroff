@@ -222,6 +222,9 @@ export function KnowledgeManager() {
             </Button>
           )}
           {isAdmin && (
+            <AutoCategorizeButton target="personal" onDone={() => { void loadList(); void loadCounts(); }} />
+          )}
+          {isAdmin && (
             <Button size="sm" onClick={openCreate}>
               <Plus className="w-4 h-4 mr-1.5" />
               新增
