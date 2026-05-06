@@ -1,29 +1,59 @@
 ## 目标
-让官方知识详情页（`/library/:id`）顶部的 4 个标签 —— 品类、IP、年代、产地 —— 全部可点击，跳转到官方知识库列表页并按该标签自动筛选；列表页支持现有的搜索/排序/二级筛选。
+重新设计 `OfficialDetail.tsx` 中的「深度阅读」卡片：让 Markdown 正文展开后排版更易读；将展开/收起按钮放到卡片下边缘正中央。
 
-## 改动范围
+## 改动文件
+仅 `src/pages/OfficialDetail.tsx`，第 393-412 行（深度阅读卡片）。
 
-### 1. `src/pages/OfficialDetail.tsx`
-将这 4 个 `<Badge>` 改成可点击：
-- 品类：`navigate('/library?cat=' + item.category)`
-- IP：`navigate('/library?cat=' + item.category + '&ip=' + ip_name)`（需带品类才能展示二级 IP 筛选）
-- 年代：`navigate('/library?era=' + item.era)`
-- 产地：`navigate('/library?origin=' + item.origin)`
-加上 `cursor-pointer hover:bg-accent` 视觉提示。
+## 视觉设计
 
-### 2. `src/pages/OfficialLibrary.tsx`
-- 用 `useSearchParams` 读取 `cat / ip / era / origin / q` 初始化对应 state（`cat`, `sub`, 新增 `era`, `origin`, `keyword`）。
-- 在数据查询里追加：`era` → `q.eq('era', era)`，`origin` → `q.eq('origin', origin)`。
-- 在搜索框下方/二级类目区，新增「当前筛选」chip 区：当 `era` 或 `origin` 非空时，显示一个可点 × 清除的圆角 chip（示例：`年代：昭和时代（约1960s） ×`）。
-- state 改变时同步回 URL（`setSearchParams`），方便分享/刷新保持。
-- 排序（最新/最热/重要）继续可用；当存在 era/origin/cat 任一过滤时，沿用现有「具体类目固定按 updated_at 排序」逻辑或允许排序——保持现有行为：只要不是「全部 + cat=all」就固定按更新时间倒序。这部分不变。
+### 折叠态
+```text
+┌──────────────────────────────┐
+│ 📖 深度阅读                   │
+│  长文正文预览（max-h ~ 9rem）│
+│  …渐隐遮罩…                   │
+├────────[ 展开 ▼ 1234字 ]──────┤  ← 居中骑边按钮
+└──────────────────────────────┘
+```
 
-### 技术细节
-- 只读 URL 一次初始化 state，再以 state 为唯一数据源；state 变更 → `setSearchParams({...})`。
-- `keyword` 已有，URL 也同步；输入框输入时去抖（沿用现状，不新增去抖逻辑）。
-- 不动数据库结构；`official_knowledge` 已有 `era`、`origin`、`ip_name`、`category` 字段。
+### 展开态
+```text
+┌──────────────────────────────┐
+│ 📖 深度阅读                   │
+│                               │
+│  完整 Markdown 正文           │
+│  （优化排版：见下）            │
+│                               │
+├────────[ 收起 ▲ ]─────────────┤
+└──────────────────────────────┘
+```
 
-## 不在本次范围
-- 不改 `MyLibrary`、`Community` 列表的标签点击。
-- 不为 era/origin 增加预设下拉列表（保持自由文本精确匹配，从详情页跳转即可命中）。
-- 不修改测试逻辑或进度条。
+## 排版优化（Tailwind prose 调整）
+- 容器：`px-5 py-5`，整体增加 `max-w-none` + 行高 `leading-7`，正文字号 `text-[15px]`。
+- 标题层级：
+  - `prose-h1:text-lg prose-h1:font-semibold prose-h1:mt-5 prose-h1:mb-2 prose-h1:pb-1.5 prose-h1:border-b prose-h1:border-border`
+  - `prose-h2:text-base prose-h2:font-semibold prose-h2:mt-5 prose-h2:mb-2 prose-h2:text-foreground`
+  - `prose-h3:text-sm prose-h3:font-semibold prose-h3:mt-4 prose-h3:mb-1.5 prose-h3:text-muted-foreground prose-h3:uppercase prose-h3:tracking-wide`
+- 段落间距：`prose-p:my-3 prose-p:leading-7`
+- 列表：`prose-ul:my-3 prose-ul:pl-5 prose-li:my-1 prose-li:leading-7 prose-ol:pl-5`
+- 强调 / 链接：`prose-strong:text-foreground prose-strong:font-semibold prose-a:text-primary prose-a:underline-offset-2`
+- 引用块：`prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:bg-muted/40 prose-blockquote:py-1 prose-blockquote:px-3 prose-blockquote:not-italic prose-blockquote:text-foreground/90 prose-blockquote:rounded-r`
+- 代码：`prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[13px] prose-code:before:content-none prose-code:after:content-none`
+- 分隔线：`prose-hr:my-6 prose-hr:border-border`
+- 图片：`prose-img:rounded-lg prose-img:my-4`
+
+## 按钮位置（卡片下边缘居中）
+- 卡片改为 `relative pb-7`（给底部按钮留空间）。
+- 移除右上角原按钮。
+- 标题区只保留：`<BookOpen className="w-4 h-4" /> 深度阅读 · {item.body.length}字`。
+- 在卡片底部新增：
+  ```tsx
+  <button className="absolute left-1/2 -translate-x-1/2 -bottom-3.5 inline-flex items-center gap-1 h-7 px-3 rounded-full border border-border bg-card text-xs text-muted-foreground hover:text-foreground hover:bg-accent shadow-sm" />
+  ```
+  内容：折叠态 `展开全文 ▾`，展开态 `收起 ▴`。
+- 折叠态高度从 `max-h-40` 调到 `max-h-44`，渐隐遮罩保留。
+
+## 不在范围
+- 不动其他卡片样式、不动小贴士/卖点/AI 聊一聊。
+- 不改数据结构、不改 ReactMarkdown 渲染器。
+
