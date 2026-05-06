@@ -167,16 +167,40 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     e.target.value = '';
   };
 
-  const triggerCover = async (prompt: string, opts: { persist?: boolean } = {}) => {
+  // 联网搜索真实图（Firecrawl），失败返回空数组
+  const webSearchImages = async (query: string, intent: 'gallery' | 'backstamp', limit: number): Promise<string[]> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('web-search-images', {
+        body: { query, intent, limit, mirror: true, pathPrefix: intent === 'backstamp' ? 'web-backstamp' : 'web-gallery' },
+      });
+      if (error) throw error;
+      const imgs = (data?.images || []) as Array<{ url: string }>;
+      return imgs.map((i) => i.url).filter(Boolean);
+    } catch (e) {
+      console.warn('[web-search-images] failed', e);
+      return [];
+    }
+  };
+
+  const triggerCover = async (prompt: string, opts: { persist?: boolean; preferWeb?: boolean } = {}) => {
     if (!prompt) return;
     setPainting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
-      if (error) throw error;
-      if (data?.url) {
-        setCoverUrl(data.url);
+      // 优先联网搜真实图
+      let url: string | null = null;
+      if (opts.preferWeb !== false && draft.name) {
+        const found = await webSearchImages(draft.name, 'gallery', 1);
+        if (found.length) url = found[0];
+      }
+      if (!url) {
+        const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
+        if (error) throw error;
+        url = data?.url || null;
+      }
+      if (url) {
+        setCoverUrl(url);
         if (opts.persist && editingItem) {
-          await supabase.from('official_knowledge').update({ cover_url: data.url }).eq('id', editingItem.id);
+          await supabase.from('official_knowledge').update({ cover_url: url }).eq('id', editingItem.id);
           onSaved();
         }
         if (opts.persist) {
