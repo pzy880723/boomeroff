@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
+        model: "google/gemini-3-flash-preview",
         messages: chatMessages,
         tools: [TOOL],
         tool_choice: { type: "function", function: { name: "write_body" } },
