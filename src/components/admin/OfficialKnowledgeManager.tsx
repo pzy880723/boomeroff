@@ -152,6 +152,7 @@ export function OfficialKnowledgeManager() {
           {computing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
           重算重要程度
         </Button>
+        <AutoCategorizeButton target="official" onDone={load} />
         <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}>
           <Wand2 className="w-4 h-4 mr-1.5" /> AI 生成
         </Button>
