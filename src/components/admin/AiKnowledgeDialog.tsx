@@ -114,6 +114,8 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const [draft, setDraft] = useState<Draft>({});
   const [coverPrompt, setCoverPrompt] = useState<string>('');
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [gallery, setGallery] = useState<string[]>([]);
+  const [galleryBusy, setGalleryBusy] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [painting, setPainting] = useState(false);
   const [saving, setSaving] = useState(false);
