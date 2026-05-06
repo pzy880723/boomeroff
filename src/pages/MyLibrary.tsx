@@ -487,10 +487,10 @@ export default function MyLibrary() {
             />
           </div>
 
-          {taskExpanded && totalCount > 0 && !todayDone && todayList.length > 0 && (
+          {taskExpanded && totalCount > 0 && !todayDone && remainingToday.length > 0 && (
             <div className="px-4 pb-3 pt-2 border-t border-border/40">
               <div className="text-[11px] text-muted-foreground mb-1.5">
-                今日推荐 {todayList.length} 条
+                今日剩余 {remainingToday.length} / {todayList.length} 条
               </div>
               <ul className="space-y-1">
                 {todayList.map((it) => (
