@@ -517,6 +517,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('再换一个更出圈的类比金句。')}>
                     换金句
                   </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('主图换一张更有代表性的，重点突出 ')}>
+                    换主图
+                  </Button>
                 </div>
               )}
               {pendingImage && (
