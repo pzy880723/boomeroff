@@ -13,7 +13,7 @@ import {
 } from '@/types';
 import {
   Loader2, Search, Star, LayoutGrid, ChevronDown, ChevronUp, List, ImageOff,
-  Clock, Flame, Award,
+  Clock, Flame, Award, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AddOfficialFab } from '@/components/library/AddOfficialFab';
