@@ -37,9 +37,44 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "缺少 prompt" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const fullPrompt = `Square product cover, clean white background, soft natural light, centered, photorealistic, no text watermark. Subject: ${prompt}`;
-    const callImage = async (model: string) => {
-      const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // 去品牌化兜底：常见易触发版权策略的专有名词 → 通用类目描述
+    const BRAND_MAP: Array<{ re: RegExp; replace: string; hint: string }> = [
+      { re: /\b(koransha|fukagawa|arita|imari|kutani|mino|hasami)\b/gi, replace: "Japanese-style porcelain piece", hint: "Japanese porcelain piece" },
+      { re: /香兰社|深川制磁|有田烧|九谷烧|伊万里|美浓烧|波佐见烧/g, replace: "Japanese-style porcelain piece", hint: "Japanese porcelain piece" },
+      { re: /\b(meissen|wedgwood|royal\s*copenhagen|herend|ginori|royal\s*albert|noritake)\b/gi, replace: "European-style porcelain piece", hint: "European porcelain piece" },
+      { re: /\b(sonny\s*angel|bearbrick|be@rbrick|nendoroid|funko|smiski|labubu|molly|dimoo)\b/gi, replace: "designer vinyl figurine", hint: "designer vinyl figurine" },
+      { re: /\b(pokemon|pokémon|hello\s*kitty|sanrio|disney|ghibli|studio\s*ghibli|gundam|evangelion|naruto|dragon\s*ball|one\s*piece|doraemon|snoopy|marvel)\b/gi, replace: "anime-style collectible item", hint: "anime-style collectible" },
+      { re: /\b(walkman|discman)\b/gi, replace: "vintage portable cassette player", hint: "vintage portable cassette player" },
+      { re: /\b(sony|panasonic|toshiba|sharp|aiwa|kenwood|denon|marantz|technics|pioneer|jvc|nakamichi)\b/gi, replace: "vintage audio device", hint: "vintage audio device" },
+      { re: /\b(nintendo|gameboy|game\s*boy|famicom|playstation|ps\d|sega|saturn|dreamcast|xbox)\b/gi, replace: "vintage handheld game console", hint: "vintage handheld game console" },
+      { re: /\b(canon|nikon|olympus|minolta|pentax|leica|fujifilm|contax|yashica|ricoh)\b/gi, replace: "vintage compact camera", hint: "vintage compact camera" },
+      { re: /\b(hermes|hermès|chanel|louis\s*vuitton|gucci|prada|dior|fendi|celine|burberry|coach|bvlgari|cartier|tiffany|rolex|omega|seiko|casio)\b/gi, replace: "luxury accessory", hint: "luxury accessory" },
+      { re: /爱马仕|香奈儿|路易威登|古驰|普拉达|迪奥|劳力士|欧米茄/g, replace: "luxury accessory", hint: "luxury accessory" },
+    ];
+
+    let categoryHint = "product";
+    const sanitizePrompt = (s: string): string => {
+      let out = s;
+      for (const m of BRAND_MAP) {
+        if (m.re.test(out)) {
+          categoryHint = m.hint;
+          out = out.replace(m.re, m.replace);
+        }
+      }
+      // 移除常见容易触发策略的修饰
+      out = out.replace(/\b(brand|brand[- ]?name|signature|official|licensed|copyright|trademark|character)\b/gi, "");
+      return out;
+    };
+
+    const cleaned = sanitizePrompt(prompt);
+    if (cleaned !== prompt) {
+      console.warn("Sanitized cover prompt:", prompt, "=>", cleaned);
+    }
+    const fullPrompt = `Square product cover. Subject: ${cleaned}. On plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo.`;
+    const fallbackPrompt = `A ${categoryHint} on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo.`;
+
+    const callImage = async (model: string, body: string) => {
+      return await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
@@ -47,22 +82,12 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           model,
-          messages: [{ role: "user", content: fullPrompt }],
+          messages: [{ role: "user", content: body }],
           modalities: ["image", "text"],
         }),
       });
-      return r;
     };
 
-    let aiResp = await callImage("google/gemini-2.5-flash-image");
-    if (!aiResp.ok) {
-      const t = await aiResp.text();
-      console.error("Image AI error", aiResp.status, t);
-      const status = aiResp.status === 429 ? 429 : aiResp.status === 402 ? 402 : 500;
-      const msg = status === 429 ? "AI 调用频率过高。" : status === 402 ? "AI 额度不足。" : "图像生成失败。";
-      return new Response(JSON.stringify({ error: msg }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    let data = await aiResp.json();
     const extractDataUrl = (d: any): string | undefined => {
       const msg = d?.choices?.[0]?.message;
       const fromImages = msg?.images?.[0]?.image_url?.url || msg?.images?.[0]?.url;
@@ -76,18 +101,38 @@ Deno.serve(async (req) => {
       }
       return undefined;
     };
-    let dataUrl = extractDataUrl(data);
 
-    // Retry once with a different image model if first call returned no image
-    if (!dataUrl?.startsWith("data:image/")) {
-      console.warn("First image call returned no image, retrying with gemini-3.1-flash-image-preview", JSON.stringify(data).slice(0, 500));
-      aiResp = await callImage("google/gemini-3.1-flash-image-preview");
-      if (aiResp.ok) {
-        data = await aiResp.json();
-        dataUrl = extractDataUrl(data);
-      } else {
-        console.error("Retry image AI error", aiResp.status, await aiResp.text());
+    // 依次尝试：新模型完整 prompt → 旧模型完整 prompt → 新模型简化 prompt
+    const attempts: Array<{ model: string; body: string; label: string }> = [
+      { model: "google/gemini-3.1-flash-image-preview", body: fullPrompt, label: "v3.1 full" },
+      { model: "google/gemini-2.5-flash-image", body: fullPrompt, label: "v2.5 full" },
+      { model: "google/gemini-3.1-flash-image-preview", body: fallbackPrompt, label: "v3.1 fallback" },
+    ];
+
+    let dataUrl: string | undefined;
+    let lastStatus = 0;
+    for (const a of attempts) {
+      const r = await callImage(a.model, a.body);
+      lastStatus = r.status;
+      if (!r.ok) {
+        console.error("Image attempt failed:", a.label, r.status, (await r.text()).slice(0, 400));
+        if (r.status === 429 || r.status === 402) {
+          const msg = r.status === 429 ? "AI 调用频率过高，请稍后再试。" : "AI 额度不足。";
+          return new Response(JSON.stringify({ error: msg }), { status: r.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        continue;
       }
+      const d = await r.json();
+      dataUrl = extractDataUrl(d);
+      if (dataUrl?.startsWith("data:image/")) {
+        console.log("Image succeeded on attempt:", a.label);
+        break;
+      }
+      console.warn("No image in response, attempt:", a.label, JSON.stringify(d).slice(0, 400));
+    }
+
+    if (!dataUrl?.startsWith("data:image/")) {
+      return new Response(JSON.stringify({ error: "AI 未能生成封面（可能因描述包含品牌名被拦截）。请在右侧重新描述外观，或稍后重试。" }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (!dataUrl?.startsWith("data:image/")) {
