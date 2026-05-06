@@ -1,49 +1,78 @@
-# 联网取真实图 + 底款图
-
 ## 目标
-- 新增知识卡时，先**联网搜真实商品图**（图集 + 底款），AI 仅作兜底。
-- 所有商品都尝试一张「底款（背面/底标）」图，独立字段，详情页单独展示。
 
-## 1. 数据库
-- `official_knowledge` 新增字段：
-  - `backstamp_url text` — 底款图 URL
-- 不动 `gallery / cover_url`。
+在「官方知识卡编辑」弹窗中，把图片管理改造成"以上传为主、可增删改排序"的图集编辑器，主图就是图集第一张。
 
-## 2. 联网搜图通道
-- 接入 **Firecrawl 连接器**（`standard_connectors--connect firecrawl`）。
-- 新建 edge function `web-search-images`：
-  - 入参：`{ query, intent: 'gallery' | 'backstamp', limit }`
-  - 走 Firecrawl `/v2/search`：`scrapeOptions.formats=['links','html']`，对结果页提取 `<img>` 真实大图（过滤 favicon/广告/小图、限制白名单/过滤敏感站）。
-  - 对 backstamp 自动追加 query 后缀：`底款 OR backstamp OR mark OR 銘 OR 底部`。
-  - 返回 `{ images: [{url, source, width?, height?}] }`，按尺寸/相关度排序。
-  - 超时 8s，失败返回空数组（不抛错），让上游兜底。
+## 现状
 
-## 3. 生成流程改造（`AiKnowledgeDialog` + `enrich-knowledge-core`）
-当 AI 拿到 `name` 后，并行：
-1. **封面 cover_url**：先调 `web-search-images(query=name, intent=gallery, limit=1)`；命中→用真实图；未命中→现有 `generate-knowledge-cover` AI 生成。
-2. **图集 gallery**（目标 3 张）：`web-search-images(query=name, limit=6)` 取前 3 张真实图；不足 3 张时，剩余位用 `generate-knowledge-cover` AI 角度图补齐。
-3. **底款 backstamp_url**：`web-search-images(query=name, intent=backstamp, limit=1)`；命中→存真实图；**未命中时不 AI 生成**（底款 AI 画不准，宁缺毋滥），前端显示「暂无底款图」。
+- 主图 (`cover_url`) 只能由 AI 生成 / 联网搜索得到，不能手动上传
+- 图集 (`gallery`) 是只读缩略图，不能删、不能换顺序、不能手动加
+- 主图与图集是两个独立字段，关系不直观
 
-所有真实图统一通过 `download → upload 到 product-images bucket` 落地，避免外链失效（新增小工具函数 `mirrorRemoteImage`）。
+## 改造方案
 
-## 4. 前端
-- `AiKnowledgeDialog` PreviewCard：
-  - 图集行旁标注每张来源（真实/AI）。
-  - 新增「底款」一栏：显示 `backstamp_url` 或「暂无底款图」+「重新搜底款」按钮。
-- `OfficialDetail.tsx`：在图集下方新增独立「底款」区块，点击可放大；无底款则不显示该区块。
+### 1. 概念统一
 
-## 5. 配置 & 安全
-- Firecrawl 通过连接器注入 `FIRECRAWL_API_KEY`，仅在 edge function 中使用。
-- `web-search-images` 需登录调用（校验 JWT）。
-- 加简单内存限流（每用户 10 req/min）。
+- **图集第一张 = 主图**：保存时自动把 `gallery[0]` 写到 `cover_url`，两边保持同步
+- 「底款」`backstamp_url` 保持独立字段，不动
 
-## 技术细节
-- 图片过滤规则：宽高 ≥ 400、非 svg/gif、URL 不含 `sprite|icon|logo|avatar`。
-- 镜像存储路径：`official/{id}/gallery-{n}.jpg`、`official/{id}/backstamp.jpg`。
-- 失败降级顺序：真实图 → AI（仅封面/图集）→ 留空（仅底款）。
+### 2. 新的图集编辑组件 `GalleryEditor`
 
-## 文件改动
-- 新建：`supabase/functions/web-search-images/index.ts`
-- 改：`supabase/functions/enrich-knowledge-core/index.ts`、`src/components/admin/AiKnowledgeDialog.tsx`、`src/pages/OfficialDetail.tsx`
-- 迁移：加 `backstamp_url` 列
-- 连接器：Firecrawl
+替换现有的 PreviewCard 内"图集"那一段，提供：
+
+- **缩略图网格**（横向滚动或 2-3 列）
+  - 每张缩略图右上角：删除按钮
+  - 每张缩略图左上角：拖拽手柄
+  - 第一张额外标记「主图」徽章
+  - 点击缩略图可放大预览（lightbox）
+- **底部操作条**
+  - `上传图片` 按钮（多选 `<input type="file" multiple>`，上传到 `product-images` bucket，路径前缀 `official-gallery/`）
+  - `AI 生成` 按钮（保留现有 `generateGallery` 行为，结果 append 到末尾）
+  - `联网搜图` 按钮（保留现有 `webSearchImages` 行为，结果 append 到末尾）
+- **排序交互**
+  - 桌面端：HTML5 drag-and-drop 重新排序
+  - 移动端：每张图旁边加「上移 / 下移 / 设为主图」三个小按钮（移动端 390px 宽时拖拽不好用）
+- **空状态**：提示「点击下方上传图片，第一张将作为主图」
+
+### 3. 上传逻辑
+
+新增内部函数 `uploadImages(files: File[])`：
+
+1. 对每个文件：调用 `supabase.storage.from('product-images').upload(...)`，路径 `official-gallery/{timestamp}-{rand}.{ext}`
+2. 拿到 publicUrl
+3. `setGallery(prev => [...prev, ...newUrls])`
+4. 编辑模式下立即 persist：`update official_knowledge set gallery = ...`
+
+进度反馈：上传中显示 spinner overlay。
+
+### 4. 主图同步
+
+`save()` 里：
+
+```ts
+const cover = gallery[0] || coverUrl || null;
+payload.cover_url = cover;
+payload.gallery = gallery;
+```
+
+任何时候 `gallery` 变化（重排、删除、上传、AI 生成），如果 `gallery[0]` 与当前 `coverUrl` 不一致，自动 `setCoverUrl(gallery[0])`，让左侧大封面预览跟着变。
+
+### 5. 顶部大封面区
+
+继续显示 `coverUrl`（即 gallery[0]）；
+"重新生成" 按钮保留，点击后 AI 生成的新图替换 `gallery[0]`（而非另存为 cover_url）。
+
+### 6. 不改的东西
+
+- 数据库结构（`gallery` jsonb + `cover_url` text + `backstamp_url` text 都已存在）
+- `OfficialDetail.tsx` 的展示（仍读 `cover_url` + `gallery` + `backstamp_url`）
+- 「一键丰富」流程（仍可写入 gallery / cover）
+- 底款管理保持独立按钮
+
+## 涉及文件
+
+- `src/components/admin/AiKnowledgeDialog.tsx`：新增 `GalleryEditor` 子组件，替换原"图集"段；改 `save()` 的 cover/gallery 同步逻辑；新增 upload handler
+- 不需要 migration、不需要新 edge function
+
+## 待确认
+
+如果你有不同想法，告诉我后我再调；否则审批后我直接按上面实现。

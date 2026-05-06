@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, Send, ImagePlus, Sparkles, RefreshCw, ImageOff, X, Quote, Maximize2, Wand2 } from 'lucide-react';
+import { Loader2, Send, ImagePlus, Sparkles, RefreshCw, ImageOff, X, Quote, Maximize2, Wand2, Upload, Globe, ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 
@@ -281,8 +281,75 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     }
   };
 
+  // 上传本地图片到图集
+  const [uploading, setUploading] = useState(false);
+  const uploadGalleryFiles = async (files: FileList | File[]) => {
+    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (!arr.length) return;
+    setUploading(true);
+    try {
+      const uploaded: string[] = [];
+      for (const f of arr) {
+        if (f.size > 8 * 1024 * 1024) { toast.error(`${f.name} 超过 8MB，已跳过`); continue; }
+        const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `official-gallery/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error } = await supabase.storage.from('product-images').upload(path, f, { contentType: f.type, upsert: false });
+        if (error) { toast.error(`上传失败：${error.message}`); continue; }
+        const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+        if (data?.publicUrl) uploaded.push(data.publicUrl);
+      }
+      if (uploaded.length) {
+        const merged = [...(gallery || []), ...uploaded];
+        setGallery(merged);
+        if (!coverUrl && merged[0]) setCoverUrl(merged[0]);
+        if (editingItem) {
+          await supabase.from('official_knowledge').update({
+            gallery: merged,
+            cover_url: merged[0] || coverUrl || null,
+          }).eq('id', editingItem.id);
+          onSaved();
+        }
+        toast.success(`已上传 ${uploaded.length} 张`);
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // 图集任意变更后，自动把第一张同步为主图
+  const persistGallery = async (next: string[]) => {
+    setGallery(next);
+    const newCover = next[0] || null;
+    setCoverUrl(newCover);
+    if (editingItem) {
+      await supabase.from('official_knowledge').update({
+        gallery: next,
+        cover_url: newCover,
+      }).eq('id', editingItem.id);
+      onSaved();
+    }
+  };
+
+  const removeGalleryItem = (idx: number) => {
+    const next = gallery.filter((_, i) => i !== idx);
+    void persistGallery(next);
+  };
+  const moveGalleryItem = (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= gallery.length) return;
+    const next = [...gallery];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    void persistGallery(next);
+  };
+  const setAsCover = (idx: number) => {
+    if (idx === 0) return;
+    const next = [gallery[idx], ...gallery.filter((_, i) => i !== idx)];
+    void persistGallery(next);
+  };
+
   const wantsCoverRedraw = (text: string) =>
     /(主图|封面|换图|换张图|换一张|重画|重新生成|重新画|重新找|找[一张]*图|cover)/i.test(text);
+
 
   const send = async () => {
     const text = input.trim();
@@ -601,7 +668,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         tips: draft.tips?.trim() || null,
         body: bodyText,
         importance_score: Math.min(100, Math.max(0, Math.round(Number(draft.importance_score) || 0))),
-        cover_url: coverUrl || null,
+        cover_url: (gallery && gallery[0]) || coverUrl || null,
         gallery: gallery || [],
         backstamp_url: backstampUrl || null,
         content: {
@@ -761,6 +828,23 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             gallery={gallery}
             galleryBusy={galleryBusy}
             onGenGallery={() => { void generateGallery(coverPrompt, { persist: !!editingItem }); }}
+            onWebSearchGallery={async () => {
+              if (!draft.name) return;
+              setGalleryBusy(true);
+              try {
+                const found = await webSearchImages(draft.name, 'gallery', 4);
+                if (found.length) {
+                  const merged = Array.from(new Set([...(gallery || []), ...found]));
+                  await persistGallery(merged);
+                  toast.success(`联网找到 ${found.length} 张`);
+                } else toast.info('暂未搜到合适的图');
+              } finally { setGalleryBusy(false); }
+            }}
+            onUploadGallery={(files) => { void uploadGalleryFiles(files); }}
+            uploading={uploading}
+            onRemoveGallery={removeGalleryItem}
+            onMoveGallery={moveGalleryItem}
+            onSetCover={setAsCover}
             backstampUrl={backstampUrl}
             backstampBusy={backstampBusy}
             onFetchBackstamp={() => { void fetchBackstamp({ persist: !!editingItem }); }}
@@ -797,6 +881,23 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
               gallery={gallery}
               galleryBusy={galleryBusy}
               onGenGallery={() => { void generateGallery(coverPrompt, { persist: !!editingItem }); }}
+              onWebSearchGallery={async () => {
+                if (!draft.name) return;
+                setGalleryBusy(true);
+                try {
+                  const found = await webSearchImages(draft.name, 'gallery', 4);
+                  if (found.length) {
+                    const merged = Array.from(new Set([...(gallery || []), ...found]));
+                    await persistGallery(merged);
+                    toast.success(`联网找到 ${found.length} 张`);
+                  } else toast.info('暂未搜到合适的图');
+                } finally { setGalleryBusy(false); }
+              }}
+              onUploadGallery={(files) => { void uploadGalleryFiles(files); }}
+              uploading={uploading}
+              onRemoveGallery={removeGalleryItem}
+              onMoveGallery={moveGalleryItem}
+              onSetCover={setAsCover}
               backstampUrl={backstampUrl}
               backstampBusy={backstampBusy}
               onFetchBackstamp={() => { void fetchBackstamp({ persist: !!editingItem }); }}
@@ -826,6 +927,12 @@ interface PreviewProps {
   gallery?: string[];
   galleryBusy?: boolean;
   onGenGallery?: () => void;
+  onWebSearchGallery?: () => void;
+  onUploadGallery?: (files: FileList) => void;
+  uploading?: boolean;
+  onRemoveGallery?: (idx: number) => void;
+  onMoveGallery?: (idx: number, dir: -1 | 1) => void;
+  onSetCover?: (idx: number) => void;
   backstampUrl?: string | null;
   backstampBusy?: boolean;
   onFetchBackstamp?: () => void;
@@ -846,7 +953,8 @@ function PreviewPane(props: PreviewProps & { onExpand: () => void }) {
   );
 }
 
-function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large, gallery, galleryBusy, onGenGallery, backstampUrl, backstampBusy, onFetchBackstamp }: PreviewProps) {
+function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large, gallery, galleryBusy, onGenGallery, onWebSearchGallery, onUploadGallery, uploading, onRemoveGallery, onMoveGallery, onSetCover, backstampUrl, backstampBusy, onFetchBackstamp }: PreviewProps) {
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);
   const t = large
     ? { name: 'text-2xl', section: 'text-sm', body: 'text-base', tag: 'text-xs', mini: 'text-xs', card: 'p-5 space-y-5', wrap: 'p-4' }
     : { name: 'text-base', section: 'text-xs', body: 'text-sm', tag: 'text-[10px]', mini: 'text-xs', card: 'p-4 space-y-3', wrap: '' };
@@ -899,25 +1007,120 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCo
 
           {draft.summary && <p className={`${t.body} text-muted-foreground leading-relaxed`}>{draft.summary}</p>}
 
-          {/* 图集 */}
+          {/* 图集（含主图） */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <div className={`${t.section} text-muted-foreground`}>图集 {gallery?.length ? `(${gallery.length})` : ''}</div>
-              {onGenGallery && (
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onGenGallery} disabled={galleryBusy || !coverPrompt}>
-                  {galleryBusy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <ImagePlus className="w-3 h-3 mr-1" />}
-                  {gallery?.length ? '再补几张' : '生成图集'}
-                </Button>
-              )}
+              <div className={`${t.section} text-muted-foreground`}>
+                图集 {gallery?.length ? `(${gallery.length})` : ''}
+                <span className="ml-1 text-[10px] opacity-70">第一张为主图</span>
+              </div>
             </div>
+
             {gallery?.length ? (
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="grid grid-cols-3 gap-2">
                 {gallery.map((u, i) => (
-                  <img key={i} src={u} alt="" className={`shrink-0 ${large ? 'w-24 h-24' : 'w-20 h-20'} rounded-md object-cover border`} />
+                  <div key={u + i} className="relative group rounded-md border overflow-hidden bg-muted aspect-square">
+                    <img src={u} alt="" className="w-full h-full object-cover" />
+                    {i === 0 && (
+                      <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium flex items-center gap-0.5">
+                        <Star className="w-2.5 h-2.5 fill-current" /> 主图
+                      </div>
+                    )}
+                    {onRemoveGallery && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveGallery(i)}
+                        className="absolute top-1 right-1 bg-background/90 hover:bg-destructive hover:text-destructive-foreground rounded-full p-1 shadow-sm"
+                        title="删除"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                    <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1 opacity-90">
+                      <div className="flex gap-1">
+                        {onMoveGallery && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onMoveGallery(i, -1)}
+                              disabled={i === 0}
+                              className="bg-background/90 disabled:opacity-30 rounded p-0.5"
+                              title="前移"
+                            >
+                              <ArrowLeft className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onMoveGallery(i, 1)}
+                              disabled={i === (gallery.length - 1)}
+                              className="bg-background/90 disabled:opacity-30 rounded p-0.5"
+                              title="后移"
+                            >
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {onSetCover && i !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onSetCover(i)}
+                          className="bg-background/90 rounded p-0.5"
+                          title="设为主图"
+                        >
+                          <Star className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (
-              <div className={`${t.mini} text-muted-foreground`}>{galleryBusy ? '正在生成图集…' : '尚无图集，可点击右上角生成'}</div>
+              <div className={`${t.mini} text-muted-foreground py-3 text-center border border-dashed rounded-md`}>
+                {uploading ? '正在上传…' : (galleryBusy ? '正在准备图片…' : '尚无图片，请上传或一键生成；第一张将作为主图')}
+              </div>
+            )}
+
+            {(onUploadGallery || onWebSearchGallery || onGenGallery) && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {onUploadGallery && (
+                  <>
+                    <input
+                      ref={galleryFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.length) onUploadGallery(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => galleryFileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
+                      {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                      上传图片
+                    </Button>
+                  </>
+                )}
+                {onWebSearchGallery && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onWebSearchGallery} disabled={galleryBusy || !draft.name}>
+                    {galleryBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
+                    联网搜图
+                  </Button>
+                )}
+                {onGenGallery && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onGenGallery} disabled={galleryBusy || !coverPrompt}>
+                    {galleryBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    AI 生成
+                  </Button>
+                )}
+              </div>
             )}
           </div>
 
