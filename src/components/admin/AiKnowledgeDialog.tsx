@@ -175,19 +175,32 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     const userMsg: ChatMsg = { role: 'user', content: text || '请基于参考图整理。', imageUrl: pendingImage ?? undefined };
     const next = [...messages, userMsg];
     setMessages(next); setInput(''); setPendingImage(null); setThinking(true);
-    try {
+    const callOnce = async () => {
       const { data, error } = await supabase.functions.invoke('generate-official-knowledge', {
         body: { messages: next.filter((m) => m.role === 'user'), currentDraft: draft },
       });
       if (error) throw error;
+      return data;
+    };
+    try {
+      let data: any;
+      try { data = await callOnce(); }
+      catch (e) {
+        console.warn('[ai-edit] retry once', e);
+        await new Promise((r) => setTimeout(r, 600));
+        data = await callOnce();
+      }
       const reply = (data?.reply as string) || '已更新草稿。';
       const newDraft: Draft = { ...draft, ...(data?.draft || {}) };
       setMessages((m) => [...m, { role: 'assistant', content: reply }]);
       setDraft(newDraft);
       const newPrompt = data?.cover_prompt as string | undefined;
-      if (newPrompt && newPrompt !== coverPrompt) {
+      // 只有当 AI 显式给了新 prompt 且与上次不同、且当前没有封面时才重画
+      if (newPrompt && newPrompt !== coverPrompt && !coverUrl) {
         setCoverPrompt(newPrompt);
         void triggerCover(newPrompt);
+      } else if (newPrompt && newPrompt !== coverPrompt) {
+        setCoverPrompt(newPrompt);
       }
     } catch (e: any) {
       toast.error(e?.message ?? 'AI 调用失败');
