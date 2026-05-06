@@ -1,29 +1,36 @@
 ## 问题
-个人知识库（`/my-library`）网格里的"官方收藏"卡片显示的是收藏那一刻写入 `user_favorites.snapshot` 的 `cover_url / name / summary / category`。当官方知识卡（`official_knowledge`）后续被编辑（换图、改名）后，snapshot 不会自动同步，所以网格里看到的是旧主图，只有点开详情时才会刷新（详情已实时拉取源表）。
+`AiKnowledgeDialog`（AI 修改官方知识 / AI 新建官方知识对话框）里有几处用户可见文案直接暴露了字段名 `body / one_liner / comparisons`，对非技术店员不友好。
 
-我建的"个人知识"（`product_knowledge`）则是直接查源表的，所以不存在这个问题——本次只修官方收藏。
+具体位置（`src/components/admin/AiKnowledgeDialog.tsx`）：
+
+1. 初始问候语（第 77 行）：
+   > 例如：「one_liner 换一个更出圈的金句」「正文加一段保养方法」「补充与 Wedgwood 的对比」
+2. 三个快捷按钮发送的提示词（第 281 / 284 / 287 行）：
+   - 「请把正文 body 再扩充一倍，加入更多年份、人名和具体价位行情。」
+   - 「请补充更多易混对比 comparisons，至少 3 条。」
+   - 「one_liner 再换一个更出圈的类比金句。」
+
+（页面上其它 `body / one_liner` 等只在代码里出现，不在用户可见文案，不动。）
 
 ## 方案
 
-在 `src/pages/MyLibrary.tsx` 的 `loadAll()` 里，对来源为 `official` 的收藏批量回查最新数据并覆盖 snapshot 字段，再写回网格。
+只改这一个文件 `src/components/admin/AiKnowledgeDialog.tsx`，把上述文案换成通俗中文，不影响 AI 后端逻辑——AI 收到中文一样能正确理解要改哪个字段（system prompt 里都有自然语言描述）。
 
-### 改动点
+### 改动
 
-1. **`src/pages/MyLibrary.tsx` — `loadAll()`**
-   - 收藏数据加载后，收集所有 `source_type === 'official'` 的 `source_id`。
-   - 一次 `supabase.from('official_knowledge').select('id, name, category, cover_url, summary').in('id', ids)` 批量拉新。
-   - 用返回的 map 覆盖每条 favorite 的 `name / category / cover_url / summary`（snapshot 仅作为 fallback，遇到源已删除的情况保留旧值并仍可显示）。
-   - 对 `source_type === 'product'`（用户拍照分享）同样处理一次 `products` 表，避免同样的陈旧问题。
-   - 失败时静默回退到 snapshot，不影响渲染。
+- 第 77 行问候语改为：
+  > 已载入「{name}」当前内容，告诉我想怎么改即可，例如：「金句换一个更出圈的」「正文加一段保养方法」「补充与 Wedgwood 的对比」。也可以直接说「整体重写得更详细」。
+- 第 281 行按钮发送语改为：
+  > 请把正文再扩充一倍，加入更多年份、人名和具体价位行情。
+- 第 284 行按钮发送语改为：
+  > 请补充更多易混对比，至少 3 条。
+- 第 287 行按钮发送语改为：
+  > 再换一个更出圈的类比金句。
 
-2. **可选小改动（同一文件）**
-   - 在 `KnowledgeEditDialog` 保存成功的回调路径之外，给 `MyLibrary` 增加一个聚焦时刷新的钩子：用现有 `loadAll`，在 `document.visibilitychange → visible` 时重新拉取一次，确保用户从后台编辑工具切回来即可看到新图（无需依赖 snapshot 同步）。
-
-### 不做的事
-- 不改数据库 schema、不加触发器去同步 snapshot（成本高、容易和已有数据不一致）。
-- 不改详情页逻辑（已经是实时拉源表）。
-- 不动"我建的"个人知识卡（已经实时）。
+### 不做
+- 不改 AI edge function 的 system prompt（内部用，不暴露给用户）。
+- 不改组件内部 TS 字段名、props、数据库列名。
+- 不动其他对话框 / 页面（已扫描确认没有同类暴露）。
 
 ### 验证
-- 打开 `/my-library`，对一条已收藏的官方知识在后台改封面 → 回到 `/my-library` 应立即看到新主图。
-- 删除该官方知识 → 网格仍显示旧 snapshot，不报错。
+打开「AI 修改官方知识」对话框，问候语和三个快捷按钮文案应不再出现 `body / one_liner / comparisons` 等英文标识，发送后 AI 仍能按要求改写对应字段。

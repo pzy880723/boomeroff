@@ -74,7 +74,7 @@ const HELLO_NEW: ChatMsg = {
 };
 const HELLO_EDIT = (name: string): ChatMsg => ({
   role: 'assistant',
-  content: `已载入「${name}」当前内容，告诉我想怎么改即可，例如：「one_liner 换一个更出圈的金句」「正文加一段保养方法」「补充与 Wedgwood 的对比」。也可以直接说「整体重写得更详细」。`,
+  content: `已载入「${name}」当前内容，告诉我想怎么改即可，例如：「金句换一个更出圈的」「正文加一段保养方法」「补充与 Wedgwood 的对比」。也可以直接说「整体重写得更详细」。`,
 });
 
 function itemToDraft(it: ExistingItem): Draft {
@@ -278,13 +278,13 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             <div className="border-t p-3 space-y-2">
               {!!draft.name && !thinking && (
                 <div className="flex flex-wrap gap-1.5">
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('请把正文 body 再扩充一倍，加入更多年份、人名和具体价位行情。')}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('请把正文再扩充一倍，加入更多年份、人名和具体价位行情。')}>
                     再深入一点
                   </Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('请补充更多易混对比 comparisons，至少 3 条。')}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('请补充更多易混对比，至少 3 条。')}>
                     补充对比
                   </Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('one_liner 再换一个更出圈的类比金句。')}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('再换一个更出圈的类比金句。')}>
                     换金句
                   </Button>
                 </div>
