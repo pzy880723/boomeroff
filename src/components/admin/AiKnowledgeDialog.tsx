@@ -74,7 +74,7 @@ const HELLO_NEW: ChatMsg = {
 };
 const HELLO_EDIT = (name: string): ChatMsg => ({
   role: 'assistant',
-  content: `已载入「${name}」当前内容，告诉我想怎么改即可，例如：「one_liner 换一个更出圈的金句」「正文加一段保养方法」「补充与 Wedgwood 的对比」。也可以直接说「整体重写得更详细」。`,
+  content: `已载入「${name}」当前内容，告诉我想怎么改即可，例如：「金句换一个更出圈的」「正文加一段保养方法」「补充与 Wedgwood 的对比」。也可以直接说「整体重写得更详细」。`,
 });
 
 function itemToDraft(it: ExistingItem): Draft {
