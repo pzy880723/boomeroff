@@ -118,9 +118,14 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
                 </button>
               ))}
             </div>
-            <Button onClick={submit} disabled={picked == null} className="w-full">
-              {step + 1 < questions.length ? '下一题' : '提交'}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { onExit?.(); onOpenChange(false); }} className="shrink-0">
+                <LogOut className="w-4 h-4 mr-1.5" />退出
+              </Button>
+              <Button onClick={submit} disabled={picked == null} className="flex-1">
+                {step + 1 < questions.length ? '下一题' : '提交'}
+              </Button>
+            </div>
           </div>
         )}
 
