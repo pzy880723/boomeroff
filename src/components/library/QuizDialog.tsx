@@ -88,7 +88,7 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Sparkles className="w-4 h-4 text-primary" />
-            来测一测
+            {title || '来测一测'}
           </DialogTitle>
         </DialogHeader>
 
