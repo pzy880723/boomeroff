@@ -219,10 +219,40 @@ export default function OfficialDetail() {
             </div>
           )}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <Badge variant="secondary">{CATEGORY_LABELS[item.category]}</Badge>
-            {item.ip_name && <Badge variant="outline">{item.ip_name}</Badge>}
-            {item.era && <Badge variant="outline">{item.era}</Badge>}
-            {item.origin && <Badge variant="outline">{item.origin}</Badge>}
+            <Badge
+              variant="secondary"
+              className="cursor-pointer hover:bg-secondary/80"
+              onClick={() => navigate(`/library?cat=${encodeURIComponent(item.category)}`)}
+            >
+              {CATEGORY_LABELS[item.category]}
+            </Badge>
+            {item.ip_name && (
+              <Badge
+                variant="outline"
+                className="cursor-pointer hover:bg-accent"
+                onClick={() => navigate(`/library?cat=${encodeURIComponent(item.category)}&ip=${encodeURIComponent(item.ip_name!)}`)}
+              >
+                {item.ip_name}
+              </Badge>
+            )}
+            {item.era && (
+              <Badge
+                variant="outline"
+                className="cursor-pointer hover:bg-accent"
+                onClick={() => navigate(`/library?era=${encodeURIComponent(item.era!)}`)}
+              >
+                {item.era}
+              </Badge>
+            )}
+            {item.origin && (
+              <Badge
+                variant="outline"
+                className="cursor-pointer hover:bg-accent"
+                onClick={() => navigate(`/library?origin=${encodeURIComponent(item.origin!)}`)}
+              >
+                {item.origin}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" />{item.view_count}</span>
