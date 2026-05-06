@@ -1,42 +1,24 @@
-## 目标
+# 图片长按拖动排序
 
-保留默认折叠交互，只在排版上做克制的改进 —— 让标题和正文有清晰差异，章节有呼吸感，价格更显眼。**不引入卡片化、不加图标、不加导航。**
+把 `KnowledgeRichEditDialog` 里图片九宫格的「前移/后移」箭头按钮，改为**长按 ~250ms 后可拖动**重新排序，移动端友好。
 
-## 改动点（只改 OfficialDetail.tsx 那一段 prose 样式）
+## 实现方案
 
-### 1. 标题层级拉开
+- 使用 `@dnd-kit/core` + `@dnd-kit/sortable`（项目已用过则复用，没有则安装；轻量、对触摸支持好）。
+- 触摸传感器配置：`TouchSensor` 设置 `activationConstraint: { delay: 250, tolerance: 8 }`，实现「长按才触发拖动」，避免误触；`PointerSensor` 设置 `distance: 6` 给桌面端。
+- 拖动中：被拖卡片半透明 + 略微放大，其它卡片自动让位（dnd-kit 默认动画）。
+- 拖到首位自动成为主图（无需额外操作），保留右下角 ⭐ 按钮作为快捷设置。
+- 删除按钮 `pointer-events` 在拖动时禁用，防止冲突。
 
-- `h2`：`text-base font-semibold text-foreground`，左侧加 `border-l-2 border-primary/60 pl-2.5`，作为章节起点的视觉锚点
-- `h2` 上下间距加大：`mt-6 mb-2.5`，章节之间断开更明显
-- `h3`（如有）：`text-sm font-medium text-foreground`，去掉当前的"灰色 muted"样式（之前太弱看不出是标题）
+## UI 调整
 
-### 2. 正文更易读
-
-- 正文字号保持 `text-[15px]`，行高从 `leading-7` 提到 `leading-[1.85]`（中文长段更舒服）
-- 段落 `my-3` → `my-3.5`
-- 段落首行缩进**不加**（移动端长行缩进反而碎），改为段间距处理
-
-### 3. 价格自动加粗
-
-在渲染前用一次正则把价格金额包成 `**...**`：
-```ts
-body.replace(/(\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:元|人民币|日元|円|RMB)|\d+\s*-\s*\d+\s*元)/g, '**$1**')
-```
-然后让 `prose-strong` 用 `text-primary font-semibold`，价格立刻跳出来。
-
-### 4. 列表项小调整
-
-- `prose-ul` 圆点改成 `marker:text-primary/60`
-- `prose-li` 行高 `leading-[1.85]` 跟正文一致
-
-### 5. 折叠交互保留，只微调
-
-- 折叠高度从 `max-h-44`（176px）→ `max-h-52`（208px），多露出第一段一两行，让用户先尝到内容再决定要不要展开
-- 渐变蒙层颜色用 `from-card`（已经是了）保持不变
-- "展开/收起"按钮文案和位置不动
+- 移除每张图底部的 ←/→ 箭头按钮。
+- 卡片左下角加一个小 `GripVertical` 图标 + 「长按拖动」提示（仅在 >1 张图时显示一次于顶部说明文字里：`第一张为主图 · 长按可拖动排序`）。
+- 主图角标、删除按钮、设为主图按钮保持不变。
 
 ## 改动文件
 
-- 编辑：`src/pages/OfficialDetail.tsx` —— 只改 `深度阅读` 那个 `<Card>` 内的 className 和加一行价格预处理；保留折叠逻辑
+- `src/components/library/KnowledgeRichEditDialog.tsx`：图片网格替换为 `<DndContext><SortableContext>`，每张图抽成内部 `SortableImage` 组件。
+- 如未安装则 `bun add @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities`。
 
-不新建组件、不改其他页面、不动数据。
+不影响保存逻辑：`gallery` 顺序变化后 `gallery[0]` 仍作为 `cover_url`。
