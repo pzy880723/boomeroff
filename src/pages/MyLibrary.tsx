@@ -104,20 +104,49 @@ export default function MyLibrary() {
       if (r.passed_at) passedSet.add(`${r.item_kind}:${r.item_id}`);
     });
 
-    const fav: UnifiedItem[] = (favRes.data || []).map((f: any) => {
+    const favRows = favRes.data || [];
+    // 批量回查源表，避免 snapshot 陈旧（如官方知识改了主图）
+    const officialIds = favRows.filter((f: any) => f.source_type === 'official').map((f: any) => f.source_id).filter(Boolean);
+    const productIds = favRows.filter((f: any) => f.source_type === 'product').map((f: any) => f.source_id).filter(Boolean);
+    const [officialFresh, productFresh] = await Promise.all([
+      officialIds.length
+        ? supabase.from('official_knowledge').select('id, name, category, cover_url, summary').in('id', officialIds)
+        : Promise.resolve({ data: [] as any[] }),
+      productIds.length
+        ? supabase.from('products').select('id, name, category, image_url, description').in('id', productIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const officialMap = new Map<string, any>();
+    (officialFresh.data || []).forEach((r: any) => officialMap.set(r.id, r));
+    const productMap = new Map<string, any>();
+    (productFresh.data || []).forEach((r: any) => productMap.set(r.id, r));
+
+    const fav: UnifiedItem[] = favRows.map((f: any) => {
       const snap = f.snapshot || {};
-      const cover = isUsableImage(snap.cover_url) ? snap.cover_url
+      const fresh = f.source_type === 'official'
+        ? officialMap.get(f.source_id)
+        : f.source_type === 'product' ? productMap.get(f.source_id) : null;
+      const freshCover = fresh
+        ? (f.source_type === 'official' ? fresh.cover_url : fresh.image_url)
+        : null;
+      const cover = isUsableImage(freshCover) ? freshCover
+        : isUsableImage(snap.cover_url) ? snap.cover_url
         : isUsableImage(snap.image_url) ? snap.image_url : null;
+      const freshName = fresh ? fresh.name : null;
+      const freshCategory = fresh ? fresh.category : null;
+      const freshSummary = fresh
+        ? (f.source_type === 'official' ? fresh.summary : fresh.description)
+        : null;
       return {
         key: `f:${f.id}`,
         kind: 'favorite',
         favorite_id: f.id,
         source_type: f.source_type,
         source_id: f.source_id,
-        category: (snap.category || 'other') as ProductCategory,
-        name: snap.name || '未命名',
+        category: (freshCategory || snap.category || 'other') as ProductCategory,
+        name: freshName || snap.name || '未命名',
         cover_url: cover,
-        summary: snap.summary || null,
+        summary: freshSummary || snap.summary || null,
         created_at: f.created_at,
         passed: passedSet.has(`favorite:${f.id}`),
       };
@@ -146,6 +175,9 @@ export default function MyLibrary() {
   useEffect(() => {
     if (!user) return;
     loadAll();
+    const onVis = () => { if (document.visibilityState === 'visible') loadAll(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
