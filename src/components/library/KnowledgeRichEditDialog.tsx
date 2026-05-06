@@ -186,49 +186,33 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
             <div className="flex items-center justify-between mb-1.5">
               <Label className="mb-0">
                 图片 {gallery.length > 0 && <span className="text-xs text-muted-foreground font-normal">({gallery.length})</span>}
-                <span className="ml-1 text-[10px] text-muted-foreground font-normal">第一张为主图</span>
+                <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                  第一张为主图{gallery.length > 1 ? ' · 长按拖动排序' : ''}
+                </span>
               </Label>
             </div>
 
             {gallery.length ? (
-              <div className="grid grid-cols-3 gap-2">
-                {gallery.map((u, i) => (
-                  <div key={u + i} className="relative rounded-md border overflow-hidden bg-muted aspect-square">
-                    <img src={u} alt="" className="w-full h-full object-cover" />
-                    {i === 0 && (
-                      <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium flex items-center gap-0.5">
-                        <Star className="w-2.5 h-2.5 fill-current" /> 主图
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeAt(i)}
-                      className="absolute top-1 right-1 bg-background/90 hover:bg-destructive hover:text-destructive-foreground rounded-full p-1 shadow-sm"
-                      title="删除"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                    <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
-                      <div className="flex gap-1">
-                        <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
-                          className="bg-background/90 disabled:opacity-30 rounded p-0.5" title="前移">
-                          <ArrowLeft className="w-3 h-3" />
-                        </button>
-                        <button type="button" onClick={() => move(i, 1)} disabled={i === gallery.length - 1}
-                          className="bg-background/90 disabled:opacity-30 rounded p-0.5" title="后移">
-                          <ArrowRight className="w-3 h-3" />
-                        </button>
-                      </div>
-                      {i !== 0 && (
-                        <button type="button" onClick={() => setCover(i)}
-                          className="bg-background/90 rounded p-0.5" title="设为主图">
-                          <Star className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext items={gallery} strategy={rectSortingStrategy}>
+                  <div className="grid grid-cols-3 gap-2">
+                    {gallery.map((u, i) => (
+                      <SortableImage
+                        key={u}
+                        url={u}
+                        index={i}
+                        isCover={i === 0}
+                        onRemove={() => removeAt(i)}
+                        onSetCover={() => setCover(i)}
+                      />
+                    ))}
                   </div>
-                ))}
-              </div>
+                </SortableContext>
+              </DndContext>
             ) : (
               <div className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-md">
                 {uploading ? '正在上传…' : (searching ? '正在联网搜索…' : '尚无图片，请上传或联网搜图')}
