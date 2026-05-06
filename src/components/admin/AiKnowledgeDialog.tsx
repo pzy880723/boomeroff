@@ -211,6 +211,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       setMessages((m) => [...m, { role: 'assistant', content: reply }]);
       setDraft(newDraft);
       const newPrompt = (data?.cover_prompt as string | undefined) || '';
+      const isFirstNameInCreate = !isEdit && !draft.name && !!newDraft.name;
       if (wantCover) {
         // 强制重画并落库（即使已有封面）
         const usePrompt = newPrompt || coverPrompt;
@@ -220,11 +221,16 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         } else {
           setMessages((m) => [...m, { role: 'assistant', content: '我没拿到新的封面描述，请再说一下您希望的外观（颜色/材质/形状）。' }]);
         }
-      } else if (newPrompt && newPrompt !== coverPrompt && !coverUrl) {
+      } else if (newPrompt && newPrompt !== coverPrompt && !coverUrl && !isFirstNameInCreate) {
         setCoverPrompt(newPrompt);
         void triggerCover(newPrompt);
       } else if (newPrompt && newPrompt !== coverPrompt) {
         setCoverPrompt(newPrompt);
+      }
+      // 新增模式：首次得到名称后，自动跑一键丰富全字段 + 主图，并在完成后弹出预览
+      if (isFirstNameInCreate) {
+        setMessages((m) => [...m, { role: 'assistant', content: '正在为您一键补全所有字段并生成主图…完成后会自动打开预览。' }]);
+        setTimeout(() => { void oneClickEnrich({ silent: true, openPreviewWhenDone: true }); }, 0);
       }
     } catch (e: any) {
       toast.error(e?.message ?? 'AI 调用失败');
