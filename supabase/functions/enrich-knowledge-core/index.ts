@@ -37,7 +37,7 @@ const TOOL = {
             summary: { type: "string", description: "1-2 句中性简介，60-100字。" },
             one_liner: {
               type: "string",
-              description: "★金句★ ≤30字，必须含类比，模仿『香兰社是日瓷界的爱马仕』。",
+              description: "★金句★ ≤30字中文，全部正向表达，禁止『便宜/廉价/劣质/二手感/过时/淘汰/小众冷门/不值/平替』等负面词；多用身份定位/时代符号/工艺亮点/场景画面/收藏价值，避免反复套用「XX 的劳斯莱斯/爱马仕」式类比。",
             },
             quick_facts: {
               type: "array", minItems: 5, maxItems: 5,
