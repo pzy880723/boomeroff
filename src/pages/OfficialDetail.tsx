@@ -283,33 +283,60 @@ export default function OfficialDetail() {
           </div>
         )}
 
-        {/* 正文 */}
-        {item.body && (
-          <Card className="p-4">
-            <h2 className="text-sm font-semibold mb-3 text-muted-foreground">深度阅读</h2>
-            <div className="prose prose-sm max-w-none dark:prose-invert leading-relaxed
-              prose-headings:font-semibold prose-p:my-2 prose-li:my-0.5">
-              <ReactMarkdown>{item.body}</ReactMarkdown>
-            </div>
-          </Card>
-        )}
-
-        {/* 卖点 */}
+        {/* 卖点（升级版：tag + 主句 + 展开） */}
         {points.length > 0 && (
           <div>
             <h2 className="text-sm font-semibold mb-2 text-muted-foreground">核心卖点</h2>
-            <ul className="space-y-2">
+            <ul className="space-y-2.5">
               {points.map((p, i) => (
-                <li key={i} className="flex gap-2 text-[15px]">
-                  <span className="text-primary mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                  <span className="leading-relaxed">
-                    {p.tag && <span className="mr-1.5 text-[10px] px-1.5 py-0.5 rounded bg-accent/30 text-accent-foreground">{p.tag}</span>}
-                    {p.text}
-                  </span>
+                <li key={i} className="rounded-lg border bg-muted/10 p-3">
+                  <div className="flex items-baseline gap-2">
+                    {p.tag && <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/40 text-accent-foreground shrink-0">{p.tag}</span>}
+                    <span className="text-[15px] font-medium leading-snug">{p.text}</span>
+                  </div>
+                  {p.detail && (
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{p.detail}</p>
+                  )}
                 </li>
               ))}
             </ul>
           </div>
+        )}
+
+        {/* 易混对比 */}
+        {comparisons.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold mb-2 text-muted-foreground">易混对比</h2>
+            <div className="space-y-1.5">
+              {comparisons.map((c, i) => (
+                <Card key={i} className="p-3 text-sm">
+                  <span className="font-semibold text-primary">vs {c.name}：</span>
+                  <span className="text-foreground/85 leading-relaxed">{c.diff}</span>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 正文（默认折叠） */}
+        {item.body && (
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-muted-foreground">深度阅读</h2>
+              <Button size="sm" variant="ghost" className="h-7 text-xs"
+                onClick={() => setShowFullBody((v) => !v)}>
+                {showFullBody ? '收起' : `展开完整学习 (${item.body.length} 字)`}
+              </Button>
+            </div>
+            <div className={`prose prose-sm max-w-none dark:prose-invert leading-relaxed
+              prose-headings:font-semibold prose-p:my-2 prose-li:my-0.5
+              ${showFullBody ? '' : 'max-h-40 overflow-hidden relative'}`}>
+              <ReactMarkdown>{item.body}</ReactMarkdown>
+              {!showFullBody && (
+                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+              )}
+            </div>
+          </Card>
         )}
 
         {/* 小贴士 */}
