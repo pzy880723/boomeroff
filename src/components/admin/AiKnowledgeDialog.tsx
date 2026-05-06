@@ -283,7 +283,6 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
 
   // 上传本地图片到图集
   const [uploading, setUploading] = useState(false);
-  const galleryFileRef = useRef<HTMLInputElement>(null);
   const uploadGalleryFiles = async (files: FileList | File[]) => {
     const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (!arr.length) return;
