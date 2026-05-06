@@ -70,6 +70,7 @@ export default function MyLibrary() {
   const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [taskExpanded, setTaskExpanded] = useState(false);
 
   const [active, setActive] = useState<UnifiedItem | null>(null);
   const [detail, setDetail] = useState<DetailData | null>(null);
