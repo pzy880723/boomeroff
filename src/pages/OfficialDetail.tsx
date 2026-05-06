@@ -32,6 +32,7 @@ interface Item {
   video_url: string | null;
   body: string | null;
   gallery: unknown;
+  content: any;
 }
 
 export default function OfficialDetail() {
