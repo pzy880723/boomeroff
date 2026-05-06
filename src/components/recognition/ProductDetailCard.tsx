@@ -184,9 +184,35 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
         <div className="h-1 bg-gradient-accent" />
         <CardContent className="pt-5 pb-4 space-y-3">
           <div className="space-y-2">
-            <h2 className="font-display text-2xl sm:text-[26px] leading-tight tracking-tight">
-              {result.name}
-            </h2>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-display text-2xl sm:text-[26px] leading-tight tracking-tight flex-1">
+                {result.name}
+              </h2>
+              <ShareMenu
+                data={{
+                  kind: 'recognition',
+                  name: result.name,
+                  category: CATEGORY_LABELS[result.category],
+                  era: result.era,
+                  origin: result.origin,
+                  coverUrl: imageUrl || null,
+                  pitch: pitch?.highlight || pitch?.story || description || null,
+                  summary: description,
+                  points: sellingPoints.map((p) => p.text).filter(Boolean),
+                  tips: [tips?.memory, tips?.objection].filter(Boolean).join(' / ') || null,
+                  recentPrice: priceText,
+                  link: shareLink || null,
+                }}
+                trigger={
+                  <button
+                    className="shrink-0 w-9 h-9 rounded-full bg-muted hover:bg-accent flex items-center justify-center"
+                    aria-label="分享"
+                  >
+                    <Share2 className="w-4 h-4" />
+                  </button>
+                }
+              />
+            </div>
             {result.era && (
               <div className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-accent/25 via-accent/10 to-transparent border border-accent/40 px-3.5 py-2.5 shadow-soft">
                 <span className="text-[10px] uppercase tracking-[0.2em] text-accent font-semibold shrink-0">年代</span>
