@@ -469,22 +469,33 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         toast.error(`长正文生成失败：${e?.message ?? ''}`);
       }
 
-      // ---- Step 3: cover (skip if already exists) ----
+      // ---- Step 3: cover — 优先联网真实图，AI 兜底 ----
       const newPrompt = (coreData.cover_prompt as string | undefined) || '';
-      if (!hasCover && newPrompt) {
+      const nameForSearch = (coreDraft.name || baseDraft.name || '').trim();
+      if (!hasCover) {
         setEnrichStage('cover');
         try {
-          const cd = await withRetry(async () => {
-            const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: newPrompt } });
-            if (error) throw error;
-            if (!data?.url) throw new Error('cover 返回为空');
-            return data;
-          }, 'cover');
-          setCoverUrl(cd.url);
-          setCoverPrompt(newPrompt);
-          if (editingItem) {
-            await supabase.from('official_knowledge').update({ cover_url: cd.url }).eq('id', editingItem.id);
-            onSaved();
+          let url: string | null = null;
+          if (nameForSearch) {
+            const found = await webSearchImages(nameForSearch, 'gallery', 1);
+            if (found.length) url = found[0];
+          }
+          if (!url && newPrompt) {
+            const cd = await withRetry(async () => {
+              const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: newPrompt } });
+              if (error) throw error;
+              if (!data?.url) throw new Error('cover 返回为空');
+              return data;
+            }, 'cover');
+            url = cd.url;
+          }
+          if (url) {
+            setCoverUrl(url);
+            if (newPrompt) setCoverPrompt(newPrompt);
+            if (editingItem) {
+              await supabase.from('official_knowledge').update({ cover_url: url }).eq('id', editingItem.id);
+              onSaved();
+            }
           }
           setEnrichProgress(92);
         } catch (e) {
@@ -492,12 +503,21 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         }
       }
 
-      // ---- Step 4: gallery (3 angles) — 仅当当前图集少于 3 张时补齐 ----
+      // ---- Step 4: gallery (优先真实图，AI 补齐) ----
       if (newPrompt && (gallery?.length || 0) < 3) {
         try {
           await generateGallery(newPrompt, { persist: !!editingItem });
         } catch (e) {
           console.warn('gallery failed', e);
+        }
+      }
+
+      // ---- Step 5: backstamp (底款图) — 所有商品都尝试 ----
+      if (!backstampUrl && nameForSearch) {
+        try {
+          await fetchBackstamp({ persist: !!editingItem });
+        } catch (e) {
+          console.warn('backstamp failed', e);
         }
       }
 
