@@ -61,6 +61,7 @@ interface ExistingItem {
   selling_points: unknown;
   content: any;
   gallery?: unknown;
+  backstamp_url?: string | null;
 }
 
 interface Props {
