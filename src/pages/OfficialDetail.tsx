@@ -149,10 +149,9 @@ export default function OfficialDetail() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div className="absolute top-3 right-3 flex items-start gap-2">
+        <div className="absolute top-3 right-3 flex gap-2">
           {isAdmin && (
             <>
-              <OneClickEnrichButton item={item} onSaved={load} />
               <button
                 onClick={() => setAiEditOpen(true)}
                 className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
