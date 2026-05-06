@@ -117,7 +117,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const [painting, setPainting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [enrichStage, setEnrichStage] = useState<'idle' | 'collect' | 'generate' | 'cover' | 'save' | 'done'>('idle');
+  const [enrichStage, setEnrichStage] = useState<'idle' | 'collect' | 'core' | 'body' | 'cover' | 'save' | 'done'>('idle');
   const [enrichProgress, setEnrichProgress] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
