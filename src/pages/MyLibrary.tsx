@@ -70,6 +70,7 @@ export default function MyLibrary() {
   const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [taskExpanded, setTaskExpanded] = useState(false);
 
   const [active, setActive] = useState<UnifiedItem | null>(null);
   const [detail, setDetail] = useState<DetailData | null>(null);
@@ -365,64 +366,62 @@ export default function MyLibrary() {
       <PageHeader title="个人知识库" subtitle="测试通过即归档为历史知识" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
 
-        {/* 顶部：今日测试任务 */}
+        {/* 顶部：今日测试任务（紧凑单行） */}
         <Card className="overflow-hidden border-border/60 bg-gradient-surface shadow-soft">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-gradient-accent flex items-center justify-center">
-                <Sparkles className="w-3.5 h-3.5 text-accent-foreground" />
-              </div>
-              <div className="font-display text-sm">今日测试任务</div>
+          <div
+            className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none"
+            onClick={() => setTaskExpanded((v) => !v)}
+          >
+            <div className="w-6 h-6 rounded-full bg-gradient-accent flex items-center justify-center shrink-0">
+              <Sparkles className="w-3 h-3 text-accent-foreground" />
             </div>
-            <Badge variant="outline" className="text-[10px] tabular-nums">
-              {passedCount} / {totalCount}
-            </Badge>
-          </div>
-          <div className="p-4 space-y-3">
-            {totalCount === 0 ? (
-              <p className="text-sm text-muted-foreground">先去收藏或自建一些知识吧</p>
-            ) : (
-              <>
-                <div className="flex items-end justify-between">
-                  <div className="text-xs text-muted-foreground">已掌握</div>
-                  <div className="text-2xl font-bold tabular-nums leading-none">
-                    {percent}<span className="text-sm text-muted-foreground ml-0.5">%</span>
-                  </div>
-                </div>
-                <Progress value={percent} className="h-2" />
-
-                {todayDone ? (
-                  <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 pt-1">
-                    <Trophy className="w-4 h-4" />
-                    全部知识已掌握，太棒了！
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="text-xs text-muted-foreground">
-                        今日推荐 {todayList.length} 条
-                      </div>
-                      <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={startTodayTask}>
-                        <GraduationCap className="w-3.5 h-3.5" />
-                        开始测试
-                      </Button>
-                    </div>
-                    <ul className="space-y-1">
-                      {todayList.map((it) => (
-                        <li
-                          key={it.key}
-                          className="text-xs text-foreground/80 flex items-center gap-1.5 truncate"
-                        >
-                          <span className="text-muted-foreground">·</span>
-                          <span className="truncate">{it.name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </>
+            <div className="font-display text-sm shrink-0">今日测试任务</div>
+            {totalCount > 0 && (
+              <Progress value={percent} className="h-1.5 w-16 sm:w-24 shrink-0" />
             )}
+            <Badge variant="outline" className="text-[10px] tabular-nums shrink-0">
+              {passedCount}/{totalCount}
+            </Badge>
+            <div className="flex-1" />
+            {totalCount === 0 ? (
+              <span className="text-[11px] text-muted-foreground">去收藏知识</span>
+            ) : todayDone ? (
+              <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+                <Trophy className="w-3.5 h-3.5" /> 已全部掌握
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                className="h-7 px-2.5 text-xs gap-1"
+                onClick={(e) => { e.stopPropagation(); startTodayTask(); }}
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                开始
+              </Button>
+            )}
+            <ChevronDown
+              className={`w-4 h-4 text-muted-foreground transition-transform ${taskExpanded ? 'rotate-180' : ''}`}
+            />
           </div>
+
+          {taskExpanded && totalCount > 0 && !todayDone && todayList.length > 0 && (
+            <div className="px-4 pb-3 pt-2 border-t border-border/40">
+              <div className="text-[11px] text-muted-foreground mb-1.5">
+                今日推荐 {todayList.length} 条
+              </div>
+              <ul className="space-y-1">
+                {todayList.map((it) => (
+                  <li
+                    key={it.key}
+                    className="text-xs text-foreground/80 flex items-center gap-1.5 truncate"
+                  >
+                    <span className="text-muted-foreground">·</span>
+                    <span className="truncate">{it.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Card>
 
         {/* 待测试 */}
