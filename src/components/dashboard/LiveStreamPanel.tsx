@@ -963,7 +963,7 @@ export function LiveStreamPanel() {
             </div>
 
             <div className="container py-4 space-y-4">
-              <ProductDetailCard result={displayResult} />
+              <ProductDetailCard result={displayResult} imageUrl={productImageUrl || capturedImage} />
 
               {/* 内联 AI 对话：有疑问/纠错都在这里 */}
               <InlineRefineChat

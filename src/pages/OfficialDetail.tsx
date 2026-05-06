@@ -19,6 +19,7 @@ import { KnowledgeRichEditDialog } from '@/components/library/KnowledgeRichEditD
 import { AiKnowledgeDialog } from '@/components/admin/AiKnowledgeDialog';
 import { KnowledgeChatPanel } from '@/components/library/KnowledgeChatPanel';
 import { normalizeTips } from '@/lib/script';
+import { ShareMenu } from '@/components/share/ShareMenu';
 
 interface Item {
   id: string;
@@ -183,6 +184,24 @@ export default function OfficialDetail() {
                 </button>
               </>
             )}
+            <ShareMenu
+              data={{
+                kind: 'official',
+                name: item.name,
+                category: CATEGORY_LABELS[item.category],
+                ip: item.ip_name,
+                era: item.era,
+                origin: item.origin,
+                coverUrl: item.cover_url,
+                summary: item.summary,
+                points: points.map((p) => p.text).filter(Boolean),
+                tips: (() => {
+                  const t = normalizeTips(item.tips);
+                  return [t?.memory, t?.objection].filter(Boolean).join(' / ') || null;
+                })(),
+                link: typeof window !== 'undefined' ? `${window.location.origin}/library/${item.id}` : null,
+              }}
+            />
             <button
               onClick={toggleFav}
               className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
