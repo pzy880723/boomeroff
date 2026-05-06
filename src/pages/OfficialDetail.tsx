@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { QuizDialog } from '@/components/library/QuizDialog';
 import { KnowledgeRichEditDialog } from '@/components/library/KnowledgeRichEditDialog';
+import { AiKnowledgeDialog } from '@/components/admin/AiKnowledgeDialog';
 
 interface Item {
   id: string;
