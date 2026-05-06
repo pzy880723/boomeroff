@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "仅管理员可用" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { messages = [], currentDraft = null, referenceImageUrl = null } = await req.json();
+    const { messages = [], currentDraft = null, referenceImageUrl = null, forceCover = false } = await req.json();
 
     const chatMessages: any[] = [
       { role: "system", content: SYSTEM },
@@ -196,6 +196,12 @@ Deno.serve(async (req) => {
       chatMessages.push({
         role: "system",
         content: `当前草稿（请在此基础上增量更新，未提及字段保持原值，body 等长文字段持续扩充）：\n${JSON.stringify(currentDraft, null, 2)}`,
+      });
+    }
+    if (forceCover) {
+      chatMessages.push({
+        role: "system",
+        content: "本轮用户希望更换主图/封面，你必须返回 cover_prompt（严格遵守封面铁律：纯外观英文描述，不出现任何品牌/IP/系列/角色/公司名，必须以 'on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo' 收尾）。同时 reply 字段告诉用户『正在为您重新生成主图…』。除非用户也提到，否则不要修改其他文本字段。",
       });
     }
     for (const m of messages) {

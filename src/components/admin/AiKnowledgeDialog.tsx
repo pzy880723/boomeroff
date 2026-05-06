@@ -75,7 +75,7 @@ const HELLO_NEW: ChatMsg = {
 };
 const HELLO_EDIT = (name: string): ChatMsg => ({
   role: 'assistant',
-  content: `已载入「${name}」当前内容，告诉我想怎么改即可，例如：「金句换一个更出圈的」「正文加一段保养方法」「补充与 Wedgwood 的对比」。也可以直接说「整体重写得更详细」。`,
+  content: `已载入「${name}」当前内容，告诉我想怎么改即可，例如：「金句换一个更出圈的」「正文加一段保养方法」「补充与 Wedgwood 的对比」「主图换成更有代表性的一张」。也可以直接说「整体重写得更详细」。`,
 });
 
 function itemToDraft(it: ExistingItem): Draft {
@@ -155,29 +155,45 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     e.target.value = '';
   };
 
-  const triggerCover = async (prompt: string) => {
+  const triggerCover = async (prompt: string, opts: { persist?: boolean } = {}) => {
     if (!prompt) return;
     setPainting(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
       if (error) throw error;
-      if (data?.url) setCoverUrl(data.url);
+      if (data?.url) {
+        setCoverUrl(data.url);
+        if (opts.persist && editingItem) {
+          await supabase.from('official_knowledge').update({ cover_url: data.url }).eq('id', editingItem.id);
+          onSaved();
+        }
+        if (opts.persist) {
+          setMessages((m) => [...m, { role: 'assistant', content: '✅ 已为您更新主图，可在右侧预览。' }]);
+        }
+      }
     } catch (e: any) {
       toast.error('封面生成失败：' + (e?.message ?? ''));
+      if (opts.persist) {
+        setMessages((m) => [...m, { role: 'assistant', content: '主图生成失败，请再说一次想要的风格，我重试。' }]);
+      }
     } finally {
       setPainting(false);
     }
   };
+
+  const wantsCoverRedraw = (text: string) =>
+    /(主图|封面|换图|换张图|换一张|重画|重新生成|重新画|重新找|找[一张]*图|cover)/i.test(text);
 
   const send = async () => {
     const text = input.trim();
     if (!text && !pendingImage) return;
     const userMsg: ChatMsg = { role: 'user', content: text || '请基于参考图整理。', imageUrl: pendingImage ?? undefined };
     const next = [...messages, userMsg];
+    const wantCover = wantsCoverRedraw(text);
     setMessages(next); setInput(''); setPendingImage(null); setThinking(true);
     const callOnce = async () => {
       const { data, error } = await supabase.functions.invoke('generate-official-knowledge', {
-        body: { messages: next.filter((m) => m.role === 'user'), currentDraft: draft },
+        body: { messages: next.filter((m) => m.role === 'user'), currentDraft: draft, forceCover: wantCover },
       });
       if (error) throw error;
       return data;
@@ -194,9 +210,17 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       const newDraft: Draft = { ...draft, ...(data?.draft || {}) };
       setMessages((m) => [...m, { role: 'assistant', content: reply }]);
       setDraft(newDraft);
-      const newPrompt = data?.cover_prompt as string | undefined;
-      // 只有当 AI 显式给了新 prompt 且与上次不同、且当前没有封面时才重画
-      if (newPrompt && newPrompt !== coverPrompt && !coverUrl) {
+      const newPrompt = (data?.cover_prompt as string | undefined) || '';
+      if (wantCover) {
+        // 强制重画并落库（即使已有封面）
+        const usePrompt = newPrompt || coverPrompt;
+        if (usePrompt) {
+          if (newPrompt) setCoverPrompt(newPrompt);
+          void triggerCover(usePrompt, { persist: true });
+        } else {
+          setMessages((m) => [...m, { role: 'assistant', content: '我没拿到新的封面描述，请再说一下您希望的外观（颜色/材质/形状）。' }]);
+        }
+      } else if (newPrompt && newPrompt !== coverPrompt && !coverUrl) {
         setCoverPrompt(newPrompt);
         void triggerCover(newPrompt);
       } else if (newPrompt && newPrompt !== coverPrompt) {
@@ -492,6 +516,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
                   </Button>
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('再换一个更出圈的类比金句。')}>
                     换金句
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('主图换一张更有代表性的，重点突出 ')}>
+                    换主图
                   </Button>
                 </div>
               )}
