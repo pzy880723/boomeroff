@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, RefreshCw, Sparkles, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Question {
@@ -22,9 +22,10 @@ interface Props {
   onPassed?: (score: number, total: number) => void;
   onAttempt?: (score: number, total: number, passed: boolean) => void;
   title?: string;
+  onExit?: () => void;
 }
 
-export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title }: Props) {
+export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title, onExit }: Props) {
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [step, setStep] = useState(0);
@@ -117,9 +118,14 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
                 </button>
               ))}
             </div>
-            <Button onClick={submit} disabled={picked == null} className="w-full">
-              {step + 1 < questions.length ? '下一题' : '提交'}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { onExit?.(); onOpenChange(false); }} className="shrink-0">
+                <LogOut className="w-4 h-4 mr-1.5" />退出
+              </Button>
+              <Button onClick={submit} disabled={picked == null} className="flex-1">
+                {step + 1 < questions.length ? '下一题' : '提交'}
+              </Button>
+            </div>
           </div>
         )}
 
@@ -153,6 +159,9 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
               })}
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { onExit?.(); onOpenChange(false); }} className="flex-1">
+                <LogOut className="w-4 h-4 mr-1.5" /> 结束测试
+              </Button>
               <Button variant="outline" onClick={reset} className="flex-1">
                 <RefreshCw className="w-4 h-4 mr-1.5" /> 再考一次
               </Button>

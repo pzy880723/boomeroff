@@ -652,6 +652,7 @@ export default function MyLibrary() {
           title={taskMode ? `今日任务 ${taskIdx + 1}/${taskQueue.length} · ${quizItem.name}` : quizItem.name}
           onPassed={(s, t) => handlePassed(quizItem, s, t)}
           onAttempt={(s, t, p) => handleAttempt(quizItem, s, t, p)}
+          onExit={() => { setTaskMode(false); setTaskQueue([]); setTaskIdx(0); setQuizItem(null); }}
         />
       )}
     </>
