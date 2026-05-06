@@ -35,7 +35,7 @@ interface Draft {
   tips?: string;
   body?: string;
   importance_score?: number;
-}
+  gallery?: string[];
 
 const VALID_CATEGORIES: ProductCategory[] = [
   'jp_porcelain','eu_porcelain','incense','antique_art','local_craft',
