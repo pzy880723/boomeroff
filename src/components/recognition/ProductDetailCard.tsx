@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Copy, Check, Volume2, VolumeX, Sparkles, Lightbulb, Info, Quote, History, Coins } from 'lucide-react';
+import { Copy, Check, Volume2, VolumeX, Sparkles, Lightbulb, Info, Quote, History, Coins, Share2 } from 'lucide-react';
 import { RecognitionResult, CATEGORY_LABELS } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useSpeech } from '@/hooks/useSpeech';
@@ -13,6 +13,7 @@ import {
   buildSpeakText,
   SELLING_TAG_STYLE,
 } from '@/lib/script';
+import { ShareMenu } from '@/components/share/ShareMenu';
 
 interface ProductDetailCardProps {
   result: Pick<
@@ -38,6 +39,8 @@ interface ProductDetailCardProps {
     | 'enriched'
     | 'isEnriching'
   >;
+  imageUrl?: string | null;
+  shareLink?: string | null;
 }
 
 // 把 pipeline 元数据翻译成一个店员看得懂的小徽章
