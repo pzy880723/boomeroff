@@ -13,6 +13,7 @@ import {
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
 import { Loader2, Upload, Globe, ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { WebImagePickerDialog } from './WebImagePickerDialog';
 
 interface Item {
   id: string;
