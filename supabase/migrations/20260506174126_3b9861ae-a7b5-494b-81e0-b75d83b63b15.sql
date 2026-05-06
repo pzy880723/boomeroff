@@ -1,0 +1,1 @@
+ALTER TABLE public.official_knowledge ADD COLUMN IF NOT EXISTS backstamp_url text;

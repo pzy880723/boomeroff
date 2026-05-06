@@ -61,6 +61,7 @@ interface ExistingItem {
   selling_points: unknown;
   content: any;
   gallery?: unknown;
+  backstamp_url?: string | null;
 }
 
 interface Props {
@@ -117,6 +118,8 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [gallery, setGallery] = useState<string[]>([]);
   const [galleryBusy, setGalleryBusy] = useState(false);
+  const [backstampUrl, setBackstampUrl] = useState<string | null>(null);
+  const [backstampBusy, setBackstampBusy] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [painting, setPainting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -136,11 +139,13 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         setCoverUrl(editingItem.cover_url || null);
         const g = (editingItem as any).gallery;
         setGallery(Array.isArray(g) ? (g as string[]).filter(Boolean) : []);
+        setBackstampUrl((editingItem as any).backstamp_url || null);
       } else {
         setMessages([HELLO_NEW]);
         setDraft({});
         setCoverUrl(null);
         setGallery([]);
+        setBackstampUrl(null);
       }
       setInput(''); setPendingImage(null); setCoverPrompt('');
       setThinking(false); setPainting(false); setSaving(false);
@@ -162,16 +167,40 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     e.target.value = '';
   };
 
-  const triggerCover = async (prompt: string, opts: { persist?: boolean } = {}) => {
+  // 联网搜索真实图（Firecrawl），失败返回空数组
+  const webSearchImages = async (query: string, intent: 'gallery' | 'backstamp', limit: number): Promise<string[]> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('web-search-images', {
+        body: { query, intent, limit, mirror: true, pathPrefix: intent === 'backstamp' ? 'web-backstamp' : 'web-gallery' },
+      });
+      if (error) throw error;
+      const imgs = (data?.images || []) as Array<{ url: string }>;
+      return imgs.map((i) => i.url).filter(Boolean);
+    } catch (e) {
+      console.warn('[web-search-images] failed', e);
+      return [];
+    }
+  };
+
+  const triggerCover = async (prompt: string, opts: { persist?: boolean; preferWeb?: boolean } = {}) => {
     if (!prompt) return;
     setPainting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
-      if (error) throw error;
-      if (data?.url) {
-        setCoverUrl(data.url);
+      // 优先联网搜真实图
+      let url: string | null = null;
+      if (opts.preferWeb !== false && draft.name) {
+        const found = await webSearchImages(draft.name, 'gallery', 1);
+        if (found.length) url = found[0];
+      }
+      if (!url) {
+        const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
+        if (error) throw error;
+        url = data?.url || null;
+      }
+      if (url) {
+        setCoverUrl(url);
         if (opts.persist && editingItem) {
-          await supabase.from('official_knowledge').update({ cover_url: data.url }).eq('id', editingItem.id);
+          await supabase.from('official_knowledge').update({ cover_url: url }).eq('id', editingItem.id);
           onSaved();
         }
         if (opts.persist) {
@@ -191,25 +220,34 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const generateGallery = async (basePrompt: string, opts: { persist?: boolean } = {}): Promise<string[]> => {
     if (!basePrompt) return [];
     setGalleryBusy(true);
-    const angles = [
-      `${basePrompt}, close-up detail shot of texture and craftsmanship`,
-      `${basePrompt}, side angle showing silhouette and proportions`,
-      `${basePrompt}, top-down flat lay arrangement`,
-    ];
     try {
-      const results = await Promise.all(
-        angles.map(async (p) => {
-          try {
-            const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: p } });
-            if (error) throw error;
-            return (data?.url as string) || null;
-          } catch (e) {
-            console.warn('[gallery] one angle failed', e);
-            return null;
-          }
-        }),
-      );
-      const urls = results.filter((u): u is string => !!u);
+      // 1) 优先联网搜真实图（最多 3 张）
+      const webUrls = draft.name ? await webSearchImages(draft.name, 'gallery', 3) : [];
+      let urls: string[] = [...webUrls];
+
+      // 2) 不足 3 张，AI 角度图补齐
+      const need = Math.max(0, 3 - urls.length);
+      if (need > 0) {
+        const angles = [
+          `${basePrompt}, close-up detail shot of texture and craftsmanship`,
+          `${basePrompt}, side angle showing silhouette and proportions`,
+          `${basePrompt}, top-down flat lay arrangement`,
+        ].slice(0, need);
+        const results = await Promise.all(
+          angles.map(async (p) => {
+            try {
+              const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: p } });
+              if (error) throw error;
+              return (data?.url as string) || null;
+            } catch (e) {
+              console.warn('[gallery] one angle failed', e);
+              return null;
+            }
+          }),
+        );
+        urls = urls.concat(results.filter((u): u is string => !!u));
+      }
+
       if (urls.length) {
         const merged = Array.from(new Set([...(gallery || []), ...urls]));
         setGallery(merged);
@@ -221,6 +259,25 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       return urls;
     } finally {
       setGalleryBusy(false);
+    }
+  };
+
+  const fetchBackstamp = async (opts: { persist?: boolean } = {}): Promise<string | null> => {
+    if (!draft.name) return null;
+    setBackstampBusy(true);
+    try {
+      const found = await webSearchImages(draft.name, 'backstamp', 1);
+      const url = found[0] || null;
+      if (url) {
+        setBackstampUrl(url);
+        if (opts.persist && editingItem) {
+          await supabase.from('official_knowledge').update({ backstamp_url: url } as any).eq('id', editingItem.id);
+          onSaved();
+        }
+      }
+      return url;
+    } finally {
+      setBackstampBusy(false);
     }
   };
 
@@ -412,22 +469,33 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         toast.error(`长正文生成失败：${e?.message ?? ''}`);
       }
 
-      // ---- Step 3: cover (skip if already exists) ----
+      // ---- Step 3: cover — 优先联网真实图，AI 兜底 ----
       const newPrompt = (coreData.cover_prompt as string | undefined) || '';
-      if (!hasCover && newPrompt) {
+      const nameForSearch = (coreDraft.name || baseDraft.name || '').trim();
+      if (!hasCover) {
         setEnrichStage('cover');
         try {
-          const cd = await withRetry(async () => {
-            const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: newPrompt } });
-            if (error) throw error;
-            if (!data?.url) throw new Error('cover 返回为空');
-            return data;
-          }, 'cover');
-          setCoverUrl(cd.url);
-          setCoverPrompt(newPrompt);
-          if (editingItem) {
-            await supabase.from('official_knowledge').update({ cover_url: cd.url }).eq('id', editingItem.id);
-            onSaved();
+          let url: string | null = null;
+          if (nameForSearch) {
+            const found = await webSearchImages(nameForSearch, 'gallery', 1);
+            if (found.length) url = found[0];
+          }
+          if (!url && newPrompt) {
+            const cd = await withRetry(async () => {
+              const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: newPrompt } });
+              if (error) throw error;
+              if (!data?.url) throw new Error('cover 返回为空');
+              return data;
+            }, 'cover');
+            url = cd.url;
+          }
+          if (url) {
+            setCoverUrl(url);
+            if (newPrompt) setCoverPrompt(newPrompt);
+            if (editingItem) {
+              await supabase.from('official_knowledge').update({ cover_url: url }).eq('id', editingItem.id);
+              onSaved();
+            }
           }
           setEnrichProgress(92);
         } catch (e) {
@@ -435,12 +503,21 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         }
       }
 
-      // ---- Step 4: gallery (3 angles) — 仅当当前图集少于 3 张时补齐 ----
+      // ---- Step 4: gallery (优先真实图，AI 补齐) ----
       if (newPrompt && (gallery?.length || 0) < 3) {
         try {
           await generateGallery(newPrompt, { persist: !!editingItem });
         } catch (e) {
           console.warn('gallery failed', e);
+        }
+      }
+
+      // ---- Step 5: backstamp (底款图) — 所有商品都尝试 ----
+      if (!backstampUrl && nameForSearch) {
+        try {
+          await fetchBackstamp({ persist: !!editingItem });
+        } catch (e) {
+          console.warn('backstamp failed', e);
         }
       }
 
@@ -526,6 +603,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         importance_score: Math.min(100, Math.max(0, Math.round(Number(draft.importance_score) || 0))),
         cover_url: coverUrl || null,
         gallery: gallery || [],
+        backstamp_url: backstampUrl || null,
         content: {
           one_liner: draft.one_liner || null,
           aliases: draft.aliases || [],
@@ -683,6 +761,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             gallery={gallery}
             galleryBusy={galleryBusy}
             onGenGallery={() => { void generateGallery(coverPrompt, { persist: !!editingItem }); }}
+            backstampUrl={backstampUrl}
+            backstampBusy={backstampBusy}
+            onFetchBackstamp={() => { void fetchBackstamp({ persist: !!editingItem }); }}
             onExpand={() => setPreviewOpen(true)}
           />
         </div>
@@ -716,6 +797,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
               gallery={gallery}
               galleryBusy={galleryBusy}
               onGenGallery={() => { void generateGallery(coverPrompt, { persist: !!editingItem }); }}
+              backstampUrl={backstampUrl}
+              backstampBusy={backstampBusy}
+              onFetchBackstamp={() => { void fetchBackstamp({ persist: !!editingItem }); }}
               large
             />
           </div>
@@ -742,6 +826,9 @@ interface PreviewProps {
   gallery?: string[];
   galleryBusy?: boolean;
   onGenGallery?: () => void;
+  backstampUrl?: string | null;
+  backstampBusy?: boolean;
+  onFetchBackstamp?: () => void;
   large?: boolean;
 }
 
@@ -759,7 +846,7 @@ function PreviewPane(props: PreviewProps & { onExpand: () => void }) {
   );
 }
 
-function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large, gallery, galleryBusy, onGenGallery }: PreviewProps) {
+function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large, gallery, galleryBusy, onGenGallery, backstampUrl, backstampBusy, onFetchBackstamp }: PreviewProps) {
   const t = large
     ? { name: 'text-2xl', section: 'text-sm', body: 'text-base', tag: 'text-xs', mini: 'text-xs', card: 'p-5 space-y-5', wrap: 'p-4' }
     : { name: 'text-base', section: 'text-xs', body: 'text-sm', tag: 'text-[10px]', mini: 'text-xs', card: 'p-4 space-y-3', wrap: '' };
@@ -831,6 +918,24 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCo
               </div>
             ) : (
               <div className={`${t.mini} text-muted-foreground`}>{galleryBusy ? '正在生成图集…' : '尚无图集，可点击右上角生成'}</div>
+            )}
+          </div>
+
+          {/* 底款图 */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className={`${t.section} text-muted-foreground`}>底款 / 背面</div>
+              {onFetchBackstamp && (
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onFetchBackstamp} disabled={backstampBusy || !draft.name}>
+                  {backstampBusy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                  {backstampUrl ? '重新搜底款' : '联网搜底款'}
+                </Button>
+              )}
+            </div>
+            {backstampUrl ? (
+              <img src={backstampUrl} alt="底款" className={`${large ? 'w-32 h-32' : 'w-24 h-24'} rounded-md object-cover border`} />
+            ) : (
+              <div className={`${t.mini} text-muted-foreground`}>{backstampBusy ? '正在联网搜索底款…' : '暂无底款图'}</div>
             )}
           </div>
 

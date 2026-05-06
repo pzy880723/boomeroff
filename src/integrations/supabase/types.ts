@@ -283,6 +283,7 @@ export type Database = {
       }
       official_knowledge: {
         Row: {
+          backstamp_url: string | null
           body: string | null
           category: Database["public"]["Enums"]["product_category"]
           content: Json
@@ -306,6 +307,7 @@ export type Database = {
           view_count: number
         }
         Insert: {
+          backstamp_url?: string | null
           body?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           content?: Json
@@ -329,6 +331,7 @@ export type Database = {
           view_count?: number
         }
         Update: {
+          backstamp_url?: string | null
           body?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           content?: Json
