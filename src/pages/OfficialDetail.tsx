@@ -154,7 +154,7 @@ export default function OfficialDetail() {
             scrolled ? 'opacity-100' : 'opacity-0'
           }`}
         />
-        <div className="container mx-auto max-w-screen-md flex items-center justify-between px-3 py-2">
+        <div className="relative container mx-auto max-w-screen-md flex items-center justify-between px-3 py-2">
           <button
             onClick={() => navigate('/library')}
             className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
