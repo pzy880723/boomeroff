@@ -562,6 +562,18 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('主图换一张更有代表性的，重点突出 ')}>
                     换主图
                   </Button>
+                  {!isEdit && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1"
+                      onClick={writeBodyOnly}
+                      disabled={savingStage === 'body'}
+                    >
+                      {savingStage === 'body' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                      {draft.body ? '重写深度阅读' : '补写深度阅读'}
+                    </Button>
+                  )}
                 </div>
               )}
               {pendingImage && (
