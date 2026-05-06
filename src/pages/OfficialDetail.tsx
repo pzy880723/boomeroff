@@ -195,7 +195,10 @@ export default function OfficialDetail() {
                 coverUrl: item.cover_url,
                 summary: item.summary,
                 points: points.map((p) => p.text).filter(Boolean),
-                tips: normalizeTips(item.tips),
+                tips: (() => {
+                  const t = normalizeTips(item.tips);
+                  return [t?.memory, t?.objection].filter(Boolean).join(' / ') || null;
+                })(),
                 link: typeof window !== 'undefined' ? `${window.location.origin}/library/${item.id}` : null,
               }}
             />
