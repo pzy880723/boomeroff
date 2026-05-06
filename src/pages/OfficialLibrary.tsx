@@ -123,7 +123,7 @@ export default function OfficialLibrary() {
         .eq('source_type', 'official');
       setFavoritedIds(new Set((fav || []).map((f) => f.source_id)));
     })();
-  }, [user, cat, sub, keyword, sort]);
+  }, [user, cat, sub, keyword, sort, reloadKey]);
 
   const toggleFav = async (item: OfficialItem) => {
     if (!user) return;
