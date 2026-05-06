@@ -175,6 +175,9 @@ export default function MyLibrary() {
   useEffect(() => {
     if (!user) return;
     loadAll();
+    const onVis = () => { if (document.visibilityState === 'visible') loadAll(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
