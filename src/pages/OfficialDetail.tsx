@@ -150,13 +150,23 @@ export default function OfficialDetail() {
         </button>
         <div className="absolute top-3 right-3 flex gap-2">
           {isAdmin && (
-            <button
-              onClick={() => setEditOpen(true)}
-              className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
-              aria-label="编辑"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
+            <>
+              <button
+                onClick={() => setAiEditOpen(true)}
+                className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+                aria-label="AI 修改"
+                title="AI 修改"
+              >
+                <Wand2 className="w-4 h-4 text-primary" />
+              </button>
+              <button
+                onClick={() => setEditOpen(true)}
+                className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+                aria-label="编辑"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </>
           )}
           <button
             onClick={toggleFav}
