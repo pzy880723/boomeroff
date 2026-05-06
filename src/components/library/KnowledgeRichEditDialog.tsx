@@ -45,6 +45,7 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
   const [gallery, setGallery] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
