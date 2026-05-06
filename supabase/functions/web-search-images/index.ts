@@ -301,3 +301,10 @@ Deno.serve(async (req) => {
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  } catch (e) {
+    console.error(e);
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "未知错误", images: [] }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
