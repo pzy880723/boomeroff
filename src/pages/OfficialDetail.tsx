@@ -411,15 +411,15 @@ export default function OfficialDetail() {
               <span className="text-xs text-muted-foreground/70">· {item.body.length} 字</span>
             </div>
             <div
-              className={`prose prose-sm max-w-none dark:prose-invert text-[15px] leading-7 text-foreground/90
+              className={`prose prose-sm max-w-none dark:prose-invert text-[15px] leading-[1.85] text-foreground/90
                 prose-headings:font-semibold prose-headings:text-foreground
-                prose-h1:text-lg prose-h1:mt-5 prose-h1:mb-2 prose-h1:pb-1.5 prose-h1:border-b prose-h1:border-border
-                prose-h2:text-base prose-h2:mt-5 prose-h2:mb-2
-                prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-1.5 prose-h3:text-muted-foreground prose-h3:tracking-wide
-                prose-p:my-3 prose-p:leading-7
+                prose-h1:text-lg prose-h1:mt-6 prose-h1:mb-2.5 prose-h1:pb-1.5 prose-h1:border-b prose-h1:border-border
+                prose-h2:text-base prose-h2:mt-6 prose-h2:mb-2.5 prose-h2:pl-2.5 prose-h2:border-l-2 prose-h2:border-primary/60
+                prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-1.5 prose-h3:font-medium prose-h3:text-foreground
+                prose-p:my-3.5 prose-p:leading-[1.85]
                 prose-ul:my-3 prose-ul:pl-5 prose-ol:my-3 prose-ol:pl-5
-                prose-li:my-1 prose-li:leading-7
-                prose-strong:text-foreground prose-strong:font-semibold
+                prose-li:my-1 prose-li:leading-[1.85] marker:text-primary/60
+                prose-strong:text-primary prose-strong:font-semibold
                 prose-a:text-primary prose-a:underline-offset-2
                 prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:bg-muted/40
                 prose-blockquote:py-1 prose-blockquote:px-3 prose-blockquote:not-italic
@@ -428,9 +428,14 @@ export default function OfficialDetail() {
                 prose-code:before:content-none prose-code:after:content-none
                 prose-hr:my-6 prose-hr:border-border
                 prose-img:rounded-lg prose-img:my-4
-                ${showFullBody ? '' : 'max-h-44 overflow-hidden relative'}`}
+                ${showFullBody ? '' : 'max-h-52 overflow-hidden relative'}`}
             >
-              <ReactMarkdown>{item.body}</ReactMarkdown>
+              <ReactMarkdown>
+                {item.body.replace(
+                  /(\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:元|人民币|日元|円|RMB)|\d+\s*[-~至]\s*\d+\s*元)/g,
+                  '**$1**',
+                )}
+              </ReactMarkdown>
               {!showFullBody && (
                 <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-card to-transparent pointer-events-none" />
               )}
