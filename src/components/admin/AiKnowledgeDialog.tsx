@@ -167,7 +167,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
           comparisons: draft.comparisons || [],
         },
       };
-      const { error } = await supabase.from('official_knowledge').insert(payload);
+      const { error } = await supabase.from('official_knowledge').insert([payload as any]);
       if (error) throw error;
       toast.success('已保存到官方知识');
       onSaved();
