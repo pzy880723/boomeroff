@@ -17,6 +17,7 @@ import ReactMarkdown from 'react-markdown';
 import { QuizDialog } from '@/components/library/QuizDialog';
 import { KnowledgeRichEditDialog } from '@/components/library/KnowledgeRichEditDialog';
 import { AiKnowledgeDialog } from '@/components/admin/AiKnowledgeDialog';
+import { normalizeTips } from '@/lib/script';
 
 interface Item {
   id: string;
@@ -352,12 +353,22 @@ export default function OfficialDetail() {
         )}
 
         {/* 小贴士 */}
-        {item.tips && (
-          <Card className="p-4 bg-accent/30 border-accent">
-            <div className="text-xs font-semibold text-accent-foreground mb-1">店员小贴士</div>
-            <p className="text-sm leading-relaxed">{item.tips}</p>
-          </Card>
-        )}
+        {item.tips && (() => {
+          const t = normalizeTips(item.tips);
+          return (
+            <Card className="p-4 bg-accent/30 border-accent">
+              <div className="text-xs font-semibold text-accent-foreground mb-2">店员小贴士</div>
+              {t && (t.memory || t.objection) ? (
+                <div className="space-y-1.5 text-sm leading-relaxed">
+                  {t.memory && <div><span className="font-medium text-accent-foreground/80">记忆点：</span>{t.memory}</div>}
+                  {t.objection && <div><span className="font-medium text-accent-foreground/80">应对疑问：</span>{t.objection}</div>}
+                </div>
+              ) : (
+                <p className="text-sm leading-relaxed">{item.tips}</p>
+              )}
+            </Card>
+          );
+        })()}
 
         {(!item.body && points.length === 0 && !item.summary) && (
           <div className="text-center text-muted-foreground text-sm py-8">
