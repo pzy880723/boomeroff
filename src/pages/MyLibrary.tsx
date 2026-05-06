@@ -64,6 +64,25 @@ const isUsableImage = (url?: string | null) => {
 };
 
 const TODAY_LIMIT = 5;
+const TASK_PROGRESS_KEY = 'today-task-progress';
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const readAttempted = (): string[] => {
+  try {
+    const raw = localStorage.getItem(TASK_PROGRESS_KEY);
+    if (!raw) return [];
+    const obj = JSON.parse(raw);
+    if (obj?.date !== todayStr()) return [];
+    return Array.isArray(obj.attemptedKeys) ? obj.attemptedKeys : [];
+  } catch { return []; }
+};
+const writeAttempted = (keys: string[]) => {
+  try {
+    localStorage.setItem(TASK_PROGRESS_KEY, JSON.stringify({ date: todayStr(), attemptedKeys: Array.from(new Set(keys)) }));
+  } catch { /* ignore */ }
+};
 
 export default function MyLibrary() {
   const { user, loading: authLoading } = useAuth();
@@ -82,6 +101,16 @@ export default function MyLibrary() {
   const [taskMode, setTaskMode] = useState(false);
   const [taskQueue, setTaskQueue] = useState<UnifiedItem[]>([]);
   const [taskIdx, setTaskIdx] = useState(0);
+  const [attemptedToday, setAttemptedToday] = useState<string[]>(() => readAttempted());
+
+  // 跨日清理
+  useEffect(() => {
+    const id = setInterval(() => {
+      const fresh = readAttempted();
+      setAttemptedToday((prev) => (prev.length === fresh.length ? prev : fresh));
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const loadAll = async () => {
     if (!user) return;
@@ -193,7 +222,11 @@ export default function MyLibrary() {
       (a.created_at || '').localeCompare(b.created_at || '')).slice(0, TODAY_LIMIT),
     [pending],
   );
-  const todayDone = todayList.length === 0 && totalCount > 0;
+  const remainingToday = useMemo(
+    () => todayList.filter((it) => !attemptedToday.includes(it.key)),
+    [todayList, attemptedToday],
+  );
+  const todayDone = (todayList.length === 0 || remainingToday.length === 0) && totalCount > 0;
 
   const groupByCategory = (list: UnifiedItem[]) => {
     const map = new Map<ProductCategory, UnifiedItem[]>();
@@ -294,11 +327,24 @@ export default function MyLibrary() {
   };
 
   const startTodayTask = () => {
-    if (todayList.length === 0) return;
-    setTaskQueue(todayList);
+    const queue = remainingToday;
+    if (queue.length === 0) {
+      toast.success('今日任务已完成 🎉');
+      return;
+    }
+    setTaskQueue(queue);
     setTaskIdx(0);
     setTaskMode(true);
-    setQuizItem(todayList[0]);
+    setQuizItem(queue[0]);
+  };
+
+  const markAttempted = (it: UnifiedItem) => {
+    setAttemptedToday((prev) => {
+      if (prev.includes(it.key)) return prev;
+      const next = [...prev, it.key];
+      writeAttempted(next);
+      return next;
+    });
   };
 
   const handlePassed = async (it: UnifiedItem, score: number, total: number) => {
@@ -314,11 +360,14 @@ export default function MyLibrary() {
       last_attempt_at: new Date().toISOString(),
     }, { onConflict: 'user_id,item_kind,item_id' });
     setItems((s) => s.map((x) => x.key === it.key ? { ...x, passed: true } : x));
+    markAttempted(it);
     toast.success('已掌握，归档到个人历史知识 🎉');
   };
 
   const handleAttempt = async (it: UnifiedItem, score: number, total: number, passed: boolean) => {
-    if (passed || !user) return;
+    if (!user) return;
+    markAttempted(it);
+    if (passed) return;
     await supabase.from('knowledge_test_results').upsert({
       user_id: user.id,
       item_kind: itemKindFor(it),
@@ -331,22 +380,24 @@ export default function MyLibrary() {
     }, { onConflict: 'user_id,item_kind,item_id' });
   };
 
+  const exitTask = () => {
+    setTaskMode(false);
+    setTaskQueue([]);
+    setTaskIdx(0);
+    setQuizItem(null);
+  };
+
   const handleQuizClose = (open: boolean) => {
     if (open) return;
-    if (taskMode) {
-      const next = taskIdx + 1;
-      if (next < taskQueue.length) {
-        setTaskIdx(next);
-        // 先关闭再重开，触发重新出题
-        setQuizItem(null);
-        setTimeout(() => setQuizItem(taskQueue[next]), 60);
-        return;
-      }
-      setTaskMode(false);
-      setTaskQueue([]);
-      setTaskIdx(0);
-    }
+    exitTask();
+  };
+
+  const goNextInTask = () => {
+    const next = taskIdx + 1;
+    if (next >= taskQueue.length) { exitTask(); return; }
+    setTaskIdx(next);
     setQuizItem(null);
+    setTimeout(() => setQuizItem(taskQueue[next]), 60);
   };
 
   if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
@@ -436,21 +487,24 @@ export default function MyLibrary() {
             />
           </div>
 
-          {taskExpanded && totalCount > 0 && !todayDone && todayList.length > 0 && (
+          {taskExpanded && totalCount > 0 && !todayDone && remainingToday.length > 0 && (
             <div className="px-4 pb-3 pt-2 border-t border-border/40">
               <div className="text-[11px] text-muted-foreground mb-1.5">
-                今日推荐 {todayList.length} 条
+                今日剩余 {remainingToday.length} / {todayList.length} 条
               </div>
               <ul className="space-y-1">
-                {todayList.map((it) => (
-                  <li
-                    key={it.key}
-                    className="text-xs text-foreground/80 flex items-center gap-1.5 truncate"
-                  >
-                    <span className="text-muted-foreground">·</span>
-                    <span className="truncate">{it.name}</span>
-                  </li>
-                ))}
+                {todayList.map((it) => {
+                  const done = attemptedToday.includes(it.key);
+                  return (
+                    <li
+                      key={it.key}
+                      className={`text-xs flex items-center gap-1.5 truncate ${done ? 'text-muted-foreground line-through' : 'text-foreground/80'}`}
+                    >
+                      <span className="text-muted-foreground">·</span>
+                      <span className="truncate">{it.name}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -652,7 +706,9 @@ export default function MyLibrary() {
           title={taskMode ? `今日任务 ${taskIdx + 1}/${taskQueue.length} · ${quizItem.name}` : quizItem.name}
           onPassed={(s, t) => handlePassed(quizItem, s, t)}
           onAttempt={(s, t, p) => handleAttempt(quizItem, s, t, p)}
-          onExit={() => { setTaskMode(false); setTaskQueue([]); setTaskIdx(0); setQuizItem(null); }}
+          onExit={exitTask}
+          hasNext={taskMode && taskIdx + 1 < taskQueue.length}
+          onNext={taskMode ? goNextInTask : undefined}
         />
       )}
     </>

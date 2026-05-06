@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Sparkles, LogOut, ChevronLeft } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, RefreshCw, Sparkles, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Question {
@@ -23,9 +23,11 @@ interface Props {
   onAttempt?: (score: number, total: number, passed: boolean) => void;
   title?: string;
   onExit?: () => void;
+  hasNext?: boolean;
+  onNext?: () => void;
 }
 
-export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title, onExit }: Props) {
+export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title, onExit, hasNext, onNext }: Props) {
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [step, setStep] = useState(0);
@@ -178,17 +180,35 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
                 );
               })}
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} className="flex-1">
-                <LogOut className="w-4 h-4 mr-1.5" /> 结束测试
-              </Button>
-              <Button variant="outline" onClick={reset} className="flex-1">
-                <RefreshCw className="w-4 h-4 mr-1.5" /> 再考一次
-              </Button>
-              {isAdmin && (
-                <Button variant="outline" onClick={() => load(true)} className="flex-1">
-                  <Sparkles className="w-4 h-4 mr-1.5" /> 换一套题
-                </Button>
+            <div className="flex flex-wrap gap-2">
+              {hasNext && onNext ? (
+                <>
+                  <Button variant="outline" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} className="flex-1">
+                    <LogOut className="w-4 h-4 mr-1.5" /> 结束今日任务
+                  </Button>
+                  {!passed && (
+                    <Button variant="outline" onClick={reset} className="flex-1">
+                      <RefreshCw className="w-4 h-4 mr-1.5" /> 再考一次
+                    </Button>
+                  )}
+                  <Button onClick={onNext} className="flex-1">
+                    下一个商品 <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} className="flex-1">
+                    <LogOut className="w-4 h-4 mr-1.5" /> 结束测试
+                  </Button>
+                  <Button variant="outline" onClick={reset} className="flex-1">
+                    <RefreshCw className="w-4 h-4 mr-1.5" /> 再考一次
+                  </Button>
+                  {isAdmin && (
+                    <Button variant="outline" onClick={() => load(true)} className="flex-1">
+                      <Sparkles className="w-4 h-4 mr-1.5" /> 换一套题
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>
