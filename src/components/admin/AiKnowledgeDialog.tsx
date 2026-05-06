@@ -172,7 +172,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     setMessages(next); setInput(''); setPendingImage(null); setThinking(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-official-knowledge', {
-        body: { messages: next.filter((m) => m.role !== 'assistant' || m !== HELLO), currentDraft: draft },
+        body: { messages: next.filter((m) => m.role === 'user'), currentDraft: draft },
       });
       if (error) throw error;
       const reply = (data?.reply as string) || '已更新草稿。';
