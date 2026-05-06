@@ -100,20 +100,20 @@ const TOOL = {
             body: {
               type: "string",
               description:
-                "Markdown 长文，至少 800 字，使用二级标题 (## ) 分段，必须包含：## 历史由来 / ## 工艺与材质 / ## 鉴别要点（落款·釉色·重量·包装）/ ## 价位行情 / ## 与同类对比 / ## 保养与禁忌。要有具体年份、人名、品牌名、价格区间，不准空话套话。",
+                "Markdown 长文。仅当用户本轮明确要求改写/扩充正文时才返回，且至少 800 字、使用二级标题 (## ) 分段（## 历史由来 / ## 工艺与材质 / ## 鉴别要点 / ## 价位行情 / ## 与同类对比 / ## 保养与禁忌）。若用户未提及正文则不要返回此字段。",
             },
             importance_score: { type: "number", description: "0-100 重要程度。" },
           },
-          required: ["name","category","one_liner","quick_facts","customer_pitches","selling_points","body"],
         },
         cover_prompt: {
           type: "string",
           description:
-            "一句英文 prompt，用来生成方形产品封面图。【硬性要求】：(1) 绝对不能出现任何品牌名、IP 名、角色名、设计师名、系列名、公司名、动漫/游戏名（中英日罗马字都不行，例如 Koransha / 香兰社 / Sonny Angel / Walkman / Meissen / Wedgwood / Pokemon / Hello Kitty 一律禁止）；(2) 只用通俗外观语言：物体类别 + 材质 + 颜色 + 形状/纹样 + 拍摄风格；(3) 必须包含 plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo。范例：『A small white porcelain coffee cup with hand-painted red flowers and gold rim, on plain white background, soft natural light, centered, photorealistic, no text』。",
+            "英文 prompt，方形产品封面。仅当用户要求重画封面、或当前没有封面、或外观相关字段发生变化时才返回；否则不要返回此字段。【硬性要求】：(1) 绝对不能出现任何品牌名、IP 名、角色名、设计师名、系列名、公司名、动漫/游戏名（中英日罗马字一律禁止）；(2) 只用通俗外观语言；(3) 必须以 'on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo' 收尾。",
         },
       },
-      required: ["reply", "draft", "cover_prompt"],
+      required: ["reply", "draft"],
     },
+
   },
 } as const;
 
