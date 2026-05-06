@@ -251,7 +251,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         <DialogHeader className="px-5 pt-5 pb-3 border-b">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Sparkles className="w-4 h-4 text-primary" />
-            AI 生成官方知识 · 店员学习卡
+            {isEdit ? `AI 修改官方知识 · ${editingItem?.name}` : 'AI 生成官方知识 · 店员学习卡'}
           </DialogTitle>
         </DialogHeader>
 
