@@ -396,12 +396,53 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     }
   };
 
+  const [savingStage, setSavingStage] = useState<'' | 'body' | 'save'>('');
+
+  const generateBody = async (): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('enrich-knowledge-body', {
+        body: { coreDraft: draft },
+      });
+      if (error) throw error;
+      if (!data?.body) throw new Error('body 返回为空');
+      return data.body as string;
+    } catch (e: any) {
+      console.warn('[auto-body] failed', e);
+      toast.warning('深度阅读自动补写失败，将先保存其他字段');
+      return null;
+    }
+  };
+
+  const writeBodyOnly = async () => {
+    if (!draft.name?.trim()) { toast.error('请先让 AI 生成有名称的草稿'); return; }
+    setSavingStage('body');
+    try {
+      const body = await generateBody();
+      if (body) {
+        setDraft((d) => ({ ...d, body }));
+        toast.success('深度阅读已补写，可在预览中查看');
+      }
+    } finally {
+      setSavingStage('');
+    }
+  };
+
   const save = async () => {
     if (!draft.name?.trim()) { toast.error('请先让 AI 生成有名称的草稿'); return; }
     const safeCategory: ProductCategory = (VALID_CATEGORIES as string[]).includes(draft.category as string)
       ? (draft.category as ProductCategory) : 'other';
     setSaving(true);
     try {
+      let bodyText = draft.body?.trim() || null;
+      if (!bodyText) {
+        setSavingStage('body');
+        const generated = await generateBody();
+        if (generated) {
+          bodyText = generated;
+          setDraft((d) => ({ ...d, body: generated }));
+        }
+      }
+      setSavingStage('save');
       const sellingPointsJson = (draft.selling_points || []).map((p) =>
         typeof p === 'string' ? { text: p } : p,
       );
@@ -414,7 +455,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         summary: draft.summary?.trim() || null,
         selling_points: sellingPointsJson,
         tips: draft.tips?.trim() || null,
-        body: draft.body?.trim() || null,
+        body: bodyText,
         importance_score: Math.min(100, Math.max(0, Math.round(Number(draft.importance_score) || 0))),
         cover_url: coverUrl || null,
         content: {
@@ -437,6 +478,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       toast.error('保存失败：' + (e?.message ?? ''));
     } finally {
       setSaving(false);
+      setSavingStage('');
     }
   };
 
@@ -520,6 +562,18 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('主图换一张更有代表性的，重点突出 ')}>
                     换主图
                   </Button>
+                  {!isEdit && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1"
+                      onClick={writeBodyOnly}
+                      disabled={savingStage === 'body'}
+                    >
+                      {savingStage === 'body' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                      {draft.body ? '重写深度阅读' : '补写深度阅读'}
+                    </Button>
+                  )}
                 </div>
               )}
               {pendingImage && (
@@ -569,7 +623,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
           <Button variant="outline" onClick={() => onOpenChange(false)} className="hidden md:inline-flex">取消</Button>
           <Button onClick={save} disabled={saving || !draft.name} className="flex-1 md:flex-none">
             {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-            {isEdit ? '保存修改' : '保存到官方知识'}
+            {savingStage === 'body' ? '正在补写深度阅读…' : (isEdit ? '保存修改' : '保存到官方知识')}
           </Button>
         </DialogFooter>
       </DialogContent>

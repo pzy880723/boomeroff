@@ -1,59 +1,42 @@
-## 目标
-重新设计 `OfficialDetail.tsx` 中的「深度阅读」卡片：让 Markdown 正文展开后排版更易读；将展开/收起按钮放到卡片下边缘正中央。
+## 问题定位
 
-## 改动文件
-仅 `src/pages/OfficialDetail.tsx`，第 393-412 行（深度阅读卡片）。
+数据库里 `香兰社 KORANSHA` 的 `body` 字段是 **NULL**，所以详情页的「深度阅读」卡片不出现。
 
-## 视觉设计
+**为什么会缺失：**
+- 普通对话生成走的是 `generate-official-knowledge` 这条边缘函数。它的 system prompt 里**明确写着「默认不要返回 body 长正文，除非用户明确说要改正文」**（index.ts 第 167 行）。
+- 这条规则是为了节省 token、加快多轮对话用的。
+- 而真正会写长正文的只有两个入口：
+  1. 编辑模式下的「✨ 一键丰富」按钮（依次调 core → body → cover）。
+  2. 用户在对话里**显式**说「写一段长正文 / 加深度阅读」，AI 才可能返回 body。
+- 香兰社这条只走了普通生成 + 保存，没有触发 body，所以保存到库里 body=NULL，详情页自然就没有「深度阅读」。
 
-### 折叠态
-```text
-┌──────────────────────────────┐
-│ 📖 深度阅读                   │
-│  长文正文预览（max-h ~ 9rem）│
-│  …渐隐遮罩…                   │
-├────────[ 展开 ▼ 1234字 ]──────┤  ← 居中骑边按钮
-└──────────────────────────────┘
-```
+## 方案
 
-### 展开态
-```text
-┌──────────────────────────────┐
-│ 📖 深度阅读                   │
-│                               │
-│  完整 Markdown 正文           │
-│  （优化排版：见下）            │
-│                               │
-├────────[ 收起 ▲ ]─────────────┤
-└──────────────────────────────┘
-```
+让"完整生成"必然产出 body，无需用户记得点二次按钮。两步改动，只动前端 `AiKnowledgeDialog.tsx`：
 
-## 排版优化（Tailwind prose 调整）
-- 容器：`px-5 py-5`，整体增加 `max-w-none` + 行高 `leading-7`，正文字号 `text-[15px]`。
-- 标题层级：
-  - `prose-h1:text-lg prose-h1:font-semibold prose-h1:mt-5 prose-h1:mb-2 prose-h1:pb-1.5 prose-h1:border-b prose-h1:border-border`
-  - `prose-h2:text-base prose-h2:font-semibold prose-h2:mt-5 prose-h2:mb-2 prose-h2:text-foreground`
-  - `prose-h3:text-sm prose-h3:font-semibold prose-h3:mt-4 prose-h3:mb-1.5 prose-h3:text-muted-foreground prose-h3:uppercase prose-h3:tracking-wide`
-- 段落间距：`prose-p:my-3 prose-p:leading-7`
-- 列表：`prose-ul:my-3 prose-ul:pl-5 prose-li:my-1 prose-li:leading-7 prose-ol:pl-5`
-- 强调 / 链接：`prose-strong:text-foreground prose-strong:font-semibold prose-a:text-primary prose-a:underline-offset-2`
-- 引用块：`prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:bg-muted/40 prose-blockquote:py-1 prose-blockquote:px-3 prose-blockquote:not-italic prose-blockquote:text-foreground/90 prose-blockquote:rounded-r`
-- 代码：`prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[13px] prose-code:before:content-none prose-code:after:content-none`
-- 分隔线：`prose-hr:my-6 prose-hr:border-border`
-- 图片：`prose-img:rounded-lg prose-img:my-4`
+### 1. 保存时，如果 `draft.body` 为空，自动补写一次长正文
 
-## 按钮位置（卡片下边缘居中）
-- 卡片改为 `relative pb-7`（给底部按钮留空间）。
-- 移除右上角原按钮。
-- 标题区只保留：`<BookOpen className="w-4 h-4" /> 深度阅读 · {item.body.length}字`。
-- 在卡片底部新增：
-  ```tsx
-  <button className="absolute left-1/2 -translate-x-1/2 -bottom-3.5 inline-flex items-center gap-1 h-7 px-3 rounded-full border border-border bg-card text-xs text-muted-foreground hover:text-foreground hover:bg-accent shadow-sm" />
-  ```
-  内容：折叠态 `展开全文 ▾`，展开态 `收起 ▴`。
-- 折叠态高度从 `max-h-40` 调到 `max-h-44`，渐隐遮罩保留。
+在 `save()` 里、调用 update/insert 之前：
+- 如果 `draft.body` 为空且 `draft.name` 已就绪，先 `supabase.functions.invoke('enrich-knowledge-body', { body: { coreDraft: draft } })`，拿到 body 后写入 payload。
+- 出错只 `toast.warning` 不阻断保存（保持现在的"核心字段优先落库"原则）。
+- 给保存按钮加一个"正在补写正文…"的中间态文案，让用户知道在等什么。
 
-## 不在范围
-- 不动其他卡片样式、不动小贴士/卖点/AI 聊一聊。
-- 不改数据结构、不改 ReactMarkdown 渲染器。
+### 2. 新建模式也暴露「一键丰富 / 写深度阅读」按钮
 
+目前 `isEdit` 才显示一键丰富面板。改成：
+- 非编辑模式下，当 `draft.name` 已生成，显示一颗轻量按钮 **「补写深度阅读」**，点击后只调 `enrich-knowledge-body` 把 body 灌进 `draft`，不落库（保留用户预览后再保存的工作流）。
+- 这样用户能看见进度、能预览，再决定保存。
+
+### 3. （可选小修）针对香兰社这条历史数据
+
+不写代码迁移；保存方案 1 上线后，管理员在「官方知识」列表里点开香兰社 → 用「AI 修改」对话框 → 点「✨ 一键丰富」即可补 body。或者干脆在新方案下点一次"保存修改"，自动补写流程也会跑。
+
+## 不动的部分
+
+- `generate-official-knowledge` 系统提示保留"对话默认不回吐 body"的策略（这是为了对话轮次快）。
+- `OfficialDetail.tsx` 的「深度阅读」卡片渲染逻辑不动。
+- 数据库结构、RLS 不动。
+
+## 受影响文件
+
+- `src/components/admin/AiKnowledgeDialog.tsx`（save 流程 + 新建模式按钮）
