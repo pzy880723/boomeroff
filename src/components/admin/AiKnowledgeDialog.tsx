@@ -202,6 +202,115 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
+  const STAGE_LABEL: Record<string, string> = {
+    idle: '', done: '完成',
+    collect: '正在收集当前内容…',
+    generate: 'AI 正在重写并补全…',
+    cover: '正在生成新封面…',
+    save: '正在保存…',
+  };
+  const STAGE_TARGET: Record<string, number> = {
+    idle: 0, collect: 15, generate: 70, cover: 90, save: 98, done: 100,
+  };
+
+  useEffect(() => {
+    if (enrichStage === 'idle') return;
+    const target = STAGE_TARGET[enrichStage];
+    if (enrichTickRef.current) window.clearInterval(enrichTickRef.current);
+    enrichTickRef.current = window.setInterval(() => {
+      setEnrichProgress((p) => {
+        if (p >= target) return p;
+        const step = Math.max(0.4, (target - p) * 0.06);
+        return Math.min(target, p + step);
+      });
+    }, 120);
+    return () => { if (enrichTickRef.current) window.clearInterval(enrichTickRef.current); };
+  }, [enrichStage]);
+
+  const resetEnrich = () => {
+    if (enrichTickRef.current) window.clearInterval(enrichTickRef.current);
+    setTimeout(() => { setEnrichStage('idle'); setEnrichProgress(0); }, 800);
+  };
+
+  const oneClickEnrich = async () => {
+    if (!editingItem) return;
+    if (enrichStage !== 'idle' && enrichStage !== 'done') return;
+    const ENRICH_PROMPT = `请把这条词条全部重写到「店员学习卡 + 客户话术卡」最高完成度：
+1. 金句更出圈、更有类比；
+2. 速记卡 5 条全部填齐，含具体数字；
+3. 客户话术 送礼/自用/收藏 三场景各一句；
+4. 卖点 4-6 条，每条 tag + 主句 + 展开；
+5. 易混对比至少 3 条；
+6. 正文按规定的 6 个二级标题写满 800 字以上，含具体年份、人名、价位区间；
+7. 店员小贴士补足保养与禁忌。
+未提及字段全部增量补强，不得删减或留空。`;
+    try {
+      setEnrichProgress(0);
+      setEnrichStage('collect');
+      const baseDraft = itemToDraft(editingItem);
+
+      setEnrichStage('generate');
+      setMessages((m) => [...m, { role: 'user', content: '✨ 一键丰富：把这条词条全部重写补全到最高完成度。' }]);
+      const { data, error } = await supabase.functions.invoke('generate-official-knowledge', {
+        body: { messages: [{ role: 'user', content: ENRICH_PROMPT }], currentDraft: baseDraft },
+      });
+      if (error) throw error;
+      const newDraft: Draft = { ...baseDraft, ...(data?.draft || {}) };
+      const newPrompt = data?.cover_prompt as string | undefined;
+      setDraft(newDraft);
+      setMessages((m) => [...m, { role: 'assistant', content: (data?.reply as string) || '已一键丰富草稿。' }]);
+
+      let newCover = coverUrl;
+      if (newPrompt && !coverUrl) {
+        setEnrichStage('cover');
+        try {
+          const { data: cd } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: newPrompt } });
+          if (cd?.url) { newCover = cd.url; setCoverUrl(cd.url); setCoverPrompt(newPrompt); }
+        } catch (e) { console.warn('cover failed', e); }
+      }
+
+      setEnrichStage('save');
+      const safeCategory: ProductCategory = (VALID_CATEGORIES as string[]).includes(newDraft.category as string)
+        ? (newDraft.category as ProductCategory) : 'other';
+      const sellingPointsJson = (newDraft.selling_points || []).map((p: any) =>
+        typeof p === 'string' ? { text: p } : p,
+      );
+      const payload = {
+        name: newDraft.name?.trim() || editingItem.name,
+        category: safeCategory,
+        ip_name: newDraft.ip_name?.trim() || null,
+        era: newDraft.era?.trim() || null,
+        origin: newDraft.origin?.trim() || null,
+        summary: newDraft.summary?.trim() || null,
+        selling_points: sellingPointsJson,
+        tips: newDraft.tips?.trim() || null,
+        body: newDraft.body?.trim() || null,
+        importance_score: Math.min(100, Math.max(0, Number(newDraft.importance_score) || 0)),
+        cover_url: newCover || null,
+        content: {
+          one_liner: newDraft.one_liner || null,
+          aliases: newDraft.aliases || [],
+          pronunciation: newDraft.pronunciation || null,
+          quick_facts: newDraft.quick_facts || [],
+          customer_pitches: newDraft.customer_pitches || [],
+          comparisons: newDraft.comparisons || [],
+        },
+      };
+      const { error: upErr } = await supabase.from('official_knowledge').update(payload as any).eq('id', editingItem.id);
+      if (upErr) throw upErr;
+
+      setEnrichStage('done');
+      setEnrichProgress(100);
+      toast.success('AI 已一键丰富并保存');
+      onSaved();
+      resetEnrich();
+    } catch (e: any) {
+      console.error(e);
+      toast.error('一键丰富失败：' + (e?.message ?? ''));
+      resetEnrich();
+    }
+  };
+
   const save = async () => {
     if (!draft.name?.trim()) { toast.error('请先让 AI 生成有名称的草稿'); return; }
     const safeCategory: ProductCategory = (VALID_CATEGORIES as string[]).includes(draft.category as string)
