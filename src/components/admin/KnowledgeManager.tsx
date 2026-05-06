@@ -21,6 +21,7 @@ import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { KnowledgeEditDialog, KnowledgeRecord } from './KnowledgeEditDialog';
+import { AutoCategorizeButton } from './AutoCategorizeButton';
 
 const PAGE_SIZE = 20;
 
