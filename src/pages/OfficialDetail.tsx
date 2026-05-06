@@ -523,6 +523,7 @@ export default function OfficialDetail() {
               importance_score: item.importance_score,
               selling_points: item.selling_points,
               content: item.content,
+              gallery: (item as any).gallery,
             }}
           />
         </>
