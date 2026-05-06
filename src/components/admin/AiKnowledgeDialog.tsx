@@ -35,6 +35,7 @@ interface Draft {
   tips?: string;
   body?: string;
   importance_score?: number;
+  gallery?: string[];
 }
 
 const VALID_CATEGORIES: ProductCategory[] = [
@@ -59,6 +60,7 @@ interface ExistingItem {
   importance_score: number;
   selling_points: unknown;
   content: any;
+  gallery?: unknown;
 }
 
 interface Props {
@@ -113,6 +115,8 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const [draft, setDraft] = useState<Draft>({});
   const [coverPrompt, setCoverPrompt] = useState<string>('');
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [gallery, setGallery] = useState<string[]>([]);
+  const [galleryBusy, setGalleryBusy] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [painting, setPainting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -130,10 +134,13 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         setMessages([HELLO_EDIT(editingItem.name)]);
         setDraft(itemToDraft(editingItem));
         setCoverUrl(editingItem.cover_url || null);
+        const g = (editingItem as any).gallery;
+        setGallery(Array.isArray(g) ? (g as string[]).filter(Boolean) : []);
       } else {
         setMessages([HELLO_NEW]);
         setDraft({});
         setCoverUrl(null);
+        setGallery([]);
       }
       setInput(''); setPendingImage(null); setCoverPrompt('');
       setThinking(false); setPainting(false); setSaving(false);
@@ -178,6 +185,42 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       }
     } finally {
       setPainting(false);
+    }
+  };
+
+  const generateGallery = async (basePrompt: string, opts: { persist?: boolean } = {}): Promise<string[]> => {
+    if (!basePrompt) return [];
+    setGalleryBusy(true);
+    const angles = [
+      `${basePrompt}, close-up detail shot of texture and craftsmanship`,
+      `${basePrompt}, side angle showing silhouette and proportions`,
+      `${basePrompt}, top-down flat lay arrangement`,
+    ];
+    try {
+      const results = await Promise.all(
+        angles.map(async (p) => {
+          try {
+            const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: p } });
+            if (error) throw error;
+            return (data?.url as string) || null;
+          } catch (e) {
+            console.warn('[gallery] one angle failed', e);
+            return null;
+          }
+        }),
+      );
+      const urls = results.filter((u): u is string => !!u);
+      if (urls.length) {
+        const merged = Array.from(new Set([...(gallery || []), ...urls]));
+        setGallery(merged);
+        if (opts.persist && editingItem) {
+          await supabase.from('official_knowledge').update({ gallery: merged }).eq('id', editingItem.id);
+          onSaved();
+        }
+      }
+      return urls;
+    } finally {
+      setGalleryBusy(false);
     }
   };
 
@@ -392,6 +435,15 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         }
       }
 
+      // ---- Step 4: gallery (3 angles) — 仅当当前图集少于 3 张时补齐 ----
+      if (newPrompt && (gallery?.length || 0) < 3) {
+        try {
+          await generateGallery(newPrompt, { persist: !!editingItem });
+        } catch (e) {
+          console.warn('gallery failed', e);
+        }
+      }
+
       setEnrichStage('done');
       setEnrichProgress(100);
       if (editingItem) toast.success('AI 已一键丰富并保存');
@@ -473,6 +525,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         body: bodyText,
         importance_score: Math.min(100, Math.max(0, Math.round(Number(draft.importance_score) || 0))),
         cover_url: coverUrl || null,
+        gallery: gallery || [],
         content: {
           one_liner: draft.one_liner || null,
           aliases: draft.aliases || [],
@@ -627,6 +680,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             coverPrompt={coverPrompt}
             painting={painting}
             triggerCover={triggerCover}
+            gallery={gallery}
+            galleryBusy={galleryBusy}
+            onGenGallery={() => { void generateGallery(coverPrompt, { persist: !!editingItem }); }}
             onExpand={() => setPreviewOpen(true)}
           />
         </div>
@@ -657,6 +713,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
               coverPrompt={coverPrompt}
               painting={painting}
               triggerCover={triggerCover}
+              gallery={gallery}
+              galleryBusy={galleryBusy}
+              onGenGallery={() => { void generateGallery(coverPrompt, { persist: !!editingItem }); }}
               large
             />
           </div>
@@ -680,6 +739,9 @@ interface PreviewProps {
   coverPrompt: string;
   painting: boolean;
   triggerCover: (p: string) => void | Promise<void>;
+  gallery?: string[];
+  galleryBusy?: boolean;
+  onGenGallery?: () => void;
   large?: boolean;
 }
 
@@ -697,7 +759,7 @@ function PreviewPane(props: PreviewProps & { onExpand: () => void }) {
   );
 }
 
-function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large }: PreviewProps) {
+function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large, gallery, galleryBusy, onGenGallery }: PreviewProps) {
   const t = large
     ? { name: 'text-2xl', section: 'text-sm', body: 'text-base', tag: 'text-xs', mini: 'text-xs', card: 'p-5 space-y-5', wrap: 'p-4' }
     : { name: 'text-base', section: 'text-xs', body: 'text-sm', tag: 'text-[10px]', mini: 'text-xs', card: 'p-4 space-y-3', wrap: '' };
@@ -749,6 +811,29 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCo
           )}
 
           {draft.summary && <p className={`${t.body} text-muted-foreground leading-relaxed`}>{draft.summary}</p>}
+
+          {/* 图集 */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className={`${t.section} text-muted-foreground`}>图集 {gallery?.length ? `(${gallery.length})` : ''}</div>
+              {onGenGallery && (
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onGenGallery} disabled={galleryBusy || !coverPrompt}>
+                  {galleryBusy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <ImagePlus className="w-3 h-3 mr-1" />}
+                  {gallery?.length ? '再补几张' : '生成图集'}
+                </Button>
+              )}
+            </div>
+            {gallery?.length ? (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {gallery.map((u, i) => (
+                  <img key={i} src={u} alt="" className={`shrink-0 ${large ? 'w-24 h-24' : 'w-20 h-20'} rounded-md object-cover border`} />
+                ))}
+              </div>
+            ) : (
+              <div className={`${t.mini} text-muted-foreground`}>{galleryBusy ? '正在生成图集…' : '尚无图集，可点击右上角生成'}</div>
+            )}
+          </div>
+
 
           {!!draft.quick_facts?.length && (
             <div className={`grid ${large ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'} gap-2`}>
