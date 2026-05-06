@@ -733,6 +733,9 @@ interface PreviewProps {
   coverPrompt: string;
   painting: boolean;
   triggerCover: (p: string) => void | Promise<void>;
+  gallery?: string[];
+  galleryBusy?: boolean;
+  onGenGallery?: () => void;
   large?: boolean;
 }
 
