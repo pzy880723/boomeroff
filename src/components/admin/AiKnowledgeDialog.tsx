@@ -279,14 +279,15 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     }
   }
 
-  const oneClickEnrich = async () => {
-    if (!editingItem) return;
+  const oneClickEnrich = async (opts: { silent?: boolean; openPreviewWhenDone?: boolean } = {}) => {
     if (enrichStage !== 'idle' && enrichStage !== 'done') return;
     try {
       setEnrichProgress(0);
       setEnrichStage('collect');
-      const baseDraft = itemToDraft(editingItem);
-      setMessages((m) => [...m, { role: 'user', content: '✨ 一键丰富：分段重写并补全到最高完成度。' }]);
+      const baseDraft: Draft = editingItem ? itemToDraft(editingItem) : { ...draft };
+      if (!opts.silent) {
+        setMessages((m) => [...m, { role: 'user', content: '✨ 一键丰富：分段重写并补全到最高完成度。' }]);
+      }
 
       const hasCover = !!coverUrl;
 
