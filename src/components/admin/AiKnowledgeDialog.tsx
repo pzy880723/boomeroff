@@ -257,133 +257,203 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
           </div>
 
           {/* Preview side */}
-          <div className="overflow-y-auto p-4 bg-muted/20 space-y-3">
-            <div className="text-xs text-muted-foreground">待入库预览</div>
-            <div className="rounded-xl border bg-background overflow-hidden shadow-soft">
-              <div className="aspect-square bg-muted flex items-center justify-center relative">
-                {coverUrl ? (
-                  <img src={coverUrl} alt={draft.name || ''} className="w-full h-full object-cover" />
-                ) : painting ? (
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground text-xs">
-                    <Loader2 className="w-5 h-5 animate-spin" /> 正在生成封面…
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-1 text-muted-foreground text-xs">
-                    <ImageOff className="w-5 h-5" /> 尚未生成封面
-                  </div>
-                )}
-                {coverPrompt && !painting && (
-                  <Button
-                    size="sm" variant="secondary"
-                    className="absolute bottom-2 right-2 h-7 text-xs"
-                    onClick={() => triggerCover(coverPrompt)}
-                  >
-                    <RefreshCw className="w-3 h-3 mr-1" /> 重新生成
-                  </Button>
-                )}
-              </div>
-              <div className="p-4 space-y-3">
-                <div>
-                  <div className="text-base font-semibold">{draft.name || '（待 AI 生成名称）'}</div>
-                  {draft.pronunciation && <div className="text-xs text-muted-foreground mt-0.5">{draft.pronunciation}</div>}
-                  <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                    {draft.category && <Badge variant="secondary">{CATEGORY_LABELS[draft.category]}</Badge>}
-                    {draft.ip_name && <Badge variant="outline">{draft.ip_name}</Badge>}
-                    {(draft.era || draft.origin) && (
-                      <span className="text-xs text-muted-foreground">
-                        {[draft.era, draft.origin].filter(Boolean).join(' · ')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {draft.one_liner && (
-                  <div className="rounded-lg bg-accent/40 border border-accent p-3 flex gap-2">
-                    <Quote className="w-4 h-4 text-accent-foreground shrink-0 mt-0.5" />
-                    <div className="text-sm font-medium leading-snug text-accent-foreground">{draft.one_liner}</div>
-                  </div>
-                )}
-
-                {draft.summary && <p className="text-sm text-muted-foreground leading-relaxed">{draft.summary}</p>}
-
-                {!!draft.quick_facts?.length && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {draft.quick_facts.map((f, i) => (
-                      <div key={i} className="rounded-md border bg-muted/30 p-2">
-                        <div className="text-[10px] text-muted-foreground">{f.label}</div>
-                        <div className="text-xs font-medium leading-tight mt-0.5">{f.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {!!draft.customer_pitches?.length && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">客户话术</div>
-                    <div className="space-y-1.5">
-                      {draft.customer_pitches.map((p, i) => (
-                        <div key={i} className="text-sm rounded-md bg-muted/40 px-2 py-1.5">
-                          <span className="text-[10px] mr-1.5 px-1.5 py-0.5 rounded bg-primary/15 text-primary">{p.scene}</span>
-                          {p.line}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {!!points.length && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">核心卖点</div>
-                    <ul className="space-y-1.5">
-                      {points.map((p, i) => (
-                        <li key={i} className="text-sm">
-                          {p.tag && <span className="mr-1.5 text-[10px] px-1.5 py-0.5 rounded bg-accent/30 text-accent-foreground">{p.tag}</span>}
-                          <span className="font-medium">{p.text}</span>
-                          {p.detail && <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{p.detail}</div>}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {!!draft.comparisons?.length && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">易混对比</div>
-                    <div className="space-y-1">
-                      {draft.comparisons.map((c, i) => (
-                        <div key={i} className="text-xs rounded-md border bg-muted/20 p-2">
-                          <span className="font-semibold">vs {c.name}：</span>{c.diff}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {draft.tips && (
-                  <div className="rounded-md bg-muted/60 p-2 text-xs leading-relaxed">
-                    <span className="text-muted-foreground">小贴士：</span>{draft.tips}
-                  </div>
-                )}
-
-                {draft.body && (
-                  <details className="text-xs">
-                    <summary className="cursor-pointer text-muted-foreground">深度阅读 ({draft.body.length} 字)</summary>
-                    <pre className="mt-2 whitespace-pre-wrap font-sans leading-relaxed">{draft.body}</pre>
-                  </details>
-                )}
-              </div>
-            </div>
-          </div>
+          <PreviewPane
+            draft={draft}
+            points={points}
+            coverUrl={coverUrl}
+            coverPrompt={coverPrompt}
+            painting={painting}
+            triggerCover={triggerCover}
+            onExpand={() => setPreviewOpen(true)}
+          />
         </div>
 
-        <DialogFooter className="px-5 py-3 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button onClick={save} disabled={saving || !draft.name}>
+        <DialogFooter className="px-5 py-3 border-t flex-row gap-2 sm:gap-2">
+          <Button variant="outline" className="md:hidden flex-1" onClick={() => setPreviewOpen(true)} disabled={!draft.name}>
+            <Maximize2 className="w-4 h-4 mr-1.5" /> 全屏预览
+          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="hidden md:inline-flex">取消</Button>
+          <Button onClick={save} disabled={saving || !draft.name} className="flex-1 md:flex-none">
             {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
             保存到官方知识
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Fullscreen preview (mobile-friendly) */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl w-[100vw] sm:w-[95vw] h-[100vh] sm:h-[92vh] max-h-[100vh] p-0 flex flex-col gap-0">
+          <DialogHeader className="px-4 py-3 border-b flex-row items-center justify-between space-y-0">
+            <DialogTitle className="text-base">入库预览</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto bg-muted/20">
+            <PreviewCard
+              draft={draft}
+              points={points}
+              coverUrl={coverUrl}
+              coverPrompt={coverPrompt}
+              painting={painting}
+              triggerCover={triggerCover}
+              large
+            />
+          </div>
+          <DialogFooter className="px-4 py-3 border-t flex-row gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setPreviewOpen(false)}>关闭</Button>
+            <Button className="flex-1" onClick={async () => { await save(); setPreviewOpen(false); }} disabled={saving || !draft.name}>
+              {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+              保存到官方知识
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
+  );
+}
+
+interface PreviewProps {
+  draft: Draft;
+  points: Array<{ tag?: string; text: string; detail?: string }>;
+  coverUrl: string | null;
+  coverPrompt: string;
+  painting: boolean;
+  triggerCover: (p: string) => void | Promise<void>;
+  large?: boolean;
+}
+
+function PreviewPane(props: PreviewProps & { onExpand: () => void }) {
+  return (
+    <div className="overflow-y-auto p-4 bg-muted/20 space-y-3 hidden md:block">
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">待入库预览</div>
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={props.onExpand} disabled={!props.draft.name}>
+          <Maximize2 className="w-3.5 h-3.5 mr-1" /> 全屏
+        </Button>
+      </div>
+      <PreviewCard {...props} />
+    </div>
+  );
+}
+
+function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large }: PreviewProps) {
+  const t = large
+    ? { name: 'text-2xl', section: 'text-sm', body: 'text-base', tag: 'text-xs', mini: 'text-xs', card: 'p-5 space-y-5', wrap: 'p-4' }
+    : { name: 'text-base', section: 'text-xs', body: 'text-sm', tag: 'text-[10px]', mini: 'text-xs', card: 'p-4 space-y-3', wrap: '' };
+  return (
+    <div className={large ? 'p-3' : ''}>
+      <div className="rounded-xl border bg-background overflow-hidden shadow-soft max-w-2xl mx-auto">
+        <div className="aspect-square bg-muted flex items-center justify-center relative">
+          {coverUrl ? (
+            <img src={coverUrl} alt={draft.name || ''} className="w-full h-full object-cover" />
+          ) : painting ? (
+            <div className="flex flex-col items-center gap-2 text-muted-foreground text-xs">
+              <Loader2 className="w-5 h-5 animate-spin" /> 正在生成封面…
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1 text-muted-foreground text-xs">
+              <ImageOff className="w-5 h-5" /> 尚未生成封面
+            </div>
+          )}
+          {coverPrompt && !painting && (
+            <Button
+              size="sm" variant="secondary"
+              className="absolute bottom-2 right-2 h-7 text-xs"
+              onClick={() => triggerCover(coverPrompt)}
+            >
+              <RefreshCw className="w-3 h-3 mr-1" /> 重新生成
+            </Button>
+          )}
+        </div>
+        <div className={t.card}>
+          <div>
+            <div className={`${t.name} font-semibold`}>{draft.name || '（待 AI 生成名称）'}</div>
+            {draft.pronunciation && <div className={`${t.mini} text-muted-foreground mt-0.5`}>{draft.pronunciation}</div>}
+            <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+              {draft.category && <Badge variant="secondary">{CATEGORY_LABELS[draft.category]}</Badge>}
+              {draft.ip_name && <Badge variant="outline">{draft.ip_name}</Badge>}
+              {(draft.era || draft.origin) && (
+                <span className={`${t.mini} text-muted-foreground`}>
+                  {[draft.era, draft.origin].filter(Boolean).join(' · ')}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {draft.one_liner && (
+            <div className="rounded-lg bg-accent/40 border border-accent p-3 flex gap-2">
+              <Quote className={`${large ? 'w-5 h-5' : 'w-4 h-4'} text-accent-foreground shrink-0 mt-0.5`} />
+              <div className={`${t.body} font-medium leading-snug text-accent-foreground`}>{draft.one_liner}</div>
+            </div>
+          )}
+
+          {draft.summary && <p className={`${t.body} text-muted-foreground leading-relaxed`}>{draft.summary}</p>}
+
+          {!!draft.quick_facts?.length && (
+            <div className={`grid ${large ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'} gap-2`}>
+              {draft.quick_facts.map((f, i) => (
+                <div key={i} className="rounded-md border bg-muted/30 p-2.5">
+                  <div className={`${t.mini} text-muted-foreground`}>{f.label}</div>
+                  <div className={`${t.body} font-medium leading-tight mt-0.5`}>{f.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!!draft.customer_pitches?.length && (
+            <div>
+              <div className={`${t.section} text-muted-foreground mb-1.5`}>客户话术</div>
+              <div className="space-y-1.5">
+                {draft.customer_pitches.map((p, i) => (
+                  <div key={i} className={`${t.body} rounded-md bg-muted/40 px-2.5 py-2`}>
+                    <span className={`${t.tag} mr-1.5 px-1.5 py-0.5 rounded bg-primary/15 text-primary`}>{p.scene}</span>
+                    {p.line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!!points.length && (
+            <div>
+              <div className={`${t.section} text-muted-foreground mb-1.5`}>核心卖点</div>
+              <ul className="space-y-2">
+                {points.map((p, i) => (
+                  <li key={i} className={t.body}>
+                    {p.tag && <span className={`${t.tag} mr-1.5 px-1.5 py-0.5 rounded bg-accent/30 text-accent-foreground`}>{p.tag}</span>}
+                    <span className="font-medium">{p.text}</span>
+                    {p.detail && <div className={`${t.mini} text-muted-foreground mt-0.5 leading-relaxed`}>{p.detail}</div>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {!!draft.comparisons?.length && (
+            <div>
+              <div className={`${t.section} text-muted-foreground mb-1.5`}>易混对比</div>
+              <div className="space-y-1.5">
+                {draft.comparisons.map((c, i) => (
+                  <div key={i} className={`${t.body} rounded-md border bg-muted/20 p-2.5`}>
+                    <span className="font-semibold">vs {c.name}：</span>{c.diff}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {draft.tips && (
+            <div className={`rounded-md bg-muted/60 p-2.5 ${t.body} leading-relaxed`}>
+              <span className="text-muted-foreground">小贴士：</span>{draft.tips}
+            </div>
+          )}
+
+          {draft.body && (
+            <details className={t.body} open={large}>
+              <summary className={`cursor-pointer ${t.section} text-muted-foreground`}>深度阅读 ({draft.body.length} 字)</summary>
+              <div className="mt-2 whitespace-pre-wrap leading-relaxed">{draft.body}</div>
+            </details>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
