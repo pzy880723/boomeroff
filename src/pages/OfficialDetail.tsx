@@ -146,12 +146,15 @@ export default function OfficialDetail() {
   return (
     <div className="min-h-screen bg-background pb-32">
       {/* 吸顶按钮栏 */}
-      <div
-        className={`fixed top-0 left-0 right-0 z-30 transition-colors duration-200 pt-[env(safe-area-inset-top)] ${
-          scrolled ? 'bg-background/80 backdrop-blur border-b border-border/60' : 'bg-transparent'
-        }`}
-      >
-        <div className="container mx-auto max-w-screen-md flex items-center justify-between px-3 py-2">
+      <div className="fixed top-0 left-0 right-0 z-30 pt-[env(safe-area-inset-top)]">
+        {/* 毛玻璃背景层 — 用 opacity 平滑过渡 */}
+        <div
+          aria-hidden
+          className={`absolute inset-0 bg-background/75 backdrop-blur-md border-b border-border/50 shadow-[0_4px_16px_-8px_hsl(var(--foreground)/0.15)] transition-opacity duration-300 ease-out ${
+            scrolled ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+        <div className="relative container mx-auto max-w-screen-md flex items-center justify-between px-3 py-2">
           <button
             onClick={() => navigate('/library')}
             className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
