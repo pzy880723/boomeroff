@@ -36,7 +36,7 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
     setQuestions([]); setStep(0); setAnswers([]); setPicked(null);
     try {
       const { data, error } = await supabase.functions.invoke('generate-knowledge-quiz', {
-        body: { id: knowledgeId, force },
+        body: { id: knowledgeId, kind, force },
       });
       if (error) throw error;
       const qs = (data?.questions || []) as Question[];
