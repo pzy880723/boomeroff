@@ -846,7 +846,7 @@ function PreviewPane(props: PreviewProps & { onExpand: () => void }) {
   );
 }
 
-function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large, gallery, galleryBusy, onGenGallery }: PreviewProps) {
+function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large, gallery, galleryBusy, onGenGallery, backstampUrl, backstampBusy, onFetchBackstamp }: PreviewProps) {
   const t = large
     ? { name: 'text-2xl', section: 'text-sm', body: 'text-base', tag: 'text-xs', mini: 'text-xs', card: 'p-5 space-y-5', wrap: 'p-4' }
     : { name: 'text-base', section: 'text-xs', body: 'text-sm', tag: 'text-[10px]', mini: 'text-xs', card: 'p-4 space-y-3', wrap: '' };
