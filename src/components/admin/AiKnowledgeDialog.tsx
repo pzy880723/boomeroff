@@ -894,6 +894,12 @@ interface PreviewProps {
   gallery?: string[];
   galleryBusy?: boolean;
   onGenGallery?: () => void;
+  onWebSearchGallery?: () => void;
+  onUploadGallery?: (files: FileList) => void;
+  uploading?: boolean;
+  onRemoveGallery?: (idx: number) => void;
+  onMoveGallery?: (idx: number, dir: -1 | 1) => void;
+  onSetCover?: (idx: number) => void;
   backstampUrl?: string | null;
   backstampBusy?: boolean;
   onFetchBackstamp?: () => void;
