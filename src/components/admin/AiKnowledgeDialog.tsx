@@ -921,6 +921,24 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCo
             )}
           </div>
 
+          {/* 底款图 */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className={`${t.section} text-muted-foreground`}>底款 / 背面</div>
+              {onFetchBackstamp && (
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onFetchBackstamp} disabled={backstampBusy || !draft.name}>
+                  {backstampBusy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                  {backstampUrl ? '重新搜底款' : '联网搜底款'}
+                </Button>
+              )}
+            </div>
+            {backstampUrl ? (
+              <img src={backstampUrl} alt="底款" className={`${large ? 'w-32 h-32' : 'w-24 h-24'} rounded-md object-cover border`} />
+            ) : (
+              <div className={`${t.mini} text-muted-foreground`}>{backstampBusy ? '正在联网搜索底款…' : '暂无底款图'}</div>
+            )}
+          </div>
+
 
           {!!draft.quick_facts?.length && (
             <div className={`grid ${large ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'} gap-2`}>
