@@ -1,42 +1,64 @@
-我查到这次失败不是 AI 卡死，而是最后保存失败：AI 返回了 `importance_score: 9.5`，但数据库该字段是整数，保存时 PATCH 报错 `invalid input syntax for type integer: "9.5"`。所以前面核心字段和长正文其实都生成成功了，最后一步失败导致体验像“跑很久后失败”。
+# 让"AI 修改"对话也能换主图
 
-当前一键丰富实际流程：
+## 现状（为什么截图里 AI 答应了却没换图）
 
-```text
-1. 收集当前词条
-2. 调用 enrich-knowledge-core
-   - 重写名称、分类、简介、金句、速记卡、话术、卖点、对比、tips、重要度、封面提示词
-   - 刚才测试约 61 秒才完成，偏慢
-3. 调用 enrich-knowledge-body
-   - 生成 800 字以上、6 个小标题的长正文
-   - 刚才测试约 1 秒返回，但正文非常长
-4. 如果没有封面，再生成封面
-   - 当前这条已有封面，所以跳过
-5. 保存 official_knowledge
-   - 这里因为 9.5 写入整数列失败
+`AiKnowledgeDialog.tsx` 的 `send()` 里：
+
+```ts
+if (newPrompt && newPrompt !== coverPrompt && !coverUrl) {
+  void triggerCover(newPrompt);
+}
 ```
 
-调整计划：
+只有"当前没封面"才会真的画。已存在封面（你这条大仓陶园 OKURA 已经有图）→ 即便 AI 回复"我将为主图寻找一个具有代表性的封面"，前端也直接跳过，所以"答应了不动手"。
 
-1. 先修保存失败
-   - 前端保存前把 `importance_score` 从小数安全转成整数，例如 `Math.round(...)` 后再限制 0-100。
-   - 同时在 `enrich-knowledge-core` 的工具 schema 里把 `importance_score` 改成 integer，并明确只允许 0-100 整数，避免 AI 再返回 9.5。
+而且 `generate-official-knowledge` 的 system prompt 默认让 AI **不返回** `cover_prompt`，只在外观字段变化时才给 → 用户单独说"换主图"时 AI 经常根本不给 prompt。
 
-2. 把一键丰富改成更快的“先保存核心，再后台补正文”体验
-   - 核心字段生成成功后立刻保存核心字段，让用户很快看到词条已更新。
-   - 长正文单独继续生成，生成成功后再二次保存 body。
-   - 这样不会因为长正文慢或失败导致整个一键丰富全部失败。
+## 目标
 
-3. 降低核心字段耗时
-   - `enrich-knowledge-core` 默认模型改为更快的 Lovable AI 默认模型 `google/gemini-3-flash-preview`。
-   - 去掉强制每次返回 `cover_prompt`；已有封面时前端传 `needCover: false`，后端不要求 AI 写封面提示词，减少输出和耗时。
-   - 缩短 prompt：只要求补强核心字段，不要求过长 tips/detail。
+在"AI 修改"聊天里，用户用自然语言说"换主图 / 重画封面 / 找一张更代表性的图 / 主图换成日式茶杯"等，系统应该：
 
-4. 降低长正文耗时
-   - `enrich-knowledge-body` 改用更快模型。
-   - 正文目标从“≥800字”调整为“约500-700字、6个小标题完整”，保证详情页够用但少等很多。
-   - 如果用户后续想要超长百科文，再通过单独按钮或 AI 修改指定“正文扩写”。
+1. 识别这是"换封面"意图。
+2. 让 AI 这一轮**强制返回 cover_prompt**（可结合用户的描述）。
+3. 前端**强制调用 `generate-knowledge-cover`**（即便已有封面），生成完即时替换并落库。
+4. 整个过程在聊天气泡里有进度反馈：「正在生成新封面…」→「✅ 已更新主图，可在右侧预览」。失败时给出可重试按钮。
 
-5. 进度与失败提示变顺畅
-   - 进度文案改成：收集 → 核心生成并保存 → 正文补充 → 封面检查 → 完成。
-   - 任一步失败显示具体原因；核心已保存时，正文失败只提示“核心已保存，正文稍后可重试”，不回滚已成功内容。
+## 改动点
+
+### 1. `src/components/admin/AiKnowledgeDialog.tsx`
+- 新增 `wantsCoverRedraw(text)`：用关键字匹配（封面 / 主图 / 换图 / 重画 / 重新生成 / 换张图 / 找一张 / cover）。
+- `send()` 里：
+  - 调 `generate-official-knowledge` 时多带一个 `forceCover: true` 字段（仅当意图命中）。
+  - 拿到响应后：
+    - 命中意图 → 即便 `coverUrl` 已存在，也调用 `triggerCover(newPrompt || coverPrompt)`；生成成功后立刻 `update official_knowledge.cover_url` + `onSaved()`，并在聊天里追加一条 assistant 气泡「✅ 已更新主图」。
+    - 未命中 → 维持现在逻辑（仅无封面时才画）。
+- `triggerCover` 增加可选参数 `{ persist?: boolean }`，命中意图时 persist=true 直接落库。
+- 失败时聊天追加「主图生成失败，[重试]」按钮（点了重新调用）。
+- 在快捷按钮区加一颗「换主图」chip，点了填入示例文本「主图换一张更有代表性的，重点突出 …」。
+
+### 2. `supabase/functions/generate-official-knowledge/index.ts`
+- 接收 `forceCover` 参数。
+- 当 `forceCover === true`：在 chatMessages 末尾追加一条 system 指令：「本轮用户希望更换封面，请**必须**返回 cover_prompt，按封面铁律来写；其他字段除非用户提到，否则不要改。」
+- tool schema 不动（`cover_prompt` 仍可选，但通过 system 指令强制本轮一定给）。
+
+### 3. UX 文案
+- HELLO_EDIT 例子里加一条："想换主图就说『主图换成 XX 风格』或『重画封面』"。
+
+## 不在范围
+- 不改一键丰富流程。
+- 不改 `KnowledgeRichEditDialog`（基础表单编辑里仍是 URL 直填）。
+- 不改 `OfficialDetail` 上的入口按钮（继续走 `Wand2` → `AiKnowledgeDialog`）。
+
+## 技术细节
+
+- 关键字匹配（不区分大小写）：`/(主图|封面|换图|换张图|重画|重新生成|找[一张]*图|cover)/i`。
+- `triggerCover` 成功后：
+  ```ts
+  setCoverUrl(url);
+  if (editingItem) {
+    await supabase.from('official_knowledge').update({ cover_url: url }).eq('id', editingItem.id);
+    onSaved();
+  }
+  ```
+- 失败保留原 `coverUrl`，只 toast + 聊天气泡提示，不破坏其他字段。
+- 与"一键丰富"互斥：丰富中禁止单独换图按钮（已有 `enrichStage` 状态可用）。
