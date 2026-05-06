@@ -125,7 +125,7 @@ async function callAI(chatMessages: any[]) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "google/gemini-3-flash-preview",
       messages: chatMessages,
       tools: [TOOL],
       tool_choice: { type: "function", function: { name: "upsert_core" } },
