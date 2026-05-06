@@ -44,19 +44,69 @@ const VALID_CATEGORIES: ProductCategory[] = [
   'woodcraft','textile','painting','porcelain','other',
 ];
 
+interface ExistingItem {
+  id: string;
+  name: string;
+  category: ProductCategory;
+  ip_name: string | null;
+  era: string | null;
+  origin: string | null;
+  summary: string | null;
+  tips: string | null;
+  body: string | null;
+  cover_url: string | null;
+  importance_score: number;
+  selling_points: unknown;
+  content: any;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onSaved: () => void;
+  /** 传入则进入「AI 修改」模式，基于该词条增量改写并 update */
+  editingItem?: ExistingItem | null;
 }
 
-const HELLO: ChatMsg = {
+const HELLO_NEW: ChatMsg = {
   role: 'assistant',
   content: '您好，告诉我想新增的中古商品或品牌即可，例如：「香兰社咖啡杯」「九谷烧」「Sonny Angel」。我会自动整理出店员学习卡和客户话术。也可以上传一张参考图。',
 };
+const HELLO_EDIT = (name: string): ChatMsg => ({
+  role: 'assistant',
+  content: `已载入「${name}」当前内容，告诉我想怎么改即可，例如：「one_liner 换一个更出圈的金句」「正文加一段保养方法」「补充与 Wedgwood 的对比」。也可以直接说「整体重写得更详细」。`,
+});
 
-export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
-  const [messages, setMessages] = useState<ChatMsg[]>([HELLO]);
+function itemToDraft(it: ExistingItem): Draft {
+  const c = it.content || {};
+  const sp = Array.isArray(it.selling_points)
+    ? (it.selling_points as unknown[]).map((p: any) =>
+        typeof p === 'string' ? { tag: '', text: p, detail: '' } : p,
+      )
+    : [];
+  return {
+    name: it.name,
+    category: it.category,
+    ip_name: it.ip_name || undefined,
+    era: it.era || undefined,
+    origin: it.origin || undefined,
+    summary: it.summary || undefined,
+    tips: it.tips || undefined,
+    body: it.body || undefined,
+    importance_score: it.importance_score ?? 0,
+    selling_points: sp,
+    one_liner: c.one_liner || undefined,
+    pronunciation: c.pronunciation || undefined,
+    aliases: Array.isArray(c.aliases) ? c.aliases : [],
+    quick_facts: Array.isArray(c.quick_facts) ? c.quick_facts : [],
+    customer_pitches: Array.isArray(c.customer_pitches) ? c.customer_pitches : [],
+    comparisons: Array.isArray(c.comparisons) ? c.comparisons : [],
+  };
+}
+
+export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: Props) {
+  const isEdit = !!editingItem;
+  const [messages, setMessages] = useState<ChatMsg[]>([HELLO_NEW]);
   const [input, setInput] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>({});
@@ -71,11 +121,19 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
 
   useEffect(() => {
     if (open) {
-      setMessages([HELLO]); setInput(''); setPendingImage(null);
-      setDraft({}); setCoverPrompt(''); setCoverUrl(null);
+      if (editingItem) {
+        setMessages([HELLO_EDIT(editingItem.name)]);
+        setDraft(itemToDraft(editingItem));
+        setCoverUrl(editingItem.cover_url || null);
+      } else {
+        setMessages([HELLO_NEW]);
+        setDraft({});
+        setCoverUrl(null);
+      }
+      setInput(''); setPendingImage(null); setCoverPrompt('');
       setThinking(false); setPainting(false); setSaving(false);
     }
-  }, [open]);
+  }, [open, editingItem]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -114,7 +172,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
     setMessages(next); setInput(''); setPendingImage(null); setThinking(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-official-knowledge', {
-        body: { messages: next.filter((m) => m.role !== 'assistant' || m !== HELLO), currentDraft: draft },
+        body: { messages: next.filter((m) => m.role === 'user'), currentDraft: draft },
       });
       if (error) throw error;
       const reply = (data?.reply as string) || '已更新草稿。';
@@ -169,9 +227,11 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
           comparisons: draft.comparisons || [],
         },
       };
-      const { error } = await supabase.from('official_knowledge').insert([payload as any]);
+      const { error } = editingItem
+        ? await supabase.from('official_knowledge').update(payload as any).eq('id', editingItem.id)
+        : await supabase.from('official_knowledge').insert([payload as any]);
       if (error) throw error;
-      toast.success('已保存到官方知识');
+      toast.success(editingItem ? '已更新官方知识' : '已保存到官方知识');
       onSaved();
       onOpenChange(false);
     } catch (e: any) {
@@ -191,7 +251,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
         <DialogHeader className="px-5 pt-5 pb-3 border-b">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Sparkles className="w-4 h-4 text-primary" />
-            AI 生成官方知识 · 店员学习卡
+            {isEdit ? `AI 修改官方知识 · ${editingItem?.name}` : 'AI 生成官方知识 · 店员学习卡'}
           </DialogTitle>
         </DialogHeader>
 
@@ -246,7 +306,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
-                  placeholder="描述这件商品/品牌…（回车发送）"
+                  placeholder={isEdit ? '想怎么改？例如：换一个金句、补充保养…' : '描述这件商品/品牌…（回车发送）'}
                   disabled={thinking}
                 />
                 <Button type="button" size="icon" onClick={send} disabled={thinking || (!input.trim() && !pendingImage)}>
@@ -275,7 +335,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
           <Button variant="outline" onClick={() => onOpenChange(false)} className="hidden md:inline-flex">取消</Button>
           <Button onClick={save} disabled={saving || !draft.name} className="flex-1 md:flex-none">
             {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-            保存到官方知识
+            {isEdit ? '保存修改' : '保存到官方知识'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -301,7 +361,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
             <Button variant="outline" className="flex-1" onClick={() => setPreviewOpen(false)}>关闭</Button>
             <Button className="flex-1" onClick={async () => { await save(); setPreviewOpen(false); }} disabled={saving || !draft.name}>
               {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-              保存到官方知识
+              {isEdit ? '保存修改' : '保存到官方知识'}
             </Button>
           </DialogFooter>
         </DialogContent>

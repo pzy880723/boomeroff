@@ -9,13 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import {
   Loader2, ArrowLeft, Star, Pencil, Sparkles, Eye, ImageOff,
-  Quote, Volume2, Square, Copy,
+  Quote, Volume2, Square, Copy, Wand2,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { QuizDialog } from '@/components/library/QuizDialog';
 import { KnowledgeRichEditDialog } from '@/components/library/KnowledgeRichEditDialog';
+import { AiKnowledgeDialog } from '@/components/admin/AiKnowledgeDialog';
 
 interface Item {
   id: string;
@@ -48,6 +49,7 @@ export default function OfficialDetail() {
   const [favored, setFavored] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [aiEditOpen, setAiEditOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [showFullBody, setShowFullBody] = useState(false);
 
@@ -148,13 +150,23 @@ export default function OfficialDetail() {
         </button>
         <div className="absolute top-3 right-3 flex gap-2">
           {isAdmin && (
-            <button
-              onClick={() => setEditOpen(true)}
-              className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
-              aria-label="编辑"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
+            <>
+              <button
+                onClick={() => setAiEditOpen(true)}
+                className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+                aria-label="AI 修改"
+                title="AI 修改"
+              >
+                <Wand2 className="w-4 h-4 text-primary" />
+              </button>
+              <button
+                onClick={() => setEditOpen(true)}
+                className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+                aria-label="编辑"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </>
           )}
           <button
             onClick={toggleFav}
@@ -385,7 +397,29 @@ export default function OfficialDetail() {
 
       <QuizDialog open={quizOpen} onOpenChange={setQuizOpen} knowledgeId={item.id} isAdmin={isAdmin} />
       {isAdmin && (
-        <KnowledgeRichEditDialog open={editOpen} onOpenChange={setEditOpen} item={item} onSaved={load} />
+        <>
+          <KnowledgeRichEditDialog open={editOpen} onOpenChange={setEditOpen} item={item} onSaved={load} />
+          <AiKnowledgeDialog
+            open={aiEditOpen}
+            onOpenChange={setAiEditOpen}
+            onSaved={load}
+            editingItem={{
+              id: item.id,
+              name: item.name,
+              category: item.category,
+              ip_name: item.ip_name,
+              era: item.era,
+              origin: item.origin,
+              summary: item.summary,
+              tips: item.tips,
+              body: item.body,
+              cover_url: item.cover_url,
+              importance_score: item.importance_score,
+              selling_points: item.selling_points,
+              content: item.content,
+            }}
+          />
+        </>
       )}
     </div>
   );
