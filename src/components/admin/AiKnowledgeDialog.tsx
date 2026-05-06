@@ -44,19 +44,69 @@ const VALID_CATEGORIES: ProductCategory[] = [
   'woodcraft','textile','painting','porcelain','other',
 ];
 
+interface ExistingItem {
+  id: string;
+  name: string;
+  category: ProductCategory;
+  ip_name: string | null;
+  era: string | null;
+  origin: string | null;
+  summary: string | null;
+  tips: string | null;
+  body: string | null;
+  cover_url: string | null;
+  importance_score: number;
+  selling_points: unknown;
+  content: any;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onSaved: () => void;
+  /** 传入则进入「AI 修改」模式，基于该词条增量改写并 update */
+  editingItem?: ExistingItem | null;
 }
 
-const HELLO: ChatMsg = {
+const HELLO_NEW: ChatMsg = {
   role: 'assistant',
   content: '您好，告诉我想新增的中古商品或品牌即可，例如：「香兰社咖啡杯」「九谷烧」「Sonny Angel」。我会自动整理出店员学习卡和客户话术。也可以上传一张参考图。',
 };
+const HELLO_EDIT = (name: string): ChatMsg => ({
+  role: 'assistant',
+  content: `已载入「${name}」当前内容，告诉我想怎么改即可，例如：「one_liner 换一个更出圈的金句」「正文加一段保养方法」「补充与 Wedgwood 的对比」。也可以直接说「整体重写得更详细」。`,
+});
 
-export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
-  const [messages, setMessages] = useState<ChatMsg[]>([HELLO]);
+function itemToDraft(it: ExistingItem): Draft {
+  const c = it.content || {};
+  const sp = Array.isArray(it.selling_points)
+    ? (it.selling_points as unknown[]).map((p: any) =>
+        typeof p === 'string' ? { tag: '', text: p, detail: '' } : p,
+      )
+    : [];
+  return {
+    name: it.name,
+    category: it.category,
+    ip_name: it.ip_name || undefined,
+    era: it.era || undefined,
+    origin: it.origin || undefined,
+    summary: it.summary || undefined,
+    tips: it.tips || undefined,
+    body: it.body || undefined,
+    importance_score: it.importance_score ?? 0,
+    selling_points: sp,
+    one_liner: c.one_liner || undefined,
+    pronunciation: c.pronunciation || undefined,
+    aliases: Array.isArray(c.aliases) ? c.aliases : [],
+    quick_facts: Array.isArray(c.quick_facts) ? c.quick_facts : [],
+    customer_pitches: Array.isArray(c.customer_pitches) ? c.customer_pitches : [],
+    comparisons: Array.isArray(c.comparisons) ? c.comparisons : [],
+  };
+}
+
+export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: Props) {
+  const isEdit = !!editingItem;
+  const [messages, setMessages] = useState<ChatMsg[]>([HELLO_NEW]);
   const [input, setInput] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>({});
@@ -71,11 +121,19 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
 
   useEffect(() => {
     if (open) {
-      setMessages([HELLO]); setInput(''); setPendingImage(null);
-      setDraft({}); setCoverPrompt(''); setCoverUrl(null);
+      if (editingItem) {
+        setMessages([HELLO_EDIT(editingItem.name)]);
+        setDraft(itemToDraft(editingItem));
+        setCoverUrl(editingItem.cover_url || null);
+      } else {
+        setMessages([HELLO_NEW]);
+        setDraft({});
+        setCoverUrl(null);
+      }
+      setInput(''); setPendingImage(null); setCoverPrompt('');
       setThinking(false); setPainting(false); setSaving(false);
     }
-  }, [open]);
+  }, [open, editingItem]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
