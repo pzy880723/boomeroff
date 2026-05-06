@@ -109,7 +109,7 @@ const TOOL = {
         cover_prompt: {
           type: "string",
           description:
-            "一句英文 prompt，用于生成方形产品封面图。要求：素净背景、自然光、产品居中、写实风、不带文字水印。",
+            "一句英文 prompt，用来生成方形产品封面图。【硬性要求】：(1) 绝对不能出现任何品牌名、IP 名、角色名、设计师名、系列名、公司名、动漫/游戏名（中英日罗马字都不行，例如 Koransha / 香兰社 / Sonny Angel / Walkman / Meissen / Wedgwood / Pokemon / Hello Kitty 一律禁止）；(2) 只用通俗外观语言：物体类别 + 材质 + 颜色 + 形状/纹样 + 拍摄风格；(3) 必须包含 plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo。范例：『A small white porcelain coffee cup with hand-painted red flowers and gold rim, on plain white background, soft natural light, centered, photorealistic, no text』。",
         },
       },
       required: ["reply", "draft", "cover_prompt"],
