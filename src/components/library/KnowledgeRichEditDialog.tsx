@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
