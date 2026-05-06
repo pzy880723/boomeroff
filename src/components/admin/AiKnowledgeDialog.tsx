@@ -118,6 +118,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const [previewOpen, setPreviewOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -194,7 +195,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
 
   const sendQuick = (text: string) => {
     setInput(text);
-    setTimeout(() => void send(), 0);
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const save = async () => {
@@ -303,6 +304,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
                   <ImagePlus className="w-4 h-4" />
                 </Button>
                 <Input
+                  ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
