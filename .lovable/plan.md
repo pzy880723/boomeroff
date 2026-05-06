@@ -1,44 +1,99 @@
-## 问题诊断
+## 目标
 
-**为什么封面一直生成不了：**
-当前 `generate-official-knowledge` 让 AI 返回的 `cover_prompt` 是"产品级"描述，里面会带具体品牌/IP 名（如 "Koransha porcelain coffee cup"、"Sonny Angel figurine"）。Gemini image 模型对带品牌、人物、动漫 IP 的提示词会**直接拒绝出图**（返回 200 但 `choices[0].message` 里没有 `images`），所以走到 "AI 未返回图像" 报错。重试到 `gemini-3.1-flash-image-preview` 触发同一个版权策略，照样失败。
+把"个人知识"页顶部的**今日学习简报**改造成**今日测试任务**：每天给店员推送一批未通过测验的知识点，做完一次"出题→作答→通过"才算掌握，已通过的自动归档进**个人历史知识**，无需再测。完成度用一根百分比进度条直观展示。下方知识列表按品类分组，每张卡上加"测验"按钮供随时手动复习。
 
-日志侧也印证了：cover 函数没有真正运行错误（只有 boot/shutdown），说明请求成功但图像被模型策略拦截。
+---
 
-## 修复方案
+## 一、数据层（新建一张表）
 
-### 1. 让 AI 生成"通俗去品牌化"的 cover_prompt — `supabase/functions/generate-official-knowledge/index.ts`
+新建 `knowledge_test_results`：
+- `user_id` — 谁的进度
+- `item_kind` — `'favorite'` / `'knowledge'`（个人收藏 vs 自建知识）
+- `item_id` — 对应 `user_favorites.id` 或 `product_knowledge.id`
+- `source_type` / `source_id` — 收藏来源（official / recognition / product）+ 原始知识 id，用于去重和回链
+- `passed_at` — 通过时间（NULL = 未通过）
+- `score` / `total` — 上次得分
+- `last_attempt_at` — 最近一次答题时间
+- 唯一约束：`(user_id, item_kind, item_id)`
+- RLS：用户只能读写自己的记录
 
-- 改写 `cover_prompt` 字段的 description 和 SYSTEM 里的撰写要求：
-  - **禁止**出现品牌名 / IP 名 / 角色名 / 设计师名 / 系列名（包括拼音、罗马字、英文写法）。
-  - **禁止**出现「Koransha / Sonny Angel / Walkman / Meissen / Wedgwood」等专有词；改用通俗外观描写。
-  - 必须用平实英文描述：物体类别 + 材质 + 颜色 + 形状 + 年代感 + 拍摄风格。  
-    示例（写进 system，给模型抄）：
-    - ❌ `Koransha porcelain coffee cup with red and gold pattern`  
-    - ✅ `A small white porcelain coffee cup with hand-painted red flowers and gold rim, on plain white background, soft natural light, photorealistic`
-    - ❌ `Sonny Angel baby figurine with strawberry hat`  
-    - ✅ `A small vinyl baby figurine wearing a fruit-shaped hat, glossy finish, on plain white background, studio light`
-- 在 tool schema 里加一句 `Must not contain any brand, IP, character, designer or product line name.`
+---
 
-### 2. cover 函数加一道"去品牌化"兜底 — `supabase/functions/generate-knowledge-cover/index.ts`
+## 二、出题函数复用
 
-即使前端传来的旧 prompt 还带品牌词，也要兜底：
-- 写一个轻量正则黑名单（常见易被拦截的词：`Koransha|Sonny Angel|Walkman|Meissen|Wedgwood|Royal Copenhagen|Hermes|Chanel|Pokemon|Disney|Sanrio|Hello Kitty|Studio Ghibli|...`），命中就替换为通用描述（"a Japanese-style porcelain piece" / "a vintage cassette player" / "a designer vinyl figurine" 等），并在日志里打 warn。
-- 模型调用顺序改为：先 `gemini-3.1-flash-image-preview`（更新、出图率更高），失败再退 `gemini-2.5-flash-image`。
-- 第二次重试时，把 prompt 进一步简化为「纯品类 + 白底 + 写实」的最短形式（去掉所有形容词、年代、人名），最大化通过率。
-- 把模型返回的 `message` 完整摘要打印到 log，便于以后定位（目前只打前 800 字够用，保持不变但加上一次重试的内容）。
-- 错误信息透传更具体的中文提示：「图像被模型策略拦截，已尝试自动通用化描述，请稍后重试或在右上角手动重写描述」。
+现在的 `generate-knowledge-quiz` 只认 `official_knowledge`。把它扩展成接收：
+- `kind: 'official' | 'favorite' | 'knowledge'`
+- `id`：对应来源主键
 
-### 3. 前端不变
+函数内部分别从 `official_knowledge` / `user_favorites.snapshot` / `product_knowledge` 取知识点拼 prompt 出 5 道题。题目继续缓存（official 写回 content.quiz；favorite/knowledge 写到新建的 `app_settings` 行 `quiz_cache:{kind}:{id}`，避免污染表结构）。
 
-`AiKnowledgeDialog` 仍然把 AI 返回的 `cover_prompt` 直接交给 cover 函数，无需改动。新提示词 + 后端兜底足以覆盖。
+**通过判定**：满分通关或正确率 ≥80% 视为通过 → 前端把结果写进 `knowledge_test_results`。
 
-## 不改动
+---
 
-- 知识词条正文 (`body`/`one_liner` 等) 仍允许使用品牌名 — 这是店员学习卡的核心价值，不能去掉。**只有 `cover_prompt` 这一字段做去品牌化**。
-- 不引入异步队列 / job 表：当前失败原因不是超时，是被策略拦截，加队列无意义，反而加复杂度。
+## 三、个人知识页（`src/pages/MyLibrary.tsx`）改版
+
+### 顶部卡片：今日测试任务
+
+替换原"今日学习简报"卡片：
+
+```text
+┌─ 今日测试任务 ──────────────[刷新]
+│  已掌握 12 / 38            32%
+│  ████████░░░░░░░░░░░░░░░░
+│  今日推荐 5 条 · [开始测试]
+│  · 明清官窑青花碗
+│  · Sonny Angel ……
+└──────────────────────────────
+```
+
+- **进度条**：分母 = 我的全部知识与收藏总数；分子 = `passed_at IS NOT NULL` 的条数。用 `<Progress />`（已存在）。
+- **今日推荐**：从未通过的项里按"创建时间最早 / 最久没测"取 5 条。点 `开始测试` 依次走 QuizDialog；通过即标记并自动跳到下一条。
+- 全部通过后显示"今日已全部掌握 🎉，明天再来巩固"，按钮变灰。
+
+### 下方列表：按品类分组 + 归档区
+
+把已加载的 items 拆成两组：
+1. **未掌握**：仍按品类分组渲染（保留现有 UI），每张卡片右下角加 `测验` 小按钮（次要样式），点击直接对该条出题。
+2. **个人历史知识**（已通过，默认收起 `<Collapsible />`）：同样按品类分组，卡片右上角换成 ✅ 徽章；点击仍可看详情，也可"再考一次"。
+
+详情弹窗里也加 `去测验` 按钮。
+
+### 状态联动
+
+- QuizDialog 关闭时若 `passed`=true，本地 items 状态把该 key 标记为已掌握，不需整页重拉，进度条立即增加。
+- 失败也写一行 `last_attempt_at`，下次"今日推荐"会优先排进来。
+
+---
+
+## 四、QuizDialog 调整（`src/components/library/QuizDialog.tsx`）
+
+- props 增加 `kind` 和 `onPassed?: (score, total) => void`。
+- `generate-knowledge-quiz` 调用时传 `{ kind, id }`。
+- 答完后判断是否达通过线，调用 `onPassed`，由调用方写 `knowledge_test_results`。
+- 完成页文案：通过 → "已掌握，自动归档到个人历史知识"；未通过 → "再练一次"。
+
+---
+
+## 五、删除/保留
+
+- 旧的 `personal-daily-summary` 函数不再在该页调用，但暂不删除（其他位置可能引用，留给后续清理）。
+- "今日学习简报"相关 state/UI 全部移除。
+
+---
 
 ## 技术细节
 
-- 黑名单替换在 `generate-knowledge-cover` 内 `fullPrompt` 拼接前做，函数 `sanitizePrompt(s: string): string`。
-- 简化版重试 prompt：`A ${categoryHint} on plain white background, soft natural light, centered, photorealistic, no text` — `categoryHint` 由黑名单替换时顺带产出，没有则用 `product`。
+```text
+files:
+  + supabase/migrations/...  -- 新建 knowledge_test_results
+  ~ supabase/functions/generate-knowledge-quiz/index.ts  -- 支持 kind
+  ~ src/components/library/QuizDialog.tsx                -- kind / onPassed
+  ~ src/pages/MyLibrary.tsx                              -- 新顶部卡 + 进度 + 归档分区 + 卡片测验按钮
+```
+
+通过线设为 **正确率 ≥ 80%**（5 题 ≥ 4 对）。如需调成"满分才算通过"或别的值请告知。
+
+---
+
+确认后我会先发数据库迁移让你审批，再改前端与边缘函数。

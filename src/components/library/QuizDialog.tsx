@@ -16,10 +16,15 @@ interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   knowledgeId: string;
+  kind?: 'official' | 'favorite' | 'knowledge';
   isAdmin?: boolean;
+  passThreshold?: number; // 0-1, 默认 0.8
+  onPassed?: (score: number, total: number) => void;
+  onAttempt?: (score: number, total: number, passed: boolean) => void;
+  title?: string;
 }
 
-export function QuizDialog({ open, onOpenChange, knowledgeId, isAdmin }: Props) {
+export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title }: Props) {
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [step, setStep] = useState(0);
@@ -31,7 +36,7 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, isAdmin }: Props) 
     setQuestions([]); setStep(0); setAnswers([]); setPicked(null);
     try {
       const { data, error } = await supabase.functions.invoke('generate-knowledge-quiz', {
-        body: { id: knowledgeId, force },
+        body: { id: knowledgeId, kind, force },
       });
       if (error) throw error;
       const qs = (data?.questions || []) as Question[];
@@ -60,11 +65,18 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, isAdmin }: Props) 
 
   const finished = answers.length === questions.length && questions.length > 0;
   const score = answers.reduce((acc, a, i) => acc + (a === questions[i]?.correctIndex ? 1 : 0), 0);
-  const verdict =
-    score === questions.length ? '满分通关 · 中古达人'
-    : score >= Math.ceil(questions.length * 0.8) ? '不错 · 已是熟客'
-    : score >= Math.ceil(questions.length * 0.6) ? '及格 · 继续加油'
-    : '再多读一遍吧';
+  const passed = questions.length > 0 && score / questions.length >= passThreshold;
+  const verdict = passed
+    ? (score === questions.length ? '满分通关 · 已掌握，自动归档' : '通过 · 已掌握，自动归档')
+    : '再练一次，争取通过';
+
+  // 通知调用方
+  useEffect(() => {
+    if (!finished) return;
+    onAttempt?.(score, questions.length, passed);
+    if (passed) onPassed?.(score, questions.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished]);
 
   const reset = () => { setStep(0); setAnswers([]); setPicked(null); };
 
@@ -76,7 +88,7 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, isAdmin }: Props) 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Sparkles className="w-4 h-4 text-primary" />
-            来测一测
+            {title || '来测一测'}
           </DialogTitle>
         </DialogHeader>
 

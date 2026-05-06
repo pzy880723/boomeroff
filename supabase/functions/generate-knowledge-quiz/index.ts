@@ -41,6 +41,12 @@ const TOOL = {
   },
 } as const;
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -55,38 +61,65 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
     const { data: userData } = await userClient.auth.getUser();
-    if (!userData?.user) {
-      return new Response(JSON.stringify({ error: "未登录" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!userData?.user) return json({ error: "未登录" }, 401);
+
+    const { id, kind = "official", force = false } = await req.json();
+    if (!id || typeof id !== "string") return json({ error: "缺少 id" }, 400);
+
+    let knowledge: any = null;
+    let cached: any[] | null = null;
+    let cacheKey = "";
+
+    if (kind === "official") {
+      const { data: row } = await adminClient
+        .from("official_knowledge").select("*").eq("id", id).maybeSingle();
+      if (!row) return json({ error: "词条不存在" }, 404);
+      cached = (row.content as any)?.quiz?.questions ?? null;
+      knowledge = {
+        name: row.name, ip_name: row.ip_name, era: row.era, origin: row.origin,
+        summary: row.summary, selling_points: row.selling_points,
+        tips: row.tips, body: row.body,
+      };
+      cacheKey = `quiz_cache:official:${id}`;
+    } else if (kind === "favorite") {
+      const { data: fav } = await adminClient
+        .from("user_favorites").select("snapshot, source_type, source_id")
+        .eq("id", id).maybeSingle();
+      if (!fav) return json({ error: "收藏不存在" }, 404);
+      const snap = (fav.snapshot as any) || {};
+      knowledge = {
+        name: snap.name, era: snap.era, origin: snap.origin,
+        summary: snap.summary || snap.description,
+        selling_points: snap.selling_points,
+        tips: snap.tips, category: snap.category,
+      };
+      cacheKey = `quiz_cache:favorite:${id}`;
+    } else if (kind === "knowledge") {
+      const { data: k } = await adminClient
+        .from("product_knowledge")
+        .select("product_name, category, era, origin, selling_points, tips")
+        .eq("id", id).maybeSingle();
+      if (!k) return json({ error: "知识不存在" }, 404);
+      knowledge = {
+        name: k.product_name, era: k.era, origin: k.origin,
+        selling_points: k.selling_points, tips: k.tips, category: k.category,
+      };
+      cacheKey = `quiz_cache:knowledge:${id}`;
+    } else {
+      return json({ error: "kind 不合法" }, 400);
     }
 
-    const { id, force = false } = await req.json();
-    if (!id || typeof id !== "string") {
-      return new Response(JSON.stringify({ error: "缺少 id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // 读 app_settings 缓存（非 official）
+    if (!force && !cached && cacheKey && kind !== "official") {
+      const { data: s } = await adminClient
+        .from("app_settings").select("value").eq("key", cacheKey).maybeSingle();
+      const qs = (s?.value as any)?.questions;
+      if (Array.isArray(qs) && qs.length === 5) cached = qs;
     }
 
-    const { data: row, error: rowErr } = await adminClient
-      .from("official_knowledge").select("*").eq("id", id).single();
-    if (rowErr || !row) {
-      return new Response(JSON.stringify({ error: "词条不存在" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    const cached = (row.content as any)?.quiz?.questions;
     if (!force && Array.isArray(cached) && cached.length === 5) {
-      return new Response(JSON.stringify({ questions: cached, cached: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ questions: cached, cached: true });
     }
-
-    const knowledge = {
-      name: row.name,
-      ip_name: row.ip_name,
-      era: row.era,
-      origin: row.origin,
-      summary: row.summary,
-      selling_points: row.selling_points,
-      tips: row.tips,
-      body: row.body,
-    };
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -108,28 +141,29 @@ Deno.serve(async (req) => {
       const t = await aiResp.text();
       console.error("AI quiz error", aiResp.status, t);
       const status = aiResp.status === 429 ? 429 : aiResp.status === 402 ? 402 : 500;
-      return new Response(JSON.stringify({ error: status === 429 ? "AI 调用频率过高" : status === 402 ? "AI 额度不足" : "AI 出题失败" }),
-        { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return json({ error: status === 429 ? "AI 调用频率过高" : status === 402 ? "AI 额度不足" : "AI 出题失败" }, status);
     }
     const data = await aiResp.json();
     const call = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!call) {
-      return new Response(JSON.stringify({ error: "AI 未返回题目" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    if (!call) return json({ error: "AI 未返回题目" }, 500);
     const args = JSON.parse(call.function.arguments || "{}");
     const questions = args.questions || [];
 
-    // 用 service role 缓存到 content.quiz
-    const newContent = { ...(row.content as any || {}), quiz: { questions, generated_at: new Date().toISOString() } };
-    await adminClient.from("official_knowledge").update({ content: newContent }).eq("id", id);
+    if (kind === "official") {
+      const { data: row } = await adminClient
+        .from("official_knowledge").select("content").eq("id", id).maybeSingle();
+      const newContent = { ...((row?.content as any) || {}), quiz: { questions, generated_at: new Date().toISOString() } };
+      await adminClient.from("official_knowledge").update({ content: newContent }).eq("id", id);
+    } else {
+      await adminClient.from("app_settings").upsert(
+        { key: cacheKey, value: { questions, generated_at: new Date().toISOString() }, updated_by: userData.user.id },
+        { onConflict: "key" },
+      );
+    }
 
-    return new Response(JSON.stringify({ questions, cached: false }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ questions, cached: false });
   } catch (e) {
     console.error(e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "未知错误" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: e instanceof Error ? e.message : "未知错误" }, 500);
   }
 });
