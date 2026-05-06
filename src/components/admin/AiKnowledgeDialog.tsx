@@ -195,7 +195,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
 
   const sendQuick = (text: string) => {
     setInput(text);
-    setTimeout(() => void send(), 0);
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const save = async () => {
