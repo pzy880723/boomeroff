@@ -709,6 +709,7 @@ export default function MyLibrary() {
           onExit={exitTask}
           hasNext={taskMode && taskIdx + 1 < taskQueue.length}
           onNext={taskMode ? goNextInTask : undefined}
+          taskProgress={taskMode ? { current: taskIdx + 1, total: taskQueue.length } : undefined}
         />
       )}
     </>
