@@ -124,6 +124,8 @@ export default function OfficialLibrary() {
       }
       if (cat !== 'all') q = q.eq('category', cat);
       if (sub !== 'all') q = q.eq('ip_name', sub);
+      if (era) q = q.eq('era', era);
+      if (origin) q = q.eq('origin', origin);
       if (keyword.trim()) q = q.or(`name.ilike.%${keyword}%,ip_name.ilike.%${keyword}%,summary.ilike.%${keyword}%`);
       const { data } = await q.limit(120);
       let list = (data || []) as OfficialItem[];
