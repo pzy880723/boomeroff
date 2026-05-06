@@ -110,7 +110,7 @@ export default function OfficialDetail() {
   if (!item) return (
     <div className="p-8 text-center text-muted-foreground">
       词条不存在
-      <div className="mt-4"><Button variant="outline" onClick={() => navigate('/library')}>返回</Button></div>
+      <div className="mt-4"><Button variant="outline" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/library'))}>返回</Button></div>
     </div>
   );
 
@@ -157,7 +157,7 @@ export default function OfficialDetail() {
         />
         <div className="relative container mx-auto max-w-screen-md flex items-center justify-between px-3 py-2">
           <button
-            onClick={() => navigate('/library')}
+            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/library'))}
             className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
             aria-label="返回"
           >
