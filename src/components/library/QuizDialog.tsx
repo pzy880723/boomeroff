@@ -180,17 +180,35 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
                 );
               })}
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} className="flex-1">
-                <LogOut className="w-4 h-4 mr-1.5" /> 结束测试
-              </Button>
-              <Button variant="outline" onClick={reset} className="flex-1">
-                <RefreshCw className="w-4 h-4 mr-1.5" /> 再考一次
-              </Button>
-              {isAdmin && (
-                <Button variant="outline" onClick={() => load(true)} className="flex-1">
-                  <Sparkles className="w-4 h-4 mr-1.5" /> 换一套题
-                </Button>
+            <div className="flex flex-wrap gap-2">
+              {hasNext && onNext ? (
+                <>
+                  <Button variant="outline" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} className="flex-1">
+                    <LogOut className="w-4 h-4 mr-1.5" /> 结束今日任务
+                  </Button>
+                  {!passed && (
+                    <Button variant="outline" onClick={reset} className="flex-1">
+                      <RefreshCw className="w-4 h-4 mr-1.5" /> 再考一次
+                    </Button>
+                  )}
+                  <Button onClick={onNext} className="flex-1">
+                    下一个商品 <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} className="flex-1">
+                    <LogOut className="w-4 h-4 mr-1.5" /> 结束测试
+                  </Button>
+                  <Button variant="outline" onClick={reset} className="flex-1">
+                    <RefreshCw className="w-4 h-4 mr-1.5" /> 再考一次
+                  </Button>
+                  {isAdmin && (
+                    <Button variant="outline" onClick={() => load(true)} className="flex-1">
+                      <Sparkles className="w-4 h-4 mr-1.5" /> 换一套题
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>
