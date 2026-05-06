@@ -281,8 +281,72 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     }
   };
 
-  const wantsCoverRedraw = (text: string) =>
-    /(主图|封面|换图|换张图|换一张|重画|重新生成|重新画|重新找|找[一张]*图|cover)/i.test(text);
+  // 上传本地图片到图集
+  const [uploading, setUploading] = useState(false);
+  const galleryFileRef = useRef<HTMLInputElement>(null);
+  const uploadGalleryFiles = async (files: FileList | File[]) => {
+    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (!arr.length) return;
+    setUploading(true);
+    try {
+      const uploaded: string[] = [];
+      for (const f of arr) {
+        if (f.size > 8 * 1024 * 1024) { toast.error(`${f.name} 超过 8MB，已跳过`); continue; }
+        const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `official-gallery/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error } = await supabase.storage.from('product-images').upload(path, f, { contentType: f.type, upsert: false });
+        if (error) { toast.error(`上传失败：${error.message}`); continue; }
+        const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+        if (data?.publicUrl) uploaded.push(data.publicUrl);
+      }
+      if (uploaded.length) {
+        const merged = [...(gallery || []), ...uploaded];
+        setGallery(merged);
+        if (!coverUrl && merged[0]) setCoverUrl(merged[0]);
+        if (editingItem) {
+          await supabase.from('official_knowledge').update({
+            gallery: merged,
+            cover_url: merged[0] || coverUrl || null,
+          }).eq('id', editingItem.id);
+          onSaved();
+        }
+        toast.success(`已上传 ${uploaded.length} 张`);
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // 图集任意变更后，自动把第一张同步为主图
+  const persistGallery = async (next: string[]) => {
+    setGallery(next);
+    const newCover = next[0] || null;
+    setCoverUrl(newCover);
+    if (editingItem) {
+      await supabase.from('official_knowledge').update({
+        gallery: next,
+        cover_url: newCover,
+      }).eq('id', editingItem.id);
+      onSaved();
+    }
+  };
+
+  const removeGalleryItem = (idx: number) => {
+    const next = gallery.filter((_, i) => i !== idx);
+    void persistGallery(next);
+  };
+  const moveGalleryItem = (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= gallery.length) return;
+    const next = [...gallery];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    void persistGallery(next);
+  };
+  const setAsCover = (idx: number) => {
+    if (idx === 0) return;
+    const next = [gallery[idx], ...gallery.filter((_, i) => i !== idx)];
+    void persistGallery(next);
+  };
 
   const send = async () => {
     const text = input.trim();
