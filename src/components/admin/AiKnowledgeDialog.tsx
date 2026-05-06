@@ -435,6 +435,15 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         }
       }
 
+      // ---- Step 4: gallery (3 angles) — 仅当当前图集少于 3 张时补齐 ----
+      if (newPrompt && (gallery?.length || 0) < 3) {
+        try {
+          await generateGallery(newPrompt, { persist: !!editingItem });
+        } catch (e) {
+          console.warn('gallery failed', e);
+        }
+      }
+
       setEnrichStage('done');
       setEnrichProgress(100);
       if (editingItem) toast.success('AI 已一键丰富并保存');
