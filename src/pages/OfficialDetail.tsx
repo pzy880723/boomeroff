@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -54,6 +54,19 @@ export default function OfficialDetail() {
   const [aiEditOpen, setAiEditOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [showFullBody, setShowFullBody] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setScrolled(!entry.isIntersecting),
+      { rootMargin: '0px 0px 0px 0px', threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [item?.id]);
 
   const load = async () => {
     if (!id || !user) return;
@@ -132,6 +145,51 @@ export default function OfficialDetail() {
 
   return (
     <div className="min-h-screen bg-background pb-32">
+      {/* 吸顶按钮栏 */}
+      <div
+        className={`fixed top-0 left-0 right-0 z-30 transition-colors duration-200 pt-[env(safe-area-inset-top)] ${
+          scrolled ? 'bg-background/80 backdrop-blur border-b border-border/60' : 'bg-transparent'
+        }`}
+      >
+        <div className="container mx-auto max-w-screen-md flex items-center justify-between px-3 py-2">
+          <button
+            onClick={() => navigate('/library')}
+            className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+            aria-label="返回"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <>
+                <button
+                  onClick={() => setAiEditOpen(true)}
+                  className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+                  aria-label="AI 修改"
+                  title="AI 修改"
+                >
+                  <Wand2 className="w-4 h-4 text-primary" />
+                </button>
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+                  aria-label="编辑"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </>
+            )}
+            <button
+              onClick={toggleFav}
+              className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+              aria-label="收藏"
+            >
+              <Star className={`w-5 h-5 ${favored ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Hero */}
       <div className="relative w-full bg-muted">
         <div className="aspect-[4/3] w-full max-w-screen-md mx-auto overflow-hidden">
@@ -143,41 +201,8 @@ export default function OfficialDetail() {
             </div>
           )}
         </div>
-        <button
-          onClick={() => navigate('/library')}
-          className="absolute top-3 left-3 w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
-          aria-label="返回"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="absolute top-3 right-3 flex gap-2">
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => setAiEditOpen(true)}
-                className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
-                aria-label="AI 修改"
-                title="AI 修改"
-              >
-                <Wand2 className="w-4 h-4 text-primary" />
-              </button>
-              <button
-                onClick={() => setEditOpen(true)}
-                className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
-                aria-label="编辑"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
-            </>
-          )}
-          <button
-            onClick={toggleFav}
-            className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
-            aria-label="收藏"
-          >
-            <Star className={`w-5 h-5 ${favored ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
-          </button>
-        </div>
+        {/* sentinel：滑出此点即触发吸顶背景 */}
+        <div ref={sentinelRef} className="absolute bottom-12 left-0 w-px h-px" aria-hidden />
       </div>
 
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5">

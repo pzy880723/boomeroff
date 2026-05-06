@@ -1,62 +1,31 @@
-# 官方知识详情页：新增"AI 聊一聊"
+## 目标
+官方知识详情页（`src/pages/OfficialDetail.tsx`）顶端的四个圆形按钮（返回 / AI 修改 / 编辑 / 收藏）改为**固定吸顶**，并随滚动切换样式：
+- 在封面图区域内：保持现在的样子（透明底 + `bg-background/80` 玻璃感，浮在大图上）。
+- 滚出封面图后：整条顶栏出现半透明背景（`bg-background/80 backdrop-blur` + 细底边），按钮继续显示在其上。
 
-让店员在「官方知识」详情页底部，能像识物结果页一样跟 AI 自由提问，深入了解这条词条（产地、价位、保养、与同类对比、客户常见疑问等）。**只问答、不改库**。
+## 实现方案
 
-## 用户体验
+### 1. 改动文件
+仅 `src/pages/OfficialDetail.tsx`（纯 UI 调整，不动业务逻辑）。
 
-- 详情页正文与"小贴士"之后、底部"收藏 / 来测一测"按钮之上，新增一张可折叠卡片：「💬 想多了解一点？跟 AI 聊一聊」。
-- 点开是聊天界面（与 `InlineRefineChat` 同款风格但更简洁）：
-  - 默认显示 3 个建议提问 chip：「客人嫌贵怎么回」「怎么辨真假」「跟 XX 怎么区分」（XX = 第一条 comparison 名）。
-  - 输入框 + 发送按钮，回车发送。
-  - 流式回复，Markdown 渲染。
-  - 不支持上传图片（保持轻量；要识物去识别 tab）。
-- 切换不同词条 / 离开页面 → 自动清空对话。
-- 普通店员和管理员都能用。
+### 2. 结构调整
+- 把现在散落在 Hero 内的两组绝对定位按钮（左上返回 + 右上 AI/编辑/收藏）抽出，放进一个新的 `fixed top-0 left-0 right-0 z-30` 容器，内部 `container mx-auto max-w-screen-md flex justify-between items-center px-3 py-2`。
+- Hero（封面图）保持原结构，但移除原先 `absolute` 的按钮。
+- 因为变成 fixed，body 顶部不再被按钮"占位"——封面图本来就在最顶，视觉无需补 padding；但要确保封面图高度仍 `aspect-[4/3]`，按钮浮在其上。
 
-## 技术方案
+### 3. 滚动样式切换
+- 用 `useEffect` + `window.scroll` 监听 + `useState` `scrolled` 布尔值。
+- 阈值 = 封面图高度。简化做法：用一个隐藏 sentinel `<div ref={sentinelRef} />` 放在封面图末尾，配合 `IntersectionObserver`，当 sentinel 离开视口顶部即 `scrolled = true`。比读 DOM 高度更稳。
+- 顶栏 className 条件：
+  - `scrolled` → `bg-background/80 backdrop-blur border-b border-border/60`
+  - 否则 → `bg-transparent`
+- 单个按钮始终保留 `bg-background/80 backdrop-blur`（保持封面图上的可读性）；滚动后看上去自然融入吸顶栏。
 
-### 1. 新建 edge function：`supabase/functions/chat-knowledge/index.ts`
-- 入参：`{ knowledgeId: string, messages: {role,content}[] }`
-- 服务端用 service role 读取 `official_knowledge` 这条记录的全部字段（name/category/era/origin/summary/one_liner/quick_facts/customer_pitches/selling_points/comparisons/tips/body/content），拼成精炼上下文 system prompt。**不让客户端传 system / 知识内容**，避免越权或污染。
-- 调用 Lovable AI Gateway，`google/gemini-3-flash-preview`，**stream: true**，按现有 `refine-recognition` 同款 SSE 直通模式返回。
-- system prompt 要点：
-  - 「你是日本中古杂货店的资深买手助理，正在帮店员深入理解 XXX 这条官方知识。」
-  - 「严格基于以下卡片资料回答；超出资料的部分要明确说『资料里没写，仅供参考』。」
-  - 「禁止使用『主播』，称呼对方『您』或『店员』，全程简体中文。」
-  - 「回答 100-300 字，多用要点；如果店员问『怎么讲给客人』就给一句可直接念的话术。」
-- 鉴权：要求登录用户即可（authenticated）；不需要 admin。
-- 错误处理：429 / 402 / 其他失败按现有规范返回。
+### 4. 细节
+- `z-index`：吸顶栏 `z-30`；现有 Lightbox `z-50`、底部操作栏 `z-20` 不冲突。
+- 移动端安全区：`pt-[env(safe-area-inset-top)]` 加在吸顶栏上。
+- 不改按钮顺序、图标、aria-label、点击逻辑，只搬位置 + 加滚动样式。
 
-### 2. 新建组件：`src/components/library/KnowledgeChatPanel.tsx`
-- Props: `{ knowledgeId, knowledgeName, suggestions?: string[] }`
-- 内部状态：`messages`、`input`、`streaming`、`open`（折叠）。
-- 调用方式：参考 `InlineRefineChat` 的 `fetch(${VITE_SUPABASE_URL}/functions/v1/chat-knowledge, ...)` SSE 解析逻辑（同样的 line-by-line + [DONE] 处理）。
-- UI 用项目现有 `Card` / `Button` / `Textarea`、Tailwind 语义 token，与 `InlineRefineChat` 视觉一致但用 `bg-accent/20` 而非 amber 色（不是"警告"语义）。
-- 助手消息 `ReactMarkdown` 渲染，用户消息纯文本。
-- 第一条 assistant 欢迎语硬编码：`您好，我是「${knowledgeName}」的小助手，想知道什么直接问我吧～`。
-
-### 3. 接入 `src/pages/OfficialDetail.tsx`
-- 在小贴士 Card 之后、空内容兜底之前（或紧贴空内容兜底之前）插入：
-  ```tsx
-  <KnowledgeChatPanel
-    knowledgeId={item.id}
-    knowledgeName={item.name}
-    suggestions={[
-      '客人嫌贵怎么回？',
-      '怎么辨真假？',
-      comparisons[0] ? `跟 ${comparisons[0].name} 有什么区别？` : '保养有什么禁忌？',
-    ]}
-  />
-  ```
-- 因为底部有 fixed 操作条，详情页已有 `pb-32`，确保聊天卡完整可见。
-
-## 不在范围
-- 不改 `AiKnowledgeDialog`（那是管理员的编辑流程）。
-- 不持久化对话（页面刷新 / 切词条即清空）。
-- 不接入图片上传 / 工具调用 / 联网搜索。
-- 不在「个人知识」详情接入（本期只做官方）。
-
-## 文件清单
-- 新建：`supabase/functions/chat-knowledge/index.ts`
-- 新建：`src/components/library/KnowledgeChatPanel.tsx`
-- 修改：`src/pages/OfficialDetail.tsx`（导入 + 渲染一处）
+### 5. 不做的事
+- 不动 `KnowledgeChatPanel`、底部操作栏、Hero 图片本身。
+- 不引入新依赖。
