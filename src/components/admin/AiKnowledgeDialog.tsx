@@ -335,7 +335,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
           <Button variant="outline" onClick={() => onOpenChange(false)} className="hidden md:inline-flex">取消</Button>
           <Button onClick={save} disabled={saving || !draft.name} className="flex-1 md:flex-none">
             {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-            保存到官方知识
+            {isEdit ? '保存修改' : '保存到官方知识'}
           </Button>
         </DialogFooter>
       </DialogContent>
