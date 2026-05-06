@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import {
   Loader2, ArrowLeft, Star, Pencil, Sparkles, Eye, ImageOff,
-  Quote, Volume2, Square, Copy, Wand2,
+  Quote, Volume2, Square, Copy, Wand2, BookOpen, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
@@ -392,22 +392,47 @@ export default function OfficialDetail() {
 
         {/* 正文（默认折叠） */}
         {item.body && (
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-muted-foreground">深度阅读</h2>
-              <Button size="sm" variant="ghost" className="h-7 text-xs"
-                onClick={() => setShowFullBody((v) => !v)}>
-                {showFullBody ? '收起' : `展开完整学习 (${item.body.length} 字)`}
-              </Button>
+          <Card className="relative px-5 py-5 pb-7 overflow-visible">
+            <div className="flex items-center gap-1.5 mb-3 text-muted-foreground">
+              <BookOpen className="w-4 h-4" />
+              <h2 className="text-sm font-semibold">深度阅读</h2>
+              <span className="text-xs text-muted-foreground/70">· {item.body.length} 字</span>
             </div>
-            <div className={`prose prose-sm max-w-none dark:prose-invert leading-relaxed
-              prose-headings:font-semibold prose-p:my-2 prose-li:my-0.5
-              ${showFullBody ? '' : 'max-h-40 overflow-hidden relative'}`}>
+            <div
+              className={`prose prose-sm max-w-none dark:prose-invert text-[15px] leading-7 text-foreground/90
+                prose-headings:font-semibold prose-headings:text-foreground
+                prose-h1:text-lg prose-h1:mt-5 prose-h1:mb-2 prose-h1:pb-1.5 prose-h1:border-b prose-h1:border-border
+                prose-h2:text-base prose-h2:mt-5 prose-h2:mb-2
+                prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-1.5 prose-h3:text-muted-foreground prose-h3:tracking-wide
+                prose-p:my-3 prose-p:leading-7
+                prose-ul:my-3 prose-ul:pl-5 prose-ol:my-3 prose-ol:pl-5
+                prose-li:my-1 prose-li:leading-7
+                prose-strong:text-foreground prose-strong:font-semibold
+                prose-a:text-primary prose-a:underline-offset-2
+                prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:bg-muted/40
+                prose-blockquote:py-1 prose-blockquote:px-3 prose-blockquote:not-italic
+                prose-blockquote:text-foreground/90 prose-blockquote:rounded-r prose-blockquote:my-3
+                prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[13px]
+                prose-code:before:content-none prose-code:after:content-none
+                prose-hr:my-6 prose-hr:border-border
+                prose-img:rounded-lg prose-img:my-4
+                ${showFullBody ? '' : 'max-h-44 overflow-hidden relative'}`}
+            >
               <ReactMarkdown>{item.body}</ReactMarkdown>
               {!showFullBody && (
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-card to-transparent pointer-events-none" />
               )}
             </div>
+            <button
+              onClick={() => setShowFullBody((v) => !v)}
+              className="absolute left-1/2 -translate-x-1/2 -bottom-3.5 inline-flex items-center gap-1 h-7 px-3.5 rounded-full border border-border bg-card text-xs text-muted-foreground hover:text-foreground hover:bg-accent shadow-sm transition-colors"
+            >
+              {showFullBody ? (
+                <>收起 <ChevronUp className="w-3.5 h-3.5" /></>
+              ) : (
+                <>展开全文 <ChevronDown className="w-3.5 h-3.5" /></>
+              )}
+            </button>
           </Card>
         )}
 
