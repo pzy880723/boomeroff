@@ -41,6 +41,7 @@ export default function OfficialDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, role, loading: authLoading } = useAuth();
+  const { isSpeaking, speak, stop } = useSpeech();
   const isAdmin = role === 'admin';
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,6 +49,7 @@ export default function OfficialDetail() {
   const [quizOpen, setQuizOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [showFullBody, setShowFullBody] = useState(false);
 
   const load = async () => {
     if (!id || !user) return;
