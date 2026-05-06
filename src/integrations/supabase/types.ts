@@ -236,6 +236,51 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_test_results: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          item_kind: string
+          last_attempt_at: string
+          passed_at: string | null
+          score: number
+          source_id: string | null
+          source_type: string | null
+          total: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          item_kind: string
+          last_attempt_at?: string
+          passed_at?: string | null
+          score?: number
+          source_id?: string | null
+          source_type?: string | null
+          total?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          item_kind?: string
+          last_attempt_at?: string
+          passed_at?: string | null
+          score?: number
+          source_id?: string | null
+          source_type?: string | null
+          total?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       official_knowledge: {
         Row: {
           body: string | null
