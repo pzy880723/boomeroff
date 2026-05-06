@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
@@ -11,9 +11,17 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
-import { Loader2, Upload, Globe, ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react';
+import { Loader2, Upload, Globe, Star, Trash2, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { WebImagePickerDialog } from './WebImagePickerDialog';
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, arrayMove, rectSortingStrategy, useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Item {
   id: string;
@@ -88,18 +96,24 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
   };
 
   const removeAt = (i: number) => setGallery((p) => p.filter((_, idx) => idx !== i));
-  const move = (i: number, dir: -1 | 1) => {
-    setGallery((p) => {
-      const j = i + dir;
-      if (j < 0 || j >= p.length) return p;
-      const next = [...p];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
-  };
   const setCover = (i: number) => {
     if (i === 0) return;
     setGallery((p) => [p[i], ...p.filter((_, idx) => idx !== i)]);
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  );
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    setGallery((items) => {
+      const oldIndex = items.indexOf(String(active.id));
+      const newIndex = items.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) return items;
+      return arrayMove(items, oldIndex, newIndex);
+    });
   };
 
   const save = async () => {
@@ -178,49 +192,33 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
             <div className="flex items-center justify-between mb-1.5">
               <Label className="mb-0">
                 图片 {gallery.length > 0 && <span className="text-xs text-muted-foreground font-normal">({gallery.length})</span>}
-                <span className="ml-1 text-[10px] text-muted-foreground font-normal">第一张为主图</span>
+                <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                  第一张为主图{gallery.length > 1 ? ' · 长按拖动排序' : ''}
+                </span>
               </Label>
             </div>
 
             {gallery.length ? (
-              <div className="grid grid-cols-3 gap-2">
-                {gallery.map((u, i) => (
-                  <div key={u + i} className="relative rounded-md border overflow-hidden bg-muted aspect-square">
-                    <img src={u} alt="" className="w-full h-full object-cover" />
-                    {i === 0 && (
-                      <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium flex items-center gap-0.5">
-                        <Star className="w-2.5 h-2.5 fill-current" /> 主图
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeAt(i)}
-                      className="absolute top-1 right-1 bg-background/90 hover:bg-destructive hover:text-destructive-foreground rounded-full p-1 shadow-sm"
-                      title="删除"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                    <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
-                      <div className="flex gap-1">
-                        <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
-                          className="bg-background/90 disabled:opacity-30 rounded p-0.5" title="前移">
-                          <ArrowLeft className="w-3 h-3" />
-                        </button>
-                        <button type="button" onClick={() => move(i, 1)} disabled={i === gallery.length - 1}
-                          className="bg-background/90 disabled:opacity-30 rounded p-0.5" title="后移">
-                          <ArrowRight className="w-3 h-3" />
-                        </button>
-                      </div>
-                      {i !== 0 && (
-                        <button type="button" onClick={() => setCover(i)}
-                          className="bg-background/90 rounded p-0.5" title="设为主图">
-                          <Star className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext items={gallery} strategy={rectSortingStrategy}>
+                  <div className="grid grid-cols-3 gap-2">
+                    {gallery.map((u, i) => (
+                      <SortableImage
+                        key={u}
+                        url={u}
+                        index={i}
+                        isCover={i === 0}
+                        onRemove={() => removeAt(i)}
+                        onSetCover={() => setCover(i)}
+                      />
+                    ))}
                   </div>
-                ))}
-              </div>
+                </SortableContext>
+              </DndContext>
             ) : (
               <div className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-md">
                 {uploading ? '正在上传…' : (searching ? '正在联网搜索…' : '尚无图片，请上传或联网搜图')}
@@ -294,5 +292,71 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
         onConfirm={(urls) => setGallery((prev) => Array.from(new Set([...prev, ...urls])))}
       />
     </Dialog>
+  );
+}
+
+function SortableImage({
+  url, index, isCover, onRemove, onSetCover,
+}: {
+  url: string;
+  index: number;
+  isCover: boolean;
+  onRemove: () => void;
+  onSetCover: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: url });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+    touchAction: 'manipulation',
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="relative rounded-md border overflow-hidden bg-muted aspect-square select-none"
+    >
+      {/* 拖动热区：覆盖整张图，长按触发 */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute inset-0 cursor-grab active:cursor-grabbing"
+        aria-label="长按拖动排序"
+      >
+        <img src={url} alt="" draggable={false} className="w-full h-full object-cover pointer-events-none" />
+      </div>
+      {isCover && (
+        <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium flex items-center gap-0.5 pointer-events-none">
+          <Star className="w-2.5 h-2.5 fill-current" /> 主图
+        </div>
+      )}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={onRemove}
+        className="absolute top-1 right-1 bg-background/90 hover:bg-destructive hover:text-destructive-foreground rounded-full p-1 shadow-sm z-10"
+        title="删除"
+      >
+        <Trash2 className="w-3 h-3" />
+      </button>
+      <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1 z-10">
+        <div className="bg-background/80 rounded p-0.5 pointer-events-none">
+          <GripVertical className="w-3 h-3 text-muted-foreground" />
+        </div>
+        {!isCover && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onSetCover}
+            className="bg-background/90 rounded p-0.5"
+            title="设为主图"
+          >
+            <Star className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
