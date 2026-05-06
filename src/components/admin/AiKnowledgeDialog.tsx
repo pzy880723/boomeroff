@@ -118,6 +118,8 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [gallery, setGallery] = useState<string[]>([]);
   const [galleryBusy, setGalleryBusy] = useState(false);
+  const [backstampUrl, setBackstampUrl] = useState<string | null>(null);
+  const [backstampBusy, setBackstampBusy] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [painting, setPainting] = useState(false);
   const [saving, setSaving] = useState(false);
