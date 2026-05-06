@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Scan from "./pages/Scan";
 import OfficialLibrary from "./pages/OfficialLibrary";
+import OfficialDetail from "./pages/OfficialDetail";
 import MyLibrary from "./pages/MyLibrary";
 import Community from "./pages/Community";
 import Me from "./pages/Me";
@@ -38,6 +39,7 @@ const App = () => (
             </Route>
 
             {/* Standalone pages without bottom tab */}
+            <Route path="/library/:id" element={<OfficialDetail />} />
             <Route path="/history" element={<History />} />
             <Route path="/portal" element={<PortalGuard><Portal /></PortalGuard>} />
             <Route path="/admin/users" element={<Navigate to="/portal" replace />} />
