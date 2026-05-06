@@ -478,6 +478,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       toast.error('保存失败：' + (e?.message ?? ''));
     } finally {
       setSaving(false);
+      setSavingStage('');
     }
   };
 
