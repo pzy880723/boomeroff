@@ -136,7 +136,7 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
               ))}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={() => { onExit?.(); onOpenChange(false); }} aria-label="退出">
+              <Button variant="outline" size="icon" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} aria-label="退出">
                 <LogOut className="w-4 h-4" />
               </Button>
               <Button variant="outline" onClick={goBack} disabled={step === 0} className="shrink-0">
@@ -179,7 +179,7 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
               })}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { onExit?.(); onOpenChange(false); }} className="flex-1">
+              <Button variant="outline" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} className="flex-1">
                 <LogOut className="w-4 h-4 mr-1.5" /> 结束测试
               </Button>
               <Button variant="outline" onClick={reset} className="flex-1">
