@@ -38,9 +38,10 @@ interface Draft {
 
 const VALID_CATEGORIES: ProductCategory[] = [
   'jp_porcelain','eu_porcelain','incense','antique_art','local_craft',
-  'anime_toy','otaku_goods','luxury','vintage_jewelry',
+  'anime_toy','otaku_goods','luxury','jewelry',
   'game_console','walkman','ccd','media_record','playback_device',
-  'home_appliance','hobby','other',
+  'home_appliance','hobby','stationery','lacquerware','bronze',
+  'woodcraft','textile','painting','porcelain','other',
 ];
 
 interface Props {
