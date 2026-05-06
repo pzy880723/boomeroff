@@ -49,6 +49,7 @@ export default function OfficialDetail() {
   const [favored, setFavored] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [aiEditOpen, setAiEditOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [showFullBody, setShowFullBody] = useState(false);
 
