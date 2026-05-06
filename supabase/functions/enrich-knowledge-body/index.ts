@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
         role: "system",
         content: `当前词条核心字段如下，请基于这些事实撰写长正文 body：\n${JSON.stringify(coreDraft, null, 2)}`,
       },
-      { role: "user", content: "请撰写这条词条的长正文 body，至少 800 字，严格使用规定的 6 个二级标题。" },
+      { role: "user", content: "请撰写这条词条的长正文 body，约 500-700 字，严格使用规定的 6 个二级标题。" },
     ];
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
