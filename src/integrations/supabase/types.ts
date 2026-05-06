@@ -238,6 +238,7 @@ export type Database = {
       }
       official_knowledge: {
         Row: {
+          body: string | null
           category: Database["public"]["Enums"]["product_category"]
           content: Json
           cover_url: string | null
@@ -256,9 +257,11 @@ export type Database = {
           summary: string | null
           tips: string | null
           updated_at: string
+          video_url: string | null
           view_count: number
         }
         Insert: {
+          body?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           content?: Json
           cover_url?: string | null
@@ -277,9 +280,11 @@ export type Database = {
           summary?: string | null
           tips?: string | null
           updated_at?: string
+          video_url?: string | null
           view_count?: number
         }
         Update: {
+          body?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           content?: Json
           cover_url?: string | null
@@ -298,6 +303,7 @@ export type Database = {
           summary?: string | null
           tips?: string | null
           updated_at?: string
+          video_url?: string | null
           view_count?: number
         }
         Relationships: []
