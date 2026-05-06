@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Sparkles, LogOut } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, RefreshCw, Sparkles, LogOut, ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Question {
@@ -57,14 +57,31 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
 
   const submit = () => {
     if (picked == null) return;
-    const next = [...answers, picked];
+    const next = [...answers];
+    next[step] = picked;
     setAnswers(next);
-    setPicked(null);
-    if (step + 1 < questions.length) setStep(step + 1);
-    else setStep(questions.length); // 完成
+    if (step + 1 < questions.length) {
+      setStep(step + 1);
+      setPicked(next[step + 1] ?? null);
+    } else {
+      setStep(questions.length); // 完成
+    }
   };
 
-  const finished = answers.length === questions.length && questions.length > 0;
+  const goBack = () => {
+    if (step === 0) return;
+    // 保留当前选择（如已选）
+    if (picked != null) {
+      const next = [...answers];
+      next[step] = picked;
+      setAnswers(next);
+    }
+    const prev = step - 1;
+    setStep(prev);
+    setPicked(answers[prev] ?? null);
+  };
+
+  const finished = questions.length > 0 && step >= questions.length;
   const score = answers.reduce((acc, a, i) => acc + (a === questions[i]?.correctIndex ? 1 : 0), 0);
   const passed = questions.length > 0 && score / questions.length >= passThreshold;
   const verdict = passed
@@ -119,8 +136,11 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
               ))}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { onExit?.(); onOpenChange(false); }} className="shrink-0">
-                <LogOut className="w-4 h-4 mr-1.5" />退出
+              <Button variant="outline" size="icon" onClick={() => { onExit?.(); onOpenChange(false); }} aria-label="退出">
+                <LogOut className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" onClick={goBack} disabled={step === 0} className="shrink-0">
+                <ChevronLeft className="w-4 h-4 mr-1" />上一题
               </Button>
               <Button onClick={submit} disabled={picked == null} className="flex-1">
                 {step + 1 < questions.length ? '下一题' : '提交'}
