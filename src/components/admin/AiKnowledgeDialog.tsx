@@ -525,6 +525,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         body: bodyText,
         importance_score: Math.min(100, Math.max(0, Math.round(Number(draft.importance_score) || 0))),
         cover_url: coverUrl || null,
+        gallery: gallery || [],
         content: {
           one_liner: draft.one_liner || null,
           aliases: draft.aliases || [],
