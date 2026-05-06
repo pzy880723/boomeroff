@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
@@ -13,7 +13,7 @@ import {
 } from '@/types';
 import {
   Loader2, Search, Star, LayoutGrid, ChevronDown, ChevronUp, List, ImageOff,
-  Clock, Flame, Award,
+  Clock, Flame, Award, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AddOfficialFab } from '@/components/library/AddOfficialFab';
@@ -43,13 +43,18 @@ type SortKey = 'latest' | 'hot' | 'important';
 
 export default function OfficialLibrary() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, role, loading: authLoading } = useAuth();
   const isAdmin = role === 'admin';
   const [items, setItems] = useState<OfficialItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [keyword, setKeyword] = useState('');
-  const [cat, setCat] = useState<ProductCategory | 'all'>('all');
-  const [sub, setSub] = useState<string>('all');
+  const [keyword, setKeyword] = useState(() => searchParams.get('q') || '');
+  const [cat, setCat] = useState<ProductCategory | 'all'>(
+    () => (searchParams.get('cat') as ProductCategory | null) || 'all',
+  );
+  const [sub, setSub] = useState<string>(() => searchParams.get('ip') || 'all');
+  const [era, setEra] = useState<string>(() => searchParams.get('era') || '');
+  const [origin, setOrigin] = useState<string>(() => searchParams.get('origin') || '');
   const [expanded, setExpanded] = useState(false);
   const [sort, setSort] = useState<SortKey>(() => {
     if (typeof window === 'undefined') return 'latest';
@@ -61,6 +66,17 @@ export default function OfficialLibrary() {
   });
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(new Set());
   const [reloadKey, setReloadKey] = useState(0);
+
+  // 同步 URL 参数
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (cat !== 'all') params.cat = cat;
+    if (sub !== 'all') params.ip = sub;
+    if (era) params.era = era;
+    if (origin) params.origin = origin;
+    if (keyword.trim()) params.q = keyword.trim();
+    setSearchParams(params, { replace: true });
+  }, [cat, sub, era, origin, keyword, setSearchParams]);
 
   useEffect(() => {
     localStorage.setItem('lib_view', view);
@@ -74,8 +90,12 @@ export default function OfficialLibrary() {
     localStorage.setItem('lib_sort', sort);
   }, [sort]);
 
-  // 切换一级类目时重置二级
-  useEffect(() => { setSub('all'); }, [cat]);
+  // 切换一级类目时重置二级（首次挂载若已有 ip 参数则跳过）
+  const [catInited, setCatInited] = useState(false);
+  useEffect(() => {
+    if (!catInited) { setCatInited(true); return; }
+    setSub('all');
+  }, [cat]);
 
   // 若选中类目在折叠区外，自动展开
   useEffect(() => {
@@ -104,6 +124,8 @@ export default function OfficialLibrary() {
       }
       if (cat !== 'all') q = q.eq('category', cat);
       if (sub !== 'all') q = q.eq('ip_name', sub);
+      if (era) q = q.eq('era', era);
+      if (origin) q = q.eq('origin', origin);
       if (keyword.trim()) q = q.or(`name.ilike.%${keyword}%,ip_name.ilike.%${keyword}%,summary.ilike.%${keyword}%`);
       const { data } = await q.limit(120);
       let list = (data || []) as OfficialItem[];
@@ -123,7 +145,7 @@ export default function OfficialLibrary() {
         .eq('source_type', 'official');
       setFavoritedIds(new Set((fav || []).map((f) => f.source_id)));
     })();
-  }, [user, cat, sub, keyword, sort, reloadKey]);
+  }, [user, cat, sub, era, origin, keyword, sort, reloadKey]);
 
   const toggleFav = async (item: OfficialItem) => {
     if (!user) return;
@@ -191,6 +213,30 @@ export default function OfficialLibrary() {
             </button>
           </div>
         </div>
+
+        {/* 当前筛选 chips（年代/产地） */}
+        {(era || origin) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {era && (
+              <button
+                onClick={() => setEra('')}
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-primary/10 text-primary text-xs hover:bg-primary/20"
+              >
+                年代：{era}
+                <X className="w-3 h-3" />
+              </button>
+            )}
+            {origin && (
+              <button
+                onClick={() => setOrigin('')}
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-primary/10 text-primary text-xs hover:bg-primary/20"
+              >
+                产地：{origin}
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* 主类目网格 */}
         <div className="grid grid-cols-6 gap-1.5">
