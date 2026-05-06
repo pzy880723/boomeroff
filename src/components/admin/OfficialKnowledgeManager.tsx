@@ -22,6 +22,7 @@ import { Plus, Trash2, Edit, Loader2, Search, ImageOff, Sparkles, Wand2 } from '
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 import { AiKnowledgeDialog } from './AiKnowledgeDialog';
+import { AutoCategorizeButton } from './AutoCategorizeButton';
 
 interface Item {
   id: string;
