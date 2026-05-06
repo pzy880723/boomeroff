@@ -278,13 +278,13 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             <div className="border-t p-3 space-y-2">
               {!!draft.name && !thinking && (
                 <div className="flex flex-wrap gap-1.5">
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('请把正文 body 再扩充一倍，加入更多年份、人名和具体价位行情。')}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('请把正文再扩充一倍，加入更多年份、人名和具体价位行情。')}>
                     再深入一点
                   </Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('请补充更多易混对比 comparisons，至少 3 条。')}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('请补充更多易混对比，至少 3 条。')}>
                     补充对比
                   </Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('one_liner 再换一个更出圈的类比金句。')}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => sendQuick('再换一个更出圈的类比金句。')}>
                     换金句
                   </Button>
                 </div>
