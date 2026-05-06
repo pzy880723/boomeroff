@@ -211,6 +211,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       setMessages((m) => [...m, { role: 'assistant', content: reply }]);
       setDraft(newDraft);
       const newPrompt = (data?.cover_prompt as string | undefined) || '';
+      const isFirstNameInCreate = !isEdit && !draft.name && !!newDraft.name;
       if (wantCover) {
         // 强制重画并落库（即使已有封面）
         const usePrompt = newPrompt || coverPrompt;
@@ -220,11 +221,16 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         } else {
           setMessages((m) => [...m, { role: 'assistant', content: '我没拿到新的封面描述，请再说一下您希望的外观（颜色/材质/形状）。' }]);
         }
-      } else if (newPrompt && newPrompt !== coverPrompt && !coverUrl) {
+      } else if (newPrompt && newPrompt !== coverPrompt && !coverUrl && !isFirstNameInCreate) {
         setCoverPrompt(newPrompt);
         void triggerCover(newPrompt);
       } else if (newPrompt && newPrompt !== coverPrompt) {
         setCoverPrompt(newPrompt);
+      }
+      // 新增模式：首次得到名称后，自动跑一键丰富全字段 + 主图，并在完成后弹出预览
+      if (isFirstNameInCreate) {
+        setMessages((m) => [...m, { role: 'assistant', content: '正在为您一键补全所有字段并生成主图…完成后会自动打开预览。' }]);
+        setTimeout(() => { void oneClickEnrich({ silent: true, openPreviewWhenDone: true, baseDraft: newDraft }); }, 0);
       }
     } catch (e: any) {
       toast.error(e?.message ?? 'AI 调用失败');
@@ -279,14 +285,15 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     }
   }
 
-  const oneClickEnrich = async () => {
-    if (!editingItem) return;
+  const oneClickEnrich = async (opts: { silent?: boolean; openPreviewWhenDone?: boolean; baseDraft?: Draft } = {}) => {
     if (enrichStage !== 'idle' && enrichStage !== 'done') return;
     try {
       setEnrichProgress(0);
       setEnrichStage('collect');
-      const baseDraft = itemToDraft(editingItem);
-      setMessages((m) => [...m, { role: 'user', content: '✨ 一键丰富：分段重写并补全到最高完成度。' }]);
+      const baseDraft: Draft = opts.baseDraft ? { ...opts.baseDraft } : (editingItem ? itemToDraft(editingItem) : { ...draft });
+      if (!opts.silent) {
+        setMessages((m) => [...m, { role: 'user', content: '✨ 一键丰富：分段重写并补全到最高完成度。' }]);
+      }
 
       const hasCover = !!coverUrl;
 
@@ -305,34 +312,36 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       setDraft(coreDraft);
       setMessages((m) => [...m, { role: 'assistant', content: (coreData.reply as string) || '已重写核心字段。' }]);
 
-      // ---- Step 1.5: 立刻保存核心字段，避免长正文失败导致整体丢失 ----
+      // ---- Step 1.5: 立刻保存核心字段（仅编辑模式），新增模式只暂存到 draft ----
       const safeCategory: ProductCategory = (VALID_CATEGORIES as string[]).includes(coreDraft.category as string)
         ? (coreDraft.category as ProductCategory) : 'other';
       const sellingPointsJson = (coreDraft.selling_points || []).map((p: any) =>
         typeof p === 'string' ? { text: p } : p,
       );
-      const corePayload: any = {
-        name: coreDraft.name?.trim() || editingItem.name,
-        category: safeCategory,
-        ip_name: coreDraft.ip_name?.trim() || null,
-        era: coreDraft.era?.trim() || null,
-        origin: coreDraft.origin?.trim() || null,
-        summary: coreDraft.summary?.trim() || null,
-        selling_points: sellingPointsJson,
-        tips: coreDraft.tips?.trim() || null,
-        importance_score: Math.min(100, Math.max(0, Math.round(Number(coreDraft.importance_score) || 0))),
-        content: {
-          one_liner: coreDraft.one_liner || null,
-          aliases: coreDraft.aliases || [],
-          pronunciation: coreDraft.pronunciation || null,
-          quick_facts: coreDraft.quick_facts || [],
-          customer_pitches: coreDraft.customer_pitches || [],
-          comparisons: coreDraft.comparisons || [],
-        },
-      };
-      const { error: coreSaveErr } = await supabase.from('official_knowledge').update(corePayload).eq('id', editingItem.id);
-      if (coreSaveErr) throw coreSaveErr;
-      onSaved();
+      if (editingItem) {
+        const corePayload: any = {
+          name: coreDraft.name?.trim() || editingItem.name,
+          category: safeCategory,
+          ip_name: coreDraft.ip_name?.trim() || null,
+          era: coreDraft.era?.trim() || null,
+          origin: coreDraft.origin?.trim() || null,
+          summary: coreDraft.summary?.trim() || null,
+          selling_points: sellingPointsJson,
+          tips: coreDraft.tips?.trim() || null,
+          importance_score: Math.min(100, Math.max(0, Math.round(Number(coreDraft.importance_score) || 0))),
+          content: {
+            one_liner: coreDraft.one_liner || null,
+            aliases: coreDraft.aliases || [],
+            pronunciation: coreDraft.pronunciation || null,
+            quick_facts: coreDraft.quick_facts || [],
+            customer_pitches: coreDraft.customer_pitches || [],
+            comparisons: coreDraft.comparisons || [],
+          },
+        };
+        const { error: coreSaveErr } = await supabase.from('official_knowledge').update(corePayload).eq('id', editingItem.id);
+        if (coreSaveErr) throw coreSaveErr;
+        onSaved();
+      }
 
       // ---- Step 2: long body ----
       setEnrichStage('body');
@@ -349,13 +358,15 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         bodyText = bodyData.body as string;
         setEnrichProgress(80);
         setDraft({ ...coreDraft, body: bodyText });
-        const { error: bodyErr } = await supabase.from('official_knowledge').update({ body: bodyText }).eq('id', editingItem.id);
-        if (bodyErr) throw bodyErr;
-        setMessages((m) => [...m, { role: 'assistant', content: '已撰写长正文。' }]);
-        onSaved();
+        if (editingItem) {
+          const { error: bodyErr } = await supabase.from('official_knowledge').update({ body: bodyText }).eq('id', editingItem.id);
+          if (bodyErr) throw bodyErr;
+          onSaved();
+        }
+        if (!opts.silent) setMessages((m) => [...m, { role: 'assistant', content: '已撰写长正文。' }]);
       } catch (e: any) {
         console.warn('body failed', e);
-        toast.error(`长正文生成失败：${e?.message ?? ''}（核心字段已保存，可稍后重试）`);
+        toast.error(`长正文生成失败：${e?.message ?? ''}`);
       }
 
       // ---- Step 3: cover (skip if already exists) ----
@@ -371,9 +382,11 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
           }, 'cover');
           setCoverUrl(cd.url);
           setCoverPrompt(newPrompt);
-          await supabase.from('official_knowledge').update({ cover_url: cd.url }).eq('id', editingItem.id);
+          if (editingItem) {
+            await supabase.from('official_knowledge').update({ cover_url: cd.url }).eq('id', editingItem.id);
+            onSaved();
+          }
           setEnrichProgress(92);
-          onSaved();
         } catch (e) {
           console.warn('cover failed, continue without it', e);
         }
@@ -381,7 +394,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
 
       setEnrichStage('done');
       setEnrichProgress(100);
-      toast.success('AI 已一键丰富并保存');
+      if (editingItem) toast.success('AI 已一键丰富并保存');
+      else toast.success('已生成完整草稿与主图，请预览后保存');
+      if (opts.openPreviewWhenDone) setPreviewOpen(true);
       resetEnrich();
     } catch (e: any) {
       console.error(e);
@@ -528,7 +543,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
                     <Button
                       size="sm"
                       className="h-7 text-xs gap-1"
-                      onClick={oneClickEnrich}
+                      onClick={() => oneClickEnrich()}
                       disabled={enrichStage !== 'idle' && enrichStage !== 'done'}
                     >
                       {(enrichStage !== 'idle' && enrichStage !== 'done')
