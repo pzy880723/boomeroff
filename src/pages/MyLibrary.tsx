@@ -493,15 +493,18 @@ export default function MyLibrary() {
                 今日剩余 {remainingToday.length} / {todayList.length} 条
               </div>
               <ul className="space-y-1">
-                {todayList.map((it) => (
-                  <li
-                    key={it.key}
-                    className="text-xs text-foreground/80 flex items-center gap-1.5 truncate"
-                  >
-                    <span className="text-muted-foreground">·</span>
-                    <span className="truncate">{it.name}</span>
-                  </li>
-                ))}
+                {todayList.map((it) => {
+                  const done = attemptedToday.includes(it.key);
+                  return (
+                    <li
+                      key={it.key}
+                      className={`text-xs flex items-center gap-1.5 truncate ${done ? 'text-muted-foreground line-through' : 'text-foreground/80'}`}
+                    >
+                      <span className="text-muted-foreground">·</span>
+                      <span className="truncate">{it.name}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
