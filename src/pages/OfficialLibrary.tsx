@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
   CATEGORY_LABELS, CATEGORY_ORDER, CATEGORY_ICONS,
@@ -16,9 +16,7 @@ import {
   Clock, Flame, Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
+import { AddOfficialFab } from '@/components/library/AddOfficialFab';
 
 interface OfficialItem {
   id: string;
@@ -44,7 +42,9 @@ type ViewMode = 'grid' | 'list';
 type SortKey = 'latest' | 'hot' | 'important';
 
 export default function OfficialLibrary() {
-  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const { user, role, loading: authLoading } = useAuth();
+  const isAdmin = role === 'admin';
   const [items, setItems] = useState<OfficialItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
