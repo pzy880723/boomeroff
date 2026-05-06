@@ -537,7 +537,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
                     <Button
                       size="sm"
                       className="h-7 text-xs gap-1"
-                      onClick={oneClickEnrich}
+                      onClick={() => oneClickEnrich()}
                       disabled={enrichStage !== 'idle' && enrichStage !== 'done'}
                     >
                       {(enrichStage !== 'idle' && enrichStage !== 'done')
