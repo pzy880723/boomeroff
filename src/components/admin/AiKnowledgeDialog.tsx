@@ -304,6 +304,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
                   <ImagePlus className="w-4 h-4" />
                 </Button>
                 <Input
+                  ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
