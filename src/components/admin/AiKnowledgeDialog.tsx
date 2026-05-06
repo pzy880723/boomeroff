@@ -669,7 +669,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         tips: draft.tips?.trim() || null,
         body: bodyText,
         importance_score: Math.min(100, Math.max(0, Math.round(Number(draft.importance_score) || 0))),
-        cover_url: coverUrl || null,
+        cover_url: (gallery && gallery[0]) || coverUrl || null,
         gallery: gallery || [],
         backstamp_url: backstampUrl || null,
         content: {
