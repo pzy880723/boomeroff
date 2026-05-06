@@ -64,6 +64,25 @@ const isUsableImage = (url?: string | null) => {
 };
 
 const TODAY_LIMIT = 5;
+const TASK_PROGRESS_KEY = 'today-task-progress';
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const readAttempted = (): string[] => {
+  try {
+    const raw = localStorage.getItem(TASK_PROGRESS_KEY);
+    if (!raw) return [];
+    const obj = JSON.parse(raw);
+    if (obj?.date !== todayStr()) return [];
+    return Array.isArray(obj.attemptedKeys) ? obj.attemptedKeys : [];
+  } catch { return []; }
+};
+const writeAttempted = (keys: string[]) => {
+  try {
+    localStorage.setItem(TASK_PROGRESS_KEY, JSON.stringify({ date: todayStr(), attemptedKeys: Array.from(new Set(keys)) }));
+  } catch { /* ignore */ }
+};
 
 export default function MyLibrary() {
   const { user, loading: authLoading } = useAuth();
