@@ -220,25 +220,34 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const generateGallery = async (basePrompt: string, opts: { persist?: boolean } = {}): Promise<string[]> => {
     if (!basePrompt) return [];
     setGalleryBusy(true);
-    const angles = [
-      `${basePrompt}, close-up detail shot of texture and craftsmanship`,
-      `${basePrompt}, side angle showing silhouette and proportions`,
-      `${basePrompt}, top-down flat lay arrangement`,
-    ];
     try {
-      const results = await Promise.all(
-        angles.map(async (p) => {
-          try {
-            const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: p } });
-            if (error) throw error;
-            return (data?.url as string) || null;
-          } catch (e) {
-            console.warn('[gallery] one angle failed', e);
-            return null;
-          }
-        }),
-      );
-      const urls = results.filter((u): u is string => !!u);
+      // 1) 优先联网搜真实图（最多 3 张）
+      const webUrls = draft.name ? await webSearchImages(draft.name, 'gallery', 3) : [];
+      let urls: string[] = [...webUrls];
+
+      // 2) 不足 3 张，AI 角度图补齐
+      const need = Math.max(0, 3 - urls.length);
+      if (need > 0) {
+        const angles = [
+          `${basePrompt}, close-up detail shot of texture and craftsmanship`,
+          `${basePrompt}, side angle showing silhouette and proportions`,
+          `${basePrompt}, top-down flat lay arrangement`,
+        ].slice(0, need);
+        const results = await Promise.all(
+          angles.map(async (p) => {
+            try {
+              const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: p } });
+              if (error) throw error;
+              return (data?.url as string) || null;
+            } catch (e) {
+              console.warn('[gallery] one angle failed', e);
+              return null;
+            }
+          }),
+        );
+        urls = urls.concat(results.filter((u): u is string => !!u));
+      }
+
       if (urls.length) {
         const merged = Array.from(new Set([...(gallery || []), ...urls]));
         setGallery(merged);
@@ -250,6 +259,25 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       return urls;
     } finally {
       setGalleryBusy(false);
+    }
+  };
+
+  const fetchBackstamp = async (opts: { persist?: boolean } = {}): Promise<string | null> => {
+    if (!draft.name) return null;
+    setBackstampBusy(true);
+    try {
+      const found = await webSearchImages(draft.name, 'backstamp', 1);
+      const url = found[0] || null;
+      if (url) {
+        setBackstampUrl(url);
+        if (opts.persist && editingItem) {
+          await supabase.from('official_knowledge').update({ backstamp_url: url } as any).eq('id', editingItem.id);
+          onSaved();
+        }
+      }
+      return url;
+    } finally {
+      setBackstampBusy(false);
     }
   };
 
