@@ -397,7 +397,29 @@ export default function OfficialDetail() {
 
       <QuizDialog open={quizOpen} onOpenChange={setQuizOpen} knowledgeId={item.id} isAdmin={isAdmin} />
       {isAdmin && (
-        <KnowledgeRichEditDialog open={editOpen} onOpenChange={setEditOpen} item={item} onSaved={load} />
+        <>
+          <KnowledgeRichEditDialog open={editOpen} onOpenChange={setEditOpen} item={item} onSaved={load} />
+          <AiKnowledgeDialog
+            open={aiEditOpen}
+            onOpenChange={setAiEditOpen}
+            onSaved={load}
+            editingItem={{
+              id: item.id,
+              name: item.name,
+              category: item.category,
+              ip_name: item.ip_name,
+              era: item.era,
+              origin: item.origin,
+              summary: item.summary,
+              tips: item.tips,
+              body: item.body,
+              cover_url: item.cover_url,
+              importance_score: item.importance_score,
+              selling_points: item.selling_points,
+              content: item.content,
+            }}
+          />
+        </>
       )}
     </div>
   );
