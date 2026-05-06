@@ -1008,25 +1008,120 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCo
 
           {draft.summary && <p className={`${t.body} text-muted-foreground leading-relaxed`}>{draft.summary}</p>}
 
-          {/* 图集 */}
+          {/* 图集（含主图） */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <div className={`${t.section} text-muted-foreground`}>图集 {gallery?.length ? `(${gallery.length})` : ''}</div>
-              {onGenGallery && (
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onGenGallery} disabled={galleryBusy || !coverPrompt}>
-                  {galleryBusy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <ImagePlus className="w-3 h-3 mr-1" />}
-                  {gallery?.length ? '再补几张' : '生成图集'}
-                </Button>
-              )}
+              <div className={`${t.section} text-muted-foreground`}>
+                图集 {gallery?.length ? `(${gallery.length})` : ''}
+                <span className="ml-1 text-[10px] opacity-70">第一张为主图</span>
+              </div>
             </div>
+
             {gallery?.length ? (
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="grid grid-cols-3 gap-2">
                 {gallery.map((u, i) => (
-                  <img key={i} src={u} alt="" className={`shrink-0 ${large ? 'w-24 h-24' : 'w-20 h-20'} rounded-md object-cover border`} />
+                  <div key={u + i} className="relative group rounded-md border overflow-hidden bg-muted aspect-square">
+                    <img src={u} alt="" className="w-full h-full object-cover" />
+                    {i === 0 && (
+                      <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium flex items-center gap-0.5">
+                        <Star className="w-2.5 h-2.5 fill-current" /> 主图
+                      </div>
+                    )}
+                    {onRemoveGallery && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveGallery(i)}
+                        className="absolute top-1 right-1 bg-background/90 hover:bg-destructive hover:text-destructive-foreground rounded-full p-1 shadow-sm"
+                        title="删除"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                    <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1 opacity-90">
+                      <div className="flex gap-1">
+                        {onMoveGallery && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onMoveGallery(i, -1)}
+                              disabled={i === 0}
+                              className="bg-background/90 disabled:opacity-30 rounded p-0.5"
+                              title="前移"
+                            >
+                              <ArrowLeft className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onMoveGallery(i, 1)}
+                              disabled={i === (gallery.length - 1)}
+                              className="bg-background/90 disabled:opacity-30 rounded p-0.5"
+                              title="后移"
+                            >
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {onSetCover && i !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onSetCover(i)}
+                          className="bg-background/90 rounded p-0.5"
+                          title="设为主图"
+                        >
+                          <Star className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (
-              <div className={`${t.mini} text-muted-foreground`}>{galleryBusy ? '正在生成图集…' : '尚无图集，可点击右上角生成'}</div>
+              <div className={`${t.mini} text-muted-foreground py-3 text-center border border-dashed rounded-md`}>
+                {uploading ? '正在上传…' : (galleryBusy ? '正在准备图片…' : '尚无图片，请上传或一键生成；第一张将作为主图')}
+              </div>
+            )}
+
+            {(onUploadGallery || onWebSearchGallery || onGenGallery) && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {onUploadGallery && (
+                  <>
+                    <input
+                      ref={galleryFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.length) onUploadGallery(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => galleryFileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
+                      {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                      上传图片
+                    </Button>
+                  </>
+                )}
+                {onWebSearchGallery && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onWebSearchGallery} disabled={galleryBusy || !draft.name}>
+                    {galleryBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
+                    联网搜图
+                  </Button>
+                )}
+                {onGenGallery && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onGenGallery} disabled={galleryBusy || !coverPrompt}>
+                    {galleryBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    AI 生成
+                  </Button>
+                )}
+              </div>
             )}
           </div>
 
