@@ -17,7 +17,6 @@ import ReactMarkdown from 'react-markdown';
 import { QuizDialog } from '@/components/library/QuizDialog';
 import { KnowledgeRichEditDialog } from '@/components/library/KnowledgeRichEditDialog';
 import { AiKnowledgeDialog } from '@/components/admin/AiKnowledgeDialog';
-import { OneClickEnrichButton } from '@/components/admin/OneClickEnrichButton';
 import { normalizeTips } from '@/lib/script';
 
 interface Item {
