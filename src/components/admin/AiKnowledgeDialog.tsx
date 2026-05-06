@@ -188,6 +188,42 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     }
   };
 
+  const generateGallery = async (basePrompt: string, opts: { persist?: boolean } = {}): Promise<string[]> => {
+    if (!basePrompt) return [];
+    setGalleryBusy(true);
+    const angles = [
+      `${basePrompt}, close-up detail shot of texture and craftsmanship`,
+      `${basePrompt}, side angle showing silhouette and proportions`,
+      `${basePrompt}, top-down flat lay arrangement`,
+    ];
+    try {
+      const results = await Promise.all(
+        angles.map(async (p) => {
+          try {
+            const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: p } });
+            if (error) throw error;
+            return (data?.url as string) || null;
+          } catch (e) {
+            console.warn('[gallery] one angle failed', e);
+            return null;
+          }
+        }),
+      );
+      const urls = results.filter((u): u is string => !!u);
+      if (urls.length) {
+        const merged = Array.from(new Set([...(gallery || []), ...urls]));
+        setGallery(merged);
+        if (opts.persist && editingItem) {
+          await supabase.from('official_knowledge').update({ gallery: merged }).eq('id', editingItem.id);
+          onSaved();
+        }
+      }
+      return urls;
+    } finally {
+      setGalleryBusy(false);
+    }
+  };
+
   const wantsCoverRedraw = (text: string) =>
     /(主图|封面|换图|换张图|换一张|重画|重新生成|重新画|重新找|找[一张]*图|cover)/i.test(text);
 
