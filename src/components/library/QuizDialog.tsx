@@ -25,9 +25,10 @@ interface Props {
   onExit?: () => void;
   hasNext?: boolean;
   onNext?: () => void;
+  taskProgress?: { current: number; total: number }; // 今日任务进度
 }
 
-export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title, onExit, hasNext, onNext }: Props) {
+export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official', isAdmin, passThreshold = 0.8, onPassed, onAttempt, title, onExit, hasNext, onNext, taskProgress }: Props) {
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [step, setStep] = useState(0);
