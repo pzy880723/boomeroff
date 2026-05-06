@@ -230,7 +230,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       // 新增模式：首次得到名称后，自动跑一键丰富全字段 + 主图，并在完成后弹出预览
       if (isFirstNameInCreate) {
         setMessages((m) => [...m, { role: 'assistant', content: '正在为您一键补全所有字段并生成主图…完成后会自动打开预览。' }]);
-        setTimeout(() => { void oneClickEnrich({ silent: true, openPreviewWhenDone: true }); }, 0);
+        setTimeout(() => { void oneClickEnrich({ silent: true, openPreviewWhenDone: true, baseDraft: newDraft }); }, 0);
       }
     } catch (e: any) {
       toast.error(e?.message ?? 'AI 调用失败');
