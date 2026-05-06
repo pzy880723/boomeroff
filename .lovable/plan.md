@@ -1,42 +1,49 @@
-## 问题定位
+# 联网取真实图 + 底款图
 
-数据库里 `香兰社 KORANSHA` 的 `body` 字段是 **NULL**，所以详情页的「深度阅读」卡片不出现。
+## 目标
+- 新增知识卡时，先**联网搜真实商品图**（图集 + 底款），AI 仅作兜底。
+- 所有商品都尝试一张「底款（背面/底标）」图，独立字段，详情页单独展示。
 
-**为什么会缺失：**
-- 普通对话生成走的是 `generate-official-knowledge` 这条边缘函数。它的 system prompt 里**明确写着「默认不要返回 body 长正文，除非用户明确说要改正文」**（index.ts 第 167 行）。
-- 这条规则是为了节省 token、加快多轮对话用的。
-- 而真正会写长正文的只有两个入口：
-  1. 编辑模式下的「✨ 一键丰富」按钮（依次调 core → body → cover）。
-  2. 用户在对话里**显式**说「写一段长正文 / 加深度阅读」，AI 才可能返回 body。
-- 香兰社这条只走了普通生成 + 保存，没有触发 body，所以保存到库里 body=NULL，详情页自然就没有「深度阅读」。
+## 1. 数据库
+- `official_knowledge` 新增字段：
+  - `backstamp_url text` — 底款图 URL
+- 不动 `gallery / cover_url`。
 
-## 方案
+## 2. 联网搜图通道
+- 接入 **Firecrawl 连接器**（`standard_connectors--connect firecrawl`）。
+- 新建 edge function `web-search-images`：
+  - 入参：`{ query, intent: 'gallery' | 'backstamp', limit }`
+  - 走 Firecrawl `/v2/search`：`scrapeOptions.formats=['links','html']`，对结果页提取 `<img>` 真实大图（过滤 favicon/广告/小图、限制白名单/过滤敏感站）。
+  - 对 backstamp 自动追加 query 后缀：`底款 OR backstamp OR mark OR 銘 OR 底部`。
+  - 返回 `{ images: [{url, source, width?, height?}] }`，按尺寸/相关度排序。
+  - 超时 8s，失败返回空数组（不抛错），让上游兜底。
 
-让"完整生成"必然产出 body，无需用户记得点二次按钮。两步改动，只动前端 `AiKnowledgeDialog.tsx`：
+## 3. 生成流程改造（`AiKnowledgeDialog` + `enrich-knowledge-core`）
+当 AI 拿到 `name` 后，并行：
+1. **封面 cover_url**：先调 `web-search-images(query=name, intent=gallery, limit=1)`；命中→用真实图；未命中→现有 `generate-knowledge-cover` AI 生成。
+2. **图集 gallery**（目标 3 张）：`web-search-images(query=name, limit=6)` 取前 3 张真实图；不足 3 张时，剩余位用 `generate-knowledge-cover` AI 角度图补齐。
+3. **底款 backstamp_url**：`web-search-images(query=name, intent=backstamp, limit=1)`；命中→存真实图；**未命中时不 AI 生成**（底款 AI 画不准，宁缺毋滥），前端显示「暂无底款图」。
 
-### 1. 保存时，如果 `draft.body` 为空，自动补写一次长正文
+所有真实图统一通过 `download → upload 到 product-images bucket` 落地，避免外链失效（新增小工具函数 `mirrorRemoteImage`）。
 
-在 `save()` 里、调用 update/insert 之前：
-- 如果 `draft.body` 为空且 `draft.name` 已就绪，先 `supabase.functions.invoke('enrich-knowledge-body', { body: { coreDraft: draft } })`，拿到 body 后写入 payload。
-- 出错只 `toast.warning` 不阻断保存（保持现在的"核心字段优先落库"原则）。
-- 给保存按钮加一个"正在补写正文…"的中间态文案，让用户知道在等什么。
+## 4. 前端
+- `AiKnowledgeDialog` PreviewCard：
+  - 图集行旁标注每张来源（真实/AI）。
+  - 新增「底款」一栏：显示 `backstamp_url` 或「暂无底款图」+「重新搜底款」按钮。
+- `OfficialDetail.tsx`：在图集下方新增独立「底款」区块，点击可放大；无底款则不显示该区块。
 
-### 2. 新建模式也暴露「一键丰富 / 写深度阅读」按钮
+## 5. 配置 & 安全
+- Firecrawl 通过连接器注入 `FIRECRAWL_API_KEY`，仅在 edge function 中使用。
+- `web-search-images` 需登录调用（校验 JWT）。
+- 加简单内存限流（每用户 10 req/min）。
 
-目前 `isEdit` 才显示一键丰富面板。改成：
-- 非编辑模式下，当 `draft.name` 已生成，显示一颗轻量按钮 **「补写深度阅读」**，点击后只调 `enrich-knowledge-body` 把 body 灌进 `draft`，不落库（保留用户预览后再保存的工作流）。
-- 这样用户能看见进度、能预览，再决定保存。
+## 技术细节
+- 图片过滤规则：宽高 ≥ 400、非 svg/gif、URL 不含 `sprite|icon|logo|avatar`。
+- 镜像存储路径：`official/{id}/gallery-{n}.jpg`、`official/{id}/backstamp.jpg`。
+- 失败降级顺序：真实图 → AI（仅封面/图集）→ 留空（仅底款）。
 
-### 3. （可选小修）针对香兰社这条历史数据
-
-不写代码迁移；保存方案 1 上线后，管理员在「官方知识」列表里点开香兰社 → 用「AI 修改」对话框 → 点「✨ 一键丰富」即可补 body。或者干脆在新方案下点一次"保存修改"，自动补写流程也会跑。
-
-## 不动的部分
-
-- `generate-official-knowledge` 系统提示保留"对话默认不回吐 body"的策略（这是为了对话轮次快）。
-- `OfficialDetail.tsx` 的「深度阅读」卡片渲染逻辑不动。
-- 数据库结构、RLS 不动。
-
-## 受影响文件
-
-- `src/components/admin/AiKnowledgeDialog.tsx`（save 流程 + 新建模式按钮）
+## 文件改动
+- 新建：`supabase/functions/web-search-images/index.ts`
+- 改：`supabase/functions/enrich-knowledge-core/index.ts`、`src/components/admin/AiKnowledgeDialog.tsx`、`src/pages/OfficialDetail.tsx`
+- 迁移：加 `backstamp_url` 列
+- 连接器：Firecrawl
