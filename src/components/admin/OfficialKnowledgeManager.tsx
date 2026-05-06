@@ -18,9 +18,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, Edit, Loader2, Search, ImageOff, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Edit, Loader2, Search, ImageOff, Sparkles, Wand2 } from 'lucide-react';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
 import { toast } from 'sonner';
+import { AiKnowledgeDialog } from './AiKnowledgeDialog';
 
 interface Item {
   id: string;
@@ -54,6 +55,7 @@ export function OfficialKnowledgeManager() {
   const [del, setDel] = useState<Item | null>(null);
   const [pointsText, setPointsText] = useState('');
   const [computing, setComputing] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -149,10 +151,15 @@ export function OfficialKnowledgeManager() {
           {computing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
           重算重要程度
         </Button>
+        <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}>
+          <Wand2 className="w-4 h-4 mr-1.5" /> AI 生成
+        </Button>
         <Button size="sm" onClick={() => openEdit()}>
           <Plus className="w-4 h-4 mr-1.5" /> 新增
         </Button>
       </div>
+
+      <AiKnowledgeDialog open={aiOpen} onOpenChange={setAiOpen} onSaved={load} />
 
       <div className="rounded-md border overflow-hidden">
         <Table>
