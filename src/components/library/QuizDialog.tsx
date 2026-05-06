@@ -81,7 +81,7 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
     setPicked(answers[prev] ?? null);
   };
 
-  const finished = answers.length === questions.length && questions.length > 0;
+  const finished = questions.length > 0 && step >= questions.length;
   const score = answers.reduce((acc, a, i) => acc + (a === questions[i]?.correctIndex ? 1 : 0), 0);
   const passed = questions.length > 0 && score / questions.length >= passThreshold;
   const verdict = passed
