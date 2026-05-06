@@ -1,56 +1,61 @@
-## 问题诊断
+## 目标
 
-当前 `web-search-images` 的实现有 3 个明显瓶颈：
+把"联网搜图"从"自动塞 4 张到图集"改成"弹出选图器 → 一次给 20 张候选 → 勾选后再加入图集，不满意可点'下一批'刷新"。
 
-1. **搜索方式低效**：用 Firecrawl `/search` 抓 6 个网页的完整 HTML（`scrapeOptions: { formats: ["html"] }`），再用正则从 HTML 里挖 `<img>`。这一步本身就要 5–15 秒，而且很多商品网站会反爬、返回登录页或空 HTML，所以经常挖不到图。
-2. **镜像下载是串行的**：`for` 循环里一张一张 `await mirrorImage(...)`，每张最多 8 秒超时。要凑够 3 张图，最坏就是 24 秒。
-3. **查询词不够精准**：`${query} 商品 真实图` 这种中文 query 在 Google 网页搜索里命中的不一定是图片密集的页面。
+## 实现方案
 
-## 改造方案
+### 1. 边缘函数 `web-search-images` 增加两种模式
 
-### 1. 直接走 Firecrawl 图片搜索（核心提速）
+接口扩展（向后兼容）：
 
-Firecrawl v2 的 `/search` 支持 `sources: ["images"]`，直接返回图片 URL + 来源页 + 标题，**不需要再抓 HTML 也不需要正则解析**。这一步从 5–15 秒降到 ~1–2 秒，且命中率显著提高。
+- 默认 / `mode: "search"`：返回最多 20 张**原始 URL**（不再镜像下载到 Storage，速度极快，~1–2s）。新增 `exclude: string[]` 参数 —— 把"上一批已经展示过的 URL"传进来，在去重时直接跳过，实现"下一批"。同时把 Firecrawl `limit` 调到 30–40 做候选池。
+- `mode: "mirror"`：前端把用户**勾选的原始 URL** 传进来（`urls: string[]`），函数并发下载 + 上传到 `product-images/web-gallery/`，返回公网 URL 数组。这样只为真正被选中的图付出下载成本。
 
+返回结构：
 ```ts
-body: JSON.stringify({
-  query: q,
-  limit: 12,            // 多取一些做候选
-  sources: ["images"],  // 关键：图片源
-})
+// search 模式
+{ images: [{ url, source }], found: number, reason?: string }
+// mirror 模式
+{ images: string[], failed: number }
 ```
 
-返回结构形如 `{ data: { images: [{ url, title, imageUrl, position }] } }`，直接用 `imageUrl`。
+### 2. 新增 `src/components/library/WebImagePickerDialog.tsx`
 
-保留旧的 HTML 兜底逻辑，只在图片源返回 0 张时再退回去试一次（容错）。
+一个 Dialog 组件：
 
-### 2. 镜像下载改成并发
+- 顶部：搜索词（默认 `draft.name`，可改）+ 「搜索」按钮
+- 中部：3 列网格，最多 20 张缩略图；每张右上角勾选框；底部小字显示来源域名
+- 加载中骨架；无结果时提示并保留"下一批"按钮
+- 底部按钮：
+  - **下一批**：把当前 20 张 URL 加入 `seenSet`，重新调用 `mode: "search"` 并传 `exclude: [...seenSet]`
+  - **取消**
+  - **加入图集（已选 N 张）**：禁用直到至少选 1 张；点击后调用 `mode: "mirror"` 把选中 URL 镜像到 Storage，拿到公网 URL 后通过 `onConfirm(urls: string[])` 回调返回，并 toast 成功。
 
-把串行 `for await` 换成 `Promise.allSettled`，一次性发起前 N 张候选的下载（N = `limit * 3`，比如要 3 张就并发拉 9 张），先到先得，凑够 `limit` 张就返回。整体耗时从 N×8s 降到约 1×8s。
+为避免热链失败展示空白：`<img>` 加 `referrerPolicy="no-referrer"` 和 `onError` 隐藏失败缩略图。
 
-```ts
-const tasks = uniq.slice(0, limit * 3).map(c => mirrorImage(...));
-const settled = await Promise.allSettled(tasks);
-const ok = settled.filter(...).slice(0, limit);
-```
+### 3. 改造 `KnowledgeRichEditDialog.tsx`
 
-### 3. 查询词优化 + 失败提示
+- 删除现有的 `webSearch()` 直接搜图逻辑。
+- "联网搜图"按钮改成打开 `<WebImagePickerDialog open initialQuery={draft.name} onConfirm={(urls) => setGallery(prev => Array.from(new Set([...prev, ...urls])))} />`。
+- 其它（上传 / 删除 / 移动 / 设为主图）保持不变。
 
-- `intent: "gallery"` → 直接用 `query`（图片搜索本身已经够精准，不要加"商品 真实图"这种噪音词）
-- `intent: "backstamp"` → `${query} backstamp 底款`
-- 返回结果里加上 `reason` 字段：当 `images=[]` 时告诉前端是"未搜到"还是"全部下载失败"，方便排查。
+### 4. AiKnowledgeDialog 不动
 
-### 4. 顺带的小修
-
-- 把 `mirrorImage` 的下载超时从 8s 降到 6s（避免单张拖死整体）。
-- 候选去重时按 URL 的"路径基名"去重，避免同一张图的不同尺寸缩略图占满候选位。
+`AiKnowledgeDialog.tsx` 里的 `webSearchImages()` 还在多处自动调用（封面候选、底款等），保持向后兼容（不传 `mode` 时默认走老的镜像路径）。
 
 ## 改动文件
 
-- `supabase/functions/web-search-images/index.ts` — 按上述 4 点重写搜索 + 下载逻辑，前端无需任何改动（接口 schema `{ images, found }` 不变，只多加一个可选 `reason`）。
+- 编辑：`supabase/functions/web-search-images/index.ts` —— 增加 `mode` / `urls` / `exclude` 分支
+- 新建：`src/components/library/WebImagePickerDialog.tsx`
+- 编辑：`src/components/library/KnowledgeRichEditDialog.tsx` —— 用选图器替换原直连搜图
 
-## 预期效果
+## 兼容性
 
-- 平均耗时：**8–20 秒 → 2–5 秒**
-- 命中率：明显提升（不再依赖网页能否被成功抓取并解析出 `<img>`）
-- 用户感知：基本一次就能搜到 3 张图，失败时也有明确原因。
+- 边缘函数对老调用方（不传 `mode`）保持原行为：搜图 + 自动镜像 + 返回 `{ images: [{url, source}] }`。
+- 前端老的 `AiKnowledgeDialog` 调用无需修改。
+
+## 用户体验
+
+- 第一次出图：1–2 秒内出 20 张缩略图（不镜像，纯展示）
+- 「下一批」：再 1–2 秒
+- 「加入图集」：仅镜像被选中的 N 张，并发下载，3–5 秒拿到入库后的公网 URL
