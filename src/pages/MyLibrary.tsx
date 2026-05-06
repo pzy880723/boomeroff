@@ -459,11 +459,14 @@ export default function MyLibrary() {
               <Sparkles className="w-3 h-3 text-accent-foreground" />
             </div>
             <div className="font-display text-sm shrink-0">今日测试任务</div>
-            {totalCount > 0 && (
-              <Progress value={percent} className="h-1.5 w-16 sm:w-24 shrink-0" />
+            {todayList.length > 0 && (
+              <Progress
+                value={Math.round(((todayList.length - remainingToday.length) / todayList.length) * 100)}
+                className="h-1.5 w-16 sm:w-24 shrink-0"
+              />
             )}
             <Badge variant="outline" className="text-[10px] tabular-nums shrink-0">
-              {passedCount}/{totalCount}
+              {todayList.length - remainingToday.length}/{todayList.length}
             </Badge>
             <div className="flex-1" />
             {totalCount === 0 ? (
@@ -489,8 +492,9 @@ export default function MyLibrary() {
 
           {taskExpanded && totalCount > 0 && !todayDone && remainingToday.length > 0 && (
             <div className="px-4 pb-3 pt-2 border-t border-border/40">
-              <div className="text-[11px] text-muted-foreground mb-1.5">
-                今日剩余 {remainingToday.length} / {todayList.length} 条
+              <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center justify-between">
+                <span>今日剩余 {remainingToday.length} / {todayList.length} 条</span>
+                <span>累计：通过 {passedCount} / 共 {totalCount}</span>
               </div>
               <ul className="space-y-1">
                 {todayList.map((it) => {
