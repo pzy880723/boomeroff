@@ -96,18 +96,24 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
   };
 
   const removeAt = (i: number) => setGallery((p) => p.filter((_, idx) => idx !== i));
-  const move = (i: number, dir: -1 | 1) => {
-    setGallery((p) => {
-      const j = i + dir;
-      if (j < 0 || j >= p.length) return p;
-      const next = [...p];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
-  };
   const setCover = (i: number) => {
     if (i === 0) return;
     setGallery((p) => [p[i], ...p.filter((_, idx) => idx !== i)]);
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  );
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    setGallery((items) => {
+      const oldIndex = items.indexOf(String(active.id));
+      const newIndex = items.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) return items;
+      return arrayMove(items, oldIndex, newIndex);
+    });
   };
 
   const save = async () => {
