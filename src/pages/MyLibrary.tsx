@@ -7,15 +7,20 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   Loader2, Trash2, ExternalLink, ImageOff, Lightbulb,
-  Sparkles, Store, User as UserIcon, RefreshCcw,
+  Sparkles, CheckCircle2, ChevronDown, GraduationCap, Trophy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { CATEGORY_LABELS, CATEGORY_ICONS, ProductCategory } from '@/types';
+import { QuizDialog } from '@/components/library/QuizDialog';
 
 interface UnifiedItem {
   key: string;
@@ -31,6 +36,7 @@ interface UnifiedItem {
   era?: string | null;
   origin?: string | null;
   created_at: string;
+  passed: boolean;
 }
 
 interface DetailData {
@@ -45,12 +51,6 @@ interface DetailData {
   missing?: boolean;
 }
 
-interface PersonalSummary {
-  summary: { team_summary: string; personal_advice: string };
-  stats: { shop_total: number; mine_total: number; shop_top_cats: string; my_top_cats: string };
-  generated_at: string;
-}
-
 const SOURCE_LABEL: Record<string, string> = {
   official: '官方',
   recognition: '识别',
@@ -63,23 +63,29 @@ const isUsableImage = (url?: string | null) => {
   return true;
 };
 
+const TODAY_LIMIT = 5;
+
 export default function MyLibrary() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [summary, setSummary] = useState<PersonalSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(true);
-
   const [active, setActive] = useState<UnifiedItem | null>(null);
   const [detail, setDetail] = useState<DetailData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // 测验弹窗
+  const [quizItem, setQuizItem] = useState<UnifiedItem | null>(null);
+  // 今日任务队列模式
+  const [taskMode, setTaskMode] = useState(false);
+  const [taskQueue, setTaskQueue] = useState<UnifiedItem[]>([]);
+  const [taskIdx, setTaskIdx] = useState(0);
+
   const loadAll = async () => {
     if (!user) return;
     setLoading(true);
-    const [favRes, knowRes] = await Promise.all([
+    const [favRes, knowRes, resultRes] = await Promise.all([
       supabase.from('user_favorites').select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }).limit(300),
@@ -87,7 +93,15 @@ export default function MyLibrary() {
         .select('id, product_id, product_name, category, era, origin, image_url, tips, selling_points, created_at')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false }).limit(300),
+      supabase.from('knowledge_test_results')
+        .select('item_kind, item_id, passed_at')
+        .eq('user_id', user.id).limit(1000),
     ]);
+
+    const passedSet = new Set<string>();
+    (resultRes.data || []).forEach((r: any) => {
+      if (r.passed_at) passedSet.add(`${r.item_kind}:${r.item_id}`);
+    });
 
     const fav: UnifiedItem[] = (favRes.data || []).map((f: any) => {
       const snap = f.snapshot || {};
@@ -104,6 +118,7 @@ export default function MyLibrary() {
         cover_url: cover,
         summary: snap.summary || null,
         created_at: f.created_at,
+        passed: passedSet.has(`favorite:${f.id}`),
       };
     });
 
@@ -118,6 +133,7 @@ export default function MyLibrary() {
       era: k.era,
       origin: k.origin,
       created_at: k.created_at,
+      passed: passedSet.has(`knowledge:${k.id}`),
     }));
 
     const merged = [...fav, ...know].sort((a, b) =>
@@ -126,38 +142,37 @@ export default function MyLibrary() {
     setLoading(false);
   };
 
-  const loadSummary = async (force = false) => {
-    if (!user) return;
-    setSummaryLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('personal-daily-summary', {
-        body: { force },
-      });
-      if (error) throw error;
-      if (data && (data as any).summary) setSummary(data as PersonalSummary);
-    } catch (e) {
-      console.error('[PersonalSummary] error:', e);
-    } finally {
-      setSummaryLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (!user) return;
     loadAll();
-    loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const grouped = useMemo(() => {
+  const totalCount = items.length;
+  const passedCount = items.filter((i) => i.passed).length;
+  const percent = totalCount ? Math.round((passedCount / totalCount) * 100) : 0;
+  const pending = useMemo(() => items.filter((i) => !i.passed), [items]);
+  const archived = useMemo(() => items.filter((i) => i.passed), [items]);
+
+  // 今日推荐：未通过中按创建时间最早的取 TODAY_LIMIT 条
+  const todayList = useMemo(
+    () => [...pending].sort((a, b) =>
+      (a.created_at || '').localeCompare(b.created_at || '')).slice(0, TODAY_LIMIT),
+    [pending],
+  );
+  const todayDone = todayList.length === 0 && totalCount > 0;
+
+  const groupByCategory = (list: UnifiedItem[]) => {
     const map = new Map<ProductCategory, UnifiedItem[]>();
-    items.forEach((it) => {
+    list.forEach((it) => {
       const arr = map.get(it.category) || [];
       arr.push(it);
       map.set(it.category, arr);
     });
     return Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length);
-  }, [items]);
+  };
+  const pendingGrouped = useMemo(() => groupByCategory(pending), [pending]);
+  const archivedGrouped = useMemo(() => groupByCategory(archived), [archived]);
 
   useEffect(() => {
     if (!active) { setDetail(null); return; }
@@ -236,69 +251,186 @@ export default function MyLibrary() {
     }
   };
 
+  const itemKindFor = (it: UnifiedItem): 'favorite' | 'knowledge' => it.kind;
+  const itemIdFor = (it: UnifiedItem) => it.kind === 'favorite' ? it.favorite_id! : it.knowledge_id!;
+
+  const startTest = (it: UnifiedItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setTaskMode(false);
+    setQuizItem(it);
+  };
+
+  const startTodayTask = () => {
+    if (todayList.length === 0) return;
+    setTaskQueue(todayList);
+    setTaskIdx(0);
+    setTaskMode(true);
+    setQuizItem(todayList[0]);
+  };
+
+  const handlePassed = async (it: UnifiedItem, score: number, total: number) => {
+    if (!user) return;
+    await supabase.from('knowledge_test_results').upsert({
+      user_id: user.id,
+      item_kind: itemKindFor(it),
+      item_id: itemIdFor(it),
+      source_type: it.source_type ?? null,
+      source_id: it.source_id ?? null,
+      passed_at: new Date().toISOString(),
+      score, total,
+      last_attempt_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,item_kind,item_id' });
+    setItems((s) => s.map((x) => x.key === it.key ? { ...x, passed: true } : x));
+    toast.success('已掌握，归档到个人历史知识 🎉');
+  };
+
+  const handleAttempt = async (it: UnifiedItem, score: number, total: number, passed: boolean) => {
+    if (passed || !user) return;
+    await supabase.from('knowledge_test_results').upsert({
+      user_id: user.id,
+      item_kind: itemKindFor(it),
+      item_id: itemIdFor(it),
+      source_type: it.source_type ?? null,
+      source_id: it.source_id ?? null,
+      passed_at: null,
+      score, total,
+      last_attempt_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,item_kind,item_id' });
+  };
+
+  const handleQuizClose = (open: boolean) => {
+    if (open) return;
+    if (taskMode) {
+      const next = taskIdx + 1;
+      if (next < taskQueue.length) {
+        setTaskIdx(next);
+        // 先关闭再重开，触发重新出题
+        setQuizItem(null);
+        setTimeout(() => setQuizItem(taskQueue[next]), 60);
+        return;
+      }
+      setTaskMode(false);
+      setTaskQueue([]);
+      setTaskIdx(0);
+    }
+    setQuizItem(null);
+  };
+
   if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!user) return <AuthPage />;
 
+  const renderCard = (it: UnifiedItem) => (
+    <Card
+      key={it.key}
+      className="overflow-hidden cursor-pointer active:opacity-80 transition-opacity"
+      onClick={() => setActive(it)}
+    >
+      <div className="aspect-square bg-muted relative">
+        {it.cover_url ? (
+          <img src={it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+            <ImageOff className="w-6 h-6" />
+          </div>
+        )}
+        <Badge
+          className="absolute top-2 left-2 text-[10px]"
+          variant={it.kind === 'knowledge' ? 'default' : 'secondary'}
+        >
+          {it.kind === 'knowledge' ? '我建的' : (SOURCE_LABEL[it.source_type || ''] || '收藏')}
+        </Badge>
+        {it.passed && (
+          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-emerald-500/90 flex items-center justify-center">
+            <CheckCircle2 className="w-4 h-4 text-white" />
+          </div>
+        )}
+      </div>
+      <div className="p-2.5 space-y-2">
+        <p className="text-sm font-medium leading-tight line-clamp-2 min-h-[2.5rem]">{it.name}</p>
+        <Button
+          size="sm"
+          variant={it.passed ? 'ghost' : 'outline'}
+          className="w-full h-7 text-xs gap-1"
+          onClick={(e) => startTest(it, e)}
+        >
+          <GraduationCap className="w-3.5 h-3.5" />
+          {it.passed ? '再考一次' : '测验'}
+        </Button>
+      </div>
+    </Card>
+  );
+
   return (
     <>
-      <PageHeader title="个人知识库" subtitle="你的收藏与自建知识" />
+      <PageHeader title="个人知识库" subtitle="测试通过即归档为历史知识" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
 
-        {/* 顶部：今日学习简报 */}
+        {/* 顶部：今日测试任务 */}
         <Card className="overflow-hidden border-border/60 bg-gradient-surface shadow-soft">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-full bg-gradient-accent flex items-center justify-center">
                 <Sparkles className="w-3.5 h-3.5 text-accent-foreground" />
               </div>
-              <div className="font-display text-sm">今日学习简报</div>
+              <div className="font-display text-sm">今日测试任务</div>
             </div>
-            <Button
-              size="sm" variant="ghost"
-              className="h-7 px-2 text-xs gap-1"
-              disabled={summaryLoading}
-              onClick={() => loadSummary(true)}
-            >
-              <RefreshCcw className={`w-3 h-3 ${summaryLoading ? 'animate-spin' : ''}`} />
-              刷新
-            </Button>
+            <Badge variant="outline" className="text-[10px] tabular-nums">
+              {passedCount} / {totalCount}
+            </Badge>
           </div>
           <div className="p-4 space-y-3">
-            {summaryLoading && !summary ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                正在生成今日简报...
-              </div>
-            ) : summary ? (
-              <>
-                <div className="flex gap-2.5">
-                  <Store className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">全店动态</div>
-                    <p className="text-sm leading-relaxed">{summary.summary.team_summary}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2.5">
-                  <UserIcon className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">给你的建议</div>
-                    <p className="text-sm leading-relaxed">{summary.summary.personal_advice}</p>
-                  </div>
-                </div>
-              </>
+            {totalCount === 0 ? (
+              <p className="text-sm text-muted-foreground">先去收藏或自建一些知识吧</p>
             ) : (
-              <p className="text-sm text-muted-foreground">暂无简报</p>
+              <>
+                <div className="flex items-end justify-between">
+                  <div className="text-xs text-muted-foreground">已掌握</div>
+                  <div className="text-2xl font-bold tabular-nums leading-none">
+                    {percent}<span className="text-sm text-muted-foreground ml-0.5">%</span>
+                  </div>
+                </div>
+                <Progress value={percent} className="h-2" />
+
+                {todayDone ? (
+                  <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 pt-1">
+                    <Trophy className="w-4 h-4" />
+                    全部知识已掌握，太棒了！
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="text-xs text-muted-foreground">
+                        今日推荐 {todayList.length} 条
+                      </div>
+                      <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={startTodayTask}>
+                        <GraduationCap className="w-3.5 h-3.5" />
+                        开始测试
+                      </Button>
+                    </div>
+                    <ul className="space-y-1">
+                      {todayList.map((it) => (
+                        <li
+                          key={it.key}
+                          className="text-xs text-foreground/80 flex items-center gap-1.5 truncate"
+                        >
+                          <span className="text-muted-foreground">·</span>
+                          <span className="truncate">{it.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </>
             )}
           </div>
         </Card>
 
-        {/* 标题 */}
+        {/* 待测试 */}
         <div className="flex items-baseline justify-between px-1 pt-1">
-          <h2 className="text-sm font-display">我的知识与收藏</h2>
-          <span className="text-xs text-muted-foreground tabular-nums">共 {items.length} 条</span>
+          <h2 className="text-sm font-display">待掌握</h2>
+          <span className="text-xs text-muted-foreground tabular-nums">{pending.length} 条</span>
         </div>
 
-        {/* 按品类分组 */}
         {loading ? (
           <div className="flex justify-center py-10">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -311,9 +443,11 @@ export default function MyLibrary() {
               <Button size="sm" variant="outline" onClick={() => navigate('/scan')}>去识别商品</Button>
             </div>
           </div>
+        ) : pending.length === 0 ? (
+          <p className="text-center text-sm text-muted-foreground py-8">所有知识都已掌握 🎉</p>
         ) : (
           <div className="space-y-5">
-            {grouped.map(([cat, list]) => {
+            {pendingGrouped.map(([cat, list]) => {
               const Icon = CATEGORY_ICONS[cat] || CATEGORY_ICONS.other;
               return (
                 <section key={cat} className="space-y-2">
@@ -325,41 +459,45 @@ export default function MyLibrary() {
                     <span className="text-[11px] text-muted-foreground tabular-nums">{list.length}</span>
                   </header>
                   <div className="grid grid-cols-2 gap-3">
-                    {list.map((it) => (
-                      <Card
-                        key={it.key}
-                        className="overflow-hidden cursor-pointer active:opacity-80 transition-opacity"
-                        onClick={() => setActive(it)}
-                      >
-                        <div className="aspect-square bg-muted relative">
-                          {it.cover_url ? (
-                            <img src={it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                              <ImageOff className="w-6 h-6" />
-                            </div>
-                          )}
-                          <Badge
-                            className="absolute top-2 left-2 text-[10px]"
-                            variant={it.kind === 'knowledge' ? 'default' : 'secondary'}
-                          >
-                            {it.kind === 'knowledge'
-                              ? '我建的'
-                              : (SOURCE_LABEL[it.source_type || ''] || '收藏')}
-                          </Badge>
-                        </div>
-                        <div className="p-2.5">
-                          <p className="text-sm font-medium leading-tight line-clamp-2 min-h-[2.5rem]">
-                            {it.name}
-                          </p>
-                        </div>
-                      </Card>
-                    ))}
+                    {list.map(renderCard)}
                   </div>
                 </section>
               );
             })}
           </div>
+        )}
+
+        {/* 个人历史知识（已通过） */}
+        {archived.length > 0 && (
+          <Collapsible className="pt-2">
+            <CollapsibleTrigger className="w-full flex items-center justify-between px-1 py-2 group">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <h2 className="text-sm font-display">个人历史知识</h2>
+                <span className="text-xs text-muted-foreground tabular-nums">{archived.length} 条</span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-5 pt-2">
+              {archivedGrouped.map(([cat, list]) => {
+                const Icon = CATEGORY_ICONS[cat] || CATEGORY_ICONS.other;
+                return (
+                  <section key={cat} className="space-y-2">
+                    <header className="flex items-center gap-2 px-1">
+                      <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                        <Icon className="w-3.5 h-3.5 text-foreground/70" />
+                      </div>
+                      <h3 className="text-sm font-medium">{CATEGORY_LABELS[cat] || cat}</h3>
+                      <span className="text-[11px] text-muted-foreground tabular-nums">{list.length}</span>
+                    </header>
+                    <div className="grid grid-cols-2 gap-3">
+                      {list.map(renderCard)}
+                    </div>
+                  </section>
+                );
+              })}
+            </CollapsibleContent>
+          </Collapsible>
         )}
       </div>
 
@@ -374,6 +512,9 @@ export default function MyLibrary() {
                     ? '我建的'
                     : (SOURCE_LABEL[active.source_type || ''] || '收藏')}
                 </Badge>
+              )}
+              {active?.passed && (
+                <Badge className="text-[10px] bg-emerald-500 hover:bg-emerald-500">已掌握</Badge>
               )}
               <span className="line-clamp-1">{detail?.name || active?.name || '加载中…'}</span>
             </DialogTitle>
@@ -441,32 +582,47 @@ export default function MyLibrary() {
 
           {active && (
             <div className="border-t px-4 py-3 flex gap-2 shrink-0 bg-background">
+              <Button
+                size="sm" className="flex-1 gap-1.5"
+                onClick={() => active && startTest(active)}
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                {active.passed ? '再考一次' : '去测验'}
+              </Button>
               {active.kind === 'favorite' && active.source_type === 'official' && !detail?.missing && (
                 <Button
-                  variant="outline" size="sm" className="flex-1 gap-1.5"
+                  variant="outline" size="sm" className="gap-1.5"
                   onClick={() => { navigate('/library'); setActive(null); }}
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  去官方知识库
                 </Button>
               )}
-              {active.kind === 'favorite' ? (
+              {active.kind === 'favorite' && (
                 <Button
                   variant="ghost" size="sm"
-                  className="flex-1 gap-1.5 text-muted-foreground"
+                  className="gap-1.5 text-muted-foreground"
                   onClick={() => active && remove(active)}
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> 移除收藏
+                  <Trash2 className="w-3.5 h-3.5" />
                 </Button>
-              ) : (
-                <p className="flex-1 text-[11px] text-muted-foreground self-center">
-                  自建知识请联系管理员在「官方知识」中编辑
-                </p>
               )}
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 测验弹窗 */}
+      {quizItem && (
+        <QuizDialog
+          open={!!quizItem}
+          onOpenChange={handleQuizClose}
+          knowledgeId={itemIdFor(quizItem)}
+          kind={itemKindFor(quizItem)}
+          title={taskMode ? `今日任务 ${taskIdx + 1}/${taskQueue.length} · ${quizItem.name}` : quizItem.name}
+          onPassed={(s, t) => handlePassed(quizItem, s, t)}
+          onAttempt={(s, t, p) => handleAttempt(quizItem, s, t, p)}
+        />
+      )}
     </>
   );
 }
