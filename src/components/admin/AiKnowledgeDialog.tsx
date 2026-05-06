@@ -346,7 +346,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     if (idx === 0) return;
     const next = [gallery[idx], ...gallery.filter((_, i) => i !== idx)];
     void persistGallery(next);
-  };
+  const wantsCoverRedraw = (text: string) =>
+    /(主图|封面|换图|换张图|换一张|重画|重新生成|重新画|重新找|找[一张]*图|cover)/i.test(text);
+
 
   const send = async () => {
     const text = input.trim();
