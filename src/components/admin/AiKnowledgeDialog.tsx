@@ -65,6 +65,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved }: Props) {
   const [thinking, setThinking] = useState(false);
   const [painting, setPainting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
