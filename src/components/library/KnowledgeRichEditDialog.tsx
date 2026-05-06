@@ -87,26 +87,6 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
     }
   };
 
-  const webSearch = async () => {
-    if (!draft.name?.trim()) { toast.error('请先填写名称'); return; }
-    setSearching(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('web-search-images', {
-        body: { query: draft.name, intent: 'gallery', limit: 4, mirror: true, pathPrefix: 'web-gallery' },
-      });
-      if (error) throw error;
-      const imgs = ((data?.images || []) as Array<{ url: string }>).map((i) => i.url).filter(Boolean);
-      if (imgs.length) {
-        setGallery((prev) => Array.from(new Set([...prev, ...imgs])));
-        toast.success(`联网找到 ${imgs.length} 张`);
-      } else toast.info('暂未搜到合适的图');
-    } catch (e: any) {
-      toast.error('联网搜图失败：' + (e?.message ?? ''));
-    } finally {
-      setSearching(false);
-    }
-  };
-
   const removeAt = (i: number) => setGallery((p) => p.filter((_, idx) => idx !== i));
   const move = (i: number, dir: -1 | 1) => {
     setGallery((p) => {
