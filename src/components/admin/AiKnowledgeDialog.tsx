@@ -306,7 +306,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
-                  placeholder="描述这件商品/品牌…（回车发送）"
+                  placeholder={isEdit ? '想怎么改？例如：换一个金句、补充保养…' : '描述这件商品/品牌…（回车发送）'}
                   disabled={thinking}
                 />
                 <Button type="button" size="icon" onClick={send} disabled={thinking || (!input.trim() && !pendingImage)}>
