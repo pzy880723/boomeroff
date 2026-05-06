@@ -90,8 +90,12 @@ export default function OfficialLibrary() {
     localStorage.setItem('lib_sort', sort);
   }, [sort]);
 
-  // 切换一级类目时重置二级
-  useEffect(() => { setSub('all'); }, [cat]);
+  // 切换一级类目时重置二级（首次挂载若已有 ip 参数则跳过）
+  const [catInited, setCatInited] = useState(false);
+  useEffect(() => {
+    if (!catInited) { setCatInited(true); return; }
+    setSub('all');
+  }, [cat]);
 
   // 若选中类目在折叠区外，自动展开
   useEffect(() => {
