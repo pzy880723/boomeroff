@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import {
   CATEGORY_LABELS, CATEGORY_ORDER, CATEGORY_ICONS,
-  CATEGORY_SUBCATEGORIES, ProductCategory,
+  CATEGORY_BRANDS, CATEGORY_TYPES, ProductCategory,
 } from '@/types';
 import {
   Loader2, Search, Star, LayoutGrid, ChevronDown, ChevronUp, List, ImageOff,
@@ -23,6 +23,8 @@ interface OfficialItem {
   name: string;
   category: ProductCategory;
   ip_name: string | null;
+  brand: string | null;
+  sub_type: string | null;
   summary: string | null;
   era: string | null;
   origin: string | null;
