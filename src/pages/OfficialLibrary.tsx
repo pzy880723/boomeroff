@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import {
   CATEGORY_LABELS, CATEGORY_ORDER, CATEGORY_ICONS,
-  CATEGORY_SUBCATEGORIES, ProductCategory,
+  CATEGORY_BRANDS, CATEGORY_TYPES, ProductCategory,
 } from '@/types';
 import {
   Loader2, Search, Star, LayoutGrid, ChevronDown, ChevronUp, List, ImageOff,
@@ -23,6 +23,8 @@ interface OfficialItem {
   name: string;
   category: ProductCategory;
   ip_name: string | null;
+  brand: string | null;
+  sub_type: string | null;
   summary: string | null;
   era: string | null;
   origin: string | null;
@@ -52,7 +54,8 @@ export default function OfficialLibrary() {
   const [cat, setCat] = useState<ProductCategory | 'all'>(
     () => (searchParams.get('cat') as ProductCategory | null) || 'all',
   );
-  const [sub, setSub] = useState<string>(() => searchParams.get('ip') || 'all');
+  const [brand, setBrand] = useState<string>(() => searchParams.get('brand') || searchParams.get('ip') || 'all');
+  const [subType, setSubType] = useState<string>(() => searchParams.get('type') || 'all');
   const [era, setEra] = useState<string>(() => searchParams.get('era') || '');
   const [origin, setOrigin] = useState<string>(() => searchParams.get('origin') || '');
   const [expanded, setExpanded] = useState(false);
@@ -71,12 +74,13 @@ export default function OfficialLibrary() {
   useEffect(() => {
     const params: Record<string, string> = {};
     if (cat !== 'all') params.cat = cat;
-    if (sub !== 'all') params.ip = sub;
+    if (brand !== 'all') params.brand = brand;
+    if (subType !== 'all') params.type = subType;
     if (era) params.era = era;
     if (origin) params.origin = origin;
     if (keyword.trim()) params.q = keyword.trim();
     setSearchParams(params, { replace: true });
-  }, [cat, sub, era, origin, keyword, setSearchParams]);
+  }, [cat, brand, subType, era, origin, keyword, setSearchParams]);
 
   useEffect(() => {
     localStorage.setItem('lib_view', view);
@@ -90,11 +94,12 @@ export default function OfficialLibrary() {
     localStorage.setItem('lib_sort', sort);
   }, [sort]);
 
-  // 切换一级类目时重置二级（首次挂载若已有 ip 参数则跳过）
+  // 切换一级类目时重置二级（首次挂载若已有 brand/type 参数则跳过）
   const [catInited, setCatInited] = useState(false);
   useEffect(() => {
     if (!catInited) { setCatInited(true); return; }
-    setSub('all');
+    setBrand('all');
+    setSubType('all');
   }, [cat]);
 
   // 若选中类目在折叠区外，自动展开
@@ -109,13 +114,9 @@ export default function OfficialLibrary() {
     (async () => {
       setLoading(true);
       let q = supabase.from('official_knowledge').select('*');
-      // 仅在「全部」类目下应用排序切换；具体类目固定按更新时间倒序
       if (cat === 'all') {
         if (sort === 'important') {
           q = q.order('importance_score', { ascending: false }).order('updated_at', { ascending: false });
-        } else if (sort === 'hot') {
-          // 数据库无法直接 order by 表达式，前端再排；先按更新时间初排
-          q = q.order('updated_at', { ascending: false });
         } else {
           q = q.order('updated_at', { ascending: false });
         }
@@ -123,10 +124,14 @@ export default function OfficialLibrary() {
         q = q.order('updated_at', { ascending: false });
       }
       if (cat !== 'all') q = q.eq('category', cat);
-      if (sub !== 'all') q = q.eq('ip_name', sub);
+      if (brand !== 'all') {
+        // 兼容旧数据：brand 优先匹配 brand 列，回退 ip_name
+        q = q.or(`brand.eq.${brand},ip_name.eq.${brand}`);
+      }
+      if (subType !== 'all') q = q.eq('sub_type', subType);
       if (era) q = q.eq('era', era);
       if (origin) q = q.eq('origin', origin);
-      if (keyword.trim()) q = q.or(`name.ilike.%${keyword}%,ip_name.ilike.%${keyword}%,summary.ilike.%${keyword}%`);
+      if (keyword.trim()) q = q.or(`name.ilike.%${keyword}%,ip_name.ilike.%${keyword}%,brand.ilike.%${keyword}%,sub_type.ilike.%${keyword}%,summary.ilike.%${keyword}%`);
       const { data } = await q.limit(120);
       let list = (data || []) as OfficialItem[];
       if (cat === 'all' && sort === 'hot') {
@@ -145,7 +150,7 @@ export default function OfficialLibrary() {
         .eq('source_type', 'official');
       setFavoritedIds(new Set((fav || []).map((f) => f.source_id)));
     })();
-  }, [user, cat, sub, era, origin, keyword, sort, reloadKey]);
+  }, [user, cat, brand, subType, era, origin, keyword, sort, reloadKey]);
 
   const toggleFav = async (item: OfficialItem) => {
     if (!user) return;
@@ -172,7 +177,8 @@ export default function OfficialLibrary() {
     () => (expanded ? categoriesAll : categoriesAll.slice(0, VISIBLE_COUNT)),
     [expanded],
   );
-  const subList = cat !== 'all' ? CATEGORY_SUBCATEGORIES[cat] || [] : [];
+  const brandList = cat !== 'all' ? CATEGORY_BRANDS[cat] || [] : [];
+  const typeList = cat !== 'all' ? CATEGORY_TYPES[cat] || [] : [];
 
   if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!user) return <AuthPage />;
@@ -295,28 +301,57 @@ export default function OfficialLibrary() {
           </div>
         )}
 
-        {/* 二级类目 - 上滑时吸顶 */}
-        {subList.length > 0 && (
-          <div className="sticky top-12 z-20 -mx-3 px-3 py-2 flex gap-1.5 overflow-x-auto bg-background/95 backdrop-blur border-b border-border scrollbar-none">
-            <button
-              onClick={() => setSub('all')}
-              className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
-                sub === 'all'
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-card text-muted-foreground hover:bg-accent'
-              }`}
-            >全部</button>
-            {subList.map((s) => (
-              <button
-                key={s}
-                onClick={() => setSub(s)}
-                className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
-                  sub === s
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-border bg-card text-muted-foreground hover:bg-accent'
-                }`}
-              >{s}</button>
-            ))}
+        {/* 二级类目 - 品牌行 + 类型行 */}
+        {(brandList.length > 0 || typeList.length > 0) && (
+          <div className="sticky top-12 z-20 -mx-3 px-3 py-2 space-y-1.5 bg-background/95 backdrop-blur border-b border-border">
+            {brandList.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                <span className="shrink-0 text-[10px] text-muted-foreground w-8">品牌</span>
+                <button
+                  onClick={() => setBrand('all')}
+                  className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
+                    brand === 'all'
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-card text-muted-foreground hover:bg-accent'
+                  }`}
+                >全部</button>
+                {brandList.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setBrand(s)}
+                    className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
+                      brand === s
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-card text-muted-foreground hover:bg-accent'
+                    }`}
+                  >{s}</button>
+                ))}
+              </div>
+            )}
+            {typeList.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                <span className="shrink-0 text-[10px] text-muted-foreground w-8">类型</span>
+                <button
+                  onClick={() => setSubType('all')}
+                  className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
+                    subType === 'all'
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-card text-muted-foreground hover:bg-accent'
+                  }`}
+                >全部</button>
+                {typeList.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setSubType(s)}
+                    className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
+                      subType === s
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-card text-muted-foreground hover:bg-accent'
+                    }`}
+                  >{s}</button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -348,7 +383,8 @@ export default function OfficialLibrary() {
                   <p className="text-sm font-medium leading-tight truncate">{it.name}</p>
                   <div className="flex items-center gap-1 flex-wrap">
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{CATEGORY_LABELS[it.category]}</Badge>
-                    {it.ip_name && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.ip_name}</Badge>}
+                    {(it.brand || it.ip_name) && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.brand || it.ip_name}</Badge>}
+                    {it.sub_type && <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-dashed">{it.sub_type}</Badge>}
                   </div>
                   {it.era && <p className="text-[11px] text-muted-foreground truncate">{it.era}</p>}
                 </div>
@@ -374,7 +410,8 @@ export default function OfficialLibrary() {
                   <p className="text-sm font-medium leading-tight truncate">{it.name}</p>
                   <div className="flex items-center gap-1 flex-wrap">
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{CATEGORY_LABELS[it.category]}</Badge>
-                    {it.ip_name && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.ip_name}</Badge>}
+                    {(it.brand || it.ip_name) && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.brand || it.ip_name}</Badge>}
+                    {it.sub_type && <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-dashed">{it.sub_type}</Badge>}
                     {it.era && <span className="text-[10px] text-muted-foreground">{it.era}</span>}
                   </div>
                   {it.summary && <p className="text-[11px] text-muted-foreground truncate">{it.summary}</p>}

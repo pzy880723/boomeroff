@@ -48,14 +48,14 @@ export function AutoCategorizeButton({ target, onDone }: Props) {
     <>
       <Button size="sm" variant="outline" onClick={() => setOpen(true)} disabled={running}>
         {running ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
-        AI 自动分类
+        AI 自动分类（含二级类目）
       </Button>
       <AlertDialog open={open} onOpenChange={(o) => !running && setOpen(o)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>AI 重新归类「{LABELS[target]}」？</AlertDialogTitle>
             <AlertDialogDescription>
-              将对所有词条用 AI 重新判定品类，已有品类会被覆盖。耗时与条数成正比，请耐心等待。
+              将对所有词条用 AI 重新判定一级品类、品牌、类型/题材，并合并同义写法（如 Sony/索尼）。已有值会被覆盖。耗时与条数成正比，请耐心等待。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -120,10 +120,38 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
     if (!draft.name?.trim()) { toast.error('名称必填'); return; }
     setSaving(true);
     try {
-      const { error } = await supabase.from('official_knowledge').update({
+      const sp = pointsText.split('\n').map((s) => s.trim()).filter(Boolean);
+      // AI 自动补 brand / sub_type / 校正 category
+      let category = draft.category;
+      let brand: string | null = draft.ip_name?.trim() || null;
+      let sub_type: string | null = null;
+      try {
+        const { data: catData } = await supabase.functions.invoke('auto-categorize-knowledge', {
+          body: {
+            mode: 'single',
+            name: draft.name.trim(),
+            ip_name: draft.ip_name?.trim(),
+            summary: draft.summary?.trim(),
+            era: draft.era?.trim(),
+            origin: draft.origin?.trim(),
+            selling_points: sp,
+            tips: draft.tips?.trim(),
+            category: draft.category,
+          },
+        });
+        if (catData?.category) category = catData.category as ProductCategory;
+        if (catData?.brand !== undefined) brand = catData.brand;
+        if (catData?.sub_type !== undefined) sub_type = catData.sub_type;
+      } catch (e) {
+        console.warn('auto categorize failed', e);
+      }
+
+      const payload: Record<string, unknown> = {
         name: draft.name.trim(),
-        category: draft.category,
-        ip_name: draft.ip_name?.trim() || null,
+        category,
+        ip_name: brand || draft.ip_name?.trim() || null,
+        brand,
+        sub_type,
         summary: draft.summary?.trim() || null,
         era: draft.era?.trim() || null,
         origin: draft.origin?.trim() || null,
@@ -131,10 +159,11 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
         gallery,
         video_url: draft.video_url?.trim() || null,
         body: draft.body?.trim() || null,
-        selling_points: pointsText.split('\n').map((s) => s.trim()).filter(Boolean),
+        selling_points: sp,
         tips: draft.tips?.trim() || null,
         importance_score: Math.min(100, Math.max(0, Number(draft.importance_score) || 0)),
-      }).eq('id', draft.id);
+      };
+      const { error } = await supabase.from('official_knowledge').update(payload as never).eq('id', draft.id);
       if (error) throw error;
       toast.success('已保存');
       onSaved();
