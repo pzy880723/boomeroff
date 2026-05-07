@@ -1,52 +1,42 @@
-# 提高加载速度方案
+## 问题诊断
 
-当前问题：所有页面（含 Community 551 行、MyLibrary 721 行、OfficialDetail 573 行、LiveStreamPanel 1232 行）和重型库（recharts、html-to-image、react-markdown、embla-carousel、dnd-kit 等）全部打包进首屏 bundle，移动端首屏体积大、解析慢。
+排查后发现两处高度相关的 bug：
 
-## 改动
+### 1. 顶栏（Header.tsx）logo 严重溢出
+`src/components/layout/Header.tsx`:
+- 容器声明 `className="h-15"`（Tailwind 没有 h-15）+ 内联 `style={{ height: '3.75rem' }}`（60px）
+- 但里面的 logo 是 `h-[5.25rem] w-[5.25rem] sm:h-[6.5rem]`（84–104px）
 
-### 1. 路由懒加载（最大收益）
-`src/App.tsx` 改用 `React.lazy + Suspense`，对所有页面拆包：
-- `Scan / OfficialLibrary / OfficialDetail / MyLibrary / Community / Me / History / Portal / Invite / ResetPassword / CheckInHistory / NotFound` 全部 lazy
-- Suspense fallback 用一个轻量 loading（复用现有 `Loader2` spinner，配 `min-h-screen`）
-- 仅 `MainLayout / AuthProvider / Toaster` 留在主包
+logo 比顶栏本身还高 24–44px，导致顶栏被撑大或 logo 被裁切，视觉上"高度错误"。
 
-预计首屏 JS 缩减 50%+。
+### 2. 底栏（MainLayout + BottomTabBar）安全区预留不足
+- `BottomTabBar` = `h-12`（48px）导航 + `safe-bottom`（≥12px，iOS 刘海机最多 ~34px）≈ 60–82px
+- `MainLayout` 只给 `pb-16`（64px），iOS 上底部内容会被 tab 栏遮住
 
-### 2. Vite 手动分包
-`vite.config.ts` 增加 `build.rollupOptions.output.manualChunks`，把第三方库拆成独立 chunk，浏览器可并行下载并长缓存：
-- `react-vendor`：react / react-dom / react-router-dom
-- `supabase`：@supabase/supabase-js
-- `ui-vendor`：所有 @radix-ui/*
-- `charts`：recharts
-- `markdown`：react-markdown
-- `image-tools`：html-to-image
-- `dnd`：@dnd-kit/*
-- `carousel`：embla-carousel-react、vaul
-- `query`：@tanstack/react-query
+另外，`PageHeader` 也带了一个 logo 按钮（h-8），和 PageHeader title 并列在 h-12 容器里，移动端 440px 视口下与 `right` 槽位会挤压标题区。
 
-### 3. 图片优化
-- `src/pages/Me.tsx` 底部 logo 加 `loading="lazy" decoding="async"`
-- `src/components/layout/PageHeader` / `BottomTabBar` 中的 logo 同样加 `decoding="async"`（如已用）
-- 历史 / 社区 / 知识库列表里的商品图片统一加 `loading="lazy" decoding="async"`（Community / MyLibrary / OfficialLibrary / History）
+## 修复方案
 
-### 4. React Query 默认缓存
-`src/App.tsx` 的 `new QueryClient()` 加默认 options：
-- `staleTime: 60_000`（1 分钟内不重复请求）
-- `gcTime: 5 * 60_000`
-- `refetchOnWindowFocus: false`
+### A. Header.tsx
+- 移除非法的 `h-15`，统一容器高度为 `h-14`（56px），删除内联 style
+- logo 缩到 `h-10 w-10 sm:h-11 sm:w-11`（40–44px），与顶栏高度协调
+- 保留 5 次点击进入后台逻辑
 
-减少切 tab 回来时的重复请求。
+### B. MainLayout.tsx
+- `<main>` 的 `pb-16` 改为 `pb-[calc(3.5rem+env(safe-area-inset-bottom))]`，正确避开底栏 + 安全区
 
-### 5. index.html 预连接
-`index.html` `<head>` 加 `<link rel="preconnect" href="https://narqwgwpqglathwtyevz.supabase.co" crossorigin>`，让 Supabase 首个请求更快建链。
+### C. BottomTabBar.tsx
+- 容器固定高度由 `h-12` 改为 `h-14`（56px），与 main 的预留对齐；图标/字号不变，仅去掉底部 `pb-0.5` 让 `safe-bottom` 自然撑开
+- 中间凸起按钮的 `w-7 h-7` 微调为 `w-9 h-9`，与 56px 高度更匹配
 
-## 不动的部分
-- 不改业务逻辑、RLS、edge functions、认证流程
-- 不改 design system / tokens
-- 不改 `installStorageShim` 调用顺序
-- 不动 `src/integrations/supabase/client.ts`
+### D. PageHeader.tsx
+- 把右上角重复的 logo 按钮移除（顶部品牌已经在 Header 里；PageHeader 只用于二级页且本身不显示 Header，因此保留 logo 按钮以维持"5 次点击入口"）→ 改为只保留隐形点击区，不再渲染 `<img>`，避免高度抖动
+- 容器高度 `h-12` 改为 `h-14`，与 Header 一致
 
-## 验证
-- `bun run build` 看产物 chunk 拆分是否生效、首屏 entry 是否变小
-- 预览刷新，Network 面板看首屏 JS 总量、TTI 是否下降
-- 切换各 tab，首次进入有短暂 fallback 是预期行为，不应白屏报错
+### 不会改动
+- 路由、业务逻辑、AI 流程、RLS、edge functions
+- 设计 token / 配色
+
+### 验证
+- 在 440×798 视口截图确认顶栏 56px、底栏 56px+安全区，logo 不溢出
+- 切换 Scan / OfficialLibrary / Community / Me 各页，底部最后一行内容不被遮挡

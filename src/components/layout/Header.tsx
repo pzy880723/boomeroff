@@ -74,7 +74,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 glass safe-top">
-      <div className="container flex h-15 items-center justify-between gap-2" style={{ height: '3.75rem' }}>
+      <div className="container flex h-14 items-center justify-between gap-2">
         <button
           type="button"
           onClick={handleLogoClick}
@@ -85,7 +85,9 @@ export function Header() {
             src={logo}
             alt="中古商品知识系统"
             draggable={false}
-            className="h-[5.25rem] w-[5.25rem] sm:h-[6.5rem] sm:w-[6.5rem] rounded-lg object-contain shrink-0"
+            loading="lazy"
+            decoding="async"
+            className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg object-contain shrink-0"
           />
         </button>
 

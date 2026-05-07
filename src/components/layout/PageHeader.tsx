@@ -43,7 +43,7 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 glass safe-top">
-      <div className="container mx-auto max-w-screen-md flex items-center gap-2 h-12 px-3">
+      <div className="container mx-auto max-w-screen-md flex items-center gap-2 h-14 px-3">
         {back && (
           <Link to={back}>
             <Button variant="ghost" size="icon" className="h-9 w-9 -ml-2">
@@ -60,15 +60,8 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
           type="button"
           onClick={tap}
           aria-label="BOOMER-OFF"
-          className="shrink-0 select-none focus:outline-none ml-1 flex items-center"
-        >
-          <img
-            src={logo}
-            alt="中古商品知识系统"
-            draggable={false}
-            className="h-8 w-auto object-contain"
-          />
-        </button>
+          className="shrink-0 select-none focus:outline-none ml-1 w-8 h-8 opacity-0"
+        />
       </div>
 
       <Dialog open={pwdOpen} onOpenChange={setPwdOpen}>
