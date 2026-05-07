@@ -1,71 +1,50 @@
-# 知识卡/识物卡分享功能
+## 调整分享长图样式
 
-为「官方知识详情」(`OfficialDetail`) 和「识物卡」(`ProductDetailCard`) 增加统一的分享按钮，支持两种方式：
+重做 `src/components/share/ShareCard.tsx`，让长图更接近手机浏览的实际宽高比例和字号，并修正 logo 显示。
 
-1. **分享链接** — 复制可访问的页面链接（识物卡需要可分享 URL，见下）
-2. **保存长图** — 生成一张精简核心内容 + 品牌 logo 的竖版长图，可直接保存到相册
+### 尺寸与排版
 
-## 交互
+- 画布宽度从 750px 改为 **390px**（与移动端视口一致），`html-to-image` 仍以 `pixelRatio: 2` 输出，最终生成约 780px 宽的高清 PNG —— 文件大小合适，且字号视觉上和真实手机一致。
+- 整体字号同步缩小到移动端真实比例：
+  - 标题 H1：`20px / 600`
+  - 副标题（IP·年代·产地）：`12px`
+  - 推荐语 / 摘要正文：`14px`，行高 1.7
+  - 价格数字：`18px / 700`，标签 `11px`
+  - 卖点正文：`13px`
+  - 类目徽章：`11px`
+- 主图：保持正方形，宽度 = 卡片宽减去左右 padding（约 334px），圆角 14px。
+- 整体 padding：外层 16px，卡片内部 18px。
 
-- 顶部操作栏（详情页右上角 / 识物卡右上角）增加「分享」图标按钮
-- 点击弹出底部抽屉（Sheet）两个选项：
-  - 复制链接（带 toast 提示，移动端优先尝试 `navigator.share`）
-  - 保存长图（生成中显示 loading，完成后弹出全屏预览，长按保存或点「下载」按钮）
+### 内容增加
 
-## 长图设计（宽 750px，高度自适应，2x 输出 1500px 宽）
+让信息更饱满（之前太少），按可用字段补足：
 
-竖版卡片，圆角 24px，纯白底 + 浅灰渐变包边：
+- **副标题行**：除了 IP/年代/产地，再追加「材质 / 工艺 / 尺寸」中存在的字段（识物卡走 spec_basic，知识卡走 fields）。
+- **摘要 / 一句话推荐**：截断长度从 120 字提高到 **180 字**。
+- **核心卖点**：从 3 条提高到 **最多 5 条**，每条最多 60 字。
+- **小贴士**：保留，最多 60 字。
+- **新增「适用场景 / 鉴别要点」分块**（仅当数据存在时渲染），知识卡使用 `fields.identification` / `fields.scenarios`，识物卡使用 `value_factors` / `caution`（如有）。
 
-```text
-┌──────────────────────────────┐
-│  [BOOMER-OFF logo]    分类徽章 │
-│                              │
-│  [主图，正方形，圆角 16]      │
-│                              │
-│  商品名（24pt 粗体）          │
-│  IP / 年代 · 产地（小字灰）   │
-│  ─────────────────────────   │
-│  ★ 一句话卖点（识物卡）       │
-│   或 摘要 summary（知识卡）   │
-│                              │
-│  价格区（突出显示）           │
-│   建议: ¥xxx                 │
-│   历史: ¥xxx                 │
-│                              │
-│  3 个核心卖点（带 ▸）         │
-│                              │
-│  ─────────────────────────   │
-│  [小 logo] BOOMER-OFF         │
-│  扫码/链接 · 中古好物识别助手  │
-└──────────────────────────────┘
-```
+`ShareCardData` 接口新增可选字段 `extras?: { label: string; value: string }[]`，由调用方按需传入，避免改动太大。
 
-**核心内容取舍**：
-- 知识卡：cover_url + name + category/era/origin + summary（截 80 字）+ 前 3 个 selling_points + 一句店员小贴士
-- 识物卡：主图 + name + category + 一句话推荐语 + 建议价/历史价 + 前 3 个卖点
-- 不包含：完整 body 长文、视频、聊天、操作按钮
+### Logo 与底部署名
 
-## 实现技术
+- **去掉顶部品牌条上的 logo 和「BOOMER-OFF」文字**，顶部只保留分类徽章（右对齐）。
+- **底部新增居中的 logo + 文案**：
+  - 一张 logo 居中（48×48，圆角 10）
+  - 下方一行小字：`由 boomeroff 官方生成`（12px，居中，灰色 `#737373`）
+  - 不再显示链接 URL（链接由「复制链接」操作单独承担）
+- 用 `object-fit: contain` 显示 logo，避免被裁切/拉伸压缩；外层容器宽高固定，内部 img 用 `width:100%; height:100%; object-fit:contain`。
+- 移除当前底部那行「由 BOOMER-OFF 生成 · 长按或点击下载保存图片」(此提示文案搬到 `ShareMenu` 预览弹窗里，不进截图)。
 
-- **截图库**：`html-to-image` (~12KB，比 html2canvas 更轻、对现代 CSS 支持好)。新建 `src/lib/share-image.ts` 封装。
-- **共用组件**：`src/components/share/ShareCardCanvas.tsx` —— 隐藏的离屏 DOM (`fixed -left-[9999px]`)，用 React 渲染上面布局，再 `htmlToPng()` 转图片。
-- **共用按钮**：`src/components/share/ShareMenu.tsx` —— 触发 Sheet，处理复制链接 + 生成图片 + 预览/下载。
-- **品牌 logo**：复用 `src/assets` 已有的 `boomer-off-logo`（参考 brand-identity memory）。
-- **链接**：
-  - 知识卡 → `${origin}/library/${id}`（已存在）
-  - 识物卡 → 暂用社区分享链接 `${origin}/community/${post_id}`；若识别尚未发布到社区，先弹出「发布到中古圈以获取链接？」二选一，或仅允许「保存长图」。
+### 调用方对齐
 
-## 改动文件
+- `ProductDetailCard.tsx` 和 `OfficialDetail.tsx` 在构造 `ShareCardData` 时按上面新字段补充 `points`（最多 5）、`extras`（鉴别/场景）。
+- `ShareMenu.tsx`：离屏容器宽度跟随 ShareCard（390px），不需改逻辑；预览弹窗内已有「iOS 长按保存」提示，新增一行「由 boomeroff 官方生成」的说明放预览弹窗即可。
 
-- 新增 `src/lib/share-image.ts`
-- 新增 `src/components/share/ShareMenu.tsx`
-- 新增 `src/components/share/ShareCardCanvas.tsx`
-- 编辑 `src/pages/OfficialDetail.tsx` —— 在顶栏右上添加 `<ShareMenu kind="official" item={item} />`
-- 编辑 `src/components/recognition/ProductDetailCard.tsx` —— 添加 `<ShareMenu kind="recognition" item={...} />`
-- 安装 `html-to-image`
+### 文件改动
 
-## 兼容性
-
-- iOS Safari 不支持自动下载，预览页给出「长按图片保存」提示
-- Android / 桌面：直接触发 `<a download>` 下载 PNG
-- 离屏渲染时用 `useLayoutEffect` 等待 cover 图加载完毕再截图，避免空白
+- 编辑 `src/components/share/ShareCard.tsx`（重写样式 + 新增 extras 渲染 + 改 logo 位置）
+- 编辑 `src/components/share/ShareMenu.tsx`（仅微调底部提示文案，无逻辑变更）
+- 编辑 `src/components/recognition/ProductDetailCard.tsx`（补充 points/extras）
+- 编辑 `src/pages/OfficialDetail.tsx`（补充 points/extras）
