@@ -234,32 +234,49 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   anchor: '店员',
 };
 
-// 二级类目（基于 official_knowledge.ip_name 字段筛选）
-export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {
-  jp_porcelain: ['品牌窑口', '工艺技法', '器型用途', '花纹寓意', '年代鉴定', '场景搭配'],
-  eu_porcelain: ['品牌', '工艺', '器型', '花纹', '年代'],
-  incense: ['品牌', '香型', '用途场景'],
-  antique_art: ['书画', '漆器', '铜器', '木器', '织物'],
-  local_craft: ['闽南瓷', '茶器', '手作'],
-  anime_toy: ['高达', '圣斗士', '假面骑士', '战队', '怪兽', '食玩'],
-  otaku_goods: ['手办', '景品', '徽章', '挂件', '同人'],
-  luxury: ['包袋', '服饰', '配饰', '腕表'],
-  vintage_jewelry: ['项链', '戒指', '胸针', '耳饰', '手链'],
-  game_console: ['任天堂', '索尼', '世嘉', '掌机', '卡带'],
-  walkman: ['Walkman 磁带', 'Discman', 'MD', '数码'],
-  ccd: ['索尼', '佳能', '卡西欧', '富士', '奥林巴斯'],
-  media_record: ['黑胶', '磁带', 'CD', 'DVD'],
-  playback_device: ['黑胶机', '卡带机', 'CD 机', '收音机'],
-  home_appliance: ['电视', '收音', '厨电', '灯具'],
-  hobby: ['文具', '香水', '烟具', '户外'],
+// 二级类目 - 品牌/IP/窑口维度（official_knowledge.brand）
+export const CATEGORY_BRANDS: Record<ProductCategory, string[]> = {
+  jp_porcelain: ['香兰社', '大仓陶园', '深川制磁', '九谷烧', '萨摩烧', '有田烧', '京烧', '清水烧', '伊万里', 'Noritake', 'Narumi'],
+  eu_porcelain: ['Wedgwood', 'Meissen', 'Royal Copenhagen', 'Herend', 'Limoges', 'Royal Albert', 'Royal Doulton', 'Villeroy & Boch'],
+  incense: ['鸠居堂', '松栄堂', '日本香堂', '山田松香木店', '香十', '玉初堂'],
+  antique_art: [],
+  local_craft: ['南部铁器', '京友禅', '江户切子', '津轻涂', '博多织', '九谷', '輪島涂'],
+  anime_toy: ['Bandai', 'Popy', 'Medicom', 'Sanrio 三丽鸥', 'Takara Tomy', '万代'],
+  otaku_goods: [],
+  luxury: ['Hermès', 'Chanel', 'Louis Vuitton', 'Cartier', 'Rolex', 'Gucci', 'Prada', 'Dior'],
+  vintage_jewelry: ['Tiffany', 'Cartier', 'Mikimoto', 'Cameo', 'Bvlgari', 'Van Cleef & Arpels'],
+  game_console: ['任天堂', '索尼', '世嘉', 'Atari', 'Microsoft'],
+  walkman: ['索尼', '爱华', '松下', 'Panasonic', 'Sharp'],
+  ccd: ['索尼', '佳能', '卡西欧', '富士', '奥林巴斯', '尼康', '理光', '柯达'],
+  media_record: [],
+  playback_device: ['JBL', 'Diatone', '山水', '先锋', 'Marantz', 'Denon', 'Technics', 'Bose'],
+  home_appliance: ['National', 'Panasonic', 'Sharp', '日立', '东芝', '三洋'],
+  hobby: [],
   other: [],
-  // 旧品类
-  porcelain: [],
-  stationery: [],
-  lacquerware: [],
-  bronze: [],
-  woodcraft: [],
-  textile: [],
-  jewelry: [],
-  painting: [],
+  porcelain: [], stationery: [], lacquerware: [], bronze: [], woodcraft: [], textile: [], jewelry: [], painting: [],
 };
+
+// 二级类目 - 类型/工艺/题材维度（official_knowledge.sub_type）
+export const CATEGORY_TYPES: Record<ProductCategory, string[]> = {
+  jp_porcelain: ['品牌窑口', '工艺技法', '器型用途', '花纹寓意', '年代鉴定', '场景搭配'],
+  eu_porcelain: ['茶具', '餐具', '装饰瓷', '人物瓷偶', '花瓶'],
+  incense: ['线香', '盘香', '锥香', '香道具', '香炉'],
+  antique_art: ['书画', '漆器', '铜器', '木器', '织物', '浮世绘', '根付', '香炉', '茶道具'],
+  local_craft: ['铁器', '染织', '玻璃', '漆器', '陶瓷'],
+  anime_toy: ['高达', '圣斗士', '假面骑士', '战队', '怪兽', '食玩', 'Bearbrick', '龙珠', '阿童木', '变形金刚'],
+  otaku_goods: ['手办', '景品', '吧唧', '亚克力立牌', '痛包', '原画集', '挂件', '徽章'],
+  luxury: ['包袋', '服饰', '配饰', '腕表', '丝巾', '皮具'],
+  vintage_jewelry: ['项链', '戒指', '胸针', '耳饰', '手链', '带留'],
+  game_console: ['主机', '掌机', '卡带', '配件', '光盘'],
+  walkman: ['Walkman 磁带', 'Discman', 'MD', '数码'],
+  ccd: [],
+  media_record: ['黑胶', '磁带', 'CD', 'DVD', 'LD'],
+  playback_device: ['黑胶机', '卡带机', 'CD 机', '收音机', '音箱', '功放'],
+  home_appliance: ['电视', '收音机', '厨电', '灯具', '风扇'],
+  hobby: ['文具', '香水', '烟具', '户外', '钢笔', '打火机'],
+  other: [],
+  porcelain: [], stationery: [], lacquerware: [], bronze: [], woodcraft: [], textile: [], jewelry: [], painting: [],
+};
+
+// 兼容旧引用
+export const CATEGORY_SUBCATEGORIES = CATEGORY_TYPES;
