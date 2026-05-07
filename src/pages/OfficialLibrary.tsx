@@ -94,11 +94,12 @@ export default function OfficialLibrary() {
     localStorage.setItem('lib_sort', sort);
   }, [sort]);
 
-  // 切换一级类目时重置二级（首次挂载若已有 ip 参数则跳过）
+  // 切换一级类目时重置二级（首次挂载若已有 brand/type 参数则跳过）
   const [catInited, setCatInited] = useState(false);
   useEffect(() => {
     if (!catInited) { setCatInited(true); return; }
-    setSub('all');
+    setBrand('all');
+    setSubType('all');
   }, [cat]);
 
   // 若选中类目在折叠区外，自动展开
@@ -113,13 +114,9 @@ export default function OfficialLibrary() {
     (async () => {
       setLoading(true);
       let q = supabase.from('official_knowledge').select('*');
-      // 仅在「全部」类目下应用排序切换；具体类目固定按更新时间倒序
       if (cat === 'all') {
         if (sort === 'important') {
           q = q.order('importance_score', { ascending: false }).order('updated_at', { ascending: false });
-        } else if (sort === 'hot') {
-          // 数据库无法直接 order by 表达式，前端再排；先按更新时间初排
-          q = q.order('updated_at', { ascending: false });
         } else {
           q = q.order('updated_at', { ascending: false });
         }
@@ -127,10 +124,14 @@ export default function OfficialLibrary() {
         q = q.order('updated_at', { ascending: false });
       }
       if (cat !== 'all') q = q.eq('category', cat);
-      if (sub !== 'all') q = q.eq('ip_name', sub);
+      if (brand !== 'all') {
+        // 兼容旧数据：brand 优先匹配 brand 列，回退 ip_name
+        q = q.or(`brand.eq.${brand},ip_name.eq.${brand}`);
+      }
+      if (subType !== 'all') q = q.eq('sub_type', subType);
       if (era) q = q.eq('era', era);
       if (origin) q = q.eq('origin', origin);
-      if (keyword.trim()) q = q.or(`name.ilike.%${keyword}%,ip_name.ilike.%${keyword}%,summary.ilike.%${keyword}%`);
+      if (keyword.trim()) q = q.or(`name.ilike.%${keyword}%,ip_name.ilike.%${keyword}%,brand.ilike.%${keyword}%,sub_type.ilike.%${keyword}%,summary.ilike.%${keyword}%`);
       const { data } = await q.limit(120);
       let list = (data || []) as OfficialItem[];
       if (cat === 'all' && sort === 'hot') {
@@ -149,7 +150,7 @@ export default function OfficialLibrary() {
         .eq('source_type', 'official');
       setFavoritedIds(new Set((fav || []).map((f) => f.source_id)));
     })();
-  }, [user, cat, sub, era, origin, keyword, sort, reloadKey]);
+  }, [user, cat, brand, subType, era, origin, keyword, sort, reloadKey]);
 
   const toggleFav = async (item: OfficialItem) => {
     if (!user) return;
@@ -176,7 +177,8 @@ export default function OfficialLibrary() {
     () => (expanded ? categoriesAll : categoriesAll.slice(0, VISIBLE_COUNT)),
     [expanded],
   );
-  const subList = cat !== 'all' ? CATEGORY_SUBCATEGORIES[cat] || [] : [];
+  const brandList = cat !== 'all' ? CATEGORY_BRANDS[cat] || [] : [];
+  const typeList = cat !== 'all' ? CATEGORY_TYPES[cat] || [] : [];
 
   if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!user) return <AuthPage />;
