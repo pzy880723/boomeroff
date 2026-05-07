@@ -17,7 +17,7 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // 图片压缩函数 - 1280px/0.85，瓷器底款等细节关键
+  // 图片压缩函数 - 默认 1280px/0.85；超过 600KB 再压一档到 1024px/0.8
   const compressImage = (imageData: string, maxWidth = 1280, quality = 0.85): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
@@ -27,12 +27,23 @@ export function CameraCapture({ onCapture, disabled }: CameraCaptureProps) {
         canvas.width = img.width * ratio;
         canvas.height = img.height * ratio;
         const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        } else {
-          resolve(imageData);
+        if (!ctx) { resolve(imageData); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const out = canvas.toDataURL('image/jpeg', quality);
+        // base64 长度 > 800K 字符（约 600KB 二进制）→ 二次压缩
+        if (out.length > 800_000 && maxWidth > 1024) {
+          const c2 = document.createElement('canvas');
+          const r2 = Math.min(1024 / img.width, 1);
+          c2.width = img.width * r2;
+          c2.height = img.height * r2;
+          const ctx2 = c2.getContext('2d');
+          if (ctx2) {
+            ctx2.drawImage(img, 0, 0, c2.width, c2.height);
+            resolve(c2.toDataURL('image/jpeg', 0.8));
+            return;
+          }
         }
+        resolve(out);
       };
       img.src = imageData;
     });
