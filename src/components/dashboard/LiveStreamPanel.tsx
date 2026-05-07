@@ -508,7 +508,7 @@ export function LiveStreamPanel() {
       const sp = displayResult.sellingPoints || [];
 
       // 拉取已上传的真实图片 URL（避免把 base64 写进 jsonb/text）
-      const { data: prod } = await withRetry(async () =>
+      const { data: prod } = await withRetry(async () => await
         supabase
           .from('products')
           .select('image_url')
@@ -518,7 +518,7 @@ export function LiveStreamPanel() {
       const coverUrl = prod?.image_url || null;
 
       // 现状探查（顺序执行，避免并发互相超时）
-      const pkRes = await withRetry(async () =>
+      const pkRes = await withRetry(async () => await
         supabase
           .from('product_knowledge')
           .select('id')
@@ -527,7 +527,7 @@ export function LiveStreamPanel() {
           .maybeSingle(),
       );
       const ofRes = isAdmin
-        ? await withRetry(async () =>
+        ? await withRetry(async () => await
             supabase
               .from('official_knowledge')
               .select('id')
@@ -541,7 +541,7 @@ export function LiveStreamPanel() {
 
       // 缺 product_knowledge → 补
       if (!pkRes.data) {
-        const { error } = await withRetry(async () =>
+        const { error } = await withRetry(async () => await
           supabase.from('product_knowledge').insert({
             product_id: currentProductId,
             category: displayResult.category,
@@ -559,7 +559,7 @@ export function LiveStreamPanel() {
         didSomething = true;
       } else if (isAdmin) {
         // 已存在但旧版未标记 official → 升级
-        await withRetry(async () =>
+        await withRetry(async () => await
           supabase
             .from('product_knowledge')
             .update({ is_official: true })
@@ -569,7 +569,7 @@ export function LiveStreamPanel() {
 
       // admin 且缺 official_knowledge → 补建
       if (isAdmin && !ofRes.data) {
-        const { error: ofErr } = await withRetry(async () =>
+        const { error: ofErr } = await withRetry(async () => await
           supabase.from('official_knowledge').insert({
             name: displayResult.name,
             category: displayResult.category,
