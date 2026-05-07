@@ -1,71 +1,108 @@
-# 知识卡/识物卡分享功能
 
-为「官方知识详情」(`OfficialDetail`) 和「识物卡」(`ProductDetailCard`) 增加统一的分享按钮，支持两种方式：
+# 二级类目自动归类方案
 
-1. **分享链接** — 复制可访问的页面链接（识物卡需要可分享 URL，见下）
-2. **保存长图** — 生成一张精简核心内容 + 品牌 logo 的竖版长图，可直接保存到相册
+## 当前问题
 
-## 交互
+`OfficialLibrary` 用 `ip_name` 当二级类目筛选，但定义和实际数据严重脱节：
 
-- 顶部操作栏（详情页右上角 / 识物卡右上角）增加「分享」图标按钮
-- 点击弹出底部抽屉（Sheet）两个选项：
-  - 复制链接（带 toast 提示，移动端优先尝试 `navigator.share`）
-  - 保存长图（生成中显示 loading，完成后弹出全屏预览，长按保存或点「下载」按钮）
+- **incense / luxury / vintage_jewelry / walkman / playback_device**：定义是「类型」（如线香/包袋/腕表），数据库存的全是「品牌」。筛选 0 命中。
+- **anime_toy**：定义是 IP（高达/圣斗士），数据存的是 Sanrio/Bearbrick 等其他 IP。
+- **media_record**：定义是「黑胶/CD/DVD」，数据存的是「City Pop/坂本龙一」等内容。
+- **同义异写**：`索尼` vs `Sony / 索尼` vs `SONY / 索尼`、`任天堂` vs `任天堂 (Nintendo)`、`南部铁器` vs `南部铁器 (Nambu Tekki)` 各算成不同标签。
+- **jp_porcelain**：约 120 条已带正确二级标签，要保留。
 
-## 长图设计（宽 750px，高度自适应，2x 输出 1500px 宽）
+## 目标
 
-竖版卡片，圆角 24px，纯白底 + 浅灰渐变包边：
+把二级类目升级为**品牌 + 类型**双维度筛选，已有数据 AI 自动归并，新词条入库时 AI 一并判定。
 
-```text
-┌──────────────────────────────┐
-│  [BOOMER-OFF logo]    分类徽章 │
-│                              │
-│  [主图，正方形，圆角 16]      │
-│                              │
-│  商品名（24pt 粗体）          │
-│  IP / 年代 · 产地（小字灰）   │
-│  ─────────────────────────   │
-│  ★ 一句话卖点（识物卡）       │
-│   或 摘要 summary（知识卡）   │
-│                              │
-│  价格区（突出显示）           │
-│   建议: ¥xxx                 │
-│   历史: ¥xxx                 │
-│                              │
-│  3 个核心卖点（带 ▸）         │
-│                              │
-│  ─────────────────────────   │
-│  [小 logo] BOOMER-OFF         │
-│  扫码/链接 · 中古好物识别助手  │
-└──────────────────────────────┘
+## 数据结构改动
+
+`official_knowledge` 表新增两列：
+- `brand TEXT` —— 品牌/IP/窑口名（从 `ip_name` 迁移并规范化）
+- `sub_type TEXT` —— 物品类型/工艺/题材
+
+迁移策略：保留 `ip_name` 不删，作为冗余兼容；新写入逻辑统一写 `brand`+`sub_type`，旧字段同步写 `brand` 值确保旧代码也能读。
+
+## 二级类目字典重写
+
+`src/types/index.ts` 中新增两个字典：
+
+```ts
+CATEGORY_BRANDS: Record<ProductCategory, string[]>      // 品牌/IP 维度
+CATEGORY_TYPES:  Record<ProductCategory, string[]>      // 类型/工艺维度
 ```
 
-**核心内容取舍**：
-- 知识卡：cover_url + name + category/era/origin + summary（截 80 字）+ 前 3 个 selling_points + 一句店员小贴士
-- 识物卡：主图 + name + category + 一句话推荐语 + 建议价/历史价 + 前 3 个卖点
-- 不包含：完整 body 长文、视频、聊天、操作按钮
+举例（覆盖所有 16 个一级类目，下面只列样本）：
 
-## 实现技术
+| 一级 | 品牌 (CATEGORY_BRANDS) | 类型 (CATEGORY_TYPES) |
+|---|---|---|
+| jp_porcelain | 香兰社 / 大仓 / 深川 / 九谷 / 萨摩 / 有田 / 京烧 … | 品牌窑口 / 工艺技法 / 器型用途 / 花纹寓意 / 年代鉴定 / 场景搭配 |
+| eu_porcelain | Wedgwood / Meissen / Royal Copenhagen / Herend / Limoges / Royal Albert | 茶具 / 餐具 / 装饰瓷 / 人物瓷偶 |
+| incense | 鸠居堂 / 松栄堂 / 日本香堂 / 山田松 / 香十 | 线香 / 盘香 / 香道具 / 香炉 |
+| luxury | Hermès / Chanel / LV / Cartier / Rolex | 包袋 / 服饰 / 配饰 / 腕表 |
+| vintage_jewelry | Tiffany / Cartier / Mikimoto / Cameo | 项链 / 戒指 / 胸针 / 耳饰 / 带留 |
+| anime_toy | Bandai / Popy / Medicom / Sanrio / 三丽鸥 | 高达 / 圣斗士 / 假面骑士 / Bearbrick / 龙珠 / 阿童木 / 食玩 |
+| otaku_goods | —（多无固定品牌） | 手办 / 景品 / 吧唧 / 亚克力立牌 / 痛包 / 原画集 |
+| game_console | 任天堂 / 索尼 / 世嘉 | 主机 / 掌机 / 卡带 / 配件 |
+| walkman | 索尼 / 爱华 / 松下 | Walkman 磁带 / Discman / MD / 数码 |
+| ccd | 索尼 / 佳能 / 卡西欧 / 富士 / 奥林巴斯 / 尼康 | —— |
+| media_record | —— | 黑胶 / 磁带 / CD / DVD / LD |
+| playback_device | JBL / Diatone / 山水 / 先锋 | 黑胶机 / 卡带机 / CD 机 / 收音机 / 音箱 |
+| home_appliance | —— | 电视 / 收音机 / 厨电 / 灯具 |
+| local_craft | 南部铁器 / 京友禅 / 江户切子 / 津轻涂 / 博多织 | 铁器 / 染织 / 玻璃 / 漆器 |
+| antique_art | —— | 书画 / 漆器 / 铜器 / 木器 / 织物 / 浮世绘 / 根付 / 香炉 |
+| hobby | —— | 文具 / 香水 / 烟具 / 户外 |
 
-- **截图库**：`html-to-image` (~12KB，比 html2canvas 更轻、对现代 CSS 支持好)。新建 `src/lib/share-image.ts` 封装。
-- **共用组件**：`src/components/share/ShareCardCanvas.tsx` —— 隐藏的离屏 DOM (`fixed -left-[9999px]`)，用 React 渲染上面布局，再 `htmlToPng()` 转图片。
-- **共用按钮**：`src/components/share/ShareMenu.tsx` —— 触发 Sheet，处理复制链接 + 生成图片 + 预览/下载。
-- **品牌 logo**：复用 `src/assets` 已有的 `boomer-off-logo`（参考 brand-identity memory）。
-- **链接**：
-  - 知识卡 → `${origin}/library/${id}`（已存在）
-  - 识物卡 → 暂用社区分享链接 `${origin}/community/${post_id}`；若识别尚未发布到社区，先弹出「发布到中古圈以获取链接？」二选一，或仅允许「保存长图」。
+某些类目两个维度只有一个有意义（如 ccd 没"类型"维度），UI 只显示有内容的那一栏。
 
-## 改动文件
+## 改动清单
 
-- 新增 `src/lib/share-image.ts`
-- 新增 `src/components/share/ShareMenu.tsx`
-- 新增 `src/components/share/ShareCardCanvas.tsx`
-- 编辑 `src/pages/OfficialDetail.tsx` —— 在顶栏右上添加 `<ShareMenu kind="official" item={item} />`
-- 编辑 `src/components/recognition/ProductDetailCard.tsx` —— 添加 `<ShareMenu kind="recognition" item={...} />`
-- 安装 `html-to-image`
+### 1. 数据库迁移
+- `ALTER TABLE official_knowledge ADD COLUMN brand TEXT, ADD COLUMN sub_type TEXT;`
+- 加索引 `(category, brand)` `(category, sub_type)`。
+- `product_knowledge` 同样加 `brand` `sub_type`。
 
-## 兼容性
+### 2. 后端：升级 `auto-categorize-knowledge` Edge Function
+- 在 prompt 里加入当前选中的 `category` 对应的品牌和类型候选清单（来自上面的字典）。
+- 工具调用 schema 改为同时返回 `category` / `brand` / `sub_type`。
+- 规则：
+  - `brand` 必须从该 category 的 `CATEGORY_BRANDS` 中精确选一个，找不到就返回 `null`，**禁止编造新品牌**。
+  - `sub_type` 同理。
+  - 强调"索尼=Sony=SONY"等同义合并 → 统一写中文规范名。
+- batch 模式遍历全部 official_knowledge / product_knowledge，回填 brand+sub_type；只覆盖空值或与候选清单不一致的旧值。
 
-- iOS Safari 不支持自动下载，预览页给出「长按图片保存」提示
-- Android / 桌面：直接触发 `<a download>` 下载 PNG
-- 离屏渲染时用 `useLayoutEffect` 等待 cover 图加载完毕再截图，避免空白
+### 3. 新词条入库时调用同一函数
+- `KnowledgeRichEditDialog`、`OfficialKnowledgeManager`、`AiKnowledgeDialog`、`KnowledgeEditDialog`：保存前调一次 `auto-categorize-knowledge`，把返回的 `brand` `sub_type` 一起 upsert。
+- 编辑界面里允许用户手动覆盖 AI 选择，下拉里就是该一级类目的候选清单 + 「自定义」。
+
+### 4. 前端筛选 UI（`OfficialLibrary.tsx`）
+- 选中一级类目后，二级筛选区从单行变两行：
+  - 第一行 chip：品牌（`CATEGORY_BRANDS[cat]`）
+  - 第二行 chip：类型（`CATEGORY_TYPES[cat]`）
+- URL 参数从 `?ip=` 拓展为 `?brand=&type=`。
+- 查询条件：`.eq('brand', brand)` 和/或 `.eq('sub_type', subType)`。
+- 关键词搜索同时 `or` 上 brand/sub_type。
+
+### 5. 详情页 `OfficialDetail.tsx`
+- 标题下的标签从「ip_name」改为同时显示 `brand` 和 `sub_type` 两个 Badge，点击跳到对应筛选。
+
+### 6. 一次性后台任务
+迁移完成后在 /portal 提供「全量重新归类」按钮，调用 batch 模式：
+- 用 AI 把现有 124 条 jp_porcelain 的旧 ip_name（"品牌窑口/工艺技法"等元标签）重新映射到新的 brand+sub_type；
+- 把 incense/luxury/walkman 等品牌名搬到 `brand`，并补 `sub_type`；
+- 同义合并到规范写法。
+- 失败的条目列出来供管理员手工处理。
+
+## 实现顺序
+
+1. 写数据库迁移（加列 + 索引）。
+2. 更新 `src/types/index.ts` 加 `CATEGORY_BRANDS` / `CATEGORY_TYPES`。
+3. 改 `auto-categorize-knowledge` 函数（输入清单 + 输出 brand/sub_type + 同义归并提示）。
+4. 改前端编辑器（保存时落 brand/sub_type）+ 详情页 + 列表筛选。
+5. 在 /portal 触发全量回填，按一级类目分批执行（jp_porcelain → 其它）。
+6. 验证：每个一级类目下都能筛出非 0 结果，且没有"索尼/Sony/索尼"重复 chip。
+
+## 不在本次范围
+
+- `community_posts` 表不动（社区帖子不走二级筛选）。
+- 不删除旧 `ip_name` 字段，保留作历史兼容；待 brand 全部回填且稳定后再考虑下线。
