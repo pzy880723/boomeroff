@@ -26,6 +26,8 @@ interface Item {
   name: string;
   category: ProductCategory;
   ip_name: string | null;
+  brand: string | null;
+  sub_type: string | null;
   summary: string | null;
   era: string | null;
   origin: string | null;
