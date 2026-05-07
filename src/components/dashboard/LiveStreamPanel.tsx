@@ -327,6 +327,13 @@ export function LiveStreamPanel() {
     }
   }, []);
 
+  const stopTimer = () => {
+    if (timerRef.current != null) {
+      cancelAnimationFrame(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
   const handleRecognition = async (imageList: string[], opts: { forceRefresh?: boolean } = {}) => {
     clearResult();
     setCurrentProductId(null);
@@ -335,16 +342,22 @@ export function LiveStreamPanel() {
     setKnowledgeAdded(false);
     setEnriched(null);
     setIsEnriching(false);
+    setRecognitionFailed(false);
     enrichKeyRef.current = null;
+    lastRecognitionInputRef.current = { images: imageList, opts };
 
-    const startTime = Date.now();
-    timerRef.current = setInterval(() => {
-      setElapsedTime(Date.now() - startTime);
-    }, 100);
+    // ⚡ 用 rAF 驱动计时，主线程繁忙时不会被丢拍
+    timerStartRef.current = performance.now();
+    setElapsedTime(0);
+    stopTimer();
+    const tick = () => {
+      setElapsedTime(performance.now() - timerStartRef.current);
+      timerRef.current = requestAnimationFrame(tick);
+    };
+    timerRef.current = requestAnimationFrame(tick);
 
-    if (!user) return;
+    if (!user) { stopTimer(); return; }
 
-    // ⚡ 识别先跑，不等图片上传——上传慢不该卡识别
     const tInvoke = Date.now();
     const recognitionResult = await recognizeProduct(
       imageList.length > 1 ? imageList : imageList[0],
@@ -352,15 +365,15 @@ export function LiveStreamPanel() {
     );
     console.log('[FE] recognize roundtrip:', Date.now() - tInvoke, 'ms');
 
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    const finalTime = Date.now() - startTime;
+    stopTimer();
+    const finalTime = performance.now() - timerStartRef.current;
     setElapsedTime(finalTime);
     setRecognitionTime(finalTime);
 
-    if (!recognitionResult) return;
+    if (!recognitionResult) {
+      setRecognitionFailed(true);
+      return;
+    }
 
     // ★ 命中缓存：直接复用历史 product
     if (recognitionResult.fromCache && recognitionResult.cachedProductId) {
