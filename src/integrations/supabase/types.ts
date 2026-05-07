@@ -552,6 +552,63 @@ export type Database = {
         }
         Relationships: []
       }
+      user_check_ins: {
+        Row: {
+          check_in_date: string
+          checked_at: string
+          exp_gained: number
+          id: string
+          streak: number
+          user_id: string
+        }
+        Insert: {
+          check_in_date: string
+          checked_at?: string
+          exp_gained?: number
+          id?: string
+          streak?: number
+          user_id: string
+        }
+        Update: {
+          check_in_date?: string
+          checked_at?: string
+          exp_gained?: number
+          id?: string
+          streak?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_experience: {
+        Row: {
+          current_streak: number
+          last_check_in_date: string | null
+          longest_streak: number
+          total_check_ins: number
+          total_exp: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_streak?: number
+          last_check_in_date?: string | null
+          longest_streak?: number
+          total_check_ins?: number
+          total_exp?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_streak?: number
+          last_check_in_date?: string | null
+          longest_streak?: number
+          total_check_ins?: number
+          total_exp?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_favorites: {
         Row: {
           created_at: string
@@ -611,6 +668,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_experience: {
+        Args: { _amount: number; _user_id: string }
+        Returns: number
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -623,6 +684,7 @@ export type Database = {
         Returns: boolean
       }
       increment_official_view: { Args: { _id: string }; Returns: undefined }
+      perform_check_in: { Args: never; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "operator" | "assistant" | "anchor"
