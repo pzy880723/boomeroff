@@ -38,7 +38,10 @@ export function LiveStreamPanel() {
   const [enriched, setEnriched] = useState<RecognitionResult['enriched'] | null>(null);
   const [isEnriching, setIsEnriching] = useState(false);
   const enrichKeyRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const timerStartRef = useRef<number>(0);
+  const lastRecognitionInputRef = useRef<{ images: string[]; opts: { forceRefresh?: boolean } } | null>(null);
+  const [recognitionFailed, setRecognitionFailed] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
