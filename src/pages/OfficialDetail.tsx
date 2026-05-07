@@ -248,13 +248,22 @@ export default function OfficialDetail() {
             >
               {CATEGORY_LABELS[item.category]}
             </Badge>
-            {item.ip_name && (
+            {(item.brand || item.ip_name) && (
               <Badge
                 variant="outline"
                 className="cursor-pointer hover:bg-accent"
-                onClick={() => navigate(`/library?cat=${encodeURIComponent(item.category)}&ip=${encodeURIComponent(item.ip_name!)}`)}
+                onClick={() => navigate(`/library?cat=${encodeURIComponent(item.category)}&brand=${encodeURIComponent((item.brand || item.ip_name)!)}`)}
               >
-                {item.ip_name}
+                {item.brand || item.ip_name}
+              </Badge>
+            )}
+            {item.sub_type && (
+              <Badge
+                variant="outline"
+                className="cursor-pointer hover:bg-accent border-dashed"
+                onClick={() => navigate(`/library?cat=${encodeURIComponent(item.category)}&type=${encodeURIComponent(item.sub_type!)}`)}
+              >
+                {item.sub_type}
               </Badge>
             )}
             {item.era && (
