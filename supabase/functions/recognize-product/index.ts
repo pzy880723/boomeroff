@@ -510,26 +510,42 @@ ${knowledgeContext}
 直接调用 submit_recognition。`;
 
     const tAIStart = Date.now();
-    // 主识别只做鉴别 + 短话术，6 秒超时；超时由前端兜底显示"识别中"
-    const response = await callAIWithTimeout(imageList, recognitionPrompt, modelCfg, 8000);
-    const aiTime = Date.now() - tAIStart;
+    // 主识别 18s 超时；504/5xx 自动重试 1 次（关闭 web search 缩短 prompt）
+    let response = await callAIWithTimeout(imageList, recognitionPrompt, modelCfg, 18000);
+    let aiTime = Date.now() - tAIStart;
     console.log('[Timing] mainAI:', aiTime, 'ms (model=', modelCfg.model, 'multi=', multiImage, 'web=', modelCfg.enableWebSearch, ')');
 
+    const shouldRetry = !response.ok && (response.status === 504 || response.status >= 500) && response.status !== 402;
+    if (shouldRetry) {
+      console.warn('[Recognition] retry #1 because status=', response.status);
+      const retryCfg: ModelConfig = { ...modelCfg, enableWebSearch: false };
+      const shortPrompt = `你是日本中古杂货资深鉴定师。看图后调用 submit_recognition 工具提交。全简体中文，不详写"不详"，禁止空话。sellingPoints 恰好 3 条，每条 ≤22 字。pitch.opener ≤30 字, pitch.highlight ≤45 字。`;
+      const tRetry = Date.now();
+      response = await callAIWithTimeout(imageList, shortPrompt, retryCfg, 16000);
+      aiTime = Date.now() - tAIStart;
+      console.log('[Timing] mainAI retry:', Date.now() - tRetry, 'ms, status=', response.status);
+    }
+
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text().catch(() => '');
       console.error('[Recognition] AI error:', response.status, errorText.slice(0, 300));
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: '请求过于频繁，请稍后再试' }), {
+        return new Response(JSON.stringify({ error: '请求过于频繁，请稍后再试', retryable: true }), {
           status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: 'AI 额度不足，请充值' }), {
+        return new Response(JSON.stringify({ error: 'AI 额度不足，请充值', retryable: false }), {
           status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      return new Response(JSON.stringify({ error: 'AI 识别失败，请重试' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      const isTimeout = response.status === 504;
+      return new Response(JSON.stringify({
+        error: isTimeout ? '网络较慢，AI 识别超时，请检查信号或重拍后再试' : 'AI 识别失败，请重试',
+        retryable: true,
+      }), {
+        status: response.status >= 500 ? response.status : 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
