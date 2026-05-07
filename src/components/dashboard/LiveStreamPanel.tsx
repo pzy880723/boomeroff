@@ -660,34 +660,43 @@ export function LiveStreamPanel() {
     }
     let cancelled = false;
     (async () => {
-      const [pkRes, favRes, ofRes] = await Promise.all([
-        supabase
-          .from('product_knowledge')
-          .select('id')
-          .eq('product_id', currentProductId)
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('user_favorites')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('source_type', 'recognition')
-          .eq('source_id', currentProductId)
-          .limit(1)
-          .maybeSingle(),
-        // admin 还要确认 official_knowledge 也存在，才算"已收录"
-        isAdmin
-          ? supabase
-              .from('official_knowledge')
-              .select('id')
-              .eq('source_product_id', currentProductId)
-              .limit(1)
-              .maybeSingle()
-          : Promise.resolve({ data: { id: 'skip' } } as any),
-      ]);
-      if (cancelled) return;
-      setKnowledgeAdded(!!pkRes.data && !!ofRes.data);
-      setFavorited(!!favRes.data);
+      try {
+        const [pkRes, favRes, ofRes] = await Promise.all([
+          supabase
+            .from('product_knowledge')
+            .select('id')
+            .eq('product_id', currentProductId)
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('user_favorites')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('source_type', 'recognition')
+            .eq('source_id', currentProductId)
+            .limit(1)
+            .maybeSingle(),
+          // admin 还要确认 official_knowledge 也存在，才算"已收录"
+          isAdmin
+            ? supabase
+                .from('official_knowledge')
+                .select('id')
+                .eq('source_product_id', currentProductId)
+                .limit(1)
+                .maybeSingle()
+            : Promise.resolve({ data: { id: 'skip' } } as any),
+        ]);
+        if (cancelled) return;
+        setKnowledgeAdded(!!pkRes.data && !!ofRes.data);
+        setFavorited(!!favRes.data);
+      } catch (e) {
+        // 网络抖动时不要让整页崩溃，保持按钮可操作
+        console.warn('[Status sync] failed:', e);
+        if (!cancelled) {
+          setKnowledgeAdded(false);
+          setFavorited(false);
+        }
+      }
     })();
     return () => { cancelled = true; };
   }, [currentProductId, user, isAdmin]);
