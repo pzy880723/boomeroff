@@ -474,6 +474,33 @@ export function LiveStreamPanel() {
     })();
   };
 
+  // 区分网络抖动 vs 业务/权限错误
+  const isTransientNetworkError = (e: any) => {
+    const msg = (e?.message || String(e || '')).toLowerCase();
+    return (
+      msg.includes('load failed') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('networkerror') ||
+      msg.includes('network request failed') ||
+      msg.includes('timeout') ||
+      msg.includes('socket') ||
+      e?.name === 'TypeError' && msg.includes('fetch')
+    );
+  };
+
+  // 简单重试：仅对临时网络错误重试一次
+  const withRetry = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } catch (e) {
+      if (isTransientNetworkError(e)) {
+        await new Promise((r) => setTimeout(r, 600));
+        return await fn();
+      }
+      throw e;
+    }
+  };
+
   const addToKnowledge = async () => {
     if (!currentProductId || !user || !displayResult) return;
     setSavingKnowledge(true);
@@ -481,76 +508,88 @@ export function LiveStreamPanel() {
       const sp = displayResult.sellingPoints || [];
 
       // 拉取已上传的真实图片 URL（避免把 base64 写进 jsonb/text）
-      const { data: prod } = await supabase
-        .from('products')
-        .select('image_url')
-        .eq('id', currentProductId)
-        .maybeSingle();
+      const { data: prod } = await withRetry(async () => await
+        supabase
+          .from('products')
+          .select('image_url')
+          .eq('id', currentProductId)
+          .maybeSingle(),
+      );
       const coverUrl = prod?.image_url || null;
 
-      // 现状探查
-      const [pkRes, ofRes] = await Promise.all([
+      // 现状探查（顺序执行，避免并发互相超时）
+      const pkRes = await withRetry(async () => await
         supabase
           .from('product_knowledge')
           .select('id')
           .eq('product_id', currentProductId)
           .limit(1)
           .maybeSingle(),
-        supabase
-          .from('official_knowledge')
-          .select('id')
-          .eq('source_product_id', currentProductId)
-          .limit(1)
-          .maybeSingle(),
-      ]);
+      );
+      const ofRes = isAdmin
+        ? await withRetry(async () => await
+            supabase
+              .from('official_knowledge')
+              .select('id')
+              .eq('source_product_id', currentProductId)
+              .limit(1)
+              .maybeSingle(),
+          )
+        : { data: { id: 'skip' } as any };
 
       let didSomething = false;
 
       // 缺 product_knowledge → 补
       if (!pkRes.data) {
-        const { error } = await supabase.from('product_knowledge').insert({
-          product_id: currentProductId,
-          category: displayResult.category,
-          product_name: displayResult.name,
-          selling_points: sp as any,
-          tips: serializeTips(displayResult.tips ?? null),
-          era: displayResult.era || null,
-          origin: displayResult.origin || null,
-          image_url: coverUrl,
-          created_by: user.id,
-          is_official: isAdmin,
-        });
+        const { error } = await withRetry(async () => await
+          supabase.from('product_knowledge').insert({
+            product_id: currentProductId,
+            category: displayResult.category,
+            product_name: displayResult.name,
+            selling_points: sp as any,
+            tips: serializeTips(displayResult.tips ?? null),
+            era: displayResult.era || null,
+            origin: displayResult.origin || null,
+            image_url: coverUrl,
+            created_by: user.id,
+            is_official: isAdmin,
+          }),
+        );
         if (error) throw error;
         didSomething = true;
       } else if (isAdmin) {
         // 已存在但旧版未标记 official → 升级
-        await supabase
-          .from('product_knowledge')
-          .update({ is_official: true })
-          .eq('id', pkRes.data.id);
+        await withRetry(async () => await
+          supabase
+            .from('product_knowledge')
+            .update({ is_official: true })
+            .eq('id', pkRes.data!.id),
+        );
       }
 
       // admin 且缺 official_knowledge → 补建
       if (isAdmin && !ofRes.data) {
-        const { error: ofErr } = await supabase.from('official_knowledge').insert({
-          name: displayResult.name,
-          category: displayResult.category,
-          summary: displayResult.description || null,
-          content: {
-            material: displayResult.material || null,
-            craft: displayResult.craft || null,
-            dimensions: displayResult.dimensions || null,
-            condition: displayResult.condition || null,
-          },
-          era: displayResult.era || null,
-          origin: displayResult.origin || null,
-          cover_url: coverUrl,
-          gallery: coverUrl ? [coverUrl] : [],
-          selling_points: sp as any,
-          tips: serializeTips(displayResult.tips ?? null),
-          source_product_id: currentProductId,
-          created_by: user.id,
-        });
+        const { error: ofErr } = await withRetry(async () => await
+          supabase.from('official_knowledge').insert({
+            name: displayResult.name,
+            category: displayResult.category,
+            summary: displayResult.description || null,
+            content: {
+              material: displayResult.material || null,
+              craft: displayResult.craft || null,
+              dimensions: displayResult.dimensions || null,
+              condition: displayResult.condition || null,
+            },
+            era: displayResult.era || null,
+            origin: displayResult.origin || null,
+            cover_url: coverUrl,
+            gallery: coverUrl ? [coverUrl] : [],
+            selling_points: sp as any,
+            tips: serializeTips(displayResult.tips ?? null),
+            source_product_id: currentProductId,
+            created_by: user.id,
+          }),
+        );
         if (ofErr) throw ofErr;
         didSomething = true;
       }
@@ -570,6 +609,16 @@ export function LiveStreamPanel() {
       const code = e?.code || '';
       if (code === '42501' || /row-level security/i.test(e?.message || '')) {
         toast({ title: '权限不足', description: '需要店员或管理员权限', variant: 'destructive' });
+      } else if (code === '23505' || /duplicate/i.test(e?.message || '')) {
+        // 已存在视作成功
+        setKnowledgeAdded(true);
+        toast({ title: '已在知识库中', description: '无需重复添加' });
+      } else if (isTransientNetworkError(e)) {
+        toast({
+          title: '网络不稳定',
+          description: '收录没有完成，请稍后重试',
+          variant: 'destructive',
+        });
       } else {
         toast({ title: '加入失败', description: e?.message || '请稍后重试', variant: 'destructive' });
       }
@@ -660,34 +709,43 @@ export function LiveStreamPanel() {
     }
     let cancelled = false;
     (async () => {
-      const [pkRes, favRes, ofRes] = await Promise.all([
-        supabase
-          .from('product_knowledge')
-          .select('id')
-          .eq('product_id', currentProductId)
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('user_favorites')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('source_type', 'recognition')
-          .eq('source_id', currentProductId)
-          .limit(1)
-          .maybeSingle(),
-        // admin 还要确认 official_knowledge 也存在，才算"已收录"
-        isAdmin
-          ? supabase
-              .from('official_knowledge')
-              .select('id')
-              .eq('source_product_id', currentProductId)
-              .limit(1)
-              .maybeSingle()
-          : Promise.resolve({ data: { id: 'skip' } } as any),
-      ]);
-      if (cancelled) return;
-      setKnowledgeAdded(!!pkRes.data && !!ofRes.data);
-      setFavorited(!!favRes.data);
+      try {
+        const [pkRes, favRes, ofRes] = await Promise.all([
+          supabase
+            .from('product_knowledge')
+            .select('id')
+            .eq('product_id', currentProductId)
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('user_favorites')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('source_type', 'recognition')
+            .eq('source_id', currentProductId)
+            .limit(1)
+            .maybeSingle(),
+          // admin 还要确认 official_knowledge 也存在，才算"已收录"
+          isAdmin
+            ? supabase
+                .from('official_knowledge')
+                .select('id')
+                .eq('source_product_id', currentProductId)
+                .limit(1)
+                .maybeSingle()
+            : Promise.resolve({ data: { id: 'skip' } } as any),
+        ]);
+        if (cancelled) return;
+        setKnowledgeAdded(!!pkRes.data && !!ofRes.data);
+        setFavorited(!!favRes.data);
+      } catch (e) {
+        // 网络抖动时不要让整页崩溃，保持按钮可操作
+        console.warn('[Status sync] failed:', e);
+        if (!cancelled) {
+          setKnowledgeAdded(false);
+          setFavorited(false);
+        }
+      }
     })();
     return () => { cancelled = true; };
   }, [currentProductId, user, isAdmin]);
