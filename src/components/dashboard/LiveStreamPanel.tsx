@@ -800,6 +800,34 @@ export function LiveStreamPanel() {
             </div>
           )}
 
+          {!isRecognizing && recognitionFailed && (
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center animate-fade-in p-6">
+              <div className="text-center text-white space-y-4 max-w-xs">
+                <div className="w-14 h-14 mx-auto rounded-full bg-destructive/20 ring-1 ring-destructive/40 flex items-center justify-center">
+                  <X className="w-8 h-8 text-destructive" strokeWidth={2} />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-display text-lg">识别未成功</p>
+                  <p className="text-white/60 text-xs leading-relaxed">网络较慢或商品角度不清，请检查信号或换个角度后重试。</p>
+                </div>
+                <div className="flex gap-2 justify-center">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const last = lastRecognitionInputRef.current;
+                      if (last) handleRecognition(last.images, last.opts);
+                    }}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-1.5" /> 重新识别
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setRecognitionFailed(false)}>
+                    取消
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 顶部状态条 */}
           <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2 pointer-events-none">
             {isStreaming && !capturedImage && (
