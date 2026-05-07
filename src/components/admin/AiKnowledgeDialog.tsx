@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, Send, ImagePlus, Sparkles, RefreshCw, ImageOff, X, Quote, Maximize2, Wand2, Upload, Globe, ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react';
-import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
+import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
@@ -38,7 +38,13 @@ interface Draft {
   gallery?: string[];
 }
 
-const VALID_CATEGORIES: readonly ProductCategory[] = CATEGORY_ORDER;
+const VALID_CATEGORIES: ProductCategory[] = [
+  'jp_porcelain','eu_porcelain','incense','antique_art','local_craft',
+  'anime_toy','otaku_goods','luxury','jewelry',
+  'game_console','walkman','ccd','media_record','playback_device',
+  'home_appliance','hobby','stationery','lacquerware','bronze',
+  'woodcraft','textile','painting','porcelain','other',
+];
 
 interface ExistingItem {
   id: string;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { RecognitionResult, ProductCategory, CATEGORY_ORDER } from '@/types';
+import { RecognitionResult, ProductCategory } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { computeImageHash } from '@/lib/imageHash';
 
@@ -39,12 +39,11 @@ export function useProductRecognition() {
       if (error) throw new Error(error.message);
       if (data.error) throw new Error(data.error);
 
-      const validSet = new Set<string>(CATEGORY_ORDER as readonly string[]);
-      // 兼容 AI 偶尔返回的旧品类（jewelry / porcelain 等）
-      const legacy = new Set(['porcelain','stationery','lacquerware','bronze','woodcraft','textile','jewelry','painting']);
-      const category: ProductCategory = (validSet.has(data.category) || legacy.has(data.category))
-        ? data.category as ProductCategory
-        : 'other';
+      const validCategories: ProductCategory[] = [
+        'porcelain', 'incense', 'stationery', 'lacquerware',
+        'bronze', 'woodcraft', 'textile', 'jewelry', 'painting', 'other',
+      ];
+      const category = validCategories.includes(data.category) ? data.category : 'other';
 
       const sellingPoints: Array<string | { tag: string; text: string }> = Array.isArray(data.sellingPoints)
         ? data.sellingPoints.filter((s: unknown) => {

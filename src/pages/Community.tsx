@@ -157,22 +157,6 @@ export default function Community() {
     }
   };
 
-  const isTransientNetworkError = (e: any) => {
-    const msg = (e?.message || String(e || '')).toLowerCase();
-    return msg.includes('load failed') || msg.includes('failed to fetch')
-      || msg.includes('networkerror') || msg.includes('timeout');
-  };
-  const withRetry = async <T,>(fn: () => Promise<T>): Promise<T> => {
-    try { return await fn(); }
-    catch (e) {
-      if (isTransientNetworkError(e)) {
-        await new Promise((r) => setTimeout(r, 600));
-        return await fn();
-      }
-      throw e;
-    }
-  };
-
   const addToOfficial = async () => {
     if (!user || !active || !active.product_id || !isAdmin) return;
     setSavingOfficial(true);
@@ -186,58 +170,54 @@ export default function Community() {
       const summary = activeDetail?.description ?? null;
       const cover = activeDetail?.image_url ?? active.image_url;
 
-      // 顺序探查，避免移动端弱网下并发互相超时
-      const pkRes = await withRetry(async () => await
+      const [pkRes, ofRes] = await Promise.all([
         supabase.from('product_knowledge').select('id')
-          .eq('product_id', active.product_id!).limit(1).maybeSingle());
-      const ofRes = await withRetry(async () => await
+          .eq('product_id', active.product_id).limit(1).maybeSingle(),
         supabase.from('official_knowledge').select('id')
-          .eq('source_product_id', active.product_id!).limit(1).maybeSingle());
+          .eq('source_product_id', active.product_id).limit(1).maybeSingle(),
+      ]);
 
       let didSomething = false;
 
       if (!pkRes.data) {
-        const { error } = await withRetry(async () => await
-          supabase.from('product_knowledge').insert({
-            product_id: active.product_id,
-            category: active.category,
-            product_name: active.name,
-            selling_points: sp,
-            tips: tips || null,
-            era: era || null,
-            origin: origin || null,
-            image_url: cover || null,
-            created_by: user.id,
-            is_official: true,
-          }));
+        const { error } = await supabase.from('product_knowledge').insert({
+          product_id: active.product_id,
+          category: active.category,
+          product_name: active.name,
+          selling_points: sp,
+          tips: tips || null,
+          era: era || null,
+          origin: origin || null,
+          image_url: cover || null,
+          created_by: user.id,
+          is_official: true,
+        });
         if (error) throw error;
         didSomething = true;
       } else {
-        await withRetry(async () => await
-          supabase.from('product_knowledge').update({ is_official: true }).eq('id', pkRes.data!.id));
+        await supabase.from('product_knowledge').update({ is_official: true }).eq('id', pkRes.data.id);
       }
 
       if (!ofRes.data) {
-        const { error: ofErr } = await withRetry(async () => await
-          supabase.from('official_knowledge').insert({
-            name: active.name,
-            category: active.category,
-            summary,
-            content: {
-              material: activeDetail?.material || null,
-              craft: activeDetail?.craft || null,
-              dimensions: activeDetail?.dimensions || null,
-              condition: activeDetail?.condition || null,
-            },
-            era: era || null,
-            origin: origin || null,
-            cover_url: cover || null,
-            gallery: cover ? [cover] : [],
-            selling_points: sp,
-            tips: tips || null,
-            source_product_id: active.product_id,
-            created_by: user.id,
-          }));
+        const { error: ofErr } = await supabase.from('official_knowledge').insert({
+          name: active.name,
+          category: active.category,
+          summary,
+          content: {
+            material: activeDetail?.material || null,
+            craft: activeDetail?.craft || null,
+            dimensions: activeDetail?.dimensions || null,
+            condition: activeDetail?.condition || null,
+          },
+          era: era || null,
+          origin: origin || null,
+          cover_url: cover || null,
+          gallery: cover ? [cover] : [],
+          selling_points: sp,
+          tips: tips || null,
+          source_product_id: active.product_id,
+          created_by: user.id,
+        });
         if (ofErr) throw ofErr;
         didSomething = true;
       }
@@ -249,11 +229,6 @@ export default function Community() {
       const code = e?.code || '';
       if (code === '42501' || /row-level security/i.test(e?.message || '')) {
         toast.error('权限不足：仅管理员可收录');
-      } else if (code === '23505' || /duplicate/i.test(e?.message || '')) {
-        setOfficialAdded(true);
-        toast.success('已在官方知识库中');
-      } else if (isTransientNetworkError(e)) {
-        toast.error('网络不稳定，收录未完成，请稍后重试');
       } else {
         toast.error(e?.message || '收录失败，请稍后重试');
       }

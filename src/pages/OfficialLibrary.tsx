@@ -83,6 +83,10 @@ export default function OfficialLibrary() {
   }, [view]);
 
   useEffect(() => {
+    localStorage.setItem('lib_view', view);
+  }, [view]);
+
+  useEffect(() => {
     localStorage.setItem('lib_sort', sort);
   }, [sort]);
 
