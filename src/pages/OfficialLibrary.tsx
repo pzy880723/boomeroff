@@ -410,7 +410,8 @@ export default function OfficialLibrary() {
                   <p className="text-sm font-medium leading-tight truncate">{it.name}</p>
                   <div className="flex items-center gap-1 flex-wrap">
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{CATEGORY_LABELS[it.category]}</Badge>
-                    {it.ip_name && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.ip_name}</Badge>}
+                    {(it.brand || it.ip_name) && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.brand || it.ip_name}</Badge>}
+                    {it.sub_type && <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-dashed">{it.sub_type}</Badge>}
                     {it.era && <span className="text-[10px] text-muted-foreground">{it.era}</span>}
                   </div>
                   {it.summary && <p className="text-[11px] text-muted-foreground truncate">{it.summary}</p>}
