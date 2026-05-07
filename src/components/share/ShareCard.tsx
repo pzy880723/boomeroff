@@ -16,58 +16,51 @@ export interface ShareCardData {
   recentPrice?: string | null;
   link?: string | null;
   kind: 'official' | 'recognition';
+  extras?: { label: string; value: string }[];
 }
 
 /**
- * 离屏渲染的分享长图卡片。固定宽度 750px，由 html-to-image 截图。
+ * 离屏渲染的分享长图卡片。固定宽度 390px（手机视口），由 html-to-image 以 2x 截图。
  * 不要给它加 dark: 类名，必须保持白底确保截图稳定。
  */
 export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(
   ({ data }, ref) => {
-    const points = (data.points || []).slice(0, 3);
-    const summary = (data.summary || '').slice(0, 120);
-    const subtitleParts = [data.ip, data.era, data.origin].filter(Boolean);
+    const points = (data.points || []).filter(Boolean).slice(0, 5);
+    const summary = (data.summary || '').slice(0, 180);
+    const pitch = (data.pitch || '').slice(0, 180);
+    const tips = (data.tips || '').slice(0, 60);
+    const subtitleParts = [data.ip, data.era, data.origin].filter(Boolean) as string[];
+    const extras = (data.extras || []).filter((e) => e.value).slice(0, 3);
 
     return (
       <div
         ref={ref}
         style={{
-          width: 750,
-          background: 'linear-gradient(180deg, #fff7ed 0%, #ffffff 30%, #ffffff 100%)',
+          width: 390,
+          background: 'linear-gradient(180deg, #fff7ed 0%, #ffffff 25%, #ffffff 100%)',
           fontFamily:
             '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif',
           color: '#1f1f1f',
-          padding: 32,
+          padding: 16,
           boxSizing: 'border-box',
         }}
       >
         <div
           style={{
             background: '#ffffff',
-            borderRadius: 28,
+            borderRadius: 20,
             overflow: 'hidden',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.06)',
+            boxShadow: '0 6px 24px rgba(0,0,0,0.06)',
             border: '1px solid #f1f1f1',
           }}
         >
-          {/* 顶部品牌条 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '20px 28px 12px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <img src={logoUrl} alt="" crossOrigin="anonymous" style={{ width: 36, height: 36, borderRadius: 8 }} />
-              <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 1 }}>BOOMER-OFF</span>
-            </div>
-            {data.category && (
+          {/* 顶部：仅类目徽章 */}
+          {data.category && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 16px 0' }}>
               <span
                 style={{
-                  fontSize: 13,
-                  padding: '4px 12px',
+                  fontSize: 11,
+                  padding: '3px 10px',
                   background: '#fff7ed',
                   color: '#c2410c',
                   borderRadius: 999,
@@ -76,17 +69,17 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(
               >
                 {data.category}
               </span>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* 主图 */}
           {data.coverUrl ? (
-            <div style={{ padding: '0 28px' }}>
+            <div style={{ padding: '12px 16px 0' }}>
               <div
                 style={{
                   width: '100%',
                   aspectRatio: '1 / 1',
-                  borderRadius: 18,
+                  borderRadius: 14,
                   overflow: 'hidden',
                   background: '#f4f4f5',
                 }}
@@ -102,50 +95,50 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(
           ) : null}
 
           {/* 标题 + 副标题 */}
-          <div style={{ padding: '20px 28px 0' }}>
-            <h1 style={{ fontSize: 30, fontWeight: 700, lineHeight: 1.3, margin: 0 }}>
+          <div style={{ padding: '14px 16px 0' }}>
+            <h1 style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.35, margin: 0 }}>
               {data.name}
             </h1>
             {subtitleParts.length > 0 && (
-              <p style={{ marginTop: 8, fontSize: 15, color: '#737373' }}>
+              <p style={{ marginTop: 6, fontSize: 12, color: '#737373', lineHeight: 1.5 }}>
                 {subtitleParts.join(' · ')}
               </p>
             )}
           </div>
 
           {/* 一句话推荐 / 摘要 */}
-          {(data.pitch || summary) && (
-            <div style={{ padding: '14px 28px 0' }}>
+          {(pitch || summary) && (
+            <div style={{ padding: '12px 16px 0' }}>
               <div
                 style={{
                   background: '#fafaf9',
                   borderLeft: '3px solid #f59e0b',
-                  borderRadius: 8,
-                  padding: '14px 16px',
-                  fontSize: 15,
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                  fontSize: 14,
                   lineHeight: 1.7,
                   color: '#3f3f46',
                 }}
               >
-                {data.pitch || summary}
+                {pitch || summary}
               </div>
             </div>
           )}
 
           {/* 价格 */}
           {(data.suggestedPrice || data.recentPrice) && (
-            <div style={{ padding: '16px 28px 0', display: 'flex', gap: 12 }}>
+            <div style={{ padding: '12px 16px 0', display: 'flex', gap: 8 }}>
               {data.suggestedPrice && (
                 <div
                   style={{
                     flex: 1,
                     background: '#fff7ed',
-                    borderRadius: 12,
-                    padding: '12px 14px',
+                    borderRadius: 10,
+                    padding: '10px 12px',
                   }}
                 >
-                  <div style={{ fontSize: 12, color: '#a16207' }}>建议价</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: '#c2410c', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: '#a16207' }}>建议价</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#c2410c', marginTop: 2 }}>
                     {data.suggestedPrice}
                   </div>
                 </div>
@@ -155,12 +148,12 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(
                   style={{
                     flex: 1,
                     background: '#f5f5f4',
-                    borderRadius: 12,
-                    padding: '12px 14px',
+                    borderRadius: 10,
+                    padding: '10px 12px',
                   }}
                 >
-                  <div style={{ fontSize: 12, color: '#737373' }}>历史成交</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: '#404040', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: '#737373' }}>历史成交</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#404040', marginTop: 2 }}>
                     {data.recentPrice}
                   </div>
                 </div>
@@ -170,74 +163,93 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(
 
           {/* 卖点 */}
           {points.length > 0 && (
-            <div style={{ padding: '18px 28px 0' }}>
-              <div style={{ fontSize: 13, color: '#737373', marginBottom: 8 }}>核心卖点</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ padding: '14px 16px 0' }}>
+              <div style={{ fontSize: 12, color: '#737373', marginBottom: 6 }}>核心卖点</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {points.map((p, i) => (
                   <div
                     key={i}
                     style={{
                       display: 'flex',
-                      gap: 10,
-                      fontSize: 15,
+                      gap: 8,
+                      fontSize: 13,
                       lineHeight: 1.6,
                       color: '#262626',
                     }}
                   >
                     <span style={{ color: '#f59e0b', fontWeight: 700 }}>▸</span>
-                    <span style={{ flex: 1 }}>{p}</span>
+                    <span style={{ flex: 1 }}>{p.slice(0, 60)}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
+          {/* 额外信息块 */}
+          {extras.length > 0 && (
+            <div style={{ padding: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {extras.map((e, i) => (
+                <div key={i} style={{ background: '#fafafa', borderRadius: 8, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 11, color: '#737373', marginBottom: 2 }}>{e.label}</div>
+                  <div style={{ fontSize: 13, color: '#262626', lineHeight: 1.6 }}>
+                    {e.value.slice(0, 120)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* 小贴士 */}
-          {data.tips && (
-            <div style={{ padding: '14px 28px 0' }}>
+          {tips && (
+            <div style={{ padding: '12px 16px 0' }}>
               <div
                 style={{
                   background: '#fefce8',
-                  borderRadius: 10,
-                  padding: '10px 14px',
-                  fontSize: 13,
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                  fontSize: 12,
                   color: '#713f12',
                   lineHeight: 1.6,
                 }}
               >
-                💡 {data.tips}
+                💡 {tips}
               </div>
             </div>
           )}
 
-          {/* 底部品牌 */}
+          {/* 底部：居中 logo + 署名 */}
           <div
             style={{
-              marginTop: 24,
-              padding: '18px 28px',
+              marginTop: 20,
+              padding: '16px 16px 18px',
               borderTop: '1px dashed #e5e5e5',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              gap: 8,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <img src={logoUrl} alt="" crossOrigin="anonymous" style={{ width: 28, height: 28, borderRadius: 6 }} />
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>BOOMER-OFF</span>
-                <span style={{ fontSize: 11, color: '#737373' }}>中古好物识别助手</span>
-              </div>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 10,
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#ffffff',
+              }}
+            >
+              <img
+                src={logoUrl}
+                alt=""
+                crossOrigin="anonymous"
+                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+              />
             </div>
-            {data.link && (
-              <span style={{ fontSize: 11, color: '#a3a3a3', maxWidth: 320, textAlign: 'right', wordBreak: 'break-all' }}>
-                {data.link.replace(/^https?:\/\//, '')}
-              </span>
-            )}
+            <div style={{ fontSize: 12, color: '#737373' }}>由 boomeroff 官方生成</div>
           </div>
-        </div>
-
-        <div style={{ textAlign: 'center', fontSize: 11, color: '#a3a3a3', marginTop: 14 }}>
-          由 BOOMER-OFF 生成 · 长按或点击下载保存图片
         </div>
       </div>
     );
