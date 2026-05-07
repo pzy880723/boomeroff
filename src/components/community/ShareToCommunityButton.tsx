@@ -35,9 +35,10 @@ export function ShareToCommunityButton({
   const [shared, setShared] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // 懒检查
-  const ensureChecked = async () => {
-    if (shared !== null || !user) return;
+  // 懒检查 — 返回最新结果，避免读到闭包旧 state
+  const ensureChecked = async (): Promise<boolean> => {
+    if (shared !== null) return shared;
+    if (!user) return false;
     const { data } = await supabase
       .from('community_posts')
       .select('id')
@@ -45,13 +46,15 @@ export function ShareToCommunityButton({
       .eq('product_id', productId)
       .limit(1)
       .maybeSingle();
-    setShared(!!data);
+    const isShared = !!data;
+    setShared(isShared);
+    return isShared;
   };
 
   const handleClick = async () => {
-    if (!user) return;
-    if (shared === null) await ensureChecked();
-    if (shared) return;
+    if (!user || busy) return;
+    const already = await ensureChecked();
+    if (already) return;
     setBusy(true);
     try {
       // selling_points 在 community_posts 里仍按 jsonb 存原始结构
