@@ -285,7 +285,6 @@ export type Database = {
         Row: {
           backstamp_url: string | null
           body: string | null
-          brand: string | null
           category: Database["public"]["Enums"]["product_category"]
           content: Json
           cover_url: string | null
@@ -301,7 +300,6 @@ export type Database = {
           origin: string | null
           selling_points: Json
           source_product_id: string | null
-          sub_type: string | null
           summary: string | null
           tips: string | null
           updated_at: string
@@ -311,7 +309,6 @@ export type Database = {
         Insert: {
           backstamp_url?: string | null
           body?: string | null
-          brand?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           content?: Json
           cover_url?: string | null
@@ -327,7 +324,6 @@ export type Database = {
           origin?: string | null
           selling_points?: Json
           source_product_id?: string | null
-          sub_type?: string | null
           summary?: string | null
           tips?: string | null
           updated_at?: string
@@ -337,7 +333,6 @@ export type Database = {
         Update: {
           backstamp_url?: string | null
           body?: string | null
-          brand?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           content?: Json
           cover_url?: string | null
@@ -353,7 +348,6 @@ export type Database = {
           origin?: string | null
           selling_points?: Json
           source_product_id?: string | null
-          sub_type?: string | null
           summary?: string | null
           tips?: string | null
           updated_at?: string
@@ -402,7 +396,6 @@ export type Database = {
       }
       product_knowledge: {
         Row: {
-          brand: string | null
           category: Database["public"]["Enums"]["product_category"]
           created_at: string
           created_by: string | null
@@ -414,11 +407,9 @@ export type Database = {
           product_id: string | null
           product_name: string
           selling_points: Json
-          sub_type: string | null
           tips: string | null
         }
         Insert: {
-          brand?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           created_at?: string
           created_by?: string | null
@@ -430,11 +421,9 @@ export type Database = {
           product_id?: string | null
           product_name: string
           selling_points?: Json
-          sub_type?: string | null
           tips?: string | null
         }
         Update: {
-          brand?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           created_at?: string
           created_by?: string | null
@@ -446,7 +435,6 @@ export type Database = {
           product_id?: string | null
           product_name?: string
           selling_points?: Json
-          sub_type?: string | null
           tips?: string | null
         }
         Relationships: [

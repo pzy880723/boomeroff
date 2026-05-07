@@ -71,10 +71,8 @@ export function KnowledgeEditDialog({ record, open, onOpenChange, onSaved }: Pro
       const sp = form.selling_points
         .split('\n').map((s) => s.trim()).filter(Boolean);
 
-      // AI 自动判定品类、品牌、类型
+      // AI 自动判定品类（用 AI 判定结果覆盖手选，避免乱归类）
       let category: ProductCategory = form.category;
-      let brand: string | null = null;
-      let sub_type: string | null = null;
       try {
         const { data: catData } = await supabase.functions.invoke('auto-categorize-knowledge', {
           body: {
@@ -84,21 +82,16 @@ export function KnowledgeEditDialog({ record, open, onOpenChange, onSaved }: Pro
             origin: form.origin.trim(),
             selling_points: sp,
             tips: form.tips.trim(),
-            category: form.category,
           },
         });
         if (catData?.category) category = catData.category as ProductCategory;
-        brand = catData?.brand ?? null;
-        sub_type = catData?.sub_type ?? null;
       } catch (e) {
         console.warn('auto categorize failed, fallback to form value', e);
       }
 
-      const payload: Record<string, unknown> = {
+      const payload = {
         product_name: form.product_name.trim(),
         category,
-        brand,
-        sub_type,
         era: form.era.trim() || null,
         origin: form.origin.trim() || null,
         selling_points: sp,
@@ -109,14 +102,14 @@ export function KnowledgeEditDialog({ record, open, onOpenChange, onSaved }: Pro
       if (record?.id) {
         const { error } = await supabase
           .from('product_knowledge')
-          .update(payload as never)
+          .update(payload)
           .eq('id', record.id);
         if (error) throw error;
         toast({ title: '已更新' });
       } else {
         const { error } = await supabase
           .from('product_knowledge')
-          .insert({ ...payload, created_by: user?.id } as never);
+          .insert({ ...payload, created_by: user?.id });
         if (error) throw error;
         toast({ title: '已新增' });
       }
