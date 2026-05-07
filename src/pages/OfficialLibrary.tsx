@@ -301,28 +301,57 @@ export default function OfficialLibrary() {
           </div>
         )}
 
-        {/* 二级类目 - 上滑时吸顶 */}
-        {subList.length > 0 && (
-          <div className="sticky top-12 z-20 -mx-3 px-3 py-2 flex gap-1.5 overflow-x-auto bg-background/95 backdrop-blur border-b border-border scrollbar-none">
-            <button
-              onClick={() => setSub('all')}
-              className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
-                sub === 'all'
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-card text-muted-foreground hover:bg-accent'
-              }`}
-            >全部</button>
-            {subList.map((s) => (
-              <button
-                key={s}
-                onClick={() => setSub(s)}
-                className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
-                  sub === s
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-border bg-card text-muted-foreground hover:bg-accent'
-                }`}
-              >{s}</button>
-            ))}
+        {/* 二级类目 - 品牌行 + 类型行 */}
+        {(brandList.length > 0 || typeList.length > 0) && (
+          <div className="sticky top-12 z-20 -mx-3 px-3 py-2 space-y-1.5 bg-background/95 backdrop-blur border-b border-border">
+            {brandList.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                <span className="shrink-0 text-[10px] text-muted-foreground w-8">品牌</span>
+                <button
+                  onClick={() => setBrand('all')}
+                  className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
+                    brand === 'all'
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-card text-muted-foreground hover:bg-accent'
+                  }`}
+                >全部</button>
+                {brandList.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setBrand(s)}
+                    className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
+                      brand === s
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-card text-muted-foreground hover:bg-accent'
+                    }`}
+                  >{s}</button>
+                ))}
+              </div>
+            )}
+            {typeList.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                <span className="shrink-0 text-[10px] text-muted-foreground w-8">类型</span>
+                <button
+                  onClick={() => setSubType('all')}
+                  className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
+                    subType === 'all'
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-card text-muted-foreground hover:bg-accent'
+                  }`}
+                >全部</button>
+                {typeList.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setSubType(s)}
+                    className={`shrink-0 px-3 h-7 rounded-full text-xs border transition-colors ${
+                      subType === s
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-card text-muted-foreground hover:bg-accent'
+                    }`}
+                  >{s}</button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
