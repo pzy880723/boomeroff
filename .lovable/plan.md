@@ -1,87 +1,104 @@
-# 每日打卡 & 等级体系升级方案
 
-## 一、目标
-1. 在「我的」顶部新增"每日打卡"卡片，店员每天点一下即可签到。
-2. 提供「我的打卡」详情页：日历视图、连续天数、本月签到天数、累计天数、最长连签、近期签到时间列表。
-3. 打通多维度经验值系统，并设计 10 级中古主题等级（从 Lv.1 到 Lv.10 满级），在「我的」实时展示当前等级、称号、经验进度。
+## 问题诊断
 
-## 二、数据库设计（迁移）
+### 一、为什么"秒针不动"
 
-### 1. `user_check_ins` — 打卡记录
-- `user_id` uuid，`check_in_date` date（同一天唯一），`checked_at` timestamptz，`streak` int（当时的连续天数快照），`exp_gained` int
-- 唯一索引 `(user_id, check_in_date)`，防重复签到
-- RLS：用户只能 select/insert 自己的记录
+定位文件：`src/components/dashboard/LiveStreamPanel.tsx`（337-340 行）
 
-### 2. `user_experience` — 经验汇总（一行/用户）
-字段：`user_id` (PK)、`total_exp` int、`current_streak` int、`longest_streak` int、`last_check_in_date` date、`total_check_ins` int、`updated_at`
-- RLS：本人 select/update；所有人可 select（用于排行/展示称号）
-- 提供 SECURITY DEFINER 函数 `perform_check_in()`：
-  - 校验今日未签 → 计算 streak（昨日签过 +1，否则归 1）
-  - 基础 +10 exp；连续 3 天额外 +5；7 天 +15；30 天 +50
-  - 写 `user_check_ins`，upsert `user_experience`
-  - 返回 `{ exp_gained, new_total, current_streak, level }`
-- 提供 SECURITY DEFINER 函数 `add_experience(_user_id, _action, _amount)`：用于其他维度加经验，幂等校验由调用方做。
+```ts
+const startTime = Date.now();
+timerRef.current = setInterval(() => {
+  setElapsedTime(Date.now() - startTime);
+}, 100);
+```
 
-### 3. 经验事件来源（在已有触发器/调用点接入）
-- **签到**：`perform_check_in` 直接写入。
-- **识别商品入库**：`products` 表 AFTER INSERT 触发器 → +15 exp（recorded_by/created_by）。
-- **加入官方知识库**（admin 创建 official_knowledge 来自用户上传的）：+30 exp 给 source product 的 created_by。
-- **中古圈互动**：
-  - 自己发帖 `community_posts` INSERT → +5 exp 给作者
-  - 收到点赞 `community_likes` INSERT → +2 exp 给帖子作者（去重：同 user 同 post 不重复）
-  - 收到评论 `community_comments` INSERT → +3 exp 给帖子作者
-- **个人知识测试通过**：`knowledge_test_results` UPDATE 当 `passed_at` 由 null 变非 null → +10 exp
+实际表现：进度数字常年停留在 `0.0s`，等 AI 返回后突然跳到 `2.7s`。
 
-所有触发器走 `add_experience` SECURITY DEFINER 函数，统一更新 `user_experience.total_exp`。
+根因有两层：
 
-## 三、等级体系（10 级，中古主题命名）
+1. **`setInterval` 在主线程繁忙时会被浏览器丢弃 tick**。识别流程紧接着会做：
+   - `computeImageHash`（Canvas getImageData，同步约 10–60ms）
+   - `JSON.stringify` 一张 1280px 的 base64 大图（500KB+ 字符串，同步约 30–80ms）
+   - `supabase.functions.invoke` 内部还会再做一次序列化
+   
+   在 iOS Safari/微信内置浏览器，主线程被这些同步动作占住后，第一拍 `setInterval` 经常 1–3 秒后才触发。表现就是"秒针不走"。
 
-| Lv | 称号 | 累计经验门槛 |
-|----|------|--------------|
-| 1 | 中古萌新 | 0 |
-| 2 | 入坑学徒 | 50 |
-| 3 | 寻宝玩家 | 150 |
-| 4 | 古物侦探 | 350 |
-| 5 | 鉴货掌柜 | 700 |
-| 6 | 行家里手 | 1200 |
-| 7 | 时代收藏家 | 2000 |
-| 8 | 中古名士 | 3200 |
-| 9 | 古董宗师 | 5000 |
-| 10 | 一代藏圣 | 8000（满级）|
+2. **`setElapsedTime` 100ms 一次的 setState 在 React 18 下会被 concurrent batch 合并**，再叠加 `isRecognizing` 切换、overlay 进出动画的重渲染，视觉上更卡。
 
-工具函数 `src/lib/level.ts`：`getLevelInfo(totalExp)` 返回 `{ level, title, currentExp, nextExp, progress, isMax }`。
+### 二、为什么"有时候识别失败"
 
-## 四、前端实现
+定位文件：`supabase/functions/recognize-product/index.ts`（514 行）
 
-### 1. 新组件
-- `src/components/me/CheckInCard.tsx`
-  - 显示今日是否已签、签到按钮、当前连续天数、总经验、等级
-  - 点击触发 supabase.rpc('perform_check_in')，弹 toast "+10 经验，已连续 X 天"
-- `src/components/me/LevelCard.tsx`（替换现有 Lv.1 假数据卡）
-  - 等级、称号、进度条 `currentExp / nextExp`，满级显示"已达顶峰"
-  - 副本说明每个维度获取经验的方式（折叠/Drawer）
-- `src/pages/CheckInHistory.tsx`（新路由 `/me/check-ins`）
-  - 顶部统计：连续 X 天 / 最长 Y 天 / 累计 Z 天 / 本月 N 天
-  - 月历视图（用 `react-day-picker`，已在 shadcn Calendar 中），高亮签到日
-  - 列表：最近 30 条，显示日期 + 签到时间 + 当时连签 + 获得经验
+```ts
+const response = await callAIWithTimeout(imageList, recognitionPrompt, modelCfg, 8000);
+```
 
-### 2. Me.tsx 改动
-- 接入 `user_experience` 数据源，移除假数据 Lv.1
-- 顶部加 `CheckInCard`
-- 替换增长卡为 `LevelCard`
-- 设置区新增"我的打卡 →"入口跳 `/me/check-ins`
+主识别只给了 **8 秒**超时。Edge 日志显示一次正常调用就要 3.1 秒（`[Timing] mainAI: 3098 ms`），P95 经常会到 6–10 秒，尤其在：
 
-### 3. 路由
-`src/App.tsx` 注册 `/me/check-ins`。
+- 弱网（店内 4G）上行 500KB base64
+- Gemini gateway 偶发排队
+- 多图（最多 5 张）模式
 
-## 五、技术细节
-- 所有经验加成走 RPC/触发器，前端不直接 update `user_experience`，避免作弊。
-- 触发器使用 SECURITY DEFINER + `set search_path = public`。
-- `community_likes` 去重：同一 user 同一 post 不重复加经验（依靠表本身 unique 约束即可）。
-- 已签到状态：前端通过查 `user_check_ins where user_id=me and check_in_date=today` 判断。
-- 实时刷新：签到成功后本地 setState，无需订阅。
+→ 触发 504，前端 toast"识别失败"。当前还**没有任何重试**，命中即失败。
 
-## 六、文件改动清单
-- 新建：`user_check_ins`、`user_experience` 表 + RPC + 4 个触发器（migration）
-- 新建：`src/lib/level.ts`、`src/components/me/CheckInCard.tsx`、`src/components/me/LevelCard.tsx`、`src/pages/CheckInHistory.tsx`
-- 编辑：`src/pages/Me.tsx`、`src/App.tsx`
+另外 8 秒超时撞墙后，前端 `recognizeProduct` 会直接返回 `null`，但 `setRecognitionTime` 没设置，UI 只看到一个红色 toast，体感很糟。
+
+---
+
+## 修复方案
+
+### A. 计时器改为 `requestAnimationFrame` + ref 驱动（前端）
+
+文件：`src/components/dashboard/LiveStreamPanel.tsx`
+
+- 用 `requestAnimationFrame` 取代 `setInterval`，不会被丢拍。
+- elapsed 走 ref + 每帧 `setState`（最多 16ms 一次），切到后台自动暂停。
+- 计时启动放在 `await computeImageHash` **之前**，保证从用户点"开始识别"那一刻就开始计数。
+- 卸载/异常路径补 `cancelAnimationFrame`，避免泄漏。
+
+### B. 主识别超时与重试加固（后端）
+
+文件：`supabase/functions/recognize-product/index.ts`
+
+- 超时从 **8s → 18s**（Gemini Flash Lite 视觉 P99 < 15s，留余量但仍远小于 Edge 150s 上限）。
+- 加一次**自动重试**：仅对 504/5xx/网络错误重试 1 次，且第二次缩短 prompt + 关闭 google_search（如果当时开了）。
+- 504 返回体新增 `retryable: true`，前端能识别。
+- 日志补 `[Recognition] retry #1 because 504` 便于追因。
+
+### C. 前端失败兜底（前端）
+
+文件：`src/components/dashboard/LiveStreamPanel.tsx` + `src/hooks/useProductRecognition.tsx`
+
+- 失败时仍 `setRecognitionTime(finalTime)`，并在结果区显示「识别超时，点这里重试」按钮，不再只弹 toast 就消失。
+- toast 文案区分：超时 = "网络较慢，已自动重试一次仍未成功，请检查信号或换个角度重拍"；额度不足/格式异常分别提示。
+
+### D.（可选）大图自适应压缩
+
+文件：`src/components/recognition/CameraCapture.tsx`
+
+当前固定 `1280px / 0.85`。建议：
+
+- 若 base64 长度 > 600KB，二次压到 `1024px / 0.8`（瓷器底款这种细节场景仍清晰）。
+- 这步能把弱网下的失败率再砍一半。
+
+---
+
+## 技术细节
+
+| 项 | 现状 | 改后 |
+|---|---|---|
+| 前端计时器 | setInterval 100ms | requestAnimationFrame，每帧更新 |
+| 计时启动点 | hash 计算之后 | 进入 handleRecognition 第一行 |
+| Edge 主识别超时 | 8s | 18s |
+| 重试 | 无 | 1 次（仅 504/5xx） |
+| 失败 UI | 只有 toast | toast + 卡片内"重试"按钮 |
+| 图片压缩 | 固定 1280/0.85 | 大于 600KB 再压一档 |
+
+不改：模型选择、缓存逻辑、enrich-recognition、识别 schema、RLS。
+
+## 影响范围
+
+- 改 2 个前端文件 + 1 个 edge function
+- 不动数据库、不动 enrich/community 流程
+- enrich-recognition 已在后台跑，本次改动不影响
+
