@@ -64,7 +64,7 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
         >
           <img
             src={logo}
-            alt="中古商品实时识别系统"
+            alt="中古商品知识系统"
             draggable={false}
             className="h-8 w-auto object-contain"
           />

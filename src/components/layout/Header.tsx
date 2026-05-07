@@ -83,7 +83,7 @@ export function Header() {
         >
           <img
             src={logo}
-            alt="中古商品实时识别系统"
+            alt="中古商品知识系统"
             draggable={false}
             className="h-[5.25rem] w-[5.25rem] sm:h-[6.5rem] sm:w-[6.5rem] rounded-lg object-contain shrink-0"
           />
