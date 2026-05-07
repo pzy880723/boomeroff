@@ -109,14 +109,14 @@ export function KnowledgeEditDialog({ record, open, onOpenChange, onSaved }: Pro
       if (record?.id) {
         const { error } = await supabase
           .from('product_knowledge')
-          .update(payload)
+          .update(payload as never)
           .eq('id', record.id);
         if (error) throw error;
         toast({ title: '已更新' });
       } else {
         const { error } = await supabase
           .from('product_knowledge')
-          .insert({ ...payload, created_by: user?.id });
+          .insert({ ...payload, created_by: user?.id } as never);
         if (error) throw error;
         toast({ title: '已新增' });
       }
