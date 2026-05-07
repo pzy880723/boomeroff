@@ -16,6 +16,7 @@ import Portal from "./pages/Portal";
 import { PortalGuard } from "./pages/PortalGuard";
 import Invite from "./pages/Invite";
 import ResetPassword from "./pages/ResetPassword";
+import CheckInHistory from "./pages/CheckInHistory";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/admin/users" element={<Navigate to="/portal" replace />} />
             <Route path="/invite/:code" element={<Invite />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/me/check-ins" element={<CheckInHistory />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut, ChevronRight, Edit2 } from 'lucide-react';
+import { Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut, ChevronRight, Edit2, CalendarCheck } from 'lucide-react';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 import { Link } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
@@ -16,30 +16,36 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { CheckInCard } from '@/components/me/CheckInCard';
+import { LevelCard } from '@/components/me/LevelCard';
 
 export default function Me() {
   const { user, role, signOut, loading: authLoading } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [stats, setStats] = useState({ scans: 0, favs: 0, posts: 0 });
+  const [totalExp, setTotalExp] = useState(0);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [draftName, setDraftName] = useState('');
+  const [expRefreshKey, setExpRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
       setLoading(true);
-      const [{ data: profile }, scansC, favsC, postsC] = await Promise.all([
+      const [{ data: profile }, scansC, favsC, postsC, { data: exp }] = await Promise.all([
         supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
         supabase.from('products').select('id', { count: 'exact', head: true }).eq('created_by', user.id),
         supabase.from('user_favorites').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('community_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('user_experience').select('total_exp').eq('user_id', user.id).maybeSingle(),
       ]);
       setDisplayName(profile?.display_name || user.email?.split('@')[0] || '中古玩家');
       setStats({ scans: scansC.count || 0, favs: favsC.count || 0, posts: postsC.count || 0 });
+      setTotalExp(exp?.total_exp || 0);
       setLoading(false);
     })();
-  }, [user]);
+  }, [user, expRefreshKey]);
 
   const saveName = async () => {
     if (!user || !draftName.trim()) return;
@@ -85,16 +91,11 @@ export default function Me() {
           </div>
         </Card>
 
-        {/* Growth */}
-        <Card className="p-4 bg-gradient-primary text-primary-foreground">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Lv.1 中古萌新</span>
-            <span className="text-xs opacity-80">距下一级 还需识别 10 次</span>
-          </div>
-          <div className="h-1.5 bg-primary-foreground/20 rounded-full overflow-hidden">
-            <div className="h-full bg-primary-foreground/80" style={{ width: `${Math.min((stats.scans / 10) * 100, 100)}%` }} />
-          </div>
-        </Card>
+        {/* Daily check-in */}
+        <CheckInCard userId={user.id} onChanged={() => setExpRefreshKey(k => k + 1)} />
+
+        {/* Level */}
+        <LevelCard totalExp={totalExp} />
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
@@ -117,7 +118,12 @@ export default function Me() {
 
         {/* Settings */}
         <Card className="overflow-hidden">
-          <Link to="/history" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors">
+          <Link to="/me/check-ins" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors">
+            <CalendarCheck className="w-5 h-5 text-muted-foreground" />
+            <span className="flex-1 text-sm">我的打卡</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </Link>
+          <Link to="/history" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
             <HistoryIcon className="w-5 h-5 text-muted-foreground" />
             <span className="flex-1 text-sm">历史记录</span>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
