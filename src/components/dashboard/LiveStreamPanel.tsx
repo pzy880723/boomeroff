@@ -99,6 +99,13 @@ export function LiveStreamPanel() {
     fetch(url, { method: 'OPTIONS' }).catch(() => { /* noop */ });
   }, []);
 
+  // 卸载时清理计时器
+  useEffect(() => {
+    return () => {
+      if (timerRef.current != null) cancelAnimationFrame(timerRef.current);
+    };
+  }, []);
+
   const uploadImage = async (imageBase64: string, userId: string): Promise<string | null> => {
     try {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
