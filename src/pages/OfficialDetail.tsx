@@ -193,12 +193,16 @@ export default function OfficialDetail() {
                 era: item.era,
                 origin: item.origin,
                 coverUrl: item.cover_url,
+                pronunciation,
+                aliases,
+                oneLiner,
                 summary: item.summary,
-                points: points.map((p) => p.text).filter(Boolean),
-                tips: (() => {
-                  const t = normalizeTips(item.tips);
-                  return [t?.memory, t?.objection].filter(Boolean).join(' / ') || null;
-                })(),
+                quickFacts,
+                customerPitches,
+                pointsRich: points,
+                comparisons,
+                tipsRich: normalizeTips(item.tips),
+                tips: item.tips,
                 link: typeof window !== 'undefined' ? `${window.location.origin}/library/${item.id}` : null,
               }}
             />
