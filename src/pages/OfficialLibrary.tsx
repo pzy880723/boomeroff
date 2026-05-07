@@ -54,7 +54,8 @@ export default function OfficialLibrary() {
   const [cat, setCat] = useState<ProductCategory | 'all'>(
     () => (searchParams.get('cat') as ProductCategory | null) || 'all',
   );
-  const [sub, setSub] = useState<string>(() => searchParams.get('ip') || 'all');
+  const [brand, setBrand] = useState<string>(() => searchParams.get('brand') || searchParams.get('ip') || 'all');
+  const [subType, setSubType] = useState<string>(() => searchParams.get('type') || 'all');
   const [era, setEra] = useState<string>(() => searchParams.get('era') || '');
   const [origin, setOrigin] = useState<string>(() => searchParams.get('origin') || '');
   const [expanded, setExpanded] = useState(false);
@@ -73,12 +74,13 @@ export default function OfficialLibrary() {
   useEffect(() => {
     const params: Record<string, string> = {};
     if (cat !== 'all') params.cat = cat;
-    if (sub !== 'all') params.ip = sub;
+    if (brand !== 'all') params.brand = brand;
+    if (subType !== 'all') params.type = subType;
     if (era) params.era = era;
     if (origin) params.origin = origin;
     if (keyword.trim()) params.q = keyword.trim();
     setSearchParams(params, { replace: true });
-  }, [cat, sub, era, origin, keyword, setSearchParams]);
+  }, [cat, brand, subType, era, origin, keyword, setSearchParams]);
 
   useEffect(() => {
     localStorage.setItem('lib_view', view);
