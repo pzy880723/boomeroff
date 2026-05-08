@@ -12,6 +12,21 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { z } from 'zod';
+
+const registerSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .regex(/^[a-zA-Z0-9_]{3,32}$/, '用户名仅支持字母、数字、下划线，3-32 位'),
+    password: z.string().min(6, '密码至少 6 位').max(72, '密码过长'),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: '两次密码不一致',
+    path: ['confirmPassword'],
+  });
 
 interface RegisterFormProps {
   onBackToLogin: () => void;
@@ -28,25 +43,11 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!/^[a-zA-Z0-9_]{3,32}$/.test(username)) {
+    const parsed = registerSchema.safeParse({ username, password, confirmPassword });
+    if (!parsed.success) {
       toast({
-        title: '用户名格式错误',
-        description: '仅支持字母、数字、下划线，3-32 位',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (password.length < 6) {
-      toast({
-        title: '密码太短',
-        description: '密码至少 6 位',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (password !== confirmPassword) {
-      toast({
-        title: '两次密码不一致',
+        title: '输入有误',
+        description: parsed.error.errors[0]?.message ?? '请检查输入',
         variant: 'destructive',
       });
       return;

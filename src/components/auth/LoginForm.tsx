@@ -6,6 +6,17 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { z } from 'zod';
+
+const loginSchema = z.object({
+  account: z
+    .string()
+    .trim()
+    .min(3, '账号至少 3 位')
+    .max(255, '账号过长')
+    .regex(/^([a-zA-Z0-9_]{3,32}|[^\s@]+@[^\s@]+\.[^\s@]+)$/, '请输入有效的用户名或邮箱'),
+  password: z.string().min(6, '密码至少 6 位').max(72, '密码过长'),
+});
 
 interface LoginFormProps {
   onForgotPassword: () => void;
@@ -22,10 +33,19 @@ export function LoginForm({ onForgotPassword, onRegister }: LoginFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const parsed = loginSchema.safeParse({ account, password });
+    if (!parsed.success) {
+      toast({
+        title: '输入有误',
+        description: parsed.error.errors[0]?.message ?? '请检查输入',
+        variant: 'destructive',
+      });
+      return;
+    }
     setLoading(true);
 
     try {
-      const trimmed = account.trim();
+      const trimmed = parsed.data.account;
       const loginEmail = trimmed.includes('@')
         ? trimmed
         : `${trimmed.toLowerCase()}@boomeroff.local`;
