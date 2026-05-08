@@ -53,23 +53,24 @@ export function pickKnowledgeCard(raw: unknown): KnowledgeCard | null {
   // selling_points_rich 优先；fallback 到 selling_points（带 detail 才算 rich）
   const spSource = (Array.isArray(r.selling_points_rich) ? r.selling_points_rich : r.selling_points) as unknown;
   if (Array.isArray(spSource)) {
-    const arr = (spSource as unknown[])
-      .map((p) => {
-        if (!p) return null;
-        if (typeof p === 'string' && p.trim()) return { text: p.trim() };
-        if (typeof p === 'object') {
-          const o = p as Record<string, unknown>;
-          if (typeof o.text === 'string' && o.text.trim()) {
-            return {
-              text: String(o.text).trim(),
-              tag: typeof o.tag === 'string' ? o.tag : undefined,
-              detail: typeof o.detail === 'string' && o.detail.trim() ? String(o.detail).trim() : undefined,
-            };
-          }
+    const arr: KnowledgeCardPoint[] = [];
+    for (const p of spSource as unknown[]) {
+      if (!p) continue;
+      if (typeof p === 'string' && p.trim()) {
+        arr.push({ text: p.trim() });
+        continue;
+      }
+      if (typeof p === 'object') {
+        const o = p as Record<string, unknown>;
+        if (typeof o.text === 'string' && o.text.trim()) {
+          arr.push({
+            text: String(o.text).trim(),
+            tag: typeof o.tag === 'string' ? o.tag : undefined,
+            detail: typeof o.detail === 'string' && o.detail.trim() ? String(o.detail).trim() : undefined,
+          });
         }
-        return null;
-      })
-      .filter((p): p is KnowledgeCardPoint => !!p);
+      }
+    }
     if (arr.length) card.selling_points_rich = arr;
   }
 
