@@ -15,7 +15,14 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  esbuild: {
+    // 生产构建移除 console / debugger，减小体积、加快解析
+    drop: mode === "production" ? ["console", "debugger"] : [],
+  },
   build: {
+    target: "es2020",
+    cssCodeSplit: true,
+    reportCompressedSize: false,
     // 把大的第三方依赖拆成独立 chunk，便于浏览器长效缓存
     rollupOptions: {
       output: {
