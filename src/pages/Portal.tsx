@@ -7,11 +7,12 @@ import { OfficialKnowledgeManager } from '@/components/admin/OfficialKnowledgeMa
 import { CommunityModeration } from '@/components/admin/CommunityModeration';
 import { AISettingsPanel } from '@/components/admin/AISettingsPanel';
 import { CorrectionReviewPanel } from '@/components/admin/CorrectionReviewPanel';
+import { XianyuCacheManager } from '@/components/admin/XianyuCacheManager';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Shield, Users, LogOut, AlertCircle, BookOpen, Sparkles, BadgeCheck, MessageSquare, MessageSquareWarning } from 'lucide-react';
+import { Shield, Users, LogOut, AlertCircle, BookOpen, Sparkles, BadgeCheck, MessageSquare, MessageSquareWarning, TrendingUp } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
 import { useNavigate } from 'react-router-dom';
@@ -83,6 +84,10 @@ export default function Portal() {
                   <Sparkles className="w-4 h-4" />
                   AI 模型
                 </TabsTrigger>
+                <TabsTrigger value="xianyu" className="gap-1.5">
+                  <TrendingUp className="w-4 h-4" />
+                  闲鱼行情
+                </TabsTrigger>
               </TabsList>
             </div>
 
@@ -112,6 +117,10 @@ export default function Portal() {
 
             <TabsContent value="ai" className="p-3 sm:p-5 m-0">
               <AISettingsPanel />
+            </TabsContent>
+
+            <TabsContent value="xianyu" className="p-3 sm:p-5 m-0">
+              <XianyuCacheManager />
             </TabsContent>
           </Tabs>
         </Card>
