@@ -217,13 +217,15 @@ export default function OfficialDetail() {
                 link: typeof window !== 'undefined' ? `${window.location.origin}/library/${item.id}` : null,
               }}
             />
-            <button
-              onClick={toggleFav}
-              className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
-              aria-label="收藏"
-            >
-              <Star className={`w-5 h-5 ${favored ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
-            </button>
+            {!alreadyInPersonal && (
+              <button
+                onClick={toggleFav}
+                className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+                aria-label="收藏"
+              >
+                <Star className={`w-5 h-5 ${favored ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
+              </button>
+            )}
           </div>
         </div>
       </div>
