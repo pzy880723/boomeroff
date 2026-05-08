@@ -295,7 +295,7 @@ export function LiveStreamPanel() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // 后台触发深度故事补充：不阻塞 UI，结果回填到当前卡片
+  // 后台触发知识卡补充：不阻塞 UI，结果回填到当前卡片
   const triggerEnrich = useCallback(async (
     base: RecognitionResult,
     productId: string | null,
@@ -415,7 +415,7 @@ export function LiveStreamPanel() {
         }
       })();
 
-      // 后台：补充深度故事话术（联网核实 + Pro 模型）
+      // 后台：补充知识卡话术（联网核实 + Pro 模型）
       void triggerEnrich(recognitionResult, recognitionResult.cachedProductId!);
       return;
     }
