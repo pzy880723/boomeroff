@@ -404,6 +404,7 @@ export type Database = {
         Row: {
           brand: string | null
           category: Database["public"]["Enums"]["product_category"]
+          content: Json
           created_at: string
           created_by: string | null
           era: string | null
@@ -420,6 +421,7 @@ export type Database = {
         Insert: {
           brand?: string | null
           category?: Database["public"]["Enums"]["product_category"]
+          content?: Json
           created_at?: string
           created_by?: string | null
           era?: string | null
@@ -436,6 +438,7 @@ export type Database = {
         Update: {
           brand?: string | null
           category?: Database["public"]["Enums"]["product_category"]
+          content?: Json
           created_at?: string
           created_by?: string | null
           era?: string | null

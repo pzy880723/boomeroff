@@ -14,13 +14,13 @@ const ENRICH_TOOL = {
   type: 'function',
   function: {
     name: 'submit_enrichment',
-    description: '提交商品深度故事补充',
+    description: '提交商品深度故事 + 完整知识卡（不含 body 深度阅读长正文）',
     parameters: {
       type: 'object',
       properties: {
         story: {
           type: 'string',
-          description: '180-260字深度口语化故事段，店员逐字念给客人听 25-35 秒。讲品牌/作家/年代真实背景、生产年限、当年用途、同款最新行情或拍卖纪录、为什么稀缺。要像真人说话，"您看…""其实当年…""我跟您讲…" 这种口吻，给具体数字。',
+          description: '180-260字深度口语化故事段，店员逐字念给客人听 25-35 秒。讲品牌/作家/年代真实背景、生产年限、当年用途、同款最新行情或拍卖纪录、为什么稀缺。要像真人说话，"您看…""其实当年…""我跟您讲…" 这种口吻，给具体数字。禁用「主播」字样。',
         },
         highlight: {
           type: 'string',
@@ -43,16 +43,72 @@ const ENRICH_TOOL = {
             required: ['tag', 'text'],
           },
         },
-        objection: {
+        objection: { type: 'string', description: '≤80字砍价/质疑应答，自然口语。' },
+        memory: { type: 'string', description: '≤30字记忆口诀' },
+
+        // —— 富知识卡（与官方知识卡一致）——
+        one_liner: {
           type: 'string',
-          description: '≤80字砍价/质疑应答，自然口语。',
+          description: '★金句★ ≤30字中文，全部正向表达。可在身份定位、时代符号、工艺亮点、场景画面、收藏价值中灵活挑选；禁用「便宜/廉价/劣质/二手感/过时/淘汰/不值/平替」等贬低词；禁止使用「主播」。',
         },
-        memory: {
-          type: 'string',
-          description: '≤30字记忆口诀',
+        pronunciation: { type: 'string', description: '中文/罗马字/日文读音，例如「ノリタケ Noritake」' },
+        aliases: { type: 'array', items: { type: 'string' }, description: '常见别名/简称，最多 4 个' },
+        quick_facts: {
+          type: 'array',
+          minItems: 5,
+          maxItems: 5,
+          items: {
+            type: 'object',
+            properties: {
+              label: { type: 'string', enum: ['创立年代', '产地', '工艺', '代表元素', '价位段'] },
+              value: { type: 'string', description: '具体数字或专有名词' },
+            },
+            required: ['label', 'value'],
+          },
+        },
+        customer_pitches: {
+          type: 'array',
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: 'object',
+            properties: {
+              scene: { type: 'string', enum: ['送礼', '自用', '收藏'] },
+              line: { type: 'string', description: '≤40字直接念给客人的话' },
+            },
+            required: ['scene', 'line'],
+          },
+        },
+        selling_points_rich: {
+          type: 'array',
+          minItems: 4,
+          maxItems: 6,
+          description: '带 tag/主句/detail 三段式，每段更详细（detail 40-80字）。',
+          items: {
+            type: 'object',
+            properties: {
+              tag: { type: 'string' },
+              text: { type: 'string' },
+              detail: { type: 'string' },
+            },
+            required: ['tag', 'text', 'detail'],
+          },
+        },
+        comparisons: {
+          type: 'array',
+          minItems: 2,
+          maxItems: 4,
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              diff: { type: 'string', description: '30-60字一眼可辨的差别' },
+            },
+            required: ['name', 'diff'],
+          },
         },
       },
-      required: ['story', 'highlight', 'sellingPoints'],
+      required: ['story', 'highlight', 'sellingPoints', 'one_liner', 'quick_facts', 'customer_pitches', 'comparisons'],
     },
   },
 };
@@ -110,12 +166,12 @@ serve(async (req) => {
       });
     }
 
-    // 已有 enrichment 直接返回（同 product 不重复跑）
+    // 已有 enrichment 直接返回（同 product 不重复跑）；要求富字段也已生成
     if (productId) {
       const { data: existing } = await adminClient
         .from('products').select('ai_analysis').eq('id', productId).maybeSingle();
       const cached = (existing?.ai_analysis as any)?.enriched;
-      if (cached?.story && cached?.updatedAt) {
+      if (cached?.story && cached?.updatedAt && cached?.one_liner) {
         return new Response(JSON.stringify({ enriched: cached, fromCache: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -140,19 +196,20 @@ serve(async (req) => {
       currentStory ? `初版故事：${currentStory.slice(0, 160)}` : '',
     ].filter(Boolean).join('\n');
 
-    const systemPrompt = `你是日本中古杂货资深鉴定师 + 王牌销售。结合下方商品信息，必要时使用网络搜索核实品牌/年代/同款行情，输出比初版更深入的销售话术。
+    const systemPrompt = `你是日本中古杂货资深鉴定师 + 王牌销售。结合下方商品信息，必要时使用网络搜索核实品牌/年代/同款行情，输出比初版更深入的销售话术 + 一份完整知识卡。
 
 【硬性规则】
-1. 全部简体中文，外文品牌音译（Sony→索尼）。
+1. 全部简体中文，外文品牌音译（Sony→索尼）。**绝不出现「主播」字样**，店员对客人称「您」。
 2. 禁用空话：非常精美/极具价值/匠心独运/巧夺天工/美轮美奂。能给数字就给数字。
-3. story 必须 180-260 字，要像真人说话，"您看…""其实当年…""我跟您讲…"，10-15 秒讲完顾客已经心动。
+3. story 必须 180-260 字，口语化「您看…」「其实当年…」，10-15 秒讲完顾客已经心动。
 4. 必须比初版更具体：加入真实背景（生产年限/品牌历史/同款拍卖价/存世量）。无法核实的就讲场景类比，绝不编造数字。
 5. sellingPoints 4-6 条，每条 ≤32 字完整句，tag 必须是 身世/工艺/稀缺/场景。
+6. one_liner ≤30 字正向金句；quick_facts 5 条标签固定（创立年代/产地/工艺/代表元素/价位段）；customer_pitches 必须覆盖 送礼/自用/收藏 三场景；selling_points_rich 4-6 条带 tag/text/detail；comparisons 至少 2 条易混对比。
 
 【商品信息】
 ${ctx}
 
-请调用 submit_enrichment 工具提交。`;
+请调用 submit_enrichment 工具一次性提交所有字段。`;
 
     const reqBody: any = {
       model: ENRICH_MODEL,
@@ -210,13 +267,20 @@ ${ctx}
       });
     }
 
-    const enriched = {
+    const enriched: Record<string, unknown> = {
       story: String(parsed.story),
       highlight: parsed.highlight ? String(parsed.highlight) : undefined,
       description: parsed.description ? String(parsed.description) : undefined,
       sellingPoints: Array.isArray(parsed.sellingPoints) ? parsed.sellingPoints : undefined,
       objection: parsed.objection ? String(parsed.objection) : undefined,
       memory: parsed.memory ? String(parsed.memory) : undefined,
+      one_liner: parsed.one_liner ? String(parsed.one_liner) : undefined,
+      pronunciation: parsed.pronunciation ? String(parsed.pronunciation) : undefined,
+      aliases: Array.isArray(parsed.aliases) ? parsed.aliases.filter((s: unknown) => typeof s === 'string') : undefined,
+      quick_facts: Array.isArray(parsed.quick_facts) ? parsed.quick_facts : undefined,
+      customer_pitches: Array.isArray(parsed.customer_pitches) ? parsed.customer_pitches : undefined,
+      selling_points_rich: Array.isArray(parsed.selling_points_rich) ? parsed.selling_points_rich : undefined,
+      comparisons: Array.isArray(parsed.comparisons) ? parsed.comparisons : undefined,
       webSearchUsed: used,
       updatedAt: new Date().toISOString(),
     };

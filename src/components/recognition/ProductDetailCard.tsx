@@ -14,6 +14,8 @@ import {
   SELLING_TAG_STYLE,
 } from '@/lib/script';
 import { ShareMenu } from '@/components/share/ShareMenu';
+import { KnowledgeCardSections } from '@/components/knowledge/KnowledgeCardSections';
+import { pickKnowledgeCard } from '@/lib/knowledgeCard';
 
 interface ProductDetailCardProps {
   result: Pick<
@@ -332,6 +334,13 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
           </CardContent>
         </Card>
       )}
+
+      {/* 富知识卡：金句 / 速记卡 / 客户话术 / 易混对比 — 与官方知识卡一致 */}
+      <KnowledgeCardSections
+        card={pickKnowledgeCard(enriched)}
+        loading={!!result.isEnriching}
+        loadingText="正在为本次识别生成知识卡…"
+      />
 
       {/* 核心卖点 - 带分类标签 */}
       {sellingPoints.length > 0 && (
