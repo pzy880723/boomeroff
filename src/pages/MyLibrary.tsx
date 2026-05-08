@@ -265,7 +265,7 @@ export default function MyLibrary() {
         if (active.kind === 'favorite') {
           if (active.source_type === 'official') {
             const { data } = await supabase.from('official_knowledge')
-              .select('name, category, cover_url, summary, era, origin, selling_points, tips')
+              .select('name, category, cover_url, summary, era, origin, selling_points, tips, content')
               .eq('id', active.source_id!).maybeSingle();
             if (cancelled) return;
             if (!data) { setDetail({ ...fallback, missing: true }); return; }
@@ -275,24 +275,27 @@ export default function MyLibrary() {
               summary: data.summary, era: data.era, origin: data.origin,
               selling_points: Array.isArray(data.selling_points) ? data.selling_points : [],
               tips: data.tips,
+              card: officialRowToCard({ content: data.content, selling_points: data.selling_points, summary: data.summary }),
             });
           } else {
             const { data } = await supabase.from('products')
-              .select('name, category, image_url, description, era, origin, selling_points, tips')
+              .select('name, category, image_url, description, era, origin, selling_points, tips, ai_analysis')
               .eq('id', active.source_id!).maybeSingle();
             if (cancelled) return;
             if (!data) { setDetail({ ...fallback, missing: true }); return; }
+            const ai = (data.ai_analysis ?? {}) as Record<string, unknown>;
             setDetail({
               name: data.name, category: data.category,
               cover_url: data.image_url || fallback.cover_url,
               summary: data.description, era: data.era, origin: data.origin,
               selling_points: Array.isArray(data.selling_points) ? data.selling_points : [],
               tips: data.tips,
+              card: pickKnowledgeCard(ai.card) ?? pickKnowledgeCard(ai.enriched),
             });
           }
         } else {
           const { data } = await supabase.from('product_knowledge')
-            .select('product_name, category, image_url, era, origin, selling_points, tips')
+            .select('product_name, category, image_url, era, origin, selling_points, tips, content')
             .eq('id', active.knowledge_id!).maybeSingle();
           if (cancelled) return;
           if (!data) { setDetail({ ...fallback, missing: true }); return; }
@@ -302,6 +305,7 @@ export default function MyLibrary() {
             summary: null, era: data.era, origin: data.origin,
             selling_points: Array.isArray(data.selling_points) ? data.selling_points : [],
             tips: data.tips,
+            card: pickKnowledgeCard(data.content) ?? officialRowToCard({ content: data.content, selling_points: data.selling_points }),
           });
         }
       } catch {
