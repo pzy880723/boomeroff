@@ -91,7 +91,9 @@ const writeAttempted = (keys: string[]) => {
 };
 
 export default function MyLibrary() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
+  const isAdmin = role === 'admin';
+  const [enrichingCard, setEnrichingCard] = useState(false);
   const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedItem[]>([]);
   const [loading, setLoading] = useState(true);
