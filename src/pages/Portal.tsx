@@ -84,6 +84,10 @@ export default function Portal() {
                   <Sparkles className="w-4 h-4" />
                   AI 模型
                 </TabsTrigger>
+                <TabsTrigger value="xianyu" className="gap-1.5">
+                  <TrendingUp className="w-4 h-4" />
+                  闲鱼行情
+                </TabsTrigger>
               </TabsList>
             </div>
 
