@@ -21,6 +21,11 @@ import {
 } from '@/components/ui/dialog';
 import { CATEGORY_LABELS, CATEGORY_ICONS, ProductCategory } from '@/types';
 import { QuizDialog } from '@/components/library/QuizDialog';
+import { KnowledgeCardSections } from '@/components/knowledge/KnowledgeCardSections';
+import { pickKnowledgeCard, officialRowToCard, type KnowledgeCard } from '@/lib/knowledgeCard';
+import { Wand2 } from 'lucide-react';
+import type { Json } from '@/integrations/supabase/types';
+import { useAuth as useAuthForRole } from '@/hooks/useAuth';
 
 interface UnifiedItem {
   key: string;
