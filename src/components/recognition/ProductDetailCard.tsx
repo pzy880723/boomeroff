@@ -66,10 +66,7 @@ const Meta = ({ label, value }: { label: string; value: string }) => (
 );
 
 export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetailCardProps) {
-  const [copied, setCopied] = useState(false);
   const [showLong, setShowLong] = useState(false);
-  const { toast } = useToast();
-  const { isSpeaking, speak, stop } = useSpeech();
 
   const enriched = result.enriched;
   const sellingPoints = normalizeSellingPoints(
@@ -95,29 +92,6 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
       }
     : baseTips;
   const description = enriched?.description || result.description;
-
-  const speakText = buildSpeakText({ pitch, sellingPoints, description });
-
-  const fullText = [
-    pitch?.opener,
-    pitch?.highlight,
-    pitch?.story,
-    sellingPoints.length ? '核心卖点：\n' + sellingPoints.map(p => `· [${p.tag}] ${p.text}`).join('\n') : '',
-    description && description !== pitch?.opener ? '完整介绍：\n' + description : '',
-    tips?.memory ? '记忆口诀：' + tips.memory : '',
-    tips?.objection ? '顾客常问：' + tips.objection : '',
-  ].filter(Boolean).join('\n\n');
-
-  const copyAll = async () => {
-    try {
-      await navigator.clipboard.writeText(fullText);
-      setCopied(true);
-      toast({ title: '已复制到剪贴板' });
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast({ title: '复制失败', variant: 'destructive' });
-    }
-  };
 
   const cacheLabel = result.cacheSource === 'official'
     ? '匹配到官方知识库'
