@@ -84,6 +84,15 @@ export default function OfficialDetail() {
         .from('user_favorites').select('id')
         .eq('user_id', user.id).eq('source_type', 'official').eq('source_id', id).maybeSingle();
       setFavored(!!fav);
+      const sourceProductId = (data as any).source_product_id as string | null;
+      if (sourceProductId) {
+        const { data: rec } = await supabase
+          .from('user_favorites').select('id')
+          .eq('user_id', user.id).eq('source_type', 'recognition').eq('source_id', sourceProductId).maybeSingle();
+        setAlreadyInPersonal(!!rec);
+      } else {
+        setAlreadyInPersonal(false);
+      }
     }
     setLoading(false);
   };
