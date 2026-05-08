@@ -241,35 +241,6 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
         loadingText="正在为本次识别生成知识卡…"
       />
 
-      {/* 核心卖点 - 带分类标签 */}
-      {sellingPoints.length > 0 && (
-        <Card className="border-accent/30 bg-accent-soft/40 shadow-soft overflow-hidden">
-          <CardContent className="pt-5 pb-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-accent flex items-center justify-center shrink-0">
-                <Sparkles className="w-4 h-4 text-accent-foreground" />
-              </div>
-              <div>
-                <h3 className="font-display text-lg leading-none">核心卖点</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">分类速记 · 一眼抓重点</p>
-              </div>
-            </div>
-            <ul className="space-y-2.5">
-              {sellingPoints.map((point, i) => (
-                <li key={i} className="flex gap-2.5 items-start leading-relaxed">
-                  <span
-                    className={`shrink-0 mt-0.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${SELLING_TAG_STYLE[point.tag]}`}
-                  >
-                    {point.tag}
-                  </span>
-                  <span className="flex-1 text-[15px]">{point.text}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
       {/* 完整介绍（折叠） */}
       {description && description.trim() && description !== pitch?.opener && (
         <Card className="border-border/60 shadow-soft">
