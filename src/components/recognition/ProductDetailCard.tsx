@@ -1,16 +1,12 @@
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Copy, Check, Volume2, VolumeX, Sparkles, Lightbulb, Info, Quote, History, Coins, Share2 } from 'lucide-react';
+import { Sparkles, Lightbulb, Info, History, Coins, Share2 } from 'lucide-react';
 import { RecognitionResult, CATEGORY_LABELS } from '@/types';
-import { useToast } from '@/hooks/use-toast';
-import { useSpeech } from '@/hooks/useSpeech';
 import {
   normalizeSellingPoints,
   normalizePitch,
   normalizeTips,
-  buildSpeakText,
   SELLING_TAG_STYLE,
 } from '@/lib/script';
 import { ShareMenu } from '@/components/share/ShareMenu';
