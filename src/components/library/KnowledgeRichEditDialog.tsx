@@ -173,7 +173,7 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved, onD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] p-0 flex flex-col gap-0">
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0"><DialogTitle>编辑词条</DialogTitle></DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-4 space-y-3">
           <div>
             <Label>名称 *</Label>
             <Input value={draft.name || ''} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
