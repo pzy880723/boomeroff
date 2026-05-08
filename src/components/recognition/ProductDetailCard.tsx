@@ -233,66 +233,6 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
         </CardContent>
       </Card>
 
-      {/* 一句话开场 + 亮点 —— 直接念给客户 */}
-      {pitch && (pitch.opener || pitch.highlight) && (
-        <Card className="border-primary/30 bg-gradient-to-br from-primary/8 via-background to-accent/8 shadow-soft overflow-hidden">
-          <CardContent className="pt-5 pb-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                <Quote className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-display text-lg leading-none">张口就讲</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">含完整故事段 · 念给客户 15-20 秒</p>
-              </div>
-            </div>
-            <div className="space-y-2.5">
-              {pitch.opener && (
-                <p className="text-[17px] leading-relaxed font-medium text-foreground">
-                  「{pitch.opener}」
-                </p>
-              )}
-              {pitch.highlight && (
-                <p className="text-[15px] leading-relaxed text-foreground/85">
-                  「{pitch.highlight}」
-                </p>
-              )}
-              {pitch.story && (
-                <div className="mt-1 rounded-lg bg-background/60 border border-border/50 px-3.5 py-3">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80 mb-1.5">故事段 · 直接念</div>
-                  <p className="text-[14.5px] leading-[1.7] text-foreground/90 whitespace-pre-wrap">
-                    {pitch.story}
-                  </p>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button size="sm" variant="outline" onClick={copyAll} className="rounded-full">
-                {copied ? <Check className="w-4 h-4 mr-1.5" /> : <Copy className="w-4 h-4 mr-1.5" />}
-                {copied ? '已复制' : '复制全文'}
-              </Button>
-              <Button
-                size="sm"
-                variant={isSpeaking ? 'secondary' : 'outline'}
-                onClick={() => (isSpeaking ? stop() : speak(speakText))}
-                className="rounded-full"
-              >
-                {isSpeaking ? (
-                  <>
-                    <VolumeX className="w-4 h-4 mr-1.5" />
-                    停止
-                  </>
-                ) : (
-                  <>
-                    <Volume2 className="w-4 h-4 mr-1.5" />
-                    朗读
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* 富知识卡：金句 / 速记卡 / 客户话术 / 易混对比 — 与官方知识卡一致 */}
       <KnowledgeCardSections
