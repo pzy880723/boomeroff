@@ -171,7 +171,7 @@ serve(async (req) => {
       const { data: existing } = await adminClient
         .from('products').select('ai_analysis').eq('id', productId).maybeSingle();
       const cached = (existing?.ai_analysis as any)?.enriched;
-      if (cached?.story && cached?.updatedAt && cached?.one_liner) {
+      if (cached?.one_liner && cached?.updatedAt) {
         return new Response(JSON.stringify({ enriched: cached, fromCache: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
