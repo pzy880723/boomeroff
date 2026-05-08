@@ -260,7 +260,7 @@ ${ctx}
     if (tc?.function?.arguments) parsed = safeParseJSON(tc.function.arguments);
     if (!parsed && message?.content) parsed = safeParseJSON(message.content);
 
-    if (!parsed?.story) {
+    if (!parsed?.one_liner) {
       return new Response(JSON.stringify({ error: '深度补充返回为空' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
