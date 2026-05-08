@@ -232,6 +232,19 @@ export function ProductDetailDialog({
               </Card>
             )}
 
+            {(card || cardLoading) && (
+              <div className="pt-2 border-t border-border/40">
+                <KnowledgeCardSections card={card} loading={cardLoading} loadingText="正在读取知识卡…" />
+              </div>
+            )}
+
+            {isAdmin && !card && !cardLoading && (
+              <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={generateCard} disabled={enriching}>
+                {enriching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                {enriching ? 'AI 生成中…' : 'AI 生成知识卡'}
+              </Button>
+            )}
+
             <div className="pt-2 border-t border-border/40">
               <ShareToCommunityButton
                 productId={product.id}
