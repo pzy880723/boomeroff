@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import {
   Loader2, ArrowLeft, Star, Pencil, Sparkles, Eye, ImageOff,
-  Quote, Volume2, Square, Copy, Wand2, BookOpen, ChevronDown, ChevronUp,
+  Quote, Volume2, Square, Copy, Wand2, BookOpen, ChevronDown, ChevronUp, Check,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
@@ -39,6 +39,7 @@ interface Item {
   body: string | null;
   gallery: unknown;
   content: any;
+  source_product_id: string | null;
 }
 
 export default function OfficialDetail() {
@@ -50,6 +51,7 @@ export default function OfficialDetail() {
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [favored, setFavored] = useState(false);
+  const [alreadyInPersonal, setAlreadyInPersonal] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [aiEditOpen, setAiEditOpen] = useState(false);
@@ -82,6 +84,15 @@ export default function OfficialDetail() {
         .from('user_favorites').select('id')
         .eq('user_id', user.id).eq('source_type', 'official').eq('source_id', id).maybeSingle();
       setFavored(!!fav);
+      const sourceProductId = (data as any).source_product_id as string | null;
+      if (sourceProductId) {
+        const { data: rec } = await supabase
+          .from('user_favorites').select('id')
+          .eq('user_id', user.id).eq('source_type', 'recognition').eq('source_id', sourceProductId).maybeSingle();
+        setAlreadyInPersonal(!!rec);
+      } else {
+        setAlreadyInPersonal(false);
+      }
     }
     setLoading(false);
   };
@@ -206,13 +217,15 @@ export default function OfficialDetail() {
                 link: typeof window !== 'undefined' ? `${window.location.origin}/library/${item.id}` : null,
               }}
             />
-            <button
-              onClick={toggleFav}
-              className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
-              aria-label="收藏"
-            >
-              <Star className={`w-5 h-5 ${favored ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
-            </button>
+            {!alreadyInPersonal && (
+              <button
+                onClick={toggleFav}
+                className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
+                aria-label="收藏"
+              >
+                <Star className={`w-5 h-5 ${favored ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -522,10 +535,17 @@ export default function OfficialDetail() {
       {/* 底部测试入口 */}
       <div className="fixed bottom-16 left-0 right-0 z-20 px-4 py-3 bg-background/95 backdrop-blur border-t">
         <div className="container mx-auto max-w-screen-md flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={toggleFav}>
-            <Star className={`w-4 h-4 mr-1.5 ${favored ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-            {favored ? '已收藏' : '收藏'}
-          </Button>
+          {alreadyInPersonal ? (
+            <div className="flex-1 flex items-center justify-center gap-1.5 text-sm text-muted-foreground border rounded-md h-10 bg-muted/40">
+              <Check className="w-4 h-4 text-green-600" />
+              已在个人知识库
+            </div>
+          ) : (
+            <Button variant="outline" className="flex-1" onClick={toggleFav}>
+              <Star className={`w-4 h-4 mr-1.5 ${favored ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+              {favored ? '已收藏' : '收藏'}
+            </Button>
+          )}
           <Button className="flex-1" onClick={() => setQuizOpen(true)}>
             <Sparkles className="w-4 h-4 mr-1.5" />
             来测一测
