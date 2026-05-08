@@ -39,6 +39,7 @@ interface Item {
   body: string | null;
   gallery: unknown;
   content: any;
+  source_product_id: string | null;
 }
 
 export default function OfficialDetail() {
