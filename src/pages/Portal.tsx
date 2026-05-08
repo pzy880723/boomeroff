@@ -118,6 +118,10 @@ export default function Portal() {
             <TabsContent value="ai" className="p-3 sm:p-5 m-0">
               <AISettingsPanel />
             </TabsContent>
+
+            <TabsContent value="xianyu" className="p-3 sm:p-5 m-0">
+              <XianyuCacheManager />
+            </TabsContent>
           </Tabs>
         </Card>
       </main>
