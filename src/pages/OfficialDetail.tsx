@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import {
   Loader2, ArrowLeft, Star, Pencil, Sparkles, Eye, ImageOff,
-  Quote, Volume2, Square, Copy, Wand2, BookOpen, ChevronDown, ChevronUp,
+  Quote, Volume2, Square, Copy, Wand2, BookOpen, ChevronDown, ChevronUp, Check,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
