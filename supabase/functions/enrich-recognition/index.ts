@@ -108,7 +108,7 @@ const ENRICH_TOOL = {
           },
         },
       },
-      required: ['story', 'highlight', 'sellingPoints', 'one_liner', 'quick_facts', 'customer_pitches', 'comparisons'],
+      required: ['sellingPoints', 'one_liner', 'quick_facts', 'customer_pitches', 'comparisons'],
     },
   },
 };
