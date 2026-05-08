@@ -267,7 +267,7 @@ ${ctx}
     }
 
     const enriched: Record<string, unknown> = {
-      story: String(parsed.story),
+      story: parsed.story ? String(parsed.story) : undefined,
       highlight: parsed.highlight ? String(parsed.highlight) : undefined,
       description: parsed.description ? String(parsed.description) : undefined,
       sellingPoints: Array.isArray(parsed.sellingPoints) ? parsed.sellingPoints : undefined,
