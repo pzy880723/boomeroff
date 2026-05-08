@@ -478,6 +478,16 @@ export default function MyLibrary() {
             <CheckCircle2 className="w-4 h-4 text-white" />
           </div>
         )}
+        {it.kind === 'favorite' && !it.passed && (
+          <button
+            type="button"
+            aria-label="移除收藏"
+            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-background/80 backdrop-blur flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
+            onClick={(e) => remove(it, e)}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <div className="p-2.5 space-y-2">
         <p className="text-sm font-medium leading-tight line-clamp-2 min-h-[2.5rem]">{it.name}</p>
