@@ -26,6 +26,44 @@ import { pickKnowledgeCard, officialRowToCard, type KnowledgeCard } from '@/lib/
 import { Wand2 } from 'lucide-react';
 import type { Json } from '@/integrations/supabase/types';
 
+  const generateCardForActive = async () => {
+    if (!active || !isAdmin) return;
+    setEnrichingCard(true);
+    try {
+      const draftSource = active.kind === 'knowledge' ? 'product_knowledge' : 'products';
+      const id = active.kind === 'knowledge' ? active.knowledge_id! : active.source_id!;
+      const currentDraft = {
+        name: detail?.name || active.name,
+        category: detail?.category || active.category,
+        era: detail?.era || active.era,
+        origin: detail?.origin || active.origin,
+        selling_points: Array.isArray(detail?.selling_points)
+          ? detail!.selling_points.map((s: any) => typeof s === 'string' ? s : s?.text).filter(Boolean)
+          : [],
+      };
+      const { data, error } = await supabase.functions.invoke('enrich-knowledge-core', {
+        body: { currentDraft, needCover: false },
+      });
+      if (error) throw error;
+      const draft = (data as any)?.draft;
+      if (!draft) throw new Error('AI 未返回结果');
+      const newCard = pickKnowledgeCard(draft);
+      if (draftSource === 'products') {
+        const { data: cur } = await supabase.from('products').select('ai_analysis').eq('id', id).maybeSingle();
+        const merged = { ...((cur?.ai_analysis ?? {}) as Record<string, unknown>), card: draft };
+        await supabase.from('products').update({ ai_analysis: merged as unknown as Json }).eq('id', id);
+      } else {
+        await supabase.from('product_knowledge').update({ content: draft as unknown as Json }).eq('id', id);
+      }
+      setDetail((d) => d ? { ...d, card: newCard } : d);
+      toast.success('知识卡已生成');
+    } catch (e) {
+      toast.error('生成失败：' + (e instanceof Error ? e.message : '请重试'));
+    } finally {
+      setEnrichingCard(false);
+    }
+  };
+
 
 interface UnifiedItem {
   key: string;
