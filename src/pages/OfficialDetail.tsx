@@ -535,10 +535,17 @@ export default function OfficialDetail() {
       {/* 底部测试入口 */}
       <div className="fixed bottom-16 left-0 right-0 z-20 px-4 py-3 bg-background/95 backdrop-blur border-t">
         <div className="container mx-auto max-w-screen-md flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={toggleFav}>
-            <Star className={`w-4 h-4 mr-1.5 ${favored ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-            {favored ? '已收藏' : '收藏'}
-          </Button>
+          {alreadyInPersonal ? (
+            <div className="flex-1 flex items-center justify-center gap-1.5 text-sm text-muted-foreground border rounded-md h-10 bg-muted/40">
+              <Check className="w-4 h-4 text-green-600" />
+              已在个人知识库
+            </div>
+          ) : (
+            <Button variant="outline" className="flex-1" onClick={toggleFav}>
+              <Star className={`w-4 h-4 mr-1.5 ${favored ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+              {favored ? '已收藏' : '收藏'}
+            </Button>
+          )}
           <Button className="flex-1" onClick={() => setQuizOpen(true)}>
             <Sparkles className="w-4 h-4 mr-1.5" />
             来测一测
