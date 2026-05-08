@@ -7,11 +7,12 @@ import { OfficialKnowledgeManager } from '@/components/admin/OfficialKnowledgeMa
 import { CommunityModeration } from '@/components/admin/CommunityModeration';
 import { AISettingsPanel } from '@/components/admin/AISettingsPanel';
 import { CorrectionReviewPanel } from '@/components/admin/CorrectionReviewPanel';
+import { XianyuCacheManager } from '@/components/admin/XianyuCacheManager';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Shield, Users, LogOut, AlertCircle, BookOpen, Sparkles, BadgeCheck, MessageSquare, MessageSquareWarning } from 'lucide-react';
+import { Shield, Users, LogOut, AlertCircle, BookOpen, Sparkles, BadgeCheck, MessageSquare, MessageSquareWarning, TrendingUp } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
 import { useNavigate } from 'react-router-dom';
