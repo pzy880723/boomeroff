@@ -677,6 +677,22 @@ export default function MyLibrary() {
                     <p className="leading-relaxed">{detail.tips}</p>
                   </div>
                 )}
+
+                {detail.card && (
+                  <div className="pt-2 border-t border-border/40">
+                    <KnowledgeCardSections card={detail.card} />
+                  </div>
+                )}
+
+                {isAdmin && !detail.card && active && (active.kind === 'knowledge' || (active.kind === 'favorite' && active.source_type === 'product')) && (
+                  <Button
+                    size="sm" variant="outline" className="w-full gap-1.5"
+                    onClick={generateCardForActive} disabled={enrichingCard}
+                  >
+                    {enrichingCard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                    {enrichingCard ? 'AI 生成中…' : 'AI 生成知识卡'}
+                  </Button>
+                )}
               </>
             ) : null}
           </div>
