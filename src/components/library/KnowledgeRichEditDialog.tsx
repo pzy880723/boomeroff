@@ -317,7 +317,7 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved, onD
             </p>
           </div>
         </div>
-        <div className="sticky bottom-0 shrink-0 bg-background border-t px-6 py-3 flex gap-2">
+        <div className="shrink-0 bg-background border-t px-6 py-3 flex gap-2">
           <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>取消</Button>
           <Button className="flex-1" onClick={save} disabled={saving}>
             {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}保存
