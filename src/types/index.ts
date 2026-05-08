@@ -129,6 +129,14 @@ export interface RecognitionResult {
     sellingPoints?: Array<{ tag: string; text: string }>;
     objection?: string;
     memory?: string;
+    // 富知识卡字段（与官方知识卡一致，不含 body 深度阅读）
+    one_liner?: string;
+    pronunciation?: string;
+    aliases?: string[];
+    quick_facts?: Array<{ label: string; value: string }>;
+    customer_pitches?: Array<{ scene: string; line: string }>;
+    selling_points_rich?: Array<{ tag?: string; text: string; detail?: string }>;
+    comparisons?: Array<{ name: string; diff: string }>;
     webSearchUsed?: boolean;
     updatedAt?: string;
   };
