@@ -125,17 +125,6 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
                 )}
               </div>
             )}
-            {result.isEnriching && (
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                深度故事补充中…
-              </div>
-            )}
-            {!result.isEnriching && enriched?.story && (
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-                ✨ 已补充深度故事{enriched.webSearchUsed ? ' · 含联网核实' : ''}
-              </div>
-            )}
           </div>
         );
       })()}
