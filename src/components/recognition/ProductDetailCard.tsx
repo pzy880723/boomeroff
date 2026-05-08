@@ -157,7 +157,7 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
                   era: result.era,
                   origin: result.origin,
                   coverUrl: imageUrl || null,
-                  pitch: pitch?.highlight || pitch?.story || description || null,
+                  pitch: enriched?.one_liner || pitch?.highlight || description || null,
                   summary: description,
                   points: sellingPoints.map((p) => p.text).filter(Boolean),
                   tips: [tips?.memory, tips?.objection].filter(Boolean).join(' / ') || null,
