@@ -14,13 +14,13 @@ const ENRICH_TOOL = {
   type: 'function',
   function: {
     name: 'submit_enrichment',
-    description: '提交商品深度故事补充',
+    description: '提交商品深度故事 + 完整知识卡（不含 body 深度阅读长正文）',
     parameters: {
       type: 'object',
       properties: {
         story: {
           type: 'string',
-          description: '180-260字深度口语化故事段，店员逐字念给客人听 25-35 秒。讲品牌/作家/年代真实背景、生产年限、当年用途、同款最新行情或拍卖纪录、为什么稀缺。要像真人说话，"您看…""其实当年…""我跟您讲…" 这种口吻，给具体数字。',
+          description: '180-260字深度口语化故事段，店员逐字念给客人听 25-35 秒。讲品牌/作家/年代真实背景、生产年限、当年用途、同款最新行情或拍卖纪录、为什么稀缺。要像真人说话，"您看…""其实当年…""我跟您讲…" 这种口吻，给具体数字。禁用「主播」字样。',
         },
         highlight: {
           type: 'string',
@@ -43,16 +43,72 @@ const ENRICH_TOOL = {
             required: ['tag', 'text'],
           },
         },
-        objection: {
+        objection: { type: 'string', description: '≤80字砍价/质疑应答，自然口语。' },
+        memory: { type: 'string', description: '≤30字记忆口诀' },
+
+        // —— 富知识卡（与官方知识卡一致）——
+        one_liner: {
           type: 'string',
-          description: '≤80字砍价/质疑应答，自然口语。',
+          description: '★金句★ ≤30字中文，全部正向表达。可在身份定位、时代符号、工艺亮点、场景画面、收藏价值中灵活挑选；禁用「便宜/廉价/劣质/二手感/过时/淘汰/不值/平替」等贬低词；禁止使用「主播」。',
         },
-        memory: {
-          type: 'string',
-          description: '≤30字记忆口诀',
+        pronunciation: { type: 'string', description: '中文/罗马字/日文读音，例如「ノリタケ Noritake」' },
+        aliases: { type: 'array', items: { type: 'string' }, description: '常见别名/简称，最多 4 个' },
+        quick_facts: {
+          type: 'array',
+          minItems: 5,
+          maxItems: 5,
+          items: {
+            type: 'object',
+            properties: {
+              label: { type: 'string', enum: ['创立年代', '产地', '工艺', '代表元素', '价位段'] },
+              value: { type: 'string', description: '具体数字或专有名词' },
+            },
+            required: ['label', 'value'],
+          },
+        },
+        customer_pitches: {
+          type: 'array',
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: 'object',
+            properties: {
+              scene: { type: 'string', enum: ['送礼', '自用', '收藏'] },
+              line: { type: 'string', description: '≤40字直接念给客人的话' },
+            },
+            required: ['scene', 'line'],
+          },
+        },
+        selling_points_rich: {
+          type: 'array',
+          minItems: 4,
+          maxItems: 6,
+          description: '带 tag/主句/detail 三段式，每段更详细（detail 40-80字）。',
+          items: {
+            type: 'object',
+            properties: {
+              tag: { type: 'string' },
+              text: { type: 'string' },
+              detail: { type: 'string' },
+            },
+            required: ['tag', 'text', 'detail'],
+          },
+        },
+        comparisons: {
+          type: 'array',
+          minItems: 2,
+          maxItems: 4,
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              diff: { type: 'string', description: '30-60字一眼可辨的差别' },
+            },
+            required: ['name', 'diff'],
+          },
         },
       },
-      required: ['story', 'highlight', 'sellingPoints'],
+      required: ['story', 'highlight', 'sellingPoints', 'one_liner', 'quick_facts', 'customer_pitches', 'comparisons'],
     },
   },
 };
