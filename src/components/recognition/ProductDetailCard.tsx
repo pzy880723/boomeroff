@@ -12,6 +12,8 @@ import {
 import { ShareMenu } from '@/components/share/ShareMenu';
 import { KnowledgeCardSections } from '@/components/knowledge/KnowledgeCardSections';
 import { pickKnowledgeCard } from '@/lib/knowledgeCard';
+import { XianyuPriceCard } from '@/components/recognition/XianyuPriceCard';
+import { useAuth } from '@/hooks/useAuth';
 
 interface ProductDetailCardProps {
   result: Pick<
