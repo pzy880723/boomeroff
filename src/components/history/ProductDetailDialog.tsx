@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -9,13 +9,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Edit, Trash2, Calendar, Sparkles, Package, Info, Lightbulb,
+  Edit, Trash2, Calendar, Sparkles, Package, Info, Lightbulb, Wand2, Loader2,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import type { Json } from '@/integrations/supabase/types';
 import { ProductEditDialog } from './ProductEditDialog';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
 import { normalizeSellingPoints, normalizeTips, SELLING_TAG_STYLE } from '@/lib/script';
+import { KnowledgeCardSections } from '@/components/knowledge/KnowledgeCardSections';
+import { pickKnowledgeCard, type KnowledgeCard } from '@/lib/knowledgeCard';
 
 interface Product {
   id: string;
