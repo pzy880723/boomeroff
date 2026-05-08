@@ -49,9 +49,10 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   item: Item;
   onSaved: () => void;
+  onDeleted?: () => void;
 }
 
-export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: Props) {
+export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved, onDeleted }: Props) {
   const [draft, setDraft] = useState<Item>(item);
   const [pointsText, setPointsText] = useState('');
   const [gallery, setGallery] = useState<string[]>([]);
