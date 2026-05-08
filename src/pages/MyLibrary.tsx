@@ -21,6 +21,11 @@ import {
 } from '@/components/ui/dialog';
 import { CATEGORY_LABELS, CATEGORY_ICONS, ProductCategory } from '@/types';
 import { QuizDialog } from '@/components/library/QuizDialog';
+import { KnowledgeCardSections } from '@/components/knowledge/KnowledgeCardSections';
+import { pickKnowledgeCard, officialRowToCard, type KnowledgeCard } from '@/lib/knowledgeCard';
+import { Wand2 } from 'lucide-react';
+import type { Json } from '@/integrations/supabase/types';
+
 
 interface UnifiedItem {
   key: string;
@@ -48,6 +53,7 @@ interface DetailData {
   origin?: string | null;
   selling_points?: any[];
   tips?: string | null;
+  card?: KnowledgeCard | null;
   missing?: boolean;
 }
 
@@ -85,7 +91,9 @@ const writeAttempted = (keys: string[]) => {
 };
 
 export default function MyLibrary() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
+  const isAdmin = role === 'admin';
+  const [enrichingCard, setEnrichingCard] = useState(false);
   const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -257,7 +265,7 @@ export default function MyLibrary() {
         if (active.kind === 'favorite') {
           if (active.source_type === 'official') {
             const { data } = await supabase.from('official_knowledge')
-              .select('name, category, cover_url, summary, era, origin, selling_points, tips')
+              .select('name, category, cover_url, summary, era, origin, selling_points, tips, content')
               .eq('id', active.source_id!).maybeSingle();
             if (cancelled) return;
             if (!data) { setDetail({ ...fallback, missing: true }); return; }
@@ -267,24 +275,27 @@ export default function MyLibrary() {
               summary: data.summary, era: data.era, origin: data.origin,
               selling_points: Array.isArray(data.selling_points) ? data.selling_points : [],
               tips: data.tips,
+              card: officialRowToCard({ content: data.content, selling_points: data.selling_points, summary: data.summary }),
             });
           } else {
             const { data } = await supabase.from('products')
-              .select('name, category, image_url, description, era, origin, selling_points, tips')
+              .select('name, category, image_url, description, era, origin, selling_points, tips, ai_analysis')
               .eq('id', active.source_id!).maybeSingle();
             if (cancelled) return;
             if (!data) { setDetail({ ...fallback, missing: true }); return; }
+            const ai = (data.ai_analysis ?? {}) as Record<string, unknown>;
             setDetail({
               name: data.name, category: data.category,
               cover_url: data.image_url || fallback.cover_url,
               summary: data.description, era: data.era, origin: data.origin,
               selling_points: Array.isArray(data.selling_points) ? data.selling_points : [],
               tips: data.tips,
+              card: pickKnowledgeCard(ai.card) ?? pickKnowledgeCard(ai.enriched),
             });
           }
         } else {
           const { data } = await supabase.from('product_knowledge')
-            .select('product_name, category, image_url, era, origin, selling_points, tips')
+            .select('product_name, category, image_url, era, origin, selling_points, tips, content')
             .eq('id', active.knowledge_id!).maybeSingle();
           if (cancelled) return;
           if (!data) { setDetail({ ...fallback, missing: true }); return; }
@@ -294,6 +305,7 @@ export default function MyLibrary() {
             summary: null, era: data.era, origin: data.origin,
             selling_points: Array.isArray(data.selling_points) ? data.selling_points : [],
             tips: data.tips,
+            card: pickKnowledgeCard(data.content) ?? officialRowToCard({ content: data.content, selling_points: data.selling_points }),
           });
         }
       } catch {
@@ -304,6 +316,44 @@ export default function MyLibrary() {
     })();
     return () => { cancelled = true; };
   }, [active]);
+
+  const generateCardForActive = async () => {
+    if (!active || !isAdmin) return;
+    setEnrichingCard(true);
+    try {
+      const draftSource = active.kind === 'knowledge' ? 'product_knowledge' : 'products';
+      const id = active.kind === 'knowledge' ? active.knowledge_id! : active.source_id!;
+      const currentDraft = {
+        name: detail?.name || active.name,
+        category: detail?.category || active.category,
+        era: detail?.era || active.era,
+        origin: detail?.origin || active.origin,
+        selling_points: Array.isArray(detail?.selling_points)
+          ? detail!.selling_points.map((s: any) => typeof s === 'string' ? s : s?.text).filter(Boolean)
+          : [],
+      };
+      const { data, error } = await supabase.functions.invoke('enrich-knowledge-core', {
+        body: { currentDraft, needCover: false },
+      });
+      if (error) throw error;
+      const draft = (data as any)?.draft;
+      if (!draft) throw new Error('AI 未返回结果');
+      const newCard = pickKnowledgeCard(draft);
+      if (draftSource === 'products') {
+        const { data: cur } = await supabase.from('products').select('ai_analysis').eq('id', id).maybeSingle();
+        const merged = { ...((cur?.ai_analysis ?? {}) as Record<string, unknown>), card: draft };
+        await supabase.from('products').update({ ai_analysis: merged as unknown as Json }).eq('id', id);
+      } else {
+        await supabase.from('product_knowledge').update({ content: draft as unknown as Json }).eq('id', id);
+      }
+      setDetail((d) => d ? { ...d, card: newCard } : d);
+      toast.success('知识卡已生成');
+    } catch (e) {
+      toast.error('生成失败：' + (e instanceof Error ? e.message : '请重试'));
+    } finally {
+      setEnrichingCard(false);
+    }
+  };
 
   const remove = async (it: UnifiedItem, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -664,6 +714,22 @@ export default function MyLibrary() {
                     <Lightbulb className="w-4 h-4 shrink-0 mt-0.5 text-accent-foreground" />
                     <p className="leading-relaxed">{detail.tips}</p>
                   </div>
+                )}
+
+                {detail.card && (
+                  <div className="pt-2 border-t border-border/40">
+                    <KnowledgeCardSections card={detail.card} />
+                  </div>
+                )}
+
+                {isAdmin && !detail.card && active && (active.kind === 'knowledge' || (active.kind === 'favorite' && active.source_type === 'product')) && (
+                  <Button
+                    size="sm" variant="outline" className="w-full gap-1.5"
+                    onClick={generateCardForActive} disabled={enrichingCard}
+                  >
+                    {enrichingCard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                    {enrichingCard ? 'AI 生成中…' : 'AI 生成知识卡'}
+                  </Button>
                 )}
               </>
             ) : null}
