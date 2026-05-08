@@ -14,7 +14,7 @@ const ENRICH_TOOL = {
   type: 'function',
   function: {
     name: 'submit_enrichment',
-    description: '提交商品深度故事 + 完整知识卡（不含 body 深度阅读长正文）',
+    description: '提交完整知识卡（金句 / 速记 / 客户话术 / 易混对比 / 富卖点），不再生成深度故事段',
     parameters: {
       type: 'object',
       properties: {
