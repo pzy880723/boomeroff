@@ -153,11 +153,27 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved, onD
     }
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('official_knowledge').delete().eq('id', draft.id);
+      if (error) throw error;
+      toast.success('已删除');
+      setConfirmDelete(false);
+      onOpenChange(false);
+      onDeleted?.();
+    } catch (e: any) {
+      toast.error('删除失败：' + (e?.message ?? ''));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>编辑词条</DialogTitle></DialogHeader>
-        <div className="space-y-3">
+      <DialogContent className="max-w-lg max-h-[90vh] p-0 flex flex-col gap-0">
+        <DialogHeader className="px-6 pt-6 pb-2 shrink-0"><DialogTitle>编辑词条</DialogTitle></DialogHeader>
+        <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-3">
           <div>
             <Label>名称 *</Label>
             <Input value={draft.name || ''} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
