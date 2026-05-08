@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -45,9 +49,10 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   item: Item;
   onSaved: () => void;
+  onDeleted?: () => void;
 }
 
-export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: Props) {
+export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved, onDeleted }: Props) {
   const [draft, setDraft] = useState<Item>(item);
   const [pointsText, setPointsText] = useState('');
   const [gallery, setGallery] = useState<string[]>([]);
@@ -55,6 +60,8 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
   const [searching, setSearching] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -146,11 +153,27 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
     }
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('official_knowledge').delete().eq('id', draft.id);
+      if (error) throw error;
+      toast.success('已删除');
+      setConfirmDelete(false);
+      onOpenChange(false);
+      onDeleted?.();
+    } catch (e: any) {
+      toast.error('删除失败：' + (e?.message ?? ''));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>编辑词条</DialogTitle></DialogHeader>
-        <div className="space-y-3">
+      <DialogContent className="max-w-lg max-h-[90vh] p-0 flex flex-col gap-0">
+        <DialogHeader className="px-6 pt-6 pb-2 shrink-0"><DialogTitle>编辑词条</DialogTitle></DialogHeader>
+        <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-3">
           <div>
             <Label>名称 *</Label>
             <Input value={draft.name || ''} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
@@ -276,13 +299,30 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
               value={draft.importance_score ?? 0}
               onChange={(e) => setDraft({ ...draft, importance_score: Number(e.target.value) })} />
           </div>
+
+          {/* 危险操作区 — 不固定，需滚到底才能看到 */}
+          <div className="mt-8 pt-4 border-t border-destructive/20">
+            <div className="text-xs text-muted-foreground mb-2">危险操作</div>
+            <Button
+              type="button"
+              variant="destructive"
+              className="w-full gap-1.5"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="w-4 h-4" />
+              删除此词条
+            </Button>
+            <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+              删除后无法恢复，词条的图片、正文、卖点等全部内容都会丢失。
+            </p>
+          </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button onClick={save} disabled={saving}>
+        <div className="sticky bottom-0 shrink-0 bg-background border-t px-6 py-3 flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button className="flex-1" onClick={save} disabled={saving}>
             {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}保存
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
       <WebImagePickerDialog
         open={pickerOpen}
@@ -291,6 +331,28 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved }: P
         pathPrefix="web-gallery"
         onConfirm={(urls) => setGallery((prev) => Array.from(new Set([...prev, ...urls])))}
       />
+
+      <AlertDialog open={confirmDelete} onOpenChange={(o) => !deleting && setConfirmDelete(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除？</AlertDialogTitle>
+            <AlertDialogDescription>
+              即将永久删除「{draft.name}」，此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); void handleDelete(); }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

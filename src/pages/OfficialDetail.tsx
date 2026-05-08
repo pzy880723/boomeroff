@@ -544,7 +544,13 @@ export default function OfficialDetail() {
       <QuizDialog open={quizOpen} onOpenChange={setQuizOpen} knowledgeId={item.id} isAdmin={isAdmin} />
       {isAdmin && (
         <>
-          <KnowledgeRichEditDialog open={editOpen} onOpenChange={setEditOpen} item={item} onSaved={load} />
+          <KnowledgeRichEditDialog
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            item={item}
+            onSaved={load}
+            onDeleted={() => (window.history.length > 1 ? navigate(-1) : navigate('/library'))}
+          />
           <AiKnowledgeDialog
             open={aiEditOpen}
             onOpenChange={setAiEditOpen}
