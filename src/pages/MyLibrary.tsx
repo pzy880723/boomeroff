@@ -53,6 +53,7 @@ interface DetailData {
   origin?: string | null;
   selling_points?: any[];
   tips?: string | null;
+  card?: KnowledgeCard | null;
   missing?: boolean;
 }
 
