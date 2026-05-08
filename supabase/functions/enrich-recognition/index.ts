@@ -267,13 +267,20 @@ ${ctx}
       });
     }
 
-    const enriched = {
+    const enriched: Record<string, unknown> = {
       story: String(parsed.story),
       highlight: parsed.highlight ? String(parsed.highlight) : undefined,
       description: parsed.description ? String(parsed.description) : undefined,
       sellingPoints: Array.isArray(parsed.sellingPoints) ? parsed.sellingPoints : undefined,
       objection: parsed.objection ? String(parsed.objection) : undefined,
       memory: parsed.memory ? String(parsed.memory) : undefined,
+      one_liner: parsed.one_liner ? String(parsed.one_liner) : undefined,
+      pronunciation: parsed.pronunciation ? String(parsed.pronunciation) : undefined,
+      aliases: Array.isArray(parsed.aliases) ? parsed.aliases.filter((s: unknown) => typeof s === 'string') : undefined,
+      quick_facts: Array.isArray(parsed.quick_facts) ? parsed.quick_facts : undefined,
+      customer_pitches: Array.isArray(parsed.customer_pitches) ? parsed.customer_pitches : undefined,
+      selling_points_rich: Array.isArray(parsed.selling_points_rich) ? parsed.selling_points_rich : undefined,
+      comparisons: Array.isArray(parsed.comparisons) ? parsed.comparisons : undefined,
       webSearchUsed: used,
       updatedAt: new Date().toISOString(),
     };
