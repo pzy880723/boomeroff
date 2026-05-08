@@ -14,7 +14,7 @@ const ENRICH_TOOL = {
   type: 'function',
   function: {
     name: 'submit_enrichment',
-    description: '提交商品深度故事 + 完整知识卡（不含 body 深度阅读长正文）',
+    description: '提交完整知识卡（金句 / 速记 / 客户话术 / 易混对比 / 富卖点），不再生成深度故事段',
     parameters: {
       type: 'object',
       properties: {
@@ -108,7 +108,7 @@ const ENRICH_TOOL = {
           },
         },
       },
-      required: ['story', 'highlight', 'sellingPoints', 'one_liner', 'quick_facts', 'customer_pitches', 'comparisons'],
+      required: ['sellingPoints', 'one_liner', 'quick_facts', 'customer_pitches', 'comparisons'],
     },
   },
 };
@@ -171,7 +171,7 @@ serve(async (req) => {
       const { data: existing } = await adminClient
         .from('products').select('ai_analysis').eq('id', productId).maybeSingle();
       const cached = (existing?.ai_analysis as any)?.enriched;
-      if (cached?.story && cached?.updatedAt && cached?.one_liner) {
+      if (cached?.one_liner && cached?.updatedAt) {
         return new Response(JSON.stringify({ enriched: cached, fromCache: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -196,15 +196,14 @@ serve(async (req) => {
       currentStory ? `初版故事：${currentStory.slice(0, 160)}` : '',
     ].filter(Boolean).join('\n');
 
-    const systemPrompt = `你是日本中古杂货资深鉴定师 + 王牌销售。结合下方商品信息，必要时使用网络搜索核实品牌/年代/同款行情，输出比初版更深入的销售话术 + 一份完整知识卡。
+    const systemPrompt = `你是日本中古杂货资深鉴定师 + 王牌销售。结合下方商品信息，必要时使用网络搜索核实品牌/年代/同款行情，输出一份完整的销售知识卡。
 
 【硬性规则】
 1. 全部简体中文，外文品牌音译（Sony→索尼）。**绝不出现「主播」字样**，店员对客人称「您」。
-2. 禁用空话：非常精美/极具价值/匠心独运/巧夺天工/美轮美奂。能给数字就给数字。
-3. story 必须 180-260 字，口语化「您看…」「其实当年…」，10-15 秒讲完顾客已经心动。
-4. 必须比初版更具体：加入真实背景（生产年限/品牌历史/同款拍卖价/存世量）。无法核实的就讲场景类比，绝不编造数字。
-5. sellingPoints 4-6 条，每条 ≤32 字完整句，tag 必须是 身世/工艺/稀缺/场景。
-6. one_liner ≤30 字正向金句；quick_facts 5 条标签固定（创立年代/产地/工艺/代表元素/价位段）；customer_pitches 必须覆盖 送礼/自用/收藏 三场景；selling_points_rich 4-6 条带 tag/text/detail；comparisons 至少 2 条易混对比。
+2. 禁用空话：非常精美/极具价值/匠心独运/巧夺天工/美轮美奂。能给数字就给数字。无法核实的就讲场景类比，绝不编造数字。
+3. sellingPoints 4-6 条，每条 ≤32 字完整句，tag 必须是 身世/工艺/稀缺/场景。
+4. one_liner ≤30 字正向金句；quick_facts 5 条标签固定（创立年代/产地/工艺/代表元素/价位段）；customer_pitches 必须覆盖 送礼/自用/收藏 三场景；selling_points_rich 4-6 条带 tag/text/detail；comparisons 至少 2 条易混对比。
+5. 不需要再写长故事段（story）或单句开场（highlight），重点产出知识卡字段即可。
 
 【商品信息】
 ${ctx}
@@ -261,14 +260,14 @@ ${ctx}
     if (tc?.function?.arguments) parsed = safeParseJSON(tc.function.arguments);
     if (!parsed && message?.content) parsed = safeParseJSON(message.content);
 
-    if (!parsed?.story) {
+    if (!parsed?.one_liner) {
       return new Response(JSON.stringify({ error: '深度补充返回为空' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const enriched: Record<string, unknown> = {
-      story: String(parsed.story),
+      story: parsed.story ? String(parsed.story) : undefined,
       highlight: parsed.highlight ? String(parsed.highlight) : undefined,
       description: parsed.description ? String(parsed.description) : undefined,
       sellingPoints: Array.isArray(parsed.sellingPoints) ? parsed.sellingPoints : undefined,
