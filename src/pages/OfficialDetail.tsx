@@ -51,6 +51,7 @@ export default function OfficialDetail() {
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [favored, setFavored] = useState(false);
+  const [alreadyInPersonal, setAlreadyInPersonal] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [aiEditOpen, setAiEditOpen] = useState(false);
