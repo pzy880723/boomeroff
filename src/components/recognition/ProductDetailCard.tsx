@@ -244,6 +244,14 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
         loadingText="正在为本次识别生成知识卡…"
       />
 
+      {/* 闲鱼行情参考（按需查询） */}
+      <XianyuPriceCard
+        name={result.name}
+        era={result.era}
+        category={result.category}
+        canRefetch={role === 'admin'}
+      />
+
       {/* 完整介绍（折叠） */}
       {description && description.trim() && description !== pitch?.opener && (
         <Card className="border-border/60 shadow-soft">
