@@ -60,6 +60,8 @@ export function KnowledgeRichEditDialog({ open, onOpenChange, item, onSaved, onD
   const [searching, setSearching] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
