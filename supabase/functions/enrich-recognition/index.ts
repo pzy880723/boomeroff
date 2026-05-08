@@ -166,12 +166,12 @@ serve(async (req) => {
       });
     }
 
-    // 已有 enrichment 直接返回（同 product 不重复跑）
+    // 已有 enrichment 直接返回（同 product 不重复跑）；要求富字段也已生成
     if (productId) {
       const { data: existing } = await adminClient
         .from('products').select('ai_analysis').eq('id', productId).maybeSingle();
       const cached = (existing?.ai_analysis as any)?.enriched;
-      if (cached?.story && cached?.updatedAt) {
+      if (cached?.story && cached?.updatedAt && cached?.one_liner) {
         return new Response(JSON.stringify({ enriched: cached, fromCache: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
