@@ -69,6 +69,7 @@ const Meta = ({ label, value }: { label: string; value: string }) => (
 
 export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetailCardProps) {
   const [showLong, setShowLong] = useState(false);
+  const { role } = useAuth();
 
   const enriched = result.enriched;
   const sellingPoints = normalizeSellingPoints(
