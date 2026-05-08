@@ -335,6 +335,13 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
         </Card>
       )}
 
+      {/* 富知识卡：金句 / 速记卡 / 客户话术 / 易混对比 — 与官方知识卡一致 */}
+      <KnowledgeCardSections
+        card={pickKnowledgeCard(enriched)}
+        loading={!!result.isEnriching}
+        loadingText="正在为本次识别生成知识卡…"
+      />
+
       {/* 核心卖点 - 带分类标签 */}
       {sellingPoints.length > 0 && (
         <Card className="border-accent/30 bg-accent-soft/40 shadow-soft overflow-hidden">
