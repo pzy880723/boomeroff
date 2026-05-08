@@ -1,0 +1,1 @@
+ALTER TABLE public.product_knowledge ADD COLUMN IF NOT EXISTS content jsonb NOT NULL DEFAULT '{}'::jsonb;
