@@ -52,8 +52,65 @@ export function ProductDetailDialog({
   const { toast } = useToast();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [card, setCard] = useState<KnowledgeCard | null>(null);
+  const [cardLoading, setCardLoading] = useState(false);
+  const [enriching, setEnriching] = useState(false);
 
   const isAdmin = role === 'admin';
+
+  useEffect(() => {
+    if (!product || !open) { setCard(null); return; }
+    let cancelled = false;
+    setCardLoading(true);
+    (async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('ai_analysis')
+        .eq('id', product.id)
+        .maybeSingle();
+      if (cancelled) return;
+      const ai = (data?.ai_analysis ?? {}) as Record<string, unknown>;
+      const fromCard = pickKnowledgeCard(ai.card);
+      setCard(fromCard ?? pickKnowledgeCard(ai.enriched));
+      setCardLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [product, open]);
+
+  const generateCard = async () => {
+    if (!product || !isAdmin) return;
+    setEnriching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enrich-knowledge-core', {
+        body: {
+          currentDraft: {
+            name: product.name,
+            category: product.category,
+            era: product.era,
+            origin: product.origin,
+            material: product.material,
+            craft: product.craft,
+            description: product.description,
+            selling_points: normalizeSellingPoints(product.selling_points).map(s => s.text),
+          },
+          needCover: false,
+        },
+      });
+      if (error) throw error;
+      const draft = (data as any)?.draft;
+      if (!draft) throw new Error('AI 未返回结果');
+      const newCard = pickKnowledgeCard(draft);
+      const { data: cur } = await supabase.from('products').select('ai_analysis').eq('id', product.id).maybeSingle();
+      const merged = { ...(cur?.ai_analysis as Record<string, unknown> ?? {}), card: draft };
+      await supabase.from('products').update({ ai_analysis: merged as unknown as Json }).eq('id', product.id);
+      setCard(newCard);
+      toast({ title: '知识卡已生成' });
+    } catch (e) {
+      toast({ title: '生成失败', description: e instanceof Error ? e.message : '请重试', variant: 'destructive' });
+    } finally {
+      setEnriching(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!product || !isAdmin) return;
