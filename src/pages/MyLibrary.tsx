@@ -123,13 +123,9 @@ export default function MyLibrary() {
   const loadAll = async () => {
     if (!user) return;
     setLoading(true);
-    const [favRes, knowRes, resultRes] = await Promise.all([
+    const [favRes, resultRes] = await Promise.all([
       supabase.from('user_favorites').select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false }).limit(300),
-      supabase.from('product_knowledge')
-        .select('id, product_id, product_name, category, era, origin, image_url, tips, selling_points, created_at')
-        .eq('created_by', user.id)
         .order('created_at', { ascending: false }).limit(300),
       supabase.from('knowledge_test_results')
         .select('item_kind, item_id, passed_at')
