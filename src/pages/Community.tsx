@@ -153,7 +153,7 @@ export default function Community() {
         },
       });
       setFavs((s) => new Set(s).add(post.product_id!));
-      toast.success('已收藏到我的学习清单');
+      toast.success('已收藏为个人知识');
     }
   };
 
