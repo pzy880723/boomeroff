@@ -185,21 +185,7 @@ export default function MyLibrary() {
       };
     });
 
-    const know: UnifiedItem[] = (knowRes.data || []).map((k: any) => ({
-      key: `k:${k.id}`,
-      kind: 'knowledge',
-      knowledge_id: k.id,
-      category: k.category as ProductCategory,
-      name: k.product_name || '未命名',
-      cover_url: isUsableImage(k.image_url) ? k.image_url : null,
-      summary: k.tips || null,
-      era: k.era,
-      origin: k.origin,
-      created_at: k.created_at,
-      passed: passedSet.has(`knowledge:${k.id}`),
-    }));
-
-    const merged = [...fav, ...know].sort((a, b) =>
+    const merged = fav.sort((a, b) =>
       (b.created_at || '').localeCompare(a.created_at || ''));
     setItems(merged);
     setLoading(false);
