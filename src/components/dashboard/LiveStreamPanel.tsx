@@ -572,55 +572,32 @@ export function LiveStreamPanel() {
     ? { ...merged, enriched: enriched ?? merged.enriched, isEnriching }
     : null;
 
-  // 进入已识别商品时，同步「加入知识库」与「收藏」状态，避免重复入库
+  // 进入已识别商品时，同步「收藏」状态
   useEffect(() => {
     if (!currentProductId || !user) {
-      setKnowledgeAdded(false);
       setFavorited(false);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const [pkRes, favRes, ofRes] = await Promise.all([
-          supabase
-            .from('product_knowledge')
-            .select('id')
-            .eq('product_id', currentProductId)
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('user_favorites')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('source_type', 'recognition')
-            .eq('source_id', currentProductId)
-            .limit(1)
-            .maybeSingle(),
-          // admin 还要确认 official_knowledge 也存在，才算"已收录"
-          isAdmin
-            ? supabase
-                .from('official_knowledge')
-                .select('id')
-                .eq('source_product_id', currentProductId)
-                .limit(1)
-                .maybeSingle()
-            : Promise.resolve({ data: { id: 'skip' } } as any),
-        ]);
+        const { data } = await supabase
+          .from('user_favorites')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('source_type', 'recognition')
+          .eq('source_id', currentProductId)
+          .limit(1)
+          .maybeSingle();
         if (cancelled) return;
-        setKnowledgeAdded(!!pkRes.data && !!ofRes.data);
-        setFavorited(!!favRes.data);
+        setFavorited(!!data);
       } catch (e) {
-        // 网络抖动时不要让整页崩溃，保持按钮可操作
-        console.warn('[Status sync] failed:', e);
-        if (!cancelled) {
-          setKnowledgeAdded(false);
-          setFavorited(false);
-        }
+        console.warn('[Favorite sync] failed:', e);
+        if (!cancelled) setFavorited(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [currentProductId, user, isAdmin]);
+  }, [currentProductId, user]);
 
   const switchMode = (mode: CaptureMode) => {
     if (mode === captureMode) return;
