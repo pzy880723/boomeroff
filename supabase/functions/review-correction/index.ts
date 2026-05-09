@@ -87,6 +87,19 @@ serve(async (req) => {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      // 给纠错提交者奖励 +30 经验（如果不是管理员）
+      const submitterId = target.submitted_by || target.user_id || null;
+      if (submitterId) {
+        try {
+          const { data: submitterRole } = await adminClient
+            .from('user_roles').select('role').eq('user_id', submitterId).maybeSingle();
+          if (submitterRole?.role !== 'admin') {
+            await adminClient.rpc('add_experience', { _user_id: submitterId, _amount: 30 });
+          }
+        } catch (e) {
+          console.warn('[Review] add_experience failed:', e);
+        }
+      }
     }
 
     const remaining = items.filter((it) => it.id !== id);
