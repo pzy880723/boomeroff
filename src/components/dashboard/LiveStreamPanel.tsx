@@ -886,7 +886,7 @@ export function LiveStreamPanel() {
                     clearResult();
                     setCurrentProductId(null);
                     setRecognitionTime(null);
-                    setKnowledgeAdded(false);
+                    setFavorited(false);
                     startCamera();
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
