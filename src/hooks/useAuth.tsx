@@ -57,10 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSuspended(data.suspended || false);
         console.log('[Auth] Role set to:', data.role, 'Suspended:', data.suspended);
         
-        // If user is suspended, sign them out
+        // If user is suspended (pending approval or manually suspended), sign them out
         if (data.suspended) {
           console.log('[Auth] User is suspended, signing out...');
-          toast.error('您的账号已被暂停，请联系管理员');
+          toast.error('账号待管理员审核通过后方可登录');
           await supabase.auth.signOut();
         }
       } else {

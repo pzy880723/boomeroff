@@ -50,14 +50,15 @@ export function LoginForm({ onForgotPassword, onRegister }: LoginFormProps) {
         ? trimmed
         : `${trimmed.toLowerCase()}@boomeroff.local`;
       await signIn(loginEmail, password);
-      toast({
-        title: '登录成功',
-        description: '欢迎回来！',
-      });
+      // 不再立即弹"登录成功"——若账号待审核，useAuth 会弹审核提示并登出，避免互相矛盾
     } catch (error) {
+      const raw = error instanceof Error ? error.message : '';
+      const friendly = /invalid login credentials/i.test(raw)
+        ? '用户名不存在或密码错误'
+        : raw || '登录失败，请稍后重试';
       toast({
         title: '登录失败',
-        description: error instanceof Error ? error.message : '请检查用户名和密码',
+        description: friendly,
         variant: 'destructive',
       });
     } finally {

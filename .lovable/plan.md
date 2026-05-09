@@ -1,46 +1,78 @@
-## 背景与共识
 
-- **官方知识** = 公共、理论化、基础知识，只能由管理员在 `/portal` 维护。识物结果不再有任何"申请收录 / 收录为官方知识"按钮。
-- **中古圈** = 店员识物后分享个性化知识的地方，要做成识物结果区的**主推 CTA**。
-- **个人收藏**（`user_favorites`）保留，但改名为「收藏为个人知识」，去掉"学习清单"这个说法。
+## 当前问题（已在代码 / 日志中确认）
 
-修正循环（RefineDialog → 管理员审核 → official_knowledge）属于管理员侧的「纠错」通道，不动。
+### 1. 管理员"新增用户"完全失败
+`supabase/functions/admin-create-user/index.ts` 调用了 `userClient.auth.getClaims(token)`，但项目使用的是 `@supabase/supabase-js@2.45.0`，该版本**不存在 `getClaims` 方法**。
 
-## 改动范围
+边缘函数日志连续报错：
+```
+TypeError: userClient.auth.getClaims is not a function
+```
+导致管理员在 /portal 里点"新增用户" → 永远 500 失败。
 
-只改前端文案 / 按钮排版 / 一段移除，不动数据库、不动 RLS、不动 edge function。
+### 2. "忘记密码"功能实质上不可用
+- 用户注册时只填用户名，系统拼接成假邮箱 `username@boomeroff.local`（不存在的域名）。
+- `ForgotPasswordForm` 调用 `supabase.auth.resetPasswordForEmail(email)`，要求用户输入邮箱，但用户根本没有真实邮箱，重置邮件也发不出去。
+- 这个入口对店员而言是死链，会让人以为系统坏了。
 
-### 1. `src/components/dashboard/LiveStreamPanel.tsx`（识物结果操作区，约 1085–1151 行）
+### 3. 待审核用户登录后的提示极易误导
+`useAuth.fetchUserRole` 一旦发现 `suspended=true`，弹的 toast 是 **"您的账号已被暂停，请联系管理员"**。但新注册用户首次登录时也会触发这条逻辑（注册即默认 suspended=true 等待审核），让人以为账号"被封"。同时 `LoginForm` 已先弹了"登录成功"，紧接着又弹"账号已被暂停"，两条 toast 自相矛盾。
 
-- **删除**「申请收录到官方知识库 / 直接收录为官方知识」主按钮（1088–1115 行整段）。
-- **删除**与之配套的 state / handler：`knowledgeAdded`、`savingKnowledge`、`addToKnowledge` 函数，以及 703 行附近"同步加入知识库状态"的相关查询逻辑（只保留收藏部分）。`Award` 图标 import 一并清理。
-- **重排剩余按钮顺序**，让"分享到中古圈"成为视觉主按钮：
-  1. 主按钮：`<ShareToCommunityButton>` ——使用 gradient-accent 样式（`bg-gradient-accent text-accent-foreground`，`h-12`，rounded-full），文案改为「分享到中古圈 · 让更多店员看到」（已分享时显示「✓ 已分享到中古圈」）。
-  2. 次按钮：收藏按钮，`variant="outline"`，文案改为：
-     - 未收藏：`收藏为个人知识`
-     - 已收藏：`已收藏为个人知识`
-- **底部引导文字**改为：`个人收藏只有自己能看到 · 分享到中古圈能让所有同事学到这件好物`。
+### 4. 登录失败提示不够清晰
+`LoginForm` 把所有失败都说成"请检查用户名和密码"。当用户名根本没注册时，给的提示和密码错完全一样，新用户排查困难。
 
-### 2. `src/components/community/ShareToCommunityButton.tsx`
+---
 
-- 默认文案润色：
-  - 未分享：`分享到中古圈 · 让更多店员看到`
-  - 已分享：`已分享到中古圈`
-  - 提交成功 toast：`{ title: '已分享到中古圈', description: '同事们可以在「中古圈」里看到你的发现' }`
-- 增加可选 prop `label?: string`，方便其它入口（如历史详情对话框）按需覆盖；不传则用上面的默认文案。
-- 默认 `variant` 改为 `default`，让它在外部传 `className="bg-gradient-accent…"` 时也能正常显示主按钮态。
+## 修复方案
 
-### 3. `src/components/history/ProductDetailDialog.tsx`
+### A. 修复 admin-create-user（核心 bug）
+`supabase/functions/admin-create-user/index.ts`：
+- 去掉 `userClient.auth.getClaims(token)`，改用 `userClient.auth.getUser(token)` 拿到 `callerId`（这是 v2.45 支持的稳定 API，本项目其他位置也是这么用的）。
+- 其他逻辑（admin 校验、createUser、role 调整）保持不变。
 
-- 历史详情里的 `<ShareToCommunityButton>` 已经是次级位置，沿用新默认文案即可，无需改动逻辑。视觉保持当前 outline / 圆角不变。
+### B. 重做"忘记密码"入口
+既然账号是用户名而非真邮箱，邮件链路本身行不通。改成：
+- `ForgotPasswordForm` 不再调 `resetPasswordForEmail`，改成纯提示页：
+  > 本系统使用用户名登录，忘记密码请联系管理员在「用户管理」中重置。
+  保留"返回登录"按钮。
+- `LoginForm` 中"忘记密码？"链接保留，但点击后展示上面的提示卡片即可，不再要求输入邮箱。
+- 同步在 `UserTable` 行操作里增加 **"重置密码"** 项：调用一个新的边缘函数 `admin-reset-password`，由管理员输入或自动生成新密码后展示给管理员转告员工。
+  - 新建 `supabase/functions/admin-reset-password/index.ts`：admin 校验 + `admin.auth.admin.updateUserById(userId, { password })`。
+  - 前端 `ResetUserPasswordDialog` 弹窗：填入新密码 → 成功后显示提示。
 
-### 4. 其它清理
+> 说明：`/reset-password` 页面留作未来真实邮箱用户的兜底，不删除。
 
-- 全工程搜索 `学习清单`、`收录为官方`、`申请收录`、`加入知识库`，确认只剩上面已处理的位置；如有遗漏文案一并对齐到新口径。
-- 不动 `/portal` 的 OfficialKnowledgeManager、AiKnowledgeDialog、CorrectionReviewPanel —— 那是管理员通道，符合"官方知识只由管理员维护"的新定位。
+### C. 修复登录 / 待审核提示
+- `useAuth.fetchUserRole`：检测到 `suspended` 时，区分"待审核"和"被暂停"。最简单的做法 —— 始终用 **"账号待管理员审核通过后方可登录"** 这条更友好的文案；管理员手动暂停时同样适用，语义不冲突。
+- `LoginForm.handleSubmit`：登录成功后**不再立刻**弹"登录成功"。改为：
+  - `await signIn(...)` 成功后，等待 `useAuth` 完成角色拉取再决定。
+  - 实现方式：`signIn` 后不弹 toast，由 `Scan` / 路由层在 `loading=false && user` 时再展示欢迎 toast；或者更简单，直接去掉"登录成功" toast（页面会自然跳转到主界面）。
+- 这样待审核用户只会看到那一条"待审核"的提示，不会自相矛盾。
 
-## 不做的事情
+### D. 登录失败文案更准确
+`LoginForm`：捕获到 supabase 错误时，把 `Invalid login credentials` 翻译成"用户名不存在或密码错误"，其他 error 透传 `error.message`。
 
-- 不删除 `product_knowledge` 表和已有数据（保持向后兼容，旧数据仍可在 MyLibrary「我建的」标签内只读查看）。
-- 不改 `submit-correction` / `review-correction` 边缘函数。
-- 不动识物结果的知识卡渲染、闲鱼行情卡、纠错对话框等其它模块。
+---
+
+## 涉及改动文件
+
+技术细节区：
+- `supabase/functions/admin-create-user/index.ts`：`getClaims` → `getUser`。
+- `supabase/functions/admin-reset-password/index.ts`：**新建**，admin 校验 + `updateUserById`。
+- `src/components/admin/ResetUserPasswordDialog.tsx`：**新建**，admin 给员工设新密码的弹窗。
+- `src/components/admin/UserTable.tsx`：菜单加入"重置密码"。
+- `src/components/auth/ForgotPasswordForm.tsx`：改成"请联系管理员"提示卡片，移除邮箱输入和 `resetPasswordForEmail` 调用。
+- `src/components/auth/LoginForm.tsx`：移除"登录成功" toast；登录失败时给出区分性的中文提示。
+- `src/hooks/useAuth.tsx`：suspended 时的 toast 文案改为"账号待管理员审核通过后方可登录"。
+
+不动：数据库 schema、`handle_new_user` 触发器、RLS、`public-register` 流程、`/reset-password` 页面。
+
+---
+
+## 验收
+
+1. 管理员在 /portal 新建用户 → 成功创建并出现在列表中。
+2. 新用户自助注册 → 登录看到"待审核"友好提示，不会再看到"已被暂停"。
+3. 管理员通过审核 → 用户重新登录可正常进入。
+4. 用户忘记密码 → 提示联系管理员；管理员在用户列表点"重置密码" → 输入新密码 → 用户用新密码登录成功。
+5. 用错误密码登录 → 提示"用户名不存在或密码错误"。
