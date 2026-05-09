@@ -344,7 +344,7 @@ export function LiveStreamPanel() {
     setCurrentProductId(null);
     setRecognitionTime(null);
     setElapsedTime(0);
-    setKnowledgeAdded(false);
+    setFavorited(false);
     setEnriched(null);
     setIsEnriching(false);
     setRecognitionFailed(false);
