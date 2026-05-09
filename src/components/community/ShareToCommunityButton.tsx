@@ -74,7 +74,7 @@ export function ShareToCommunityButton({
       });
       if (error) throw error;
       setShared(true);
-      toast({ title: '已分享到中古圈' });
+      toast({ title: '已分享到中古圈', description: '同事们可以在「中古圈」里看到你的发现' });
     } catch (e: any) {
       console.error('[ShareToCommunity] error:', e);
       toast({ title: '分享失败', description: e?.message || '请重试', variant: 'destructive' });
