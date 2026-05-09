@@ -45,6 +45,49 @@ Deno.serve(async (req) => {
 
     const email = `${username.toLowerCase()}@boomeroff.local`;
 
+    // Look up existing user by email (paginate auth.users — small user base)
+    const findExistingUser = async (): Promise<{ id: string } | null> => {
+      for (let page = 1; page <= 20; page++) {
+        const { data, error } = await admin.auth.admin.listUsers({
+          page,
+          perPage: 200,
+        });
+        if (error) {
+          console.error("listUsers error:", error);
+          return null;
+        }
+        const found = (data?.users || []).find(
+          (u) => (u.email || "").toLowerCase() === email,
+        );
+        if (found) return { id: found.id };
+        if (!data?.users || data.users.length < 200) return null;
+      }
+      return null;
+    };
+
+    const respondExisting = async (userId: string) => {
+      const { data: roleRow } = await admin
+        .from("user_roles")
+        .select("suspended")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const suspended = roleRow?.suspended === true;
+      return json(
+        {
+          error: suspended
+            ? "您已提交过申请，正在等待管理员审核，请耐心等待"
+            : "该用户名已被注册，请直接登录或更换用户名",
+        },
+        409,
+      );
+    };
+
+    // Pre-check: detect existing user to give precise feedback
+    const pre = await findExistingUser();
+    if (pre) {
+      return await respondExisting(pre.id);
+    }
+
     const { data: created, error: createErr } =
       await admin.auth.admin.createUser({
         email,
@@ -55,10 +98,13 @@ Deno.serve(async (req) => {
 
     if (createErr || !created.user) {
       const msg = createErr?.message ?? "注册失败";
-      const friendly = /already|exists|registered/i.test(msg)
-        ? "用户名已存在"
-        : msg;
-      return json({ error: friendly }, 400);
+      // Race condition: user created between pre-check and now → still respond cleanly
+      if (/already|exists|registered/i.test(msg)) {
+        const post = await findExistingUser();
+        if (post) return await respondExisting(post.id);
+        return json({ error: "用户名已存在" }, 409);
+      }
+      return json({ error: msg }, 400);
     }
 
     const newUserId = created.user.id;
