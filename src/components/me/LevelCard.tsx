@@ -59,7 +59,6 @@ export function LevelCard({ totalExp }: { totalExp: number }) {
             </div>
           </DrawerContent>
         </Drawer>
-      </div>
       <div className="flex items-center justify-between text-xs opacity-90 mb-1.5">
         <span className="tabular-nums">{info.totalExp} EXP</span>
         <span className="tabular-nums">
