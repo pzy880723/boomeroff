@@ -19,6 +19,9 @@ interface ShareToCommunityButtonProps {
   variant?: 'default' | 'outline' | 'secondary';
   size?: 'sm' | 'lg' | 'default';
   className?: string;
+  /** 自定义按钮文案；不传则使用默认文案 */
+  label?: string;
+  sharedLabel?: string;
 }
 
 /**
@@ -28,7 +31,9 @@ interface ShareToCommunityButtonProps {
 export function ShareToCommunityButton({
   productId, name, category, era, origin, imageUrl,
   sellingPoints = [], tips,
-  variant = 'secondary', size = 'lg', className = '',
+  variant = 'default', size = 'lg', className = '',
+  label = '分享到中古圈 · 让更多店员看到',
+  sharedLabel = '已分享到中古圈',
 }: ShareToCommunityButtonProps) {
   const { user } = useAuth();
   const { toast } = useToast();
