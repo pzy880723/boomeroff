@@ -63,17 +63,22 @@ export function UserTable() {
     try {
       const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
-        .select(`
-          id,
-          user_id,
-          role,
-          created_at,
-          suspended,
-          suspended_at,
-          profiles!user_roles_user_id_fkey(display_name, avatar_url)
-        `);
+        .select('id, user_id, role, created_at, suspended, suspended_at')
+        .order('created_at', { ascending: false });
 
       if (rolesError) throw rolesError;
+
+      const userIds = (roles || []).map((r: any) => r.user_id);
+      let profileMap: Record<string, { display_name: string | null; avatar_url: string | null }> = {};
+      if (userIds.length > 0) {
+        const { data: profs } = await supabase
+          .from('profiles')
+          .select('user_id, display_name, avatar_url')
+          .in('user_id', userIds);
+        (profs || []).forEach((p: any) => {
+          profileMap[p.user_id] = { display_name: p.display_name, avatar_url: p.avatar_url };
+        });
+      }
 
       const usersWithProfiles = (roles || []).map((r: any) => ({
         id: r.id,
@@ -82,7 +87,7 @@ export function UserTable() {
         created_at: r.created_at,
         suspended: r.suspended || false,
         suspended_at: r.suspended_at,
-        profile: r.profiles,
+        profile: profileMap[r.user_id],
       }));
 
       setUsers(usersWithProfiles);
