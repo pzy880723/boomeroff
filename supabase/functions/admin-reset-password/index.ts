@@ -8,12 +8,8 @@ const corsHeaders = {
 };
 
 const BodySchema = z.object({
-  username: z
-    .string()
-    .trim()
-    .regex(/^[a-zA-Z0-9_]{3,32}$/, "用户名仅支持字母、数字、下划线，3-32 位"),
-  password: z.string().min(6, "密码至少 6 位").max(72),
-  role: z.enum(["admin", "anchor"]),
+  user_id: z.string().uuid(),
+  new_password: z.string().min(6, "密码至少 6 位").max(72),
 });
 
 function json(body: unknown, status = 200) {
@@ -38,7 +34,6 @@ Deno.serve(async (req) => {
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify caller and check admin role
     const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -57,7 +52,7 @@ Deno.serve(async (req) => {
       _role: "admin",
     });
     if (roleErr || !isAdmin) {
-      return json({ error: "仅管理员可创建用户" }, 403);
+      return json({ error: "仅管理员可重置密码" }, 403);
     }
 
     const parsed = BodySchema.safeParse(await req.json());
@@ -65,51 +60,18 @@ Deno.serve(async (req) => {
       const first = parsed.error.errors[0]?.message ?? "参数错误";
       return json({ error: first }, 400);
     }
-    const { username, password, role } = parsed.data;
+    const { user_id, new_password } = parsed.data;
 
-    const email = `${username.toLowerCase()}@boomeroff.local`;
-
-    const { data: created, error: createErr } =
-      await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { display_name: username },
-      });
-
-    if (createErr || !created.user) {
-      const msg = createErr?.message ?? "创建失败";
-      const friendly = /already|exists|registered/i.test(msg)
-        ? "用户名已存在"
-        : msg;
-      return json({ error: friendly }, 400);
-    }
-
-    const newUserId = created.user.id;
-
-    // handle_new_user trigger inserts default 'anchor' role.
-    // If admin requested, replace it.
-    if (role === "admin") {
-      await admin.from("user_roles").delete().eq("user_id", newUserId);
-      const { error: insertRoleErr } = await admin
-        .from("user_roles")
-        .insert({ user_id: newUserId, role: "admin" });
-      if (insertRoleErr) {
-        return json(
-          { error: `用户已创建，但角色设置失败：${insertRoleErr.message}` },
-          500,
-        );
-      }
-    }
-
-    return json({
-      success: true,
-      user_id: newUserId,
-      username,
-      role,
+    const { error: updErr } = await admin.auth.admin.updateUserById(user_id, {
+      password: new_password,
     });
+    if (updErr) {
+      return json({ error: updErr.message }, 400);
+    }
+
+    return json({ success: true });
   } catch (e) {
-    console.error("admin-create-user error:", e);
+    console.error("admin-reset-password error:", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
   }
 });
