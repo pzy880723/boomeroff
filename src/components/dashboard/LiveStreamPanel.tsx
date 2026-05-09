@@ -931,55 +931,10 @@ export function LiveStreamPanel() {
                 onApplied={(next) => setOverriddenResult(next)}
               />
 
-              {/* 团队/官方知识库 + 个人收藏 */}
+              {/* 分享到中古圈（主推） + 个人收藏 */}
               {currentProductId && (
                 <div className="space-y-2 pt-1">
-                  {/* 主按钮：申请收录 / 直接收录为官方 */}
-                  <Button
-                    onClick={addToKnowledge}
-                    disabled={knowledgeAdded || savingKnowledge}
-                    size="lg"
-                    className={`w-full h-12 rounded-full gap-2 text-base font-medium shadow-soft ${
-                      knowledgeAdded
-                        ? 'bg-success text-success-foreground hover:bg-success'
-                        : 'bg-gradient-accent text-accent-foreground hover:opacity-95'
-                    }`}
-                  >
-                    {savingKnowledge ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        正在收录...
-                      </>
-                    ) : knowledgeAdded ? (
-                      <>
-                        <Check className="w-5 h-5" />
-                        {isAdmin ? '已收录为官方知识' : '已申请收录'}
-                      </>
-                    ) : (
-                      <>
-                        <Award className="w-5 h-5" />
-                        {isAdmin ? '直接收录为官方知识' : '申请收录到官方知识库'}
-                      </>
-                    )}
-                  </Button>
-
-                  {/* 次按钮：个人收藏 */}
-                  <Button
-                    onClick={toggleFavorite}
-                    disabled={savingFav}
-                    variant={favorited ? 'outline' : 'secondary'}
-                    size="lg"
-                    className="w-full h-11 rounded-full gap-2"
-                  >
-                    {savingFav ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Star className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                    )}
-                    {favorited ? '已加入我的学习清单' : '收藏到我的学习清单'}
-                  </Button>
-
-                  {/* 分享到中古圈 */}
+                  {/* 主按钮：分享到中古圈 */}
                   <ShareToCommunityButton
                     productId={currentProductId}
                     name={displayResult.name}
@@ -990,12 +945,29 @@ export function LiveStreamPanel() {
                     sellingPoints={displayResult.sellingPoints || []}
                     tips={displayResult.tips}
                     size="lg"
-                    className="w-full h-11 rounded-full"
+                    variant="default"
+                    className="w-full h-12 rounded-full bg-gradient-accent text-accent-foreground hover:opacity-95 shadow-soft text-base font-medium"
                   />
+
+                  {/* 次按钮：收藏为个人知识 */}
+                  <Button
+                    onClick={toggleFavorite}
+                    disabled={savingFav}
+                    variant="outline"
+                    size="lg"
+                    className="w-full h-11 rounded-full gap-2"
+                  >
+                    {savingFav ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Star className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                    )}
+                    {favorited ? '已收藏为个人知识' : '收藏为个人知识'}
+                  </Button>
 
                   {/* 引导提示 */}
                   <p className="text-[11px] text-muted-foreground text-center px-2 leading-relaxed">
-                    收藏只有自己看得到 · {isAdmin ? '收录后所有同事都能学到' : '申请收录会让所有同事都能学到'}
+                    个人收藏只有自己能看到 · 分享到中古圈能让所有同事学到这件好物
                   </p>
                 </div>
               )}
