@@ -45,6 +45,35 @@ Deno.serve(async (req) => {
 
     const email = `${username.toLowerCase()}@boomeroff.local`;
 
+    // Pre-check: detect existing user to give precise feedback
+    {
+      const { data: list } = await admin.auth.admin.listUsers({
+        page: 1,
+        perPage: 1,
+        // @ts-ignore - filter is supported at the GoTrue API level
+        filter: `email.eq.${email}`,
+      });
+      const existing = (list?.users || []).find(
+        (u) => (u.email || "").toLowerCase() === email,
+      );
+      if (existing) {
+        const { data: roleRow } = await admin
+          .from("user_roles")
+          .select("suspended")
+          .eq("user_id", existing.id)
+          .maybeSingle();
+        const suspended = roleRow?.suspended === true;
+        return json(
+          {
+            error: suspended
+              ? "您已提交过申请，正在等待管理员审核，请耐心等待"
+              : "该用户名已被注册，请直接登录或更换用户名",
+          },
+          409,
+        );
+      }
+    }
+
     const { data: created, error: createErr } =
       await admin.auth.admin.createUser({
         email,
