@@ -100,7 +100,7 @@ export function ShareToCommunityButton({
       ) : (
         <Share2 className="w-4 h-4" />
       )}
-      {shared ? '已分享到中古圈' : '分享到中古圈'}
+      {shared ? sharedLabel : label}
     </Button>
   );
 }
