@@ -69,6 +69,22 @@ Deno.serve(async (req) => {
 
     const email = `${username.toLowerCase()}@boomeroff.local`;
 
+    // Pre-check duplicate username
+    for (let page = 1; page <= 20; page++) {
+      const { data: list, error: listErr } = await admin.auth.admin.listUsers({
+        page,
+        perPage: 200,
+      });
+      if (listErr) break;
+      const found = (list?.users || []).find(
+        (u) => (u.email || "").toLowerCase() === email,
+      );
+      if (found) {
+        return json({ error: "用户名已存在" }, 409);
+      }
+      if (!list?.users || list.users.length < 200) break;
+    }
+
     const { data: created, error: createErr } =
       await admin.auth.admin.createUser({
         email,
@@ -79,10 +95,8 @@ Deno.serve(async (req) => {
 
     if (createErr || !created.user) {
       const msg = createErr?.message ?? "创建失败";
-      const friendly = /already|exists|registered/i.test(msg)
-        ? "用户名已存在"
-        : msg;
-      return json({ error: friendly }, 400);
+      const dup = /already|exists|registered/i.test(msg);
+      return json({ error: dup ? "用户名已存在" : msg }, dup ? 409 : 400);
     }
 
     const newUserId = created.user.id;
