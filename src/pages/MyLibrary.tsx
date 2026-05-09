@@ -123,13 +123,9 @@ export default function MyLibrary() {
   const loadAll = async () => {
     if (!user) return;
     setLoading(true);
-    const [favRes, knowRes, resultRes] = await Promise.all([
+    const [favRes, resultRes] = await Promise.all([
       supabase.from('user_favorites').select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false }).limit(300),
-      supabase.from('product_knowledge')
-        .select('id, product_id, product_name, category, era, origin, image_url, tips, selling_points, created_at')
-        .eq('created_by', user.id)
         .order('created_at', { ascending: false }).limit(300),
       supabase.from('knowledge_test_results')
         .select('item_kind, item_id, passed_at')
@@ -189,21 +185,7 @@ export default function MyLibrary() {
       };
     });
 
-    const know: UnifiedItem[] = (knowRes.data || []).map((k: any) => ({
-      key: `k:${k.id}`,
-      kind: 'knowledge',
-      knowledge_id: k.id,
-      category: k.category as ProductCategory,
-      name: k.product_name || '未命名',
-      cover_url: isUsableImage(k.image_url) ? k.image_url : null,
-      summary: k.tips || null,
-      era: k.era,
-      origin: k.origin,
-      created_at: k.created_at,
-      passed: passedSet.has(`knowledge:${k.id}`),
-    }));
-
-    const merged = [...fav, ...know].sort((a, b) =>
+    const merged = fav.sort((a, b) =>
       (b.created_at || '').localeCompare(a.created_at || ''));
     setItems(merged);
     setLoading(false);
