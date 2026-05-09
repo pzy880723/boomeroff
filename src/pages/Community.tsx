@@ -153,7 +153,7 @@ export default function Community() {
         },
       });
       setFavs((s) => new Set(s).add(post.product_id!));
-      toast.success('已收藏到我的学习清单');
+      toast.success('已收藏为个人知识');
     }
   };
 
@@ -460,7 +460,7 @@ export default function Community() {
                     {active.product_id && (
                       <Button variant="outline" size="sm" onClick={() => toggleFav(active)}>
                         <Star className={cn('w-4 h-4 mr-1', favs.has(active.product_id) && 'fill-yellow-400 text-yellow-400')} />
-                        {favs.has(active.product_id) ? '已收藏' : '收藏到我的学习清单'}
+                        {favs.has(active.product_id) ? '已收藏' : '收藏为个人知识'}
                       </Button>
                     )}
                   </div>

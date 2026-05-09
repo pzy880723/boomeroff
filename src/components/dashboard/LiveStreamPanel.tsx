@@ -6,7 +6,7 @@ import { useProductRecognition } from '@/hooks/useProductRecognition';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Award, Star,
+  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Star,
 } from 'lucide-react';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
@@ -28,8 +28,6 @@ export function LiveStreamPanel() {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [knowledgeAdded, setKnowledgeAdded] = useState(false);
-  const [savingKnowledge, setSavingKnowledge] = useState(false);
   const [favorited, setFavorited] = useState(false);
   const [savingFav, setSavingFav] = useState(false);
   
@@ -346,7 +344,7 @@ export function LiveStreamPanel() {
     setCurrentProductId(null);
     setRecognitionTime(null);
     setElapsedTime(0);
-    setKnowledgeAdded(false);
+    setFavorited(false);
     setEnriched(null);
     setIsEnriching(false);
     setRecognitionFailed(false);
@@ -501,132 +499,6 @@ export function LiveStreamPanel() {
     }
   };
 
-  const addToKnowledge = async () => {
-    if (!currentProductId || !user || !displayResult) return;
-    setSavingKnowledge(true);
-    try {
-      const sp = displayResult.sellingPoints || [];
-
-      // 拉取已上传的真实图片 URL（避免把 base64 写进 jsonb/text）
-      const { data: prod } = await withRetry(async () => await
-        supabase
-          .from('products')
-          .select('image_url')
-          .eq('id', currentProductId)
-          .maybeSingle(),
-      );
-      const coverUrl = prod?.image_url || null;
-
-      // 现状探查（顺序执行，避免并发互相超时）
-      const pkRes = await withRetry(async () => await
-        supabase
-          .from('product_knowledge')
-          .select('id')
-          .eq('product_id', currentProductId)
-          .limit(1)
-          .maybeSingle(),
-      );
-      const ofRes = isAdmin
-        ? await withRetry(async () => await
-            supabase
-              .from('official_knowledge')
-              .select('id')
-              .eq('source_product_id', currentProductId)
-              .limit(1)
-              .maybeSingle(),
-          )
-        : { data: { id: 'skip' } as any };
-
-      let didSomething = false;
-
-      // 缺 product_knowledge → 补
-      if (!pkRes.data) {
-        const { error } = await withRetry(async () => await
-          supabase.from('product_knowledge').insert({
-            product_id: currentProductId,
-            category: displayResult.category,
-            product_name: displayResult.name,
-            selling_points: sp as any,
-            tips: serializeTips(displayResult.tips ?? null),
-            era: displayResult.era || null,
-            origin: displayResult.origin || null,
-            image_url: coverUrl,
-            created_by: user.id,
-            is_official: isAdmin,
-          }),
-        );
-        if (error) throw error;
-        didSomething = true;
-      } else if (isAdmin) {
-        // 已存在但旧版未标记 official → 升级
-        await withRetry(async () => await
-          supabase
-            .from('product_knowledge')
-            .update({ is_official: true })
-            .eq('id', pkRes.data!.id),
-        );
-      }
-
-      // admin 且缺 official_knowledge → 补建
-      if (isAdmin && !ofRes.data) {
-        const { error: ofErr } = await withRetry(async () => await
-          supabase.from('official_knowledge').insert({
-            name: displayResult.name,
-            category: displayResult.category,
-            summary: displayResult.description || null,
-            content: {
-              material: displayResult.material || null,
-              craft: displayResult.craft || null,
-              dimensions: displayResult.dimensions || null,
-              condition: displayResult.condition || null,
-            },
-            era: displayResult.era || null,
-            origin: displayResult.origin || null,
-            cover_url: coverUrl,
-            gallery: coverUrl ? [coverUrl] : [],
-            selling_points: sp as any,
-            tips: serializeTips(displayResult.tips ?? null),
-            source_product_id: currentProductId,
-            created_by: user.id,
-          }),
-        );
-        if (ofErr) throw ofErr;
-        didSomething = true;
-      }
-
-      setKnowledgeAdded(true);
-
-      if (!didSomething) {
-        toast({ title: '已在知识库中', description: '无需重复添加' });
-      } else {
-        toast({
-          title: isAdmin ? '已收录为官方知识' : '已申请收录',
-          description: isAdmin ? '所有同事都能在「官方知识」看到' : '已加入团队池，等待管理员审核',
-        });
-      }
-    } catch (e: any) {
-      console.error('[Knowledge] insert error:', e);
-      const code = e?.code || '';
-      if (code === '42501' || /row-level security/i.test(e?.message || '')) {
-        toast({ title: '权限不足', description: '需要店员或管理员权限', variant: 'destructive' });
-      } else if (code === '23505' || /duplicate/i.test(e?.message || '')) {
-        // 已存在视作成功
-        setKnowledgeAdded(true);
-        toast({ title: '已在知识库中', description: '无需重复添加' });
-      } else if (isTransientNetworkError(e)) {
-        toast({
-          title: '网络不稳定',
-          description: '收录没有完成，请稍后重试',
-          variant: 'destructive',
-        });
-      } else {
-        toast({ title: '加入失败', description: e?.message || '请稍后重试', variant: 'destructive' });
-      }
-    } finally {
-      setSavingKnowledge(false);
-    }
-  };
-
   const toggleFavorite = async () => {
     if (!currentProductId || !user || !displayResult) return;
     setSavingFav(true);
@@ -700,55 +572,32 @@ export function LiveStreamPanel() {
     ? { ...merged, enriched: enriched ?? merged.enriched, isEnriching }
     : null;
 
-  // 进入已识别商品时，同步「加入知识库」与「收藏」状态，避免重复入库
+  // 进入已识别商品时，同步「收藏」状态
   useEffect(() => {
     if (!currentProductId || !user) {
-      setKnowledgeAdded(false);
       setFavorited(false);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const [pkRes, favRes, ofRes] = await Promise.all([
-          supabase
-            .from('product_knowledge')
-            .select('id')
-            .eq('product_id', currentProductId)
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('user_favorites')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('source_type', 'recognition')
-            .eq('source_id', currentProductId)
-            .limit(1)
-            .maybeSingle(),
-          // admin 还要确认 official_knowledge 也存在，才算"已收录"
-          isAdmin
-            ? supabase
-                .from('official_knowledge')
-                .select('id')
-                .eq('source_product_id', currentProductId)
-                .limit(1)
-                .maybeSingle()
-            : Promise.resolve({ data: { id: 'skip' } } as any),
-        ]);
+        const { data } = await supabase
+          .from('user_favorites')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('source_type', 'recognition')
+          .eq('source_id', currentProductId)
+          .limit(1)
+          .maybeSingle();
         if (cancelled) return;
-        setKnowledgeAdded(!!pkRes.data && !!ofRes.data);
-        setFavorited(!!favRes.data);
+        setFavorited(!!data);
       } catch (e) {
-        // 网络抖动时不要让整页崩溃，保持按钮可操作
-        console.warn('[Status sync] failed:', e);
-        if (!cancelled) {
-          setKnowledgeAdded(false);
-          setFavorited(false);
-        }
+        console.warn('[Favorite sync] failed:', e);
+        if (!cancelled) setFavorited(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [currentProductId, user, isAdmin]);
+  }, [currentProductId, user]);
 
   const switchMode = (mode: CaptureMode) => {
     if (mode === captureMode) return;
@@ -1037,7 +886,7 @@ export function LiveStreamPanel() {
                     clearResult();
                     setCurrentProductId(null);
                     setRecognitionTime(null);
-                    setKnowledgeAdded(false);
+                    setFavorited(false);
                     startCamera();
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
@@ -1082,55 +931,10 @@ export function LiveStreamPanel() {
                 onApplied={(next) => setOverriddenResult(next)}
               />
 
-              {/* 团队/官方知识库 + 个人收藏 */}
+              {/* 分享到中古圈（主推） + 个人收藏 */}
               {currentProductId && (
                 <div className="space-y-2 pt-1">
-                  {/* 主按钮：申请收录 / 直接收录为官方 */}
-                  <Button
-                    onClick={addToKnowledge}
-                    disabled={knowledgeAdded || savingKnowledge}
-                    size="lg"
-                    className={`w-full h-12 rounded-full gap-2 text-base font-medium shadow-soft ${
-                      knowledgeAdded
-                        ? 'bg-success text-success-foreground hover:bg-success'
-                        : 'bg-gradient-accent text-accent-foreground hover:opacity-95'
-                    }`}
-                  >
-                    {savingKnowledge ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        正在收录...
-                      </>
-                    ) : knowledgeAdded ? (
-                      <>
-                        <Check className="w-5 h-5" />
-                        {isAdmin ? '已收录为官方知识' : '已申请收录'}
-                      </>
-                    ) : (
-                      <>
-                        <Award className="w-5 h-5" />
-                        {isAdmin ? '直接收录为官方知识' : '申请收录到官方知识库'}
-                      </>
-                    )}
-                  </Button>
-
-                  {/* 次按钮：个人收藏 */}
-                  <Button
-                    onClick={toggleFavorite}
-                    disabled={savingFav}
-                    variant={favorited ? 'outline' : 'secondary'}
-                    size="lg"
-                    className="w-full h-11 rounded-full gap-2"
-                  >
-                    {savingFav ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Star className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                    )}
-                    {favorited ? '已加入我的学习清单' : '收藏到我的学习清单'}
-                  </Button>
-
-                  {/* 分享到中古圈 */}
+                  {/* 主按钮：分享到中古圈 */}
                   <ShareToCommunityButton
                     productId={currentProductId}
                     name={displayResult.name}
@@ -1141,12 +945,29 @@ export function LiveStreamPanel() {
                     sellingPoints={displayResult.sellingPoints || []}
                     tips={displayResult.tips}
                     size="lg"
-                    className="w-full h-11 rounded-full"
+                    variant="default"
+                    className="w-full h-12 rounded-full bg-gradient-accent text-accent-foreground hover:opacity-95 shadow-soft text-base font-medium"
                   />
+
+                  {/* 次按钮：收藏为个人知识 */}
+                  <Button
+                    onClick={toggleFavorite}
+                    disabled={savingFav}
+                    variant="outline"
+                    size="lg"
+                    className="w-full h-11 rounded-full gap-2"
+                  >
+                    {savingFav ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Star className={`w-4 h-4 ${favorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                    )}
+                    {favorited ? '已收藏为个人知识' : '收藏为个人知识'}
+                  </Button>
 
                   {/* 引导提示 */}
                   <p className="text-[11px] text-muted-foreground text-center px-2 leading-relaxed">
-                    收藏只有自己看得到 · {isAdmin ? '收录后所有同事都能学到' : '申请收录会让所有同事都能学到'}
+                    个人收藏只有自己能看到 · 分享到中古圈能让所有同事学到这件好物
                   </p>
                 </div>
               )}
