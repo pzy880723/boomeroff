@@ -29,7 +29,6 @@ export function LiveStreamPanel() {
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [favorited, setFavorited] = useState(false);
-  const [favorited, setFavorited] = useState(false);
   const [savingFav, setSavingFav] = useState(false);
   
   const [overriddenResult, setOverriddenResult] = useState<RecognitionResult | null>(null);
