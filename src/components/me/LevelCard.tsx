@@ -13,20 +13,25 @@ export function LevelCard({ totalExp }: { totalExp: number }) {
       <div className="absolute -right-4 -top-4 opacity-10">
         <Crown className="w-24 h-24" />
       </div>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-base font-semibold">Lv.{info.level} {info.title}</span>
-          {info.isMax && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-foreground/20">已满级</span>
-          )}
-        </div>
-        <Drawer open={open} onOpenChange={setOpen}>
-          <DrawerTrigger asChild>
-            <button className="flex items-center gap-1 text-xs opacity-90 hover:opacity-100">
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerTrigger asChild>
+          <button
+            type="button"
+            aria-label="查看等级规则"
+            className="w-full flex items-center justify-between mb-2 text-left cursor-pointer rounded-md -mx-1 px-1 py-1 hover:bg-primary-foreground/10 active:bg-primary-foreground/15 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <span className="text-base font-semibold">Lv.{info.level} {info.title}</span>
+              {info.isMax && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-foreground/20">已满级</span>
+              )}
+            </span>
+            <span className="flex items-center gap-1.5 text-xs opacity-90 px-2 py-1 -mr-1 rounded-md bg-primary-foreground/10">
               <Info className="w-3.5 h-3.5" /> 等级规则
-            </button>
-          </DrawerTrigger>
-          <DrawerContent>
+            </span>
+          </button>
+        </DrawerTrigger>
+        <DrawerContent>
             <DrawerHeader><DrawerTitle>等级与经验规则</DrawerTitle></DrawerHeader>
             <div className="px-4 pb-6 space-y-4 max-h-[70vh] overflow-y-auto">
               <div>
@@ -54,7 +59,6 @@ export function LevelCard({ totalExp }: { totalExp: number }) {
             </div>
           </DrawerContent>
         </Drawer>
-      </div>
       <div className="flex items-center justify-between text-xs opacity-90 mb-1.5">
         <span className="tabular-nums">{info.totalExp} EXP</span>
         <span className="tabular-nums">
