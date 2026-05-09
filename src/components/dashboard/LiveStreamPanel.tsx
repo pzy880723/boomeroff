@@ -28,8 +28,7 @@ export function LiveStreamPanel() {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [knowledgeAdded, setKnowledgeAdded] = useState(false);
-  const [savingKnowledge, setSavingKnowledge] = useState(false);
+  const [favorited, setFavorited] = useState(false);
   const [favorited, setFavorited] = useState(false);
   const [savingFav, setSavingFav] = useState(false);
   
