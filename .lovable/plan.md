@@ -1,29 +1,31 @@
 ## 目标
-让「我的」页面里 LevelCard（等级卡片）顶部的等级文字与「等级规则」文字整块都可以点击打开等级规则抽屉，而不是只有 ⓘ 小图标可点。
+把整个网页的「网页图标 / favicon」（浏览器标签页、分享链接缩略图旁边的小图标）换成 BOOMER-OFF Vintage 红色 logo。
 
 ## 现状
-`src/components/me/LevelCard.tsx` 里：
-- 抽屉触发器 `<DrawerTrigger>` 只包裹了右上角的 `ⓘ + 等级规则` 这个小按钮
-- 左侧的 `Lv.20 古道掌门` 文字完全不能点
-- 右侧按钮虽然 icon 和文字都在同一个 `<button>` 里，但因为字号小（text-xs）、间距小（gap-1）、整块只占很窄一条，手指容易只点到图标位置
+- `index.html` 没有任何 `<link rel="icon">`，浏览器默认请求 `/favicon.ico`
+- `public/` 目录里目前应该有一个默认 `favicon.ico`，会覆盖任何同名替换
+- 用户已上传 logo 图：`user-uploads://IMG_5966.jpeg`（红底白字 BOOMER-OFF Vintage 方形图）
 
-## 改动方案（仅前端 UI）
-只编辑 `src/components/me/LevelCard.tsx`：
+## 改动方案
 
-1. 把整个卡片顶部一行（`Lv.X 标题` + 右侧的「等级规则」入口）都作为打开抽屉的触发区：
-   - 用一个 `<DrawerTrigger asChild><button>…</button></DrawerTrigger>` 包裹整行 flex 容器
-   - 这样点 `Lv.20`、`古道掌门`、`等级规则`、`ⓘ`、空白处都能打开抽屉
-2. 同时把右侧「等级规则」按钮的可点击区域加大：
-   - 加 `px-2 py-1 -mx-2 -my-1`（视觉位置不变，但 hit area 更大）
-   - `gap-1` 改 `gap-1.5`，让图标和文字之间也算点击区
-3. 给整行加上 `cursor-pointer`、`role="button"`、`aria-label="查看等级规则"`，无障碍可达
-4. 不动抽屉内容、不动进度条、不动经验数值显示
+1. 把上传的 logo 复制到 `public/favicon.png`（PNG 比 JPEG 在小尺寸下更清晰，背景也保持红色方块，识别度高）
+2. 删除 `public/favicon.ico`，避免浏览器优先请求旧的 ico 覆盖新图标
+3. 在 `index.html` 的 `<head>` 里加：
+   ```html
+   <link rel="icon" type="image/png" href="/favicon.png" />
+   <link rel="apple-touch-icon" href="/favicon.png" />
+   ```
+   - `apple-touch-icon` 让 iOS「添加到主屏幕」和部分 App 内分享卡片也用这张图
+4. 同时给 OG 分享卡片补一张缩略图，让微信 / iMessage / Twitter 分享链接时图标用 logo：
+   ```html
+   <meta property="og:image" content="/favicon.png" />
+   <meta name="twitter:image" content="/favicon.png" />
+   ```
 
 ## 不在范围内
-- 不改 `src/lib/level.ts` 的等级或经验规则
-- 不改签到卡 / 数据库 / 经验触发器
-- 不调整其他页面
+- 不改 app 内的 logo 组件（`src/assets/boomer-off-vintage-logo.png` 继续使用）
+- 不改 `ShareMenu` 生成的长图卡片（那个是另一个东西，已经带 logo）
+- 不改任何业务逻辑、数据库、等级系统
 
-## 技术细节
-- 因为整行变成了 `<button>`，里面不能再嵌一个 `<button>`（HTML 不允许嵌套交互元素）。所以右侧那个原来的小 `<button>` 要降级成 `<span>`，仅作为视觉提示，整行的外层按钮负责真正的点击。
-- `Drawer` 的 `open / setOpen` 状态保持不变，仍由 React state 控制。
+## 注意
+- 浏览器对 favicon 有强缓存，发布后用户可能要硬刷新或等几分钟才看到新图标
