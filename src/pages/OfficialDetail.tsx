@@ -169,7 +169,7 @@ export default function OfficialDetail() {
         />
         <div className="relative container mx-auto max-w-screen-md flex items-center justify-between px-3 py-2">
           <button
-            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/library'))}
+            onClick={() => navigate('/library')}
             className="w-10 h-10 rounded-full bg-background/80 backdrop-blur flex items-center justify-center"
             aria-label="返回"
           >
