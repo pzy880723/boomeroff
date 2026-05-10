@@ -28,6 +28,7 @@ import { Link } from 'react-router-dom';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import type { Json } from '@/integrations/supabase/types';
 import { ProductDetailDialog } from '@/components/history/ProductDetailDialog';
+import { normalizeSellingPoints } from '@/lib/script';
 
 const PAGE_SIZE = 20;
 
