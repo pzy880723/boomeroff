@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap');
+/* 字体已经在 index.html 中以非阻塞方式加载，避免阻塞 CSS 解析 */
 
 @tailwind base;
 @tailwind components;
