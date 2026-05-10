@@ -330,19 +330,23 @@ export default function History() {
                     )}
 
                     {/* 卖点预览 */}
-                    {Array.isArray(product.selling_points) && (product.selling_points as string[]).length > 0 && (
-                      <div className="bg-muted/50 rounded-lg p-3">
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-primary mb-1.5">
-                          <Sparkles className="h-3 w-3" />
-                          核心卖点
+                    {(() => {
+                      const sp = normalizeSellingPoints(product.selling_points);
+                      if (sp.length === 0) return null;
+                      return (
+                        <div className="bg-muted/50 rounded-lg p-3">
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-primary mb-1.5">
+                            <Sparkles className="h-3 w-3" />
+                            核心卖点
+                          </div>
+                          <ul className="space-y-1">
+                            {sp.slice(0, 2).map((p, i) => (
+                              <li key={i} className="text-xs text-muted-foreground line-clamp-1">· {p.text}</li>
+                            ))}
+                          </ul>
                         </div>
-                        <ul className="space-y-1">
-                          {(product.selling_points as string[]).slice(0, 2).map((p, i) => (
-                            <li key={i} className="text-xs text-muted-foreground line-clamp-1">· {p}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               ))}
