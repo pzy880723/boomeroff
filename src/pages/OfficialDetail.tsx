@@ -533,7 +533,7 @@ export default function OfficialDetail() {
       </div>
 
       {/* 底部测试入口 */}
-      <div className="fixed bottom-16 left-0 right-0 z-20 px-4 py-3 bg-background/95 backdrop-blur border-t">
+      <div className="fixed bottom-0 left-0 right-0 z-20 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-background/95 backdrop-blur border-t">
         <div className="container mx-auto max-w-screen-md flex gap-2">
           {alreadyInPersonal ? (
             <div className="flex-1 flex items-center justify-center gap-1.5 text-sm text-muted-foreground border rounded-md h-10 bg-muted/40">
