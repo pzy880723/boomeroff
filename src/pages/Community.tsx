@@ -73,7 +73,7 @@ export default function Community() {
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('community_posts').select('*').eq('is_public', true).order('created_at', { ascending: false });
+    let q = supabase.from('community_posts').select('*').eq('is_public', true).eq('is_guest', false).order('created_at', { ascending: false });
     if (cat !== 'all') q = q.eq('category', cat);
     const { data: postsData } = await q.limit(60);
     const list = (postsData || []) as Post[];
