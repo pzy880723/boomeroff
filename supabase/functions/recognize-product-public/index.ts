@@ -1,9 +1,9 @@
-// 游客版（免登录）AI 识物
-// 与 recognize-product 同样的 AI 调用，但：
+// 顾客版（免登录）AI 识物
 // - 不需要 JWT
-// - 不写 products 表（不污染知识库）
-// - 按 IP 哈希做每日限频（在 app_settings.guest_limits 里配置）
-// - 仅做 hash_cache 命中复用 + 主 AI 识别两步，跳过 quickClassify/nameMatch（保持轻量）
+// - 不写 products 表（不污染店员知识库）
+// - 按 IP 哈希做每日限频
+// - 命中 hash 缓存复用 + 主 AI 识别两步
+// - 输出从【顾客视角】组织：物件故事 / 看点 / 怎么欣赏 / 保养小贴士
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -13,17 +13,18 @@ const corsHeaders = {
 };
 
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-const LITE_MODEL = 'google/gemini-2.5-flash-lite';
+// 与店员版同等详细程度的主模型
+const MAIN_MODEL = 'google/gemini-2.5-flash';
 
 const RECOGNITION_TOOL = {
   type: 'function',
   function: {
     name: 'submit_recognition',
-    description: '快速鉴定中古商品基本属性',
+    description: '从顾客视角介绍中古商品：是什么、有什么故事、怎么看、怎么保养',
     parameters: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: '商品名称（≤12字 简体中文）' },
+        name: { type: 'string', description: '商品名称（≤14字 简体中文）' },
         category: {
           type: 'string',
           enum: ['jp_porcelain', 'eu_porcelain', 'incense', 'antique_art', 'local_craft',
@@ -35,6 +36,12 @@ const RECOGNITION_TOOL = {
         origin: { type: 'string', description: '产地/窑口/品牌，未知写"不详"' },
         material: { type: 'string', description: '材质，未知写"不详"' },
         craft: { type: 'string', description: '工艺，未知写"不详"' },
+        dimensions: { type: 'string', description: '大致尺寸或体量描述，未知留空' },
+        condition: { type: 'string', description: '从外观可见的品相描述，未知留空' },
+        description: { type: 'string', description: '面向顾客的 80-140 字客观介绍，告诉顾客这是什么' },
+        story: { type: 'string', description: '物件背后的故事或时代背景，80-140 字，娓娓道来不要导购腔' },
+        appreciation: { type: 'string', description: '怎么欣赏 / 怎么把玩 / 看哪些细节，60-120 字' },
+        careTips: { type: 'string', description: '日常使用、清洁、收藏、避坑提醒，40-100 字' },
         sellingPoints: {
           type: 'array',
           minItems: 3,
@@ -42,23 +49,15 @@ const RECOGNITION_TOOL = {
           items: {
             type: 'object',
             properties: {
-              tag: { type: 'string', enum: ['身世', '工艺', '稀缺', '场景'] },
-              text: { type: 'string', description: '≤22汉字短句' },
+              tag: { type: 'string', enum: ['身世', '工艺', '稀缺', '趣味'] },
+              text: { type: 'string', description: '≤24 汉字短句，从顾客好奇角度' },
             },
             required: ['tag', 'text'],
           },
         },
-        pitch: {
-          type: 'object',
-          properties: {
-            opener: { type: 'string', description: '≤30字开场，含品类+年代/产地' },
-            highlight: { type: 'string', description: '≤45字亮点句' },
-          },
-          required: ['opener', 'highlight'],
-        },
         confidence: { type: 'number', description: '置信度 0-1' },
       },
-      required: ['name', 'category', 'pitch', 'confidence'],
+      required: ['name', 'category', 'description', 'sellingPoints', 'confidence'],
     },
   },
 };
@@ -72,11 +71,19 @@ function safeParseJSON(raw: string): any | null {
   try { return JSON.parse(txt); } catch (_) { return null; }
 }
 
-function productRowToResult(row: any) {
-  let tipsObj: any = undefined;
-  if (typeof row.tips === 'string' && row.tips.trim().startsWith('{')) {
-    try { tipsObj = JSON.parse(row.tips); } catch { tipsObj = row.tips; }
-  } else if (row.tips) tipsObj = row.tips;
+function productRowToGuestResult(row: any) {
+  // 把店员历史记录转成顾客视角的简化结构（缺顾客字段时降级展示 description）
+  let tipsText: string | undefined = undefined;
+  if (typeof row.tips === 'string' && row.tips.trim()) {
+    if (row.tips.trim().startsWith('{')) {
+      try {
+        const obj = JSON.parse(row.tips);
+        tipsText = [obj?.memory, obj?.objection].filter(Boolean).join('\n');
+      } catch { tipsText = row.tips; }
+    } else {
+      tipsText = row.tips;
+    }
+  }
   return {
     name: row.name,
     category: row.category,
@@ -88,7 +95,7 @@ function productRowToResult(row: any) {
     condition: row.condition || undefined,
     description: row.description || undefined,
     sellingPoints: Array.isArray(row.selling_points) ? row.selling_points : [],
-    tips: tipsObj,
+    careTips: tipsText,
     confidence: 0.9,
   };
 }
@@ -114,14 +121,13 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 限额配置
     const { data: cfgRow } = await adminClient
       .from('app_settings').select('value').eq('key', 'guest_limits').maybeSingle();
     const cfg = (cfgRow?.value || {}) as { enabled?: boolean; recognize_per_day?: number };
     const enabled = cfg.enabled !== false;
     const limit = Math.max(1, Number(cfg.recognize_per_day || 30));
     if (!enabled) {
-      return new Response(JSON.stringify({ error: '游客通道已关闭，请稍后再试' }), {
+      return new Response(JSON.stringify({ error: '体验通道已关闭，请稍后再试' }), {
         status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -157,7 +163,6 @@ serve(async (req) => {
       });
     }
 
-    // 单张体积保护：超过 ~1.5MB base64（约 1.1MB 图）拒绝
     const tooBig = imageList.find((s) => s.length > 1_600_000);
     if (tooBig) {
       return new Response(JSON.stringify({ error: '图片过大，请重新拍摄或换张较小的图' }), {
@@ -165,18 +170,17 @@ serve(async (req) => {
       });
     }
 
-    // 命中 hash 缓存：直接返回历史商品（公开数据，可复用）
+    // hash 缓存命中：直接复用历史商品（公开数据）
     if (imageHash) {
       const { data: hit } = await adminClient
         .from('products').select('*').eq('image_hash', imageHash)
         .order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (hit) {
-        // 计入 1 次（仍消耗一次配额，避免无限重试同图刷限额）
         await adminClient.from('guest_daily_usage').upsert({
           ip_hash: ipHash, usage_date: today,
           recognize_count: used + 1, updated_at: new Date().toISOString(),
         }, { onConflict: 'ip_hash,usage_date' });
-        const cached = productRowToResult(hit);
+        const cached = productRowToGuestResult(hit);
         return new Response(JSON.stringify({
           ...cached,
           fromCache: true,
@@ -190,7 +194,6 @@ serve(async (req) => {
       }
     }
 
-    // 调 AI
     const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
     if (!lovableKey) {
       return new Response(JSON.stringify({ error: 'AI 服务未配置' }), {
@@ -202,24 +205,38 @@ serve(async (req) => {
       img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`);
     const userText = imageUrls.length > 1
       ? `以下为同一件中古商品的 ${imageUrls.length} 张多角度照片，综合判断后调用 submit_recognition。`
-      : '请鉴定这件中古商品，调用 submit_recognition 工具提交结果。';
+      : '以下是顾客在中古杂货店里拍到的物件，请帮顾客介绍它，调用 submit_recognition 工具提交结果。';
     const userContent: any[] = [{ type: 'text', text: userText }];
     for (const url of imageUrls) userContent.push({ type: 'image_url', image_url: { url } });
 
-    const systemPrompt = `你是日本中古杂货资深鉴定师。看图后调用 submit_recognition 工具提交。
-全简体中文，外文品牌音译。看不清写"不详"，宁缺勿编。
-sellingPoints 恰好 3 条，tag 必须是 身世/工艺/稀缺/场景。每条 ≤22 字。
-pitch.opener ≤30 字，pitch.highlight ≤45 字。`;
+    // 顾客视角的 system prompt：不要导购腔、不要价格、不要话术
+    const systemPrompt = `你是日本中古杂货资深鉴定师，正在为店里的顾客介绍他们刚拍到的物件。
+顾客大多不知道这是什么、有什么来历、怎么玩、要不要买。请用平实、有温度的口吻向顾客讲解。
+
+【绝对要求】
+1. 全简体中文，外文品牌做音译并附原文（如「ロイヤルコペンハーゲン Royal Copenhagen」）。
+2. 看不清就写"不详"，宁缺勿编，绝不杜撰具体年份/窑口/型号。
+3. 完全禁止以下内容：价格估值、推销话术、直播开场白、"卖点"、"促单"、"限时"、"店员"、"主播"、"上架"等导购词。
+4. 语气面向顾客本人（"你"），像朋友逛市集时给你介绍。
+
+【内容侧重】
+- description：客观说明这是什么、用来做什么、属于哪个谱系。
+- story：背后的时代/工艺/品牌故事，娓娓道来。
+- appreciation：怎么欣赏——看哪个细节、底款怎么读、上手什么手感。
+- careTips：日常使用 / 清洁 / 收藏 / 真假避坑提醒。
+- sellingPoints 三条，tag 必须是 身世/工艺/稀缺/趣味，每条 ≤24 字，从顾客好奇心出发（"为什么有意思"而非"为什么该买"）。
+
+务必通过 submit_recognition 工具提交，不要回普通文本。`;
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 18000);
+    const timer = setTimeout(() => controller.abort(), 22000);
     let resp: Response;
     try {
       resp = await fetch(LOVABLE_URL, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${lovableKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: LITE_MODEL,
+          model: MAIN_MODEL,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userContent },
@@ -273,9 +290,8 @@ pitch.opener ≤30 字，pitch.highlight ≤45 字。`;
     if (typeof result.confidence !== 'number') result.confidence = 0.7;
     result.fromCache = false;
     if (imageHash) result.imageHash = imageHash;
-    result.__pipeline = { source: 'lovable_gemini', model: LITE_MODEL, webSearchUsed: false };
+    result.__pipeline = { source: 'lovable_gemini', model: MAIN_MODEL, webSearchUsed: false };
 
-    // 计数 +1
     await adminClient.from('guest_daily_usage').upsert({
       ip_hash: ipHash, usage_date: today,
       recognize_count: used + 1, updated_at: new Date().toISOString(),
