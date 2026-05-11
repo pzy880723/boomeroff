@@ -92,6 +92,7 @@ serve(async (req) => {
       name, category, era, origin, sellingPoints, tips,
       story, appreciation, description, careTips,
       material, craft, dimensions, condition, confidence,
+      rarity, collectionValue, marketValue, buyReason,
       imageBase64, // 新上传图片
       imageUrl,    // 复用公共 URL（如 hash_cache 命中的历史 image_url）
     } = body as {
@@ -100,6 +101,7 @@ serve(async (req) => {
       story?: string | null; appreciation?: string | null; description?: string | null; careTips?: string | null;
       material?: string | null; craft?: string | null; dimensions?: string | null; condition?: string | null;
       confidence?: number | null;
+      rarity?: number | null; collectionValue?: string | null; marketValue?: string | null; buyReason?: string | null;
       imageBase64?: string; imageUrl?: string | null;
     };
 
