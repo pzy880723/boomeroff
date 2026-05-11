@@ -1,29 +1,26 @@
-import { useState } from 'react';
+import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, Camera, Sparkles } from 'lucide-react';
-import { CameraCapture } from '@/components/recognition/CameraCapture';
+import { Camera, Sparkles } from 'lucide-react';
+import { CameraStage, type CameraStageHandle } from '@/components/recognition/CameraStage';
 import { useGuestRecognition } from '@/hooks/useGuestRecognition';
 
 export default function PublicScan() {
   const navigate = useNavigate();
-  const { isRecognizing, recognize, remaining } = useGuestRecognition();
-  const [lastImage, setLastImage] = useState<string | null>(null);
+  const { recognize, remaining } = useGuestRecognition();
+  const stageRef = useRef<CameraStageHandle>(null);
 
-  const handleCapture = async (img: string) => {
-    setLastImage(img);
-    const r = await recognize(img);
-    if (r) {
-      // 用 sessionStorage 把结果传到结果页（避免超大 URL）
-      sessionStorage.setItem('guest_result', JSON.stringify(r));
-      sessionStorage.setItem('guest_result_image', img);
-      navigate('/u/result');
-    }
+  const handleRecognize = async (images: string[]): Promise<boolean> => {
+    const r = await recognize(images.length > 1 ? images : images[0]);
+    if (!r) return false;
+    sessionStorage.setItem('guest_result', JSON.stringify(r));
+    sessionStorage.setItem('guest_result_image', images[0]);
+    navigate('/u/result');
+    return true;
   };
 
   return (
-    <div className="container max-w-screen-md py-4 space-y-4">
+    <div className="container max-w-screen-md py-3 space-y-3">
       <Card className="bg-gradient-primary text-primary-foreground border-0 shadow-md">
         <CardContent className="p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center shrink-0">
@@ -41,18 +38,9 @@ export default function PublicScan() {
         </CardContent>
       </Card>
 
-      <CameraCapture onCapture={handleCapture} disabled={isRecognizing} />
+      <CameraStage ref={stageRef} onRecognize={handleRecognize} keepPreviewAfterSuccess={false} />
 
-      {isRecognizing && (
-        <Card>
-          <CardContent className="p-6 flex items-center justify-center gap-3">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">AI 识别中，1-3 秒…</span>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card className="bg-muted/40 border-dashed">
+      <Card className="bg-muted/40 border-dashed mx-3 sm:mx-4">
         <CardContent className="p-4 text-xs text-muted-foreground space-y-1.5 leading-relaxed">
           <div className="flex items-center gap-1.5 text-foreground/80 font-medium">
             <Camera className="w-3.5 h-3.5" /> 拍摄小贴士
@@ -62,12 +50,6 @@ export default function PublicScan() {
           <p>· 识别结果可一键匿名分享到「中古圈」</p>
         </CardContent>
       </Card>
-
-      {lastImage && !isRecognizing && (
-        <Button variant="outline" className="w-full" onClick={() => setLastImage(null)}>
-          重新拍摄
-        </Button>
-      )}
     </div>
   );
 }
