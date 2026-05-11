@@ -179,6 +179,36 @@ export default function PublicResult() {
       {/* 编辑式结果卡 */}
       <GuestProductCard result={result} imageUrl={image} />
 
+      {/* 一键复制图文文案 */}
+      <section className="rounded-3xl bg-card ring-1 ring-border/60 p-5 space-y-3.5 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
+              Copy &amp; Share
+            </div>
+            <h3 className="font-display text-[17px] leading-tight tracking-tight flex items-center gap-1.5">
+              <FileText className="w-4 h-4 text-accent" />
+              一键生成图文文案
+            </h3>
+            <p className="text-[12px] text-muted-foreground leading-relaxed">
+              复制后可直接粘贴到微信 / 小红书 / 朋友圈，发给朋友看看这件中古。
+            </p>
+          </div>
+        </div>
+        <pre className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed font-sans text-foreground/90 bg-muted/40 rounded-2xl p-3.5 ring-1 ring-border/40 max-h-56 overflow-auto">
+{shareText}
+        </pre>
+        <Button
+          onClick={handleCopy}
+          variant="default"
+          size="lg"
+          className="w-full gap-2"
+        >
+          {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          {copied ? '已复制到剪贴板' : '复制图文文案'}
+        </Button>
+      </section>
+
       {/* 分享 hero 卡 */}
       <section className="relative overflow-hidden rounded-3xl bg-gradient-primary text-primary-foreground p-6 shadow-elevated">
         <div className="absolute -right-10 -bottom-10 w-44 h-44 rounded-full bg-accent/25 blur-3xl pointer-events-none" />
