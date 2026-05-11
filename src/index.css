@@ -203,4 +203,15 @@
     height: 1px;
     background: linear-gradient(90deg, transparent, hsl(var(--accent) / 0.4), transparent);
   }
+
+  /* 小红书式两列瀑布流 */
+  .masonry-2col {
+    column-count: 2;
+    column-gap: 0.5rem;
+  }
+  .masonry-item {
+    break-inside: avoid;
+    margin-bottom: 0.5rem;
+  }
 }
+

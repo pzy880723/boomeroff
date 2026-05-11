@@ -13,6 +13,10 @@ const VALID_CATS: ProductCategory[] = [
 
 export interface GuestRecognitionResult extends RecognitionResult {
   remaining?: number;
+  /** 顾客视角扩展字段（顾客版独有） */
+  story?: string;
+  appreciation?: string;
+  careTips?: string;
 }
 
 /** 游客版识别 hook：调用 recognize-product-public，无需登录 */
@@ -67,6 +71,9 @@ export function useGuestRecognition() {
         cachedProductId: data.cachedProductId,
         __pipeline: data.__pipeline,
         remaining: typeof data.remaining === 'number' ? data.remaining : undefined,
+        story: typeof data.story === 'string' ? data.story : undefined,
+        appreciation: typeof data.appreciation === 'string' ? data.appreciation : undefined,
+        careTips: typeof data.careTips === 'string' ? data.careTips : undefined,
       };
       setResult(out);
       if (typeof data.remaining === 'number') setRemaining(data.remaining);
