@@ -86,6 +86,15 @@ export default function PublicResult() {
         origin: result.origin || null,
         sellingPoints: result.sellingPoints || [],
         tips: result.tips ?? null,
+        story: result.story ?? null,
+        appreciation: result.appreciation ?? null,
+        description: result.description ?? null,
+        careTips: result.careTips ?? null,
+        material: result.material ?? null,
+        craft: result.craft ?? null,
+        dimensions: (result as any).dimensions ?? null,
+        condition: (result as any).condition ?? null,
+        confidence: typeof result.confidence === 'number' ? result.confidence : null,
       };
       if (image) body.imageBase64 = image;
       const { data, error } = await supabase.functions.invoke('submit-public-post', { body });
