@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Camera, Share2, Check, Loader2, ChevronLeft, Sparkles, ImageOff, Aperture, Copy, FileText } from 'lucide-react';
+import { Camera, Share2, Check, Loader2, ChevronLeft, Sparkles, ImageOff, Aperture, Copy, FileText, RefreshCw } from 'lucide-react';
 import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
+import {
+  buildLocalShareCopy,
+  sanitizeShareCopy,
+  STYLE_LABELS,
+  type ShareStyle,
+} from '@/lib/shareCopy';
 
 type ViewState = 'loading' | 'empty' | 'ready';
 
@@ -18,44 +24,71 @@ export default function PublicResult() {
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const buildShareText = (r: GuestRecognitionResult) => {
-    const lines: string[] = [];
-    lines.push(`【${r.name || '中古好物'}】`);
-    if (r.category) lines.push(`分类｜${r.category}`);
-    const meta: string[] = [];
-    if (r.era) meta.push(`年代 ${r.era}`);
-    if (r.origin) meta.push(`产地 ${r.origin}`);
-    if (meta.length) lines.push(meta.join(' · '));
-    const points = (r.sellingPoints || [])
-      .map((p: any) => (typeof p === 'string' ? p : p?.text || p?.title || ''))
-      .filter(Boolean)
-      .slice(0, 4);
-    if (points.length) {
-      lines.push('');
-      lines.push('关键看点：');
-      points.forEach((p, i) => lines.push(`${i + 1}. ${p}`));
-    }
-    if (r.tips) {
-      lines.push('');
-      lines.push(`小贴士：${r.tips}`);
-    }
-    lines.push('');
-    lines.push('— 以上内容由 AI 生成，仅供参考，不代表真伪与估价 —');
-    lines.push('via BOOMER-OFF · 拍一拍读懂中古');
-    return lines.join('\n');
-  };
+  // —— 一键生成图文文案 —— //
+  const [style, setStyle] = useState<ShareStyle>('xhs');
+  const [caption, setCaption] = useState<string>('');
+  const [captionLoading, setCaptionLoading] = useState(false);
+  const captionReqId = useRef(0);
 
-  const shareText = result ? buildShareText(result) : '';
+
 
   const handleCopy = async () => {
-    if (!result) return;
+    if (!caption) return;
     try {
-      await navigator.clipboard.writeText(shareText);
+      await navigator.clipboard.writeText(caption);
       setCopied(true);
       toast.success('文案已复制，去粘贴给朋友吧');
       setTimeout(() => setCopied(false), 2200);
     } catch {
       toast.error('复制失败，请长按选中文案手动复制');
+    }
+  };
+
+  // —— 生成文案：先本地兜底，再调 AI 替换 —— //
+  const generateCaption = async (r: GuestRecognitionResult, s: ShareStyle, useAI = true) => {
+    const reqId = ++captionReqId.current;
+    // 立即用本地模板出一段，避免空白
+    const local = buildLocalShareCopy(
+      {
+        name: r.name,
+        category: r.category,
+        era: r.era,
+        origin: r.origin,
+        material: r.material,
+        craft: r.craft,
+        story: r.story,
+        sellingPoints: r.sellingPoints,
+      },
+      s,
+    );
+    setCaption(local);
+    if (!useAI) return;
+    setCaptionLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-share-copy', {
+        body: {
+          name: r.name,
+          category: r.category,
+          era: r.era || null,
+          origin: r.origin || null,
+          material: r.material || null,
+          craft: r.craft || null,
+          sellingPoints: r.sellingPoints || [],
+          story: r.story || null,
+          style: s,
+        },
+      });
+      if (reqId !== captionReqId.current) return; // 已被新一轮覆盖
+      if (error) throw new Error((error as any).message || 'AI 生成失败');
+      const c = (data?.caption || '').toString();
+      if (c) setCaption(sanitizeShareCopy(c));
+      else if (data?.error) throw new Error(data.error);
+    } catch (e: any) {
+      if (reqId !== captionReqId.current) return;
+      // 静默落到本地模板，已经显示了
+      console.warn('[ShareCopy] AI fallback:', e?.message);
+    } finally {
+      if (reqId === captionReqId.current) setCaptionLoading(false);
     }
   };
 
@@ -67,13 +100,28 @@ export default function PublicResult() {
       return;
     }
     try {
-      setResult(JSON.parse(raw));
+      const r: GuestRecognitionResult = JSON.parse(raw);
+      setResult(r);
       if (img) setImage(img);
       setView('ready');
+      // 首屏：本地秒出 + AI 替换
+      generateCaption(r, 'xhs', true);
     } catch {
       setView('empty');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleStyleChange = (s: ShareStyle) => {
+    if (!result || s === style) return;
+    setStyle(s);
+    generateCaption(result, s, true);
+  };
+
+  const handleRegenerate = () => {
+    if (!result || captionLoading) return;
+    generateCaption(result, style, true);
+  };
 
   const handleShare = async () => {
     if (!result || sharing || shared) return;
@@ -188,34 +236,73 @@ export default function PublicResult() {
       {/* 编辑式结果卡 */}
       <GuestProductCard result={result} imageUrl={image} />
 
-      {/* 一键复制图文文案 */}
+      {/* 一键生成图文文案 —— 站在用户视角的种草 / 装逼短文 */}
       <section className="rounded-3xl bg-card ring-1 ring-border/60 p-5 space-y-3.5 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
-              Copy &amp; Share
-            </div>
-            <h3 className="font-display text-[17px] leading-tight tracking-tight flex items-center gap-1.5">
-              <FileText className="w-4 h-4 text-accent" />
-              一键生成图文文案
-            </h3>
-            <p className="text-[12px] text-muted-foreground leading-relaxed">
-              复制后可直接粘贴到微信 / 小红书 / 朋友圈，发给朋友看看这件中古。
-            </p>
+        <div className="space-y-1">
+          <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
+            Copy &amp; Share
           </div>
+          <h3 className="font-display text-[17px] leading-tight tracking-tight flex items-center gap-1.5">
+            <FileText className="w-4 h-4 text-accent" />
+            一键生成图文文案
+          </h3>
+          <p className="text-[12px] text-muted-foreground leading-relaxed">
+            站在你的口吻写一段「偶遇 / 入手」种草文，可直接粘贴到小红书 / 朋友圈 / 微信。
+          </p>
         </div>
-        <pre className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed font-sans text-foreground/90 bg-muted/40 rounded-2xl p-3.5 ring-1 ring-border/40 max-h-56 overflow-auto">
-{shareText}
-        </pre>
-        <Button
-          onClick={handleCopy}
-          variant="default"
-          size="lg"
-          className="w-full gap-2"
-        >
-          {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-          {copied ? '已复制到剪贴板' : '复制图文文案'}
-        </Button>
+
+        {/* 风格切换 */}
+        <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
+          {(Object.keys(STYLE_LABELS) as ShareStyle[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => handleStyleChange(s)}
+              disabled={captionLoading && s !== style}
+              className={`shrink-0 px-3 py-1.5 text-[12px] rounded-full transition-all ${
+                style === s
+                  ? 'bg-foreground text-background font-medium shadow-soft'
+                  : 'bg-muted/60 text-muted-foreground ring-1 ring-border/50 hover:text-foreground'
+              } disabled:opacity-50`}
+            >
+              {STYLE_LABELS[s]}
+            </button>
+          ))}
+        </div>
+
+        {/* 文案内容 */}
+        <div className="relative">
+          <pre className="whitespace-pre-wrap break-words text-[13px] leading-[1.85] font-sans text-foreground/90 bg-muted/40 rounded-2xl p-4 ring-1 ring-border/40 max-h-72 overflow-auto">
+{caption || '正在生成…'}
+          </pre>
+          {captionLoading && (
+            <div className="absolute top-2 right-2 inline-flex items-center gap-1 text-[10.5px] text-muted-foreground bg-background/85 backdrop-blur px-2 py-1 rounded-full ring-1 ring-border/50">
+              <Loader2 className="w-3 h-3 animate-spin" /> AI 润色中
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-[1fr_auto] gap-2">
+          <Button
+            onClick={handleCopy}
+            variant="default"
+            size="lg"
+            className="gap-2"
+            disabled={!caption}
+          >
+            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {copied ? '已复制到剪贴板' : '复制文案'}
+          </Button>
+          <Button
+            onClick={handleRegenerate}
+            variant="outline"
+            size="lg"
+            className="gap-2"
+            disabled={captionLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${captionLoading ? 'animate-spin' : ''}`} />
+            换一段
+          </Button>
+        </div>
       </section>
 
       {/* 分享 hero 卡 */}
