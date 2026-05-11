@@ -90,11 +90,16 @@ serve(async (req) => {
     const body = await req.json();
     const {
       name, category, era, origin, sellingPoints, tips,
+      story, appreciation, description, careTips,
+      material, craft, dimensions, condition, confidence,
       imageBase64, // 新上传图片
       imageUrl,    // 复用公共 URL（如 hash_cache 命中的历史 image_url）
     } = body as {
       name?: string; category?: string; era?: string | null; origin?: string | null;
       sellingPoints?: any; tips?: any;
+      story?: string | null; appreciation?: string | null; description?: string | null; careTips?: string | null;
+      material?: string | null; craft?: string | null; dimensions?: string | null; condition?: string | null;
+      confidence?: number | null;
       imageBase64?: string; imageUrl?: string | null;
     };
 
@@ -125,6 +130,11 @@ serve(async (req) => {
       try { tipsStr = JSON.stringify(tips).slice(0, 2000); } catch { tipsStr = null; }
     }
 
+    const clip = (v: unknown, max: number): string | null =>
+      typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
+    const conf = typeof confidence === 'number' && Number.isFinite(confidence)
+      ? Math.max(0, Math.min(1, confidence)) : null;
+
     const { data: inserted, error: insertErr } = await adminClient
       .from('community_posts').insert({
         user_id: null,
@@ -136,6 +146,15 @@ serve(async (req) => {
         origin: origin ? String(origin).slice(0, 60) : null,
         selling_points: sp,
         tips: tipsStr,
+        story: clip(story, 2000),
+        appreciation: clip(appreciation, 2000),
+        description: clip(description, 4000),
+        care_tips: clip(careTips, 1500),
+        material: clip(material, 120),
+        craft: clip(craft, 120),
+        dimensions: clip(dimensions, 120),
+        condition: clip(condition, 120),
+        confidence: conf,
         is_public: true,
         is_guest: true,
         guest_name: '游客',
