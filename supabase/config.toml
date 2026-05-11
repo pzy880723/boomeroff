@@ -2,3 +2,9 @@ project_id = "narqwgwpqglathwtyevz"
 
 [functions.recognize-product]
 verify_jwt = true
+
+[functions.recognize-product-public]
+verify_jwt = false
+
+[functions.submit-public-post]
+verify_jwt = false
