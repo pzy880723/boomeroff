@@ -73,6 +73,103 @@ function Block({
   );
 }
 
+function ValuationHero({
+  rarity, collectionValue, marketValue, buyReason, era, origin,
+}: {
+  rarity: number | null;
+  collectionValue: string | null;
+  marketValue: string | null;
+  buyReason: string | null;
+  era: string | null;
+  origin: string | null;
+}) {
+  const hasAny = (rarity && rarity > 0) || collectionValue || marketValue || buyReason;
+  if (!hasAny) return null;
+
+  const stars = Math.max(0, Math.min(5, Math.round(rarity || 0)));
+  const cvKey = collectionValue && COLLECTION_VALUE_STYLE[collectionValue] ? collectionValue : null;
+
+  return (
+    <section className="relative mx-1 rounded-3xl overflow-hidden bg-gradient-to-br from-accent/12 via-background to-primary/8 ring-1 ring-accent/30 shadow-elevated">
+      <div className="absolute -right-12 -top-12 w-40 h-40 rounded-full bg-accent/15 blur-3xl pointer-events-none" />
+      <div className="absolute -left-10 -bottom-10 w-36 h-36 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+
+      <div className="relative p-5 sm:p-6 space-y-5">
+        <div className="flex items-center gap-2 text-accent">
+          <Gem className="w-3.5 h-3.5" />
+          <div className="text-[10px] tracking-[0.24em] uppercase font-medium">Valuation · 估值速览</div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[1.3fr_1fr] gap-5">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-[10.5px] tracking-[0.2em] uppercase text-muted-foreground/85">
+              <TrendingUp className="w-3 h-3" /> 市场参考价
+            </div>
+            {marketValue ? (
+              <div className="font-display text-[26px] sm:text-[30px] leading-tight tracking-tight text-foreground">
+                {marketValue}
+              </div>
+            ) : (
+              <div className="font-display text-[22px] text-muted-foreground/70">—</div>
+            )}
+            <div className="text-[10px] text-muted-foreground/70 tracking-wide">
+              来源公开二手市场估算 · 非本店售价
+            </div>
+          </div>
+
+          <div className="space-y-3 sm:border-l sm:border-border/50 sm:pl-5">
+            {(rarity != null) && (
+              <div className="space-y-1">
+                <div className="text-[10.5px] tracking-[0.2em] uppercase text-muted-foreground/85">稀缺度</div>
+                <div className="flex items-center gap-0.5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star
+                      key={i}
+                      className={`w-4 h-4 ${i < stars ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground/30'}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {cvKey && (
+              <div className="space-y-1">
+                <div className="text-[10.5px] tracking-[0.2em] uppercase text-muted-foreground/85">收藏价值</div>
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium ring-1 ${COLLECTION_VALUE_STYLE[cvKey]}`}>
+                  {cvKey}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {(era || origin) && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {era && (
+              <span className="px-2.5 py-1 rounded-full bg-background/80 ring-1 ring-border/60 text-[11.5px] tracking-wide">
+                <span className="text-muted-foreground/80 mr-1">年代</span>{era}
+              </span>
+            )}
+            {origin && (
+              <span className="px-2.5 py-1 rounded-full bg-background/80 ring-1 ring-border/60 text-[11.5px] tracking-wide">
+                <span className="text-muted-foreground/80 mr-1">产地</span>{origin}
+              </span>
+            )}
+          </div>
+        )}
+
+        {buyReason && (
+          <div className="relative pl-4 border-l-2 border-accent">
+            <Quote className="absolute -left-[7px] top-0 w-3 h-3 text-accent fill-accent" />
+            <p className="font-display text-[15px] leading-[1.6] text-foreground/90 italic">
+              {buyReason}
+            </p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /** 顾客视角的识别结果卡：编辑式杂志版式。 */
 export function GuestProductCard({ result, imageUrl }: Props) {
   const sp = normalizeSellingPoints(result.sellingPoints as any);
