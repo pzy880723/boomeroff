@@ -36,6 +36,7 @@ export default function PublicCommunity() {
     let q = supabase.from('community_posts')
       .select('id,image_url,name,category,era,origin,selling_points,tips,created_at,is_guest,guest_name,user_id')
       .eq('is_public', true)
+      .eq('is_guest', true)
       .order('created_at', { ascending: false })
       .limit(80);
     if (cat !== 'all') q = q.eq('category', cat);
