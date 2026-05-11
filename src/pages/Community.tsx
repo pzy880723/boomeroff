@@ -31,6 +31,7 @@ interface Post {
   comments_count: number;
   created_at: string;
   is_public: boolean;
+  is_guest?: boolean;
 }
 
 interface ProductDetail {
@@ -73,7 +74,7 @@ export default function Community() {
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('community_posts').select('*').eq('is_public', true).order('created_at', { ascending: false });
+    let q = supabase.from('community_posts').select('*').eq('is_public', true).eq('is_guest', false).order('created_at', { ascending: false });
     if (cat !== 'all') q = q.eq('category', cat);
     const { data: postsData } = await q.limit(60);
     const list = (postsData || []) as Post[];
@@ -108,7 +109,7 @@ export default function Community() {
     const ch = supabase.channel('community-posts-feed')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_posts' }, (payload) => {
         const np = payload.new as Post;
-        if (np.is_public && (cat === 'all' || np.category === cat)) {
+        if (np.is_public && !np.is_guest && (cat === 'all' || np.category === cat)) {
           setPosts((p) => [np, ...p]);
           if (!profiles[np.user_id]) {
             supabase.from('profiles').select('user_id, display_name').eq('user_id', np.user_id).single()
