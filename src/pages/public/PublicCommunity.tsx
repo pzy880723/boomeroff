@@ -37,6 +37,10 @@ interface Post {
   dimensions?: string | null;
   condition?: string | null;
   confidence?: number | null;
+  rarity?: number | null;
+  collection_value?: string | null;
+  market_value?: string | null;
+  buy_reason?: string | null;
   created_at: string;
   likes_count?: number;
   comments_count?: number;
