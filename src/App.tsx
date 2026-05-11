@@ -25,6 +25,15 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CheckInHistory = lazy(() => import("./pages/CheckInHistory"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+// 游客版（免登录）
+const PublicLayout = lazy(() =>
+  import("./components/layout/PublicLayout").then((m) => ({ default: m.PublicLayout }))
+);
+const PublicScan = lazy(() => import("./pages/public/PublicScan"));
+const PublicResult = lazy(() => import("./pages/public/PublicResult"));
+const PublicCommunity = lazy(() => import("./pages/public/PublicCommunity"));
+const PublicAbout = lazy(() => import("./pages/public/PublicAbout"));
+
 const queryClient = new QueryClient();
 
 function RouteFallback() {
@@ -69,6 +78,14 @@ const App = () => (
               <Route path="/invite/:code" element={<Invite />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/me/check-ins" element={<CheckInHistory />} />
+
+              {/* 游客版（免登录） */}
+              <Route path="/u" element={<PublicLayout />}>
+                <Route index element={<PublicScan />} />
+                <Route path="result" element={<PublicResult />} />
+                <Route path="community" element={<PublicCommunity />} />
+                <Route path="about" element={<PublicAbout />} />
+              </Route>
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
