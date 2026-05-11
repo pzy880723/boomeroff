@@ -108,7 +108,7 @@ export default function Community() {
     const ch = supabase.channel('community-posts-feed')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_posts' }, (payload) => {
         const np = payload.new as Post;
-        if (np.is_public && (cat === 'all' || np.category === cat)) {
+        if (np.is_public && !np.is_guest && (cat === 'all' || np.category === cat)) {
           setPosts((p) => [np, ...p]);
           if (!profiles[np.user_id]) {
             supabase.from('profiles').select('user_id, display_name').eq('user_id', np.user_id).single()
