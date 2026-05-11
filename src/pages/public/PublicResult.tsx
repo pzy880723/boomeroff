@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Camera, Share2, Check, Loader2, ChevronLeft, Sparkles, ImageOff, Aperture } from 'lucide-react';
+import { Camera, Share2, Check, Loader2, ChevronLeft, Sparkles, ImageOff, Aperture, Copy, FileText } from 'lucide-react';
 import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -16,6 +16,48 @@ export default function PublicResult() {
   const [image, setImage] = useState<string | null>(null);
   const [shared, setShared] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const buildShareText = (r: GuestRecognitionResult) => {
+    const lines: string[] = [];
+    lines.push(`【${r.name || '中古好物'}】`);
+    if (r.category) lines.push(`分类｜${r.category}`);
+    const meta: string[] = [];
+    if (r.era) meta.push(`年代 ${r.era}`);
+    if (r.origin) meta.push(`产地 ${r.origin}`);
+    if (meta.length) lines.push(meta.join(' · '));
+    const points = (r.sellingPoints || [])
+      .map((p: any) => (typeof p === 'string' ? p : p?.text || p?.title || ''))
+      .filter(Boolean)
+      .slice(0, 4);
+    if (points.length) {
+      lines.push('');
+      lines.push('关键看点：');
+      points.forEach((p, i) => lines.push(`${i + 1}. ${p}`));
+    }
+    if (r.tips) {
+      lines.push('');
+      lines.push(`小贴士：${r.tips}`);
+    }
+    lines.push('');
+    lines.push('— 以上内容由 AI 生成，仅供参考，不代表真伪与估价 —');
+    lines.push('via BOOMER-OFF · 拍一拍读懂中古');
+    return lines.join('\n');
+  };
+
+  const shareText = result ? buildShareText(result) : '';
+
+  const handleCopy = async () => {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setCopied(true);
+      toast.success('文案已复制，去粘贴给朋友吧');
+      setTimeout(() => setCopied(false), 2200);
+    } catch {
+      toast.error('复制失败，请长按选中文案手动复制');
+    }
+  };
 
   useEffect(() => {
     const raw = sessionStorage.getItem('guest_result');
@@ -136,6 +178,36 @@ export default function PublicResult() {
 
       {/* 编辑式结果卡 */}
       <GuestProductCard result={result} imageUrl={image} />
+
+      {/* 一键复制图文文案 */}
+      <section className="rounded-3xl bg-card ring-1 ring-border/60 p-5 space-y-3.5 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
+              Copy &amp; Share
+            </div>
+            <h3 className="font-display text-[17px] leading-tight tracking-tight flex items-center gap-1.5">
+              <FileText className="w-4 h-4 text-accent" />
+              一键生成图文文案
+            </h3>
+            <p className="text-[12px] text-muted-foreground leading-relaxed">
+              复制后可直接粘贴到微信 / 小红书 / 朋友圈，发给朋友看看这件中古。
+            </p>
+          </div>
+        </div>
+        <pre className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed font-sans text-foreground/90 bg-muted/40 rounded-2xl p-3.5 ring-1 ring-border/40 max-h-56 overflow-auto">
+{shareText}
+        </pre>
+        <Button
+          onClick={handleCopy}
+          variant="default"
+          size="lg"
+          className="w-full gap-2"
+        >
+          {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          {copied ? '已复制到剪贴板' : '复制图文文案'}
+        </Button>
+      </section>
 
       {/* 分享 hero 卡 */}
       <section className="relative overflow-hidden rounded-3xl bg-gradient-primary text-primary-foreground p-6 shadow-elevated">
