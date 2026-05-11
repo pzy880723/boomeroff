@@ -1,7 +1,6 @@
 import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '@/components/ui/card';
-import { Camera, Sparkles } from 'lucide-react';
+import { Sparkles, Aperture, Lightbulb } from 'lucide-react';
 import { CameraStage, type CameraStageHandle } from '@/components/recognition/CameraStage';
 import { useGuestRecognition } from '@/hooks/useGuestRecognition';
 
@@ -20,36 +19,69 @@ export default function PublicScan() {
   };
 
   return (
-    <div className="container max-w-screen-md py-3 space-y-3">
-      <Card className="bg-gradient-primary text-primary-foreground border-0 shadow-md">
-        <CardContent className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5" />
+    <div className="container max-w-screen-md py-4 space-y-5">
+      {/* 编辑式头图 */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-primary text-primary-foreground shadow-elevated">
+        <div className="absolute inset-0 opacity-[0.08] pointer-events-none"
+          style={{
+            backgroundImage:
+              'radial-gradient(circle at 20% 20%, white 1px, transparent 1px), radial-gradient(circle at 80% 60%, white 1px, transparent 1px)',
+            backgroundSize: '32px 32px, 28px 28px',
+          }}
+        />
+        <div className="relative px-5 py-6 sm:px-6 sm:py-7">
+          <div className="flex items-center gap-1.5 text-[10px] tracking-[0.22em] uppercase opacity-80">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            AI 在线 · 1-3 秒识别
           </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold">拍一拍，AI 帮你认中古</div>
-            <div className="text-xs opacity-90 mt-0.5">
-              免登录体验
-              {typeof remaining === 'number' && (
-                <span className="ml-1">· 今日还可识别 {remaining} 次</span>
-              )}
+          <h1 className="mt-3 font-display text-[26px] sm:text-[30px] leading-[1.15] tracking-tight">
+            拍一拍，<br className="sm:hidden" />读懂这件中古
+          </h1>
+          <p className="mt-2 text-[13px] leading-relaxed opacity-85 max-w-[26rem]">
+            不知道这是什么？对准它按下快门，AI 会告诉你它的年代、产地与背后的小故事。
+          </p>
+          {typeof remaining === 'number' && (
+            <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur text-[11px] tabular-nums ring-1 ring-white/20">
+              <Sparkles className="w-3 h-3" />
+              今日剩余 {remaining} 次免费识别
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          )}
+        </div>
+      </section>
 
       <CameraStage ref={stageRef} onRecognize={handleRecognize} keepPreviewAfterSuccess={false} />
 
-      <Card className="bg-muted/40 border-dashed mx-3 sm:mx-4">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-1.5 leading-relaxed">
-          <div className="flex items-center gap-1.5 text-foreground/80 font-medium">
-            <Camera className="w-3.5 h-3.5" /> 拍摄小贴士
-          </div>
-          <p>· 让商品占满画面 2/3，背景尽量干净</p>
-          <p>· 有铭文/底款时单独补一张近照效果更好</p>
-          <p>· 识别结果可一键匿名分享到「中古圈」</p>
-        </CardContent>
-      </Card>
+      {/* 拍摄小贴士 */}
+      <section className="mx-3 sm:mx-4 rounded-2xl bg-card/60 ring-1 ring-border/60 backdrop-blur p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="w-7 h-7 rounded-full bg-accent/15 text-accent flex items-center justify-center">
+            <Lightbulb className="w-4 h-4" strokeWidth={2} />
+          </span>
+          <div className="font-display text-sm tracking-tight">拍出更好的识别效果</div>
+        </div>
+        <ul className="text-[12.5px] text-muted-foreground space-y-2 leading-relaxed">
+          <Tip n="01">让物件占满画面 2/3，背景越简单越准</Tip>
+          <Tip n="02">有铭文 / 底款时单独补一张近照</Tip>
+          <Tip n="03">识别完可一键匿名分享到「中古圈」</Tip>
+        </ul>
+      </section>
+
+      {/* 品牌底栏 */}
+      <div className="text-center pt-1 pb-2">
+        <div className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground/70 tracking-[0.2em] uppercase">
+          <Aperture className="w-3 h-3" />
+          BOOMER-OFF · 中古杂货
+        </div>
+      </div>
     </div>
+  );
+}
+
+function Tip({ n, children }: { n: string; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-3">
+      <span className="font-display text-[11px] text-accent tabular-nums shrink-0 mt-px">{n}</span>
+      <span>{children}</span>
+    </li>
   );
 }
