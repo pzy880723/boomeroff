@@ -98,9 +98,16 @@ export type Database = {
       }
       community_posts: {
         Row: {
+          appreciation: string | null
+          care_tips: string | null
           category: Database["public"]["Enums"]["product_category"]
           comments_count: number
+          condition: string | null
+          confidence: number | null
+          craft: string | null
           created_at: string
+          description: string | null
+          dimensions: string | null
           era: string | null
           guest_name: string | null
           id: string
@@ -108,17 +115,26 @@ export type Database = {
           is_guest: boolean
           is_public: boolean
           likes_count: number
+          material: string | null
           name: string
           origin: string | null
           product_id: string | null
           selling_points: Json
+          story: string | null
           tips: string | null
           user_id: string | null
         }
         Insert: {
+          appreciation?: string | null
+          care_tips?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           comments_count?: number
+          condition?: string | null
+          confidence?: number | null
+          craft?: string | null
           created_at?: string
+          description?: string | null
+          dimensions?: string | null
           era?: string | null
           guest_name?: string | null
           id?: string
@@ -126,17 +142,26 @@ export type Database = {
           is_guest?: boolean
           is_public?: boolean
           likes_count?: number
+          material?: string | null
           name: string
           origin?: string | null
           product_id?: string | null
           selling_points?: Json
+          story?: string | null
           tips?: string | null
           user_id?: string | null
         }
         Update: {
+          appreciation?: string | null
+          care_tips?: string | null
           category?: Database["public"]["Enums"]["product_category"]
           comments_count?: number
+          condition?: string | null
+          confidence?: number | null
+          craft?: string | null
           created_at?: string
+          description?: string | null
+          dimensions?: string | null
           era?: string | null
           guest_name?: string | null
           id?: string
@@ -144,10 +169,12 @@ export type Database = {
           is_guest?: boolean
           is_public?: boolean
           likes_count?: number
+          material?: string | null
           name?: string
           origin?: string | null
           product_id?: string | null
           selling_points?: Json
+          story?: string | null
           tips?: string | null
           user_id?: string | null
         }

@@ -1,5 +1,5 @@
 import { Sparkles, BookOpen, Eye, ShieldAlert, FileText } from 'lucide-react';
-import { CATEGORY_LABELS } from '@/types';
+import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { normalizeSellingPoints } from '@/lib/script';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
 
@@ -10,8 +10,27 @@ const SP_TAG_DOT: Record<string, string> = {
   稀缺: 'bg-rose-500',
 };
 
+/** 通用化的「编辑式杂志卡」数据结构 —— 既能渲染识别结果，也能渲染中古圈帖子。 */
+export interface EditorialCardData {
+  name: string;
+  category: ProductCategory;
+  era?: string | null;
+  origin?: string | null;
+  material?: string | null;
+  craft?: string | null;
+  dimensions?: string | null;
+  condition?: string | null;
+  sellingPoints?: unknown;
+  story?: string | null;
+  appreciation?: string | null;
+  description?: string | null;
+  careTips?: string | null;
+  tips?: string | null;
+  confidence?: number | null;
+}
+
 interface Props {
-  result: GuestRecognitionResult;
+  result: GuestRecognitionResult | EditorialCardData;
   imageUrl?: string | null;
 }
 
@@ -54,6 +73,10 @@ export function GuestProductCard({ result, imageUrl }: Props) {
   ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   const lowConfidence = typeof result.confidence === 'number' && result.confidence < 0.6;
+  const careTipsText: string | null =
+    (typeof result.careTips === 'string' && result.careTips) ||
+    (typeof result.tips === 'string' && result.tips) ||
+    null;
 
   return (
     <article className="space-y-6">
@@ -175,7 +198,7 @@ export function GuestProductCard({ result, imageUrl }: Props) {
       )}
 
       {/* 保养与使用 — 高亮卡 */}
-      {result.careTips && (
+      {careTipsText && (
         <section className="rounded-2xl bg-accent/8 ring-1 ring-accent/25 p-5 space-y-2.5">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-accent" />
@@ -183,7 +206,7 @@ export function GuestProductCard({ result, imageUrl }: Props) {
           </div>
           <h3 className="font-display text-[16px] tracking-tight">保养与使用</h3>
           <p className="text-[13.5px] leading-relaxed text-foreground/85 whitespace-pre-wrap">
-            {result.careTips}
+            {careTipsText}
           </p>
         </section>
       )}
