@@ -67,7 +67,7 @@ export default function PublicCommunity() {
       </header>
 
       {/* 分类筛选 */}
-      <div className="flex gap-1.5 overflow-x-auto -mx-3 px-3 pb-1 scrollbar-hide">
+      <div className="flex gap-1.5 overflow-x-auto -mx-3 px-3 pb-1">
         {cats.map((c) => (
           <button
             key={c}
