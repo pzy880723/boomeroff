@@ -13,8 +13,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm install
-      - run: npm run build
+      - name: Enable Corepack (for yarn)
+        run: corepack enable && corepack prepare yarn@stable --activate
+      - name: Install dependencies
+        run: yarn install --immutable
+      - run: yarn build
       - name: Sync Capacitor
         run: npx cap sync ios
       - name: Pod install
