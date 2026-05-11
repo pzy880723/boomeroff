@@ -119,6 +119,15 @@ export function GuestProductCard({ result, imageUrl }: Props) {
           </div>
         )}
 
+        <ValuationHero
+          rarity={typeof result.rarity === 'number' ? result.rarity : null}
+          collectionValue={result.collectionValue ?? null}
+          marketValue={result.marketValue ?? null}
+          buyReason={result.buyReason ?? null}
+          era={result.era ?? null}
+          origin={result.origin ?? null}
+        />
+
         {/* 标题 */}
         <div className="px-1 space-y-2">
           <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
