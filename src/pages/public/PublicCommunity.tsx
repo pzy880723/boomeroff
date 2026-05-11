@@ -2,17 +2,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
-import { Camera, X, ImageOff, Heart, MessageCircle, Sparkles, ShieldAlert, MessageSquareHeart } from 'lucide-react';
-import { normalizeSellingPoints } from '@/lib/script';
+import { Camera, X, ImageOff, Heart, MessageCircle, MessageSquareHeart } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import shopWechatQr from '@/assets/shop-wechat-qr.png';
-
-const SP_TAG_DOT: Record<string, string> = {
-  身世: 'bg-violet-500',
-  工艺: 'bg-emerald-500',
-  趣味: 'bg-amber-500',
-  稀缺: 'bg-rose-500',
-};
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -35,6 +28,15 @@ interface Post {
   origin: string | null;
   selling_points: unknown;
   tips: string | null;
+  story?: string | null;
+  appreciation?: string | null;
+  description?: string | null;
+  care_tips?: string | null;
+  material?: string | null;
+  craft?: string | null;
+  dimensions?: string | null;
+  condition?: string | null;
+  confidence?: number | null;
   created_at: string;
   likes_count?: number;
   comments_count?: number;
