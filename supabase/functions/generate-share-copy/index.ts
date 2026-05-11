@@ -132,7 +132,7 @@ ${JSON.stringify(facts, null, 2)}
 
 请按上面的风格写一段 caption 出来。`;
 
-    // —— 调 Lovable AI Gateway —— //
+    // —— 调 Lovable AI Gateway（纯文本，避免不同模型对 json_schema 支持差异）—— //
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -143,21 +143,9 @@ ${JSON.stringify(facts, null, 2)}
         model: 'google/gemini-3-flash-preview',
         messages: [
           { role: 'system', content: sys },
-          { role: 'user', content: userPrompt },
+          { role: 'user', content: userPrompt + '\n\n直接输出 caption 正文，不要包裹 JSON、不要前后多余说明。' },
         ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'share_copy',
-            schema: {
-              type: 'object',
-              properties: { caption: { type: 'string' } },
-              required: ['caption'],
-              additionalProperties: false,
-            },
-            strict: true,
-          },
-        },
+        temperature: 0.95,
       }),
     });
 
@@ -170,14 +158,16 @@ ${JSON.stringify(facts, null, 2)}
       }), { status: aiResp.status === 402 ? 402 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     const aiData = await aiResp.json();
-    const raw: string = aiData?.choices?.[0]?.message?.content || '';
-    let caption = '';
-    try {
-      const parsed = JSON.parse(raw);
-      caption = sanitize(String(parsed.caption || ''));
-    } catch {
-      caption = sanitize(raw);
+    let caption: string = (aiData?.choices?.[0]?.message?.content || '').toString();
+    // 万一模型仍包成 ```json {...} ``` 或 {"caption": ...}
+    caption = caption.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+    if (caption.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(caption);
+        if (parsed && typeof parsed.caption === 'string') caption = parsed.caption;
+      } catch { /* keep as-is */ }
     }
+    caption = sanitize(caption);
     if (!caption) {
       return new Response(JSON.stringify({ error: 'AI 未返回内容' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
