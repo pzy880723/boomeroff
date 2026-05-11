@@ -177,8 +177,23 @@ export default function PublicCommunity() {
 }
 
 function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void }) {
-  const sp = normalizeSellingPoints(post.selling_points as any);
-  const meta = [post.era, post.origin].filter(Boolean) as string[];
+  const cardData = {
+    name: post.name,
+    category: post.category,
+    era: post.era,
+    origin: post.origin,
+    material: post.material,
+    craft: post.craft,
+    dimensions: post.dimensions,
+    condition: post.condition,
+    sellingPoints: post.selling_points,
+    story: post.story,
+    appreciation: post.appreciation,
+    description: post.description,
+    careTips: post.care_tips,
+    tips: post.tips,
+    confidence: post.confidence,
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-background overflow-y-auto safe-top safe-bottom animate-fade-in">
@@ -197,113 +212,16 @@ function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void })
         </Link>
       </div>
 
-      {/* Hero 大图 + 浮层 */}
-      {post.image_url && (
-        <div className="relative bg-muted">
-          <img src={post.image_url} alt={post.name} className="w-full block" />
-          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 via-black/15 to-transparent pointer-events-none" />
-          <span className="absolute left-3 top-3 px-2.5 py-1 rounded-full bg-background/85 backdrop-blur text-[10.5px] font-medium ring-1 ring-border/60">
-            {CATEGORY_LABELS[post.category]}
-          </span>
-          {meta.length > 0 && (
-            <div className="absolute left-4 right-4 bottom-3 text-white">
-              <div className="text-[10px] tracking-[0.22em] uppercase opacity-80">Era</div>
-              <div className="font-display text-[16px] tracking-tight leading-tight">
-                {meta.join(' · ')}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="container max-w-screen-md py-5 space-y-6">
-        {/* 标题块 */}
-        <header className="space-y-2 px-1">
-          <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
-            Discovery · {CATEGORY_LABELS[post.category]}
-          </div>
-          <h1 className="font-display text-[24px] sm:text-[28px] leading-[1.15] tracking-tight">
-            {post.name}
-          </h1>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11.5px] text-muted-foreground tracking-wide pt-1">
-            <span>{post.guest_name || '游客'} · {timeAgo(post.created_at)}</span>
-            <span className="inline-flex items-center gap-1"><Heart className="w-3 h-3" /> {post.likes_count ?? 0}</span>
-            <span className="inline-flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {post.comments_count ?? 0}</span>
-          </div>
-        </header>
+        {/* 编辑式卡 */}
+        <GuestProductCard result={cardData} imageUrl={post.image_url} />
 
-        {/* Meta 表格 */}
-        {meta.length > 0 && (
-          <div className="px-1">
-            <div className="border-t border-border/60" />
-            <dl className="grid grid-cols-2 gap-x-5 gap-y-3 py-4">
-              {post.era && (
-                <div className="space-y-0.5">
-                  <dt className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/80">年代</dt>
-                  <dd className="text-[13.5px] font-medium leading-snug">{post.era}</dd>
-                </div>
-              )}
-              {post.origin && (
-                <div className="space-y-0.5">
-                  <dt className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground/80">产地</dt>
-                  <dd className="text-[13.5px] font-medium leading-snug">{post.origin}</dd>
-                </div>
-              )}
-            </dl>
-            <div className="border-b border-border/60" />
-          </div>
-        )}
-
-        {/* 看点 */}
-        {sp.length > 0 && (
-          <section className="space-y-3 px-1">
-            <div className="flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded-full bg-accent/15 text-accent flex items-center justify-center shrink-0">
-                <Sparkles className="w-3.5 h-3.5" />
-              </span>
-              <div className="space-y-0.5">
-                <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">Highlights</div>
-                <h3 className="font-display text-[17px] tracking-tight">值得留意的细节</h3>
-              </div>
-            </div>
-            <ul className="space-y-3.5 pl-[38px]">
-              {sp.map((s, i) => {
-                const tag = typeof s === 'string' ? '' : (s.tag || '');
-                const text = typeof s === 'string' ? s : s.text;
-                return (
-                  <li key={i} className="flex gap-3">
-                    <span className="font-display text-[13px] text-accent tabular-nums shrink-0 mt-0.5 w-6">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <div className="flex-1 space-y-1">
-                      {tag && (
-                        <div className="flex items-center gap-1.5 text-[10.5px] tracking-[0.18em] uppercase text-muted-foreground/85">
-                          <span className={`w-1.5 h-1.5 rounded-full ${SP_TAG_DOT[tag] || 'bg-muted-foreground'}`} />
-                          {tag}
-                        </div>
-                      )}
-                      <p className="text-[14px] leading-relaxed text-foreground/85">{text}</p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
-
-        {/* 小贴士 */}
-        {post.tips && (
-          <section className="rounded-2xl bg-accent/8 ring-1 ring-accent/25 p-5 space-y-2.5 mx-1">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-accent" />
-              <div className="text-[10px] tracking-[0.22em] uppercase text-accent/90">Care Tips</div>
-            </div>
-            <h3 className="font-display text-[16px] tracking-tight">保养与使用</h3>
-            <p className="text-[13.5px] leading-relaxed text-foreground/85 whitespace-pre-wrap">
-              {post.tips}
-            </p>
-          </section>
-        )}
+        {/* 帖子元信息 */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11.5px] text-muted-foreground tracking-wide px-1">
+          <span>{post.guest_name || '游客'} · {timeAgo(post.created_at)}</span>
+          <span className="inline-flex items-center gap-1"><Heart className="w-3 h-3" /> {post.likes_count ?? 0}</span>
+          <span className="inline-flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {post.comments_count ?? 0}</span>
+        </div>
 
         {/* 喜欢这件? 加店铺微信 */}
         <section className="relative overflow-hidden rounded-3xl bg-gradient-primary text-primary-foreground p-6 mx-1 shadow-elevated">
