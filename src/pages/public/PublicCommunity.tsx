@@ -197,6 +197,10 @@ function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void })
     careTips: post.care_tips,
     tips: post.tips,
     confidence: post.confidence,
+    rarity: post.rarity,
+    collectionValue: post.collection_value,
+    marketValue: post.market_value,
+    buyReason: post.buy_reason,
   };
 
   return (
