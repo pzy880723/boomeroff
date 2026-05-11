@@ -102,8 +102,10 @@ export type Database = {
           comments_count: number
           created_at: string
           era: string | null
+          guest_name: string | null
           id: string
           image_url: string | null
+          is_guest: boolean
           is_public: boolean
           likes_count: number
           name: string
@@ -111,15 +113,17 @@ export type Database = {
           product_id: string | null
           selling_points: Json
           tips: string | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           category?: Database["public"]["Enums"]["product_category"]
           comments_count?: number
           created_at?: string
           era?: string | null
+          guest_name?: string | null
           id?: string
           image_url?: string | null
+          is_guest?: boolean
           is_public?: boolean
           likes_count?: number
           name: string
@@ -127,15 +131,17 @@ export type Database = {
           product_id?: string | null
           selling_points?: Json
           tips?: string | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           category?: Database["public"]["Enums"]["product_category"]
           comments_count?: number
           created_at?: string
           era?: string | null
+          guest_name?: string | null
           id?: string
           image_url?: string | null
+          is_guest?: boolean
           is_public?: boolean
           likes_count?: number
           name?: string
@@ -143,7 +149,7 @@ export type Database = {
           product_id?: string | null
           selling_points?: Json
           tips?: string | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -200,6 +206,33 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+        }
+        Relationships: []
+      }
+      guest_daily_usage: {
+        Row: {
+          id: string
+          ip_hash: string
+          recognize_count: number
+          share_count: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          id?: string
+          ip_hash: string
+          recognize_count?: number
+          share_count?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Update: {
+          id?: string
+          ip_hash?: string
+          recognize_count?: number
+          share_count?: number
+          updated_at?: string
+          usage_date?: string
         }
         Relationships: []
       }
