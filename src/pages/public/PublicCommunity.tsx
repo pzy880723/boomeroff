@@ -36,6 +36,8 @@ interface Post {
   selling_points: unknown;
   tips: string | null;
   created_at: string;
+  likes_count?: number;
+  comments_count?: number;
   is_guest?: boolean;
   guest_name?: string | null;
   user_id?: string | null;
