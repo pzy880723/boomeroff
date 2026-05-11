@@ -31,6 +31,7 @@ interface Post {
   comments_count: number;
   created_at: string;
   is_public: boolean;
+  is_guest?: boolean;
 }
 
 interface ProductDetail {
