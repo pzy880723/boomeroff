@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Camera, Share2, Check, Loader2, ChevronLeft } from 'lucide-react';
-import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
+import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
@@ -72,7 +72,7 @@ export default function PublicResult() {
         )}
       </div>
 
-      <ProductDetailCard result={result} imageUrl={image} />
+      <GuestProductCard result={result} imageUrl={image} />
 
       <Card className="border-primary/30">
         <CardContent className="p-4 space-y-3">
