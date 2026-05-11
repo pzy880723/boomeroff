@@ -1,4 +1,4 @@
-import { Sparkles, BookOpen, Eye, ShieldAlert, FileText } from 'lucide-react';
+import { Sparkles, BookOpen, Eye, ShieldAlert, FileText, Star, Gem, TrendingUp, Quote } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { normalizeSellingPoints } from '@/lib/script';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
@@ -8,6 +8,13 @@ const SP_TAG_DOT: Record<string, string> = {
   工艺: 'bg-emerald-500',
   趣味: 'bg-amber-500',
   稀缺: 'bg-rose-500',
+};
+
+const COLLECTION_VALUE_STYLE: Record<string, string> = {
+  极高: 'text-rose-600 bg-rose-500/10 ring-rose-500/30',
+  高: 'text-amber-600 bg-amber-500/10 ring-amber-500/30',
+  中: 'text-emerald-600 bg-emerald-500/10 ring-emerald-500/30',
+  一般: 'text-muted-foreground bg-muted ring-border',
 };
 
 /** 通用化的「编辑式杂志卡」数据结构 —— 既能渲染识别结果，也能渲染中古圈帖子。 */
@@ -27,6 +34,10 @@ export interface EditorialCardData {
   careTips?: string | null;
   tips?: string | null;
   confidence?: number | null;
+  rarity?: number | null;
+  collectionValue?: string | null;
+  marketValue?: string | null;
+  buyReason?: string | null;
 }
 
 interface Props {
