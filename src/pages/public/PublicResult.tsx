@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Camera, Share2, Check, Loader2, ChevronLeft, Sparkles, ImageOff, Aperture, Copy, FileText } from 'lucide-react';
+import { Camera, Share2, Check, Loader2, ChevronLeft, Sparkles, ImageOff, Aperture, Copy, FileText, RefreshCw } from 'lucide-react';
 import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
+import {
+  buildLocalShareCopy,
+  sanitizeShareCopy,
+  STYLE_LABELS,
+  type ShareStyle,
+} from '@/lib/shareCopy';
 
 type ViewState = 'loading' | 'empty' | 'ready';
 
@@ -17,6 +23,12 @@ export default function PublicResult() {
   const [shared, setShared] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // —— 一键生成图文文案 —— //
+  const [style, setStyle] = useState<ShareStyle>('xhs');
+  const [caption, setCaption] = useState<string>('');
+  const [captionLoading, setCaptionLoading] = useState(false);
+  const captionReqId = useRef(0);
 
   const buildShareText = (r: GuestRecognitionResult) => {
     const lines: string[] = [];
