@@ -98,6 +98,14 @@ export interface RecognitionResult {
   // 新结构：记忆口诀+顾客应答；老数据可能是 string
   tips?: string | { memory?: string; objection?: string };
   confidence?: number;
+  /** 估值速览：稀缺度 1-5 */
+  rarity?: number;
+  /** 估值速览：收藏价值标签：极高/高/中/一般 */
+  collectionValue?: string;
+  /** 估值速览：市场参考价区间，如 "¥1,800 – ¥2,400" */
+  marketValue?: string;
+  /** 估值速览：一句话购买理由 */
+  buyReason?: string;
   imageHash?: string;
   fromCache?: boolean;
   // 命中来源：'hash' | 'official' | 'history'
