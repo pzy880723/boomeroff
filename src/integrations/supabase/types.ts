@@ -99,8 +99,10 @@ export type Database = {
       community_posts: {
         Row: {
           appreciation: string | null
+          buy_reason: string | null
           care_tips: string | null
           category: Database["public"]["Enums"]["product_category"]
+          collection_value: string | null
           comments_count: number
           condition: string | null
           confidence: number | null
@@ -115,10 +117,12 @@ export type Database = {
           is_guest: boolean
           is_public: boolean
           likes_count: number
+          market_value: string | null
           material: string | null
           name: string
           origin: string | null
           product_id: string | null
+          rarity: number | null
           selling_points: Json
           story: string | null
           tips: string | null
@@ -126,8 +130,10 @@ export type Database = {
         }
         Insert: {
           appreciation?: string | null
+          buy_reason?: string | null
           care_tips?: string | null
           category?: Database["public"]["Enums"]["product_category"]
+          collection_value?: string | null
           comments_count?: number
           condition?: string | null
           confidence?: number | null
@@ -142,10 +148,12 @@ export type Database = {
           is_guest?: boolean
           is_public?: boolean
           likes_count?: number
+          market_value?: string | null
           material?: string | null
           name: string
           origin?: string | null
           product_id?: string | null
+          rarity?: number | null
           selling_points?: Json
           story?: string | null
           tips?: string | null
@@ -153,8 +161,10 @@ export type Database = {
         }
         Update: {
           appreciation?: string | null
+          buy_reason?: string | null
           care_tips?: string | null
           category?: Database["public"]["Enums"]["product_category"]
+          collection_value?: string | null
           comments_count?: number
           condition?: string | null
           confidence?: number | null
@@ -169,10 +179,12 @@ export type Database = {
           is_guest?: boolean
           is_public?: boolean
           likes_count?: number
+          market_value?: string | null
           material?: string | null
           name?: string
           origin?: string | null
           product_id?: string | null
+          rarity?: number | null
           selling_points?: Json
           story?: string | null
           tips?: string | null

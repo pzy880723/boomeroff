@@ -1,47 +1,76 @@
 ## 目标
-把 `/u/result` 上「一键生成图文文案」从干巴巴的卖点列表，改成站在用户视角、引导剁手 + 适合朋友圈/小红书发的「装逼种草文」，长度 150–220 字。
 
-## 文案逻辑
-**默认** AI 实时生成（Lovable AI Gateway），**兜底** 用本地模板拼接，保证断网/限额时也能立刻出。
-风格三选一，用户在卡片上可随时切换并「换一段」重生：
-1. 小红书姐妹种草体（emoji + 感叹号 + 短句）
-2. 朋友圈装逼随手记（克制、有质感、少 emoji）
-3. 中古藏家口吻（半专业，强调缘分/年代）
+在「中古圈帖子详情」和「识别结果」的商品卡顶部，加入一张高识别度的「估值速览卡」，把 **年代 / 产地 / 稀缺程度 / 收藏价值 / 市场价值** 用突出版式排在最前面，并紧跟一句「为什么值得入手」的购买理由，引导用户产生「划算」「捡漏」的感觉。
 
-每段都要包含：偶遇/入手桥段 → 一两个让人心动的设计/工艺细节（来自 sellingPoints/material/craft/era/origin/brand）→ 品牌或年代点睛 → 「一不小心剁手了」式收尾 → 末尾一行 AI 免责小字（`— AI 生成仅供欣赏 · via BOOMER-OFF —`）。
+## 一、视觉设计（在 `GuestProductCard.tsx` 头图下方新增模块）
 
-## 改动范围
+```text
+┌─────────────────────────────────────────────┐
+│  VALUATION · 估值速览                        │
+│                                              │
+│   市场参考价                                  │
+│   ¥ 1,800 – 2,400        稀缺度  ★★★★☆      │
+│   ───────────             收藏价值 高          │
+│                                              │
+│   年代  1980s  ·  产地  日本 · 京都           │
+│                                              │
+│  ┝━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┥     │
+│   "出自京都老铺的限定花纹，存世已不多，        │
+│    遇到就是缘分，错过基本只能去拍卖行寻。"    │
+└─────────────────────────────────────────────┘
+```
 
-### 1. 新增边缘函数 `generate-share-copy`
-- 公共函数（与 `submit-public-post` / `recognize-product-public` 一致：`verify_jwt = false`，按 IP 简单限频，沿用 `guest_daily_usage`，加一列或新键 `copy_count`）。
-- 入参：`{ name, category, era, origin, material, craft, sellingPoints, story, brand?, style: 'xhs' | 'pyq' | 'collector' }`
-- 用 Vercel AI SDK + Lovable AI Gateway，model `google/gemini-3-flash-preview`，`Output.object` 结构化输出 `{ caption: string }`，限定 150–220 字、含 1–3 个 emoji（仅 xhs 风格）、不得使用「主播」字样、不得编造价格。
-- system prompt 给三种风格的明确语料示例。
-- 出错时返回 `{ caption: null, error }`，前端落到模板。
+要点：
+- 整张卡用 `bg-gradient-to-br from-accent/10 to-primary/5` + `ring-1 ring-accent/30`，与下方故事/看点区拉开层级
+- 「市场参考价」用 `font-display` 大号（24-28px），下方注脚「市场参考·非本店售价」灰字
+- 稀缺度用 5 星填充图标；收藏价值文字标签（极高/高/中/一般）配色：极高=rose，高=amber，中=emerald，一般=muted
+- 年代/产地用一行内联 chip，弱化为副信息
+- 一句话购买理由用 `border-l-2 border-accent` 引文样式，斜体或 `font-display`
 
-### 2. 新增 `src/lib/shareCopy.ts`
-导出 `buildLocalShareCopy(result, style)`：3 种风格各 3–5 套模板片段（开头/中段/结尾），随机拼接，自动塞入有数据的字段（无 brand 就跳过）；保证产出 150–220 字。
+## 二、数据字段（AI 输出 → 存库 → 渲染）
 
-### 3. 改造 `src/pages/public/PublicResult.tsx` 的「一键生成图文文案」卡
-- 顶部加 3 个风格切换胶囊：`小红书种草` / `朋友圈随手` / `藏家口吻`，默认 `小红书种草`。
-- 内容区由原来的 `pre + buildShareText` 替换为 `caption` 段落（保留 `whitespace-pre-wrap`、最大高度可滚动）。
-- 三个按钮：
-  - `复制文案`（已有，复制当前 caption）
-  - `换一段`（重新调用 AI；正在生成时显示 loader；失败 toast 后自动落到本地模板）
-  - 风格切换 → 自动重新生成
-- 首次进入：先用本地模板瞬间渲染一段，同时后台调一次 AI 替换（无感升级）。
-- 移除当前文案里干巴巴的「分类｜xxx 关键看点 1/2/3/4」结构，改为新的种草体。
+新增 4 个字段：
 
-### 4. 不动
-- AI 识别管线、`useGuestRecognition`、`GuestProductCard`、中古圈详情卡都不改。
-- 数据库 schema 不需要变（限频可复用 `guest_daily_usage.share_count` 概念，新增字段 `copy_count` 可选；如不加就和 share 共用日额度，简化先不加）。
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `rarity` | int 1-5 | 稀缺度，1 常见 → 5 极罕见 |
+| `collection_value` | text | 收藏价值标签：`极高 / 高 / 中 / 一般` |
+| `market_value` | text | 市场参考价区间，如 `¥1,800 – ¥2,400`、`¥800 起` |
+| `buy_reason` | text | 一句话购买理由，30-60 字，"偶遇/捡漏/错过就没了" 风格 |
 
-## 执行顺序
-1. 写 `src/lib/shareCopy.ts`（模板）
-2. 写 `supabase/functions/generate-share-copy/index.ts`（AI + 兜底）
-3. 改 `PublicResult.tsx`（风格切换 + 实时替换）
+> 关于「市场价稍微夸张」：在 prompt 里给 AI 明确指令——按公开二手市场（闲鱼/煤炉/Yahoo Auctions 日拍）参考价的 **上沿** 给区间，并明确"宁可偏高，不可偏低"，但保持合理（不超过常见行情上限的 1.3 倍），并标注"市场参考·非本店售价"避免合规风险。
 
-## 风险与边界
-- AI 生成可能含编造细节：prompt 中明确「只能用我提供的字段，不许编品牌/价格/产地」。
-- 「主播」禁用词：在 system prompt + 服务端正则二次清洗。
-- 文案要 100% 中文，不出现英文段落（品牌/型号原文允许）。
+## 三、改动清单
+
+### 1. 数据库迁移
+给 `community_posts` 表新增 `rarity int`, `collection_value text`, `market_value text`, `buy_reason text`（都可空，老数据兼容）。
+
+### 2. 边缘函数 `recognize-product-public`
+- prompt 中追加这 4 个字段的输出要求 + 市场价"取上沿"指令
+- 返回 JSON 中包含这 4 个字段
+
+### 3. 边缘函数 `submit-public-post`
+- 透传这 4 个字段写入 `community_posts`
+
+### 4. `useGuestRecognition.tsx` & `RecognitionResult`/`GuestRecognitionResult` 类型
+- 新增 4 个可选字段，从 `data` 透传
+
+### 5. `GuestProductCard.tsx`
+- 新增 `<ValuationHero />` 子组件，**渲染顺序：Hero 大图 → 估值速览卡 → 标题 → meta 表格 → 它的故事 …**
+- 老数据没有这 4 字段时整卡不渲染，回退到现有版式
+
+### 6. `PublicCommunity.tsx` & `PublicResult.tsx`
+- `select` 与 `cardData` 透传新字段
+
+## 四、不在本次范围
+
+- 不改造识别管线缓存逻辑（hash/name cache 命中时若无新字段，下次刷新会被 AI 补齐）
+- 不改 `official_knowledge` / `product_knowledge`（管理员后台可后续再加）
+- 不调整价格记录、闲鱼快照等已有价格模块
+
+## 五、技术细节
+
+- 所有颜色走 `text-accent / text-rose-500 / text-amber-500 / text-emerald-600` 等 Tailwind tokens，已有设计体系
+- 星级用 `lucide-react` 的 `Star` + `StarOff`（或填充透明度）
+- 估值卡放在 hero 图下、标题上方，移动端单列；桌面端可保持单列以求专注
+- 合规小字「市场参考·来源公开二手平台估算，非本店售价」放在估值卡右下 `text-[10px] text-muted-foreground/70`
