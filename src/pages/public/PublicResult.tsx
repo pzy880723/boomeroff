@@ -30,34 +30,7 @@ export default function PublicResult() {
   const [captionLoading, setCaptionLoading] = useState(false);
   const captionReqId = useRef(0);
 
-  const buildShareText = (r: GuestRecognitionResult) => {
-    const lines: string[] = [];
-    lines.push(`【${r.name || '中古好物'}】`);
-    if (r.category) lines.push(`分类｜${r.category}`);
-    const meta: string[] = [];
-    if (r.era) meta.push(`年代 ${r.era}`);
-    if (r.origin) meta.push(`产地 ${r.origin}`);
-    if (meta.length) lines.push(meta.join(' · '));
-    const points = (r.sellingPoints || [])
-      .map((p: any) => (typeof p === 'string' ? p : p?.text || p?.title || ''))
-      .filter(Boolean)
-      .slice(0, 4);
-    if (points.length) {
-      lines.push('');
-      lines.push('关键看点：');
-      points.forEach((p, i) => lines.push(`${i + 1}. ${p}`));
-    }
-    if (r.tips) {
-      lines.push('');
-      lines.push(`小贴士：${r.tips}`);
-    }
-    lines.push('');
-    lines.push('— 以上内容由 AI 生成，仅供参考，不代表真伪与估价 —');
-    lines.push('via BOOMER-OFF · 拍一拍读懂中古');
-    return lines.join('\n');
-  };
 
-  const shareText = result ? buildShareText(result) : '';
 
   const handleCopy = async () => {
     if (!caption) return;
