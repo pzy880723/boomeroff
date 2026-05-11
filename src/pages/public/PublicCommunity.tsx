@@ -56,7 +56,7 @@ export default function PublicCommunity() {
   const loadPosts = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('community_posts')
-      .select('id,image_url,name,category,era,origin,selling_points,tips,created_at,is_guest,guest_name,user_id')
+      .select('id,image_url,name,category,era,origin,selling_points,tips,created_at,likes_count,comments_count,is_guest,guest_name,user_id')
       .eq('is_public', true)
       .eq('is_guest', true)
       .order('created_at', { ascending: false })
