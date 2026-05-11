@@ -37,6 +37,10 @@ interface Post {
   dimensions?: string | null;
   condition?: string | null;
   confidence?: number | null;
+  rarity?: number | null;
+  collection_value?: string | null;
+  market_value?: string | null;
+  buy_reason?: string | null;
   created_at: string;
   likes_count?: number;
   comments_count?: number;
@@ -58,7 +62,7 @@ export default function PublicCommunity() {
   const loadPosts = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('community_posts')
-      .select('id,image_url,name,category,era,origin,selling_points,tips,story,appreciation,description,care_tips,material,craft,dimensions,condition,confidence,created_at,likes_count,comments_count,is_guest,guest_name,user_id')
+      .select('id,image_url,name,category,era,origin,selling_points,tips,story,appreciation,description,care_tips,material,craft,dimensions,condition,confidence,rarity,collection_value,market_value,buy_reason,created_at,likes_count,comments_count,is_guest,guest_name,user_id')
       .eq('is_public', true)
       .eq('is_guest', true)
       .order('created_at', { ascending: false })
@@ -193,6 +197,10 @@ function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void })
     careTips: post.care_tips,
     tips: post.tips,
     confidence: post.confidence,
+    rarity: post.rarity,
+    collectionValue: post.collection_value,
+    marketValue: post.market_value,
+    buyReason: post.buy_reason,
   };
 
   return (

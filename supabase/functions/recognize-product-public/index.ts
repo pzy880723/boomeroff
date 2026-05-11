@@ -55,9 +55,13 @@ const RECOGNITION_TOOL = {
             required: ['tag', 'text'],
           },
         },
+        rarity: { type: 'integer', minimum: 1, maximum: 5, description: '稀缺度 1-5：1 常见、3 不易遇到、5 极罕见' },
+        collectionValue: { type: 'string', enum: ['极高', '高', '中', '一般'], description: '收藏价值标签' },
+        marketValue: { type: 'string', description: '公开二手市场参考价区间，人民币，例 "¥1,800 – ¥2,400" 或 "¥800 起"。务必给区间或起步价，取行情上沿，不要保守低估，但不超过常见上限的 1.3 倍。' },
+        buyReason: { type: 'string', description: '一句话购买理由，30-60 字，"偶遇/捡漏/错过就没有了" 风格，引导顾客觉得划算值得带回家，不要出现具体折扣或本店价格。' },
         confidence: { type: 'number', description: '置信度 0-1' },
       },
-      required: ['name', 'category', 'description', 'sellingPoints', 'confidence'],
+      required: ['name', 'category', 'description', 'sellingPoints', 'rarity', 'collectionValue', 'marketValue', 'buyReason', 'confidence'],
     },
   },
 };
@@ -225,6 +229,10 @@ serve(async (req) => {
 - appreciation：怎么欣赏——看哪个细节、底款怎么读、上手什么手感。
 - careTips：日常使用 / 清洁 / 收藏 / 真假避坑提醒。
 - sellingPoints 三条，tag 必须是 身世/工艺/稀缺/趣味，每条 ≤24 字，从顾客好奇心出发（"为什么有意思"而非"为什么该买"）。
+- rarity：1-5 整数，市面常见=1，偶尔遇到=2，不易遇到=3，少见=4，极罕见=5。
+- collectionValue：从 极高/高/中/一般 四档中选一档。
+- marketValue：参考公开二手市场（闲鱼/煤炉/雅虎日拍/中古店）行情，给一个人民币区间（如 "¥1,800 – ¥2,400"）。**取行情上沿，宁可偏高，不可偏低**——目的是让顾客对比本店价格时有"捡到了"的感觉；但不得超过常见上限的 1.3 倍，更不能编造离谱天价。区间下限不低于 ¥80。绝不可写"本店价"或具体店内售价。
+- buyReason：一句话 30-60 字的购买理由，"偶遇/捡漏/错过就没了/这种品相不常见" 风格，引导顾客把它带回家，不要出现折扣数字或店内价格。
 
 务必通过 submit_recognition 工具提交，不要回普通文本。`;
 

@@ -143,6 +143,10 @@ export default function PublicResult() {
         dimensions: (result as any).dimensions ?? null,
         condition: (result as any).condition ?? null,
         confidence: typeof result.confidence === 'number' ? result.confidence : null,
+        rarity: typeof result.rarity === 'number' ? result.rarity : null,
+        collectionValue: result.collectionValue ?? null,
+        marketValue: result.marketValue ?? null,
+        buyReason: result.buyReason ?? null,
       };
       if (image) body.imageBase64 = image;
       const { data, error } = await supabase.functions.invoke('submit-public-post', { body });

@@ -92,6 +92,7 @@ serve(async (req) => {
       name, category, era, origin, sellingPoints, tips,
       story, appreciation, description, careTips,
       material, craft, dimensions, condition, confidence,
+      rarity, collectionValue, marketValue, buyReason,
       imageBase64, // 新上传图片
       imageUrl,    // 复用公共 URL（如 hash_cache 命中的历史 image_url）
     } = body as {
@@ -100,6 +101,7 @@ serve(async (req) => {
       story?: string | null; appreciation?: string | null; description?: string | null; careTips?: string | null;
       material?: string | null; craft?: string | null; dimensions?: string | null; condition?: string | null;
       confidence?: number | null;
+      rarity?: number | null; collectionValue?: string | null; marketValue?: string | null; buyReason?: string | null;
       imageBase64?: string; imageUrl?: string | null;
     };
 
@@ -155,6 +157,11 @@ serve(async (req) => {
         dimensions: clip(dimensions, 120),
         condition: clip(condition, 120),
         confidence: conf,
+        rarity: typeof rarity === 'number' && Number.isFinite(rarity)
+          ? Math.max(1, Math.min(5, Math.round(rarity))) : null,
+        collection_value: clip(collectionValue, 20),
+        market_value: clip(marketValue, 80),
+        buy_reason: clip(buyReason, 200),
         is_public: true,
         is_guest: true,
         guest_name: '游客',
