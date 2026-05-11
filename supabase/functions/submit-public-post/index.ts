@@ -157,6 +157,11 @@ serve(async (req) => {
         dimensions: clip(dimensions, 120),
         condition: clip(condition, 120),
         confidence: conf,
+        rarity: typeof rarity === 'number' && Number.isFinite(rarity)
+          ? Math.max(1, Math.min(5, Math.round(rarity))) : null,
+        collection_value: clip(collectionValue, 20),
+        market_value: clip(marketValue, 80),
+        buy_reason: clip(buyReason, 200),
         is_public: true,
         is_guest: true,
         guest_name: '游客',
