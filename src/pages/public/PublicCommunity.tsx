@@ -245,7 +245,7 @@ function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void })
                 长按下方二维码，添加店铺微信，和店员聊聊这件物件的细节、价格与到店时间。
               </p>
             </div>
-            <div className="w-full max-w-[18rem] sm:max-w-[20rem] rounded-2xl bg-white p-1.5 shadow-soft">
+            <div className="w-full rounded-2xl bg-white p-2 shadow-soft">
               <img
                 src={shopWechatQr}
                 alt="店铺微信二维码"
