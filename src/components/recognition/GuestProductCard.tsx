@@ -1,5 +1,5 @@
 import { Sparkles, BookOpen, Eye, ShieldAlert, FileText } from 'lucide-react';
-import { CATEGORY_LABELS } from '@/types';
+import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { normalizeSellingPoints } from '@/lib/script';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
 
@@ -10,8 +10,27 @@ const SP_TAG_DOT: Record<string, string> = {
   稀缺: 'bg-rose-500',
 };
 
+/** 通用化的「编辑式杂志卡」数据结构 —— 既能渲染识别结果，也能渲染中古圈帖子。 */
+export interface EditorialCardData {
+  name: string;
+  category: ProductCategory;
+  era?: string | null;
+  origin?: string | null;
+  material?: string | null;
+  craft?: string | null;
+  dimensions?: string | null;
+  condition?: string | null;
+  sellingPoints?: unknown;
+  story?: string | null;
+  appreciation?: string | null;
+  description?: string | null;
+  careTips?: string | null;
+  tips?: string | null;
+  confidence?: number | null;
+}
+
 interface Props {
-  result: GuestRecognitionResult;
+  result: GuestRecognitionResult | EditorialCardData;
   imageUrl?: string | null;
 }
 
