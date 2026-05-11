@@ -236,34 +236,73 @@ export default function PublicResult() {
       {/* 编辑式结果卡 */}
       <GuestProductCard result={result} imageUrl={image} />
 
-      {/* 一键复制图文文案 */}
+      {/* 一键生成图文文案 —— 站在用户视角的种草 / 装逼短文 */}
       <section className="rounded-3xl bg-card ring-1 ring-border/60 p-5 space-y-3.5 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
-              Copy &amp; Share
-            </div>
-            <h3 className="font-display text-[17px] leading-tight tracking-tight flex items-center gap-1.5">
-              <FileText className="w-4 h-4 text-accent" />
-              一键生成图文文案
-            </h3>
-            <p className="text-[12px] text-muted-foreground leading-relaxed">
-              复制后可直接粘贴到微信 / 小红书 / 朋友圈，发给朋友看看这件中古。
-            </p>
+        <div className="space-y-1">
+          <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
+            Copy &amp; Share
           </div>
+          <h3 className="font-display text-[17px] leading-tight tracking-tight flex items-center gap-1.5">
+            <FileText className="w-4 h-4 text-accent" />
+            一键生成图文文案
+          </h3>
+          <p className="text-[12px] text-muted-foreground leading-relaxed">
+            站在你的口吻写一段「偶遇 / 入手」种草文，可直接粘贴到小红书 / 朋友圈 / 微信。
+          </p>
         </div>
-        <pre className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed font-sans text-foreground/90 bg-muted/40 rounded-2xl p-3.5 ring-1 ring-border/40 max-h-56 overflow-auto">
-{shareText}
-        </pre>
-        <Button
-          onClick={handleCopy}
-          variant="default"
-          size="lg"
-          className="w-full gap-2"
-        >
-          {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-          {copied ? '已复制到剪贴板' : '复制图文文案'}
-        </Button>
+
+        {/* 风格切换 */}
+        <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
+          {(Object.keys(STYLE_LABELS) as ShareStyle[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => handleStyleChange(s)}
+              disabled={captionLoading && s !== style}
+              className={`shrink-0 px-3 py-1.5 text-[12px] rounded-full transition-all ${
+                style === s
+                  ? 'bg-foreground text-background font-medium shadow-soft'
+                  : 'bg-muted/60 text-muted-foreground ring-1 ring-border/50 hover:text-foreground'
+              } disabled:opacity-50`}
+            >
+              {STYLE_LABELS[s]}
+            </button>
+          ))}
+        </div>
+
+        {/* 文案内容 */}
+        <div className="relative">
+          <pre className="whitespace-pre-wrap break-words text-[13px] leading-[1.85] font-sans text-foreground/90 bg-muted/40 rounded-2xl p-4 ring-1 ring-border/40 max-h-72 overflow-auto">
+{caption || '正在生成…'}
+          </pre>
+          {captionLoading && (
+            <div className="absolute top-2 right-2 inline-flex items-center gap-1 text-[10.5px] text-muted-foreground bg-background/85 backdrop-blur px-2 py-1 rounded-full ring-1 ring-border/50">
+              <Loader2 className="w-3 h-3 animate-spin" /> AI 润色中
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-[1fr_auto] gap-2">
+          <Button
+            onClick={handleCopy}
+            variant="default"
+            size="lg"
+            className="gap-2"
+            disabled={!caption}
+          >
+            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {copied ? '已复制到剪贴板' : '复制文案'}
+          </Button>
+          <Button
+            onClick={handleRegenerate}
+            variant="outline"
+            size="lg"
+            className="gap-2"
+            disabled={captionLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${captionLoading ? 'animate-spin' : ''}`} />
+            换一段
+          </Button>
+        </div>
       </section>
 
       {/* 分享 hero 卡 */}
