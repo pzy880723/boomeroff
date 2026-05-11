@@ -73,7 +73,10 @@ export function GuestProductCard({ result, imageUrl }: Props) {
   ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   const lowConfidence = typeof result.confidence === 'number' && result.confidence < 0.6;
-  const careTipsText = result.careTips || result.tips || null;
+  const careTipsText: string | null =
+    (typeof result.careTips === 'string' && result.careTips) ||
+    (typeof result.tips === 'string' && result.tips) ||
+    null;
 
   return (
     <article className="space-y-6">
