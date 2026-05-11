@@ -13,11 +13,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Setup npm version
-        run: npm install -g npm@latest
+      - name: Enable Corepack (for yarn)
+        run: corepack enable && corepack prepare yarn@stable --activate
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
-      - run: npm run build
+        run: yarn install --immutable
+      - run: yarn build
       - name: Sync Capacitor
         run: npx cap sync android
       - name: Grant execute permission for gradlew
