@@ -60,14 +60,62 @@ export default function PublicResult() {
   const shareText = result ? buildShareText(result) : '';
 
   const handleCopy = async () => {
-    if (!result) return;
+    if (!caption) return;
     try {
-      await navigator.clipboard.writeText(shareText);
+      await navigator.clipboard.writeText(caption);
       setCopied(true);
       toast.success('文案已复制，去粘贴给朋友吧');
       setTimeout(() => setCopied(false), 2200);
     } catch {
       toast.error('复制失败，请长按选中文案手动复制');
+    }
+  };
+
+  // —— 生成文案：先本地兜底，再调 AI 替换 —— //
+  const generateCaption = async (r: GuestRecognitionResult, s: ShareStyle, useAI = true) => {
+    const reqId = ++captionReqId.current;
+    // 立即用本地模板出一段，避免空白
+    const local = buildLocalShareCopy(
+      {
+        name: r.name,
+        category: r.category,
+        era: r.era,
+        origin: r.origin,
+        material: r.material,
+        craft: r.craft,
+        story: r.story,
+        sellingPoints: r.sellingPoints,
+      },
+      s,
+    );
+    setCaption(local);
+    if (!useAI) return;
+    setCaptionLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-share-copy', {
+        body: {
+          name: r.name,
+          category: r.category,
+          era: r.era || null,
+          origin: r.origin || null,
+          material: r.material || null,
+          craft: r.craft || null,
+          sellingPoints: r.sellingPoints || [],
+          story: r.story || null,
+          style: s,
+        },
+      });
+      if (reqId !== captionReqId.current) return; // 已被新一轮覆盖
+      if (error) throw new Error((error as any).message || 'AI 生成失败');
+      const c = (data?.caption || '').toString();
+      if (c) setCaption(sanitizeShareCopy(c));
+      else if (data?.error) throw new Error(data.error);
+    } catch (e: any) {
+      if (reqId !== captionReqId.current) return;
+      // 静默落到本地模板，已经显示了
+      console.warn('[ShareCopy] AI fallback:', e?.message);
+    } finally {
+      if (reqId === captionReqId.current) setCaptionLoading(false);
     }
   };
 
@@ -79,13 +127,28 @@ export default function PublicResult() {
       return;
     }
     try {
-      setResult(JSON.parse(raw));
+      const r: GuestRecognitionResult = JSON.parse(raw);
+      setResult(r);
       if (img) setImage(img);
       setView('ready');
+      // 首屏：本地秒出 + AI 替换
+      generateCaption(r, 'xhs', true);
     } catch {
       setView('empty');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleStyleChange = (s: ShareStyle) => {
+    if (!result || s === style) return;
+    setStyle(s);
+    generateCaption(result, s, true);
+  };
+
+  const handleRegenerate = () => {
+    if (!result || captionLoading) return;
+    generateCaption(result, style, true);
+  };
 
   const handleShare = async () => {
     if (!result || sharing || shared) return;
