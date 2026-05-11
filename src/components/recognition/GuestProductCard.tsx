@@ -195,7 +195,7 @@ export function GuestProductCard({ result, imageUrl }: Props) {
       )}
 
       {/* 保养与使用 — 高亮卡 */}
-      {result.careTips && (
+      {careTipsText && (
         <section className="rounded-2xl bg-accent/8 ring-1 ring-accent/25 p-5 space-y-2.5">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-accent" />
@@ -203,7 +203,7 @@ export function GuestProductCard({ result, imageUrl }: Props) {
           </div>
           <h3 className="font-display text-[16px] tracking-tight">保养与使用</h3>
           <p className="text-[13.5px] leading-relaxed text-foreground/85 whitespace-pre-wrap">
-            {result.careTips}
+            {careTipsText}
           </p>
         </section>
       )}
