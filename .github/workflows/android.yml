@@ -16,6 +16,10 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
+      - name: Sync Capacitor
+        run: npx cap sync android
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./android/gradlew
       - uses: gradle/gradle-build-action@v2
         with:
           arguments: assembleDebug
