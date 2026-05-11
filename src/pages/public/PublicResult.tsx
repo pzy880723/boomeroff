@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Camera, Share2, Check, Loader2, ChevronLeft, Sparkles, ImageOff, Aperture } from 'lucide-react';
+import { Camera, Share2, Check, Loader2, ChevronLeft, Sparkles, ImageOff, Aperture, Copy, FileText } from 'lucide-react';
 import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
