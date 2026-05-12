@@ -173,14 +173,16 @@ export function GuestProductCard({ result, imageUrl }: Props) {
     (typeof result.tips === 'string' && result.tips) ||
     null;
 
+  // 日本相关品类：origin 缺失时兜底为「日本」
+  const displayOrigin = result.origin || (JP_CATS.has(result.category) ? '日本' : null);
+
   return (
     <article className="space-y-6">
-      {/* Hero 大图 + 浮层标签 */}
       <header className="space-y-4">
+        {/* Hero 大图：保留品类 / 低置信度浮层，移除底部信息蒙层 */}
         {imageUrl && (
           <div className="relative rounded-3xl overflow-hidden ring-1 ring-border/50 shadow-elevated bg-muted">
             <img src={imageUrl} alt={result.name} className="w-full h-auto block" />
-            <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/55 via-black/15 to-transparent pointer-events-none" />
             <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
               <span className="px-2.5 py-1 rounded-full bg-background/85 backdrop-blur text-[10.5px] font-medium ring-1 ring-border/60">
                 {CATEGORY_LABELS[result.category]}
@@ -191,28 +193,10 @@ export function GuestProductCard({ result, imageUrl }: Props) {
                 </span>
               )}
             </div>
-            {result.era && (
-              <div className="absolute left-4 right-4 bottom-3 text-white">
-                <div className="text-[10px] tracking-[0.22em] uppercase opacity-80">Era</div>
-                <div className="font-display text-[16px] tracking-tight leading-tight">
-                  {result.era}
-                  {result.origin && <span className="opacity-80"> · {result.origin}</span>}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        <ValuationHero
-          rarity={typeof result.rarity === 'number' ? result.rarity : null}
-          collectionValue={result.collectionValue ?? null}
-          marketValue={result.marketValue ?? null}
-          buyReason={result.buyReason ?? null}
-          era={result.era ?? null}
-          origin={result.origin ?? null}
-        />
-
-        {/* 标题 */}
+        {/* 标题：图片下方 */}
         <div className="px-1 space-y-2">
           <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">
             Discovery · {CATEGORY_LABELS[result.category]}
@@ -220,12 +204,16 @@ export function GuestProductCard({ result, imageUrl }: Props) {
           <h1 className="font-display text-[26px] sm:text-[30px] leading-[1.15] tracking-tight">
             {result.name}
           </h1>
-          {!imageUrl && (result.era || result.origin) && (
-            <div className="text-[12.5px] text-muted-foreground tracking-wide">
-              {[result.era, result.origin].filter(Boolean).join(' · ')}
-            </div>
-          )}
         </div>
+
+        {/* 估值速览卡 */}
+        <ValuationHero
+          rarity={typeof result.rarity === 'number' ? result.rarity : null}
+          marketValue={result.marketValue ?? null}
+          buyReason={result.buyReason ?? null}
+          era={result.era ?? null}
+          origin={displayOrigin}
+        />
 
         {/* Meta 编辑式表格 */}
         {meta.length > 0 && (
