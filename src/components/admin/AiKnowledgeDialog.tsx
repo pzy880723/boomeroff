@@ -1036,11 +1036,14 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCo
               <ImageOff className="w-5 h-5" /> 尚未生成封面
             </div>
           )}
-          {coverPrompt && !painting && (
+          {!painting && draft.name && (
             <Button
               size="sm" variant="secondary"
               className="absolute bottom-2 right-2 h-7 text-xs"
-              onClick={() => triggerCover(coverPrompt)}
+              onClick={async () => {
+                try { await triggerCover(coverPrompt); }
+                catch (err) { console.warn('[regen-cover] uncaught', err); }
+              }}
             >
               <RefreshCw className="w-3 h-3 mr-1" /> 重新生成
             </Button>
