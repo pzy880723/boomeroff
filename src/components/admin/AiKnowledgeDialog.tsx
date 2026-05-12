@@ -122,6 +122,10 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const [backstampBusy, setBackstampBusy] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [painting, setPainting] = useState(false);
+  const [coverElapsed, setCoverElapsed] = useState(0);
+  const [coverCooldown, setCoverCooldown] = useState(false);
+  const COVER_TIMEOUT_MS = 40000;
+  const COVER_EST_MS = 25000;
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [enrichStage, setEnrichStage] = useState<'idle' | 'collect' | 'core' | 'body' | 'cover' | 'save' | 'done'>('idle');
@@ -228,20 +232,33 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   };
 
   const triggerCover = async (promptArg: string, opts: { persist?: boolean; preferWeb?: boolean } = {}) => {
-    if (painting) return; // 防抖
+    if (painting || coverCooldown) return; // 防抖 + 失败冷却
     const prompt = (promptArg && promptArg.trim()) || buildFallbackCoverPrompt(draft);
     setPainting(true);
+    setCoverElapsed(0);
+    const startedAt = Date.now();
+    const tick = window.setInterval(() => {
+      setCoverElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 500);
+    let timeoutHit = false;
+    const timeoutPromise = new Promise<never>((_, rej) => {
+      window.setTimeout(() => { timeoutHit = true; rej(new Error('timeout')); }, COVER_TIMEOUT_MS);
+    });
     try {
       // 优先联网搜真实图
       let url: string | null = null;
       if (opts.preferWeb !== false && draft.name) {
         try {
-          const found = await webSearchImages(draft.name, 'gallery', 1);
+          const found = await Promise.race([webSearchImages(draft.name, 'gallery', 1), timeoutPromise]);
           if (found.length) url = found[0];
-        } catch (e) { console.warn('[triggerCover] web search failed', e); }
+        } catch (e) {
+          if (timeoutHit) throw e;
+          console.warn('[triggerCover] web search failed', e);
+        }
       }
       if (!url) {
-        const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
+        const invokeP = supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
+        const { data, error } = await Promise.race([invokeP, timeoutPromise]) as any;
         if (error) throw error;
         url = (data && (data as any).url) || null;
       }
@@ -256,14 +273,19 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         }
       } else {
         toast.error('封面生成失败，请稍后再试');
+        setCoverCooldown(true);
+        window.setTimeout(() => setCoverCooldown(false), 5000);
       }
     } catch (e: unknown) {
-      const msg = safeErrMsg(e);
+      const msg = timeoutHit ? '生成超时，请稍后重试或简化描述' : safeErrMsg(e);
       toast.error('封面生成失败：' + msg);
+      setCoverCooldown(true);
+      window.setTimeout(() => setCoverCooldown(false), 8000);
       if (opts.persist) {
-        setMessages((m) => [...m, { role: 'assistant', content: '主图生成失败，请再说一次想要的风格，我重试。' }]);
+        setMessages((m) => [...m, { role: 'assistant', content: `主图${timeoutHit ? '生成超时' : '生成失败'}，请稍后再试或换个描述。` }]);
       }
     } finally {
+      window.clearInterval(tick);
       setPainting(false);
     }
   };
@@ -887,6 +909,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             coverUrl={coverUrl}
             coverPrompt={coverPrompt}
             painting={painting}
+            coverElapsed={coverElapsed}
+            coverEstSec={Math.round(COVER_EST_MS / 1000)}
+            coverCooldown={coverCooldown}
             triggerCover={triggerCover}
             gallery={gallery}
             galleryBusy={galleryBusy}
@@ -940,6 +965,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
               coverUrl={coverUrl}
               coverPrompt={coverPrompt}
               painting={painting}
+              coverElapsed={coverElapsed}
+              coverEstSec={Math.round(COVER_EST_MS / 1000)}
+              coverCooldown={coverCooldown}
               triggerCover={triggerCover}
               gallery={gallery}
               galleryBusy={galleryBusy}
@@ -986,6 +1014,9 @@ interface PreviewProps {
   coverUrl: string | null;
   coverPrompt: string;
   painting: boolean;
+  coverElapsed?: number;
+  coverEstSec?: number;
+  coverCooldown?: boolean;
   triggerCover: (p: string) => void | Promise<void>;
   gallery?: string[];
   galleryBusy?: boolean;
@@ -1016,36 +1047,47 @@ function PreviewPane(props: PreviewProps & { onExpand: () => void }) {
   );
 }
 
-function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large, gallery, galleryBusy, onGenGallery, onWebSearchGallery, onUploadGallery, uploading, onRemoveGallery, onMoveGallery, onSetCover, backstampUrl, backstampBusy, onFetchBackstamp }: PreviewProps) {
+function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, coverElapsed = 0, coverEstSec = 25, coverCooldown = false, triggerCover, large, gallery, galleryBusy, onGenGallery, onWebSearchGallery, onUploadGallery, uploading, onRemoveGallery, onMoveGallery, onSetCover, backstampUrl, backstampBusy, onFetchBackstamp }: PreviewProps) {
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
   const t = large
     ? { name: 'text-2xl', section: 'text-sm', body: 'text-base', tag: 'text-xs', mini: 'text-xs', card: 'p-5 space-y-5', wrap: 'p-4' }
     : { name: 'text-base', section: 'text-xs', body: 'text-sm', tag: 'text-[10px]', mini: 'text-xs', card: 'p-4 space-y-3', wrap: '' };
+  const coverPct = painting ? Math.min(95, Math.round((coverElapsed / coverEstSec) * 100)) : 0;
   return (
     <div className={large ? 'p-3' : ''}>
       <div className="rounded-xl border bg-background overflow-hidden shadow-soft max-w-2xl mx-auto">
         <div className="aspect-square bg-muted flex items-center justify-center relative">
-          {coverUrl ? (
+          {coverUrl && !painting ? (
             <img src={coverUrl} alt={draft.name || ''} className="w-full h-full object-cover" />
           ) : painting ? (
-            <div className="flex flex-col items-center gap-2 text-muted-foreground text-xs">
-              <Loader2 className="w-5 h-5 animate-spin" /> 正在生成封面…
+            <div className="flex flex-col items-center gap-2 text-muted-foreground text-xs w-2/3">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <div>正在生成封面… {coverElapsed}s</div>
+              <Progress value={coverPct} className="h-1.5 w-full" />
+              <div className="text-[10px] opacity-70">通常需要 10–25 秒，超过 40 秒会自动停止</div>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-1 text-muted-foreground text-xs">
               <ImageOff className="w-5 h-5" /> 尚未生成封面
             </div>
           )}
-          {!painting && draft.name && (
+          {draft.name && (
             <Button
               size="sm" variant="secondary"
               className="absolute bottom-2 right-2 h-7 text-xs"
+              disabled={painting || coverCooldown}
               onClick={async () => {
                 try { await triggerCover(coverPrompt); }
                 catch (err) { console.warn('[regen-cover] uncaught', err); }
               }}
             >
-              <RefreshCw className="w-3 h-3 mr-1" /> 重新生成
+              {painting ? (
+                <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> 生成中 {coverElapsed}s</>
+              ) : coverCooldown ? (
+                <><RefreshCw className="w-3 h-3 mr-1" /> 稍候再试</>
+              ) : (
+                <><RefreshCw className="w-3 h-3 mr-1" /> 重新生成</>
+              )}
             </Button>
           )}
         </div>
