@@ -1041,36 +1041,47 @@ function PreviewPane(props: PreviewProps & { onExpand: () => void }) {
   );
 }
 
-function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCover, large, gallery, galleryBusy, onGenGallery, onWebSearchGallery, onUploadGallery, uploading, onRemoveGallery, onMoveGallery, onSetCover, backstampUrl, backstampBusy, onFetchBackstamp }: PreviewProps) {
+function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, coverElapsed = 0, coverEstSec = 25, coverCooldown = false, triggerCover, large, gallery, galleryBusy, onGenGallery, onWebSearchGallery, onUploadGallery, uploading, onRemoveGallery, onMoveGallery, onSetCover, backstampUrl, backstampBusy, onFetchBackstamp }: PreviewProps) {
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
   const t = large
     ? { name: 'text-2xl', section: 'text-sm', body: 'text-base', tag: 'text-xs', mini: 'text-xs', card: 'p-5 space-y-5', wrap: 'p-4' }
     : { name: 'text-base', section: 'text-xs', body: 'text-sm', tag: 'text-[10px]', mini: 'text-xs', card: 'p-4 space-y-3', wrap: '' };
+  const coverPct = painting ? Math.min(95, Math.round((coverElapsed / coverEstSec) * 100)) : 0;
   return (
     <div className={large ? 'p-3' : ''}>
       <div className="rounded-xl border bg-background overflow-hidden shadow-soft max-w-2xl mx-auto">
         <div className="aspect-square bg-muted flex items-center justify-center relative">
-          {coverUrl ? (
+          {coverUrl && !painting ? (
             <img src={coverUrl} alt={draft.name || ''} className="w-full h-full object-cover" />
           ) : painting ? (
-            <div className="flex flex-col items-center gap-2 text-muted-foreground text-xs">
-              <Loader2 className="w-5 h-5 animate-spin" /> 正在生成封面…
+            <div className="flex flex-col items-center gap-2 text-muted-foreground text-xs w-2/3">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <div>正在生成封面… {coverElapsed}s</div>
+              <Progress value={coverPct} className="h-1.5 w-full" />
+              <div className="text-[10px] opacity-70">通常需要 10–25 秒，超过 40 秒会自动停止</div>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-1 text-muted-foreground text-xs">
               <ImageOff className="w-5 h-5" /> 尚未生成封面
             </div>
           )}
-          {!painting && draft.name && (
+          {draft.name && (
             <Button
               size="sm" variant="secondary"
               className="absolute bottom-2 right-2 h-7 text-xs"
+              disabled={painting || coverCooldown}
               onClick={async () => {
                 try { await triggerCover(coverPrompt); }
                 catch (err) { console.warn('[regen-cover] uncaught', err); }
               }}
             >
-              <RefreshCw className="w-3 h-3 mr-1" /> 重新生成
+              {painting ? (
+                <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> 生成中 {coverElapsed}s</>
+              ) : coverCooldown ? (
+                <><RefreshCw className="w-3 h-3 mr-1" /> 稍候再试</>
+              ) : (
+                <><RefreshCw className="w-3 h-3 mr-1" /> 重新生成</>
+              )}
             </Button>
           )}
         </div>
