@@ -1008,6 +1008,9 @@ interface PreviewProps {
   coverUrl: string | null;
   coverPrompt: string;
   painting: boolean;
+  coverElapsed?: number;
+  coverEstSec?: number;
+  coverCooldown?: boolean;
   triggerCover: (p: string) => void | Promise<void>;
   gallery?: string[];
   galleryBusy?: boolean;
