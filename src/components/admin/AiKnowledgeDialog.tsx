@@ -634,9 +634,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       }
 
       // ---- Step 4: gallery (优先真实图，AI 补齐) ----
-      if (newPrompt && (gallery?.length || 0) < 3) {
+      if (promptToUse && (gallery?.length || 0) < 3) {
         try {
-          await generateGallery(newPrompt, { persist: !!editingItem });
+          await generateGallery(promptToUse, { persist: !!editingItem });
         } catch (e) {
           console.warn('gallery failed', e);
         }
