@@ -587,33 +587,45 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         toast.error(`长正文生成失败：${e?.message ?? ''}`);
       }
 
-      // ---- Step 3: cover — 优先联网真实图，AI 兜底 ----
-      const newPrompt = (coreData.cover_prompt as string | undefined) || '';
+      // ---- Step 3: cover — 优先联网真实图，AI 兜底（无 cover_prompt 也用本地兜底）----
+      const aiPrompt = (coreData.cover_prompt as string | undefined) || '';
+      const fallbackPrompt = buildFallbackCoverPrompt(coreDraft);
+      const promptToUse = aiPrompt || fallbackPrompt;
       const nameForSearch = (coreDraft.name || baseDraft.name || '').trim();
       if (!hasCover) {
         setEnrichStage('cover');
         try {
           let url: string | null = null;
           if (nameForSearch) {
-            const found = await webSearchImages(nameForSearch, 'gallery', 1);
-            if (found.length) url = found[0];
+            try {
+              const found = await webSearchImages(nameForSearch, 'gallery', 1);
+              if (found.length) url = found[0];
+            } catch (e) { console.warn('[enrich:cover] web search failed', e); }
           }
-          if (!url && newPrompt) {
-            const cd = await withRetry(async () => {
-              const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: newPrompt } });
-              if (error) throw error;
-              if (!data?.url) throw new Error('cover 返回为空');
-              return data;
-            }, 'cover');
-            url = cd.url;
+          if (!url) {
+            try {
+              const cd = await withRetry(async () => {
+                const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: promptToUse } });
+                if (error) throw error;
+                if (!data?.url) throw new Error('cover 返回为空');
+                return data;
+              }, 'cover');
+              url = cd.url;
+            } catch (e) {
+              console.warn('[enrich:cover] AI cover failed', e);
+              toast.warning('主图生成失败，可在预览中点「重新生成」重试');
+            }
           }
           if (url) {
             setCoverUrl(url);
-            if (newPrompt) setCoverPrompt(newPrompt);
+            setCoverPrompt(promptToUse);
             if (editingItem) {
               await supabase.from('official_knowledge').update({ cover_url: url }).eq('id', editingItem.id);
               onSaved();
             }
+          } else if (!coverPrompt) {
+            // 即便失败也存一份 prompt，便于用户手动「重新生成」
+            setCoverPrompt(promptToUse);
           }
           setEnrichProgress(92);
         } catch (e) {
