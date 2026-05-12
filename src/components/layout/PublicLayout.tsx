@@ -28,15 +28,13 @@ export function PublicLayout() {
             </div>
           </Link>
           <Link to="/u" className="ml-auto relative shrink-0" aria-label="中古识物">
-            <div className="h-7 w-12 overflow-hidden flex items-center justify-center">
-              <img
-                src={logo}
-                alt="中古识物"
-                className="h-16 w-auto max-w-none object-contain"
-                draggable={false}
-              />
-            </div>
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent ring-2 ring-background" />
+            <img
+              src={logo}
+              alt="中古识物"
+              draggable={false}
+              className="h-9 w-auto object-contain"
+            />
+            <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-accent ring-2 ring-background" />
           </Link>
         </div>
       </header>
