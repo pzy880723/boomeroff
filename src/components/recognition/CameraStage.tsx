@@ -460,6 +460,7 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
               {!isStreaming && !capturedImage && (
                 <>
                   <Button
+                    id="onboard-start-camera"
                     size="lg"
                     onClick={() => startCamera()}
                     className="gap-2 h-12 px-6 rounded-full bg-accent hover:bg-accent/90 text-accent-foreground shadow-glow font-medium"

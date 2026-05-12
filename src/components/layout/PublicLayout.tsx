@@ -17,7 +17,7 @@ export function PublicLayout() {
     <div className="min-h-screen bg-gradient-surface flex flex-col">
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur-xl safe-top">
         <div className="container flex h-14 items-center gap-3">
-          <Link to="/u" className="flex items-center gap-2.5 min-w-0 group">
+          <Link id="onboard-logo" to="/u" className="flex items-center gap-2.5 min-w-0 group">
             <div className="relative">
               <img
                 src={logo}
@@ -55,7 +55,7 @@ export function PublicLayout() {
                 ? location.pathname === to
                 : location.pathname === to || location.pathname.startsWith(to + '/');
               return (
-                <li key={to} className="flex-1">
+                <li key={to} className="flex-1" id={to === '/u/community' ? 'onboard-community-tab' : undefined}>
                   <NavLink
                     to={to}
                     end={exact}

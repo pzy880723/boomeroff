@@ -1,31 +1,49 @@
-## 调整内容
+## 游客版首次引导：分步气泡 Coachmark
 
-针对 `GuestProductCard.tsx`（识别结果 + 中古圈帖子详情共用）：
+在 `/u`（PublicScan）页面叠加一层轻量的引导：依次高亮三个真实区域，配气泡说明 + 「下一步 / 跳过」按钮，最后一步是「我知道了」。每次进入 `/u` 都展示，用户可随时跳过。
 
-### 1. 删除「收藏价值」
-- `ValuationHero` 中移除整段 `collectionValue` 渲染（标签 + 配色 chip）
-- 移除 `COLLECTION_VALUE_STYLE` 常量
-- props 仍保留 `collectionValue`（向后兼容数据），仅不渲染
+### 引导步骤
 
-### 2. 稀缺度默认 ≥4 星
-- 在 `ValuationHero` 内：`stars = max(4, round(rarity || 4))`，并 clamp 到 5
-- 即 AI 给的若 <4 自动抬到 4；缺失时默认 4
-- 同时在 `recognize-product-public` 边缘函数 prompt 中追加："稀缺度 rarity 取值范围 4-5（默认偏高，营造稀缺感）"，让落库数据也偏高
+1. **拍照按钮**（CameraStage 内的快门）
+   - 标题：对准它，按下快门
+   - 说明：让物件占满画面 2/3，AI 1-3 秒告诉你它是什么
+2. **底部「中古圈」tab**
+   - 标题：逛逛中古圈
+   - 说明：识别完可以匿名分享，看看别人都淘到了什么
+3. **顶部 Logo / 关于**（指向 header 区域或「关于」tab）
+   - 标题：来自 BOOMER-OFF
+   - 说明：一家专注日本中古杂货的小店，欢迎到店逛逛
+   - 按钮文案：开始体验
 
-### 3. 日本 IP 产品产地默认「日本」
-- 在 `recognize-product-public` 边缘函数：判定为日本相关品类（`jp_porcelain / incense / anime_toy / otaku_goods / walkman / ccd / media_record / playback_device / game_console`）时，若 AI 没给 `origin` 或给的不是日本相关，强制 `origin = '日本'`
-- 同时在 `GuestProductCard` 兜底显示：当 `origin` 缺失且 category 属于上述日本品类时，渲染「日本」
+### 交互细节
 
-### 4. 商品名移到图片下方
-- 现状：hero 图左上角是品类 chip，左下角白字叠了 `era · origin`，标题在图外下面
-- 改为：
-  - 移除图片底部的 era/origin 白字浮层 + 黑色渐变蒙层
-  - 图片下方紧跟 `<h1>` 商品名块（保留现在的 `Discovery · 品类` 小标签 + 大标题）
-  - 估值速览卡放到标题下方（顺序：Hero 图 → 标题 → 估值速览卡 → meta → 故事…）
-  - 估值卡里继续展示 era / origin chips，避免信息丢失
+- 进入 `/u` 后延迟 ~400ms 出现遮罩，避免与首屏渲染抢资源
+- 半透明遮罩 + 高亮区域「打孔」：用绝对定位的 4 块 `bg-black/55` 拼出目标矩形周围的暗区，目标区本身保持原样可见（也响应点击直接触发）
+- 气泡：紧贴高亮区，显示步骤指示「1 / 3」、标题、说明、`跳过` `下一步` 两个按钮；最后一步右键是「我知道了」
+- 进入下一步时 100ms 淡入；ESC 或点击遮罩外不关闭，必须点按钮（避免误关）
+- 若窗口尺寸变化（旋转屏幕）重新测量目标位置
+- 完全不写 localStorage —— 每次进入都展示（按用户选择）
 
-## 不改动
+### 技术方案
 
-- 数据库结构不动（`collection_value` 字段保留）
-- `submit-public-post`、`useGuestRecognition` 透传字段不动
-- 其他模块（看点 / 故事 / 保养）样式不动
+- 新建 `src/components/public/GuestOnboarding.tsx`：
+  - props: `steps: { targetId: string; title: string; desc: string }[]`，`onDone: () => void`
+  - 内部用 `useState(stepIndex)`，`useLayoutEffect` 通过 `document.getElementById(targetId).getBoundingClientRect()` 计算高亮位置
+  - 监听 `resize` / `scroll` 重新测量
+  - 使用 portal（`createPortal` to `document.body`）渲染遮罩层，`z-50`，置于 PublicLayout 的 nav 之上
+- 给被引导元素加 `id`：
+  - CameraStage 的快门按钮：`id="onboard-shutter"`（需查看并最小改动 `CameraStage.tsx`）
+  - PublicLayout 的「中古圈」NavLink：`id="onboard-community-tab"`
+  - PublicLayout 的 logo 链接：`id="onboard-logo"`
+- 在 `PublicScan.tsx` 顶部：
+  ```ts
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  ```
+  渲染 `{showOnboarding && <GuestOnboarding steps={...} onDone={() => setShowOnboarding(false)} />}`
+- 全部使用 design tokens（`bg-background`, `text-foreground`, `bg-primary` 等），不硬编码颜色
+
+### 不在范围内
+
+- 不动登录版（Scan/MainLayout）
+- 不修改识别逻辑、edge function、数据表
+- 不引入新依赖（不用 react-joyride 等）
