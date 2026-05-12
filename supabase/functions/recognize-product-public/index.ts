@@ -296,6 +296,17 @@ serve(async (req) => {
     }
     if (!result.name) result.name = '未知商品';
     if (typeof result.confidence !== 'number') result.confidence = 0.7;
+    // 稀缺度兜底：低于 4 抬到 4
+    if (typeof result.rarity !== 'number' || result.rarity < 4) result.rarity = 4;
+    if (result.rarity > 5) result.rarity = 5;
+    // 日本相关品类：产地兜底为"日本"
+    const JP_CATS = new Set(['jp_porcelain','incense','anime_toy','otaku_goods','walkman','ccd','media_record','playback_device','game_console']);
+    if (JP_CATS.has(result.category)) {
+      const o = (result.origin || '').toString();
+      if (!o || o === '不详' || !/日本|日|Japan|jp/i.test(o)) {
+        result.origin = '日本';
+      }
+    }
     result.fromCache = false;
     if (imageHash) result.imageHash = imageHash;
     result.__pipeline = { source: 'lovable_gemini', model: MAIN_MODEL, webSearchUsed: false };
