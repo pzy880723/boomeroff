@@ -17,15 +17,7 @@ export function PublicLayout() {
     <div className="min-h-screen bg-gradient-surface flex flex-col">
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur-xl safe-top">
         <div className="container flex h-14 items-center gap-3">
-          <Link id="onboard-logo" to="/u" className="flex items-center gap-2.5 min-w-0 group">
-            <div className="relative">
-              <img
-                src={logo}
-                alt="中古识物"
-                className="h-9 w-9 rounded-lg object-contain ring-1 ring-border/50 bg-background"
-              />
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent ring-2 ring-background" />
-            </div>
+          <Link id="onboard-logo" to="/u" className="flex items-center min-w-0 group">
             <div className="min-w-0 leading-tight">
               <div className="font-display text-[15px] tracking-tight truncate">
                 中古识物
@@ -34,6 +26,17 @@ export function PublicLayout() {
                 Tap · Discover
               </div>
             </div>
+          </Link>
+          <Link to="/u" className="ml-auto relative shrink-0" aria-label="中古识物">
+            <div className="h-7 w-12 overflow-hidden flex items-center justify-center">
+              <img
+                src={logo}
+                alt="中古识物"
+                className="h-16 w-auto max-w-none object-contain"
+                draggable={false}
+              />
+            </div>
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent ring-2 ring-background" />
           </Link>
         </div>
       </header>
