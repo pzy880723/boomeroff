@@ -909,6 +909,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
             coverUrl={coverUrl}
             coverPrompt={coverPrompt}
             painting={painting}
+            coverElapsed={coverElapsed}
+            coverEstSec={Math.round(COVER_EST_MS / 1000)}
+            coverCooldown={coverCooldown}
             triggerCover={triggerCover}
             gallery={gallery}
             galleryBusy={galleryBusy}
