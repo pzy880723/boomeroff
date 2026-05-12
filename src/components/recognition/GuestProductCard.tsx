@@ -71,20 +71,20 @@ function Block({
 }
 
 function ValuationHero({
-  rarity, collectionValue, marketValue, buyReason, era, origin,
+  rarity, marketValue, buyReason, era, origin,
 }: {
   rarity: number | null;
-  collectionValue: string | null;
   marketValue: string | null;
   buyReason: string | null;
   era: string | null;
   origin: string | null;
 }) {
-  const hasAny = (rarity && rarity > 0) || collectionValue || marketValue || buyReason;
+  const hasAny = (rarity != null) || marketValue || buyReason || era || origin;
   if (!hasAny) return null;
 
-  const stars = Math.max(0, Math.min(5, Math.round(rarity || 0)));
-  const cvKey = collectionValue && COLLECTION_VALUE_STYLE[collectionValue] ? collectionValue : null;
+  // 默认 4 星起步
+  const raw = typeof rarity === 'number' && rarity > 0 ? Math.round(rarity) : 4;
+  const stars = Math.min(5, Math.max(4, raw));
 
   return (
     <section className="relative mx-1 rounded-3xl overflow-hidden bg-gradient-to-br from-accent/12 via-background to-primary/8 ring-1 ring-accent/30 shadow-elevated">
@@ -115,27 +115,17 @@ function ValuationHero({
           </div>
 
           <div className="space-y-3 sm:border-l sm:border-border/50 sm:pl-5">
-            {(rarity != null) && (
-              <div className="space-y-1">
-                <div className="text-[10.5px] tracking-[0.2em] uppercase text-muted-foreground/85">稀缺度</div>
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-4 h-4 ${i < stars ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground/30'}`}
-                    />
-                  ))}
-                </div>
+            <div className="space-y-1">
+              <div className="text-[10.5px] tracking-[0.2em] uppercase text-muted-foreground/85">稀缺度</div>
+              <div className="flex items-center gap-0.5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star
+                    key={i}
+                    className={`w-4 h-4 ${i < stars ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground/30'}`}
+                  />
+                ))}
               </div>
-            )}
-            {cvKey && (
-              <div className="space-y-1">
-                <div className="text-[10.5px] tracking-[0.2em] uppercase text-muted-foreground/85">收藏价值</div>
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium ring-1 ${COLLECTION_VALUE_STYLE[cvKey]}`}>
-                  {cvKey}
-                </span>
-              </div>
-            )}
+            </div>
           </div>
         </div>
 
