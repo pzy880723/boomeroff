@@ -38,7 +38,9 @@ export default function PublicScan() {
   const navigate = useNavigate();
   const { recognize, remaining } = useGuestRecognition();
   const stageRef = useRef<CameraStageHandle>(null);
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => typeof window !== 'undefined' && !sessionStorage.getItem('guest_onboarding_shown_v1'),
+  );
 
   const handleRecognize = async (images: string[]): Promise<boolean> => {
     const r = await recognize(images.length > 1 ? images : images[0]);
@@ -108,7 +110,10 @@ export default function PublicScan() {
       {showOnboarding && (
         <GuestOnboarding
           steps={ONBOARD_STEPS}
-          onDone={() => setShowOnboarding(false)}
+          onDone={() => {
+            sessionStorage.setItem('guest_onboarding_shown_v1', '1');
+            setShowOnboarding(false);
+          }}
         />
       )}
     </div>
