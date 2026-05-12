@@ -73,19 +73,26 @@ Deno.serve(async (req) => {
     const fullPrompt = `Square product cover. Subject: ${cleaned}. On plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo.`;
     const fallbackPrompt = `A ${categoryHint} on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo.`;
 
-    const callImage = async (model: string, body: string) => {
-      return await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: "user", content: body }],
-          modalities: ["image", "text"],
-        }),
-      });
+    const callImage = async (model: string, body: string, timeoutMs = 18000) => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        return await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: body }],
+            modalities: ["image", "text"],
+          }),
+          signal: ctrl.signal,
+        });
+      } finally {
+        clearTimeout(t);
+      }
     };
 
     const extractDataUrl = (d: any): string | undefined => {
@@ -110,10 +117,14 @@ Deno.serve(async (req) => {
     ];
 
     let dataUrl: string | undefined;
-    let lastStatus = 0;
     for (const a of attempts) {
-      const r = await callImage(a.model, a.body);
-      lastStatus = r.status;
+      let r: Response;
+      try {
+        r = await callImage(a.model, a.body);
+      } catch (e) {
+        console.error("Image attempt threw:", a.label, e instanceof Error ? e.message : e);
+        continue;
+      }
       if (!r.ok) {
         console.error("Image attempt failed:", a.label, r.status, (await r.text()).slice(0, 400));
         if (r.status === 429 || r.status === 402) {
@@ -132,12 +143,7 @@ Deno.serve(async (req) => {
     }
 
     if (!dataUrl?.startsWith("data:image/")) {
-      return new Response(JSON.stringify({ error: "AI 未能生成封面（可能因描述包含品牌名被拦截）。请在右侧重新描述外观，或稍后重试。" }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    if (!dataUrl?.startsWith("data:image/")) {
-      console.error("No image in response", JSON.stringify(data).slice(0, 800));
-      return new Response(JSON.stringify({ error: "AI 未返回图像，请稍后再试或更换描述。" }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "AI 未能生成封面，请稍后再试或调整描述。" }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const [meta, b64] = dataUrl.split(",");
     const mime = meta.match(/data:(image\/[a-zA-Z+]+)/)?.[1] ?? "image/png";
