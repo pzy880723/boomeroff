@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Aperture, Lightbulb } from 'lucide-react';
+import { Sparkles, Aperture, Lightbulb, Camera, Layers, FileText, Share2 } from 'lucide-react';
 import { CameraStage, type CameraStageHandle } from '@/components/recognition/CameraStage';
 import { useGuestRecognition } from '@/hooks/useGuestRecognition';
 import { GuestOnboarding, type OnboardStep } from '@/components/public/GuestOnboarding';
@@ -9,23 +9,28 @@ const ONBOARD_STEPS: OnboardStep[] = [
   {
     targetId: 'onboard-start-camera',
     title: '对准它，按下快门',
-    desc: '让物件占满画面 2/3，AI 1-3 秒告诉你它的年代、产地与小故事。',
+    desc: '让物件占满画面 2/3，AI 1-3 秒读懂年代、产地与小故事。',
     placement: 'top',
     shape: 'pill',
+    icon: Camera,
   },
   {
-    targetId: 'onboard-community-tab',
-    title: '逛逛中古圈',
-    desc: '识别完可以匿名分享，看看别人都淘到了什么有意思的中古物。',
-    placement: 'top',
-    shape: 'rounded',
-  },
-  {
-    targetId: 'onboard-logo',
-    title: '来自 BOOMER-OFF',
-    desc: '一家专注日本中古杂货的小店，欢迎到店里慢慢逛。',
+    targetId: 'onboard-multi-mode',
+    title: '复杂物件，多拍几张更准',
+    desc: '切到「多角度合并」最多 5 张，正面、底款、铭牌一起送 AI 综合判断。',
     placement: 'bottom',
-    shape: 'rounded',
+    shape: 'pill',
+    icon: Layers,
+  },
+  {
+    title: '识别完，自动写好种草文',
+    desc: '小红书 / 朋友圈 / 微信三种风格随便切，复制即用，朋友秒懂这件好在哪。',
+    icon: FileText,
+  },
+  {
+    title: '让更多人看见你的发现',
+    desc: '一键以「游客」身份匿名发布到中古圈，不需要登录、不留账号。',
+    icon: Share2,
   },
 ];
 

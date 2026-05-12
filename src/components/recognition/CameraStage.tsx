@@ -306,6 +306,7 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
               单张快拍
             </button>
             <button
+              id="onboard-multi-mode"
               type="button"
               onClick={() => switchMode('multi')}
               className={`flex-1 h-9 rounded-full text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
