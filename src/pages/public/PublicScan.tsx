@@ -99,9 +99,18 @@ export default function PublicScan() {
           BOOMER-OFF · 中古杂货
         </div>
       </div>
+
+      {showOnboarding && (
+        <GuestOnboarding
+          steps={ONBOARD_STEPS}
+          onDone={() => setShowOnboarding(false)}
+        />
+      )}
     </div>
   );
 }
+
+// keep tail intact below
 
 function Tip({ n, children }: { n: string; children: React.ReactNode }) {
   return (
