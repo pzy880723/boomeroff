@@ -1,20 +1,40 @@
-## 目标
-顾客版引导每次"打开应用"只显示一次，切换 tab / 路由不再触发；完全关闭页面后再次进入才重新展示。
+## 调整 PublicLayout 顶端栏 logo 位置与裁切
 
-## 方案
-使用 `sessionStorage` 作为记忆载体（关闭标签页/浏览器即清空，符合"关闭后第二次再进入"的语义）。
+仅修改 `src/components/layout/PublicLayout.tsx` 中的 `<header>` 内容。
 
-### 修改 `src/pages/public/PublicScan.tsx`
-- key：`guest_onboarding_shown_v1`
-- 初始 state：`useState(() => !sessionStorage.getItem('guest_onboarding_shown_v1'))`
-- `onDone` 回调里：`sessionStorage.setItem('guest_onboarding_shown_v1', '1')` 后再 `setShowOnboarding(false)`
-- `GuestOnboarding` 内部"跳过"也会触发 `onDone`，所以跳过同样会被记住
+### 1. 布局：logo 移到右侧
 
-### 不动的部分
-- `GuestOnboarding.tsx` 组件本身（已是受控渲染）
-- 4 步引导内容、样式、记忆 key 之外的逻辑
-- 登录版、其他路由
+将原先的单一 `<Link>`（包含 logo + 标题文字）拆分为两部分：
 
-## 备注
-- 选 `sessionStorage` 而非 `localStorage`：用户之前说过"每次进入都展示"，本次调整为"每个会话一次"，`sessionStorage` 在关闭标签页后清空，刚好对应"关闭后第二次再进入才显示"。
-- 如希望"永久只看一次"可后续改为 `localStorage`，结构不变。
+- **左侧**：标题文字区（"中古识物" + "Tap · Discover"），整体仍包在 `<Link to="/u">` 中，保留 `id="onboard-logo"`（onboarding 引导锚点不能丢）。
+- **右侧**：logo 图形，独立的小 `<Link to="/u">`，用 `ml-auto` 推到最右。
+
+容器仍是 `flex h-14 items-center gap-3`。
+
+### 2. 裁切：去掉 logo 上下白边
+
+不改图片源文件，纯 CSS：
+
+```tsx
+<div className="h-7 w-9 overflow-hidden flex items-center justify-center">
+  <img
+    src={logo}
+    alt="中古识物"
+    className="h-14 w-auto object-contain -my-3.5"
+  />
+</div>
+```
+
+思路：外层容器固定为较扁的高度（`h-7` ≈ 28px）并 `overflow-hidden`；内部 `<img>` 用原本两倍高度（`h-14`）+ 负 margin 上下抠掉白边部分，让图中"文字部分"恰好落在容器可视区。
+
+如果实测裁切比例不对，会微调 `h-14` / `-my-3.5` 这两个数值（不需要改其它文件）。
+
+### 3. 保留事项
+
+- 右上角红点装饰 `absolute -top-0.5 -right-0.5`：跟随 logo 一起移到右侧。
+- `id="onboard-logo"`：放在左侧标题文字 Link 上，保证现有 GuestOnboarding 步骤的目标元素仍存在（如果 onboarding 是指向 logo 图形本身，则改放到右侧 logo 上——会先在文件里 grep `onboard-logo` 用法确认）。
+- 其它文件、底部 tab、PublicScan 引导逻辑均不动。
+
+### 受影响文件
+
+- `src/components/layout/PublicLayout.tsx`（仅 header 区域）
