@@ -55,7 +55,7 @@ export function PublicLayout() {
                 ? location.pathname === to
                 : location.pathname === to || location.pathname.startsWith(to + '/');
               return (
-                <li key={to} className="flex-1">
+                <li key={to} className="flex-1" id={to === '/u/community' ? 'onboard-community-tab' : undefined}>
                   <NavLink
                     to={to}
                     end={exact}
