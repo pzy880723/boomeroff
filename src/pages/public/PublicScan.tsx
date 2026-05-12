@@ -1,13 +1,39 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Aperture, Lightbulb } from 'lucide-react';
 import { CameraStage, type CameraStageHandle } from '@/components/recognition/CameraStage';
 import { useGuestRecognition } from '@/hooks/useGuestRecognition';
+import { GuestOnboarding, type OnboardStep } from '@/components/public/GuestOnboarding';
+
+const ONBOARD_STEPS: OnboardStep[] = [
+  {
+    targetId: 'onboard-start-camera',
+    title: '对准它，按下快门',
+    desc: '让物件占满画面 2/3，AI 1-3 秒告诉你它的年代、产地与小故事。',
+    placement: 'top',
+    shape: 'pill',
+  },
+  {
+    targetId: 'onboard-community-tab',
+    title: '逛逛中古圈',
+    desc: '识别完可以匿名分享，看看别人都淘到了什么有意思的中古物。',
+    placement: 'top',
+    shape: 'rounded',
+  },
+  {
+    targetId: 'onboard-logo',
+    title: '来自 BOOMER-OFF',
+    desc: '一家专注日本中古杂货的小店，欢迎到店里慢慢逛。',
+    placement: 'bottom',
+    shape: 'rounded',
+  },
+];
 
 export default function PublicScan() {
   const navigate = useNavigate();
   const { recognize, remaining } = useGuestRecognition();
   const stageRef = useRef<CameraStageHandle>(null);
+  const [showOnboarding, setShowOnboarding] = useState(true);
 
   const handleRecognize = async (images: string[]): Promise<boolean> => {
     const r = await recognize(images.length > 1 ? images : images[0]);
