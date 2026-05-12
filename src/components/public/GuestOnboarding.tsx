@@ -2,15 +2,19 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import type { LucideIcon } from 'lucide-react';
 
 export interface OnboardStep {
-  targetId: string;
+  /** 高亮目标元素 id；不传或找不到时，渲染居中插画卡 */
+  targetId?: string;
   title: string;
   desc: string;
   /** 气泡相对高亮区放在上方还是下方；默认自动 */
   placement?: 'top' | 'bottom' | 'auto';
   /** 高亮形状：默认 rounded；底部 tab 用 pill */
   shape?: 'rounded' | 'pill' | 'square';
+  /** 居中插画卡用的图标 */
+  icon?: LucideIcon;
 }
 
 interface Props {
@@ -50,23 +54,20 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
 
   const step = steps[stepIndex];
 
-  // 延迟出现
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), startDelay);
     return () => clearTimeout(t);
   }, [startDelay]);
 
-  // 测量目标位置
   useLayoutEffect(() => {
     if (!visible || !step) return;
     let raf = 0;
     const measure = () => {
-      const r = readRect(step.targetId);
+      const r = step.targetId ? readRect(step.targetId) : null;
       setRect(r);
       setVw(window.innerWidth);
       setVh(window.innerHeight);
     };
-    // 多次尝试，等待懒加载/字体渲染稳定
     measure();
     raf = window.setTimeout(measure, 80) as unknown as number;
     const onResize = () => measure();
@@ -86,7 +87,6 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
   const radius =
     step.shape === 'pill' ? 9999 : step.shape === 'square' ? 8 : 16;
 
-  // 高亮区扩张 padding
   const hi = rect
     ? {
         top: Math.max(0, rect.top - PADDING),
@@ -96,7 +96,6 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
       }
     : null;
 
-  // 气泡位置
   let bubbleTop = 0;
   let bubblePlacement: 'top' | 'bottom' = 'bottom';
   if (hi) {
@@ -128,6 +127,8 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
     onDone();
   };
 
+  const Icon = step.icon;
+
   return createPortal(
     <div
       className="fixed inset-0 z-[60] animate-in fade-in duration-200"
@@ -135,20 +136,17 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
       aria-modal="true"
       aria-label="使用引导"
     >
-      {/* 遮罩 + 高亮挖洞：4 块拼接 */}
+      {/* 遮罩 + 高亮挖洞 */}
       {hi ? (
         <>
-          {/* 上 */}
           <div
             className="absolute left-0 right-0 top-0 bg-black/60"
             style={{ height: hi.top }}
           />
-          {/* 下 */}
           <div
             className="absolute left-0 right-0 bg-black/60"
             style={{ top: hi.top + hi.height, bottom: 0 }}
           />
-          {/* 左 */}
           <div
             className="absolute bg-black/60"
             style={{
@@ -158,7 +156,6 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
               height: hi.height,
             }}
           />
-          {/* 右 */}
           <div
             className="absolute bg-black/60"
             style={{
@@ -168,7 +165,6 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
               height: hi.height,
             }}
           />
-          {/* 高亮描边光圈 */}
           <div
             className="absolute pointer-events-none ring-2 ring-accent/80 shadow-[0_0_0_4px_hsl(var(--accent)/0.25)]"
             style={{
@@ -181,10 +177,10 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
           />
         </>
       ) : (
-        <div className="absolute inset-0 bg-black/60" />
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       )}
 
-      {/* 气泡 */}
+      {/* 气泡 / 插画卡 */}
       <div
         className={cn(
           'absolute left-1/2 -translate-x-1/2 w-[min(22rem,calc(100vw-2rem))]',
@@ -200,9 +196,7 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
           bottom:
             hi && bubblePlacement === 'top' ? vh - bubbleTop : undefined,
           transform: hi
-            ? bubblePlacement === 'top'
-              ? 'translate(-50%, 0)'
-              : 'translate(-50%, 0)'
+            ? 'translate(-50%, 0)'
             : 'translate(-50%, -50%)',
         }}
       >
@@ -222,10 +216,25 @@ export function GuestOnboarding({ steps, onDone, startDelay = 400 }: Props) {
             ))}
           </div>
         </div>
-        <h3 className="font-display text-base tracking-tight leading-tight">
+
+        {!hi && Icon && (
+          <div className="my-2 flex items-center justify-center">
+            <span className="w-14 h-14 rounded-2xl bg-accent/15 text-accent flex items-center justify-center ring-1 ring-accent/30">
+              <Icon className="w-7 h-7" strokeWidth={1.6} />
+            </span>
+          </div>
+        )}
+
+        <h3 className={cn(
+          'font-display tracking-tight leading-tight',
+          !hi ? 'text-[18px] text-center' : 'text-base',
+        )}>
           {step.title}
         </h3>
-        <p className="mt-1.5 text-[13px] text-muted-foreground leading-relaxed">
+        <p className={cn(
+          'mt-1.5 text-[13px] text-muted-foreground leading-relaxed',
+          !hi && 'text-center',
+        )}>
           {step.desc}
         </p>
         <div className="mt-3 flex items-center justify-between gap-2">
