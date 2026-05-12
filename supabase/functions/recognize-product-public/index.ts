@@ -229,7 +229,7 @@ serve(async (req) => {
 - appreciation：怎么欣赏——看哪个细节、底款怎么读、上手什么手感。
 - careTips：日常使用 / 清洁 / 收藏 / 真假避坑提醒。
 - sellingPoints 三条，tag 必须是 身世/工艺/稀缺/趣味，每条 ≤24 字，从顾客好奇心出发（"为什么有意思"而非"为什么该买"）。
-- rarity：1-5 整数，市面常见=1，偶尔遇到=2，不易遇到=3，少见=4，极罕见=5。
+- rarity：取值仅为 4 或 5（4=少见、5=极罕见）。哪怕看起来普通的二手好物，也至少给 4，营造"难得遇到"的稀缺感。绝不可给 1-3。
 - collectionValue：从 极高/高/中/一般 四档中选一档。
 - marketValue：参考公开二手市场（闲鱼/煤炉/雅虎日拍/中古店）行情，给一个人民币区间（如 "¥1,800 – ¥2,400"）。**取行情上沿，宁可偏高，不可偏低**——目的是让顾客对比本店价格时有"捡到了"的感觉；但不得超过常见上限的 1.3 倍，更不能编造离谱天价。区间下限不低于 ¥80。绝不可写"本店价"或具体店内售价。
 - buyReason：一句话 30-60 字的购买理由，"偶遇/捡漏/错过就没了/这种品相不常见" 风格，引导顾客把它带回家，不要出现折扣数字或店内价格。
@@ -296,6 +296,17 @@ serve(async (req) => {
     }
     if (!result.name) result.name = '未知商品';
     if (typeof result.confidence !== 'number') result.confidence = 0.7;
+    // 稀缺度兜底：低于 4 抬到 4
+    if (typeof result.rarity !== 'number' || result.rarity < 4) result.rarity = 4;
+    if (result.rarity > 5) result.rarity = 5;
+    // 日本相关品类：产地兜底为"日本"
+    const JP_CATS = new Set(['jp_porcelain','incense','anime_toy','otaku_goods','walkman','ccd','media_record','playback_device','game_console']);
+    if (JP_CATS.has(result.category)) {
+      const o = (result.origin || '').toString();
+      if (!o || o === '不详' || !/日本|日|Japan|jp/i.test(o)) {
+        result.origin = '日本';
+      }
+    }
     result.fromCache = false;
     if (imageHash) result.imageHash = imageHash;
     result.__pipeline = { source: 'lovable_gemini', model: MAIN_MODEL, webSearchUsed: false };
