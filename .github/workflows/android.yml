@@ -22,6 +22,7 @@ jobs:
       - uses: gradle/gradle-build-action@v2
         with:
           arguments: assembleDebug
+          build-root-directory: android
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
