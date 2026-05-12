@@ -182,20 +182,68 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     }
   };
 
-  const triggerCover = async (prompt: string, opts: { persist?: boolean; preferWeb?: boolean } = {}) => {
-    if (!prompt) return;
+  // 兜底封面 prompt：当 AI 不返回 cover_prompt 时，根据已有字段安全拼一段中性英文
+  const buildFallbackCoverPrompt = (d: Draft): string => {
+    const categoryHint: Partial<Record<ProductCategory, string>> = {
+      jp_porcelain: 'Japanese-style porcelain piece with hand-painted patterns',
+      eu_porcelain: 'European-style porcelain piece with delicate decoration',
+      incense: 'traditional incense burner and incense sticks',
+      antique_art: 'antique decorative art object',
+      local_craft: 'handmade folk craft object',
+      anime_toy: 'cute designer vinyl figurine',
+      otaku_goods: 'anime-style collectible item',
+      luxury: 'luxury accessory piece',
+      vintage_jewelry: 'vintage decorative jewelry piece',
+      jewelry: 'vintage decorative jewelry piece',
+      game_console: 'vintage handheld game console',
+      walkman: 'vintage portable cassette player',
+      ccd: 'vintage compact camera',
+      media_record: 'vintage media record disc',
+      playback_device: 'vintage audio playback device',
+      home_appliance: 'vintage small home appliance',
+      hobby: 'collectible hobby object',
+      stationery: 'vintage stationery item',
+      lacquerware: 'traditional lacquerware piece',
+      bronze: 'antique bronze ware',
+      woodcraft: 'handmade wooden craft object',
+      textile: 'traditional textile piece',
+      painting: 'framed traditional painting',
+      porcelain: 'porcelain piece',
+      other: 'collectible vintage object',
+    };
+    const subject = (d.category && categoryHint[d.category]) || 'collectible vintage object';
+    const era = d.era ? `, ${d.era} era style` : '';
+    const origin = d.origin ? `, made in ${d.origin}` : '';
+    return `A ${subject}${era}${origin}, on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo`;
+  };
+
+  const safeErrMsg = (e: unknown): string => {
+    if (e instanceof Error) return e.message || '请稍后重试';
+    if (typeof e === 'string') return e;
+    try {
+      const m = (e as any)?.message;
+      if (typeof m === 'string') return m;
+    } catch { /* ignore */ }
+    return '请稍后重试';
+  };
+
+  const triggerCover = async (promptArg: string, opts: { persist?: boolean; preferWeb?: boolean } = {}) => {
+    if (painting) return; // 防抖
+    const prompt = (promptArg && promptArg.trim()) || buildFallbackCoverPrompt(draft);
     setPainting(true);
     try {
       // 优先联网搜真实图
       let url: string | null = null;
       if (opts.preferWeb !== false && draft.name) {
-        const found = await webSearchImages(draft.name, 'gallery', 1);
-        if (found.length) url = found[0];
+        try {
+          const found = await webSearchImages(draft.name, 'gallery', 1);
+          if (found.length) url = found[0];
+        } catch (e) { console.warn('[triggerCover] web search failed', e); }
       }
       if (!url) {
         const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
         if (error) throw error;
-        url = data?.url || null;
+        url = (data && (data as any).url) || null;
       }
       if (url) {
         setCoverUrl(url);
@@ -206,9 +254,12 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         if (opts.persist) {
           setMessages((m) => [...m, { role: 'assistant', content: '✅ 已为您更新主图，可在右侧预览。' }]);
         }
+      } else {
+        toast.error('封面生成失败，请稍后再试');
       }
-    } catch (e: any) {
-      toast.error('封面生成失败：' + (e?.message ?? ''));
+    } catch (e: unknown) {
+      const msg = safeErrMsg(e);
+      toast.error('封面生成失败：' + msg);
       if (opts.persist) {
         setMessages((m) => [...m, { role: 'assistant', content: '主图生成失败，请再说一次想要的风格，我重试。' }]);
       }
@@ -536,33 +587,45 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         toast.error(`长正文生成失败：${e?.message ?? ''}`);
       }
 
-      // ---- Step 3: cover — 优先联网真实图，AI 兜底 ----
-      const newPrompt = (coreData.cover_prompt as string | undefined) || '';
+      // ---- Step 3: cover — 优先联网真实图，AI 兜底（无 cover_prompt 也用本地兜底）----
+      const aiPrompt = (coreData.cover_prompt as string | undefined) || '';
+      const fallbackPrompt = buildFallbackCoverPrompt(coreDraft);
+      const promptToUse = aiPrompt || fallbackPrompt;
       const nameForSearch = (coreDraft.name || baseDraft.name || '').trim();
       if (!hasCover) {
         setEnrichStage('cover');
         try {
           let url: string | null = null;
           if (nameForSearch) {
-            const found = await webSearchImages(nameForSearch, 'gallery', 1);
-            if (found.length) url = found[0];
+            try {
+              const found = await webSearchImages(nameForSearch, 'gallery', 1);
+              if (found.length) url = found[0];
+            } catch (e) { console.warn('[enrich:cover] web search failed', e); }
           }
-          if (!url && newPrompt) {
-            const cd = await withRetry(async () => {
-              const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: newPrompt } });
-              if (error) throw error;
-              if (!data?.url) throw new Error('cover 返回为空');
-              return data;
-            }, 'cover');
-            url = cd.url;
+          if (!url) {
+            try {
+              const cd = await withRetry(async () => {
+                const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: promptToUse } });
+                if (error) throw error;
+                if (!data?.url) throw new Error('cover 返回为空');
+                return data;
+              }, 'cover');
+              url = cd.url;
+            } catch (e) {
+              console.warn('[enrich:cover] AI cover failed', e);
+              toast.warning('主图生成失败，可在预览中点「重新生成」重试');
+            }
           }
           if (url) {
             setCoverUrl(url);
-            if (newPrompt) setCoverPrompt(newPrompt);
+            setCoverPrompt(promptToUse);
             if (editingItem) {
               await supabase.from('official_knowledge').update({ cover_url: url }).eq('id', editingItem.id);
               onSaved();
             }
+          } else if (!coverPrompt) {
+            // 即便失败也存一份 prompt，便于用户手动「重新生成」
+            setCoverPrompt(promptToUse);
           }
           setEnrichProgress(92);
         } catch (e) {
@@ -571,9 +634,9 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       }
 
       // ---- Step 4: gallery (优先真实图，AI 补齐) ----
-      if (newPrompt && (gallery?.length || 0) < 3) {
+      if (promptToUse && (gallery?.length || 0) < 3) {
         try {
-          await generateGallery(newPrompt, { persist: !!editingItem });
+          await generateGallery(promptToUse, { persist: !!editingItem });
         } catch (e) {
           console.warn('gallery failed', e);
         }
@@ -973,11 +1036,14 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, triggerCo
               <ImageOff className="w-5 h-5" /> 尚未生成封面
             </div>
           )}
-          {coverPrompt && !painting && (
+          {!painting && draft.name && (
             <Button
               size="sm" variant="secondary"
               className="absolute bottom-2 right-2 h-7 text-xs"
-              onClick={() => triggerCover(coverPrompt)}
+              onClick={async () => {
+                try { await triggerCover(coverPrompt); }
+                catch (err) { console.warn('[regen-cover] uncaught', err); }
+              }}
             >
               <RefreshCw className="w-3 h-3 mr-1" /> 重新生成
             </Button>
