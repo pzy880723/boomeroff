@@ -122,6 +122,10 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   const [backstampBusy, setBackstampBusy] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [painting, setPainting] = useState(false);
+  const [coverElapsed, setCoverElapsed] = useState(0);
+  const [coverCooldown, setCoverCooldown] = useState(false);
+  const COVER_TIMEOUT_MS = 40000;
+  const COVER_EST_MS = 25000;
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [enrichStage, setEnrichStage] = useState<'idle' | 'collect' | 'core' | 'body' | 'cover' | 'save' | 'done'>('idle');
