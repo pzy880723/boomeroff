@@ -232,20 +232,33 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   };
 
   const triggerCover = async (promptArg: string, opts: { persist?: boolean; preferWeb?: boolean } = {}) => {
-    if (painting) return; // 防抖
+    if (painting || coverCooldown) return; // 防抖 + 失败冷却
     const prompt = (promptArg && promptArg.trim()) || buildFallbackCoverPrompt(draft);
     setPainting(true);
+    setCoverElapsed(0);
+    const startedAt = Date.now();
+    const tick = window.setInterval(() => {
+      setCoverElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 500);
+    let timeoutHit = false;
+    const timeoutPromise = new Promise<never>((_, rej) => {
+      window.setTimeout(() => { timeoutHit = true; rej(new Error('timeout')); }, COVER_TIMEOUT_MS);
+    });
     try {
       // 优先联网搜真实图
       let url: string | null = null;
       if (opts.preferWeb !== false && draft.name) {
         try {
-          const found = await webSearchImages(draft.name, 'gallery', 1);
+          const found = await Promise.race([webSearchImages(draft.name, 'gallery', 1), timeoutPromise]);
           if (found.length) url = found[0];
-        } catch (e) { console.warn('[triggerCover] web search failed', e); }
+        } catch (e) {
+          if (timeoutHit) throw e;
+          console.warn('[triggerCover] web search failed', e);
+        }
       }
       if (!url) {
-        const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
+        const invokeP = supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
+        const { data, error } = await Promise.race([invokeP, timeoutPromise]) as any;
         if (error) throw error;
         url = (data && (data as any).url) || null;
       }
@@ -260,14 +273,19 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         }
       } else {
         toast.error('封面生成失败，请稍后再试');
+        setCoverCooldown(true);
+        window.setTimeout(() => setCoverCooldown(false), 5000);
       }
     } catch (e: unknown) {
-      const msg = safeErrMsg(e);
+      const msg = timeoutHit ? '生成超时，请稍后重试或简化描述' : safeErrMsg(e);
       toast.error('封面生成失败：' + msg);
+      setCoverCooldown(true);
+      window.setTimeout(() => setCoverCooldown(false), 8000);
       if (opts.persist) {
-        setMessages((m) => [...m, { role: 'assistant', content: '主图生成失败，请再说一次想要的风格，我重试。' }]);
+        setMessages((m) => [...m, { role: 'assistant', content: `主图${timeoutHit ? '生成超时' : '生成失败'}，请稍后再试或换个描述。` }]);
       }
     } finally {
+      window.clearInterval(tick);
       setPainting(false);
     }
   };
