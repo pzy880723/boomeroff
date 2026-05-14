@@ -26,10 +26,14 @@ import { lockPortal } from '@/hooks/useAdminPortal';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
+type TabKey = 'users' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
 
 const MENU: { key: TabKey; label: string; icon: typeof Users }[] = [
   { key: 'users', label: '用户管理', icon: Users },
+  { key: 'schedule', label: '排班管理', icon: CalendarDays },
+  { key: 'shifts', label: '班次设置', icon: Clock },
+  { key: 'sop', label: '门店 SOP', icon: BookOpen },
+  { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare },
   { key: 'official', label: '官方知识', icon: BadgeCheck },
   { key: 'community', label: '中古圈', icon: MessageSquare },
   { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning },
