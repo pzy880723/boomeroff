@@ -64,7 +64,7 @@ export function UserTable() {
     try {
       const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
-        .select('id, user_id, role, created_at, suspended, suspended_at')
+        .select('id, user_id, role, role_code, created_at, suspended, suspended_at')
         .order('created_at', { ascending: false });
 
       if (rolesError) throw rolesError;
@@ -81,10 +81,11 @@ export function UserTable() {
         });
       }
 
-      const usersWithProfiles = (roles || []).map((r: any) => ({
+      const usersWithProfiles: UserWithRole[] = (roles || []).map((r: any) => ({
         id: r.id,
         user_id: r.user_id,
         role: r.role as AppRole,
+        role_code: r.role_code ?? (r.role === 'admin' ? 'super_admin' : 'staff'),
         created_at: r.created_at,
         suspended: r.suspended || false,
         suspended_at: r.suspended_at,
