@@ -627,6 +627,209 @@ export type Database = {
         }
         Relationships: []
       }
+      shift_schedules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          shift_code: string
+          source: string
+          user_id: string
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          shift_code: string
+          source?: string
+          user_id: string
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          shift_code?: string
+          source?: string
+          user_id?: string
+          work_date?: string
+        }
+        Relationships: []
+      }
+      shop_holidays: {
+        Row: {
+          created_at: string
+          date: string
+          full_staff_off: boolean
+          id: string
+          intern_works: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          full_staff_off?: boolean
+          id?: string
+          intern_works?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          full_staff_off?: boolean
+          id?: string
+          intern_works?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
+      shop_kb_categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
+          type?: string
+        }
+        Relationships: []
+      }
+      shop_kb_entries: {
+        Row: {
+          body: string
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          sort_order: number
+          tags: string[]
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          sort_order?: number
+          tags?: string[]
+          title: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          sort_order?: number
+          tags?: string[]
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shop_kb_entries_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "shop_kb_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shop_shifts: {
+        Row: {
+          active: boolean
+          code: string
+          color: string | null
+          created_at: string
+          end_time: string
+          id: string
+          name: string
+          sort_order: number
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          color?: string | null
+          created_at?: string
+          end_time: string
+          id?: string
+          name: string
+          sort_order?: number
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          color?: string | null
+          created_at?: string
+          end_time?: string
+          id?: string
+          name?: string
+          sort_order?: number
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      staff_profiles: {
+        Row: {
+          available_weekdays: number[]
+          employment_type: string
+          max_per_week: number
+          note: string | null
+          preferred_shifts: string[]
+          updated_at: string
+          user_id: string
+          weekly_workdays: number
+        }
+        Insert: {
+          available_weekdays?: number[]
+          employment_type?: string
+          max_per_week?: number
+          note?: string | null
+          preferred_shifts?: string[]
+          updated_at?: string
+          user_id: string
+          weekly_workdays?: number
+        }
+        Update: {
+          available_weekdays?: number[]
+          employment_type?: string
+          max_per_week?: number
+          note?: string | null
+          preferred_shifts?: string[]
+          updated_at?: string
+          user_id?: string
+          weekly_workdays?: number
+        }
+        Relationships: []
+      }
       user_check_ins: {
         Row: {
           check_in_date: string
