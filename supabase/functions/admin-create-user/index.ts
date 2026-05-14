@@ -119,6 +119,27 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Upsert staff_profile with real_name + shop binding
+    if (real_name || shop_id) {
+      const profilePayload: Record<string, unknown> = { user_id: newUserId };
+      if (real_name) profilePayload.real_name = real_name;
+      if (shop_id) profilePayload.shop_id = shop_id;
+      const { error: profileErr } = await admin
+        .from("staff_profiles")
+        .upsert(profilePayload, { onConflict: "user_id" });
+      if (profileErr) {
+        console.error("staff_profiles upsert failed:", profileErr);
+      }
+    }
+
+    // Sync display_name to profiles table
+    if (real_name) {
+      await admin
+        .from("profiles")
+        .update({ display_name: real_name })
+        .eq("user_id", newUserId);
+    }
+
     return json({
       success: true,
       user_id: newUserId,
