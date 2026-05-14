@@ -74,15 +74,15 @@ export default function Me() {
       <PageHeader title="我的" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
         {/* Profile card */}
-        <Card className="p-4 flex items-center gap-4">
-          <Avatar className="h-16 w-16">
+        <Card className="p-3 sm:p-4 flex items-start gap-3">
+          <Avatar className="h-14 w-14 sm:h-16 sm:w-16 shrink-0">
             <AvatarFallback className="bg-gradient-primary text-primary-foreground text-lg">
               {displayName.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold truncate">{displayName}</h2>
+              <h2 className="text-base sm:text-lg font-semibold truncate">{displayName}</h2>
               <button onClick={() => { setDraftName(displayName); setEditOpen(true); }}>
                 <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
@@ -90,6 +90,7 @@ export default function Me() {
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             {role && <Badge variant="secondary" className="mt-1.5 text-[10px]">{ROLE_LABELS[role]}</Badge>}
           </div>
+          <ShiftBadgeRight userId={user.id} className="w-[130px] sm:w-[170px] shrink-0" />
         </Card>
 
         {/* Daily check-in */}
