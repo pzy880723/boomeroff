@@ -26,8 +26,6 @@ export function KbManager({ type, title }: Props) {
   const [catDraft, setCatDraft] = useState<Cat | null>(null);
   const [entryDraft, setEntryDraft] = useState<Entry | null>(null);
   const [filterCat, setFilterCat] = useState<string>('all');
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiTopic, setAiTopic] = useState('');
   const [aiHint, setAiHint] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
 
