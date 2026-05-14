@@ -19,6 +19,7 @@ const registerSchema = z
       .string()
       .trim()
       .regex(/^[a-zA-Z0-9_]{3,32}$/, '用户名仅支持字母、数字、下划线，3-32 位'),
+    real_name: z.string().trim().min(1, '请填写真实姓名').max(32, '姓名过长'),
     password: z.string().min(6, '密码至少 6 位').max(72, '密码过长'),
     confirmPassword: z.string(),
     shop_id: z.string().uuid('请选择所属门店'),
