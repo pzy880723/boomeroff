@@ -121,6 +121,20 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="reg-realname">真实姓名</Label>
+            <Input
+              id="reg-realname"
+              type="text"
+              value={realName}
+              onChange={(e) => setRealName(e.target.value)}
+              placeholder="例如：张三"
+              autoComplete="name"
+              maxLength={32}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="reg-shop">所属门店</Label>
             {shopsLoading ? (
               <div className="text-xs text-muted-foreground py-2">加载中…</div>
