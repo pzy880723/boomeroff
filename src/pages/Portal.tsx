@@ -10,6 +10,7 @@ import { XianyuCacheManager } from '@/components/admin/XianyuCacheManager';
 import { ShiftSettingsPanel } from '@/components/admin/ShiftSettingsPanel';
 import { ScheduleManager } from '@/components/admin/ScheduleManager';
 import { KbManager } from '@/components/admin/KbManager';
+import { ShopManager } from '@/components/admin/ShopManager';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
