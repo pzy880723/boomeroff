@@ -125,10 +125,12 @@ Deno.serve(async (req) => {
       console.error("Failed to mark new user as suspended:", suspendErr);
     }
 
-    // 写入员工档案，绑定门店
+    // 写入员工档案，绑定门店和真实姓名
+    const profilePayload: Record<string, unknown> = { user_id: newUserId, shop_id };
+    if (real_name) profilePayload.real_name = real_name;
     const { error: profileErr } = await admin
       .from("staff_profiles")
-      .upsert({ user_id: newUserId, shop_id }, { onConflict: "user_id" });
+      .upsert(profilePayload, { onConflict: "user_id" });
     if (profileErr) {
       console.error("Failed to create staff_profile:", profileErr);
     }
