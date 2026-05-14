@@ -104,10 +104,12 @@ export function UserTable() {
     fetchUsers();
   }, []);
 
-  const handleRoleChange = async (userId: string, newRole: AppRole) => {
+  const handleRoleChange = async (userId: string, newRoleCode: string) => {
+    // 同步写入旧 enum 字段，保持现有 RLS 不破：super_admin → admin，其它 → anchor
+    const legacy = newRoleCode === 'super_admin' ? 'admin' : 'anchor';
     const { error } = await supabase
       .from('user_roles')
-      .update({ role: newRole })
+      .update({ role_code: newRoleCode, role: legacy })
       .eq('user_id', userId);
 
     if (error) {
