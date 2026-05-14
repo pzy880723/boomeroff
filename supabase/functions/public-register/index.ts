@@ -14,6 +14,7 @@ const BodySchema = z.object({
     .regex(/^[a-zA-Z0-9_]{3,32}$/, "用户名仅支持字母、数字、下划线，3-32 位"),
   password: z.string().min(6, "密码至少 6 位").max(72),
   display_name: z.string().trim().max(32).optional(),
+  shop_id: z.string().uuid("请选择所属门店"),
 });
 
 function json(body: unknown, status = 200) {
