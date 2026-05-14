@@ -14,6 +14,8 @@ const BodySchema = z.object({
     .regex(/^[a-zA-Z0-9_]{3,32}$/, "用户名仅支持字母、数字、下划线，3-32 位"),
   password: z.string().min(6, "密码至少 6 位").max(72),
   role: z.enum(["admin", "anchor"]),
+  real_name: z.string().trim().max(32).optional(),
+  shop_id: z.string().uuid("请选择所属门店").optional(),
 });
 
 function json(body: unknown, status = 200) {
@@ -65,9 +67,10 @@ Deno.serve(async (req) => {
       const first = parsed.error.errors[0]?.message ?? "参数错误";
       return json({ error: first }, 400);
     }
-    const { username, password, role } = parsed.data;
+    const { username, password, role, real_name, shop_id } = parsed.data;
 
     const email = `${username.toLowerCase()}@boomeroff.local`;
+    const displayName = real_name?.trim() || username;
 
     // Pre-check duplicate username
     for (let page = 1; page <= 20; page++) {
@@ -90,7 +93,7 @@ Deno.serve(async (req) => {
         email,
         password,
         email_confirm: true,
-        user_metadata: { display_name: username },
+        user_metadata: { display_name: displayName },
       });
 
     if (createErr || !created.user) {
@@ -114,6 +117,27 @@ Deno.serve(async (req) => {
           500,
         );
       }
+    }
+
+    // Upsert staff_profile with real_name + shop binding
+    if (real_name || shop_id) {
+      const profilePayload: Record<string, unknown> = { user_id: newUserId };
+      if (real_name) profilePayload.real_name = real_name;
+      if (shop_id) profilePayload.shop_id = shop_id;
+      const { error: profileErr } = await admin
+        .from("staff_profiles")
+        .upsert(profilePayload, { onConflict: "user_id" });
+      if (profileErr) {
+        console.error("staff_profiles upsert failed:", profileErr);
+      }
+    }
+
+    // Sync display_name to profiles table
+    if (real_name) {
+      await admin
+        .from("profiles")
+        .update({ display_name: real_name })
+        .eq("user_id", newUserId);
     }
 
     return json({

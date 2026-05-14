@@ -31,10 +31,11 @@ import { RoleEditor } from './RoleEditor';
 import { ROLE_LABELS, AppRole } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound } from 'lucide-react';
+import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound, IdCard, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { ResetUserPasswordDialog } from './ResetUserPasswordDialog';
+import { StaffProfileDialog } from './StaffProfileDialog';
 
 interface UserWithRole {
   id: string;
@@ -48,6 +49,10 @@ interface UserWithRole {
     display_name: string | null;
     avatar_url: string | null;
   };
+  staff?: {
+    real_name: string | null;
+    shop_id: string | null;
+  };
 }
 
 export function UserTable() {
@@ -56,8 +61,11 @@ export function UserTable() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
   const [resetUser, setResetUser] = useState<UserWithRole | null>(null);
+  const [profileUser, setProfileUser] = useState<UserWithRole | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending'>('all');
   const [roleNameMap, setRoleNameMap] = useState<Record<string, string>>({});
+  const [shopNameMap, setShopNameMap] = useState<Record<string, string>>({});
+  const [shifts, setShifts] = useState<{ code: string; name: string }[]>([]);
   const { user: currentUser } = useAuth();
 
   useEffect(() => {
@@ -65,6 +73,14 @@ export function UserTable() {
       const m: Record<string, string> = {};
       (data ?? []).forEach((r: any) => { m[r.code] = r.name; });
       setRoleNameMap(m);
+    });
+    void supabase.from('shops' as any).select('id, name').then(({ data }) => {
+      const m: Record<string, string> = {};
+      (data ?? []).forEach((s: any) => { m[s.id] = s.name; });
+      setShopNameMap(m);
+    });
+    void supabase.from('shop_shifts' as any).select('code, name').eq('active', true).order('sort_order').then(({ data }) => {
+      setShifts((data as any) || []);
     });
   }, []);
 
@@ -80,13 +96,23 @@ export function UserTable() {
 
       const userIds = (roles || []).map((r: any) => r.user_id);
       let profileMap: Record<string, { display_name: string | null; avatar_url: string | null }> = {};
+      let staffMap: Record<string, { real_name: string | null; shop_id: string | null }> = {};
       if (userIds.length > 0) {
-        const { data: profs } = await supabase
-          .from('profiles')
-          .select('user_id, display_name, avatar_url')
-          .in('user_id', userIds);
+        const [{ data: profs }, { data: staff }] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('user_id, display_name, avatar_url')
+            .in('user_id', userIds),
+          supabase
+            .from('staff_profiles' as any)
+            .select('user_id, real_name, shop_id')
+            .in('user_id', userIds),
+        ]);
         (profs || []).forEach((p: any) => {
           profileMap[p.user_id] = { display_name: p.display_name, avatar_url: p.avatar_url };
+        });
+        (staff || []).forEach((s: any) => {
+          staffMap[s.user_id] = { real_name: s.real_name, shop_id: s.shop_id };
         });
       }
 
@@ -99,6 +125,7 @@ export function UserTable() {
         suspended: r.suspended || false,
         suspended_at: r.suspended_at,
         profile: profileMap[r.user_id],
+        staff: staffMap[r.user_id],
       }));
 
       setUsers(usersWithProfiles);
@@ -268,15 +295,16 @@ export function UserTable() {
               filteredUsers.map((user) => (
                 <TableRow key={user.id} className={user.suspended ? 'opacity-50' : ''}>
                   <TableCell>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col gap-0.5">
                       <span className="font-medium">
-                        {user.profile?.display_name || '未设置昵称'}
+                        {user.staff?.real_name || user.profile?.display_name || '未设置姓名'}
                         {isCurrentUser(user.user_id) && (
                           <span className="text-xs text-muted-foreground ml-1">(我)</span>
                         )}
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {user.user_id.slice(0, 8)}...
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Store className="h-3 w-3" />
+                        {user.staff?.shop_id ? (shopNameMap[user.staff.shop_id] || '门店') : '未绑定门店'}
                       </span>
                     </div>
                   </TableCell>
@@ -323,6 +351,11 @@ export function UserTable() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setProfileUser(user)}>
+                            <IdCard className="mr-2 h-4 w-4" />
+                            编辑姓名 / 门店
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleSuspend(user)}>
                             {user.suspended ? (
                               <>
@@ -386,6 +419,17 @@ export function UserTable() {
           onOpenChange={(o) => !o && setResetUser(null)}
           userId={resetUser.user_id}
           displayName={resetUser.profile?.display_name || '该用户'}
+        />
+      )}
+
+      {profileUser && (
+        <StaffProfileDialog
+          open={!!profileUser}
+          onOpenChange={(o) => !o && setProfileUser(null)}
+          userId={profileUser.user_id}
+          displayName={profileUser.staff?.real_name || profileUser.profile?.display_name || '该用户'}
+          shifts={shifts}
+          onSaved={fetchUsers}
         />
       )}
     </>

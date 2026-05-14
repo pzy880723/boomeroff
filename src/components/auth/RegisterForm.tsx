@@ -19,6 +19,7 @@ const registerSchema = z
       .string()
       .trim()
       .regex(/^[a-zA-Z0-9_]{3,32}$/, '用户名仅支持字母、数字、下划线，3-32 位'),
+    real_name: z.string().trim().min(1, '请填写真实姓名').max(32, '姓名过长'),
     password: z.string().min(6, '密码至少 6 位').max(72, '密码过长'),
     confirmPassword: z.string(),
     shop_id: z.string().uuid('请选择所属门店'),
@@ -36,6 +37,7 @@ interface Shop { id: string; name: string }
 
 export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
   const [username, setUsername] = useState('');
+  const [realName, setRealName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [shopId, setShopId] = useState('');
@@ -60,7 +62,7 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const parsed = registerSchema.safeParse({ username, password, confirmPassword, shop_id: shopId });
+    const parsed = registerSchema.safeParse({ username, real_name: realName, password, confirmPassword, shop_id: shopId });
     if (!parsed.success) {
       toast({
         title: '输入有误',
@@ -74,7 +76,7 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
     try {
       const { data, error } = await supabase.functions.invoke(
         'public-register',
-        { body: { username, password, shop_id: shopId } },
+        { body: { username, password, shop_id: shopId, real_name: realName.trim(), display_name: realName.trim() } },
       );
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -114,6 +116,20 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="3-32 位字母、数字、下划线"
               autoComplete="username"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="reg-realname">真实姓名</Label>
+            <Input
+              id="reg-realname"
+              type="text"
+              value={realName}
+              onChange={(e) => setRealName(e.target.value)}
+              placeholder="例如：张三"
+              autoComplete="name"
+              maxLength={32}
               required
             />
           </div>

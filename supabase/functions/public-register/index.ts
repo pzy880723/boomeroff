@@ -14,6 +14,7 @@ const BodySchema = z.object({
     .regex(/^[a-zA-Z0-9_]{3,32}$/, "用户名仅支持字母、数字、下划线，3-32 位"),
   password: z.string().min(6, "密码至少 6 位").max(72),
   display_name: z.string().trim().max(32).optional(),
+  real_name: z.string().trim().min(1, "请填写真实姓名").max(32).optional(),
   shop_id: z.string().uuid("请选择所属门店"),
 });
 
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
       const first = parsed.error.errors[0]?.message ?? "参数错误";
       return json({ error: first }, 400);
     }
-    const { username, password, display_name, shop_id } = parsed.data;
+    const { username, password, display_name, real_name, shop_id } = parsed.data;
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -94,7 +95,7 @@ Deno.serve(async (req) => {
         email,
         password,
         email_confirm: true,
-        user_metadata: { display_name: display_name || username },
+        user_metadata: { display_name: display_name || real_name || username },
       });
 
     if (createErr || !created.user) {
@@ -124,10 +125,12 @@ Deno.serve(async (req) => {
       console.error("Failed to mark new user as suspended:", suspendErr);
     }
 
-    // 写入员工档案，绑定门店
+    // 写入员工档案，绑定门店和真实姓名
+    const profilePayload: Record<string, unknown> = { user_id: newUserId, shop_id };
+    if (real_name) profilePayload.real_name = real_name;
     const { error: profileErr } = await admin
       .from("staff_profiles")
-      .upsert({ user_id: newUserId, shop_id }, { onConflict: "user_id" });
+      .upsert(profilePayload, { onConflict: "user_id" });
     if (profileErr) {
       console.error("Failed to create staff_profile:", profileErr);
     }
