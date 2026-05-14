@@ -114,25 +114,46 @@ export default function Portal() {
                   </SheetTitle>
                 </SheetHeader>
                 <nav className="p-2">
-                  {MENU.map((m) => {
-                    const Icon = m.icon;
-                    const active = tab === m.key;
-                    return (
-                      <button
-                        key={m.key}
-                        onClick={() => { setTab(m.key); setMenuOpen(false); }}
-                        className={cn(
-                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors',
-                          active
-                            ? 'bg-primary/10 text-primary font-medium'
-                            : 'hover:bg-muted text-foreground'
-                        )}
-                      >
-                        <Icon className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{m.label}</span>
-                      </button>
-                    );
-                  })}
+                  <Accordion
+                    type="multiple"
+                    defaultValue={[currentGroup.key]}
+                    className="w-full"
+                  >
+                    {MENU_GROUPS.map((g) => {
+                      const GIcon = g.icon;
+                      return (
+                        <AccordionItem key={g.key} value={g.key} className="border-none">
+                          <AccordionTrigger className="px-3 py-2 rounded-lg hover:bg-muted hover:no-underline text-sm">
+                            <span className="flex items-center gap-2.5">
+                              <GIcon className="w-4 h-4 shrink-0" />
+                              {g.label}
+                            </span>
+                          </AccordionTrigger>
+                          <AccordionContent className="pb-1">
+                            {g.items.map((m) => {
+                              const Icon = m.icon;
+                              const active = tab === m.key;
+                              return (
+                                <button
+                                  key={m.key}
+                                  onClick={() => { setTab(m.key); setMenuOpen(false); }}
+                                  className={cn(
+                                    'w-full flex items-center gap-3 pl-9 pr-3 py-2 rounded-lg text-sm transition-colors',
+                                    active
+                                      ? 'bg-primary/10 text-primary font-medium'
+                                      : 'hover:bg-muted text-foreground'
+                                  )}
+                                >
+                                  <Icon className="w-4 h-4 shrink-0" />
+                                  <span className="truncate">{m.label}</span>
+                                </button>
+                              );
+                            })}
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
                 </nav>
               </SheetContent>
             </Sheet>
