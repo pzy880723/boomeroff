@@ -7,6 +7,9 @@ import { CommunityModeration } from '@/components/admin/CommunityModeration';
 import { AISettingsPanel } from '@/components/admin/AISettingsPanel';
 import { CorrectionReviewPanel } from '@/components/admin/CorrectionReviewPanel';
 import { XianyuCacheManager } from '@/components/admin/XianyuCacheManager';
+import { ShiftSettingsPanel } from '@/components/admin/ShiftSettingsPanel';
+import { ScheduleManager } from '@/components/admin/ScheduleManager';
+import { KbManager } from '@/components/admin/KbManager';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -16,6 +19,7 @@ import {
 import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, TrendingUp, Menu,
+  CalendarDays, Clock, BookOpen, MessagesSquare,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
