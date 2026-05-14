@@ -421,6 +421,17 @@ export function UserTable() {
           displayName={resetUser.profile?.display_name || '该用户'}
         />
       )}
+
+      {profileUser && (
+        <StaffProfileDialog
+          open={!!profileUser}
+          onOpenChange={(o) => !o && setProfileUser(null)}
+          userId={profileUser.user_id}
+          displayName={profileUser.staff?.real_name || profileUser.profile?.display_name || '该用户'}
+          shifts={shifts}
+          onSaved={fetchUsers}
+        />
+      )}
     </>
   );
 }
