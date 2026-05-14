@@ -37,6 +37,7 @@ interface Shop { id: string; name: string }
 
 export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
   const [username, setUsername] = useState('');
+  const [realName, setRealName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [shopId, setShopId] = useState('');
