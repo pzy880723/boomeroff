@@ -7,6 +7,9 @@ import { CommunityModeration } from '@/components/admin/CommunityModeration';
 import { AISettingsPanel } from '@/components/admin/AISettingsPanel';
 import { CorrectionReviewPanel } from '@/components/admin/CorrectionReviewPanel';
 import { XianyuCacheManager } from '@/components/admin/XianyuCacheManager';
+import { ShiftSettingsPanel } from '@/components/admin/ShiftSettingsPanel';
+import { ScheduleManager } from '@/components/admin/ScheduleManager';
+import { KbManager } from '@/components/admin/KbManager';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -16,16 +19,21 @@ import {
 import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, TrendingUp, Menu,
+  CalendarDays, Clock, BookOpen, MessagesSquare,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
+type TabKey = 'users' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
 
 const MENU: { key: TabKey; label: string; icon: typeof Users }[] = [
   { key: 'users', label: '用户管理', icon: Users },
+  { key: 'schedule', label: '排班管理', icon: CalendarDays },
+  { key: 'shifts', label: '班次设置', icon: Clock },
+  { key: 'sop', label: '门店 SOP', icon: BookOpen },
+  { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare },
   { key: 'official', label: '官方知识', icon: BadgeCheck },
   { key: 'community', label: '中古圈', icon: MessageSquare },
   { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning },
@@ -120,6 +128,10 @@ export default function Portal() {
               <UserTable />
             </div>
           )}
+          {tab === 'schedule' && <ScheduleManager />}
+          {tab === 'shifts' && <ShiftSettingsPanel />}
+          {tab === 'sop' && <KbManager type="sop" title="门店 SOP" />}
+          {tab === 'qa' && <KbManager type="qa" title="顾客 Q&A" />}
           {tab === 'official' && <OfficialKnowledgeManager />}
           {tab === 'community' && <CommunityModeration />}
           {tab === 'corrections' && <CorrectionReviewPanel />}
