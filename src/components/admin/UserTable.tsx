@@ -49,6 +49,10 @@ interface UserWithRole {
     display_name: string | null;
     avatar_url: string | null;
   };
+  staff?: {
+    real_name: string | null;
+    shop_id: string | null;
+  };
 }
 
 export function UserTable() {
