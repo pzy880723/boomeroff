@@ -132,6 +132,7 @@ export default function Portal() {
               <UserTable />
             </div>
           )}
+          {tab === 'roles' && <RolePermissionManager />}
           {tab === 'shops' && <ShopManager />}
           {tab === 'schedule' && <ScheduleManager />}
           {tab === 'shifts' && <ShiftSettingsPanel />}
