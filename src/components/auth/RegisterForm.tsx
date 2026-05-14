@@ -76,7 +76,7 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
     try {
       const { data, error } = await supabase.functions.invoke(
         'public-register',
-        { body: { username, password, shop_id: shopId } },
+        { body: { username, password, shop_id: shopId, real_name: realName.trim(), display_name: realName.trim() } },
       );
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
