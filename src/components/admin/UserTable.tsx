@@ -68,6 +68,7 @@ export function UserTable() {
   const [shopNameMap, setShopNameMap] = useState<Record<string, string>>({});
   const [shifts, setShifts] = useState<{ code: string; name: string }[]>([]);
   const { user: currentUser } = useAuth();
+  const { can } = usePermissions();
 
   useEffect(() => {
     void supabase.from('app_roles').select('code, name').then(({ data }) => {
