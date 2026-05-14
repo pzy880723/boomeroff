@@ -106,14 +106,14 @@ export default function Portal() {
                   <Menu className="w-5 h-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-72 p-0">
-                <SheetHeader className="px-5 pt-5 pb-3 border-b border-border/60">
+              <SheetContent side="left" className="w-72 p-0 flex flex-col h-full">
+                <SheetHeader className="px-5 pt-5 pb-3 border-b border-border/60 shrink-0">
                   <SheetTitle className="flex items-center gap-2">
                     <Shield className="w-4 h-4" />
                     后台管理
                   </SheetTitle>
                 </SheetHeader>
-                <nav className="p-2">
+                <nav className="p-2 flex-1 overflow-y-auto overscroll-contain">
                   <Accordion
                     type="multiple"
                     defaultValue={[currentGroup.key]}
