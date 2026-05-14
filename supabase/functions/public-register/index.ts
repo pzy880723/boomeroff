@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       const first = parsed.error.errors[0]?.message ?? "参数错误";
       return json({ error: first }, 400);
     }
-    const { username, password, display_name } = parsed.data;
+    const { username, password, display_name, shop_id } = parsed.data;
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
