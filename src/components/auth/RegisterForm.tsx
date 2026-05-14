@@ -62,7 +62,7 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const parsed = registerSchema.safeParse({ username, password, confirmPassword, shop_id: shopId });
+    const parsed = registerSchema.safeParse({ username, real_name: realName, password, confirmPassword, shop_id: shopId });
     if (!parsed.success) {
       toast({
         title: '输入有误',
