@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
@@ -26,19 +26,38 @@ interface CreateUserDialogProps {
   onCreated?: () => void;
 }
 
+interface Shop { id: string; name: string }
+
 export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState('');
+  const [realName, setRealName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<AppRole>('anchor');
+  const [shopId, setShopId] = useState('');
+  const [shops, setShops] = useState<Shop[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const { data } = await supabase
+        .from('shops' as any)
+        .select('id, name')
+        .eq('active', true)
+        .order('sort_order');
+      setShops((data as any) || []);
+    })();
+  }, [open]);
 
   const reset = () => {
     setUsername('');
+    setRealName('');
     setPassword('');
     setShowPassword(false);
     setRole('anchor');
+    setShopId('');
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -56,12 +75,24 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
       toast.error('密码至少 6 位');
       return;
     }
+    if (!shopId) {
+      toast.error('请选择所属门店');
+      return;
+    }
 
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke(
         'admin-create-user',
-        { body: { username, password, role } },
+        {
+          body: {
+            username,
+            password,
+            role,
+            real_name: realName.trim() || undefined,
+            shop_id: shopId,
+          },
+        },
       );
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -110,6 +141,37 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="new-realname">真实姓名</Label>
+            <Input
+              id="new-realname"
+              value={realName}
+              onChange={(e) => setRealName(e.target.value)}
+              placeholder="例如：张三"
+              maxLength={32}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="new-shop">所属门店</Label>
+            {shops.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-2">
+                暂无可选门店，请先在「门店管理」创建门店
+              </div>
+            ) : (
+              <Select value={shopId} onValueChange={setShopId}>
+                <SelectTrigger id="new-shop">
+                  <SelectValue placeholder="请选择门店" />
+                </SelectTrigger>
+                <SelectContent>
+                  {shops.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="new-password">密码</Label>
             <div className="relative">
               <Input
@@ -149,7 +211,7 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
             </Select>
           </div>
 
-          <Button type="submit" disabled={loading} className="w-full">
+          <Button type="submit" disabled={loading || shops.length === 0} className="w-full">
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             创建用户
           </Button>
