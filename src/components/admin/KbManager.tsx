@@ -151,10 +151,7 @@ export function KbManager({ type, title }: Props) {
                 {cats.map(c => <SelectItem key={c.id} value={c.id!}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}>
-              <Sparkles className="w-4 h-4 mr-1" />AI 生成
-            </Button>
-            <Button size="sm" onClick={() => setEntryDraft({ type, category_id: cats[0]?.id || null, title: '', body: '', tags: [], sort_order: entries.length })}>
+            <Button size="sm" onClick={() => { setAiHint(''); setEntryDraft({ type, category_id: cats[0]?.id || null, title: '', body: '', tags: [], sort_order: entries.length }); }}>
               <Plus className="w-4 h-4 mr-1" />新增词条
             </Button>
           </div>
