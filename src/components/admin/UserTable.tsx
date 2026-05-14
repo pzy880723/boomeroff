@@ -272,8 +272,8 @@ export function UserTable() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={getRoleBadgeVariant(user.role)}>
-                      {ROLE_LABELS[user.role]}
+                    <Badge variant={user.role_code === 'super_admin' ? 'destructive' : 'secondary'}>
+                      {roleNameMap[user.role_code ?? ''] ?? ROLE_LABELS[user.role]}
                     </Badge>
                   </TableCell>
                   <TableCell>
