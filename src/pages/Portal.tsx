@@ -20,7 +20,7 @@ import {
 import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, TrendingUp, Menu,
-  CalendarDays, Clock, BookOpen, MessagesSquare,
+  CalendarDays, Clock, BookOpen, MessagesSquare, Store,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
