@@ -18,7 +18,17 @@ import { cn } from '@/lib/utils';
 
 interface Shift { code: string; name: string; start_time: string; end_time: string; color: string | null; sort_order: number; shop_id?: string | null }
 interface Sched { id?: string; work_date: string; shift_code: string; user_id: string; source?: string; shop_id?: string | null }
-interface User { user_id: string; display_name: string; allowed_shop_ids?: string[]; shop_id?: string | null }
+interface User {
+  user_id: string;
+  display_name: string;
+  allowed_shop_ids?: string[];
+  shop_id?: string | null;
+  available_weekdays?: number[];
+  blocked_weekdays?: number[];
+  blocked_shifts?: string[];
+  max_per_week?: number;
+  day_offs?: string[];
+}
 interface Shop { id: string; name: string }
 
 export function ScheduleManager() {
