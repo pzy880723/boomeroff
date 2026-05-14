@@ -73,6 +73,53 @@ export function KbManager({ type, title }: Props) {
 
   const filtered = filterCat === 'all' ? entries : entries.filter(e => e.category_id === filterCat);
 
+  const runAi = async () => {
+    if (!aiTopic.trim()) { toast.error('请填写主题'); return; }
+    setAiLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-shop-kb', {
+        body: {
+          type,
+          topic: aiTopic.trim(),
+          hint: aiHint.trim(),
+          categories: cats.map(c => ({ id: c.id, name: c.name })),
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const draft = (data as any).draft as { title: string; body: string; category_name: string; tags?: string[] };
+
+      // match category by name (case-insensitive trim)
+      const norm = (s: string) => s.trim().toLowerCase();
+      let cat = cats.find(c => norm(c.name) === norm(draft.category_name));
+      if (!cat) {
+        const { data: newCat, error: e2 } = await supabase
+          .from('shop_kb_categories' as any)
+          .insert({ type, name: draft.category_name.trim(), sort_order: cats.length })
+          .select().single();
+        if (e2) throw e2;
+        cat = newCat as any;
+      }
+
+      setAiOpen(false);
+      setAiTopic(''); setAiHint('');
+      await refresh();
+      setEntryDraft({
+        type,
+        category_id: cat!.id || null,
+        title: draft.title,
+        body: draft.body,
+        tags: draft.tags || [],
+        sort_order: entries.length,
+      });
+      toast.success(`已生成草稿，分类：${cat!.name}`);
+    } catch (e: any) {
+      toast.error(e.message || 'AI 生成失败');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" /></div>;
 
   return (
