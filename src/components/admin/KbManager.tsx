@@ -74,13 +74,15 @@ export function KbManager({ type, title }: Props) {
   const filtered = filterCat === 'all' ? entries : entries.filter(e => e.category_id === filterCat);
 
   const runAi = async () => {
-    if (!aiTopic.trim()) { toast.error('请填写主题'); return; }
+    if (!entryDraft) return;
+    const topic = entryDraft.title.trim();
+    if (!topic) { toast.error('请先在标题里填写主题'); return; }
     setAiLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-shop-kb', {
         body: {
           type,
-          topic: aiTopic.trim(),
+          topic,
           hint: aiHint.trim(),
           categories: cats.map(c => ({ id: c.id, name: c.name })),
         },
@@ -89,7 +91,6 @@ export function KbManager({ type, title }: Props) {
       if ((data as any)?.error) throw new Error((data as any).error);
       const draft = (data as any).draft as { title: string; body: string; category_name: string; tags?: string[] };
 
-      // match category by name (case-insensitive trim)
       const norm = (s: string) => s.trim().toLowerCase();
       let cat = cats.find(c => norm(c.name) === norm(draft.category_name));
       if (!cat) {
@@ -99,20 +100,17 @@ export function KbManager({ type, title }: Props) {
           .select().single();
         if (e2) throw e2;
         cat = newCat as any;
+        await refresh();
       }
 
-      setAiOpen(false);
-      setAiTopic(''); setAiHint('');
-      await refresh();
       setEntryDraft({
-        type,
-        category_id: cat!.id || null,
-        title: draft.title,
+        ...entryDraft,
+        category_id: cat!.id || entryDraft.category_id,
+        title: draft.title || entryDraft.title,
         body: draft.body,
-        tags: draft.tags || [],
-        sort_order: entries.length,
+        tags: draft.tags?.length ? draft.tags : entryDraft.tags,
       });
-      toast.success(`已生成草稿，分类：${cat!.name}`);
+      toast.success(`已生成内容，分类：${cat!.name}`);
     } catch (e: any) {
       toast.error(e.message || 'AI 生成失败');
     } finally {
