@@ -351,6 +351,11 @@ export function UserTable() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setProfileUser(user)}>
+                            <IdCard className="mr-2 h-4 w-4" />
+                            编辑姓名 / 门店
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleSuspend(user)}>
                             {user.suspended ? (
                               <>
