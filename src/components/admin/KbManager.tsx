@@ -232,42 +232,6 @@ export function KbManager({ type, title }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* AI generate dialog */}
-      <Dialog open={aiOpen} onOpenChange={(o) => !aiLoading && setAiOpen(o)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>AI 生成{title}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>主题 / 标题</Label>
-              <Input
-                placeholder={type === 'qa' ? '例：客户砍价怎么应对' : '例：闭店流程'}
-                value={aiTopic}
-                onChange={(e) => setAiTopic(e.target.value)}
-                disabled={aiLoading}
-              />
-            </div>
-            <div>
-              <Label>补充说明（可选）</Label>
-              <Textarea
-                rows={3}
-                placeholder="想强调的要点、限制条件、店内特殊情况等"
-                value={aiHint}
-                onChange={(e) => setAiHint(e.target.value)}
-                disabled={aiLoading}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              AI 会自动从 {cats.length} 个现有分类里匹配，匹配不上时会新建一个分类。生成后可在弹出的编辑框二次修改。
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAiOpen(false)} disabled={aiLoading}>取消</Button>
-            <Button onClick={runAi} disabled={aiLoading}>
-              {aiLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />生成中…</> : <><Sparkles className="w-4 h-4 mr-1" />开始生成</>}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
