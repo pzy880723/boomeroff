@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -6,37 +7,45 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, Shield, Store } from 'lucide-react';
-import { AppRole, ROLE_LABELS } from '@/types';
+import { ChevronDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+interface RoleOption {
+  code: string;
+  name: string;
+}
+
 interface RoleEditorProps {
-  currentRole: AppRole;
-  onRoleChange: (newRole: AppRole) => Promise<boolean>;
+  currentRoleCode: string | null;
+  onChanged: (newRoleCode: string) => Promise<boolean>;
   disabled?: boolean;
 }
 
-const ROLE_OPTIONS: { value: AppRole; label: string; icon: typeof Shield }[] = [
-  { value: 'admin', label: ROLE_LABELS.admin, icon: Shield },
-  { value: 'anchor', label: ROLE_LABELS.anchor, icon: Store },
-];
-
-export function RoleEditor({ currentRole, onRoleChange, disabled }: RoleEditorProps) {
+export function RoleEditor({ currentRoleCode, onChanged, disabled }: RoleEditorProps) {
   const [loading, setLoading] = useState(false);
+  const [options, setOptions] = useState<RoleOption[]>([]);
 
-  const handleRoleChange = async (newRole: AppRole) => {
-    if (newRole === currentRole) return;
+  useEffect(() => {
+    void supabase
+      .from('app_roles')
+      .select('code, name')
+      .order('sort_order')
+      .then(({ data }) => setOptions((data ?? []) as RoleOption[]));
+  }, []);
 
+  const current = options.find((o) => o.code === currentRoleCode);
+
+  const handle = async (code: string) => {
+    if (code === currentRoleCode) return;
     setLoading(true);
     try {
-      const success = await onRoleChange(newRole);
-      if (success) {
-        toast.success(`角色已更新为 ${ROLE_LABELS[newRole]}`);
+      const ok = await onChanged(code);
+      if (ok) {
+        const target = options.find((o) => o.code === code);
+        toast.success(`角色已更新为 ${target?.name ?? code}`);
       } else {
         toast.error('更新失败');
       }
-    } catch (error) {
-      toast.error('更新失败');
     } finally {
       setLoading(false);
     }
@@ -46,20 +55,20 @@ export function RoleEditor({ currentRole, onRoleChange, disabled }: RoleEditorPr
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" disabled={loading || disabled}>
-          修改角色
+          {loading && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+          {current?.name ?? '修改角色'}
           <ChevronDown className="ml-1 h-3 w-3" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {ROLE_OPTIONS.map((option) => (
+        {options.map((o) => (
           <DropdownMenuItem
-            key={option.value}
-            onClick={() => handleRoleChange(option.value)}
-            className={currentRole === option.value ? 'bg-muted' : ''}
+            key={o.code}
+            onClick={() => handle(o.code)}
+            className={currentRoleCode === o.code ? 'bg-muted' : ''}
           >
-            <option.icon className="mr-2 h-4 w-4" />
-            {option.label}
-            {currentRole === option.value && (
+            {o.name}
+            {currentRoleCode === o.code && (
               <span className="ml-auto text-xs text-muted-foreground">当前</span>
             )}
           </DropdownMenuItem>

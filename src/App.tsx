@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { PermissionsProvider } from "@/hooks/usePermissions";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Loader2 } from "lucide-react";
 import Scan from "./pages/Scan";
@@ -50,7 +51,8 @@ function RouteFallback() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <TooltipProvider>
+      <PermissionsProvider>
+        <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
@@ -98,6 +100,7 @@ const App = () => (
           </Suspense>
         </BrowserRouter>
       </TooltipProvider>
+      </PermissionsProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

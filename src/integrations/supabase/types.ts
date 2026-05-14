@@ -14,6 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_permissions: {
+        Row: {
+          description: string | null
+          group: string
+          key: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          description?: string | null
+          group?: string
+          key: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          description?: string | null
+          group?: string
+          key?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      app_role_permissions: {
+        Row: {
+          permission_key: string
+          role_code: string
+        }
+        Insert: {
+          permission_key: string
+          role_code: string
+        }
+        Update: {
+          permission_key?: string
+          role_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_role_permissions_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "app_permissions"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "app_role_permissions_role_code_fkey"
+            columns: ["role_code"]
+            isOneToOne: false
+            referencedRelation: "app_roles"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      app_roles: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          is_system: boolean
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          is_system?: boolean
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          is_system?: boolean
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string
@@ -1056,25 +1137,31 @@ export type Database = {
       }
       user_roles: {
         Row: {
+          area_code: string | null
           created_at: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
+          role_code: string | null
           suspended: boolean | null
           suspended_at: string | null
           user_id: string
         }
         Insert: {
+          area_code?: string | null
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          role_code?: string | null
           suspended?: boolean | null
           suspended_at?: string | null
           user_id: string
         }
         Update: {
+          area_code?: string | null
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          role_code?: string | null
           suspended?: boolean | null
           suspended_at?: string | null
           user_id?: string
@@ -1154,6 +1241,10 @@ export type Database = {
       }
       increment_official_view: { Args: { _id: string }; Returns: undefined }
       perform_check_in: { Args: never; Returns: Json }
+      user_has_permission: {
+        Args: { _perm: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "operator" | "assistant" | "anchor"

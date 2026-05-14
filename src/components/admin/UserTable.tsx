@@ -40,6 +40,7 @@ interface UserWithRole {
   id: string;
   user_id: string;
   role: AppRole;
+  role_code: string | null;
   created_at: string;
   suspended: boolean;
   suspended_at: string | null;
@@ -56,14 +57,23 @@ export function UserTable() {
   const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
   const [resetUser, setResetUser] = useState<UserWithRole | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending'>('all');
+  const [roleNameMap, setRoleNameMap] = useState<Record<string, string>>({});
   const { user: currentUser } = useAuth();
+
+  useEffect(() => {
+    void supabase.from('app_roles').select('code, name').then(({ data }) => {
+      const m: Record<string, string> = {};
+      (data ?? []).forEach((r: any) => { m[r.code] = r.name; });
+      setRoleNameMap(m);
+    });
+  }, []);
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
-        .select('id, user_id, role, created_at, suspended, suspended_at')
+        .select('id, user_id, role, role_code, created_at, suspended, suspended_at')
         .order('created_at', { ascending: false });
 
       if (rolesError) throw rolesError;
@@ -80,10 +90,11 @@ export function UserTable() {
         });
       }
 
-      const usersWithProfiles = (roles || []).map((r: any) => ({
+      const usersWithProfiles: UserWithRole[] = (roles || []).map((r: any) => ({
         id: r.id,
         user_id: r.user_id,
         role: r.role as AppRole,
+        role_code: r.role_code ?? (r.role === 'admin' ? 'super_admin' : 'staff'),
         created_at: r.created_at,
         suspended: r.suspended || false,
         suspended_at: r.suspended_at,
@@ -102,10 +113,12 @@ export function UserTable() {
     fetchUsers();
   }, []);
 
-  const handleRoleChange = async (userId: string, newRole: AppRole) => {
+  const handleRoleChange = async (userId: string, newRoleCode: string) => {
+    // 同步写入旧 enum 字段，保持现有 RLS 不破：super_admin → admin，其它 → anchor
+    const legacy = newRoleCode === 'super_admin' ? 'admin' : 'anchor';
     const { error } = await supabase
       .from('user_roles')
-      .update({ role: newRole })
+      .update({ role_code: newRoleCode, role: legacy })
       .eq('user_id', userId);
 
     if (error) {
@@ -268,8 +281,8 @@ export function UserTable() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={getRoleBadgeVariant(user.role)}>
-                      {ROLE_LABELS[user.role]}
+                    <Badge variant={user.role_code === 'super_admin' ? 'destructive' : 'secondary'}>
+                      {roleNameMap[user.role_code ?? ''] ?? ROLE_LABELS[user.role]}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -299,8 +312,8 @@ export function UserTable() {
                         </Button>
                       )}
                       <RoleEditor
-                        currentRole={user.role}
-                        onRoleChange={(newRole) => handleRoleChange(user.user_id, newRole)}
+                        currentRoleCode={user.role_code}
+                        onChanged={(code) => handleRoleChange(user.user_id, code)}
                         disabled={isCurrentUser(user.user_id)}
                       />
                       <DropdownMenu>
