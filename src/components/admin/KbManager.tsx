@@ -199,8 +199,29 @@ export function KbManager({ type, title }: Props) {
                   <SelectContent>{cats.map(c => <SelectItem key={c.id} value={c.id!}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label>标题</Label><Input value={entryDraft.title} onChange={e => setEntryDraft({ ...entryDraft, title: e.target.value })} /></div>
-              <div><Label>正文</Label><Textarea rows={6} value={entryDraft.body} onChange={e => setEntryDraft({ ...entryDraft, body: e.target.value })} /></div>
+              <div><Label>标题 / 主题</Label><Input placeholder={type === 'qa' ? '例：客户砍价怎么应对' : '例：闭店流程'} value={entryDraft.title} onChange={e => setEntryDraft({ ...entryDraft, title: e.target.value })} /></div>
+              <div className="rounded-md border border-dashed border-border/60 p-3 space-y-2 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">AI 生成正文</span>
+                </div>
+                <Textarea
+                  rows={2}
+                  placeholder="补充说明（可选）：想强调的要点、限制条件、店内特殊情况等"
+                  value={aiHint}
+                  onChange={(e) => setAiHint(e.target.value)}
+                  disabled={aiLoading}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-muted-foreground flex-1">
+                    根据上面的标题生成；自动从 {cats.length} 个分类里匹配，匹配不上会新建。
+                  </p>
+                  <Button size="sm" variant="outline" onClick={runAi} disabled={aiLoading || !entryDraft.title.trim()}>
+                    {aiLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />生成中…</> : <><Sparkles className="w-4 h-4 mr-1" />AI 生成</>}
+                  </Button>
+                </div>
+              </div>
+              <div><Label>正文</Label><Textarea rows={8} value={entryDraft.body} onChange={e => setEntryDraft({ ...entryDraft, body: e.target.value })} /></div>
               <div><Label>标签（逗号分隔）</Label>
                 <Input value={entryDraft.tags.join(',')} onChange={e => setEntryDraft({ ...entryDraft, tags: e.target.value.split(/[,，]/).map(s => s.trim()).filter(Boolean) })} />
               </div>
