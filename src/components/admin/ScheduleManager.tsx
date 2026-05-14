@@ -63,7 +63,7 @@ export function ScheduleManager() {
         const sp = profMap.get(p.user_id) || {};
         return {
           user_id: p.user_id,
-          display_name: p.display_name || '店员',
+          display_name: (sp.real_name && String(sp.real_name).trim()) || p.display_name || '店员',
           allowed_shop_ids: sp.allowed_shop_ids || [],
           shop_id: sp.shop_id || null,
         };
