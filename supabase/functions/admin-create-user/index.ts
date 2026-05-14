@@ -67,9 +67,10 @@ Deno.serve(async (req) => {
       const first = parsed.error.errors[0]?.message ?? "参数错误";
       return json({ error: first }, 400);
     }
-    const { username, password, role } = parsed.data;
+    const { username, password, role, real_name, shop_id } = parsed.data;
 
     const email = `${username.toLowerCase()}@boomeroff.local`;
+    const displayName = real_name?.trim() || username;
 
     // Pre-check duplicate username
     for (let page = 1; page <= 20; page++) {
@@ -92,7 +93,7 @@ Deno.serve(async (req) => {
         email,
         password,
         email_confirm: true,
-        user_metadata: { display_name: username },
+        user_metadata: { display_name: displayName },
       });
 
     if (createErr || !created.user) {
