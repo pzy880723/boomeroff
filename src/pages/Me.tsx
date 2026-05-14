@@ -3,27 +3,33 @@ import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { supabase } from '@/integrations/supabase/client';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut, ChevronRight, Edit2, CalendarCheck, CalendarDays, BookOpen, MessagesSquare, MapPin } from 'lucide-react';
-import { ShiftBadgeRight } from '@/components/me/ShiftBadgeRight';
+import {
+  Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut,
+  ChevronRight, Edit2, CalendarCheck, BookOpen, MessagesSquare, MapPin, Briefcase,
+} from 'lucide-react';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 import { Link } from 'react-router-dom';
-import { ROLE_LABELS } from '@/types';
+import { ROLE_LABELS, POSITION_LABELS, type StaffPosition } from '@/types';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { CheckInCard } from '@/components/me/CheckInCard';
 import { LevelCard } from '@/components/me/LevelCard';
+import { AvatarPicker } from '@/components/me/AvatarPicker';
+import { SchedulePanel } from '@/components/me/SchedulePanel';
 
 export default function Me() {
   const { user, role, signOut, loading: authLoading } = useAuth();
   const [displayName, setDisplayName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [shopName, setShopName] = useState<string | null>(null);
+  const [realName, setRealName] = useState<string | null>(null);
+  const [position, setPosition] = useState<StaffPosition | null>(null);
   const [stats, setStats] = useState({ scans: 0, favs: 0, posts: 0 });
   const [totalExp, setTotalExp] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -36,16 +42,19 @@ export default function Me() {
     (async () => {
       setLoading(true);
       const [{ data: profile }, scansC, favsC, postsC, { data: exp }, { data: sp }] = await Promise.all([
-        supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
+        supabase.from('profiles').select('display_name, avatar_url').eq('user_id', user.id).maybeSingle(),
         supabase.from('products').select('id', { count: 'exact', head: true }).eq('created_by', user.id),
         supabase.from('user_favorites').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('community_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('user_experience').select('total_exp').eq('user_id', user.id).maybeSingle(),
-        supabase.from('staff_profiles' as any).select('shop_id').eq('user_id', user.id).maybeSingle(),
+        supabase.from('staff_profiles' as any).select('shop_id, real_name, position').eq('user_id', user.id).maybeSingle(),
       ]);
-      setDisplayName(profile?.display_name || user.email?.split('@')[0] || '中古玩家');
+      setDisplayName(profile?.display_name || user.email?.split('@')[0] || '店员');
+      setAvatarUrl((profile as any)?.avatar_url || null);
       setStats({ scans: scansC.count || 0, favs: favsC.count || 0, posts: postsC.count || 0 });
       setTotalExp(exp?.total_exp || 0);
+      setRealName((sp as any)?.real_name || null);
+      setPosition(((sp as any)?.position as StaffPosition) || null);
       const sid = (sp as any)?.shop_id;
       if (sid) {
         const { data: shop } = await supabase.from('shops' as any).select('name').eq('id', sid).maybeSingle();
@@ -83,29 +92,39 @@ export default function Me() {
       <PageHeader title="我的" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
         {/* Profile card */}
-        <Card className="p-3 sm:p-4 flex items-start gap-3">
-          <Avatar className="h-14 w-14 sm:h-16 sm:w-16 shrink-0">
-            <AvatarFallback className="bg-gradient-primary text-primary-foreground text-lg">
-              {displayName.charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
+        <Card className="p-4 flex items-start gap-4">
+          <AvatarPicker
+            userId={user.id}
+            displayName={displayName}
+            avatarUrl={avatarUrl}
+            onChanged={setAvatarUrl}
+            size={72}
+          />
+          <div className="flex-1 min-w-0 space-y-1.5">
             <div className="flex items-center gap-2">
               <h2 className="text-base sm:text-lg font-semibold truncate">{displayName}</h2>
-              <button onClick={() => { setDraftName(displayName); setEditOpen(true); }}>
+              <button onClick={() => { setDraftName(displayName); setEditOpen(true); }} aria-label="编辑昵称">
                 <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             </div>
-            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <p className="text-xs text-muted-foreground truncate">
+              {realName ? <span className="text-foreground/80">{realName} · </span> : null}
+              {user.email}
+            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
               {role && <Badge variant="secondary" className="text-[10px]">{ROLE_LABELS[role]}</Badge>}
+              {position && (
+                <Badge variant="outline" className="text-[10px] gap-1">
+                  <Briefcase className="w-3 h-3" />
+                  {POSITION_LABELS[position]}
+                </Badge>
+              )}
               <Badge variant="outline" className="text-[10px] gap-1">
                 <MapPin className="w-3 h-3" />
                 {shopName || '未分配门店'}
               </Badge>
             </div>
           </div>
-          <ShiftBadgeRight userId={user.id} className="w-[130px] sm:w-[170px] shrink-0" />
         </Card>
 
         {/* Daily check-in */}
@@ -113,6 +132,9 @@ export default function Me() {
 
         {/* Level */}
         <LevelCard totalExp={totalExp} />
+
+        {/* Schedule */}
+        <SchedulePanel />
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
@@ -135,12 +157,7 @@ export default function Me() {
 
         {/* Settings */}
         <Card className="overflow-hidden">
-          <Link to="/me/schedule" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors">
-            <CalendarDays className="w-5 h-5 text-muted-foreground" />
-            <span className="flex-1 text-sm">店铺排班</span>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          </Link>
-          <Link to="/me/sop" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
+          <Link to="/me/sop" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors">
             <BookOpen className="w-5 h-5 text-muted-foreground" />
             <span className="flex-1 text-sm">门店 SOP</span>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />

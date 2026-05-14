@@ -1,33 +1,105 @@
-## 门店选择 + 我的页门店名称
+## 目标
+重设 `/me` 页的个人信息卡 + 把"我的排班"作为独立模块内嵌到个人信息下方。
 
-### 一、注册流程
-- `RegisterForm` 增加"所属门店"下拉（必填），从 `shops` 表读取 active=true 列表
-- 如果当前 `shops` 为空，下拉禁用并提示"请先联系管理员创建门店"
-- 提交时把 `shop_id` 一起传给 `public-register` edge function
-- `public-register`：新增 `shop_id` 入参（必填，UUID 校验），用户创建成功后写入 `staff_profiles`：
-  ```text
-  staff_profiles { user_id, shop_id, employment_type='regular', ... 默认值 }
-  ```
-  使用 service role 绕过 RLS
+---
 
-### 二、我的页头部显示门店名
-- `Me.tsx` 在 `useEffect` 中追加查询：`staff_profiles.shop_id` → `shops.name`
-- 在用户名右侧（`Edit2` 之后）追加门店徽章：`<Badge variant="outline">📍 本店</Badge>`
-- 没有门店归属时显示灰色 "未分配门店"
+## 1. 数据库改动
 
-### 三、后台门店管理
-- 新增 `src/components/admin/ShopManager.tsx`：列表 + 新增/编辑/停用
-  - 字段：名称、地址（可选）、排序、启用
-- `Portal.tsx` 顶部 Tab 增加 `shops` 项「门店」（放在最前），渲染 `<ShopManager />`
-- 已有 `shops` 表 RLS 已支持 admin 写入，无需迁移
+### staff_profiles 表新增字段
+- `real_name text` — 真实姓名
+- `position text` — 职位枚举值（'manager' / 'regular' / 'parttime' / 'intern'）
 
-### 四、不做
-- 不做注册时切换门店的复杂逻辑（用户后续如需调整由管理员在 ScheduleManager 的员工属性中修改）
-- 不在底部 Tab 之间增加门店切换器（系统当前为单门店运营，门店字段是预留 + 注册归属）
+### profiles 表
+- 已有 `avatar_url text` — 直接复用，无需新增
 
-### 五、改动文件清单
-- `supabase/functions/public-register/index.ts` — 接 shop_id，写 staff_profiles
-- `src/components/auth/RegisterForm.tsx` — 加门店下拉
-- `src/pages/Me.tsx` — 头部加门店 Badge
-- `src/pages/Portal.tsx` — 加 shops Tab
-- `src/components/admin/ShopManager.tsx` — 新建 CRUD 组件
+### Storage Bucket
+- 新建 `avatars` 公共 bucket
+- RLS：所有人可读；用户只能写入 `{userId}/...` 路径下文件
+
+---
+
+## 2. 头像生成与上传
+
+**首次注册自动生成（边缘函数 `generate-avatar`）**：
+- 入参：`displayName`
+- 调用 Lovable AI `google/gemini-3-flash-image-preview`
+- prompt：基于昵称首字 + 随机配色生成扁平卡通圆形头像
+- 上传到 `avatars/{userId}/ai-{timestamp}.png` → 写入 `profiles.avatar_url`
+- 触发时机：
+  - `public-register` 注册成功后异步触发
+  - Me 页发现 `avatar_url` 为空时按钮触发
+
+**用户操作**：
+- Me 页头像点击 → 弹出菜单：「上传图片」/「AI 重新生成」
+- 上传：直接 supabase storage 上传，更新 `profiles.avatar_url`
+- 重新生成：调用 `generate-avatar` 函数
+
+---
+
+## 3. Me 页 UI 重构
+
+### 模块 A：个人信息卡（顶部）
+```
+┌─────────────────────────────────────┐
+│ [大头像]  昵称 ✎                    │
+│  点击     真实姓名 · 职位徽章        │
+│  编辑     📍门店名称                 │
+│           role + 邮箱                │
+└─────────────────────────────────────┘
+```
+- 头像：80x80，可点击弹菜单（上传/AI生成）
+- 昵称：用户可改（已有）
+- 真实姓名：只读展示，"未设置"占位
+- 职位：徽章展示（店长/正式店员/兼职/实习生）
+- 门店：📍徽章
+- 删除原 `ShiftBadgeRight`（移到下面排班模块）
+
+### 模块 B：打卡 + 等级（保留）
+
+### 模块 C：统计三宫格（保留）
+
+### 模块 D：**我的排班（新内嵌模块，替代菜单跳转）**
+- Card 包裹，标题"店铺排班"
+- 内嵌 `<Tabs>` 「我的 / 门店」
+  - 直接复用 `MyScheduleList` 与 `ShopScheduleList`
+- 移除 Settings 列表中的"店铺排班"链接
+- 删除 `MySchedule.tsx` 路由（保留组件文件以便复用，或仅删路由）
+
+### 模块 E：Settings 列表（保留 SOP / Q&A / 打卡 / 历史 / 改密 / 退出）
+
+---
+
+## 4. 管理员后台维护
+
+### `StaffProfileDialog.tsx` 扩展
+现有员工属性弹窗增加字段：
+- 真实姓名（input）
+- 职位（Select：店长/正式店员/兼职/实习生）
+- 门店（已有 shop_id 选择）
+
+---
+
+## 5. 路由 / 文件改动
+
+### 新建
+- `supabase/functions/generate-avatar/index.ts`
+- `src/components/me/AvatarPicker.tsx`（头像点击菜单 + 上传/AI 生成逻辑）
+- `src/components/me/SchedulePanel.tsx`（包装 Tabs + Lists）
+
+### 修改
+- `src/pages/Me.tsx` — 重构布局
+- `src/components/admin/StaffProfileDialog.tsx` — 新增字段
+- `src/App.tsx` — 移除 `/me/schedule` 路由（可选：保留以兼容外链）
+
+### 数据库迁移
+- `ALTER TABLE staff_profiles ADD real_name, position`
+- 创建 `avatars` storage bucket + RLS
+- `profiles` 表保持不变
+
+---
+
+## 技术细节
+- AI 头像调用 Lovable AI Gateway，使用 `LOVABLE_API_KEY` 与 image preview 模型
+- 上传走 supabase-js storage client，路径前缀 `{userId}/`，避免越权
+- 排班 Tabs 默认值 `me`，与原 `/me/schedule` 一致
+- 职位常量集中放在 `src/types/index.ts`：`POSITION_LABELS = { manager: '店长', regular: '正式店员', parttime: '兼职', intern: '实习生' }`

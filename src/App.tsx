@@ -23,7 +23,7 @@ const PortalGuard = lazy(() =>
 const Invite = lazy(() => import("./pages/Invite"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CheckInHistory = lazy(() => import("./pages/CheckInHistory"));
-const MySchedule = lazy(() => import("./pages/MySchedule"));
+
 const MySop = lazy(() => import("./pages/MySop"));
 const MyQa = lazy(() => import("./pages/MyQa"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -81,7 +81,7 @@ const App = () => (
               <Route path="/invite/:code" element={<Invite />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/me/check-ins" element={<CheckInHistory />} />
-              <Route path="/me/schedule" element={<MySchedule />} />
+              
               <Route path="/me/sop" element={<MySop />} />
               <Route path="/me/qa" element={<MyQa />} />
 

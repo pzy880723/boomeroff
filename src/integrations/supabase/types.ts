@@ -887,7 +887,9 @@ export type Database = {
           employment_type: string
           max_per_week: number
           note: string | null
+          position: string | null
           preferred_shifts: string[]
+          real_name: string | null
           shop_id: string | null
           updated_at: string
           user_id: string
@@ -898,7 +900,9 @@ export type Database = {
           employment_type?: string
           max_per_week?: number
           note?: string | null
+          position?: string | null
           preferred_shifts?: string[]
+          real_name?: string | null
           shop_id?: string | null
           updated_at?: string
           user_id: string
@@ -909,7 +913,9 @@ export type Database = {
           employment_type?: string
           max_per_week?: number
           note?: string | null
+          position?: string | null
           preferred_shifts?: string[]
+          real_name?: string | null
           shop_id?: string | null
           updated_at?: string
           user_id?: string
