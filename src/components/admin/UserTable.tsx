@@ -74,6 +74,14 @@ export function UserTable() {
       (data ?? []).forEach((r: any) => { m[r.code] = r.name; });
       setRoleNameMap(m);
     });
+    void supabase.from('shops' as any).select('id, name').then(({ data }) => {
+      const m: Record<string, string> = {};
+      (data ?? []).forEach((s: any) => { m[s.id] = s.name; });
+      setShopNameMap(m);
+    });
+    void supabase.from('shop_shifts' as any).select('code, name').eq('active', true).order('sort_order').then(({ data }) => {
+      setShifts((data as any) || []);
+    });
   }, []);
 
   const fetchUsers = async () => {
