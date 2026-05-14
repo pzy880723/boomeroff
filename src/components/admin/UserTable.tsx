@@ -153,7 +153,14 @@ export function UserTable() {
       return false;
     }
 
-    fetchUsers();
+    // 局部更新，避免整页重新加载导致滚动回到顶部
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.user_id === userId
+          ? { ...u, role_code: newRoleCode, role: legacy as AppRole }
+          : u,
+      ),
+    );
     return true;
   };
 
