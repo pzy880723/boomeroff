@@ -23,6 +23,9 @@ const PortalGuard = lazy(() =>
 const Invite = lazy(() => import("./pages/Invite"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CheckInHistory = lazy(() => import("./pages/CheckInHistory"));
+const MySchedule = lazy(() => import("./pages/MySchedule"));
+const MySop = lazy(() => import("./pages/MySop"));
+const MyQa = lazy(() => import("./pages/MyQa"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // 游客版（免登录）
