@@ -19,9 +19,13 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
 import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from '@/components/ui/accordion';
+import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, TrendingUp, Menu,
   CalendarDays, Clock, BookOpen, MessagesSquare, Store, ShieldCheck,
+  UserCog, Building2, Library, Megaphone, Settings,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
@@ -30,20 +34,47 @@ import { cn } from '@/lib/utils';
 
 type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
 
-const MENU: { key: TabKey; label: string; icon: typeof Users }[] = [
-  { key: 'users', label: '用户管理', icon: Users },
-  { key: 'roles', label: '角色与权限', icon: ShieldCheck },
-  { key: 'shops', label: '门店管理', icon: Store },
-  { key: 'schedule', label: '排班管理', icon: CalendarDays },
-  { key: 'shifts', label: '班次设置', icon: Clock },
-  { key: 'sop', label: '门店 SOP', icon: BookOpen },
-  { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare },
-  { key: 'official', label: '官方知识', icon: BadgeCheck },
-  { key: 'community', label: '中古圈', icon: MessageSquare },
-  { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning },
-  { key: 'ai', label: 'AI 模型', icon: Sparkles },
-  { key: 'xianyu', label: '闲鱼行情', icon: TrendingUp },
+type MenuItem = { key: TabKey; label: string; icon: typeof Users };
+type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
+
+const MENU_GROUPS: MenuGroup[] = [
+  {
+    key: 'people', label: '人员', icon: UserCog, items: [
+      { key: 'users', label: '用户管理', icon: Users },
+      { key: 'roles', label: '角色与权限', icon: ShieldCheck },
+    ],
+  },
+  {
+    key: 'ops', label: '门店运营', icon: Building2, items: [
+      { key: 'shops', label: '门店管理', icon: Store },
+      { key: 'schedule', label: '排班管理', icon: CalendarDays },
+      { key: 'shifts', label: '班次设置', icon: Clock },
+    ],
+  },
+  {
+    key: 'kb', label: '知识库', icon: Library, items: [
+      { key: 'sop', label: '门店 SOP', icon: BookOpen },
+      { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare },
+      { key: 'official', label: '官方知识', icon: BadgeCheck },
+    ],
+  },
+  {
+    key: 'social', label: '社区', icon: Megaphone, items: [
+      { key: 'community', label: '中古圈', icon: MessageSquare },
+      { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning },
+    ],
+  },
+  {
+    key: 'system', label: '系统', icon: Settings, items: [
+      { key: 'ai', label: 'AI 模型', icon: Sparkles },
+      { key: 'xianyu', label: '闲鱼行情', icon: TrendingUp },
+    ],
+  },
 ];
+
+const ALL_ITEMS: { item: MenuItem; group: MenuGroup }[] = MENU_GROUPS.flatMap(
+  (g) => g.items.map((item) => ({ item, group: g }))
+);
 
 export default function Portal() {
   const { role } = useAuth();
