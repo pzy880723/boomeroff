@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut, ChevronRight, Edit2, CalendarCheck, CalendarDays, BookOpen, MessagesSquare } from 'lucide-react';
+import { Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut, ChevronRight, Edit2, CalendarCheck, CalendarDays, BookOpen, MessagesSquare, MapPin } from 'lucide-react';
 import { ShiftBadgeRight } from '@/components/me/ShiftBadgeRight';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 import { Link } from 'react-router-dom';
