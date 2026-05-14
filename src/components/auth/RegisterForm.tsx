@@ -1,15 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { z } from 'zod';
@@ -22,6 +21,7 @@ const registerSchema = z
       .regex(/^[a-zA-Z0-9_]{3,32}$/, '用户名仅支持字母、数字、下划线，3-32 位'),
     password: z.string().min(6, '密码至少 6 位').max(72, '密码过长'),
     confirmPassword: z.string(),
+    shop_id: z.string().uuid('请选择所属门店'),
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: '两次密码不一致',
@@ -32,18 +32,35 @@ interface RegisterFormProps {
   onBackToLogin: () => void;
 }
 
+interface Shop { id: string; name: string }
+
 export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [shopId, setShopId] = useState('');
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [shopsLoading, setShopsLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('shops' as any)
+        .select('id, name')
+        .eq('active', true)
+        .order('sort_order');
+      setShops((data as any) || []);
+      setShopsLoading(false);
+    })();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const parsed = registerSchema.safeParse({ username, password, confirmPassword });
+    const parsed = registerSchema.safeParse({ username, password, confirmPassword, shop_id: shopId });
     if (!parsed.success) {
       toast({
         title: '输入有误',
@@ -57,7 +74,7 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
     try {
       const { data, error } = await supabase.functions.invoke(
         'public-register',
-        { body: { username, password } },
+        { body: { username, password, shop_id: shopId } },
       );
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -102,6 +119,28 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="reg-shop">所属门店</Label>
+            {shopsLoading ? (
+              <div className="text-xs text-muted-foreground py-2">加载中…</div>
+            ) : shops.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-2">
+                暂无可选门店，请联系管理员先创建门店
+              </div>
+            ) : (
+              <Select value={shopId} onValueChange={setShopId}>
+                <SelectTrigger id="reg-shop">
+                  <SelectValue placeholder="请选择门店" />
+                </SelectTrigger>
+                <SelectContent>
+                  {shops.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="reg-password">密码</Label>
             <div className="relative">
               <Input
@@ -141,7 +180,7 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading || shops.length === 0}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             提交注册
           </Button>

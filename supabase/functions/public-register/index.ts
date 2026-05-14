@@ -14,6 +14,7 @@ const BodySchema = z.object({
     .regex(/^[a-zA-Z0-9_]{3,32}$/, "用户名仅支持字母、数字、下划线，3-32 位"),
   password: z.string().min(6, "密码至少 6 位").max(72),
   display_name: z.string().trim().max(32).optional(),
+  shop_id: z.string().uuid("请选择所属门店"),
 });
 
 function json(body: unknown, status = 200) {
@@ -37,7 +38,7 @@ Deno.serve(async (req) => {
       const first = parsed.error.errors[0]?.message ?? "参数错误";
       return json({ error: first }, 400);
     }
-    const { username, password, display_name } = parsed.data;
+    const { username, password, display_name, shop_id } = parsed.data;
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -121,6 +122,14 @@ Deno.serve(async (req) => {
 
     if (suspendErr) {
       console.error("Failed to mark new user as suspended:", suspendErr);
+    }
+
+    // 写入员工档案，绑定门店
+    const { error: profileErr } = await admin
+      .from("staff_profiles")
+      .upsert({ user_id: newUserId, shop_id }, { onConflict: "user_id" });
+    if (profileErr) {
+      console.error("Failed to create staff_profile:", profileErr);
     }
 
     return json({
