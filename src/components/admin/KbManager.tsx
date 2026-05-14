@@ -26,8 +26,6 @@ export function KbManager({ type, title }: Props) {
   const [catDraft, setCatDraft] = useState<Cat | null>(null);
   const [entryDraft, setEntryDraft] = useState<Entry | null>(null);
   const [filterCat, setFilterCat] = useState<string>('all');
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiTopic, setAiTopic] = useState('');
   const [aiHint, setAiHint] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -74,13 +72,15 @@ export function KbManager({ type, title }: Props) {
   const filtered = filterCat === 'all' ? entries : entries.filter(e => e.category_id === filterCat);
 
   const runAi = async () => {
-    if (!aiTopic.trim()) { toast.error('请填写主题'); return; }
+    if (!entryDraft) return;
+    const topic = entryDraft.title.trim();
+    if (!topic) { toast.error('请先在标题里填写主题'); return; }
     setAiLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-shop-kb', {
         body: {
           type,
-          topic: aiTopic.trim(),
+          topic,
           hint: aiHint.trim(),
           categories: cats.map(c => ({ id: c.id, name: c.name })),
         },
@@ -89,7 +89,6 @@ export function KbManager({ type, title }: Props) {
       if ((data as any)?.error) throw new Error((data as any).error);
       const draft = (data as any).draft as { title: string; body: string; category_name: string; tags?: string[] };
 
-      // match category by name (case-insensitive trim)
       const norm = (s: string) => s.trim().toLowerCase();
       let cat = cats.find(c => norm(c.name) === norm(draft.category_name));
       if (!cat) {
@@ -99,20 +98,17 @@ export function KbManager({ type, title }: Props) {
           .select().single();
         if (e2) throw e2;
         cat = newCat as any;
+        await refresh();
       }
 
-      setAiOpen(false);
-      setAiTopic(''); setAiHint('');
-      await refresh();
       setEntryDraft({
-        type,
-        category_id: cat!.id || null,
-        title: draft.title,
+        ...entryDraft,
+        category_id: cat!.id || entryDraft.category_id,
+        title: draft.title || entryDraft.title,
         body: draft.body,
-        tags: draft.tags || [],
-        sort_order: entries.length,
+        tags: draft.tags?.length ? draft.tags : entryDraft.tags,
       });
-      toast.success(`已生成草稿，分类：${cat!.name}`);
+      toast.success(`已生成内容，分类：${cat!.name}`);
     } catch (e: any) {
       toast.error(e.message || 'AI 生成失败');
     } finally {
@@ -151,10 +147,7 @@ export function KbManager({ type, title }: Props) {
                 {cats.map(c => <SelectItem key={c.id} value={c.id!}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}>
-              <Sparkles className="w-4 h-4 mr-1" />AI 生成
-            </Button>
-            <Button size="sm" onClick={() => setEntryDraft({ type, category_id: cats[0]?.id || null, title: '', body: '', tags: [], sort_order: entries.length })}>
+            <Button size="sm" onClick={() => { setAiHint(''); setEntryDraft({ type, category_id: cats[0]?.id || null, title: '', body: '', tags: [], sort_order: entries.length }); }}>
               <Plus className="w-4 h-4 mr-1" />新增词条
             </Button>
           </div>
@@ -206,8 +199,29 @@ export function KbManager({ type, title }: Props) {
                   <SelectContent>{cats.map(c => <SelectItem key={c.id} value={c.id!}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label>标题</Label><Input value={entryDraft.title} onChange={e => setEntryDraft({ ...entryDraft, title: e.target.value })} /></div>
-              <div><Label>正文</Label><Textarea rows={6} value={entryDraft.body} onChange={e => setEntryDraft({ ...entryDraft, body: e.target.value })} /></div>
+              <div><Label>标题 / 主题</Label><Input placeholder={type === 'qa' ? '例：客户砍价怎么应对' : '例：闭店流程'} value={entryDraft.title} onChange={e => setEntryDraft({ ...entryDraft, title: e.target.value })} /></div>
+              <div className="rounded-md border border-dashed border-border/60 p-3 space-y-2 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">AI 生成正文</span>
+                </div>
+                <Textarea
+                  rows={2}
+                  placeholder="补充说明（可选）：想强调的要点、限制条件、店内特殊情况等"
+                  value={aiHint}
+                  onChange={(e) => setAiHint(e.target.value)}
+                  disabled={aiLoading}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-muted-foreground flex-1">
+                    根据上面的标题生成；自动从 {cats.length} 个分类里匹配，匹配不上会新建。
+                  </p>
+                  <Button size="sm" variant="outline" onClick={runAi} disabled={aiLoading || !entryDraft.title.trim()}>
+                    {aiLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />生成中…</> : <><Sparkles className="w-4 h-4 mr-1" />AI 生成</>}
+                  </Button>
+                </div>
+              </div>
+              <div><Label>正文</Label><Textarea rows={8} value={entryDraft.body} onChange={e => setEntryDraft({ ...entryDraft, body: e.target.value })} /></div>
               <div><Label>标签（逗号分隔）</Label>
                 <Input value={entryDraft.tags.join(',')} onChange={e => setEntryDraft({ ...entryDraft, tags: e.target.value.split(/[,，]/).map(s => s.trim()).filter(Boolean) })} />
               </div>
@@ -218,42 +232,6 @@ export function KbManager({ type, title }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* AI generate dialog */}
-      <Dialog open={aiOpen} onOpenChange={(o) => !aiLoading && setAiOpen(o)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>AI 生成{title}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>主题 / 标题</Label>
-              <Input
-                placeholder={type === 'qa' ? '例：客户砍价怎么应对' : '例：闭店流程'}
-                value={aiTopic}
-                onChange={(e) => setAiTopic(e.target.value)}
-                disabled={aiLoading}
-              />
-            </div>
-            <div>
-              <Label>补充说明（可选）</Label>
-              <Textarea
-                rows={3}
-                placeholder="想强调的要点、限制条件、店内特殊情况等"
-                value={aiHint}
-                onChange={(e) => setAiHint(e.target.value)}
-                disabled={aiLoading}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              AI 会自动从 {cats.length} 个现有分类里匹配，匹配不上时会新建一个分类。生成后可在弹出的编辑框二次修改。
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAiOpen(false)} disabled={aiLoading}>取消</Button>
-            <Button onClick={runAi} disabled={aiLoading}>
-              {aiLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />生成中…</> : <><Sparkles className="w-4 h-4 mr-1" />开始生成</>}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
