@@ -18,7 +18,17 @@ import { cn } from '@/lib/utils';
 
 interface Shift { code: string; name: string; start_time: string; end_time: string; color: string | null; sort_order: number; shop_id?: string | null }
 interface Sched { id?: string; work_date: string; shift_code: string; user_id: string; source?: string; shop_id?: string | null }
-interface User { user_id: string; display_name: string; allowed_shop_ids?: string[]; shop_id?: string | null }
+interface User {
+  user_id: string;
+  display_name: string;
+  allowed_shop_ids?: string[];
+  shop_id?: string | null;
+  available_weekdays?: number[];
+  blocked_weekdays?: number[];
+  blocked_shifts?: string[];
+  max_per_week?: number;
+  day_offs?: string[];
+}
 interface Shop { id: string; name: string }
 
 export function ScheduleManager() {
@@ -51,11 +61,21 @@ export function ScheduleManager() {
       supabase.from('shop_shifts' as any).select('*').eq('active', true).or(`shop_id.eq.${shopId},shop_id.is.null`).order('sort_order'),
       supabase.from('shift_schedules' as any).select('*').eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', end),
       supabase.from('user_roles').select('user_id').eq('suspended', false),
-      supabase.from('staff_profiles' as any).select('user_id, allowed_shop_ids, shop_id, real_name'),
+      supabase.from('staff_profiles' as any).select('user_id, allowed_shop_ids, shop_id, real_name, available_weekdays, blocked_weekdays, blocked_shifts, max_per_week'),
     ]);
     const userIds = (roles || []).map((r: any) => r.user_id);
     const profMap = new Map<string, any>();
     (profs || []).forEach((p: any) => profMap.set(p.user_id, p));
+    const { data: dayOffs } = userIds.length
+      ? await supabase.from('staff_day_offs' as any).select('user_id, off_date, shop_id').in('user_id', userIds).gte('off_date', weekStart).lte('off_date', end)
+      : { data: [] as any[] };
+    const dayOffMap = new Map<string, string[]>();
+    (dayOffs || []).forEach((o: any) => {
+      if (o.shop_id && o.shop_id !== shopId) return;
+      const arr = dayOffMap.get(o.user_id) || [];
+      arr.push(o.off_date);
+      dayOffMap.set(o.user_id, arr);
+    });
     let usrs: User[] = [];
     if (userIds.length) {
       const { data: pr } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
@@ -66,6 +86,11 @@ export function ScheduleManager() {
           display_name: (sp.real_name && String(sp.real_name).trim()) || p.display_name || '店员',
           allowed_shop_ids: sp.allowed_shop_ids || [],
           shop_id: sp.shop_id || null,
+          available_weekdays: sp.available_weekdays || [0,1,2,3,4,5,6],
+          blocked_weekdays: sp.blocked_weekdays || [],
+          blocked_shifts: sp.blocked_shifts || [],
+          max_per_week: sp.max_per_week ?? 5,
+          day_offs: dayOffMap.get(p.user_id) || [],
         };
       });
       // 只保留可在当前门店上班的：allowed_shop_ids 包含 shopId、或主门店等于 shopId、或两者均空(全店通用)
@@ -82,7 +107,46 @@ export function ScheduleManager() {
   };
   useEffect(() => { refresh(); }, [weekStart, shopId]);
 
+  const dowOf = (iso: string) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  };
+
+  const validateAssign = (date: string, code: string, user: User): string[] => {
+    const issues: string[] = [];
+    const wd = dowOf(date);
+    if (user.available_weekdays && !user.available_weekdays.includes(wd)) {
+      issues.push(`${user.display_name} 的可上班星期不包含 ${weekdayLabel(date)}`);
+    }
+    if (user.blocked_weekdays && user.blocked_weekdays.includes(wd)) {
+      issues.push(`${user.display_name} 的固定休息日是 ${weekdayLabel(date)}`);
+    }
+    if (user.blocked_shifts && user.blocked_shifts.includes(code)) {
+      issues.push(`${user.display_name} 不排该班次`);
+    }
+    if (user.day_offs && user.day_offs.includes(date)) {
+      issues.push(`${user.display_name} 当天为禁排日`);
+    }
+    const weekCount = scheds.filter(r => r.user_id === user.user_id && r.work_date !== date).length;
+    if (typeof user.max_per_week === 'number' && weekCount + 1 > user.max_per_week) {
+      issues.push(`${user.display_name} 本周已排 ${weekCount} 天，将超出上限 ${user.max_per_week} 天`);
+    }
+    return issues;
+  };
+
   const addAssign = async (date: string, code: string, userId: string) => {
+    const user = users.find(u => u.user_id === userId);
+    if (user) {
+      const issues = validateAssign(date, code, user);
+      if (issues.length) {
+        const msg = `该排班违反以下规则：\n\n• ${issues.join('\n• ')}\n\n确定要强制排班吗？`;
+        if (!window.confirm(msg)) {
+          toast.error('已取消，未排班');
+          return;
+        }
+        toast.warning('已强制排班，已忽略规则限制');
+      }
+    }
     const exists = scheds.find(r => r.work_date === date && r.user_id === userId);
     if (exists) {
       await supabase.from('shift_schedules' as any).update({ shift_code: code, source: 'manual', shop_id: shopId }).eq('id', exists.id);
