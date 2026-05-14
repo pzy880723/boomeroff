@@ -51,7 +51,8 @@ function RouteFallback() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <TooltipProvider>
+      <PermissionsProvider>
+        <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
