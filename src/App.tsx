@@ -81,6 +81,9 @@ const App = () => (
               <Route path="/invite/:code" element={<Invite />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/me/check-ins" element={<CheckInHistory />} />
+              <Route path="/me/schedule" element={<MySchedule />} />
+              <Route path="/me/sop" element={<MySop />} />
+              <Route path="/me/qa" element={<MyQa />} />
 
               {/* 游客版（免登录） */}
               <Route path="/u" element={<PublicLayout />}>
