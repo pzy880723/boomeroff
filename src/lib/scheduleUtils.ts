@@ -50,3 +50,8 @@ export function formatShiftTime(start?: string | null, end?: string | null): str
   if (!start || !end) return '';
   return `${start.slice(0, 5)}–${end.slice(0, 5)}`;
 }
+
+export function nextNDays(startISO: string, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => addDaysISO(startISO, i));
+}
+

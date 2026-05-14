@@ -1,123 +1,62 @@
-# 排班 + 门店 SOP + 顾客 Q&A 模块
+## 排班双视图 + 多门店预留
 
-## 一、数据库（新增 5 张表）
+### 一、数据库改动（migration）
+
+新增 `shops` 表 + 把 `shop_id` 加到 `staff_profiles` / `shift_schedules` / `shop_shifts` / `shop_holidays` / `shop_kb_categories` / `shop_kb_entries`。
 
 ```text
-shop_shifts          班次定义（A/B/C…，可自定义）
-  id, code(text唯一,如A/B/C), name(text), start_time(time),
-  end_time(time), color(text), sort_order(int), active(bool)
-
-shop_holidays        节假日设置
-  id, date(date唯一), name(text),
-  full_staff_off(bool 默认true 正式员工不上班),
-  intern_works(bool 默认true 实习生上班)
-
-staff_profiles       员工排班属性（user_id 唯一）
-  user_id, employment_type('regular'|'intern'),
-  weekly_workdays(int 默认5), available_weekdays(int[] 0-6 周日=0),
-  preferred_shifts(text[] 班次code), max_per_week(int 默认5)
-
-shift_schedules      具体排班记录
-  id, work_date(date), shift_code(text), user_id(uuid),
-  source('manual'|'ai'), note(text),
-  created_by, created_at
-  唯一: (work_date, user_id)
-  索引: (work_date), (user_id, work_date)
-
-shop_kb_categories   SOP/Q&A 分类（type 区分）
-  id, type('sop'|'qa'), name, sort_order, created_by
-
-shop_kb_entries      SOP/Q&A 词条
-  id, type('sop'|'qa'), category_id(可空),
-  title, body(text), tags(text[]), sort_order,
-  created_by, created_at, updated_at
+shops            id, name, address, sort_order, active, created_at
 ```
 
-RLS：
-- 全部表已认证用户 SELECT；
-- shop_shifts / shop_holidays / staff_profiles / shop_kb_categories / shop_kb_entries 仅 admin 可写；
-- shift_schedules：admin 全权；员工只能 SELECT 自己 + 当周全部（用于看同事）。
+- `staff_profiles.shop_id uuid` — 员工归属门店（一个员工归一家）
+- `shift_schedules.shop_id uuid` — 排班所在门店
+- 其它表的 `shop_id` 用于多门店时的范围隔离
+- 自动建一条默认门店 "本店"，把现有 staff_profiles / shift_schedules 全部回填到该门店
+- RLS：所有人可读 shops；admin 可写
+- 给 `shift_schedules (shop_id, work_date)` 建索引
 
-预设种子（迁移内 INSERT）：
-- 班次：A 10:00–19:00、B 14:00–22:00（C 留空，管理员自行添加）
-- SOP 分类：开店准备 / 收银 / 顾客接待 / 商品陈列 / 清洁维护 / 闭店流程 / 售后处理
-- Q&A 分类：尺码版型 / 真伪鉴定 / 价格议价 / 退换货 / 保养清洗 / 库存调货 / 会员积分
+> 当前 UI 仍按"单门店"运转：用户和排班默认绑定到第一家 shop；后台可后续扩展添加门店与切换。本次先打基础 + 走通双视图。
 
-## 二、"我的"页面改造（src/pages/Me.tsx）
+### 二、/me/schedule 页面重构
 
-1. 顶部资料卡右侧（用户上传图中红框位置）改为 **ShiftBadgeRight**：
-   - 桌面/常规：与头像同行右侧；窄屏（< 360px）自动换到资料卡下方一行
-   - 显示：
-     ```
-     今日 A 班  10:00–19:00
-     明日 B 班  14:00–22:00
-     ```
-   - 未排班/休息显示"今日休息 / 明日 待排"
-   - 数据来自 `shift_schedules` join `shop_shifts`，按 user_id + 今/明两天查询
+把现有 `MySchedule.tsx` 从"周表格"改成 Tabs 架构：
 
-2. 设置区（Card 列表）新增三个入口：
-   - 店铺排班 → `/me/schedule`
-   - 门店 SOP → `/me/sop`
-   - 顾客 Q&A → `/me/qa`
+```text
+顶部 Tabs：[ 我的 ] [ 门店 ]
+```
 
-## 三、新增前端页面
+#### Tab 1 · 我的（近 30 天）
+- 拉取 `shift_schedules` where `user_id = me` AND `work_date BETWEEN today AND today+29`
+- 仅展示我有班的日期，按日期升序
+- 每张卡片：
+  - 左：日期 `11/14 周五` + 班次徽章（A/B/C 颜色 + 时间段）
+  - 右：当天同店同日的其他同事 chips（不论班次），点击 chip 可看其班次时间 tooltip
+- 顶部小结："未来 30 天 X 天上班 / Y 天休息"
+- 空状态："近 30 天暂无排班"
 
-### `/me/schedule`（员工视图）
-- 周历视图（本周 + 下周切换），按日列出班次和负责人
-- 高亮自己；显示班次时间段 / 颜色
-- 顶部"我的本周"汇总：上几天班、休几天
+#### Tab 2 · 门店（近 30 天折叠列表）
+- 拉取我所在 shop 的 `shift_schedules` where `work_date BETWEEN today AND today+29`
+- 每天一行 Accordion（默认折叠，今日默认展开）：
+  - 折叠头：`11/14 周五` + 节假日标签（如有） + 在岗人数 `5 人`
+  - 展开内容：按 A/B/C 班次分组，每组显示时间段 + 人员 chips；当天我自己高亮
+- 节假日来源 `shop_holidays`，整天无排班且为节假日 → 显示"全员休 / 仅实习生"
 
-### `/me/sop` 和 `/me/qa`
-- 左侧（移动端：顶部水平滚动）分类 Tab
-- 右侧词条列表：标题 + 折叠展开正文，支持搜索
-- 只读
+### 三、新增 / 修改文件
 
-## 四、后台 /portal 新增 4 个 Tab
+- `supabase/migrations/...` — 新表 + 列 + 回填 + RLS
+- `src/pages/MySchedule.tsx` — 改造为 Tabs 容器
+- `src/components/me/MyScheduleList.tsx` — 我的 30 天列表
+- `src/components/me/ShopScheduleList.tsx` — 门店 30 天折叠列表
+- `src/components/me/ShiftBadgeRight.tsx` — 排班徽章已有，无需改（仍读今日/明日）
+- `src/lib/scheduleUtils.ts` — 新增 `next30Days(today)` 工具
 
-在 `src/pages/Portal.tsx` MENU 数组追加：
-- `shifts` 班次设置（CRUD shop_shifts + shop_holidays）
-- `schedule` 排班管理（周历编辑 + AI 智能排班按钮）
-- `sop` 门店 SOP（分类与词条 CRUD）
-- `qa` 顾客 Q&A（分类与词条 CRUD）
+### 四、不做（本次）
+- 不新增门店管理 UI（admin 后续在 /portal 增加 ShopManager）
+- 不改 ShiftBadgeRight、SOP/QA、AI 排班逻辑
+- 不影响 ScheduleManager 后台周视图（仍按单店运转，默认 shop_id）
 
-排班管理面板：
-- 顶部：周选择器 + "AI 智能排班"按钮 + "清空本周"按钮
-- 表格：行=日期、列=班次 A/B/C，单元格选择员工（多选 chip）
-- 员工属性入口（"员工排班设置"）：抽屉里编辑 staff_profiles（雇佣类型、可上班星期、偏好班次、每周上限）
-
-## 五、AI 智能排班（Edge Function）
-
-新增 `supabase/functions/generate-schedule/index.ts`：
-- 入参：`{ week_start: 'YYYY-MM-DD', overwrite?: boolean }`
-- 校验调用者为 admin（JWT）
-- 拉取：shop_shifts / staff_profiles（含 user_id+display_name）/ shop_holidays（本周内）/ 已存在 shift_schedules
-- 调用 Lovable AI Gateway（用 app_settings 中已配置的模型，默认 `google/gemini-2.5-flash`）
-- System prompt 约束：
-  - 节假日：full_staff_off=true 时正式员工不排，intern_works=true 时实习生正常排
-  - 每人每周 ≤ weekly_workdays（默认 5），尽量做五休二
-  - 仅在 available_weekdays 内排
-  - 优先 preferred_shifts；同班次每天至少 1 人
-  - 输出严格 JSON：`[{date, shift_code, user_ids:[]}]`
-- 用 `Output.object` + zod 强制结构化输出
-- upsert 到 shift_schedules（source='ai'），冲突按 overwrite 决定
-
-## 六、技术细节
-
-- 新增组件位置：
-  - `src/components/me/ShiftBadgeRight.tsx`
-  - `src/components/me/ScheduleWeekView.tsx`
-  - `src/components/me/KbList.tsx`（SOP/Q&A 共用）
-  - `src/components/admin/ShiftSettingsPanel.tsx`
-  - `src/components/admin/ScheduleManager.tsx`
-  - `src/components/admin/StaffProfileDialog.tsx`
-  - `src/components/admin/KbManager.tsx`（type 参数复用 SOP/Q&A）
-- 路由在 `src/App.tsx` 中加 3 个 me 子路由
-- 时区：所有"今日/明日/本周"用 Asia/Shanghai 计算（沿用项目里 `todayShanghai` 做法）
-- 文案 100% 中文，禁止"主播"，员工统称"店员"
-
-## 七、不做的事
-
-- 不接入任何排班抓取/外部日历同步
-- 不做考勤打卡、工时统计（仅排班展示）
-- 不为店员开放新增 SOP/Q&A 词条（仅 admin）
-
+### 五、技术细节
+- 同店同事查询：先取我的 staff_profile.shop_id，缺失则取第一家 shop
+- 30 天范围全部按 Asia/Shanghai 计算（沿用 scheduleUtils）
+- 所有数据通过 RLS 受控；门店排班视图仅显示同 shop 数据
+- 页面在 390px 视口测试折叠/展开手感
