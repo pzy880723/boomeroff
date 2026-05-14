@@ -97,7 +97,13 @@ export default function Me() {
               </button>
             </div>
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-            {role && <Badge variant="secondary" className="mt-1.5 text-[10px]">{ROLE_LABELS[role]}</Badge>}
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              {role && <Badge variant="secondary" className="text-[10px]">{ROLE_LABELS[role]}</Badge>}
+              <Badge variant="outline" className="text-[10px] gap-1">
+                <MapPin className="w-3 h-3" />
+                {shopName || '未分配门店'}
+              </Badge>
+            </div>
           </div>
           <ShiftBadgeRight userId={user.id} className="w-[130px] sm:w-[170px] shrink-0" />
         </Card>
