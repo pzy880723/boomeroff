@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
         email,
         password,
         email_confirm: true,
-        user_metadata: { display_name: display_name || username },
+        user_metadata: { display_name: display_name || real_name || username },
       });
 
     if (createErr || !created.user) {
