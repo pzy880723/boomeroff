@@ -11,6 +11,7 @@ import { ShiftSettingsPanel } from '@/components/admin/ShiftSettingsPanel';
 import { ScheduleManager } from '@/components/admin/ScheduleManager';
 import { KbManager } from '@/components/admin/KbManager';
 import { ShopManager } from '@/components/admin/ShopManager';
+import { RolePermissionManager } from '@/components/admin/RolePermissionManager';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -20,14 +21,14 @@ import {
 import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, TrendingUp, Menu,
-  CalendarDays, Clock, BookOpen, MessagesSquare, Store,
+  CalendarDays, Clock, BookOpen, MessagesSquare, Store, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
 
 const MENU: { key: TabKey; label: string; icon: typeof Users }[] = [
   { key: 'users', label: '用户管理', icon: Users },
