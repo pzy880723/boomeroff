@@ -87,7 +87,12 @@ export default function Portal() {
     navigate('/');
   };
 
-  const current = useMemo(() => MENU.find((m) => m.key === tab) ?? MENU[0], [tab]);
+  const currentEntry = useMemo(
+    () => ALL_ITEMS.find((e) => e.item.key === tab) ?? ALL_ITEMS[0],
+    [tab]
+  );
+  const current = currentEntry.item;
+  const currentGroup = currentEntry.group;
 
   return (
     <div className="min-h-screen bg-gradient-surface">
