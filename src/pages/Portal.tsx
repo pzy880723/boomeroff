@@ -128,6 +128,10 @@ export default function Portal() {
               <UserTable />
             </div>
           )}
+          {tab === 'schedule' && <ScheduleManager />}
+          {tab === 'shifts' && <ShiftSettingsPanel />}
+          {tab === 'sop' && <KbManager type="sop" title="门店 SOP" />}
+          {tab === 'qa' && <KbManager type="qa" title="顾客 Q&A" />}
           {tab === 'official' && <OfficialKnowledgeManager />}
           {tab === 'community' && <CommunityModeration />}
           {tab === 'corrections' && <CorrectionReviewPanel />}
