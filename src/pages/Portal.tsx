@@ -161,7 +161,7 @@ export default function Portal() {
               <h1 className="text-lg sm:text-xl font-display font-bold tracking-tight truncate">
                 {current.label}
               </h1>
-              <p className="text-xs text-muted-foreground">后台管理 · 仅授权人员可见</p>
+              <p className="text-xs text-muted-foreground">{currentGroup.label} · 仅授权人员可见</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={handleExit} className="rounded-full shrink-0">
