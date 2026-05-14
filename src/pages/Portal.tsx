@@ -130,6 +130,7 @@ export default function Portal() {
               <UserTable />
             </div>
           )}
+          {tab === 'shops' && <ShopManager />}
           {tab === 'schedule' && <ScheduleManager />}
           {tab === 'shifts' && <ShiftSettingsPanel />}
           {tab === 'sop' && <KbManager type="sop" title="门店 SOP" />}
