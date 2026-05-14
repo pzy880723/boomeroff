@@ -295,15 +295,16 @@ export function UserTable() {
               filteredUsers.map((user) => (
                 <TableRow key={user.id} className={user.suspended ? 'opacity-50' : ''}>
                   <TableCell>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col gap-0.5">
                       <span className="font-medium">
-                        {user.profile?.display_name || '未设置昵称'}
+                        {user.staff?.real_name || user.profile?.display_name || '未设置姓名'}
                         {isCurrentUser(user.user_id) && (
                           <span className="text-xs text-muted-foreground ml-1">(我)</span>
                         )}
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {user.user_id.slice(0, 8)}...
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Store className="h-3 w-3" />
+                        {user.staff?.shop_id ? (shopNameMap[user.staff.shop_id] || '门店') : '未绑定门店'}
                       </span>
                     </div>
                   </TableCell>
