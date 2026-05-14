@@ -51,7 +51,7 @@ export function ScheduleManager() {
       supabase.from('shop_shifts' as any).select('*').eq('active', true).or(`shop_id.eq.${shopId},shop_id.is.null`).order('sort_order'),
       supabase.from('shift_schedules' as any).select('*').eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', end),
       supabase.from('user_roles').select('user_id').eq('suspended', false),
-      supabase.from('staff_profiles' as any).select('user_id, allowed_shop_ids, shop_id'),
+      supabase.from('staff_profiles' as any).select('user_id, allowed_shop_ids, shop_id, real_name'),
     ]);
     const userIds = (roles || []).map((r: any) => r.user_id);
     const profMap = new Map<string, any>();
