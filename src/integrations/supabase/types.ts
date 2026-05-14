@@ -634,6 +634,7 @@ export type Database = {
           id: string
           note: string | null
           shift_code: string
+          shop_id: string | null
           source: string
           user_id: string
           work_date: string
@@ -644,6 +645,7 @@ export type Database = {
           id?: string
           note?: string | null
           shift_code: string
+          shop_id?: string | null
           source?: string
           user_id: string
           work_date: string
@@ -654,11 +656,20 @@ export type Database = {
           id?: string
           note?: string | null
           shift_code?: string
+          shop_id?: string | null
           source?: string
           user_id?: string
           work_date?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "shift_schedules_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shop_holidays: {
         Row: {
@@ -668,6 +679,7 @@ export type Database = {
           id: string
           intern_works: boolean
           name: string
+          shop_id: string | null
         }
         Insert: {
           created_at?: string
@@ -676,6 +688,7 @@ export type Database = {
           id?: string
           intern_works?: boolean
           name: string
+          shop_id?: string | null
         }
         Update: {
           created_at?: string
@@ -684,14 +697,24 @@ export type Database = {
           id?: string
           intern_works?: boolean
           name?: string
+          shop_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "shop_holidays_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shop_kb_categories: {
         Row: {
           created_at: string
           id: string
           name: string
+          shop_id: string | null
           sort_order: number
           type: string
         }
@@ -699,6 +722,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          shop_id?: string | null
           sort_order?: number
           type: string
         }
@@ -706,10 +730,19 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          shop_id?: string | null
           sort_order?: number
           type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "shop_kb_categories_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shop_kb_entries: {
         Row: {
@@ -718,6 +751,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          shop_id: string | null
           sort_order: number
           tags: string[]
           title: string
@@ -730,6 +764,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          shop_id?: string | null
           sort_order?: number
           tags?: string[]
           title: string
@@ -742,6 +777,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          shop_id?: string | null
           sort_order?: number
           tags?: string[]
           title?: string
@@ -756,6 +792,13 @@ export type Database = {
             referencedRelation: "shop_kb_categories"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "shop_kb_entries_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
         ]
       }
       shop_shifts: {
@@ -767,6 +810,7 @@ export type Database = {
           end_time: string
           id: string
           name: string
+          shop_id: string | null
           sort_order: number
           start_time: string
           updated_at: string
@@ -779,6 +823,7 @@ export type Database = {
           end_time: string
           id?: string
           name: string
+          shop_id?: string | null
           sort_order?: number
           start_time: string
           updated_at?: string
@@ -791,8 +836,47 @@ export type Database = {
           end_time?: string
           id?: string
           name?: string
+          shop_id?: string | null
           sort_order?: number
           start_time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shop_shifts_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shops: {
+        Row: {
+          active: boolean
+          address: string | null
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          address?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          address?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
           updated_at?: string
         }
         Relationships: []
@@ -804,6 +888,7 @@ export type Database = {
           max_per_week: number
           note: string | null
           preferred_shifts: string[]
+          shop_id: string | null
           updated_at: string
           user_id: string
           weekly_workdays: number
@@ -814,6 +899,7 @@ export type Database = {
           max_per_week?: number
           note?: string | null
           preferred_shifts?: string[]
+          shop_id?: string | null
           updated_at?: string
           user_id: string
           weekly_workdays?: number
@@ -824,11 +910,20 @@ export type Database = {
           max_per_week?: number
           note?: string | null
           preferred_shifts?: string[]
+          shop_id?: string | null
           updated_at?: string
           user_id?: string
           weekly_workdays?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "staff_profiles_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_check_ins: {
         Row: {
