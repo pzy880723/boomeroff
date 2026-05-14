@@ -312,8 +312,8 @@ export function UserTable() {
                         </Button>
                       )}
                       <RoleEditor
-                        currentRole={user.role}
-                        onRoleChange={(newRole) => handleRoleChange(user.user_id, newRole)}
+                        currentRoleCode={user.role_code}
+                        onChanged={(code) => handleRoleChange(user.user_id, code)}
                         disabled={isCurrentUser(user.user_id)}
                       />
                       <DropdownMenu>
