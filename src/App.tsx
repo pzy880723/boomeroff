@@ -100,6 +100,7 @@ const App = () => (
           </Suspense>
         </BrowserRouter>
       </TooltipProvider>
+      </PermissionsProvider>
     </AuthProvider>
   </QueryClientProvider>
 );
