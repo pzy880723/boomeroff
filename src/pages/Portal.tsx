@@ -32,6 +32,7 @@ type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa'
 
 const MENU: { key: TabKey; label: string; icon: typeof Users }[] = [
   { key: 'users', label: '用户管理', icon: Users },
+  { key: 'roles', label: '角色与权限', icon: ShieldCheck },
   { key: 'shops', label: '门店管理', icon: Store },
   { key: 'schedule', label: '排班管理', icon: CalendarDays },
   { key: 'shifts', label: '班次设置', icon: Clock },
