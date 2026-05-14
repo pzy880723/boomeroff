@@ -881,9 +881,42 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_day_offs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          off_date: string
+          reason: string | null
+          shop_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          off_date: string
+          reason?: string | null
+          shop_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          off_date?: string
+          reason?: string | null
+          shop_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       staff_profiles: {
         Row: {
+          allowed_shop_ids: string[]
           available_weekdays: number[]
+          blocked_shifts: string[]
+          blocked_weekdays: number[]
           employment_type: string
           max_per_week: number
           note: string | null
@@ -896,7 +929,10 @@ export type Database = {
           weekly_workdays: number
         }
         Insert: {
+          allowed_shop_ids?: string[]
           available_weekdays?: number[]
+          blocked_shifts?: string[]
+          blocked_weekdays?: number[]
           employment_type?: string
           max_per_week?: number
           note?: string | null
@@ -909,7 +945,10 @@ export type Database = {
           weekly_workdays?: number
         }
         Update: {
+          allowed_shop_ids?: string[]
           available_weekdays?: number[]
+          blocked_shifts?: string[]
+          blocked_weekdays?: number[]
           employment_type?: string
           max_per_week?: number
           note?: string | null

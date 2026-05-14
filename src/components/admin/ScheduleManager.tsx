@@ -5,7 +5,10 @@ import { Card } from '@/components/ui/card';
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
-import { Loader2, ChevronLeft, ChevronRight, Sparkles, Eraser, Settings2, Plus, X } from 'lucide-react';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Loader2, ChevronLeft, ChevronRight, Sparkles, Eraser, Settings2, Plus, X, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   todayISO, weekStartISO, weekDays, addDaysISO, weekdayLabel, shortDateLabel, formatShiftTime,
@@ -13,12 +16,15 @@ import {
 import { StaffProfileDialog } from './StaffProfileDialog';
 import { cn } from '@/lib/utils';
 
-interface Shift { code: string; name: string; start_time: string; end_time: string; color: string | null; sort_order: number }
-interface Sched { id?: string; work_date: string; shift_code: string; user_id: string; source?: string }
-interface User { user_id: string; display_name: string }
+interface Shift { code: string; name: string; start_time: string; end_time: string; color: string | null; sort_order: number; shop_id?: string | null }
+interface Sched { id?: string; work_date: string; shift_code: string; user_id: string; source?: string; shop_id?: string | null }
+interface User { user_id: string; display_name: string; allowed_shop_ids?: string[]; shop_id?: string | null }
+interface Shop { id: string; name: string }
 
 export function ScheduleManager() {
   const [weekStart, setWeekStart] = useState(() => weekStartISO(todayISO()));
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [shopId, setShopId] = useState<string>('');
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [scheds, setScheds] = useState<Sched[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -28,34 +34,60 @@ export function ScheduleManager() {
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('shops' as any).select('id, name').eq('active', true).order('sort_order').order('name');
+      const list = (data as any) || [];
+      setShops(list);
+      if (list.length && !shopId) setShopId(list[0].id);
+    })();
+  }, []);
+
   const refresh = async () => {
+    if (!shopId) { setLoading(false); return; }
     setLoading(true);
     const end = addDaysISO(weekStart, 6);
-    const [{ data: s }, { data: sc }, { data: roles }] = await Promise.all([
-      supabase.from('shop_shifts' as any).select('*').eq('active', true).order('sort_order'),
-      supabase.from('shift_schedules' as any).select('*').gte('work_date', weekStart).lte('work_date', end),
+    const [{ data: s }, { data: sc }, { data: roles }, { data: profs }] = await Promise.all([
+      supabase.from('shop_shifts' as any).select('*').eq('active', true).or(`shop_id.eq.${shopId},shop_id.is.null`).order('sort_order'),
+      supabase.from('shift_schedules' as any).select('*').eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', end),
       supabase.from('user_roles').select('user_id').eq('suspended', false),
+      supabase.from('staff_profiles' as any).select('user_id, allowed_shop_ids, shop_id'),
     ]);
     const userIds = (roles || []).map((r: any) => r.user_id);
+    const profMap = new Map<string, any>();
+    (profs || []).forEach((p: any) => profMap.set(p.user_id, p));
     let usrs: User[] = [];
     if (userIds.length) {
       const { data: pr } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
-      usrs = (pr || []).map((p: any) => ({ user_id: p.user_id, display_name: p.display_name || '店员' }));
+      usrs = (pr || []).map((p: any) => {
+        const sp = profMap.get(p.user_id) || {};
+        return {
+          user_id: p.user_id,
+          display_name: p.display_name || '店员',
+          allowed_shop_ids: sp.allowed_shop_ids || [],
+          shop_id: sp.shop_id || null,
+        };
+      });
+      // 只保留可在当前门店上班的：allowed_shop_ids 包含 shopId、或主门店等于 shopId、或两者均空(全店通用)
+      usrs = usrs.filter(u =>
+        (u.allowed_shop_ids && u.allowed_shop_ids.length === 0 && !u.shop_id)
+        || (u.allowed_shop_ids && u.allowed_shop_ids.includes(shopId))
+        || u.shop_id === shopId
+      );
     }
     setShifts((s as any) || []);
     setScheds((sc as any) || []);
     setUsers(usrs);
     setLoading(false);
   };
-  useEffect(() => { refresh(); }, [weekStart]);
+  useEffect(() => { refresh(); }, [weekStart, shopId]);
 
   const addAssign = async (date: string, code: string, userId: string) => {
     const exists = scheds.find(r => r.work_date === date && r.user_id === userId);
     if (exists) {
-      // already assigned this day in another shift — replace
-      await supabase.from('shift_schedules' as any).update({ shift_code: code, source: 'manual' }).eq('id', exists.id);
+      await supabase.from('shift_schedules' as any).update({ shift_code: code, source: 'manual', shop_id: shopId }).eq('id', exists.id);
     } else {
-      await supabase.from('shift_schedules' as any).insert({ work_date: date, shift_code: code, user_id: userId, source: 'manual' });
+      await supabase.from('shift_schedules' as any).insert({ work_date: date, shift_code: code, user_id: userId, source: 'manual', shop_id: shopId });
     }
     refresh();
   };
@@ -67,16 +99,17 @@ export function ScheduleManager() {
   };
 
   const clearWeek = async () => {
-    if (!confirm('确认清空本周所有排班？')) return;
-    await supabase.from('shift_schedules' as any).delete().gte('work_date', weekStart).lte('work_date', addDaysISO(weekStart, 6));
+    if (!confirm('确认清空该门店本周所有排班？')) return;
+    await supabase.from('shift_schedules' as any).delete().eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', addDaysISO(weekStart, 6));
     refresh();
   };
 
   const aiGenerate = async () => {
+    if (!shopId) { toast.error('请先选择门店'); return; }
     setAiBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-schedule', {
-        body: { week_start: weekStart, overwrite: true },
+        body: { week_start: weekStart, shop_id: shopId, overwrite: true },
       });
       if (error) throw error;
       toast.success(`AI 排班完成，共 ${data?.count ?? 0} 条`);
@@ -126,6 +159,15 @@ export function ScheduleManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 mr-1">
+          <Store className="w-4 h-4 text-muted-foreground" />
+          <Select value={shopId} onValueChange={setShopId}>
+            <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="选择门店" /></SelectTrigger>
+            <SelectContent>
+              {shops.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
         <Button variant="outline" size="sm" onClick={() => setWeekStart(addDaysISO(weekStart, -7))}><ChevronLeft className="w-4 h-4" /></Button>
         <div className="text-sm font-medium tabular-nums px-2">
           {shortDateLabel(weekStart)} – {shortDateLabel(addDaysISO(weekStart, 6))}
@@ -133,14 +175,16 @@ export function ScheduleManager() {
         <Button variant="outline" size="sm" onClick={() => setWeekStart(addDaysISO(weekStart, 7))}><ChevronRight className="w-4 h-4" /></Button>
         <Button variant="outline" size="sm" onClick={() => setWeekStart(weekStartISO(todayISO()))}>本周</Button>
         <div className="flex-1" />
-        <Button size="sm" onClick={aiGenerate} disabled={aiBusy}>
+        <Button size="sm" onClick={aiGenerate} disabled={aiBusy || !shopId}>
           {aiBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
           AI 智能排班
         </Button>
-        <Button variant="outline" size="sm" onClick={clearWeek}><Eraser className="w-4 h-4 mr-1" />清空本周</Button>
+        <Button variant="outline" size="sm" onClick={clearWeek} disabled={!shopId}><Eraser className="w-4 h-4 mr-1" />清空本周</Button>
       </div>
 
-      {loading ? (
+      {!shopId ? (
+        <Card className="p-6 text-sm text-muted-foreground text-center">请先在「门店管理」创建门店</Card>
+      ) : loading ? (
         <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" /></div>
       ) : (
         <Card className="overflow-x-auto">
@@ -171,8 +215,10 @@ export function ScheduleManager() {
       <Card className="p-3">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold flex items-center gap-1.5"><Settings2 className="w-4 h-4" />员工排班属性</h3>
+          <p className="text-xs text-muted-foreground">点击员工可设置门店、禁排日、不排班次等</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {users.length === 0 && <p className="text-xs text-muted-foreground">该门店暂无可排员工，请在员工资料中将"可上班门店"包含本店</p>}
           {users.map(u => (
             <Button key={u.user_id} variant="outline" size="sm" onClick={() => setProfileFor(u)}>{u.display_name}</Button>
           ))}
@@ -186,6 +232,7 @@ export function ScheduleManager() {
           userId={profileFor.user_id}
           displayName={profileFor.display_name}
           shifts={shifts}
+          onSaved={refresh}
         />
       )}
     </div>
