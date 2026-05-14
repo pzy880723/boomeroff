@@ -11,7 +11,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Plus, Trash2, Pencil } from 'lucide-react';
+import { Loader2, Plus, Trash2, Pencil, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Cat { id?: string; type: 'sop'|'qa'; name: string; sort_order: number }
@@ -26,6 +26,10 @@ export function KbManager({ type, title }: Props) {
   const [catDraft, setCatDraft] = useState<Cat | null>(null);
   const [entryDraft, setEntryDraft] = useState<Entry | null>(null);
   const [filterCat, setFilterCat] = useState<string>('all');
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiHint, setAiHint] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -69,6 +73,53 @@ export function KbManager({ type, title }: Props) {
 
   const filtered = filterCat === 'all' ? entries : entries.filter(e => e.category_id === filterCat);
 
+  const runAi = async () => {
+    if (!aiTopic.trim()) { toast.error('请填写主题'); return; }
+    setAiLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-shop-kb', {
+        body: {
+          type,
+          topic: aiTopic.trim(),
+          hint: aiHint.trim(),
+          categories: cats.map(c => ({ id: c.id, name: c.name })),
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const draft = (data as any).draft as { title: string; body: string; category_name: string; tags?: string[] };
+
+      // match category by name (case-insensitive trim)
+      const norm = (s: string) => s.trim().toLowerCase();
+      let cat = cats.find(c => norm(c.name) === norm(draft.category_name));
+      if (!cat) {
+        const { data: newCat, error: e2 } = await supabase
+          .from('shop_kb_categories' as any)
+          .insert({ type, name: draft.category_name.trim(), sort_order: cats.length })
+          .select().single();
+        if (e2) throw e2;
+        cat = newCat as any;
+      }
+
+      setAiOpen(false);
+      setAiTopic(''); setAiHint('');
+      await refresh();
+      setEntryDraft({
+        type,
+        category_id: cat!.id || null,
+        title: draft.title,
+        body: draft.body,
+        tags: draft.tags || [],
+        sort_order: entries.length,
+      });
+      toast.success(`已生成草稿，分类：${cat!.name}`);
+    } catch (e: any) {
+      toast.error(e.message || 'AI 生成失败');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" /></div>;
 
   return (
@@ -100,6 +151,9 @@ export function KbManager({ type, title }: Props) {
                 {cats.map(c => <SelectItem key={c.id} value={c.id!}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}>
+              <Sparkles className="w-4 h-4 mr-1" />AI 生成
+            </Button>
             <Button size="sm" onClick={() => setEntryDraft({ type, category_id: cats[0]?.id || null, title: '', body: '', tags: [], sort_order: entries.length })}>
               <Plus className="w-4 h-4 mr-1" />新增词条
             </Button>
@@ -161,6 +215,43 @@ export function KbManager({ type, title }: Props) {
             </div>
           )}
           <DialogFooter><Button variant="outline" onClick={() => setEntryDraft(null)}>取消</Button><Button onClick={saveEntry}>保存</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI generate dialog */}
+      <Dialog open={aiOpen} onOpenChange={(o) => !aiLoading && setAiOpen(o)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>AI 生成{title}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>主题 / 标题</Label>
+              <Input
+                placeholder={type === 'qa' ? '例：客户砍价怎么应对' : '例：闭店流程'}
+                value={aiTopic}
+                onChange={(e) => setAiTopic(e.target.value)}
+                disabled={aiLoading}
+              />
+            </div>
+            <div>
+              <Label>补充说明（可选）</Label>
+              <Textarea
+                rows={3}
+                placeholder="想强调的要点、限制条件、店内特殊情况等"
+                value={aiHint}
+                onChange={(e) => setAiHint(e.target.value)}
+                disabled={aiLoading}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              AI 会自动从 {cats.length} 个现有分类里匹配，匹配不上时会新建一个分类。生成后可在弹出的编辑框二次修改。
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAiOpen(false)} disabled={aiLoading}>取消</Button>
+            <Button onClick={runAi} disabled={aiLoading}>
+              {aiLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />生成中…</> : <><Sparkles className="w-4 h-4 mr-1" />开始生成</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
