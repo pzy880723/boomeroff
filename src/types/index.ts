@@ -250,6 +250,17 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   anchor: '店员',
 };
 
+export type StaffPosition = 'manager' | 'regular' | 'parttime' | 'intern';
+
+export const POSITION_LABELS: Record<StaffPosition, string> = {
+  manager: '店长',
+  regular: '正式店员',
+  parttime: '兼职',
+  intern: '实习生',
+};
+
+export const POSITION_ORDER: StaffPosition[] = ['manager', 'regular', 'parttime', 'intern'];
+
 // 二级类目（基于 official_knowledge.ip_name 字段筛选）
 export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {
   jp_porcelain: ['品牌窑口', '工艺技法', '器型用途', '花纹寓意', '年代鉴定', '场景搭配'],
