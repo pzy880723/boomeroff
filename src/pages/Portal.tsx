@@ -19,9 +19,13 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
 import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from '@/components/ui/accordion';
+import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, TrendingUp, Menu,
   CalendarDays, Clock, BookOpen, MessagesSquare, Store, ShieldCheck,
+  UserCog, Building2, Library, Megaphone, Settings,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
@@ -30,20 +34,47 @@ import { cn } from '@/lib/utils';
 
 type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
 
-const MENU: { key: TabKey; label: string; icon: typeof Users }[] = [
-  { key: 'users', label: '用户管理', icon: Users },
-  { key: 'roles', label: '角色与权限', icon: ShieldCheck },
-  { key: 'shops', label: '门店管理', icon: Store },
-  { key: 'schedule', label: '排班管理', icon: CalendarDays },
-  { key: 'shifts', label: '班次设置', icon: Clock },
-  { key: 'sop', label: '门店 SOP', icon: BookOpen },
-  { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare },
-  { key: 'official', label: '官方知识', icon: BadgeCheck },
-  { key: 'community', label: '中古圈', icon: MessageSquare },
-  { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning },
-  { key: 'ai', label: 'AI 模型', icon: Sparkles },
-  { key: 'xianyu', label: '闲鱼行情', icon: TrendingUp },
+type MenuItem = { key: TabKey; label: string; icon: typeof Users };
+type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
+
+const MENU_GROUPS: MenuGroup[] = [
+  {
+    key: 'people', label: '人员', icon: UserCog, items: [
+      { key: 'users', label: '用户管理', icon: Users },
+      { key: 'roles', label: '角色与权限', icon: ShieldCheck },
+    ],
+  },
+  {
+    key: 'ops', label: '门店运营', icon: Building2, items: [
+      { key: 'shops', label: '门店管理', icon: Store },
+      { key: 'schedule', label: '排班管理', icon: CalendarDays },
+      { key: 'shifts', label: '班次设置', icon: Clock },
+    ],
+  },
+  {
+    key: 'kb', label: '知识库', icon: Library, items: [
+      { key: 'sop', label: '门店 SOP', icon: BookOpen },
+      { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare },
+      { key: 'official', label: '官方知识', icon: BadgeCheck },
+    ],
+  },
+  {
+    key: 'social', label: '社区', icon: Megaphone, items: [
+      { key: 'community', label: '中古圈', icon: MessageSquare },
+      { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning },
+    ],
+  },
+  {
+    key: 'system', label: '系统', icon: Settings, items: [
+      { key: 'ai', label: 'AI 模型', icon: Sparkles },
+      { key: 'xianyu', label: '闲鱼行情', icon: TrendingUp },
+    ],
+  },
 ];
+
+const ALL_ITEMS: { item: MenuItem; group: MenuGroup }[] = MENU_GROUPS.flatMap(
+  (g) => g.items.map((item) => ({ item, group: g }))
+);
 
 export default function Portal() {
   const { role } = useAuth();
@@ -56,7 +87,12 @@ export default function Portal() {
     navigate('/');
   };
 
-  const current = useMemo(() => MENU.find((m) => m.key === tab) ?? MENU[0], [tab]);
+  const currentEntry = useMemo(
+    () => ALL_ITEMS.find((e) => e.item.key === tab) ?? ALL_ITEMS[0],
+    [tab]
+  );
+  const current = currentEntry.item;
+  const currentGroup = currentEntry.group;
 
   return (
     <div className="min-h-screen bg-gradient-surface">
@@ -78,25 +114,46 @@ export default function Portal() {
                   </SheetTitle>
                 </SheetHeader>
                 <nav className="p-2">
-                  {MENU.map((m) => {
-                    const Icon = m.icon;
-                    const active = tab === m.key;
-                    return (
-                      <button
-                        key={m.key}
-                        onClick={() => { setTab(m.key); setMenuOpen(false); }}
-                        className={cn(
-                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors',
-                          active
-                            ? 'bg-primary/10 text-primary font-medium'
-                            : 'hover:bg-muted text-foreground'
-                        )}
-                      >
-                        <Icon className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{m.label}</span>
-                      </button>
-                    );
-                  })}
+                  <Accordion
+                    type="multiple"
+                    defaultValue={[currentGroup.key]}
+                    className="w-full"
+                  >
+                    {MENU_GROUPS.map((g) => {
+                      const GIcon = g.icon;
+                      return (
+                        <AccordionItem key={g.key} value={g.key} className="border-none">
+                          <AccordionTrigger className="px-3 py-2 rounded-lg hover:bg-muted hover:no-underline text-sm">
+                            <span className="flex items-center gap-2.5">
+                              <GIcon className="w-4 h-4 shrink-0" />
+                              {g.label}
+                            </span>
+                          </AccordionTrigger>
+                          <AccordionContent className="pb-1">
+                            {g.items.map((m) => {
+                              const Icon = m.icon;
+                              const active = tab === m.key;
+                              return (
+                                <button
+                                  key={m.key}
+                                  onClick={() => { setTab(m.key); setMenuOpen(false); }}
+                                  className={cn(
+                                    'w-full flex items-center gap-3 pl-9 pr-3 py-2 rounded-lg text-sm transition-colors',
+                                    active
+                                      ? 'bg-primary/10 text-primary font-medium'
+                                      : 'hover:bg-muted text-foreground'
+                                  )}
+                                >
+                                  <Icon className="w-4 h-4 shrink-0" />
+                                  <span className="truncate">{m.label}</span>
+                                </button>
+                              );
+                            })}
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
                 </nav>
               </SheetContent>
             </Sheet>
@@ -104,7 +161,7 @@ export default function Portal() {
               <h1 className="text-lg sm:text-xl font-display font-bold tracking-tight truncate">
                 {current.label}
               </h1>
-              <p className="text-xs text-muted-foreground">后台管理 · 仅授权人员可见</p>
+              <p className="text-xs text-muted-foreground">{currentGroup.label} · 仅授权人员可见</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={handleExit} className="rounded-full shrink-0">
