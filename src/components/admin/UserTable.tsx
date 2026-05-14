@@ -57,7 +57,16 @@ export function UserTable() {
   const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
   const [resetUser, setResetUser] = useState<UserWithRole | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending'>('all');
+  const [roleNameMap, setRoleNameMap] = useState<Record<string, string>>({});
   const { user: currentUser } = useAuth();
+
+  useEffect(() => {
+    void supabase.from('app_roles').select('code, name').then(({ data }) => {
+      const m: Record<string, string> = {};
+      (data ?? []).forEach((r: any) => { m[r.code] = r.name; });
+      setRoleNameMap(m);
+    });
+  }, []);
 
   const fetchUsers = async () => {
     setLoading(true);
