@@ -15,10 +15,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { LogOut, User, Shield, History } from 'lucide-react';
+import { LogOut, User, Shield } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
-import { DailyKnowledgeCard } from '@/components/dashboard/DailyKnowledgeCard';
 import { useLogoTapCounter, verifyPortalPassword, unlockPortal } from '@/hooks/useAdminPortal';
 import { toast } from 'sonner';
 import logo from '@/assets/boomer-off-vintage-logo.png';
