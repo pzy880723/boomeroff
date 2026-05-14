@@ -23,6 +23,7 @@ import { LevelCard } from '@/components/me/LevelCard';
 export default function Me() {
   const { user, role, signOut, loading: authLoading } = useAuth();
   const [displayName, setDisplayName] = useState('');
+  const [shopName, setShopName] = useState<string | null>(null);
   const [stats, setStats] = useState({ scans: 0, favs: 0, posts: 0 });
   const [totalExp, setTotalExp] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -34,16 +35,24 @@ export default function Me() {
     if (!user) return;
     (async () => {
       setLoading(true);
-      const [{ data: profile }, scansC, favsC, postsC, { data: exp }] = await Promise.all([
+      const [{ data: profile }, scansC, favsC, postsC, { data: exp }, { data: sp }] = await Promise.all([
         supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
         supabase.from('products').select('id', { count: 'exact', head: true }).eq('created_by', user.id),
         supabase.from('user_favorites').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('community_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('user_experience').select('total_exp').eq('user_id', user.id).maybeSingle(),
+        supabase.from('staff_profiles' as any).select('shop_id').eq('user_id', user.id).maybeSingle(),
       ]);
       setDisplayName(profile?.display_name || user.email?.split('@')[0] || '中古玩家');
       setStats({ scans: scansC.count || 0, favs: favsC.count || 0, posts: postsC.count || 0 });
       setTotalExp(exp?.total_exp || 0);
+      const sid = (sp as any)?.shop_id;
+      if (sid) {
+        const { data: shop } = await supabase.from('shops' as any).select('name').eq('id', sid).maybeSingle();
+        setShopName((shop as any)?.name || null);
+      } else {
+        setShopName(null);
+      }
       setLoading(false);
     })();
   }, [user, expRefreshKey]);
