@@ -309,6 +309,11 @@ export function UserTable() {
                           <span className="text-xs text-muted-foreground ml-1">(我)</span>
                         )}
                       </span>
+                      {user.profile?.display_name && user.profile.display_name !== user.staff?.real_name && (
+                        <span className="text-[11px] text-muted-foreground">
+                          注册昵称：{user.profile.display_name}
+                        </span>
+                      )}
                       <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                         <Store className="h-3 w-3" />
                         {user.staff?.shop_id ? (shopNameMap[user.staff.shop_id] || '门店') : '未绑定门店'}
