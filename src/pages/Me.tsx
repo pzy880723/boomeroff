@@ -120,7 +120,22 @@ export default function Me() {
 
         {/* Settings */}
         <Card className="overflow-hidden">
-          <Link to="/me/check-ins" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors">
+          <Link to="/me/schedule" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors">
+            <CalendarDays className="w-5 h-5 text-muted-foreground" />
+            <span className="flex-1 text-sm">店铺排班</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </Link>
+          <Link to="/me/sop" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
+            <BookOpen className="w-5 h-5 text-muted-foreground" />
+            <span className="flex-1 text-sm">门店 SOP</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </Link>
+          <Link to="/me/qa" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
+            <MessagesSquare className="w-5 h-5 text-muted-foreground" />
+            <span className="flex-1 text-sm">顾客 Q&A</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </Link>
+          <Link to="/me/check-ins" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
             <CalendarCheck className="w-5 h-5 text-muted-foreground" />
             <span className="flex-1 text-sm">我的打卡</span>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
