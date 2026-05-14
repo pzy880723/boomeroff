@@ -6,10 +6,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { POSITION_LABELS, POSITION_ORDER, type StaffPosition } from '@/types';
 
 interface Shift { code: string; name: string }
+interface Shop { id: string; name: string }
 
 interface Profile {
   user_id: string;
@@ -19,6 +24,9 @@ interface Profile {
   preferred_shifts: string[];
   max_per_week: number;
   note?: string | null;
+  real_name?: string | null;
+  position?: StaffPosition | null;
+  shop_id?: string | null;
 }
 
 const WEEK = [
@@ -37,16 +45,22 @@ interface Props {
 
 export function StaffProfileDialog({ open, onOpenChange, userId, displayName, shifts, onSaved }: Props) {
   const [p, setP] = useState<Profile | null>(null);
+  const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     (async () => {
       setLoading(true);
-      const { data } = await supabase.from('staff_profiles' as any).select('*').eq('user_id', userId).maybeSingle();
+      const [{ data }, { data: shopRows }] = await Promise.all([
+        supabase.from('staff_profiles' as any).select('*').eq('user_id', userId).maybeSingle(),
+        supabase.from('shops' as any).select('id, name').eq('active', true).order('sort_order').order('name'),
+      ]);
+      setShops((shopRows as any) || []);
       setP(((data as any) || {
         user_id: userId, employment_type: 'regular', weekly_workdays: 5,
         available_weekdays: [1,2,3,4,5,6,0], preferred_shifts: [], max_per_week: 5,
+        real_name: null, position: null, shop_id: null,
       }) as Profile);
       setLoading(false);
     })();
@@ -65,17 +79,48 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
 
   const save = async () => {
     if (!p) return;
-    const { error } = await supabase.from('staff_profiles' as any).upsert(p);
+    const payload = { ...p, real_name: p.real_name?.trim() || null };
+    const { error } = await supabase.from('staff_profiles' as any).upsert(payload);
     if (error) toast.error(error.message);
     else { toast.success('已保存'); onOpenChange(false); onSaved?.(); }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>排班设置 · {displayName}</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>员工资料 · {displayName}</DialogTitle></DialogHeader>
         {loading || !p ? <p className="text-sm text-muted-foreground">加载中…</p> : (
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">真实姓名</Label>
+                <Input value={p.real_name || ''} onChange={e => setP({ ...p, real_name: e.target.value })} placeholder="如：张三" />
+              </div>
+              <div>
+                <Label className="text-xs">职位</Label>
+                <Select value={p.position || ''} onValueChange={(v) => setP({ ...p, position: v as StaffPosition })}>
+                  <SelectTrigger><SelectValue placeholder="请选择" /></SelectTrigger>
+                  <SelectContent>
+                    {POSITION_ORDER.map(k => (
+                      <SelectItem key={k} value={k}>{POSITION_LABELS[k]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs">所属门店</Label>
+              <Select value={p.shop_id || ''} onValueChange={(v) => setP({ ...p, shop_id: v || null })}>
+                <SelectTrigger><SelectValue placeholder="请选择门店" /></SelectTrigger>
+                <SelectContent>
+                  {shops.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div>
               <Label className="text-xs">雇佣类型</Label>
               <div className="flex gap-2 mt-1">
