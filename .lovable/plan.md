@@ -1,42 +1,123 @@
-# 修复"官方新知识 AI 生成主图缺失 + 重新生成崩溃"
+# 排班 + 门店 SOP + 顾客 Q&A 模块
 
-## 现象
-1. 在管理员后台 `OfficialKnowledgeManager` → 「AI 生成」打开 `AiKnowledgeDialog`，输入名称后系统会自动跑 `oneClickEnrich`，但常常没有生成主图。
-2. 预览卡上点击主图区域的「重新生成」按钮后页面卡死/崩溃。
+## 一、数据库（新增 5 张表）
 
-## 根因
-**主图缺失**（`src/components/admin/AiKnowledgeDialog.tsx` 中 `oneClickEnrich` 第 540–571 行 + edge function）：
-- 封面步骤完全依赖两个来源：`webSearchImages(name)` 联网真实图，或 `coreData.cover_prompt` + `generate-knowledge-cover`。
-- `enrich-knowledge-core` 的 system prompt 没有强制 `cover_prompt`，模型经常省略不返回；同时 Firecrawl 联网搜图在很多商品名上返回空。两边都拿不到 → 直接静默跳过封面，所以"没有主图"。
-- 没有任何兜底：从 `name + category + era + origin` 自己拼一个安全的英文 prompt 喂给 `generate-knowledge-cover`。
+```text
+shop_shifts          班次定义（A/B/C…，可自定义）
+  id, code(text唯一,如A/B/C), name(text), start_time(time),
+  end_time(time), color(text), sort_order(int), active(bool)
 
-**重新生成崩溃**（`src/components/admin/AiKnowledgeDialog.tsx` `triggerCover` 第 185–218 行 + `supabase/functions/generate-knowledge-cover/index.ts`）：
-- `triggerCover` 在异常 catch 里执行 `'封面生成失败：' + (e?.message ?? '')`。当 `supabase.functions.invoke` 返回的 `FunctionsHttpError` 没有 `message` 属性、或其 `context` 含循环引用 / Response 对象时，进一步与字符串拼接或被 React 当 children 渲染会触发未捕获错误，让整个 Dialog 树崩掉。
-- edge function 文件里有一段死代码（line 142 之后第二个 `if (!dataUrl?.startsWith("data:image/"))` 引用了未定义的 `data` 变量），虽然当前路径不会执行到，但是埋雷；同时 502 错误把英文 + 中文混合返回，当客户端二次封装时容易把整个 Response/JSON 当作 message。
-- 该按钮也没有把 button 包在 try/catch 之外的状态机里：`setPainting(true)` 后若 `triggerCover` 有同步抛出（例如 `coverPrompt` 未通过闭包更新而是 `null`），`finally` 仍会 reset，但中间任何 `setMessages` 拼接 `e?.message` 渲染失败则会让整个 React 树报错。
+shop_holidays        节假日设置
+  id, date(date唯一), name(text),
+  full_staff_off(bool 默认true 正式员工不上班),
+  intern_works(bool 默认true 实习生上班)
 
-## 修复方案
+staff_profiles       员工排班属性（user_id 唯一）
+  user_id, employment_type('regular'|'intern'),
+  weekly_workdays(int 默认5), available_weekdays(int[] 0-6 周日=0),
+  preferred_shifts(text[] 班次code), max_per_week(int 默认5)
 
-### 1. `src/components/admin/AiKnowledgeDialog.tsx`
-- **加封面 prompt 兜底函数** `buildFallbackCoverPrompt(draft)`：根据 `name / category / era / origin / summary` 拼一段中性、去品牌化的英文 prompt（结尾固定 "on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo"）。
-- **改 `triggerCover`**：
-  - 永远先确保 `prompt` 非空，否则用 `buildFallbackCoverPrompt(draft)` 兜底。
-  - catch 里把 `e` 安全地转成 string（`e instanceof Error ? e.message : (typeof e === 'string' ? e : '请稍后重试')`），不再直接拼任何对象到 `setMessages`。
-  - 加按钮级别的防抖：`if (painting) return;` 防止快速连点。
-- **改 `oneClickEnrich` 的 cover 段（约 539–571 行）**：
-  - 计算 `coverPromptToUse = newPrompt || buildFallbackCoverPrompt(coreDraft)`。
-  - 联网无果时一定走 `generate-knowledge-cover` 兜底；若仍失败，弹一条非阻塞 toast 而非静默吞掉。
-- **改"重新生成"按钮渲染条件（约 976–984 行）**：
-  - 改成 `!painting`（去掉对 `coverPrompt` 的判断），让没有 `coverPrompt` 时也能点；点击时用 `coverPrompt || buildFallbackCoverPrompt(draft)`。
-  - 同时把按钮包到一个 `<ErrorBoundary>` 不必要的话至少 wrap 在 `onClick={async () => { try { await triggerCover(...) } catch {} }}`，防止 promise rejection 冒泡。
+shift_schedules      具体排班记录
+  id, work_date(date), shift_code(text), user_id(uuid),
+  source('manual'|'ai'), note(text),
+  created_by, created_at
+  唯一: (work_date, user_id)
+  索引: (work_date), (user_id, work_date)
 
-### 2. `supabase/functions/generate-knowledge-cover/index.ts`
-- **删掉第二段死代码** `if (!dataUrl?.startsWith("data:image/"))` 块（引用未定义 `data`）。
-- **统一错误返回结构** `{ error: string }`，并把 502 文案精简为单句中文（避免客户端误把整段 JSON 当 message）。
-- **加 8s + 12s 两次更短超时**：当前 attempts 串行最坏要打 3 个 image API 全跑完才返回，可能超过 Edge Function 30s 限制。改成 `AbortController` + `Promise.race` 给每次 attempt 设 12s 超时，确保整体 ≤30s 内必返回。
-- 仍然返回 200/`{ url }` 或 4xx-5xx/`{ error }`，客户端无需改动。
+shop_kb_categories   SOP/Q&A 分类（type 区分）
+  id, type('sop'|'qa'), name, sort_order, created_by
 
-## 验收
-1. 新建一条新词条（例如「香兰社咖啡杯」），自动跑完一键丰富后封面区域应有图（联网或 AI 兜底）。
-2. 主图存在/不存在两种情况下点「重新生成」都能正常 toast / 更新，不再让 Dialog 崩溃。
-3. Edge function 日志里可以看到 `Image succeeded on attempt: ...` 或单一 502 错误，不会出现 ReferenceError。
+shop_kb_entries      SOP/Q&A 词条
+  id, type('sop'|'qa'), category_id(可空),
+  title, body(text), tags(text[]), sort_order,
+  created_by, created_at, updated_at
+```
+
+RLS：
+- 全部表已认证用户 SELECT；
+- shop_shifts / shop_holidays / staff_profiles / shop_kb_categories / shop_kb_entries 仅 admin 可写；
+- shift_schedules：admin 全权；员工只能 SELECT 自己 + 当周全部（用于看同事）。
+
+预设种子（迁移内 INSERT）：
+- 班次：A 10:00–19:00、B 14:00–22:00（C 留空，管理员自行添加）
+- SOP 分类：开店准备 / 收银 / 顾客接待 / 商品陈列 / 清洁维护 / 闭店流程 / 售后处理
+- Q&A 分类：尺码版型 / 真伪鉴定 / 价格议价 / 退换货 / 保养清洗 / 库存调货 / 会员积分
+
+## 二、"我的"页面改造（src/pages/Me.tsx）
+
+1. 顶部资料卡右侧（用户上传图中红框位置）改为 **ShiftBadgeRight**：
+   - 桌面/常规：与头像同行右侧；窄屏（< 360px）自动换到资料卡下方一行
+   - 显示：
+     ```
+     今日 A 班  10:00–19:00
+     明日 B 班  14:00–22:00
+     ```
+   - 未排班/休息显示"今日休息 / 明日 待排"
+   - 数据来自 `shift_schedules` join `shop_shifts`，按 user_id + 今/明两天查询
+
+2. 设置区（Card 列表）新增三个入口：
+   - 店铺排班 → `/me/schedule`
+   - 门店 SOP → `/me/sop`
+   - 顾客 Q&A → `/me/qa`
+
+## 三、新增前端页面
+
+### `/me/schedule`（员工视图）
+- 周历视图（本周 + 下周切换），按日列出班次和负责人
+- 高亮自己；显示班次时间段 / 颜色
+- 顶部"我的本周"汇总：上几天班、休几天
+
+### `/me/sop` 和 `/me/qa`
+- 左侧（移动端：顶部水平滚动）分类 Tab
+- 右侧词条列表：标题 + 折叠展开正文，支持搜索
+- 只读
+
+## 四、后台 /portal 新增 4 个 Tab
+
+在 `src/pages/Portal.tsx` MENU 数组追加：
+- `shifts` 班次设置（CRUD shop_shifts + shop_holidays）
+- `schedule` 排班管理（周历编辑 + AI 智能排班按钮）
+- `sop` 门店 SOP（分类与词条 CRUD）
+- `qa` 顾客 Q&A（分类与词条 CRUD）
+
+排班管理面板：
+- 顶部：周选择器 + "AI 智能排班"按钮 + "清空本周"按钮
+- 表格：行=日期、列=班次 A/B/C，单元格选择员工（多选 chip）
+- 员工属性入口（"员工排班设置"）：抽屉里编辑 staff_profiles（雇佣类型、可上班星期、偏好班次、每周上限）
+
+## 五、AI 智能排班（Edge Function）
+
+新增 `supabase/functions/generate-schedule/index.ts`：
+- 入参：`{ week_start: 'YYYY-MM-DD', overwrite?: boolean }`
+- 校验调用者为 admin（JWT）
+- 拉取：shop_shifts / staff_profiles（含 user_id+display_name）/ shop_holidays（本周内）/ 已存在 shift_schedules
+- 调用 Lovable AI Gateway（用 app_settings 中已配置的模型，默认 `google/gemini-2.5-flash`）
+- System prompt 约束：
+  - 节假日：full_staff_off=true 时正式员工不排，intern_works=true 时实习生正常排
+  - 每人每周 ≤ weekly_workdays（默认 5），尽量做五休二
+  - 仅在 available_weekdays 内排
+  - 优先 preferred_shifts；同班次每天至少 1 人
+  - 输出严格 JSON：`[{date, shift_code, user_ids:[]}]`
+- 用 `Output.object` + zod 强制结构化输出
+- upsert 到 shift_schedules（source='ai'），冲突按 overwrite 决定
+
+## 六、技术细节
+
+- 新增组件位置：
+  - `src/components/me/ShiftBadgeRight.tsx`
+  - `src/components/me/ScheduleWeekView.tsx`
+  - `src/components/me/KbList.tsx`（SOP/Q&A 共用）
+  - `src/components/admin/ShiftSettingsPanel.tsx`
+  - `src/components/admin/ScheduleManager.tsx`
+  - `src/components/admin/StaffProfileDialog.tsx`
+  - `src/components/admin/KbManager.tsx`（type 参数复用 SOP/Q&A）
+- 路由在 `src/App.tsx` 中加 3 个 me 子路由
+- 时区：所有"今日/明日/本周"用 Asia/Shanghai 计算（沿用项目里 `todayShanghai` 做法）
+- 文案 100% 中文，禁止"主播"，员工统称"店员"
+
+## 七、不做的事
+
+- 不接入任何排班抓取/外部日历同步
+- 不做考勤打卡、工时统计（仅排班展示）
+- 不为店员开放新增 SOP/Q&A 词条（仅 admin）
+
