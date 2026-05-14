@@ -40,6 +40,7 @@ interface UserWithRole {
   id: string;
   user_id: string;
   role: AppRole;
+  role_code: string | null;
   created_at: string;
   suspended: boolean;
   suspended_at: string | null;
