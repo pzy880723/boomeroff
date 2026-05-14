@@ -5,16 +5,29 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
 export type PermissionKey =
+  // 人员
+  | 'user.read' | 'user.create' | 'user.update_role' | 'user.suspend' | 'user.reset_password'
+  | 'staff.read' | 'staff.write'
+  // 门店
+  | 'shop.read' | 'shop.write'
+  // 排班
+  | 'schedule.view_self' | 'schedule.view_shop'
+  | 'schedule.write' | 'schedule.ai' | 'schedule.clear'
+  | 'shift.write' | 'holiday.write' | 'dayoff.write'
+  // 知识库
+  | 'shop.kb.read' | 'shop.kb.write' | 'shop.kb.category'
+  | 'knowledge.official.read' | 'knowledge.official.write'
+  | 'knowledge.personal.write'
+  // 识别 / 商品
   | 'recognition.use'
   | 'product.create' | 'product.edit' | 'product.delete'
   | 'price.write'
+  // 社区
   | 'community.post' | 'community.moderate'
-  | 'knowledge.personal.write' | 'knowledge.official.write'
-  | 'schedule.view_self' | 'schedule.view_shop' | 'schedule.manage'
-  | 'shop.kb.read' | 'shop.kb.write'
-  | 'staff.manage'
-  | 'role.manage'
-  | 'settings.ai';
+  // 系统
+  | 'settings.ai' | 'settings.recognition'
+  | 'xianyu.manage' | 'correction.review'
+  | 'role.manage';
 
 interface Ctx {
   loading: boolean;

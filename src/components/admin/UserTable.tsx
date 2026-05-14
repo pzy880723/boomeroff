@@ -34,6 +34,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound, IdCard, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 import { ResetUserPasswordDialog } from './ResetUserPasswordDialog';
 import { StaffProfileDialog } from './StaffProfileDialog';
 
@@ -67,6 +68,7 @@ export function UserTable() {
   const [shopNameMap, setShopNameMap] = useState<Record<string, string>>({});
   const [shifts, setShifts] = useState<{ code: string; name: string }[]>([]);
   const { user: currentUser } = useAuth();
+  const { can } = usePermissions();
 
   useEffect(() => {
     void supabase.from('app_roles').select('code, name').then(({ data }) => {
@@ -341,7 +343,7 @@ export function UserTable() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {user.suspended && !isCurrentUser(user.user_id) && (
+                      {user.suspended && !isCurrentUser(user.user_id) && can('user.suspend') && (
                         <Button
                           size="sm"
                           onClick={() => handleSuspend(user)}
@@ -351,11 +353,13 @@ export function UserTable() {
                           通过审核
                         </Button>
                       )}
-                      <RoleEditor
-                        currentRoleCode={user.role_code}
-                        onChanged={(code) => handleRoleChange(user.user_id, code)}
-                        disabled={isCurrentUser(user.user_id)}
-                      />
+                      {can('user.update_role') && (
+                        <RoleEditor
+                          currentRoleCode={user.role_code}
+                          onChanged={(code) => handleRoleChange(user.user_id, code)}
+                          disabled={isCurrentUser(user.user_id)}
+                        />
+                      )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" disabled={isCurrentUser(user.user_id)}>
@@ -363,39 +367,51 @@ export function UserTable() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setProfileUser(user)}>
-                            <IdCard className="mr-2 h-4 w-4" />
-                            编辑姓名 / 门店
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleSuspend(user)}>
-                            {user.suspended ? (
-                              <>
-                                <PlayCircle className="mr-2 h-4 w-4" />
-                                通过审核 / 恢复账号
-                              </>
-                            ) : (
-                              <>
-                                <UserX className="mr-2 h-4 w-4" />
-                                暂停账号
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setResetUser(user)}>
-                            <KeyRound className="mr-2 h-4 w-4" />
-                            重置密码
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            className="text-destructive"
-                            onClick={() => {
-                              setUserToDelete(user);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            删除用户
-                          </DropdownMenuItem>
+                          {can('staff.write') && (
+                            <DropdownMenuItem onClick={() => setProfileUser(user)}>
+                              <IdCard className="mr-2 h-4 w-4" />
+                              编辑姓名 / 门店
+                            </DropdownMenuItem>
+                          )}
+                          {can('user.suspend') && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handleSuspend(user)}>
+                                {user.suspended ? (
+                                  <>
+                                    <PlayCircle className="mr-2 h-4 w-4" />
+                                    通过审核 / 恢复账号
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserX className="mr-2 h-4 w-4" />
+                                    暂停账号
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          {can('user.reset_password') && (
+                            <DropdownMenuItem onClick={() => setResetUser(user)}>
+                              <KeyRound className="mr-2 h-4 w-4" />
+                              重置密码
+                            </DropdownMenuItem>
+                          )}
+                          {can('user.create') && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => {
+                                  setUserToDelete(user);
+                                  setDeleteDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                删除用户
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>

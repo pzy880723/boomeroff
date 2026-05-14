@@ -29,70 +29,85 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
+import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
 type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
 
-type MenuItem = { key: TabKey; label: string; icon: typeof Users };
+type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
 
 const MENU_GROUPS: MenuGroup[] = [
   {
     key: 'people', label: '人员', icon: UserCog, items: [
-      { key: 'users', label: '用户管理', icon: Users },
-      { key: 'roles', label: '角色与权限', icon: ShieldCheck },
+      { key: 'users', label: '用户管理', icon: Users, perm: 'user.read' },
+      { key: 'roles', label: '角色与权限', icon: ShieldCheck, perm: 'role.manage' },
     ],
   },
   {
     key: 'ops', label: '门店运营', icon: Building2, items: [
-      { key: 'shops', label: '门店管理', icon: Store },
-      { key: 'schedule', label: '排班管理', icon: CalendarDays },
-      { key: 'shifts', label: '班次设置', icon: Clock },
+      { key: 'shops', label: '门店管理', icon: Store, perm: 'shop.write' },
+      { key: 'schedule', label: '排班管理', icon: CalendarDays, perm: 'schedule.write' },
+      { key: 'shifts', label: '班次设置', icon: Clock, perm: 'shift.write' },
     ],
   },
   {
     key: 'kb', label: '知识库', icon: Library, items: [
-      { key: 'sop', label: '门店 SOP', icon: BookOpen },
-      { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare },
-      { key: 'official', label: '官方知识', icon: BadgeCheck },
+      { key: 'sop', label: '门店 SOP', icon: BookOpen, perm: 'shop.kb.write' },
+      { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare, perm: 'shop.kb.write' },
+      { key: 'official', label: '官方知识', icon: BadgeCheck, perm: 'knowledge.official.write' },
     ],
   },
   {
     key: 'social', label: '社区', icon: Megaphone, items: [
-      { key: 'community', label: '中古圈', icon: MessageSquare },
-      { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning },
+      { key: 'community', label: '中古圈', icon: MessageSquare, perm: 'community.moderate' },
+      { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning, perm: 'correction.review' },
     ],
   },
   {
     key: 'system', label: '系统', icon: Settings, items: [
-      { key: 'ai', label: 'AI 模型', icon: Sparkles },
-      { key: 'xianyu', label: '闲鱼行情', icon: TrendingUp },
+      { key: 'ai', label: 'AI 模型', icon: Sparkles, perm: 'settings.ai' },
+      { key: 'xianyu', label: '闲鱼行情', icon: TrendingUp, perm: 'xianyu.manage' },
     ],
   },
 ];
 
-const ALL_ITEMS: { item: MenuItem; group: MenuGroup }[] = MENU_GROUPS.flatMap(
-  (g) => g.items.map((item) => ({ item, group: g }))
-);
-
 export default function Portal() {
   const { role } = useAuth();
+  const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<TabKey>('users');
+
+  // 按权限过滤菜单
+  const visibleGroups = useMemo(() => {
+    return MENU_GROUPS
+      .map((g) => ({ ...g, items: g.items.filter((it) => can(it.perm)) }))
+      .filter((g) => g.items.length > 0);
+  }, [can, permLoading]);
+
+  const visibleItems = useMemo(
+    () => visibleGroups.flatMap((g) => g.items.map((item) => ({ item, group: g }))),
+    [visibleGroups]
+  );
+
+  const [tab, setTab] = useState<TabKey | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // 默认选中第一个有权限的 tab
+  const effectiveTab: TabKey | null = tab && visibleItems.find((e) => e.item.key === tab)
+    ? tab
+    : (visibleItems[0]?.item.key ?? null);
 
   const handleExit = () => {
     lockPortal();
     navigate('/');
   };
 
-  const currentEntry = useMemo(
-    () => ALL_ITEMS.find((e) => e.item.key === tab) ?? ALL_ITEMS[0],
-    [tab]
-  );
-  const current = currentEntry.item;
-  const currentGroup = currentEntry.group;
+  const currentEntry = effectiveTab
+    ? visibleItems.find((e) => e.item.key === effectiveTab)
+    : undefined;
+  const current = currentEntry?.item;
+  const currentGroup = currentEntry?.group;
 
   return (
     <div className="min-h-screen bg-gradient-surface">
@@ -114,54 +129,62 @@ export default function Portal() {
                   </SheetTitle>
                 </SheetHeader>
                 <nav className="p-2 flex-1 overflow-y-auto overscroll-contain">
-                  <Accordion
-                    type="multiple"
-                    defaultValue={[currentGroup.key]}
-                    className="w-full"
-                  >
-                    {MENU_GROUPS.map((g) => {
-                      const GIcon = g.icon;
-                      return (
-                        <AccordionItem key={g.key} value={g.key} className="border-none">
-                          <AccordionTrigger className="px-3 py-2 rounded-lg hover:bg-muted hover:no-underline text-sm">
-                            <span className="flex items-center gap-2.5">
-                              <GIcon className="w-4 h-4 shrink-0" />
-                              {g.label}
-                            </span>
-                          </AccordionTrigger>
-                          <AccordionContent className="pb-1">
-                            {g.items.map((m) => {
-                              const Icon = m.icon;
-                              const active = tab === m.key;
-                              return (
-                                <button
-                                  key={m.key}
-                                  onClick={() => { setTab(m.key); setMenuOpen(false); }}
-                                  className={cn(
-                                    'w-full flex items-center gap-3 pl-9 pr-3 py-2 rounded-lg text-sm transition-colors',
-                                    active
-                                      ? 'bg-primary/10 text-primary font-medium'
-                                      : 'hover:bg-muted text-foreground'
-                                  )}
-                                >
-                                  <Icon className="w-4 h-4 shrink-0" />
-                                  <span className="truncate">{m.label}</span>
-                                </button>
-                              );
-                            })}
-                          </AccordionContent>
-                        </AccordionItem>
-                      );
-                    })}
-                  </Accordion>
+                  {visibleGroups.length === 0 ? (
+                    <p className="text-xs text-muted-foreground px-3 py-4 text-center">
+                      当前账号没有任何后台权限
+                    </p>
+                  ) : (
+                    <Accordion
+                      type="multiple"
+                      defaultValue={currentGroup ? [currentGroup.key] : []}
+                      className="w-full"
+                    >
+                      {visibleGroups.map((g) => {
+                        const GIcon = g.icon;
+                        return (
+                          <AccordionItem key={g.key} value={g.key} className="border-none">
+                            <AccordionTrigger className="px-3 py-2 rounded-lg hover:bg-muted hover:no-underline text-sm">
+                              <span className="flex items-center gap-2.5">
+                                <GIcon className="w-4 h-4 shrink-0" />
+                                {g.label}
+                              </span>
+                            </AccordionTrigger>
+                            <AccordionContent className="pb-1">
+                              {g.items.map((m) => {
+                                const Icon = m.icon;
+                                const active = effectiveTab === m.key;
+                                return (
+                                  <button
+                                    key={m.key}
+                                    onClick={() => { setTab(m.key); setMenuOpen(false); }}
+                                    className={cn(
+                                      'w-full flex items-center gap-3 pl-9 pr-3 py-2 rounded-lg text-sm transition-colors',
+                                      active
+                                        ? 'bg-primary/10 text-primary font-medium'
+                                        : 'hover:bg-muted text-foreground'
+                                    )}
+                                  >
+                                    <Icon className="w-4 h-4 shrink-0" />
+                                    <span className="truncate">{m.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </AccordionContent>
+                          </AccordionItem>
+                        );
+                      })}
+                    </Accordion>
+                  )}
                 </nav>
               </SheetContent>
             </Sheet>
             <div className="min-w-0">
               <h1 className="text-lg sm:text-xl font-display font-bold tracking-tight truncate">
-                {current.label}
+                {current?.label ?? '后台管理'}
               </h1>
-              <p className="text-xs text-muted-foreground">{currentGroup.label} · 仅授权人员可见</p>
+              <p className="text-xs text-muted-foreground">
+                {currentGroup ? `${currentGroup.label} · 仅授权人员可见` : '当前账号没有任何后台权限'}
+              </p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={handleExit} className="rounded-full shrink-0">
@@ -170,37 +193,39 @@ export default function Portal() {
           </Button>
         </div>
 
-        {role !== 'admin' && (
+        {!permLoading && visibleItems.length === 0 && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              当前登录账号不是管理员，部分管理操作可能因权限被拒绝。请使用管理员账号登录后再操作。
+              当前账号没有任何后台权限。如需访问，请联系管理员为你的角色分配相应权限。
             </AlertDescription>
           </Alert>
         )}
 
-        <Card className="overflow-hidden border-border/60 shadow-soft p-3 sm:p-5">
-          {tab === 'users' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h2 className="text-base font-semibold">所有用户</h2>
-                <CreateUserDialog />
+        {effectiveTab && (
+          <Card className="overflow-hidden border-border/60 shadow-soft p-3 sm:p-5">
+            {effectiveTab === 'users' && can('user.read') && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h2 className="text-base font-semibold">所有用户</h2>
+                  {can('user.create') && <CreateUserDialog />}
+                </div>
+                <UserTable />
               </div>
-              <UserTable />
-            </div>
-          )}
-          {tab === 'roles' && <RolePermissionManager />}
-          {tab === 'shops' && <ShopManager />}
-          {tab === 'schedule' && <ScheduleManager />}
-          {tab === 'shifts' && <ShiftSettingsPanel />}
-          {tab === 'sop' && <KbManager type="sop" title="门店 SOP" />}
-          {tab === 'qa' && <KbManager type="qa" title="顾客 Q&A" />}
-          {tab === 'official' && <OfficialKnowledgeManager />}
-          {tab === 'community' && <CommunityModeration />}
-          {tab === 'corrections' && <CorrectionReviewPanel />}
-          {tab === 'ai' && <AISettingsPanel />}
-          {tab === 'xianyu' && <XianyuCacheManager />}
-        </Card>
+            )}
+            {effectiveTab === 'roles' && can('role.manage') && <RolePermissionManager />}
+            {effectiveTab === 'shops' && can('shop.write') && <ShopManager />}
+            {effectiveTab === 'schedule' && can('schedule.write') && <ScheduleManager />}
+            {effectiveTab === 'shifts' && can('shift.write') && <ShiftSettingsPanel />}
+            {effectiveTab === 'sop' && can('shop.kb.write') && <KbManager type="sop" title="门店 SOP" />}
+            {effectiveTab === 'qa' && can('shop.kb.write') && <KbManager type="qa" title="顾客 Q&A" />}
+            {effectiveTab === 'official' && can('knowledge.official.write') && <OfficialKnowledgeManager />}
+            {effectiveTab === 'community' && can('community.moderate') && <CommunityModeration />}
+            {effectiveTab === 'corrections' && can('correction.review') && <CorrectionReviewPanel />}
+            {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}
+            {effectiveTab === 'xianyu' && can('xianyu.manage') && <XianyuCacheManager />}
+          </Card>
+        )}
       </main>
     </div>
   );
