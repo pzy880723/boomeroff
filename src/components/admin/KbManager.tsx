@@ -11,7 +11,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Plus, Trash2, Pencil } from 'lucide-react';
+import { Loader2, Plus, Trash2, Pencil, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Cat { id?: string; type: 'sop'|'qa'; name: string; sort_order: number }
