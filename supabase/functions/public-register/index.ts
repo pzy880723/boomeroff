@@ -124,6 +124,14 @@ Deno.serve(async (req) => {
       console.error("Failed to mark new user as suspended:", suspendErr);
     }
 
+    // 写入员工档案，绑定门店
+    const { error: profileErr } = await admin
+      .from("staff_profiles")
+      .upsert({ user_id: newUserId, shop_id }, { onConflict: "user_id" });
+    if (profileErr) {
+      console.error("Failed to create staff_profile:", profileErr);
+    }
+
     return json({
       success: true,
       message: "注册成功，等待管理员审核",
