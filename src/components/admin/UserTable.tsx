@@ -61,8 +61,11 @@ export function UserTable() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
   const [resetUser, setResetUser] = useState<UserWithRole | null>(null);
+  const [profileUser, setProfileUser] = useState<UserWithRole | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending'>('all');
   const [roleNameMap, setRoleNameMap] = useState<Record<string, string>>({});
+  const [shopNameMap, setShopNameMap] = useState<Record<string, string>>({});
+  const [shifts, setShifts] = useState<{ code: string; name: string }[]>([]);
   const { user: currentUser } = useAuth();
 
   useEffect(() => {
