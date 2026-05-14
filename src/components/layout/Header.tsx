@@ -15,10 +15,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { LogOut, User, Shield, History } from 'lucide-react';
+import { LogOut, User, Shield } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
-import { DailyKnowledgeCard } from '@/components/dashboard/DailyKnowledgeCard';
 import { useLogoTapCounter, verifyPortalPassword, unlockPortal } from '@/hooks/useAdminPortal';
 import { toast } from 'sonner';
 import logo from '@/assets/boomer-off-vintage-logo.png';
@@ -90,14 +89,6 @@ export function Header() {
         </button>
 
         <div className="flex items-center gap-1">
-          <DailyKnowledgeCard />
-
-          <Link to="/history">
-            <Button variant="ghost" size="sm" className="gap-1.5 h-9 px-2.5 sm:px-3">
-              <History className="h-4 w-4" />
-              <span className="hidden sm:inline">历史记录</span>
-            </Button>
-          </Link>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
