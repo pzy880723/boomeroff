@@ -81,7 +81,7 @@ const App = () => (
               <Route path="/invite/:code" element={<Invite />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/me/check-ins" element={<CheckInHistory />} />
-              <Route path="/me/schedule" element={<MySchedule />} />
+              
               <Route path="/me/sop" element={<MySop />} />
               <Route path="/me/qa" element={<MyQa />} />
 
