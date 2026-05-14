@@ -149,23 +149,30 @@ export function ScheduleManager() {
     }
     const exists = scheds.find(r => r.work_date === date && r.user_id === userId);
     if (exists) {
-      await supabase.from('shift_schedules' as any).update({ shift_code: code, source: 'manual', shop_id: shopId }).eq('id', exists.id);
+      const { error } = await supabase.from('shift_schedules' as any).update({ shift_code: code, source: 'manual', shop_id: shopId }).eq('id', exists.id);
+      if (error) { toast.error('排班失败：' + error.message); return; }
+      setScheds(prev => prev.map(r => r.id === exists.id ? { ...r, shift_code: code, source: 'manual', shop_id: shopId } : r));
     } else {
-      await supabase.from('shift_schedules' as any).insert({ work_date: date, shift_code: code, user_id: userId, source: 'manual', shop_id: shopId });
+      const { data, error } = await supabase.from('shift_schedules' as any)
+        .insert({ work_date: date, shift_code: code, user_id: userId, source: 'manual', shop_id: shopId })
+        .select().single();
+      if (error) { toast.error('排班失败：' + error.message); return; }
+      setScheds(prev => [...prev, data as any]);
     }
-    refresh();
   };
 
   const removeAssign = async (id?: string) => {
     if (!id) return;
-    await supabase.from('shift_schedules' as any).delete().eq('id', id);
-    refresh();
+    const { error } = await supabase.from('shift_schedules' as any).delete().eq('id', id);
+    if (error) { toast.error('删除失败：' + error.message); return; }
+    setScheds(prev => prev.filter(r => r.id !== id));
   };
 
   const clearWeek = async () => {
     if (!confirm('确认清空该门店本周所有排班？')) return;
-    await supabase.from('shift_schedules' as any).delete().eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', addDaysISO(weekStart, 6));
-    refresh();
+    const { error } = await supabase.from('shift_schedules' as any).delete().eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', addDaysISO(weekStart, 6));
+    if (error) { toast.error('清空失败：' + error.message); return; }
+    setScheds([]);
   };
 
   const aiGenerate = async () => {
