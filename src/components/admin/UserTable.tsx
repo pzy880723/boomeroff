@@ -31,10 +31,11 @@ import { RoleEditor } from './RoleEditor';
 import { ROLE_LABELS, AppRole } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound } from 'lucide-react';
+import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound, IdCard, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { ResetUserPasswordDialog } from './ResetUserPasswordDialog';
+import { StaffProfileDialog } from './StaffProfileDialog';
 
 interface UserWithRole {
   id: string;
