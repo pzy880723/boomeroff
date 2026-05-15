@@ -581,12 +581,10 @@ function TodoActivityCard({
   // 管理员:有待办优先显示待办
   if (todoCount > 0) {
     return (
-      <Card className="p-4 border-border/60 shadow-sm">
+      <Card className="p-4 border-border/50 shadow-sm rounded-2xl">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-destructive/10 flex items-center justify-center">
-              <ClipboardList className="w-4 h-4 text-destructive" />
-            </div>
+            <ClipboardList className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm font-semibold">待办事项</span>
           </div>
           <Badge variant="destructive" className="text-[10px]">{todoCount}</Badge>
