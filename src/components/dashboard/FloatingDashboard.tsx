@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 
 const POS_KEY = 'dashboard_capsule_pos_v2';
-const AUTO_OPEN_KEY = 'dashboard_last_auto_open';
+const AUTO_OPEN_KEY = 'dashboard_auto_opened_session';
 const BTN = 48;          // 圆形按钮直径
 const EDGE = 10;         // 离屏边距
 const BOTTOM_TAB = 64;
