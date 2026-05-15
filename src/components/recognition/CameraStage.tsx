@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -558,6 +558,16 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
           </div>
         </div>
       </div>
+
+      <HintInputSheet
+        open={hintSheetOpen}
+        onOpenChange={setHintSheetOpen}
+        onSubmit={(hint) => {
+          const imgs = lastInputRef.current ?? [];
+          if (imgs.length === 0) return;
+          void runRecognize(imgs, hint);
+        }}
+      />
     </div>
   );
 });
