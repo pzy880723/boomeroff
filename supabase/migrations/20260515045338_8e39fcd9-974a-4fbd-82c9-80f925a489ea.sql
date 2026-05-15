@@ -1,0 +1,1 @@
+ALTER TABLE public.shop_shifts DROP CONSTRAINT IF EXISTS shop_shifts_code_key;
