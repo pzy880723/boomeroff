@@ -3,12 +3,15 @@ import { installStorageShim } from "./lib/installStorageShim";
 installStorageShim();
 
 import { createRoot } from "react-dom/client";
+import { HelmetProvider } from "react-helmet-async";
 import App from "./App.tsx";
 import "./index.css";
 import { ErrorBoundary } from "./components/system/ErrorBoundary";
 
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary scope="root">
-    <App />
+    <HelmetProvider>
+      <App />
+    </HelmetProvider>
   </ErrorBoundary>
 );
