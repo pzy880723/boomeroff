@@ -398,86 +398,27 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
           )}
 
           {isRecognizing && (
-            <div className="absolute inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center animate-fade-in px-6">
-              <div className="w-full max-w-[18rem] text-white">
-                {/* 顶部小标 */}
-                <div className="flex items-center gap-2 mb-5">
-                  <Loader2 className="w-4 h-4 animate-spin text-accent" strokeWidth={2} />
-                  <span className="text-[13px] tracking-wide font-medium">AI 正在识别</span>
-                  <Sparkles className="w-3.5 h-3.5 text-accent/80 animate-pulse-glow ml-auto" />
-                </div>
-
-                {/* 步骤列表 */}
-                <ul className="space-y-2.5">
-                  {narrativeSteps.map((step, i) => {
-                    const done = i < currentStepIndex;
-                    const active = i === currentStepIndex && !forceAllDone;
-                    const allDone = forceAllDone;
-                    const isDone = done || allDone;
-                    return (
-                      <li
-                        key={i}
-                        className={`flex items-center gap-2.5 text-[13px] leading-tight transition-all duration-200 ${
-                          isDone
-                            ? 'text-accent'
-                            : active
-                              ? 'text-white'
-                              : 'text-white/35'
-                        }`}
-                      >
-                        <span
-                          className={`shrink-0 w-4 h-4 rounded-full flex items-center justify-center transition-all ${
-                            isDone
-                              ? 'bg-accent/15 ring-1 ring-accent/40'
-                              : active
-                                ? 'bg-white/10 ring-1 ring-white/30'
-                                : 'ring-1 ring-white/15'
-                          }`}
-                        >
-                          {isDone ? (
-                            <Check className="w-2.5 h-2.5 text-accent animate-scale-in" strokeWidth={3} />
-                          ) : active ? (
-                            <Loader2 className="w-2.5 h-2.5 animate-spin" strokeWidth={2.5} />
-                          ) : null}
-                        </span>
-                        <span className="truncate">
-                          {step.label}
-                          {active && <span className="inline-block ml-1 animate-pulse">···</span>}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                {/* 计时器(辅助信息) */}
-                <div className="mt-5 text-center text-[11px] text-white/45 tabular-nums">
-                  {(elapsedTime / 1000).toFixed(1)}s
-                </div>
-              </div>
-            </div>
+            <RecognitionProgress
+              phase={phase}
+              elapsedMs={elapsedTime}
+              pipelineSource={pipelineSource}
+            />
           )}
 
-
           {!isRecognizing && recognitionFailed && (
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center animate-fade-in p-6">
-              <div className="text-center text-white space-y-4 max-w-xs">
-                <div className="w-14 h-14 mx-auto rounded-full bg-destructive/20 ring-1 ring-destructive/40 flex items-center justify-center">
-                  <X className="w-8 h-8 text-destructive" strokeWidth={2} />
-                </div>
-                <div className="space-y-1">
-                  <p className="font-display text-lg">识别未成功</p>
-                  <p className="text-white/60 text-xs leading-relaxed">网络较慢或商品角度不清，请检查信号或换个角度后重试。</p>
-                </div>
-                <div className="flex gap-2 justify-center">
-                  <Button size="sm" onClick={retryLast}>
-                    <RotateCcw className="w-4 h-4 mr-1.5" /> 重新识别
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setRecognitionFailed(false)}>
-                    取消
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <RecognitionFailure
+              onRetry={retryLast}
+              onAppendImage={(img) => {
+                const next = [...(lastInputRef.current ?? []), img];
+                if (next.length > MAX_MULTI_IMAGES) next.splice(0, next.length - MAX_MULTI_IMAGES);
+                setCaptureMode('multi');
+                setCapturedImages(next);
+                setCapturedImage(next[0]);
+                void runRecognize(next);
+              }}
+              onOpenHint={() => setHintSheetOpen(true)}
+              onCancel={() => setRecognitionFailed(false)}
+            />
           )}
 
           {/* 顶部状态条 */}
