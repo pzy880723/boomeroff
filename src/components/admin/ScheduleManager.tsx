@@ -8,10 +8,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ChevronLeft, ChevronRight, Sparkles, Eraser, Settings2, Plus, X, Store } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, Sparkles, Eraser, Settings2, Plus, X, Store, ArrowLeftRight } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  todayISO, weekStartISO, weekDays, addDaysISO, weekdayLabel, shortDateLabel, formatShiftTime,
+  todayISO, weekStartISO, weekDays, addDaysISO, weekdayLabel, shortDateLabel, formatShiftTime, colorForUser,
 } from '@/lib/scheduleUtils';
 import { StaffProfileDialog } from './StaffProfileDialog';
 import { cn } from '@/lib/utils';
@@ -41,6 +41,8 @@ export function ScheduleManager() {
   const [loading, setLoading] = useState(true);
   const [aiBusy, setAiBusy] = useState(false);
   const [profileFor, setProfileFor] = useState<User | null>(null);
+  const [swapMode, setSwapMode] = useState(false);
+  const [swapFirst, setSwapFirst] = useState<Sched | null>(null);
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
@@ -93,7 +95,6 @@ export function ScheduleManager() {
           day_offs: dayOffMap.get(p.user_id) || [],
         };
       });
-      // 只保留可在当前门店上班的：allowed_shop_ids 包含 shopId、或主门店等于 shopId、或两者均空(全店通用)
       usrs = usrs.filter(u =>
         (u.allowed_shop_ids && u.allowed_shop_ids.length === 0 && !u.shop_id)
         || (u.allowed_shop_ids && u.allowed_shop_ids.includes(shopId))
@@ -112,38 +113,43 @@ export function ScheduleManager() {
     return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   };
 
-  const validateAssign = (date: string, code: string, user: User): string[] => {
-    const issues: string[] = [];
+  const weekCountOf = (userId: string, excludeDate?: string) =>
+    scheds.filter(r => r.user_id === userId && r.work_date !== excludeDate).length;
+
+  const validateAssign = (date: string, code: string, user: User, opts: { ignoreMax?: boolean } = {}): { hard: string[]; soft: string[] } => {
+    const hard: string[] = [];
+    const soft: string[] = [];
     const wd = dowOf(date);
     if (user.available_weekdays && !user.available_weekdays.includes(wd)) {
-      issues.push(`${user.display_name} 的可上班星期不包含 ${weekdayLabel(date)}`);
+      soft.push(`${user.display_name} 的可上班星期不包含 ${weekdayLabel(date)}`);
     }
     if (user.blocked_weekdays && user.blocked_weekdays.includes(wd)) {
-      issues.push(`${user.display_name} 的固定休息日是 ${weekdayLabel(date)}`);
+      soft.push(`${user.display_name} 的固定休息日是 ${weekdayLabel(date)}`);
     }
     if (user.blocked_shifts && user.blocked_shifts.includes(code)) {
-      issues.push(`${user.display_name} 不排该班次`);
+      soft.push(`${user.display_name} 不排该班次`);
     }
     if (user.day_offs && user.day_offs.includes(date)) {
-      issues.push(`${user.display_name} 当天为禁排日`);
+      soft.push(`${user.display_name} 当天为禁排日`);
     }
-    const weekCount = scheds.filter(r => r.user_id === user.user_id && r.work_date !== date).length;
-    if (typeof user.max_per_week === 'number' && weekCount + 1 > user.max_per_week) {
-      issues.push(`${user.display_name} 本周已排 ${weekCount} 天，将超出上限 ${user.max_per_week} 天`);
+    if (!opts.ignoreMax) {
+      const cnt = weekCountOf(user.user_id, date);
+      const cap = typeof user.max_per_week === 'number' ? user.max_per_week : 5;
+      if (cnt + 1 > Math.min(cap, 5)) {
+        hard.push(`${user.display_name} 本周已排 ${cnt} 天，已达上限 ${Math.min(cap, 5)} 天（每周最多 5 天）`);
+      }
     }
-    return issues;
+    return { hard, soft };
   };
 
   const addAssign = async (date: string, code: string, userId: string) => {
     const user = users.find(u => u.user_id === userId);
     if (user) {
-      const issues = validateAssign(date, code, user);
-      if (issues.length) {
-        const msg = `该排班违反以下规则：\n\n• ${issues.join('\n• ')}\n\n确定要强制排班吗？`;
-        if (!window.confirm(msg)) {
-          toast.error('已取消，未排班');
-          return;
-        }
+      const { hard, soft } = validateAssign(date, code, user);
+      if (hard.length) { toast.error(hard.join('；')); return; }
+      if (soft.length) {
+        const msg = `该排班违反以下规则：\n\n• ${soft.join('\n• ')}\n\n确定要强制排班吗？`;
+        if (!window.confirm(msg)) { toast.error('已取消，未排班'); return; }
         toast.warning('已强制排班，已忽略规则限制');
       }
     }
@@ -180,16 +186,64 @@ export function ScheduleManager() {
     setAiBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-schedule', {
-        body: { week_start: weekStart, shop_id: shopId, overwrite: true },
+        body: { week_start: weekStart, shop_id: shopId, overwrite: false },
       });
       if (error) throw error;
-      toast.success(`AI 排班完成，共 ${data?.count ?? 0} 条`);
+      toast.success(`AI 排班完成，新增 ${data?.count ?? 0} 条（仅填补空缺）`);
       refresh();
     } catch (e: any) {
       toast.error('AI 排班失败：' + (e?.message || String(e)));
     } finally {
       setAiBusy(false);
     }
+  };
+
+  const toggleSwap = () => {
+    setSwapMode(v => !v);
+    setSwapFirst(null);
+  };
+
+  const handleChipClick = async (r: Sched) => {
+    if (!swapMode) return;
+    if (!swapFirst) { setSwapFirst(r); return; }
+    if (swapFirst.id === r.id) { setSwapFirst(null); return; }
+    if (swapFirst.user_id === r.user_id) {
+      toast.error('两个班次属于同一员工，无需互换');
+      setSwapFirst(null);
+      return;
+    }
+    const a = swapFirst, b = r;
+    const userA = users.find(u => u.user_id === a.user_id);
+    const userB = users.find(u => u.user_id === b.user_id);
+    // 互换后：A 的位置变成 B 的人，反之亦然。校验时排除原日期防止重复计数。
+    const issues: string[] = [];
+    if (userB) {
+      const v = validateAssign(a.work_date, a.shift_code, userB, { ignoreMax: true });
+      issues.push(...v.soft, ...v.hard);
+    }
+    if (userA) {
+      const v = validateAssign(b.work_date, b.shift_code, userA, { ignoreMax: true });
+      issues.push(...v.soft, ...v.hard);
+    }
+    const confirmMsg = `换班：\n• ${userA?.display_name} 的「${a.work_date} ${a.shift_code}」\n  ↔\n• ${userB?.display_name} 的「${b.work_date} ${b.shift_code}」\n\n${issues.length ? '注意违规：\n• ' + issues.join('\n• ') + '\n\n' : ''}确认互换？`;
+    if (!window.confirm(confirmMsg)) { setSwapFirst(null); return; }
+
+    // 用临时 user_id 规避 (work_date,user_id) 唯一约束冲突
+    const tmpUid = '00000000-0000-0000-0000-000000000000';
+    const { error: e1 } = await supabase.from('shift_schedules' as any).update({ user_id: tmpUid }).eq('id', a.id);
+    if (e1) { toast.error('换班失败：' + e1.message); setSwapFirst(null); return; }
+    const { error: e2 } = await supabase.from('shift_schedules' as any).update({ user_id: a.user_id }).eq('id', b.id);
+    if (e2) { toast.error('换班失败：' + e2.message); setSwapFirst(null); return; }
+    const { error: e3 } = await supabase.from('shift_schedules' as any).update({ user_id: b.user_id }).eq('id', a.id);
+    if (e3) { toast.error('换班失败：' + e3.message); setSwapFirst(null); return; }
+
+    setScheds(prev => prev.map(x => {
+      if (x.id === a.id) return { ...x, user_id: b.user_id };
+      if (x.id === b.id) return { ...x, user_id: a.user_id };
+      return x;
+    }));
+    setSwapFirst(null);
+    toast.success('已互换');
   };
 
   const cell = (date: string, code: string) => {
@@ -200,29 +254,56 @@ export function ScheduleManager() {
       <div className="flex flex-wrap gap-1 items-center min-h-7">
         {list.map(r => {
           const u = users.find(x => x.user_id === r.user_id);
+          const c = colorForUser(r.user_id);
+          const selected = swapFirst?.id === r.id;
           return (
-            <span key={r.id} className={cn('text-[11px] rounded pl-1.5 pr-0.5 py-0.5 flex items-center gap-0.5',
-              r.source === 'ai' ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200' : 'bg-muted')}>
+            <span
+              key={r.id}
+              onClick={() => swapMode && handleChipClick(r)}
+              style={{ background: c.bg, color: c.fg, borderColor: r.source === 'ai' ? 'hsl(38 95% 55%)' : c.border }}
+              className={cn(
+                'text-[11px] rounded pl-1.5 pr-0.5 py-0.5 flex items-center gap-0.5 border',
+                r.source === 'ai' && 'border-2',
+                swapMode && 'cursor-pointer hover:ring-2 hover:ring-primary/50',
+                selected && 'ring-2 ring-primary',
+              )}
+            >
               {u?.display_name || '店员'}
-              <button onClick={() => removeAssign(r.id)} className="hover:bg-black/10 rounded p-0.5"><X className="w-3 h-3" /></button>
+              {!swapMode && (
+                <button onClick={(e) => { e.stopPropagation(); removeAssign(r.id); }} className="hover:bg-black/10 rounded p-0.5"><X className="w-3 h-3" /></button>
+              )}
             </span>
           );
         })}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="w-6 h-6 rounded-full border border-dashed border-border/80 text-muted-foreground hover:bg-muted flex items-center justify-center"><Plus className="w-3 h-3" /></button>
-          </PopoverTrigger>
-          <PopoverContent className="w-48 p-1">
-            {candidates.length === 0 ? (
-              <p className="text-xs text-muted-foreground px-2 py-1.5">无可选员工</p>
-            ) : candidates.map(u => (
-              <button key={u.user_id} onClick={() => addAssign(date, code, u.user_id)}
-                className="w-full text-left px-2 py-1.5 text-sm hover:bg-muted rounded">
-                {u.display_name}
-              </button>
-            ))}
-          </PopoverContent>
-        </Popover>
+        {!swapMode && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="w-6 h-6 rounded-full border border-dashed border-border/80 text-muted-foreground hover:bg-muted flex items-center justify-center"><Plus className="w-3 h-3" /></button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-1">
+              {candidates.length === 0 ? (
+                <p className="text-xs text-muted-foreground px-2 py-1.5">无可选员工</p>
+              ) : candidates.map(u => {
+                const cnt = weekCountOf(u.user_id);
+                const cap = Math.min(typeof u.max_per_week === 'number' ? u.max_per_week : 5, 5);
+                const full = cnt >= cap;
+                const c = colorForUser(u.user_id);
+                return (
+                  <button
+                    key={u.user_id}
+                    disabled={full}
+                    onClick={() => addAssign(date, code, u.user_id)}
+                    className={cn('w-full text-left px-2 py-1.5 text-sm rounded flex items-center gap-2', full ? 'opacity-40 cursor-not-allowed' : 'hover:bg-muted')}
+                  >
+                    <span className="w-3 h-3 rounded-full border" style={{ background: c.bg, borderColor: c.border }} />
+                    <span className="flex-1">{u.display_name}</span>
+                    <span className="text-[10px] tabular-nums text-muted-foreground">{cnt}/{cap}</span>
+                  </button>
+                );
+              })}
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
     );
   };
@@ -246,12 +327,21 @@ export function ScheduleManager() {
         <Button variant="outline" size="sm" onClick={() => setWeekStart(addDaysISO(weekStart, 7))}><ChevronRight className="w-4 h-4" /></Button>
         <Button variant="outline" size="sm" onClick={() => setWeekStart(weekStartISO(todayISO()))}>本周</Button>
         <div className="flex-1" />
-        <Button size="sm" onClick={aiGenerate} disabled={aiBusy || !shopId}>
+        <Button size="sm" onClick={aiGenerate} disabled={aiBusy || !shopId || swapMode}>
           {aiBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
           AI 智能排班
         </Button>
-        <Button variant="outline" size="sm" onClick={clearWeek} disabled={!shopId}><Eraser className="w-4 h-4 mr-1" />清空本周</Button>
+        <Button variant={swapMode ? 'default' : 'outline'} size="sm" onClick={toggleSwap} disabled={!shopId}>
+          <ArrowLeftRight className="w-4 h-4 mr-1" />{swapMode ? '退出换班' : '换班'}
+        </Button>
+        <Button variant="outline" size="sm" onClick={clearWeek} disabled={!shopId || swapMode}><Eraser className="w-4 h-4 mr-1" />清空本周</Button>
       </div>
+
+      {swapMode && (
+        <Card className="p-2 text-xs bg-primary/5 border-primary/30">
+          换班模式：{swapFirst ? '请点击第二个要互换的班次' : '请点击第一个要互换的班次'}
+        </Card>
+      )}
 
       {!shopId ? (
         <Card className="p-6 text-sm text-muted-foreground text-center">请先在「门店管理」创建门店</Card>
@@ -290,9 +380,18 @@ export function ScheduleManager() {
         </div>
         <div className="flex flex-wrap gap-2">
           {users.length === 0 && <p className="text-xs text-muted-foreground">该门店暂无可排员工，请在员工资料中将"可上班门店"包含本店</p>}
-          {users.map(u => (
-            <Button key={u.user_id} variant="outline" size="sm" onClick={() => setProfileFor(u)}>{u.display_name}</Button>
-          ))}
+          {users.map(u => {
+            const c = colorForUser(u.user_id);
+            const cnt = weekCountOf(u.user_id);
+            const cap = Math.min(typeof u.max_per_week === 'number' ? u.max_per_week : 5, 5);
+            return (
+              <Button key={u.user_id} variant="outline" size="sm" onClick={() => setProfileFor(u)} className="gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full border" style={{ background: c.bg, borderColor: c.border }} />
+                {u.display_name}
+                <span className="text-[10px] tabular-nums text-muted-foreground">{cnt}/{cap}</span>
+              </Button>
+            );
+          })}
         </div>
       </Card>
 
