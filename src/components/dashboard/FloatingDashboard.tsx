@@ -318,7 +318,7 @@ function DashboardFullscreen({
         {/* 排班 Hero 卡 */}
         <ShiftHeroCard data={data} navigate={go} />
 
-        <TaskCenterCard tasks={tasks} onClaimed={() => data.refresh()} />
+        <TaskCenterCard tasks={tasks} onClaimed={() => data.refresh()} onNavigate={go} />
 
         <LevelProgressCard data={data} navigate={go} />
 
