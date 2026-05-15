@@ -22,6 +22,7 @@ function timeAgo(iso: string) {
 interface Post {
   id: string;
   image_url: string | null;
+  thumbnail_url: string | null;
   name: string;
   category: ProductCategory;
   era: string | null;
@@ -54,24 +55,42 @@ const cats: Array<ProductCategory | 'all'> = [
 ];
 
 export default function PublicCommunity() {
+  const PAGE_SIZE = 24;
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [cat, setCat] = useState<ProductCategory | 'all'>('all');
   const [active, setActive] = useState<Post | null>(null);
 
-  const loadPosts = useCallback(async () => {
-    setLoading(true);
+  const fetchPage = useCallback(async (offset: number) => {
     let q = supabase.from('community_posts')
-      .select('id,image_url,name,category,era,origin,selling_points,tips,story,appreciation,description,care_tips,material,craft,dimensions,condition,confidence,rarity,collection_value,market_value,buy_reason,created_at,likes_count,comments_count,is_guest,guest_name,user_id')
+      .select('id,image_url,thumbnail_url,name,category,era,origin,selling_points,tips,story,appreciation,description,care_tips,material,craft,dimensions,condition,confidence,rarity,collection_value,market_value,buy_reason,created_at,likes_count,comments_count,is_guest,guest_name,user_id')
       .eq('is_public', true)
       .eq('is_guest', true)
       .order('created_at', { ascending: false })
-      .limit(80);
+      .range(offset, offset + PAGE_SIZE - 1);
     if (cat !== 'all') q = q.eq('category', cat);
     const { data } = await q;
-    setPosts((data || []) as Post[]);
-    setLoading(false);
+    return (data || []) as Post[];
   }, [cat]);
+
+  const loadPosts = useCallback(async () => {
+    setLoading(true);
+    const rows = await fetchPage(0);
+    setPosts(rows);
+    setHasMore(rows.length === PAGE_SIZE);
+    setLoading(false);
+  }, [fetchPage]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const rows = await fetchPage(posts.length);
+    setPosts((prev) => [...prev, ...rows]);
+    setHasMore(rows.length === PAGE_SIZE);
+    setLoadingMore(false);
+  }, [fetchPage, posts.length, loadingMore, hasMore]);
 
   useEffect(() => { loadPosts(); }, [loadPosts]);
 
@@ -140,19 +159,26 @@ export default function PublicCommunity() {
           </CardContent>
         </Card>
       ) : (
+        <>
         <div className="masonry-2col">
-          {posts.map((post) => (
+          {posts.map((post, idx) => {
+            const src = post.thumbnail_url || post.image_url;
+            const eager = idx < 4;
+            return (
             <button
               key={post.id}
               onClick={() => setActive(post)}
               className="masonry-item group block w-full text-left rounded-2xl overflow-hidden bg-card ring-1 ring-border/50 shadow-soft hover:shadow-elevated hover:ring-border transition-all"
             >
               <div className="relative">
-                {post.image_url ? (
+                {src ? (
                   <img
-                    src={post.image_url}
+                    src={src}
                     alt={post.name}
-                    loading="lazy"
+                    loading={eager ? 'eager' : 'lazy'}
+                    decoding="async"
+                    // @ts-expect-error fetchpriority is a valid HTML attribute
+                    fetchpriority={eager ? 'high' : 'low'}
                     className="w-full h-auto block bg-muted transition-transform duration-500 group-hover:scale-[1.02]"
                   />
                 ) : (
@@ -171,8 +197,21 @@ export default function PublicCommunity() {
                 )}
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
+        {hasMore && (
+          <div className="flex justify-center pt-3 pb-1">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="px-5 h-10 rounded-full bg-card ring-1 ring-border/60 text-[12.5px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-60"
+            >
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          </div>
+        )}
+        </>
       )}
 
       {active && <PostDetailSheet post={active} onClose={() => setActive(null)} />}

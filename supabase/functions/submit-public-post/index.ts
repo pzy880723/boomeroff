@@ -95,6 +95,7 @@ serve(async (req) => {
       rarity, collectionValue, marketValue, buyReason,
       imageBase64, // 新上传图片
       imageUrl,    // 复用公共 URL（如 hash_cache 命中的历史 image_url）
+      thumbnailBase64, // 客户端生成的小图缩略图（480px）
     } = body as {
       name?: string; category?: string; era?: string | null; origin?: string | null;
       sellingPoints?: any; tips?: any;
@@ -102,7 +103,7 @@ serve(async (req) => {
       material?: string | null; craft?: string | null; dimensions?: string | null; condition?: string | null;
       confidence?: number | null;
       rarity?: number | null; collectionValue?: string | null; marketValue?: string | null; buyReason?: string | null;
-      imageBase64?: string; imageUrl?: string | null;
+      imageBase64?: string; imageUrl?: string | null; thumbnailBase64?: string;
     };
 
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -114,6 +115,7 @@ serve(async (req) => {
     const cleanCategory = VALID_CATEGORIES.has(category as string) ? category : 'other';
 
     let finalImageUrl: string | null = null;
+    let finalThumbnailUrl: string | null = null;
     if (imageBase64 && imageBase64.startsWith('data:')) {
       if (imageBase64.length > 1_600_000) {
         return new Response(JSON.stringify({ error: '图片过大' }), {
@@ -123,6 +125,9 @@ serve(async (req) => {
       finalImageUrl = await uploadGuestImage(adminClient, imageBase64);
     } else if (imageUrl && typeof imageUrl === 'string') {
       finalImageUrl = imageUrl;
+    }
+    if (thumbnailBase64 && thumbnailBase64.startsWith('data:') && thumbnailBase64.length < 400_000) {
+      finalThumbnailUrl = await uploadGuestImage(adminClient, thumbnailBase64);
     }
 
     const sp = Array.isArray(sellingPoints) ? sellingPoints.slice(0, 5) : [];
@@ -142,6 +147,7 @@ serve(async (req) => {
         user_id: null,
         product_id: null,
         image_url: finalImageUrl,
+        thumbnail_url: finalThumbnailUrl,
         name: cleanName,
         category: cleanCategory,
         era: era ? String(era).slice(0, 40) : null,

@@ -6,6 +6,7 @@ import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
+import { makeThumbnail } from '@/lib/imageThumb';
 import {
   buildLocalShareCopy,
   sanitizeShareCopy,
@@ -148,7 +149,11 @@ export default function PublicResult() {
         marketValue: result.marketValue ?? null,
         buyReason: result.buyReason ?? null,
       };
-      if (image) body.imageBase64 = image;
+      if (image) {
+        body.imageBase64 = image;
+        const thumb = await makeThumbnail(image, 480, 0.78);
+        if (thumb) body.thumbnailBase64 = thumb;
+      }
       const { data, error } = await supabase.functions.invoke('submit-public-post', { body });
       if (error) throw new Error((error as any).message || '发布失败');
       if (data?.error) throw new Error(data.error);

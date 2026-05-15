@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Share2, Check, Loader2 } from 'lucide-react';
 import type { ProductCategory } from '@/types';
 import { serializeTips, type SellingPoint, type TipsObj } from '@/lib/script';
+import { makeThumbnail } from '@/lib/imageThumb';
 
 interface ShareToCommunityButtonProps {
   productId: string;
@@ -59,11 +60,33 @@ export function ShareToCommunityButton({
     if (shared) return;
     setBusy(true);
     try {
+      // 生成 480px 缩略图（不阻塞太久；失败也不影响发布）
+      let thumbnailUrl: string | null = null;
+      if (imageUrl) {
+        try {
+          const thumbDataUrl = await makeThumbnail(imageUrl, 480, 0.78);
+          if (thumbDataUrl) {
+            const blob = await (await fetch(thumbDataUrl)).blob();
+            const path = `community-thumb/${user.id}/${productId}-${Date.now()}.jpg`;
+            const { error: upErr } = await supabase.storage
+              .from('product-images')
+              .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+            if (!upErr) {
+              const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+              thumbnailUrl = data?.publicUrl || null;
+            }
+          }
+        } catch (e) {
+          console.warn('[ShareToCommunity] thumbnail failed:', e);
+        }
+      }
+
       // selling_points 在 community_posts 里仍按 jsonb 存原始结构
       const { error } = await supabase.from('community_posts').insert({
         user_id: user.id,
         product_id: productId,
         image_url: imageUrl || null,
+        thumbnail_url: thumbnailUrl,
         name,
         category,
         era: era || null,

@@ -206,6 +206,7 @@ export type Database = {
           rarity: number | null
           selling_points: Json
           story: string | null
+          thumbnail_url: string | null
           tips: string | null
           user_id: string | null
         }
@@ -237,6 +238,7 @@ export type Database = {
           rarity?: number | null
           selling_points?: Json
           story?: string | null
+          thumbnail_url?: string | null
           tips?: string | null
           user_id?: string | null
         }
@@ -268,6 +270,7 @@ export type Database = {
           rarity?: number | null
           selling_points?: Json
           story?: string | null
+          thumbnail_url?: string | null
           tips?: string | null
           user_id?: string | null
         }
