@@ -2,17 +2,25 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Gift, Check, Sparkles, Loader2 } from 'lucide-react';
+import { Gift, Check, Sparkles, Loader2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { useTasks } from '@/hooks/useTasks';
+import type { useTasks, DailyTaskKey } from '@/hooks/useTasks';
 
 interface Props {
   tasks: ReturnType<typeof useTasks>;
   onClaimed?: () => void;
+  onNavigate?: (path: string) => void;
 }
 
-export function TaskCenterCard({ tasks, onClaimed }: Props) {
+const TASK_ROUTE: Record<DailyTaskKey, string> = {
+  daily_first_scan: '/scan',
+  daily_3_scans: '/scan',
+  daily_quiz: '/library',
+  daily_post: '/community',
+};
+
+export function TaskCenterCard({ tasks, onClaimed, onNavigate }: Props) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [claimingAll, setClaimingAll] = useState(false);
 
