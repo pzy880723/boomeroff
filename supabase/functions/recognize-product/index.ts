@@ -498,6 +498,9 @@ serve(async (req) => {
 
     const startTime = Date.now();
 
+    const hintBlock = (typeof userHint === 'string' && userHint.trim())
+      ? `\n\n【店员补充的现场线索（最高优先级,与图片冲突时以下面文字为准）】\n${userHint.trim().slice(0, 600)}\n`
+      : '';
     const recognitionPrompt = `你是日本中古杂货资深鉴定师。看图后调用 submit_recognition 工具提交。
 
 【硬规则】
@@ -506,7 +509,7 @@ serve(async (req) => {
 3. 禁用空话：非常精美/极具价值/匠心独运。
 4. sellingPoints 恰好 3 条，tag 必须是 身世/工艺/稀缺/场景。每条 ≤22 字。
 5. pitch.opener ≤30 字，pitch.highlight ≤45 字。不要写长故事——长故事另有流程补充。
-${knowledgeContext}
+${knowledgeContext}${hintBlock}
 直接调用 submit_recognition。`;
 
     const tAIStart = Date.now();
