@@ -1,7 +1,12 @@
+import { lazy, Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { BottomTabBar } from './BottomTabBar';
 import { ErrorBoundary } from '@/components/system/ErrorBoundary';
+
+const FloatingDashboard = lazy(() =>
+  import('@/components/dashboard/FloatingDashboard').then(m => ({ default: m.FloatingDashboard }))
+);
 
 export function MainLayout() {
   return (
@@ -25,6 +30,9 @@ export function MainLayout() {
         </ErrorBoundary>
       </main>
       <BottomTabBar />
+      <Suspense fallback={null}>
+        <FloatingDashboard />
+      </Suspense>
     </div>
   );
 }
