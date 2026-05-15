@@ -2,27 +2,20 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Camera, Upload, X, Loader2, Sparkles, SwitchCamera,
-  Layers, Image as ImageIcon, RotateCcw, Check,
+  Camera, Upload, X, Sparkles, SwitchCamera,
+  Layers, Image as ImageIcon, RotateCcw,
 } from 'lucide-react';
+import { RecognitionProgress, type RecognitionPhase } from './RecognitionProgress';
+import { RecognitionFailure } from './RecognitionFailure';
+import { HintInputSheet } from './HintInputSheet';
 
 type CaptureMode = 'single' | 'multi';
 const MAX_MULTI_IMAGES = 5;
 
-/** 识别叙事步骤:让等待过程"有事情在发生",而不是干瞪倒计时。 */
-const SINGLE_STEPS: Array<{ label: string; at: number }> = [
-  { label: '正在解析图片细节', at: 0 },
-  { label: '正在比对商品知识库', at: 800 },
-  { label: '正在全网检索同款资料', at: 1600 },
-  { label: '正在整理年代 · 产地 · 故事', at: 2600 },
-];
-const buildMultiSteps = (n: number): Array<{ label: string; at: number }> => [
-  { label: `正在对齐 ${n} 张图像`, at: 0 },
-  { label: '正在解析每张图的关键特征', at: 700 },
-  { label: '正在比对商品知识库', at: 1600 },
-  { label: '正在全网检索同款资料', at: 2600 },
-  { label: '正在整理年代 · 产地 · 故事', at: 3800 },
-];
+export interface RecognizeOpts {
+  userHint?: string;
+  onPhase?: (phase: RecognitionPhase) => void;
+}
 
 export interface CameraStageHandle {
   /** 外部重置：回到「未启动」状态 */
@@ -30,8 +23,9 @@ export interface CameraStageHandle {
 }
 
 interface CameraStageProps {
-  /** 父级处理识别业务，返回 true 视为成功；返回 false / 抛错则展示重试遮罩 */
-  onRecognize: (images: string[]) => Promise<boolean>;
+  /** 父级处理识别业务，返回 true 视为成功；返回 false / 抛错则展示重试遮罩。
+   *  opts 里携带阶段回调与可选文字线索，由父级透传给 hook。 */
+  onRecognize: (images: string[], opts?: RecognizeOpts) => Promise<boolean>;
   /** 拍摄完成后是否保留预览（默认 true）。顾客版跳走结果页，可设为 false 让相机回到待机 */
   keepPreviewAfterSuccess?: boolean;
 }
@@ -51,19 +45,11 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [recognitionFailed, setRecognitionFailed] = useState(false);
+  const [hintSheetOpen, setHintSheetOpen] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [recognitionTime, setRecognitionTime] = useState<number | null>(null);
-  const [narrativeSteps, setNarrativeSteps] = useState<Array<{ label: string; at: number }>>(SINGLE_STEPS);
-  const [forceAllDone, setForceAllDone] = useState(false);
-
-  const currentStepIndex = useMemo(() => {
-    if (forceAllDone) return narrativeSteps.length;
-    let idx = 0;
-    for (let i = 0; i < narrativeSteps.length; i++) {
-      if (elapsedTime >= narrativeSteps[i].at) idx = i;
-    }
-    return idx;
-  }, [elapsedTime, narrativeSteps, forceAllDone]);
+  const [phase, setPhase] = useState<RecognitionPhase>('reading');
+  const [pipelineSource, setPipelineSource] = useState<string | undefined>(undefined);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -91,6 +77,7 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
       stopCamera();
     },
   }), [stopCamera]);
+
 
   useEffect(() => {
     return () => {
