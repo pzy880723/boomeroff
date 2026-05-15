@@ -22,6 +22,7 @@ function timeAgo(iso: string) {
 interface Post {
   id: string;
   image_url: string | null;
+  thumbnail_url: string | null;
   name: string;
   category: ProductCategory;
   era: string | null;
