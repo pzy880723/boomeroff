@@ -41,8 +41,11 @@ export function LiveStreamPanel() {
   const enrichKeyRef = useRef<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const timerStartRef = useRef<number>(0);
-  const lastRecognitionInputRef = useRef<{ images: string[]; opts: { forceRefresh?: boolean } } | null>(null);
+  const lastRecognitionInputRef = useRef<{ images: string[]; opts: { forceRefresh?: boolean }; userHint?: string } | null>(null);
   const [recognitionFailed, setRecognitionFailed] = useState(false);
+  const [phase, setPhase] = useState<RecognitionPhase>('reading');
+  const [pipelineSource, setPipelineSource] = useState<string | undefined>(undefined);
+  const [hintSheetOpen, setHintSheetOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
