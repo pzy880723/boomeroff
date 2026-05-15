@@ -402,8 +402,8 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { imageBase64, images, imageHash, forceRefresh } = body as {
-      imageBase64?: string; images?: string[]; imageHash?: string; forceRefresh?: boolean;
+    const { imageBase64, images, imageHash, forceRefresh, userHint } = body as {
+      imageBase64?: string; images?: string[]; imageHash?: string; forceRefresh?: boolean; userHint?: string;
     };
     const imageList: string[] = Array.isArray(images) && images.length > 0
       ? images.slice(0, 5)

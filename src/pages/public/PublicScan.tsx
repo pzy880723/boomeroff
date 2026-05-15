@@ -42,8 +42,11 @@ export default function PublicScan() {
     () => typeof window !== 'undefined' && !sessionStorage.getItem('guest_onboarding_shown_v1'),
   );
 
-  const handleRecognize = async (images: string[]): Promise<boolean> => {
-    const r = await recognize(images.length > 1 ? images : images[0]);
+  const handleRecognize = async (
+    images: string[],
+    opts?: { userHint?: string; onPhase?: (p: any) => void },
+  ): Promise<boolean> => {
+    const r = await recognize(images.length > 1 ? images : images[0], opts);
     if (!r) return false;
     sessionStorage.setItem('guest_result', JSON.stringify(r));
     sessionStorage.setItem('guest_result_image', images[0]);
