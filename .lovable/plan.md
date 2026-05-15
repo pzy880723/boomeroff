@@ -1,111 +1,141 @@
-## 智能仪表盘方案
+## 在原计划基础上,新增/调整以下内容
 
-### 一、整体形态
+### 1. 修复右上角重复 X
+当前 `Sheet` 内 `SheetContent` 自带一个 X 关闭按钮,我又额外加了一个 `<button>...<X /></button>`,导致重复。
+- 删除 hero 区里的自定义 X 按钮
+- 用自定义 `SheetContent` 变体或直接覆写,把右上角默认 X **整体隐藏**(后面改成底部"收起"按钮)
 
-```text
-┌──────────────────────────┐         ┌────────┐
-│   仪表盘抽屉(展开态)      │  ◀─收起▶│ 🟠 早A │ ← 浮动小胶囊
-│                          │         └────────┘
-│  Hero: 你好,XX · 今日XX  │              ↕ 可拖动到任意位置
-│  ┌─────────┬────────┐    │              ↕ localStorage 记忆
-│  │ 排班    │ 打卡   │    │
-│  ├─────────┼────────┤    │
-│  │ 学习    │ 我的   │    │
-│  ├─────────┴────────┤    │
-│  │ 待办 / 社交       │    │
-│  └──────────────────┘    │
-└──────────────────────────┘
+### 2. 全屏显示
+- 抽屉从 `h-[88vh]` 改为 `h-screen w-screen rounded-none border-none inset-0`
+- 顶部 hero 加 `pt-[env(safe-area-inset-top)]`,底部加 `pb-[env(safe-area-inset-bottom)]`
+- 内容区可滚动,底部"收起"按钮 fixed 不动
+
+### 3. 每日打气标语 (Daily Motivational Quote)
+**实现方式**:本地静态数组 + 按日期取模,无需后端,完全离线。
+```ts
+// src/lib/dailyQuote.ts
+const QUOTES = [
+  '今天也是为顾客带来惊喜的一天 ✨',
+  '每一件中古都有故事,你就是讲故事的人 📖',
+  '慢一点没关系,准确比快更重要 🎯',
+  '认真对待每一次识物,你的眼力会越来越准 🔍',
+  // ... 共 60 句,覆盖两个月不重复
+];
+export function quoteOfDay(): string {
+  const epoch = Math.floor(Date.parse(todayShanghai()) / 86400000);
+  return QUOTES[epoch % QUOTES.length];
+}
+```
+- 显示位置:hero 区"早上好,XX"下方,白底半透明卡片 + `Sparkles` 图标
+- 字号 `text-sm font-medium`,带轻微 `animate-fade-in`
+
+### 4. 自动打开逻辑
+**触发条件**:每天首次进入应用(任意路由)自动 1 次。
+```ts
+// FloatingDashboard 内
+const KEY = 'dashboard_last_auto_open';
+useEffect(() => {
+  if (!user) return;
+  const today = todayShanghai();
+  const last = localStorage.getItem(KEY);
+  if (last !== today) {
+    const t = setTimeout(() => {
+      setOpen(true);
+      localStorage.setItem(KEY, today);
+    }, 600); // 等数据加载 + 浮标动画就位再弹
+    return () => clearTimeout(t);
+  }
+}, [user]);
+```
+- **不阻断**:用户手动 setOpen(false) 后当天不再自动弹
+- 登出再登录:仍按"今天已弹过"判断(localStorage 不清),避免烦人
+
+### 5. 关闭动画:抽屉 → 浮标(FLIP 动画)
+**思路**:关闭时不直接 unmount,先用 transform 把整个 sheet 缩到浮标位置,再隐藏。
+
+实现:
+- 自定义 `<DashboardFullscreen>`(不再用 Radix Sheet),用 `framer-motion` 不行就用 CSS:
+  - 打开:`scale(0) → scale(1)`,`transform-origin` 设到浮标坐标
+  - 关闭:反向 0.35s `cubic-bezier(0.4, 0, 0.2, 1)`
+- 浮标位置实时传给抽屉用作 transform-origin:
+```css
+transform-origin: ${pos.x + 22}px ${pos.y + 22}px;
+```
+- 关闭过程中浮标保持隐藏,动画结束后再显示(避免视觉双重)
+- 用 tailwind keyframe 新增 `dashboard-zoom-in / dashboard-zoom-out`,加进 tailwind.config.ts
+
+### 6. 底部"收起"按钮
+- 位置:`fixed bottom-0` 半透明渐变蒙版上方,居中
+- 样式:`Button variant="ghost"` + `ChevronDown` 图标 + "收起仪表盘"文字
+- 高度 `h-12`,带 `pb-[env(safe-area-inset-bottom)]`
+- 同步:用户也可以滑动屏幕,下拉超过 80px 自动触发收起(可选,加分项)
+
+### 7. 顶部不再放 X,改放"仪表盘"标题
+- hero 顶部居中:`仪表盘` 大字 + 副标题日期
+- 删除右上 X(自定义 + Radix 默认 X 全删)
+
+---
+
+## 文件改动差异(基于上一个 plan 增量)
+
+### 新增
+- `src/lib/dailyQuote.ts` — 60 句打气标语 + `quoteOfDay()`
+- `src/components/dashboard/DashboardFullscreen.tsx` — 替代 Radix Sheet,自带 zoom 动画 + transform-origin
+
+### 修改
+- `src/components/dashboard/FloatingDashboard.tsx`:
+  - 自动打开 useEffect (按日期 localStorage)
+  - 用 `DashboardFullscreen` 替代 `Sheet`
+  - 传浮标当前坐标做 transform-origin
+- `src/components/dashboard/cards/HeroSection.tsx`(从 FloatingDashboard 拆出):
+  - 标题"仪表盘"
+  - 打气标语卡
+  - 删除自定义 X
+- `tailwind.config.ts` — 加 `dashboard-zoom-in / dashboard-zoom-out` keyframes
+- 底部新增 `<DashboardFooterClose />` 收起按钮
+
+### 不变
+- 通知系统数据库迁移、4 张卡片结构、边缘吸附浮标 — 维持上一份 plan 不动
+
+---
+
+## 动画核心代码片段
+
+```tsx
+// DashboardFullscreen.tsx
+<div
+  className={cn(
+    'fixed inset-0 z-50 bg-background',
+    open ? 'animate-dashboard-zoom-in' : 'animate-dashboard-zoom-out pointer-events-none'
+  )}
+  style={{
+    transformOrigin: `${capsuleX + 22}px ${capsuleY + 22}px`,
+  }}
+  onAnimationEnd={() => { if (!open) onUnmount(); }}
+>
+  ...
+</div>
 ```
 
-**两种状态**:
-- **胶囊态(默认)**: 圆形头像 + 右侧"早A/中B/晚C/休"小标签 + 未读红点。位于屏幕右下,可拖动到屏幕任意位置(限制在安全区内,自动避开底部 Tab Bar)。
-- **展开态**: 点击胶囊弹出底部抽屉(Sheet from bottom,占屏 88vh,可下滑关闭)。
+```ts
+// tailwind.config.ts keyframes
+'dashboard-zoom-in': {
+  '0%': { transform: 'scale(0)', opacity: '0', borderRadius: '50%' },
+  '100%': { transform: 'scale(1)', opacity: '1', borderRadius: '0' },
+},
+'dashboard-zoom-out': {
+  '0%': { transform: 'scale(1)', opacity: '1', borderRadius: '0' },
+  '100%': { transform: 'scale(0)', opacity: '0', borderRadius: '50%' },
+},
+```
 
-**全局挂载**: 在 `MainLayout` 内挂载 `<FloatingDashboard />`,只对已登录用户显示;`/u`(游客)和 `/portal`(后台)不显示。
+---
 
-### 二、抽屉内容布局(高级感)
+## 实现顺序(在原 7 步基础上)
 
-按视觉优先级从上到下:
-
-**1. Hero 问候条(顶部)**
-- 左侧:头像(48px) + "下午好,XX"(根据时间段)
-- 右侧:今日日期 + 农历(可选简化为星期)
-- 背景:基于今日班次的渐变色(早班暖橙、中班青绿、晚班深蓝、休息中性灰)
-
-**2. 排班卡(最大、置顶,占 2 列)**
-- **今日班次大字**:`早班 A · 09:00–14:00` 或 `今日休息`
-- **下一班**: `明日 中班 B · 14:00–21:00`
-- **同班同事头像组**: 横向 4-5 个圆形头像,超出折叠
-- **本周排班迷你条**: 7 格小方块(A/B/C/休)横向展示
-- 点击整卡跳转 `/me`(SchedulePanel)
-
-**3. 打卡 + 等级(合并卡,占 2 列分两半)**
-- 左半:`今日已打卡 ✓` 或 `点击打卡` 按钮 + 连续 N 天 🔥
-- 右半:等级徽章 Lv.5 + 经验进度环 + "距 Lv.6 还差 120 exp"
-
-**4. 学习卡片(横向滑动 carousel)**
-- 卡片 1:今日 SOP 速览(从 shop_kb_entries type=sop 随机 1 条)
-- 卡片 2:今日 Q&A(type=qa 随机 1 条)
-- 卡片 3:每日中古小知识(daily_knowledge 当日)
-- 每张卡片右上角"展开"图标,点击进对应详情页
-
-**5. 我的数据(2×2 数字卡)**
-- 本周识图 N 次(对比上周 ↑12%)
-- 本周收藏 N 个
-- 本周发布 N 条
-- 7 日识图迷你折线图(sparkline)
-
-**6. 待办与社交(按角色区分)**
-- **管理员**: 待审纠错 N · 待审分享 N · 待审新成员 N(每项一个紧凑行,带角标)
-- **普通店员**: 中古圈最新 3 条同事动态缩略(头像+一句+图);"昨日全店共识图 N 件"
-
-### 三、浮动胶囊交互细节
-
-- **形态**: 圆角 9999、阴影 elegant、宽 88px 高 44px、含 32px 圆头像 + 班次小标签;无班次显示"📋"图标。
-- **拖动**: HTML5 pointer events,记录 left/top 到 `localStorage.dashboard_pos`。拖动时 80% 透明度;松手贴合屏幕边缘 12px 边距 clamp。
-- **点击 vs 拖动**: 移动距离 < 5px 视为点击 → 展开;否则视为拖动结束。
-- **未读红点**: 当存在 待办>0 / 当日未打卡 / 有新班次变更 时显示。
-- **避让**: 自动避开 BottomTabBar(高 64px)和 iOS 安全区。
-- **进入动画**: 首次登录从右下滑入 + scale 弹性。
-
-### 四、技术实现
-
-**新增文件**:
-- `src/components/dashboard/FloatingDashboard.tsx` — 胶囊 + 抽屉容器,管理拖拽与开合状态
-- `src/components/dashboard/DashboardCapsule.tsx` — 胶囊视觉
-- `src/components/dashboard/panels/ScheduleHeroCard.tsx` — 排班大卡
-- `src/components/dashboard/panels/CheckInLevelCard.tsx` — 打卡+等级合并
-- `src/components/dashboard/panels/LearningCarousel.tsx` — 学习轮播
-- `src/components/dashboard/panels/MyStatsCard.tsx` — 我的数据
-- `src/components/dashboard/panels/TodoSocialCard.tsx` — 待办/社交(角色分流)
-- `src/hooks/useDashboardData.ts` — 一次并行拉取所有数据(React Query 缓存 60s)
-
-**修改文件**:
-- `src/components/layout/MainLayout.tsx` — 挂载 `<FloatingDashboard />`(仅登录用户)
-- `mem://index.md` + 新建 `mem://features/floating-dashboard` 记忆
-
-**复用**:
-- 排班数据复用 `MyScheduleList` 的取数逻辑(shift_schedules + shop_shifts join)
-- 打卡用现成 `perform_check_in` RPC + `user_experience` 表
-- 等级用 `src/lib/level.ts`
-- 学习卡用 shop_kb_entries / daily_knowledge
-- 数据卡复用 Me 页 stats 查询
-
-**样式**:
-- 全部使用 design tokens(bg-card / text-foreground / shadow-elegant / 渐变 var(--gradient-primary))
-- 抽屉用 `Sheet` from `@/components/ui/sheet` side="bottom"
-- 拖拽用原生 pointer events,无新依赖
-
-**性能**:
-- 抽屉内组件全部 React.lazy + Suspense,胶囊关闭时不渲染面板内容
-- useDashboardData 用 Promise.all 并行 6 个轻查询,~200ms 内完成
-- 拖拽位置存 localStorage,不写库
-
-**无需数据库迁移**: 所有数据来自现有表。
-
-### 五、不在本次范围
-
-- 不新增 /home 路由(用全局浮窗)
-- 不改动现有 Scan/Me 页面布局
-- 不做 Web 推送/桌面提醒
-- 游客版 /u 不展示
+1-7:原计划不变(数据库 + 4 张卡 + 边缘吸附浮标 + 通知系统)
+8. 写 `dailyQuote.ts`
+9. 写 `DashboardFullscreen` 全屏 + zoom 动画组件,替换 Sheet
+10. hero 区 + 底部"收起"按钮 + 删除重复 X
+11. 自动打开(按日 localStorage)
+12. 更新 `mem://features/floating-dashboard`:加全屏 + 自动打开 + zoom 动画 + 每日标语

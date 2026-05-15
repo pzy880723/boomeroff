@@ -12,6 +12,7 @@ import { ScheduleManager } from '@/components/admin/ScheduleManager';
 import { KbManager } from '@/components/admin/KbManager';
 import { ShopManager } from '@/components/admin/ShopManager';
 import { RolePermissionManager } from '@/components/admin/RolePermissionManager';
+import { NotificationManager } from '@/components/admin/NotificationManager';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -33,7 +34,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu' | 'notifications';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -63,6 +64,7 @@ const MENU_GROUPS: MenuGroup[] = [
     key: 'social', label: '社区', icon: Megaphone, items: [
       { key: 'community', label: '中古圈', icon: MessageSquare, perm: 'community.moderate' },
       { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning, perm: 'correction.review' },
+      { key: 'notifications', label: '系统通知', icon: Megaphone, perm: 'role.manage' },
     ],
   },
   {
@@ -224,6 +226,7 @@ export default function Portal() {
             {effectiveTab === 'corrections' && can('correction.review') && <CorrectionReviewPanel />}
             {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}
             {effectiveTab === 'xianyu' && can('xianyu.manage') && <XianyuCacheManager />}
+            {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
           </Card>
         )}
       </main>
