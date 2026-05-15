@@ -1051,6 +1051,15 @@ export function LiveStreamPanel() {
         }}
       />
 
+      <HintInputSheet
+        open={hintSheetOpen}
+        onOpenChange={setHintSheetOpen}
+        onSubmit={(hint) => {
+          const last = lastRecognitionInputRef.current;
+          if (last) handleRecognition(last.images, last.opts, hint);
+        }}
+      />
+
     </div>
   );
 }
