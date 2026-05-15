@@ -1,7 +1,7 @@
 {
-  "name": "中古商品知识系统",
-  "short_name": "中古识别",
-  "description": "AI 秒级识别中古商品",
+  "name": "门店运营辅助系统",
+  "short_name": "门店助手",
+  "description": "AI 识物 · 知识共享 · 排班管理 · 销售辅助,门店日常运营一个工具搞定。",
   "start_url": "/scan",
   "scope": "/",
   "display": "standalone",

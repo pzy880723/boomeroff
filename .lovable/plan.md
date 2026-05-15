@@ -1,37 +1,70 @@
 ## 目标
-为 ScheduleManager 增加 4 项排班能力：AI 不覆盖手动、员工色块、周 5 天上限强制、班次互换。
 
-## 1. AI 排班不覆盖手动
-- 前端 `aiGenerate()`：调用 edge function 时改为 `overwrite: false`，并提示"AI 仅排空缺日子"。
-- `generate-schedule/index.ts`：
-  - `overwrite=false` 时不再 delete 旧排班；
-  - 读取本周已有排班（含 source=manual / ai），构造 `existing` 传给 AI（系统提示："已被占用的 user×date 不要再排"），并在结果回写时跳过任何已存在 user+date；
-  - upsert 改为 insert（忽略冲突），避免覆盖手动；
-  - 同时把"每人本周 ≤ 5 天"硬约束（含已存在天数）加入 prompt 与回写校验。
+把面向店员/管理端的系统名称统一改为 **门店运营辅助系统**，同步更新分享卡片、PWA、原生 App 名称与所有相关文案。  
+顾客扫码进入的 `/u` 公共端继续保留「中古识物」品牌不变。
 
-## 2. 每人默认色块
-- `src/lib/scheduleUtils.ts` 新增 `colorForUser(userId)`：根据 user_id hash 选择固定色板（10 个 HSL 语义友好的浅底+深字组合，定义在 utils 内部，不写死 tailwind 颜色，使用内联 style 给 background/color）。
-- `ScheduleManager.tsx` 渲染排班 chip 时，用该色作为背景；AI 排班保留右上角小角标或边框（如黄色 ring）以区分，但底色仍按人员走。
-- "员工排班属性"区域的按钮也带同色小圆点，便于对照。
+---
 
-## 3. 周 5 天上限强制
-- 沿用 `staff_profiles.max_per_week`（默认 5），把它视为硬上限：
-  - 前端 `validateAssign` 中"超出上限"由 warning 改为 **hard block**：直接 toast.error 并 return，不再弹 confirm 强制。
-  - cell 的"+"候选列表 `candidates` 过滤掉本周已排满 max_per_week 的员工（显示为灰色禁用项更直观）。
-  - AI prompt 把第 6 条硬约束措辞改为绝不超过；回写时统计每人本周天数，超额条目直接丢弃。
+## 文案方案（润色后）
 
-## 4. 换班功能
-- 工具栏新增"换班"按钮（`ArrowLeftRight` 图标）。点击进入 swap 模式：
-  - 状态：`swapMode: boolean`、`swapFirst: Sched | null`。
-  - swap 模式下，cell 中的人员 chip 变为可点（不再显示 X 删除）；点击第一个选中并高亮，点击第二个弹 confirm 后调用 swap。
-  - swap 实现：交换两条记录的 `user_id`（保持原 date+shift_code 不变是真正的"班次互换"）。两条 update：A.user_id=B.user_id, B.user_id=A.user_id；本地 `setScheds` 同步。
-  - 校验：互换后双方都需通过 validateAssign（available_weekdays / blocked_shifts / day_offs / max_per_week —— 因为只是换人不会改变各自周总天数，max 通常 ok），若违规弹 confirm 是否强制。
-  - 再点"换班"按钮或 ESC 退出 swap 模式；UI 上 banner 提示当前模式。
+| 用途 | 新文案 |
+|---|---|
+| 系统全称 | 门店运营辅助系统 |
+| 简称 / App 名称 | 门店助手 |
+| 页面 `<title>` | 门店运营辅助系统 \| BOOMER-OFF |
+| Meta description | 一站式门店运营辅助平台：AI 秒级识别商品、知识库共享、班次排班与日常运营管理，让店员的每一天都更顺手。 |
+| og:title | 门店运营辅助系统 |
+| og:description | AI 识物 · 知识共享 · 排班管理 · 销售辅助，门店日常运营一个工具搞定。 |
+| 登录页副标题 | 门店日常运营 · AI 识物 · 知识共享 · 排班管理 |
+| 登录页主标题 | 门店运营<accent>辅助</accent>系统 |
+| Manifest name | 门店运营辅助系统 |
+| Manifest short_name / Android / iOS / Capacitor appName | 门店助手 |
 
-## 不改动
-- 数据库 schema、RLS、权限、其他 tab；StaffProfileDialog；ai 生成函数权限校验逻辑。
+---
 
-## 文件
-- `supabase/functions/generate-schedule/index.ts`
-- `src/lib/scheduleUtils.ts`
-- `src/components/admin/ScheduleManager.tsx`
+## 修改清单（仅店员/管理端）
+
+### 1. 站点 head 与 PWA
+- **`index.html`**
+  - `<title>` → 新文案
+  - `<meta name="description">` → 新文案
+  - `<meta name="author">` 保持 `BOOMER-OFF Vintage`
+  - `og:title` / `og:description` → 新文案
+  - `twitter` 同步
+  - `<meta name="apple-mobile-web-app-title">` → `门店助手`
+- **`public/manifest.json`**
+  - `name` → 门店运营辅助系统
+  - `short_name` → 门店助手
+  - `description` → 新 description
+
+### 2. 原生 App 壳
+- **`capacitor.config.ts`** `appName` → `门店助手`
+- **`android/app/src/main/res/values/strings.xml`** `app_name` / `title_activity_main` → `门店助手`
+- **`ios/App/App/Info.plist`** `CFBundleDisplayName` → `门店助手`
+
+### 3. 店员端 UI 文案
+- **`src/components/auth/AuthPage.tsx`**
+  - 主标题改为「门店运营<gradient>辅助</gradient>系统」
+  - 副文案改为「门店日常运营 · AI 识物 · 知识共享 · 排班管理」
+  - logo `alt` → `门店运营辅助系统`
+- **`src/components/layout/Header.tsx`** logo `alt` → `门店运营辅助系统`
+- **`src/components/layout/PageHeader.tsx`** logo `alt` → `门店运营辅助系统`
+
+### 4. 不动的部分
+- `src/pages/public/PublicScan.tsx`、`PublicResult.tsx`、`PublicAbout.tsx`、`src/components/layout/PublicLayout.tsx` —— 顾客版，保留「中古识物 / 拍一拍 / 中古杂货」原文案。
+- 所有 `supabase/functions/*` 中的 AI prompt（含「中古杂货」「中古商品」等领域词）—— 这些是识别/知识生成的业务上下文，不属于品牌名，保持不变。
+- README.md（开发说明）不改。
+- Logo 图片资源、`BOOMER-OFF` 母品牌名保留。
+
+### 5. 收尾
+- 更新 `mem://interface/brand-identity` 备注：店员端品牌名已变更为「门店运营辅助系统 / 门店助手」，顾客端仍为「中古识物」。
+- 更新 `mem://index.md` 中的 Core 一行，注明双品牌策略。
+
+---
+
+## 验收
+
+1. `/login`、店员端任何页面顶部 logo `alt`、登录页标题/副标题均显示新名称。
+2. 浏览器分享 / 微信分享卡片 title + description 为新文案。
+3. 安装 PWA 或打包 App 后名称显示「门店助手」。
+4. 顾客访问 `/u`、`/u/community`、`/u/about` 仍看到「中古识物」品牌，无任何更名痕迹。

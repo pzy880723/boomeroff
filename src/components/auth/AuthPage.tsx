@@ -16,13 +16,13 @@ export function AuthPage() {
         <div className="mb-8 text-center">
           <img
             src={logo}
-            alt="BOOMER-OFF Vintage"
+            alt="门店运营辅助系统"
             className="h-16 sm:h-20 w-auto object-contain mx-auto mb-4 drop-shadow-md"
           />
           <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">
-            中古商品<span className="text-gradient-accent">知识</span>系统
+            门店运营<span className="text-gradient-accent">辅助</span>系统
           </h1>
-          <p className="text-muted-foreground text-sm mt-2">中古杂货 · AI 秒级识别 · 店员销售辅助</p>
+          <p className="text-muted-foreground text-sm mt-2">门店日常运营 · AI 识物 · 知识共享 · 排班管理</p>
         </div>
         {mode === 'login' && (
           <LoginForm
