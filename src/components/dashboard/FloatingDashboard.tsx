@@ -19,6 +19,7 @@ import { quoteOfDay, dashboardAutoOpenKey } from '@/lib/dailyQuote';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import logo from '@/assets/boomer-off-vintage-logo.png';
 
 const POS_KEY = 'dashboard_capsule_pos_v2';
 const AUTO_OPEN_KEY = 'dashboard_last_auto_open';
