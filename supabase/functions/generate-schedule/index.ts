@@ -199,28 +199,29 @@ Deno.serve(async (req) => {
       for (const uid of (a.user_ids || [])) {
         if (!validUsers.has(uid)) continue;
         const st = staffIndex.get(uid)!;
-        // 二次校验硬约束
         if (st.blocked_shifts.includes(a.shift_code)) continue;
         if (st.blocked_weekdays.includes(wd)) continue;
         if (st.day_offs.includes(a.date)) continue;
         if (!st.available_weekdays.includes(wd)) continue;
+        // 不覆盖已存在
+        if (occupiedUserDate.has(`${a.date}_${uid}`)) continue;
+        // 5 天/周 硬上限（含已有 + 本次新增）
+        const cap = Math.min(typeof st.max_per_week === 'number' ? st.max_per_week : 5, 5);
+        const cur = weekCountByUser.get(uid) || 0;
+        if (cur + 1 > cap) continue;
+        weekCountByUser.set(uid, cur + 1);
+        occupiedUserDate.add(`${a.date}_${uid}`);
         rows.push({ work_date: a.date, shift_code: a.shift_code, user_id: uid, source: 'ai', shop_id: shopId, created_by: userData.user.id });
       }
     }
 
-    const seen = new Set<string>();
-    const dedup = rows.filter(r => {
-      const k = `${r.work_date}_${r.user_id}`;
-      if (seen.has(k)) return false;
-      seen.add(k); return true;
-    });
-
-    if (dedup.length) {
-      const { error } = await supabase.from('shift_schedules').upsert(dedup, { onConflict: 'work_date,user_id' });
+    if (rows.length) {
+      // 用 insert 而非 upsert，确保不覆盖手动；冲突时由前面的 occupiedUserDate 已经过滤
+      const { error } = await supabase.from('shift_schedules').insert(rows);
       if (error) throw error;
     }
 
-    return new Response(JSON.stringify({ ok: true, count: dedup.length }), {
+    return new Response(JSON.stringify({ ok: true, count: rows.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e: any) {
