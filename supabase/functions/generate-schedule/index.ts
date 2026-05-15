@@ -95,13 +95,18 @@ Deno.serve(async (req) => {
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
     const weekEnd = days[6];
 
-    const [{ data: shifts }, { data: profiles }, { data: holidays }, { data: roleList }, { data: dayOffs }] = await Promise.all([
+    const [{ data: shifts }, { data: profiles }, { data: holidays }, { data: roleList }, { data: dayOffs }, { data: existing }] = await Promise.all([
       supabase.from('shop_shifts').select('*').eq('active', true).or(`shop_id.eq.${shopId},shop_id.is.null`).order('sort_order'),
       supabase.from('staff_profiles').select('*'),
       supabase.from('shop_holidays').select('*').or(`shop_id.eq.${shopId},shop_id.is.null`).gte('date', weekStart).lte('date', weekEnd),
       supabase.from('user_roles').select('user_id').eq('suspended', false),
       supabase.from('staff_day_offs').select('*').gte('off_date', weekStart).lte('off_date', weekEnd),
+      supabase.from('shift_schedules').select('work_date, shift_code, user_id, source').eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', weekEnd),
     ]);
+    const existingRows: any[] = existing || [];
+    const occupiedUserDate = new Set<string>(existingRows.map((r: any) => `${r.work_date}_${r.user_id}`));
+    const weekCountByUser = new Map<string, number>();
+    existingRows.forEach((r: any) => weekCountByUser.set(r.user_id, (weekCountByUser.get(r.user_id) || 0) + 1));
 
     const userIds = (roleList || []).map((r: any) => r.user_id);
     const { data: profs } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
