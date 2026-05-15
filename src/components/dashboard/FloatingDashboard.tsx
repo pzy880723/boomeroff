@@ -211,9 +211,13 @@ export function FloatingDashboard() {
               {todayCode}
             </span>
           )}
-          {hasUnread && (
+          {hasClaimable ? (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 border-2 border-background text-[10px] font-bold text-white flex items-center justify-center shadow-sm animate-pulse">
+              {claimableCount > 9 ? '9+' : claimableCount}
+            </span>
+          ) : hasOtherUnread ? (
             <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-destructive ring-2 ring-background" />
-          )}
+          ) : null}
         </button>
 
         {showLabel && !dragging && (
