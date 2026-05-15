@@ -242,6 +242,7 @@ export function FloatingDashboard() {
           onClose={closeDashboard}
           data={data}
           notif={notif}
+          tasks={tasks}
           navigate={navigate}
         />,
         document.body
