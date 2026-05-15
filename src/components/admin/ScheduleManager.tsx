@@ -264,7 +264,7 @@ export function ScheduleManager() {
       <div className="flex flex-wrap gap-1 items-center min-h-7">
         {list.map(r => {
           const u = users.find(x => x.user_id === r.user_id);
-          const c = colorForUser(r.user_id);
+          const c = colorOf(r.user_id);
           const selected = swapFirst?.id === r.id;
           return (
             <span
@@ -297,7 +297,7 @@ export function ScheduleManager() {
                 const cnt = weekCountOf(u.user_id);
                 const cap = Math.min(typeof u.max_per_week === 'number' ? u.max_per_week : 5, 5);
                 const full = cnt >= cap;
-                const c = colorForUser(u.user_id);
+                const c = colorOf(u.user_id);
                 return (
                   <button
                     key={u.user_id}
@@ -391,7 +391,7 @@ export function ScheduleManager() {
         <div className="flex flex-wrap gap-2">
           {users.length === 0 && <p className="text-xs text-muted-foreground">该门店暂无可排员工，请在员工资料中将"可上班门店"包含本店</p>}
           {users.map(u => {
-            const c = colorForUser(u.user_id);
+            const c = colorOf(u.user_id);
             const cnt = weekCountOf(u.user_id);
             const cap = Math.min(typeof u.max_per_week === 'number' ? u.max_per_week : 5, 5);
             return (
