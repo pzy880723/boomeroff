@@ -147,6 +147,7 @@ serve(async (req) => {
         user_id: null,
         product_id: null,
         image_url: finalImageUrl,
+        thumbnail_url: finalThumbnailUrl,
         name: cleanName,
         category: cleanCategory,
         era: era ? String(era).slice(0, 40) : null,
