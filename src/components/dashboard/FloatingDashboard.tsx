@@ -309,6 +309,8 @@ function DashboardFullscreen({
         {/* 排班 Hero 卡 */}
         <ShiftHeroCard data={data} navigate={go} />
 
+        <LevelProgressCard data={data} navigate={go} />
+
         <NotificationCard items={notif.items} unread={notif.unreadCount} onRead={notif.markRead} onReadAll={notif.markAllRead} />
         <TodayOpsCard data={data} />
         <LearningCard learning={data.learning} navigate={go} />
