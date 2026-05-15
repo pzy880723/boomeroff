@@ -456,63 +456,69 @@ function TodayOpsCard({ data }: { data: ReturnType<typeof useDashboardData> }) {
     : (data.stats.weekScans > 0 ? 100 : 0);
 
   return (
-    <Card className="p-4 border-border/60 shadow-sm">
+    <Card className="p-4 border-border/50 shadow-sm rounded-2xl">
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-amber-500/10 flex items-center justify-center">
-            <Flame className="w-4 h-4 text-amber-600" />
-          </div>
+          <Flame className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-semibold">今日运营</span>
         </div>
-        <Badge variant={trend >= 0 ? 'default' : 'secondary'} className="text-[10px]">
+        <span className={cn('text-xs font-medium tabular-nums', trend >= 0 ? 'text-primary' : 'text-muted-foreground')}>
           本周 {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}%
-        </Badge>
+        </span>
       </div>
 
       {/* 一键打卡 */}
       {!data.checkedToday ? (
-        <Button onClick={handleCheckIn} disabled={submitting} className="w-full h-10 mb-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white border-none shadow-md hover:opacity-90">
+        <Button
+          onClick={handleCheckIn}
+          disabled={submitting}
+          className="w-full h-12 mb-4 rounded-xl bg-foreground text-background hover:bg-foreground/90 font-semibold"
+        >
           <Flame className="w-4 h-4 mr-2" />
           {submitting ? '签到中…' : `一键打卡 ${data.currentStreak > 0 ? `· 连签 ${data.currentStreak} 天` : ''}`}
         </Button>
       ) : (
-        <div className="flex items-center justify-center gap-2 h-10 mb-3 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm font-medium">
-          <Check className="w-4 h-4" /> 今日已打卡 · 连签 {data.currentStreak} 天
+        <div className="flex items-center justify-center gap-2 h-12 mb-4 rounded-xl bg-muted/60 text-foreground text-sm font-medium">
+          <Check className="w-4 h-4 text-primary" /> 今日已打卡 · 连签 {data.currentStreak} 天
         </div>
       )}
 
-      {/* 数据 */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <div className="text-center py-1.5 rounded-md bg-muted/40">
-          <Camera className="w-3.5 h-3.5 mx-auto mb-0.5 text-primary" />
-          <p className="text-base font-bold tabular-nums leading-tight">{data.stats.weekScans}</p>
-          <p className="text-[10px] text-muted-foreground">本周识物</p>
+      {/* 数据三联 */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{data.stats.weekScans}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">本周识物</p>
         </div>
-        <div className="text-center py-1.5 rounded-md bg-muted/40">
-          <Star className="w-3.5 h-3.5 mx-auto mb-0.5 text-yellow-500" />
-          <p className="text-base font-bold tabular-nums leading-tight">{data.stats.weekFavs}</p>
-          <p className="text-[10px] text-muted-foreground">本周收藏</p>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{data.stats.weekFavs}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">本周收藏</p>
         </div>
-        <div className="text-center py-1.5 rounded-md bg-muted/40">
-          <ImageIcon className="w-3.5 h-3.5 mx-auto mb-0.5 text-accent" />
-          <p className="text-base font-bold tabular-nums leading-tight">{data.stats.weekPosts}</p>
-          <p className="text-[10px] text-muted-foreground">本周发布</p>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{data.stats.weekPosts}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">本周发布</p>
         </div>
       </div>
 
-      {/* Sparkline */}
+      {/* Sparkline 线性化 */}
       <div>
-        <div className="flex items-end justify-between gap-1 h-10">
-          {data.stats.weeklySpark.map((v, i) => (
-            <div key={i} className="flex-1 flex items-end h-full">
-              <div
-                className="w-full rounded-sm bg-gradient-to-t from-primary/40 to-primary"
-                style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? 4 : 2, opacity: v > 0 ? 1 : 0.25 }}
-              />
-            </div>
-          ))}
+        <div className="flex items-end justify-between gap-1.5 h-8">
+          {data.stats.weeklySpark.map((v, i) => {
+            const isLast = i === data.stats.weeklySpark.length - 1;
+            const h = Math.max(2, (v / max) * 100);
+            return (
+              <div key={i} className="flex-1 flex items-end h-full">
+                <div
+                  className={cn(
+                    'w-full rounded-full',
+                    isLast ? 'bg-primary' : 'bg-muted-foreground/25'
+                  )}
+                  style={{ height: `${h}%` }}
+                />
+              </div>
+            );
+          })}
         </div>
-        <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
           <span>7 天前</span><span>今天</span>
         </div>
       </div>
