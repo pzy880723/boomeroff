@@ -276,33 +276,30 @@ function DashboardFullscreen({
         paddingTop: 'env(safe-area-inset-top)',
       }}
     >
-      {/* Hero */}
-      <div className="relative px-5 pt-5 pb-6 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border-b border-border/40 shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center shadow-md">
-              <LayoutDashboard className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-lg font-display font-bold tracking-tight leading-none">仪表盘</h2>
-              <p className="text-[11px] text-muted-foreground mt-1">{todayLabel}</p>
-            </div>
-          </div>
-          <p className="text-sm font-medium text-foreground/80">
-            {greet()},{data.profile?.display_name || '店员'}
+      {/* 顶栏 */}
+      <div className="px-5 pt-5 pb-2 shrink-0">
+        <div className="flex items-end justify-between">
+          <h2 className="text-2xl font-bold tracking-tight leading-none">仪表盘</h2>
+          <p className="text-xs text-muted-foreground">
+            {todayLabel} · {greet()},{data.profile?.display_name || '店员'}
           </p>
-        </div>
-
-        {/* 每日打气标语 */}
-        <div className="rounded-xl bg-card/70 backdrop-blur border border-border/50 px-3.5 py-2.5 flex items-start gap-2 shadow-sm animate-fade-in">
-          <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-          <p className="text-sm text-foreground/90 leading-relaxed font-medium">{quote}</p>
         </div>
       </div>
 
       {/* 内容区 */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3 pb-24">
-        <NotificationCard items={notif.items} unread={notif.unreadCount} onRead={notif.markRead} onReadAll={notif.markAllRead} todayShift={data.todayShift} />
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 pt-3 pb-28 space-y-4">
+        {/* 打气标语 Hero */}
+        <div className="relative rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/15 px-6 py-7 overflow-hidden animate-fade-in">
+          <Sparkles className="absolute top-4 right-4 w-5 h-5 text-primary/60" />
+          <p className="text-xl font-bold leading-snug text-foreground pr-8">
+            {quote}
+          </p>
+        </div>
+
+        {/* 排班 Hero 卡 */}
+        <ShiftHeroCard data={data} navigate={go} />
+
+        <NotificationCard items={notif.items} unread={notif.unreadCount} onRead={notif.markRead} onReadAll={notif.markAllRead} />
         <TodayOpsCard data={data} />
         <LearningCard learning={data.learning} navigate={go} />
         <TodoActivityCard data={data} navigate={go} />
