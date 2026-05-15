@@ -318,6 +318,8 @@ function DashboardFullscreen({
         {/* 排班 Hero 卡 */}
         <ShiftHeroCard data={data} navigate={go} />
 
+        <TaskCenterCard tasks={tasks} onClaimed={() => data.refresh()} />
+
         <LevelProgressCard data={data} navigate={go} />
 
         <NotificationCard items={notif.items} unread={notif.unreadCount} onRead={notif.markRead} onReadAll={notif.markAllRead} />
