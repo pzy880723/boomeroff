@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 
 const POS_KEY = 'dashboard_capsule_pos_v2';
-const AUTO_OPEN_KEY = 'dashboard_last_auto_open';
+const AUTO_OPEN_KEY = 'dashboard_auto_opened_session';
 const BTN = 48;          // 圆形按钮直径
 const EDGE = 10;         // 离屏边距
 const BOTTOM_TAB = 64;
@@ -96,15 +96,16 @@ export function FloatingDashboard() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // 每日自动打开一次
+  // 每次新登录会话自动打开一次
   useEffect(() => {
     if (!user) return;
-    const today = dashboardAutoOpenKey();
-    const last = localStorage.getItem(AUTO_OPEN_KEY);
-    if (last !== today) {
+    // 清理旧的 localStorage 残留 key
+    try { localStorage.removeItem('dashboard_last_auto_open'); } catch {}
+    const opened = sessionStorage.getItem(AUTO_OPEN_KEY);
+    if (!opened) {
       const t = setTimeout(() => {
         openDashboard();
-        localStorage.setItem(AUTO_OPEN_KEY, today);
+        sessionStorage.setItem(AUTO_OPEN_KEY, '1');
       }, 700);
       return () => clearTimeout(t);
     }
