@@ -157,18 +157,20 @@ Deno.serve(async (req) => {
 3. 仅在该员工的 available_weekdays 内排班；
 4. 员工的 blocked_weekdays（固定休息日）和 day_offs（具体禁排日期）绝不安排；
 5. 员工的 blocked_shifts 列表中的班次绝不安排该员工；
-6. 每个员工每周上班天数不得超过 max_per_week，尽量接近 weekly_workdays；
+6. 每个员工每周上班天数绝对不得超过 5 天，也不得超过 max_per_week，已包含 existing_count 中已有天数；尽量接近 weekly_workdays；
 7. 优先匹配员工的 preferred_shifts（如为空则不限）；
 8. 节假日规则：当日 full_staff_off=true 时正式员工(type=regular)不排；intern_works=true 时实习生照常排，否则也不排；
 9. 同一员工不要连续上班超过 6 天；
-10. 每个班次每天至少安排 1 名员工，尽量人员均衡。
+10. 每个班次每天至少安排 1 名员工，尽量人员均衡；
+11. 已存在的 occupied (date,user_id) 列表绝不能再排该员工到该日期；只填补空缺的人/日。
 输出工具 submit_schedule 严格 JSON。日期使用 ISO YYYY-MM-DD。`;
 
     const user = JSON.stringify({
       shop_id: shopId,
       week: days.map(d => ({ date: d, weekday: WEEK_LABEL[dow(d)], holiday: holMap.get(d) || null })),
       shifts: (shifts || []).map((s: any) => ({ code: s.code, name: s.name, time: `${s.start_time}-${s.end_time}` })),
-      staff: staffList,
+      staff: staffList.map(s => ({ ...s, existing_count: weekCountByUser.get(s.user_id) || 0 })),
+      occupied: existingRows.map((r: any) => ({ date: r.work_date, user_id: r.user_id })),
     }, null, 2);
 
     if (staffList.length === 0) {
@@ -182,6 +184,8 @@ Deno.serve(async (req) => {
 
     if (overwrite) {
       await supabase.from('shift_schedules').delete().eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', weekEnd);
+      occupiedUserDate.clear();
+      weekCountByUser.clear();
     }
 
     const validShifts = new Set((shifts || []).map((s: any) => s.code));
