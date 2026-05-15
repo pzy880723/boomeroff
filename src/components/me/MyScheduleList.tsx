@@ -66,12 +66,21 @@ export function MyScheduleList() {
       const sMap = new Map<string, Shift>();
       (sh || []).forEach((s: any) => sMap.set(s.code, s));
 
-      // 同事 profiles
+      // 同事 profiles：优先使用真实姓名（staff_profiles.real_name），否则回退到 display_name
       const userIds = Array.from(new Set(allRows.map(r => r.user_id))).filter(Boolean);
       const pMap = new Map<string, string>();
       if (userIds.length) {
-        const { data: pr } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
-        (pr || []).forEach((p: any) => pMap.set(p.user_id, p.display_name || '店员'));
+        const [{ data: pr }, { data: sps }] = await Promise.all([
+          supabase.from('profiles').select('user_id, display_name').in('user_id', userIds),
+          supabase.from('staff_profiles' as any).select('user_id, real_name').in('user_id', userIds),
+        ]);
+        const realMap = new Map<string, string>();
+        (sps as any[] || []).forEach((s: any) => { if (s.real_name) realMap.set(s.user_id, s.real_name); });
+        (pr || []).forEach((p: any) => {
+          pMap.set(p.user_id, realMap.get(p.user_id) || p.display_name || '店员');
+        });
+        // 兜底：profiles 缺失但 staff_profiles 有
+        realMap.forEach((name, uid) => { if (!pMap.has(uid)) pMap.set(uid, name); });
       }
 
       setMine((my as any) || []);
