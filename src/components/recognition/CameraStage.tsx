@@ -1,13 +1,28 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import {
   Camera, Upload, X, Loader2, Sparkles, SwitchCamera,
-  Layers, Image as ImageIcon, RotateCcw,
+  Layers, Image as ImageIcon, RotateCcw, Check,
 } from 'lucide-react';
 
 type CaptureMode = 'single' | 'multi';
 const MAX_MULTI_IMAGES = 5;
+
+/** 识别叙事步骤:让等待过程"有事情在发生",而不是干瞪倒计时。 */
+const SINGLE_STEPS: Array<{ label: string; at: number }> = [
+  { label: '正在解析图片细节', at: 0 },
+  { label: '正在比对商品知识库', at: 800 },
+  { label: '正在全网检索同款资料', at: 1600 },
+  { label: '正在整理年代 · 产地 · 故事', at: 2600 },
+];
+const buildMultiSteps = (n: number): Array<{ label: string; at: number }> => [
+  { label: `正在对齐 ${n} 张图像`, at: 0 },
+  { label: '正在解析每张图的关键特征', at: 700 },
+  { label: '正在比对商品知识库', at: 1600 },
+  { label: '正在全网检索同款资料', at: 2600 },
+  { label: '正在整理年代 · 产地 · 故事', at: 3800 },
+];
 
 export interface CameraStageHandle {
   /** 外部重置：回到「未启动」状态 */
@@ -38,6 +53,17 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
   const [recognitionFailed, setRecognitionFailed] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [recognitionTime, setRecognitionTime] = useState<number | null>(null);
+  const [narrativeSteps, setNarrativeSteps] = useState<Array<{ label: string; at: number }>>(SINGLE_STEPS);
+  const [forceAllDone, setForceAllDone] = useState(false);
+
+  const currentStepIndex = useMemo(() => {
+    if (forceAllDone) return narrativeSteps.length;
+    let idx = 0;
+    for (let i = 0; i < narrativeSteps.length; i++) {
+      if (elapsedTime >= narrativeSteps[i].at) idx = i;
+    }
+    return idx;
+  }, [elapsedTime, narrativeSteps, forceAllDone]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -186,6 +212,8 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
     setRecognitionFailed(false);
     setRecognitionTime(null);
     setElapsedTime(0);
+    setForceAllDone(false);
+    setNarrativeSteps(images.length > 1 ? buildMultiSteps(images.length) : SINGLE_STEPS);
     setIsRecognizing(true);
 
     timerStartRef.current = performance.now();
@@ -207,6 +235,11 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
       const finalTime = performance.now() - timerStartRef.current;
       setElapsedTime(finalTime);
       setRecognitionTime(finalTime);
+      if (ok) {
+        // 让用户看到一次"全部 ✓"的完成感再收起遮罩
+        setForceAllDone(true);
+        await new Promise((r) => setTimeout(r, 260));
+      }
       setIsRecognizing(false);
     }
 
@@ -373,22 +406,65 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
           )}
 
           {isRecognizing && (
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in">
-              <div className="text-center text-white space-y-4">
-                <div className="relative w-16 h-16 mx-auto">
-                  <div className="absolute inset-0 rounded-full border-2 border-accent/20" />
-                  <Loader2 className="w-16 h-16 animate-spin text-accent" strokeWidth={1.5} />
+            <div className="absolute inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center animate-fade-in px-6">
+              <div className="w-full max-w-[18rem] text-white">
+                {/* 顶部小标 */}
+                <div className="flex items-center gap-2 mb-5">
+                  <Loader2 className="w-4 h-4 animate-spin text-accent" strokeWidth={2} />
+                  <span className="text-[13px] tracking-wide font-medium">AI 正在识别</span>
+                  <Sparkles className="w-3.5 h-3.5 text-accent/80 animate-pulse-glow ml-auto" />
                 </div>
-                <div className="flex items-center gap-2 justify-center">
-                  <Sparkles className="w-4 h-4 text-accent animate-pulse-glow" />
-                  <span className="text-sm tracking-wide">AI 识别中</span>
-                </div>
-                <div className="text-3xl font-display font-bold tabular-nums">
-                  {(elapsedTime / 1000).toFixed(1)}<span className="text-base font-sans font-normal text-white/60">s</span>
+
+                {/* 步骤列表 */}
+                <ul className="space-y-2.5">
+                  {narrativeSteps.map((step, i) => {
+                    const done = i < currentStepIndex;
+                    const active = i === currentStepIndex && !forceAllDone;
+                    const allDone = forceAllDone;
+                    const isDone = done || allDone;
+                    return (
+                      <li
+                        key={i}
+                        className={`flex items-center gap-2.5 text-[13px] leading-tight transition-all duration-200 ${
+                          isDone
+                            ? 'text-accent'
+                            : active
+                              ? 'text-white'
+                              : 'text-white/35'
+                        }`}
+                      >
+                        <span
+                          className={`shrink-0 w-4 h-4 rounded-full flex items-center justify-center transition-all ${
+                            isDone
+                              ? 'bg-accent/15 ring-1 ring-accent/40'
+                              : active
+                                ? 'bg-white/10 ring-1 ring-white/30'
+                                : 'ring-1 ring-white/15'
+                          }`}
+                        >
+                          {isDone ? (
+                            <Check className="w-2.5 h-2.5 text-accent animate-scale-in" strokeWidth={3} />
+                          ) : active ? (
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" strokeWidth={2.5} />
+                          ) : null}
+                        </span>
+                        <span className="truncate">
+                          {step.label}
+                          {active && <span className="inline-block ml-1 animate-pulse">···</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {/* 计时器(辅助信息) */}
+                <div className="mt-5 text-center text-[11px] text-white/45 tabular-nums">
+                  {(elapsedTime / 1000).toFixed(1)}s
                 </div>
               </div>
             </div>
           )}
+
 
           {!isRecognizing && recognitionFailed && (
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center animate-fade-in p-6">
