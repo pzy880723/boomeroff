@@ -254,7 +254,7 @@ export function FloatingDashboard() {
 /* ===================== 全屏抽屉 ===================== */
 
 function DashboardFullscreen({
-  open, closing, originX, originY, onAnimEnd, onClose, data, notif, navigate,
+  open, closing, originX, originY, onAnimEnd, onClose, data, notif, tasks, navigate,
 }: {
   open: boolean;
   closing: boolean;
@@ -264,6 +264,7 @@ function DashboardFullscreen({
   onClose: () => void;
   data: ReturnType<typeof useDashboardData>;
   notif: ReturnType<typeof useNotifications>;
+  tasks: ReturnType<typeof useTasks>;
   navigate: (p: string) => void;
 }) {
   const today = todayISO();
