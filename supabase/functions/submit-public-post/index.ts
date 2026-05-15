@@ -115,6 +115,7 @@ serve(async (req) => {
     const cleanCategory = VALID_CATEGORIES.has(category as string) ? category : 'other';
 
     let finalImageUrl: string | null = null;
+    let finalThumbnailUrl: string | null = null;
     if (imageBase64 && imageBase64.startsWith('data:')) {
       if (imageBase64.length > 1_600_000) {
         return new Response(JSON.stringify({ error: '图片过大' }), {
@@ -124,6 +125,9 @@ serve(async (req) => {
       finalImageUrl = await uploadGuestImage(adminClient, imageBase64);
     } else if (imageUrl && typeof imageUrl === 'string') {
       finalImageUrl = imageUrl;
+    }
+    if (thumbnailBase64 && thumbnailBase64.startsWith('data:') && thumbnailBase64.length < 400_000) {
+      finalThumbnailUrl = await uploadGuestImage(adminClient, thumbnailBase64);
     }
 
     const sp = Array.isArray(sellingPoints) ? sellingPoints.slice(0, 5) : [];
