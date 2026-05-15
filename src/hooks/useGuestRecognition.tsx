@@ -52,14 +52,15 @@ export function useGuestRecognition() {
       const { data, error } = await supabase.functions.invoke('recognize-product-public', { body });
 
       if (error) {
-        // 边缘函数会把详细错误塞在 data 中（429/limit）
         const msg = (error as any)?.message || '识别失败';
         toast({ title: '识别失败', description: msg, variant: 'destructive' });
+        options.onPhase?.('done');
         return null;
       }
       if (data?.error) {
         toast({ title: '识别未完成', description: data.error, variant: 'destructive' });
         if (typeof data.remaining === 'number') setRemaining(data.remaining);
+        options.onPhase?.('done');
         return null;
       }
 
