@@ -1,47 +1,43 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
-  Calendar, Flame, Crown, BookOpen, MessagesSquare, Sparkles,
+  Calendar, Flame, BookOpen, MessagesSquare, Sparkles,
   Camera, Star, Image as ImageIcon, TrendingUp, ChevronRight, Check,
-  ClipboardList, Users as UsersIcon, AlertCircle, X,
+  ClipboardList, Users as UsersIcon, AlertCircle, ChevronDown,
+  LayoutDashboard, Megaphone, BellDot,
 } from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import { getLevelInfo } from '@/lib/level';
-import { formatShiftTime, shortDateLabel, weekdayLabel, todayISO, addDaysISO } from '@/lib/scheduleUtils';
+import { useNotifications, type NotificationItem } from '@/hooks/useNotifications';
+import { formatShiftTime, weekdayLabel, todayISO } from '@/lib/scheduleUtils';
+import { quoteOfDay, dashboardAutoOpenKey } from '@/lib/dailyQuote';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-const POS_KEY = 'dashboard_capsule_pos_v1';
-const CAPSULE_W = 96;
-const CAPSULE_H = 44;
-const EDGE = 12;
+const POS_KEY = 'dashboard_capsule_pos_v2';
+const AUTO_OPEN_KEY = 'dashboard_last_auto_open';
+const BTN = 48;          // 圆形按钮直径
+const EDGE = 10;         // 离屏边距
 const BOTTOM_TAB = 64;
+type Side = 'left' | 'right';
+interface Pos { side: Side; y: number }
 
-interface Pos { x: number; y: number }
-
-function clampPos(x: number, y: number): Pos {
-  const vw = window.innerWidth;
+function clampY(y: number): number {
+  if (typeof window === 'undefined') return y;
   const vh = window.innerHeight;
-  const minX = EDGE;
-  const maxX = Math.max(EDGE, vw - CAPSULE_W - EDGE);
-  const minY = EDGE + 8;
-  const maxY = Math.max(EDGE, vh - CAPSULE_H - BOTTOM_TAB - EDGE);
-  return {
-    x: Math.min(Math.max(x, minX), maxX),
-    y: Math.min(Math.max(y, minY), maxY),
-  };
+  const minY = EDGE + 56;
+  const maxY = Math.max(minY, vh - BTN - BOTTOM_TAB - EDGE);
+  return Math.min(Math.max(y, minY), maxY);
 }
 
 function defaultPos(): Pos {
-  if (typeof window === 'undefined') return { x: 0, y: 0 };
-  return clampPos(window.innerWidth - CAPSULE_W - EDGE, window.innerHeight - CAPSULE_H - BOTTOM_TAB - EDGE - 8);
+  if (typeof window === 'undefined') return { side: 'right', y: 200 };
+  return { side: 'right', y: clampY(window.innerHeight - BTN - BOTTOM_TAB - EDGE - 32) };
 }
 
 function loadPos(): Pos {
@@ -49,7 +45,9 @@ function loadPos(): Pos {
     const raw = localStorage.getItem(POS_KEY);
     if (raw) {
       const p = JSON.parse(raw);
-      if (typeof p?.x === 'number' && typeof p?.y === 'number') return clampPos(p.x, p.y);
+      if ((p?.side === 'left' || p?.side === 'right') && typeof p?.y === 'number') {
+        return { side: p.side, y: clampY(p.y) };
+      }
     }
   } catch {}
   return defaultPos();
@@ -64,239 +62,341 @@ function greet(): string {
   return '晚上好';
 }
 
-function shiftBg(code?: string | null): string {
-  if (!code) return 'from-slate-200 to-slate-100 dark:from-slate-800 dark:to-slate-900';
-  const c = code.toUpperCase();
-  if (c.startsWith('A')) return 'from-amber-200 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/30';
-  if (c.startsWith('B')) return 'from-emerald-200 to-teal-100 dark:from-emerald-900/40 dark:to-teal-900/30';
-  if (c.startsWith('C')) return 'from-indigo-200 to-blue-100 dark:from-indigo-900/40 dark:to-blue-900/30';
-  return 'from-slate-200 to-slate-100 dark:from-slate-800 dark:to-slate-900';
+function getCapsuleX(side: Side): number {
+  if (typeof window === 'undefined') return 0;
+  return side === 'left' ? EDGE : window.innerWidth - BTN - EDGE;
 }
 
 export function FloatingDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<Pos>(() => (typeof window !== 'undefined' ? loadPos() : { x: 0, y: 0 }));
-  const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number; moved: boolean } | null>(null);
-  const [dragging, setDragging] = useState(false);
+  const [mounted, setMounted] = useState(false);   // 全屏 DOM 是否挂载(等关闭动画)
+  const [closing, setClosing] = useState(false);   // 是否正在播放关闭动画
+  const [pos, setPos] = useState<Pos>(() => (typeof window !== 'undefined' ? loadPos() : { side: 'right', y: 0 }));
+  const [dragXY, setDragXY] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; oy: number; moved: boolean } | null>(null);
+  const [showLabel, setShowLabel] = useState(true);
   const data = useDashboardData(!!user);
+  const notif = useNotifications();
 
-  // Reposition on viewport change
+  // 标签气泡 3 秒后渐隐
   useEffect(() => {
-    const onResize = () => setPos(p => clampPos(p.x, p.y));
+    if (!showLabel) return;
+    const t = setTimeout(() => setShowLabel(false), 3500);
+    return () => clearTimeout(t);
+  }, [showLabel]);
+
+  // 视口变化重新 clamp
+  useEffect(() => {
+    const onResize = () => setPos(p => ({ ...p, y: clampY(p.y) }));
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // 每日自动打开一次
+  useEffect(() => {
+    if (!user) return;
+    const today = dashboardAutoOpenKey();
+    const last = localStorage.getItem(AUTO_OPEN_KEY);
+    if (last !== today) {
+      const t = setTimeout(() => {
+        openDashboard();
+        localStorage.setItem(AUTO_OPEN_KEY, today);
+      }, 700);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const openDashboard = () => {
+    setMounted(true);
+    setClosing(false);
+    requestAnimationFrame(() => setOpen(true));
+  };
+
+  const closeDashboard = () => {
+    setClosing(true);
+    setOpen(false);
+  };
+
+  const onAnimEnd = () => {
+    if (closing) {
+      setMounted(false);
+      setClosing(false);
+    }
+  };
+
+  /* ---------- 拖拽 ---------- */
   const onPointerDown = (e: React.PointerEvent) => {
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    dragRef.current = { startX: e.clientX, startY: e.clientY, ox: pos.x, oy: pos.y, moved: false };
-    setDragging(true);
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    const x = getCapsuleX(pos.side);
+    dragRef.current = { startX: e.clientX, startY: e.clientY, oy: pos.y, moved: false };
+    setDragXY({ x, y: pos.y });
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!dragRef.current) return;
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
-    if (Math.abs(dx) + Math.abs(dy) > 5) dragRef.current.moved = true;
-    setPos(clampPos(dragRef.current.ox + dx, dragRef.current.oy + dy));
+    if (Math.abs(dx) + Math.abs(dy) > 6) dragRef.current.moved = true;
+    setDragXY({
+      x: Math.max(EDGE, Math.min(window.innerWidth - BTN - EDGE, e.clientX - BTN / 2)),
+      y: clampY(dragRef.current.oy + dy),
+    });
   };
   const onPointerUp = (e: React.PointerEvent) => {
     const moved = dragRef.current?.moved;
     dragRef.current = null;
-    setDragging(false);
     if (!moved) {
-      setOpen(true);
-    } else {
-      try { localStorage.setItem(POS_KEY, JSON.stringify(pos)); } catch {}
+      setDragXY(null);
+      openDashboard();
+      return;
     }
+    // 吸附到最近边
+    const cx = (dragXY?.x ?? getCapsuleX(pos.side)) + BTN / 2;
+    const side: Side = cx < window.innerWidth / 2 ? 'left' : 'right';
+    const y = clampY(dragXY?.y ?? pos.y);
+    const next = { side, y };
+    setPos(next);
+    setDragXY(null);
+    try { localStorage.setItem(POS_KEY, JSON.stringify(next)); } catch {}
   };
 
   if (!user) return null;
 
-  const code = data.todayShift?.code ?? '休';
-  const todoCount = data.todos.pendingShares + data.todos.pendingCorrections + data.todos.pendingUsers;
-  const hasUnread = !data.checkedToday || todoCount > 0;
+  const dragging = !!dragRef.current || !!dragXY;
+  const capsuleX = dragging && dragXY ? dragXY.x : getCapsuleX(pos.side);
+  const capsuleY = dragging && dragXY ? dragXY.y : pos.y;
+  const todayCode = data.todayShift?.code;
+  const hasUnread = notif.unreadCount > 0
+    || (!data.checkedToday)
+    || (data.todos.pendingShares + data.todos.pendingCorrections > 0);
 
   return (
     <>
-      {/* Capsule */}
-      <button
-        type="button"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+      {/* 圆形按钮 + 文字气泡 */}
+      <div
         className={cn(
-          'fixed z-50 flex items-center gap-1.5 pl-1 pr-2.5 rounded-full bg-card/95 backdrop-blur border border-border shadow-elegant select-none touch-none transition-opacity',
-          dragging && 'opacity-80'
+          'fixed z-50 flex items-center select-none touch-none transition-all',
+          dragging ? 'duration-0' : 'duration-300 ease-out',
+          pos.side === 'right' && !dragging ? 'flex-row-reverse' : 'flex-row',
+          // 隐藏浮标:抽屉打开时;关闭动画期间也隐藏避免视觉重影
+          (open || closing) && 'opacity-0 pointer-events-none'
         )}
-        style={{ left: pos.x, top: pos.y, width: CAPSULE_W, height: CAPSULE_H }}
-        aria-label="打开仪表盘"
+        style={{ left: capsuleX, top: capsuleY }}
       >
-        <span className="relative shrink-0">
-          <Avatar className="w-9 h-9 border border-border/60">
-            <AvatarImage src={data.profile?.avatar_url || undefined} />
-            <AvatarFallback className="text-xs bg-primary/10 text-primary">
-              {data.profile?.display_name?.charAt(0) || '我'}
-            </AvatarFallback>
-          </Avatar>
-          {hasUnread && (
-            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-destructive ring-2 ring-card" />
+        <button
+          type="button"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          aria-label="打开仪表盘"
+          className={cn(
+            'relative flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-elegant border border-primary/30 active:scale-95 transition-transform',
+            dragging && 'opacity-90 scale-105'
           )}
-        </span>
-        <span
-          className="text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded text-white shrink-0"
-          style={{ background: data.todayShift?.color || (data.todayShift ? '#f59e0b' : 'hsl(var(--muted-foreground) / 0.7)') }}
+          style={{ width: BTN, height: BTN }}
         >
-          {code}
-        </span>
-      </button>
+          <LayoutDashboard className="w-5 h-5" />
+          {todayCode && (
+            <span className="absolute -bottom-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-card border border-border text-[9px] font-bold text-foreground flex items-center justify-center">
+              {todayCode}
+            </span>
+          )}
+          {hasUnread && (
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-destructive ring-2 ring-background" />
+          )}
+        </button>
 
-      {/* Drawer */}
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent
-          side="bottom"
-          className="h-[88vh] p-0 rounded-t-2xl border-t-2 overflow-hidden flex flex-col"
-        >
-          <DashboardContent data={data} onClose={() => setOpen(false)} navigate={navigate} />
-        </SheetContent>
-      </Sheet>
+        {showLabel && !dragging && (
+          <div
+            className={cn(
+              'mx-1.5 px-2.5 py-1 rounded-full bg-card/95 backdrop-blur border border-border/60 shadow-md text-xs font-semibold text-foreground whitespace-nowrap pointer-events-none animate-label-bubble-in'
+            )}
+          >
+            仪表盘
+          </div>
+        )}
+      </div>
+
+      {/* 全屏抽屉 */}
+      {mounted && createPortal(
+        <DashboardFullscreen
+          open={open}
+          closing={closing}
+          originX={getCapsuleX(pos.side) + BTN / 2}
+          originY={pos.y + BTN / 2}
+          onAnimEnd={onAnimEnd}
+          onClose={closeDashboard}
+          data={data}
+          notif={notif}
+          navigate={navigate}
+        />,
+        document.body
+      )}
     </>
   );
 }
 
-/* ---------------- Drawer body ---------------- */
+/* ===================== 全屏抽屉 ===================== */
 
-function DashboardContent({ data, onClose, navigate }: { data: ReturnType<typeof useDashboardData>; onClose: () => void; navigate: (p: string) => void }) {
-  const lvl = useMemo(() => getLevelInfo(data.totalExp), [data.totalExp]);
-  const heroBg = shiftBg(data.todayShift?.code);
+function DashboardFullscreen({
+  open, closing, originX, originY, onAnimEnd, onClose, data, notif, navigate,
+}: {
+  open: boolean;
+  closing: boolean;
+  originX: number;
+  originY: number;
+  onAnimEnd: () => void;
+  onClose: () => void;
+  data: ReturnType<typeof useDashboardData>;
+  notif: ReturnType<typeof useNotifications>;
+  navigate: (p: string) => void;
+}) {
   const today = todayISO();
   const todayLabel = `${today.slice(5).replace('-', '/')} ${weekdayLabel(today)}`;
+  const quote = useMemo(() => quoteOfDay(), []);
 
-  const go = (path: string) => { onClose(); setTimeout(() => navigate(path), 80); };
+  const go = (path: string) => {
+    onClose();
+    setTimeout(() => navigate(path), 240);
+  };
 
   return (
-    <div className="flex-1 overflow-y-auto overscroll-contain">
-      {/* Hero greeting */}
-      <div className={cn('relative px-4 pt-5 pb-6 bg-gradient-to-br', heroBg)}>
-        <button
-          aria-label="关闭"
-          onClick={onClose}
-          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-background/60 backdrop-blur flex items-center justify-center"
-        >
-          <X className="w-4 h-4" />
-        </button>
-        <div className="flex items-center gap-3">
-          <Avatar className="w-12 h-12 border-2 border-white/70">
-            <AvatarImage src={data.profile?.avatar_url || undefined} />
-            <AvatarFallback>{data.profile?.display_name?.charAt(0) || '我'}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-base font-semibold text-foreground/90">
-              {greet()}，{data.profile?.display_name || '店员'}
-            </p>
-            <p className="text-xs text-foreground/70 mt-0.5">{todayLabel} · 今日加油</p>
+    <div
+      onAnimationEnd={onAnimEnd}
+      className={cn(
+        'fixed inset-0 z-[60] bg-background flex flex-col will-change-transform',
+        open ? 'animate-dashboard-zoom-in' : 'animate-dashboard-zoom-out'
+      )}
+      style={{
+        transformOrigin: `${originX}px ${originY}px`,
+        paddingTop: 'env(safe-area-inset-top)',
+      }}
+    >
+      {/* Hero */}
+      <div className="relative px-5 pt-5 pb-6 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border-b border-border/40 shrink-0">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center shadow-md">
+              <LayoutDashboard className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-lg font-display font-bold tracking-tight leading-none">仪表盘</h2>
+              <p className="text-[11px] text-muted-foreground mt-1">{todayLabel}</p>
+            </div>
           </div>
+          <p className="text-sm font-medium text-foreground/80">
+            {greet()},{data.profile?.display_name || '店员'}
+          </p>
+        </div>
+
+        {/* 每日打气标语 */}
+        <div className="rounded-xl bg-card/70 backdrop-blur border border-border/50 px-3.5 py-2.5 flex items-start gap-2 shadow-sm animate-fade-in">
+          <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <p className="text-sm text-foreground/90 leading-relaxed font-medium">{quote}</p>
         </div>
       </div>
 
-      <div className="px-3 py-3 space-y-3 -mt-3">
-        {/* Schedule hero */}
-        <Card className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => go('/me')}>
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
-                <Calendar className="w-4 h-4 text-primary" />
-              </div>
-              <span className="text-sm font-semibold">今日排班</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          </div>
-          {data.todayShift ? (
-            <>
-              <p className="text-2xl font-bold tracking-tight">
-                {data.todayShift.name}
-                <span
-                  className="ml-2 text-[11px] font-medium px-2 py-0.5 rounded text-white align-middle"
-                  style={{ background: data.todayShift.color || '#f59e0b' }}
-                >{data.todayShift.code}</span>
-              </p>
-              <p className="text-sm text-muted-foreground tabular-nums mt-0.5">
-                {formatShiftTime(data.todayShift.start_time, data.todayShift.end_time)}
-              </p>
-            </>
-          ) : (
-            <p className="text-2xl font-bold tracking-tight text-muted-foreground">今日休息</p>
-          )}
+      {/* 内容区 */}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3 pb-24">
+        <NotificationCard items={notif.items} unread={notif.unreadCount} onRead={notif.markRead} onReadAll={notif.markAllRead} todayShift={data.todayShift} />
+        <TodayOpsCard data={data} />
+        <LearningCard learning={data.learning} navigate={go} />
+        <TodoActivityCard data={data} navigate={go} />
+      </div>
 
-          {data.nextShift && (
-            <p className="text-xs text-muted-foreground mt-2">
-              下一班：{shortDateLabel(data.nextShift.date)} {weekdayLabel(data.nextShift.date)}
-              {data.nextShift.shift && ` · ${data.nextShift.shift.name} ${formatShiftTime(data.nextShift.shift.start_time, data.nextShift.shift.end_time)}`}
-            </p>
-          )}
-
-          {/* Colleagues */}
-          {data.colleaguesToday.length > 0 && (
-            <div className="flex items-center gap-1 mt-3">
-              <span className="text-[11px] text-muted-foreground mr-1">同班：</span>
-              <div className="flex -space-x-2">
-                {data.colleaguesToday.slice(0, 5).map(c => (
-                  <Avatar key={c.user_id} className="w-6 h-6 border-2 border-background">
-                    <AvatarImage src={c.avatar_url || undefined} />
-                    <AvatarFallback className="text-[10px]">{c.display_name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                ))}
-              </div>
-              {data.colleaguesToday.length > 5 && (
-                <span className="text-[11px] text-muted-foreground ml-1">+{data.colleaguesToday.length - 5}</span>
-              )}
-            </div>
-          )}
-
-          {/* 7-day mini bar */}
-          <div className="grid grid-cols-7 gap-1 mt-3">
-            {data.weekShifts.map((d, i) => (
-              <div key={d.date} className="flex flex-col items-center gap-1">
-                <div
-                  className="w-full h-6 rounded text-[10px] font-medium text-white flex items-center justify-center"
-                  style={{ background: d.shift?.color || (d.shift ? '#f59e0b' : 'hsl(var(--muted))'), color: d.shift ? '#fff' : 'hsl(var(--muted-foreground))' }}
-                >
-                  {d.shift?.code || '休'}
-                </div>
-                <span className={cn('text-[10px]', i === 0 ? 'text-foreground font-semibold' : 'text-muted-foreground')}>
-                  {i === 0 ? '今' : weekdayLabel(d.date).slice(1)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* Check-in + Level */}
-        <div className="grid grid-cols-2 gap-3">
-          <CheckInMini data={data} />
-          <LevelMini lvl={lvl} />
-        </div>
-
-        {/* Learning carousel */}
-        <LearningRow learning={data.learning} navigate={go} />
-
-        {/* Stats */}
-        <StatsCard stats={data.stats} />
-
-        {/* Todos / Social */}
-        <TodoSocialCard data={data} navigate={go} />
+      {/* 底部 收起按钮 */}
+      <div
+        className="absolute left-0 right-0 bottom-0 bg-gradient-to-t from-background via-background/95 to-background/0 pt-6 pb-2"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
+      >
+        <Button
+          variant="secondary"
+          onClick={onClose}
+          className="mx-auto flex h-11 px-6 rounded-full shadow-md"
+        >
+          <ChevronDown className="w-4 h-4 mr-1.5" />
+          收起仪表盘
+        </Button>
       </div>
     </div>
   );
 }
 
-/* ---------------- Sub cards ---------------- */
+/* ===================== 卡片们 ===================== */
 
-function CheckInMini({ data }: { data: ReturnType<typeof useDashboardData> }) {
+function NotificationCard({
+  items, unread, onRead, onReadAll, todayShift,
+}: {
+  items: NotificationItem[];
+  unread: number;
+  onRead: (id: string) => void;
+  onReadAll: () => void;
+  todayShift: ReturnType<typeof useDashboardData>['todayShift'];
+}) {
+  return (
+    <Card className="p-4 border-border/60 shadow-sm">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
+            {unread > 0 ? <BellDot className="w-4 h-4 text-primary" /> : <Megaphone className="w-4 h-4 text-primary" />}
+          </div>
+          <span className="text-sm font-semibold">系统通知</span>
+          {unread > 0 && <Badge variant="destructive" className="text-[10px] h-5">{unread} 条未读</Badge>}
+        </div>
+        {unread > 0 && (
+          <button onClick={onReadAll} className="text-[11px] text-muted-foreground hover:text-foreground">全部已读</button>
+        )}
+      </div>
+
+      {/* 今日班次提醒(简洁) */}
+      <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40">
+        <Calendar className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        {todayShift ? (
+          <p className="text-xs">
+            <span className="text-muted-foreground">今日班次 · </span>
+            <span className="font-semibold">{todayShift.name}</span>
+            <span className="ml-2 text-muted-foreground tabular-nums">{formatShiftTime(todayShift.start_time, todayShift.end_time)}</span>
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">今日休息 · 好好放松一天 🌿</p>
+        )}
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-3">暂无系统通知</p>
+      ) : (
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {items.slice(0, 5).map(n => (
+            <button
+              key={n.id}
+              onClick={() => !n.read && onRead(n.id)}
+              className={cn(
+                'w-full text-left p-2.5 rounded-lg border transition-colors',
+                n.read ? 'border-border/40 bg-background' : 'border-primary/30 bg-primary/5 hover:bg-primary/10'
+              )}
+            >
+              <div className="flex items-start gap-2">
+                {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <p className={cn('text-sm', !n.read && 'font-semibold')}>{n.title}</p>
+                  {n.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 whitespace-pre-wrap">{n.body}</p>}
+                  <p className="text-[10px] text-muted-foreground mt-1">{new Date(n.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function TodayOpsCard({ data }: { data: ReturnType<typeof useDashboardData> }) {
   const [submitting, setSubmitting] = useState(false);
-  const handle = async () => {
+  const handleCheckIn = async () => {
     if (data.checkedToday || submitting) return;
     setSubmitting(true);
     const { data: r, error } = await supabase.rpc('perform_check_in');
@@ -304,156 +404,152 @@ function CheckInMini({ data }: { data: ReturnType<typeof useDashboardData> }) {
     if (error) { toast.error('签到失败'); return; }
     const result = r as any;
     if (!result?.already) {
-      const bonus = result?.bonus ? `（连签 +${result.bonus}）` : '';
+      const bonus = result?.bonus ? `(连签 +${result.bonus})` : '';
       toast.success(`签到 +${result?.exp_gained} 经验${bonus}`);
     }
     data.refresh();
   };
 
+  const max = Math.max(1, ...data.stats.weeklySpark);
+  const trend = data.stats.prevWeekScans > 0
+    ? Math.round(((data.stats.weekScans - data.stats.prevWeekScans) / data.stats.prevWeekScans) * 100)
+    : (data.stats.weekScans > 0 ? 100 : 0);
+
   return (
-    <Card className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border-amber-200/60 dark:border-amber-900/40">
-      <div className="flex items-center gap-2 mb-2">
-        <Flame className="w-4 h-4 text-orange-500" />
-        <span className="text-xs font-semibold">每日打卡</span>
+    <Card className="p-4 border-border/60 shadow-sm">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-md bg-amber-500/10 flex items-center justify-center">
+            <Flame className="w-4 h-4 text-amber-600" />
+          </div>
+          <span className="text-sm font-semibold">今日运营</span>
+        </div>
+        <Badge variant={trend >= 0 ? 'default' : 'secondary'} className="text-[10px]">
+          本周 {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}%
+        </Badge>
       </div>
-      <p className="text-xl font-bold tabular-nums">
-        {data.currentStreak}<span className="text-xs font-normal text-muted-foreground ml-1">天连续</span>
-      </p>
-      <Button
-        size="sm"
-        className="w-full mt-2 h-7 text-xs"
-        disabled={data.checkedToday || submitting}
-        onClick={handle}
-      >
-        {data.checkedToday ? <><Check className="w-3 h-3 mr-1" />已签到</> : (submitting ? '签到中' : '立即打卡')}
-      </Button>
+
+      {/* 一键打卡 */}
+      {!data.checkedToday ? (
+        <Button onClick={handleCheckIn} disabled={submitting} className="w-full h-10 mb-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white border-none shadow-md hover:opacity-90">
+          <Flame className="w-4 h-4 mr-2" />
+          {submitting ? '签到中…' : `一键打卡 ${data.currentStreak > 0 ? `· 连签 ${data.currentStreak} 天` : ''}`}
+        </Button>
+      ) : (
+        <div className="flex items-center justify-center gap-2 h-10 mb-3 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm font-medium">
+          <Check className="w-4 h-4" /> 今日已打卡 · 连签 {data.currentStreak} 天
+        </div>
+      )}
+
+      {/* 数据 */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="text-center py-1.5 rounded-md bg-muted/40">
+          <Camera className="w-3.5 h-3.5 mx-auto mb-0.5 text-primary" />
+          <p className="text-base font-bold tabular-nums leading-tight">{data.stats.weekScans}</p>
+          <p className="text-[10px] text-muted-foreground">本周识物</p>
+        </div>
+        <div className="text-center py-1.5 rounded-md bg-muted/40">
+          <Star className="w-3.5 h-3.5 mx-auto mb-0.5 text-yellow-500" />
+          <p className="text-base font-bold tabular-nums leading-tight">{data.stats.weekFavs}</p>
+          <p className="text-[10px] text-muted-foreground">本周收藏</p>
+        </div>
+        <div className="text-center py-1.5 rounded-md bg-muted/40">
+          <ImageIcon className="w-3.5 h-3.5 mx-auto mb-0.5 text-accent" />
+          <p className="text-base font-bold tabular-nums leading-tight">{data.stats.weekPosts}</p>
+          <p className="text-[10px] text-muted-foreground">本周发布</p>
+        </div>
+      </div>
+
+      {/* Sparkline */}
+      <div>
+        <div className="flex items-end justify-between gap-1 h-10">
+          {data.stats.weeklySpark.map((v, i) => (
+            <div key={i} className="flex-1 flex items-end h-full">
+              <div
+                className="w-full rounded-sm bg-gradient-to-t from-primary/40 to-primary"
+                style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? 4 : 2, opacity: v > 0 ? 1 : 0.25 }}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+          <span>7 天前</span><span>今天</span>
+        </div>
+      </div>
     </Card>
   );
 }
 
-function LevelMini({ lvl }: { lvl: ReturnType<typeof getLevelInfo> }) {
-  return (
-    <Card className="p-3 bg-gradient-primary text-primary-foreground relative overflow-hidden">
-      <div className="absolute -right-3 -top-3 opacity-15"><Crown className="w-16 h-16" /></div>
-      <div className="flex items-center gap-2 mb-2">
-        <Crown className="w-4 h-4" />
-        <span className="text-xs font-semibold">Lv.{lvl.level}</span>
-      </div>
-      <p className="text-sm font-bold truncate">{lvl.title}</p>
-      <p className="text-[10px] opacity-90 mt-0.5 tabular-nums">
-        {lvl.isMax ? '已达顶峰 🏆' : `距 Lv.${lvl.level + 1} 还差 ${lvl.expForNext - lvl.expIntoLevel}`}
-      </p>
-      <div className="h-1.5 bg-primary-foreground/20 rounded-full overflow-hidden mt-1.5">
-        <div className="h-full bg-primary-foreground transition-all" style={{ width: `${Math.min(lvl.progress * 100, 100)}%` }} />
-      </div>
-    </Card>
-  );
-}
-
-function LearningRow({ learning, navigate }: { learning: ReturnType<typeof useDashboardData>['learning']; navigate: (p: string) => void }) {
+function LearningCard({
+  learning, navigate,
+}: { learning: ReturnType<typeof useDashboardData>['learning']; navigate: (p: string) => void }) {
   const items = [
-    learning.sop && { key: 'sop', icon: BookOpen, label: '今日 SOP', title: learning.sop.title, body: learning.sop.body, path: '/me/sop', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' },
-    learning.qa && { key: 'qa', icon: MessagesSquare, label: '顾客 Q&A', title: learning.qa.title, body: learning.qa.body, path: '/me/qa', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
+    learning.sop && { key: 'sop', icon: BookOpen, label: '今日 SOP', title: learning.sop.title, body: learning.sop.body, path: '/me/sop', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10' },
+    learning.qa && { key: 'qa', icon: MessagesSquare, label: '顾客 Q&A', title: learning.qa.title, body: learning.qa.body, path: '/me/qa', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10' },
     learning.daily && {
       key: 'daily', icon: Sparkles, label: '中古小知识',
       title: typeof learning.daily.content === 'object' ? (learning.daily.content?.title || '今日小知识') : '今日小知识',
       body: typeof learning.daily.content === 'object' ? (learning.daily.content?.summary || learning.daily.content?.body || '') : String(learning.daily.content || ''),
-      path: '/library', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/30',
+      path: '/library', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-500/10',
     },
   ].filter(Boolean) as Array<{ key: string; icon: any; label: string; title: string; body: string; path: string; color: string; bg: string }>;
 
   if (items.length === 0) return null;
 
   return (
-    <div>
-      <p className="text-xs font-semibold text-muted-foreground mb-2 px-1">📚 今日学习</p>
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
+    <Card className="p-4 border-border/60 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-7 h-7 rounded-md bg-purple-500/10 flex items-center justify-center">
+          <BookOpen className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+        </div>
+        <span className="text-sm font-semibold">今日学习</span>
+      </div>
+      <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
         {items.map(it => {
           const Icon = it.icon;
           return (
-            <Card
+            <button
               key={it.key}
               onClick={() => navigate(it.path)}
-              className="snap-start shrink-0 w-[78%] p-3 cursor-pointer hover:shadow-md transition-shadow"
+              className="snap-start shrink-0 w-[80%] text-left p-3 rounded-xl border border-border/50 hover:border-border bg-card hover:shadow-md transition-all"
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <div className={cn('w-7 h-7 rounded-md flex items-center justify-center', it.bg)}>
-                  <Icon className={cn('w-4 h-4', it.color)} />
+                <div className={cn('w-6 h-6 rounded-md flex items-center justify-center', it.bg)}>
+                  <Icon className={cn('w-3.5 h-3.5', it.color)} />
                 </div>
                 <span className="text-[11px] text-muted-foreground">{it.label}</span>
               </div>
               <p className="text-sm font-semibold line-clamp-1">{it.title}</p>
               <p className="text-xs text-muted-foreground line-clamp-2 mt-1 leading-relaxed">{it.body}</p>
-            </Card>
+            </button>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function StatsCard({ stats }: { stats: ReturnType<typeof useDashboardData>['stats'] }) {
-  const trend = stats.prevWeekScans > 0
-    ? Math.round(((stats.weekScans - stats.prevWeekScans) / stats.prevWeekScans) * 100)
-    : (stats.weekScans > 0 ? 100 : 0);
-  const max = Math.max(1, ...stats.weeklySpark);
-
-  return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold flex items-center gap-1.5"><TrendingUp className="w-4 h-4 text-primary" /> 本周数据</span>
-        <Badge variant={trend >= 0 ? 'default' : 'secondary'} className="text-[10px]">
-          {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}%
-        </Badge>
-      </div>
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <div className="text-center">
-          <Camera className="w-4 h-4 mx-auto mb-1 text-primary" />
-          <p className="text-lg font-bold tabular-nums">{stats.weekScans}</p>
-          <p className="text-[10px] text-muted-foreground">识图</p>
-        </div>
-        <div className="text-center">
-          <Star className="w-4 h-4 mx-auto mb-1 text-yellow-500" />
-          <p className="text-lg font-bold tabular-nums">{stats.weekFavs}</p>
-          <p className="text-[10px] text-muted-foreground">收藏</p>
-        </div>
-        <div className="text-center">
-          <ImageIcon className="w-4 h-4 mx-auto mb-1 text-accent" />
-          <p className="text-lg font-bold tabular-nums">{stats.weekPosts}</p>
-          <p className="text-[10px] text-muted-foreground">发布</p>
-        </div>
-      </div>
-      {/* Sparkline */}
-      <div className="flex items-end justify-between gap-1 h-10">
-        {stats.weeklySpark.map((v, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-1">
-            <div
-              className="w-full rounded-sm bg-primary/70"
-              style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? 4 : 2, opacity: v > 0 ? 1 : 0.2 }}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-        <span>7天前</span><span>今天</span>
       </div>
     </Card>
   );
 }
 
-function TodoSocialCard({ data, navigate }: { data: ReturnType<typeof useDashboardData>; navigate: (p: string) => void }) {
+function TodoActivityCard({
+  data, navigate,
+}: { data: ReturnType<typeof useDashboardData>; navigate: (p: string) => void }) {
   const todoCount = data.todos.pendingShares + data.todos.pendingCorrections + data.todos.pendingUsers;
+
+  // 管理员:有待办优先显示待办
   if (todoCount > 0) {
     return (
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <ClipboardList className="w-4 h-4 text-destructive" />
-          <span className="text-sm font-semibold">待办事项</span>
-          <Badge variant="destructive" className="text-[10px] ml-auto">{todoCount}</Badge>
+      <Card className="p-4 border-border/60 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-md bg-destructive/10 flex items-center justify-center">
+              <ClipboardList className="w-4 h-4 text-destructive" />
+            </div>
+            <span className="text-sm font-semibold">待办事项</span>
+          </div>
+          <Badge variant="destructive" className="text-[10px]">{todoCount}</Badge>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {data.todos.pendingShares > 0 && (
-            <button onClick={() => navigate('/portal')} className="w-full flex items-center gap-2 text-left text-sm py-1.5 hover:text-primary transition-colors">
+            <button onClick={() => navigate('/portal')} className="w-full flex items-center gap-2 text-left text-sm py-2 px-2 rounded-md hover:bg-muted/50 transition-colors">
               <AlertCircle className="w-4 h-4 text-orange-500" />
               <span className="flex-1">待审分享</span>
               <span className="font-semibold tabular-nums">{data.todos.pendingShares}</span>
@@ -465,13 +561,19 @@ function TodoSocialCard({ data, navigate }: { data: ReturnType<typeof useDashboa
     );
   }
 
+  // 店员:同事最新动态
   if (data.social.posts.length === 0) return null;
   return (
-    <Card className="p-4">
+    <Card className="p-4 border-border/60 shadow-sm">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold flex items-center gap-1.5"><UsersIcon className="w-4 h-4 text-primary" /> 同事最新</span>
-        <button onClick={() => navigate('/community')} className="text-[11px] text-muted-foreground hover:text-foreground">
-          查看全部 <ChevronRight className="w-3 h-3 inline" />
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
+            <UsersIcon className="w-4 h-4 text-emerald-600" />
+          </div>
+          <span className="text-sm font-semibold">同事最新动态</span>
+        </div>
+        <button onClick={() => navigate('/community')} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center">
+          查看全部 <ChevronRight className="w-3 h-3" />
         </button>
       </div>
       <div className="space-y-2">
@@ -479,7 +581,7 @@ function TodoSocialCard({ data, navigate }: { data: ReturnType<typeof useDashboa
           <button
             key={p.id}
             onClick={() => navigate('/community')}
-            className="w-full flex items-center gap-3 text-left hover:bg-accent/30 -mx-1 px-1 py-1.5 rounded-md transition-colors"
+            className="w-full flex items-center gap-3 text-left hover:bg-muted/40 -mx-1 px-1 py-1.5 rounded-md transition-colors"
           >
             {(p.thumbnail_url || p.image_url) && (
               <img
@@ -501,3 +603,6 @@ function TodoSocialCard({ data, navigate }: { data: ReturnType<typeof useDashboa
     </Card>
   );
 }
+
+/* TrendingUp re-export to avoid unused import lint */
+export const _hint = TrendingUp;
