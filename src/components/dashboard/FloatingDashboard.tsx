@@ -96,15 +96,16 @@ export function FloatingDashboard() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // 每日自动打开一次
+  // 每次新登录会话自动打开一次
   useEffect(() => {
     if (!user) return;
-    const today = dashboardAutoOpenKey();
-    const last = localStorage.getItem(AUTO_OPEN_KEY);
-    if (last !== today) {
+    // 清理旧的 localStorage 残留 key
+    try { localStorage.removeItem('dashboard_last_auto_open'); } catch {}
+    const opened = sessionStorage.getItem(AUTO_OPEN_KEY);
+    if (!opened) {
       const t = setTimeout(() => {
         openDashboard();
-        localStorage.setItem(AUTO_OPEN_KEY, today);
+        sessionStorage.setItem(AUTO_OPEN_KEY, '1');
       }, 700);
       return () => clearTimeout(t);
     }
