@@ -1,43 +1,52 @@
-## 问题
+## 问题根因
 
-在 `/portal` 页面点击 logo 5 次唤出"后台访问验证"弹窗，输入正确密码点击「进入后台」后：
-- Toast「已进入后台」立刻出现
-- 但密码输入弹窗本身要等好几秒才消失，体验上像是"卡住了"
+1. `shop_shifts` 表有 `shop_id` 字段，但「班次设置」表单从未暴露过它。历史录入的 A/B 班全部硬绑在 **上海中信泰富店**，**上海闵行728总部一条班次都没有**。
+2. 排班页 `ScheduleManager` 用 `shop_id.eq.<当前店>,shop_id.is.null` 取班次。闵行店没班次也没 NULL 通配 → 表头 0 列 → 自然没有「+」可加员工。这就是你看到「没有班次也没有添加人员的地方」的原因。
+3. 员工分店分配 (`staff_profiles.allowed_shop_ids` / `shop_id`) 已在 `StaffProfileDialog` 里有 UI，本次不动；闵行店即便有了班次，候选员工也得在该弹窗里把「可上班门店」勾上闵行店才会出现。
 
-## 根因
+## 改动方案
 
-`src/components/layout/PageHeader.tsx` 的 `handleVerify` 里执行顺序是：
+### 1. 数据库（迁移）
+`shop_shifts` 增加唯一约束 `(code, shop_id)`，避免同一店铺重复同代号。  
+NULL `shop_id` 仍代表「全部门店通配」。
 
-```
-unlockPortal()
-setPwdOpen(false)   // 触发 Radix Dialog 关闭动画
-toast.success(...)
-navigate('/portal') // 立刻导航
-```
+### 2. `ShiftSettingsPanel`（按"代号"分组重构）
 
-两个问题叠加：
+新视图：每个 code 一张卡片，显示名称/时间/颜色 + 已适用的门店徽章列表（含"全部门店"徽章表示通配）。
 
-1. 当前已经在 `/portal`，`navigate('/portal')` 仍会触发 Portal 页重新渲染 + `usePermissions` 重新拉取 + Sheet/Accordion 重建，主线程繁忙，Radix Dialog 的关闭动画/卸载被推迟。
-2. `setPwdOpen(false)` 是关闭动画起点，紧接着同步 `navigate` 抢占渲染，导致 dialog 视觉上停留 1–3 秒才真正消失。
+**「新增班次」对话框**
+- 字段：代号、名称、起止时间、颜色、启用
+- 新增：「适用门店」多选 chips。逻辑：
+  - 列出所有 `active=true` 门店 + 一个「全部门店（通配）」选项
+  - 当代号输入后，实时查询已存在该 code 的 shop_id，**已被该 code 覆盖的门店在多选里 disabled 并标注"已配置"**
+  - 若已存在「全部门店」通配行，则禁用所有具体门店选项
+- 提交：对每个选中的门店 INSERT 一行（共享 code/name/time/color/sort_order）
 
-## 修复方案（仅前端，单文件）
+**「编辑班次」对话框（点击卡片）**
+- 同上字段；门店多选里：
+  - 已有的门店 checked
+  - 取消勾选 = 删除该店此 code 的行
+  - 勾选新店 = 插入新行
+  - name/time/color/sort_order/active 修改 → UPDATE 该 code 下所有行（保持各店一致）
 
-文件：`src/components/layout/PageHeader.tsx`，函数 `handleVerify`
+**「删除班次」**
+- 卡片右侧删除按钮：删除该 code 全部行（确认对话框列出涉及门店）
 
-1. 验证通过后，先 `unlockPortal()` + `setPwdOpen(false)` + 清空密码，让 Dialog 立即开始关闭动画。
-2. 用 `useLocation()` 读当前路径：
-   - 如果已经在 `/portal`，**不再 navigate**，直接 `toast.success('已进入后台')`，避免无谓重渲染（用户视觉上 dialog 立刻消失，Portal 内容因为 `PortalGuard` 已解锁会自动显示完整菜单）。
-   - 否则用 `requestAnimationFrame` 把 `navigate('/portal')` 推到下一帧再执行，让关闭动画有时间起步。
-3. 同时给 Dialog 的 `onOpenChange` 加防御：关闭时清空 `pwd` / `pwdError`，避免下次打开残留状态。
+### 3. `ScheduleManager` 体验微调（不改动 RLS / 业务逻辑）
+- 当前店铺没有任何班次时，原本只显示空表格；改为显示空状态提示卡片：
+  > "上海闵行728总部 还未配置班次，请先到 [班次设置](#) 为该店新增班次。"
+  并附跳转按钮，方便闭环。
 
-## 验证
+## 不改的部分
 
-- 在 `/portal` 路由下点 logo 5 次 → 输密码 → 点「进入后台」：弹窗应**立即**消失，toast 出现，页面无明显卡顿。
-- 在非 `/portal` 路由（如 `/me`）下同样操作：弹窗立即关闭，随后跳转到 `/portal`。
-- 输错密码仍显示红框 + 「密码不正确」，行为不变。
-- 取消按钮、ESC 关闭行为不变。
+- `shop_holidays` 节假日（已有 shop_id，但用户没要求改 UI；本次留作下个迭代）
+- 员工分店绑定（已在 `StaffProfileDialog` 工作）
+- AI 排班 edge function：已正确按 shop 过滤，无需变更
+- `shift_schedules` 表与排班数据
+- `MyScheduleList` / `ShopScheduleList` 客户端
 
-## 不改动
+## 文件改动
 
-- 密码、tap 计数、PortalGuard 权限校验逻辑均不变。
-- 其它使用 `PageHeader` 的页面不受影响。
+- 迁移：`shop_shifts` 加 `UNIQUE (code, COALESCE(shop_id, '00000000-0000-0000-0000-000000000000'))` 表达式索引
+- `src/components/admin/ShiftSettingsPanel.tsx` 重构（按 code 分组 + 多店多选）
+- `src/components/admin/ScheduleManager.tsx` 加空状态提示
