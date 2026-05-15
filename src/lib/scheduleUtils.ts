@@ -57,6 +57,7 @@ export function nextNDays(startISO: string, n: number): string[] {
 
 
 // 为每个用户生成稳定的色块（HSL 浅底深字），便于排班识别
+// 旧实现：基于 userId hash 取 12 种色相，可能撞色。
 const USER_COLOR_HUES = [200, 25, 280, 140, 340, 50, 175, 305, 95, 15, 250, 120];
 export function colorForUser(userId: string): { bg: string; fg: string; border: string } {
   let h = 0;
@@ -67,4 +68,24 @@ export function colorForUser(userId: string): { bg: string; fg: string; border: 
     fg: `hsl(${hue} 55% 25%)`,
     border: `hsl(${hue} 60% 70%)`,
   };
+}
+
+// 基于「索引 / 总数」均匀分布色相，确保同一门店内每位员工颜色互不重复。
+export function colorForIndex(index: number, total: number): { bg: string; fg: string; border: string } {
+  const n = Math.max(total, 1);
+  // 黄金角偏移让相邻索引颜色差异更明显
+  const hue = ((index * 360) / n + (index * 137.508)) % 360;
+  return {
+    bg: `hsl(${hue} 70% 88%)`,
+    fg: `hsl(${hue} 55% 25%)`,
+    border: `hsl(${hue} 60% 65%)`,
+  };
+}
+
+/** 给定用户 id 列表，返回 userId → 唯一色块 的映射。顺序按传入数组决定。 */
+export function buildUserColorMap(userIds: string[]): Map<string, { bg: string; fg: string; border: string }> {
+  const unique = Array.from(new Set(userIds));
+  const map = new Map<string, { bg: string; fg: string; border: string }>();
+  unique.forEach((id, i) => map.set(id, colorForIndex(i, unique.length)));
+  return map;
 }
