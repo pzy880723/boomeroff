@@ -406,22 +406,65 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
           )}
 
           {isRecognizing && (
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in">
-              <div className="text-center text-white space-y-4">
-                <div className="relative w-16 h-16 mx-auto">
-                  <div className="absolute inset-0 rounded-full border-2 border-accent/20" />
-                  <Loader2 className="w-16 h-16 animate-spin text-accent" strokeWidth={1.5} />
+            <div className="absolute inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center animate-fade-in px-6">
+              <div className="w-full max-w-[18rem] text-white">
+                {/* 顶部小标 */}
+                <div className="flex items-center gap-2 mb-5">
+                  <Loader2 className="w-4 h-4 animate-spin text-accent" strokeWidth={2} />
+                  <span className="text-[13px] tracking-wide font-medium">AI 正在识别</span>
+                  <Sparkles className="w-3.5 h-3.5 text-accent/80 animate-pulse-glow ml-auto" />
                 </div>
-                <div className="flex items-center gap-2 justify-center">
-                  <Sparkles className="w-4 h-4 text-accent animate-pulse-glow" />
-                  <span className="text-sm tracking-wide">AI 识别中</span>
-                </div>
-                <div className="text-3xl font-display font-bold tabular-nums">
-                  {(elapsedTime / 1000).toFixed(1)}<span className="text-base font-sans font-normal text-white/60">s</span>
+
+                {/* 步骤列表 */}
+                <ul className="space-y-2.5">
+                  {narrativeSteps.map((step, i) => {
+                    const done = i < currentStepIndex;
+                    const active = i === currentStepIndex && !forceAllDone;
+                    const allDone = forceAllDone;
+                    const isDone = done || allDone;
+                    return (
+                      <li
+                        key={i}
+                        className={`flex items-center gap-2.5 text-[13px] leading-tight transition-all duration-200 ${
+                          isDone
+                            ? 'text-accent'
+                            : active
+                              ? 'text-white'
+                              : 'text-white/35'
+                        }`}
+                      >
+                        <span
+                          className={`shrink-0 w-4 h-4 rounded-full flex items-center justify-center transition-all ${
+                            isDone
+                              ? 'bg-accent/15 ring-1 ring-accent/40'
+                              : active
+                                ? 'bg-white/10 ring-1 ring-white/30'
+                                : 'ring-1 ring-white/15'
+                          }`}
+                        >
+                          {isDone ? (
+                            <Check className="w-2.5 h-2.5 text-accent animate-scale-in" strokeWidth={3} />
+                          ) : active ? (
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" strokeWidth={2.5} />
+                          ) : null}
+                        </span>
+                        <span className="truncate">
+                          {step.label}
+                          {active && <span className="inline-block ml-1 animate-pulse">···</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {/* 计时器(辅助信息) */}
+                <div className="mt-5 text-center text-[11px] text-white/45 tabular-nums">
+                  {(elapsedTime / 1000).toFixed(1)}s
                 </div>
               </div>
             </div>
           )}
+
 
           {!isRecognizing && recognitionFailed && (
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center animate-fade-in p-6">
