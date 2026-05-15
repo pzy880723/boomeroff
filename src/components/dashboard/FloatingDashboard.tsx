@@ -543,11 +543,9 @@ function LearningCard({
   if (items.length === 0) return null;
 
   return (
-    <Card className="p-4 border-border/60 shadow-sm">
+    <Card className="p-4 border-border/50 shadow-sm rounded-2xl">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-7 h-7 rounded-md bg-purple-500/10 flex items-center justify-center">
-          <BookOpen className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-        </div>
+        <BookOpen className="w-4 h-4 text-muted-foreground" />
         <span className="text-sm font-semibold">今日学习</span>
       </div>
       <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
