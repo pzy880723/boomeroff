@@ -352,8 +352,14 @@ export default function Community() {
               return (
                 <div key={p.id} className="mb-3 break-inside-avoid">
                   <div className="rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm cursor-pointer" onClick={() => openDetail(p)}>
-                    {p.image_url ? (
-                      <img src={p.image_url} alt={p.name} className="w-full object-cover" loading="lazy" />
+                    {(p.thumbnail_url || p.image_url) ? (
+                      <img
+                        src={p.thumbnail_url || p.image_url || ''}
+                        alt={p.name}
+                        className="w-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                      />
                     ) : (
                       <div className="aspect-square bg-muted" />
                     )}
