@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useNotifications, type NotificationItem } from '@/hooks/useNotifications';
+import { useTasks } from '@/hooks/useTasks';
+import { TaskCenterCard } from './TaskCenterCard';
 import { formatShiftTime, weekdayLabel, todayISO } from '@/lib/scheduleUtils';
 import { quoteOfDay, dashboardAutoOpenKey } from '@/lib/dailyQuote';
 import { supabase } from '@/integrations/supabase/client';
@@ -82,6 +84,7 @@ export function FloatingDashboard() {
   const [showLabel, setShowLabel] = useState(true);
   const data = useDashboardData(!!user);
   const notif = useNotifications();
+  const tasks = useTasks();
 
   // 标签气泡 3 秒后渐隐
   useEffect(() => {
@@ -172,9 +175,9 @@ export function FloatingDashboard() {
   const capsuleX = dragging && dragXY ? dragXY.x : getCapsuleX(pos.side);
   const capsuleY = dragging && dragXY ? dragXY.y : pos.y;
   const todayCode = data.todayShift?.code;
-  const hasUnread = notif.unreadCount > 0
-    || (!data.checkedToday)
-    || (data.todos.pendingShares + data.todos.pendingCorrections > 0);
+  const claimableCount = tasks.totalUnclaimedCount;
+  const hasClaimable = claimableCount > 0;
+  const hasOtherUnread = notif.unreadCount > 0;
 
   return (
     <>
@@ -208,9 +211,13 @@ export function FloatingDashboard() {
               {todayCode}
             </span>
           )}
-          {hasUnread && (
+          {hasClaimable ? (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 border-2 border-background text-[10px] font-bold text-white flex items-center justify-center shadow-sm animate-pulse">
+              {claimableCount > 9 ? '9+' : claimableCount}
+            </span>
+          ) : hasOtherUnread ? (
             <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-destructive ring-2 ring-background" />
-          )}
+          ) : null}
         </button>
 
         {showLabel && !dragging && (
@@ -235,6 +242,7 @@ export function FloatingDashboard() {
           onClose={closeDashboard}
           data={data}
           notif={notif}
+          tasks={tasks}
           navigate={navigate}
         />,
         document.body
@@ -246,7 +254,7 @@ export function FloatingDashboard() {
 /* ===================== 全屏抽屉 ===================== */
 
 function DashboardFullscreen({
-  open, closing, originX, originY, onAnimEnd, onClose, data, notif, navigate,
+  open, closing, originX, originY, onAnimEnd, onClose, data, notif, tasks, navigate,
 }: {
   open: boolean;
   closing: boolean;
@@ -256,6 +264,7 @@ function DashboardFullscreen({
   onClose: () => void;
   data: ReturnType<typeof useDashboardData>;
   notif: ReturnType<typeof useNotifications>;
+  tasks: ReturnType<typeof useTasks>;
   navigate: (p: string) => void;
 }) {
   const today = todayISO();
@@ -308,6 +317,8 @@ function DashboardFullscreen({
 
         {/* 排班 Hero 卡 */}
         <ShiftHeroCard data={data} navigate={go} />
+
+        <TaskCenterCard tasks={tasks} onClaimed={() => data.refresh()} />
 
         <LevelProgressCard data={data} navigate={go} />
 
