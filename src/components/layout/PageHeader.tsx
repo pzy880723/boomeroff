@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [pwdOpen, setPwdOpen] = useState(false);
   const [pwd, setPwd] = useState('');
   const [pwdError, setPwdError] = useState(false);
@@ -30,14 +31,25 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
   });
 
   const handleVerify = () => {
-    if (verifyPortalPassword(pwd)) {
-      unlockPortal();
-      setPwdOpen(false);
-      setPwd('');
-      toast.success('已进入后台');
-      navigate('/portal');
-    } else {
+    if (!verifyPortalPassword(pwd)) {
       setPwdError(true);
+      return;
+    }
+    unlockPortal();
+    setPwdOpen(false);
+    setPwd('');
+    setPwdError(false);
+    toast.success('已进入后台');
+    if (location.pathname !== '/portal') {
+      requestAnimationFrame(() => navigate('/portal'));
+    }
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setPwdOpen(open);
+    if (!open) {
+      setPwd('');
+      setPwdError(false);
     }
   };
 
@@ -71,7 +83,7 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
         </button>
       </div>
 
-      <Dialog open={pwdOpen} onOpenChange={setPwdOpen}>
+      <Dialog open={pwdOpen} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
