@@ -20,6 +20,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import logo from '@/assets/boomer-off-vintage-logo.png';
+import { LevelProgressCard } from './LevelProgressCard';
 
 const POS_KEY = 'dashboard_capsule_pos_v2';
 const AUTO_OPEN_KEY = 'dashboard_auto_opened_session';
@@ -307,6 +308,8 @@ function DashboardFullscreen({
 
         {/* 排班 Hero 卡 */}
         <ShiftHeroCard data={data} navigate={go} />
+
+        <LevelProgressCard data={data} navigate={go} />
 
         <NotificationCard items={notif.items} unread={notif.unreadCount} onRead={notif.markRead} onReadAll={notif.markAllRead} />
         <TodayOpsCard data={data} />
