@@ -1,83 +1,125 @@
+
+# 识别页:三段进度 + 失败一键兜底
+
 ## 目标
-把 `/u` 游客版迁移到一个全新的、独立后端的 Lovable 项目，老项目代码暂时保留不动。
+1. 快门到结果之间,把现在的"4 段时间叙事"换成**真实可对应的 3 段进度**:**读取图片 → 比对知识库 → 生成文案**,每段进入/完成都有明确反馈,不再是按 800ms 节拍假装在干活。
+2. 失败遮罩从"重试 / 取消"升级为**3 个一键兜底动作**,让用户在原位修复问题,不用退出重头来。
 
-## 一、需要你先手动做一件事
+---
 
-我无法在当前会话里直接创建新的 Lovable 项目。请你在 Lovable 工作区先做：
-1. 新建一个空项目（建议命名 `boomeroff-public`）
-2. 进新项目后开启 Lovable Cloud（独立后端）
-3. 在该新项目里发一句话给我，比如"按方案把游客版迁过来"，我会用 `cross_project` 工具从当前项目把文件全部拉过去
+## 一、三段真实进度
 
-下面是我在新项目里会执行的全部步骤（也就是当前项目这边只是"源仓库"）。
+### 阶段定义与触发时机
 
-## 二、新项目的代码迁移
+| 阶段 | 文案 | 真实触发 | 完成判定 |
+|---|---|---|---|
+| ① 读取 | `正在读取这张图片` | 调用 `runRecognize` 起 | 客户端 `computeImageHash` 完成 + edge function `invoke` 已发起 |
+| ② 比对 | `正在比对历史与知识库` | 进入阶段 ① 完成后 | 接收到响应 **或** 超过 1.2s 阈值(命中缓存通常 <500ms,超过即说明在走 AI) |
+| ③ 生成 | `AI 正在生成文案与定价` | 进入阶段 ② 完成后 | 接收到响应 |
 
-### 复制文件清单（保持原路径）
-- `src/pages/public/PublicScan.tsx`
-- `src/pages/public/PublicResult.tsx`
-- `src/pages/public/PublicCommunity.tsx`
-- `src/pages/public/PublicAbout.tsx`
-- `src/components/layout/PublicLayout.tsx`
-- `src/components/public/GuestOnboarding.tsx`
-- `src/components/recognition/CameraStage.tsx`
-- `src/components/recognition/GuestProductCard.tsx`
-- `src/components/system/ErrorBoundary.tsx`
-- `src/lib/chunkLoadRecovery.ts`（如已加）
-- `src/hooks/useGuestRecognition.ts`
-- `src/lib/imageThumb.ts`、`src/lib/shareCopy.ts`、`src/lib/utils.ts`
-- `src/types/index.ts`（按游客版裁剪，只保留 `Product`/`Category` 等用到的类型）
-- `src/assets/boomer-off-vintage-logo.png`、`src/assets/shop-wechat-qr.png`
+完成后,根据响应里的 `__pipeline.source` 反向修正显示:
+- `hash_cache` / `name_cache` → 阶段 ② 直接打勾,阶段 ③ 跳过(显示"📦 命中缓存,秒回")
+- `ai` → 三段全打勾
 
-### shadcn 组件
-新项目里 `npx shadcn add button card`（其余按需）。`tailwind.config.ts` 和 `index.css` 设计 token 从老项目对应文件整体复制过去保持视觉一致。
+### 实现位置
+`src/components/recognition/CameraStage.tsx`
 
-### Edge Functions（在新项目重新创建）
-- `supabase/functions/recognize-product-public/index.ts`
-- `supabase/functions/submit-public-post/index.ts`
-- `supabase/functions/generate-share-copy/index.ts`
+- 删除 `SINGLE_STEPS` / `buildMultiSteps` 时间表 + `forceAllDone`。
+- 新增 `phase` 状态:`'reading' | 'matching' | 'generating' | 'done'`。
+- `runRecognize` 内部:
+  1. `setPhase('reading')` → 把 hash 计算挪进来(目前在 hook 里)或暴露阶段回调。最小改动方案:在 `onRecognize` 里加一个可选的 `onPhase?: (p: Phase) => void` 回调,由 hook 在合适节点调用。
+  2. 发起 `invoke` 后 800ms 没回来 → `setPhase('matching')`;1.6s 还没回来 → `setPhase('generating')`。
+  3. 响应到达 → 根据 `__pipeline.source` 立即跳到正确终态。
+- UI:把现有"步骤列表"替换为**3 项**,每项左侧圆点用 Loader2(进行中)/Check(完成)/灰点(未开始);底部计时器保留(已经是个亮点)。
 
-需要的 secret：`LOVABLE_API_KEY`（新项目独立的）。如老 functions 还引用了别的 secret（如 `DOUBAO_API_KEY`），到时一并加。
-
-### App.tsx 路由调整
-新项目里去掉店员相关路由，`/` 直接渲染游客首页：
-```tsx
-<Routes>
-  <Route element={<PublicLayout />}>
-    <Route index element={<PublicScan />} />
-    <Route path="result" element={<PublicResult />} />
-    <Route path="community" element={<PublicCommunity />} />
-    <Route path="about" element={<PublicAbout />} />
-  </Route>
-  <Route path="*" element={<NotFound />} />
-</Routes>
+### Hook 改造
+`useGuestRecognition` 与 `useProductRecognition` 同步加 `onPhase` 回调:
+```ts
+recognize(input, { onPhase: (p) => ... })
 ```
-同步把 `PublicLayout` / 各 Public 页面里的 `to="/u/..."`、`navigate("/u/...")` 全部改成 `to="/..."`。
+- `'reading'` 在调用开始时
+- `'matching'` 在 `invoke` 开始前(hash 算完)
+- 不再额外发,由 CameraStage 用计时器从 `matching` → `generating`
+- 响应到达后 CameraStage 自己读 `__pipeline` 决定如何收尾
 
-## 三、新项目的数据库（独立 Cloud）
+> 业务逻辑不变,只是新增观察点。
 
-通过 migration 在新项目建：
-- `community_posts`（裁剪掉店员独有列：`user_id`、`buy_reason`、`market_value` 等也保留即可，反正 anon 不写）
-- `community_likes`、`community_comments`
-- `guest_daily_usage`
-- `profiles`（仅供 community 查 `display_name`/`avatar_url`，可暂时为空）
-- 必要的 RLS：anon 可 SELECT 公开帖、anon 不能直接 INSERT（写入只走 edge function 用 service role）
+---
 
-不需要的表（`products`、`shops`、`shifts*`、`user_*`、`app_*` 等）一律不带过去。
+## 二、失败一键兜底
 
-## 四、当前项目这边
+### 现状
+失败遮罩只有「重新识别」和「取消」。退出后,如果是因为光线/角度差,用户得回到摄像头从零开始。
 
-按你的要求 **不动**。等新项目跑通、你验证完再单独发起一次"清理"任务，我会一次性删除：
-- `src/pages/public/`、`PublicLayout.tsx`、`GuestOnboarding.tsx`、`useGuestRecognition.ts`、`GuestProductCard.tsx`
-- `App.tsx` 里 `/u/*` 路由块
-- 3 个 `*-public` / `submit-public-post` edge functions
-- `guest_daily_usage` 表
-- 收紧 `community_posts` 的 RLS（删 `Public posts readable by anon`）
+### 新设计
+失败遮罩里给 **3 个并列的次要按钮 + 1 个主按钮**:
 
-## 五、域名/上线
+```
+[识别未成功]
+原因可能是:角度不清 / 网络抖动 / 商品过于小众
 
-- 新项目发布后会得到 `xxx.lovable.app` 子域；如想换正式域名（例如 `try.boomeroff.com`），在新项目 Project Settings → Domains 单独绑定
-- 老项目继续用 `boomeroff.lovable.app`，二者完全独立
+  ┌──────────────────────────┐
+  │  🔁  重新识别(同一张)      │  ← 主按钮
+  └──────────────────────────┘
+  [📷 补一张铭牌]  [✏️ 加文字描述]  [✕ 取消]
+```
 
-## 你接下来要做的
+### 三个动作行为
 
-去 Lovable 工作区新建项目并开启 Cloud，然后在那个新项目里 @ 我开工。要不要我现在先做一件准备工作——**把上面要复制的所有源文件清单导出一份 manifest（含每个文件大小/路径），方便你核对**？如果要，我下一步就生成。
+1. **重新识别** —— 现有 `retryLast()`,不动。
+
+2. **补一张铭牌(append-and-retry)**
+   - 点击 → 触发隐藏 file input(已存在)
+   - 选择图片 → 把新图追加到 `lastInputRef.current`
+   - 自动切到多角度模式 + 立即调用 `runRecognize(updatedList)`
+   - 如果原本就是单张,加完变成 2 张多角度送入
+
+3. **加文字描述(text hint)**
+   - 点击 → 弹出 shadcn `Sheet`(底部抽屉,iOS 风格),里面一个 `Textarea` + 提示"写下你看到的文字、品牌、年代等任何线索"
+   - 提交 → 调用 `runRecognize(lastInputRef.current, { userHint: text })`
+   - 后端 `recognize-product` / `recognize-product-public` 需要接收 `userHint` 字符串并塞进 prompt:`"用户补充信息(高优先级线索):${userHint}"`
+
+### 文件清单
+- `src/components/recognition/CameraStage.tsx` —— 主要 UI 改动
+- `src/components/recognition/RetryHintSheet.tsx`(新增) —— 文字描述抽屉
+- `src/hooks/useProductRecognition.tsx` —— 接收 `userHint` 透传
+- `src/hooks/useGuestRecognition.tsx` —— 同上
+- `supabase/functions/recognize-product/index.ts` —— 解析 `userHint`,加入 prompt
+- `supabase/functions/recognize-product-public/index.ts` —— 同上
+- 父级 `Scan.tsx` / `PublicScan.tsx` 的 `onRecognize` 签名:从 `(images) => Promise<boolean>` 改为 `(images, opts?: { userHint?: string }) => Promise<boolean>`
+
+---
+
+## 技术细节
+
+### Phase 状态机
+```text
+       ┌────────┐  hash done   ┌──────────┐  >800ms or resp  ┌────────────┐  resp
+idle → │reading │ ───────────→ │ matching │ ───────────────→ │ generating │ ────→ done
+       └────────┘              └──────────┘                  └────────────┘
+                                                              ↑ 命中缓存时
+                                                              直接 done
+```
+
+### 命中缓存的特殊处理
+响应到达时,如果 `__pipeline.source !== 'ai'` 且 `phase === 'matching'`:
+- 阶段 ② 直接打勾
+- 阶段 ③ 显示 `已命中缓存 · 跳过`(灰色,带 ⚡)
+- 不闪到 ③ 再打勾,避免视觉跳变
+
+### userHint 在后端的接入点
+两个 edge function 都有一段构建 user prompt 的逻辑,在图片 part 之后追加:
+```ts
+if (typeof body.userHint === 'string' && body.userHint.trim()) {
+  parts.push({ type: 'text', text: `用户补充线索(高优先级,请优先采纳):\n${body.userHint.trim()}` });
+}
+```
+不影响缓存命中(缓存只看 imageHash),只在 cache miss 走 AI 时生效。
+
+---
+
+## 不在本次范围
+- 不改识别管线本身(还是 hash → name → AI)
+- 不改结果页排版
+- 不改店员端浮窗
+- 不引入流式响应(SSE)—— 阶段切换仍用智能计时器近似,等以后边缘函数支持流式再升级

@@ -155,8 +155,8 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { imageBase64, images, imageHash } = body as {
-      imageBase64?: string; images?: string[]; imageHash?: string;
+    const { imageBase64, images, imageHash, userHint } = body as {
+      imageBase64?: string; images?: string[]; imageHash?: string; userHint?: string;
     };
     const imageList: string[] = Array.isArray(images) && images.length > 0
       ? images.slice(0, 3)
@@ -212,6 +212,12 @@ serve(async (req) => {
       : '以下是顾客在中古杂货店里拍到的物件，请帮顾客介绍它，调用 submit_recognition 工具提交结果。';
     const userContent: any[] = [{ type: 'text', text: userText }];
     for (const url of imageUrls) userContent.push({ type: 'image_url', image_url: { url } });
+    if (typeof userHint === 'string' && userHint.trim()) {
+      userContent.push({
+        type: 'text',
+        text: `【顾客补充的现场线索（最高优先级，请优先采纳，与图片冲突时以下面文字为准）】\n${userHint.trim().slice(0, 600)}`,
+      });
+    }
 
     // 顾客视角的 system prompt：不要导购腔、不要价格、不要话术
     const systemPrompt = `你是日本中古杂货资深鉴定师，正在为店里的顾客介绍他们刚拍到的物件。

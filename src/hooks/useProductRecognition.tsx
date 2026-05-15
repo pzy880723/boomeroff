@@ -4,8 +4,14 @@ import { RecognitionResult, ProductCategory } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { computeImageHash } from '@/lib/imageHash';
 
+export type RecognitionPhase = 'reading' | 'matching' | 'generating' | 'done';
+
 interface RecognizeOptions {
   forceRefresh?: boolean;
+  /** 失败兜底:用户文字补充线索,会拼到 AI prompt 里 */
+  userHint?: string;
+  /** 阶段回调,用于驱动三段进度 UI */
+  onPhase?: (phase: RecognitionPhase) => void;
 }
 
 export function useProductRecognition() {
@@ -19,6 +25,7 @@ export function useProductRecognition() {
   ) => {
     setIsRecognizing(true);
     setResult(null);
+    options.onPhase?.('reading');
 
     try {
       const firstImage = Array.isArray(input) ? input[0] : input;
@@ -31,6 +38,9 @@ export function useProductRecognition() {
         : { imageBase64: input };
       if (imageHash) body.imageHash = imageHash;
       if (options.forceRefresh) body.forceRefresh = true;
+      if (options.userHint && options.userHint.trim()) body.userHint = options.userHint.trim();
+
+      options.onPhase?.('matching');
 
       const tInvoke = Date.now();
       const { data, error } = await supabase.functions.invoke('recognize-product', { body });
@@ -102,6 +112,7 @@ export function useProductRecognition() {
       };
 
       setResult(recognitionResult);
+      options.onPhase?.('done');
       return recognitionResult;
     } catch (error) {
       console.error('Recognition error:', error);
@@ -110,6 +121,7 @@ export function useProductRecognition() {
         description: error instanceof Error ? error.message : '请重试',
         variant: 'destructive',
       });
+      options.onPhase?.('done');
       return null;
     } finally {
       setIsRecognizing(false);
