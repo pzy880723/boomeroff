@@ -6,6 +6,7 @@ import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
+import { makeThumbnail } from '@/lib/imageThumb';
 import {
   buildLocalShareCopy,
   sanitizeShareCopy,
