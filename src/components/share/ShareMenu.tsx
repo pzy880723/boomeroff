@@ -41,7 +41,11 @@ export function ShareMenu({ data, trigger }: Props) {
       // 优先用系统分享
       if (typeof navigator !== 'undefined' && (navigator as any).share) {
         try {
-          await (navigator as any).share({ title: data.name, text: data.name, url: link });
+          await (navigator as any).share({
+            title: `中古识物 · ${data.name}`,
+            text: `我用「中古识物」拍了一件 ${data.name},你也来看看 →`,
+            url: link,
+          });
           setOpen(false);
           return;
         } catch {
