@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useNotifications, type NotificationItem } from '@/hooks/useNotifications';
+import { useTasks } from '@/hooks/useTasks';
+import { TaskCenterCard } from './TaskCenterCard';
 import { formatShiftTime, weekdayLabel, todayISO } from '@/lib/scheduleUtils';
 import { quoteOfDay, dashboardAutoOpenKey } from '@/lib/dailyQuote';
 import { supabase } from '@/integrations/supabase/client';
