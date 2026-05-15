@@ -606,12 +606,10 @@ function TodoActivityCard({
   // 店员:同事最新动态
   if (data.social.posts.length === 0) return null;
   return (
-    <Card className="p-4 border-border/60 shadow-sm">
+    <Card className="p-4 border-border/50 shadow-sm rounded-2xl">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
-            <UsersIcon className="w-4 h-4 text-emerald-600" />
-          </div>
+          <UsersIcon className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-semibold">同事最新动态</span>
         </div>
         <button onClick={() => navigate('/community')} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center">
