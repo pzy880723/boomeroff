@@ -30,6 +30,9 @@ export function MainLayout() {
         </ErrorBoundary>
       </main>
       <BottomTabBar />
+      <Suspense fallback={null}>
+        <FloatingDashboard />
+      </Suspense>
     </div>
   );
 }
