@@ -53,6 +53,17 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
   const [recognitionFailed, setRecognitionFailed] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [recognitionTime, setRecognitionTime] = useState<number | null>(null);
+  const [narrativeSteps, setNarrativeSteps] = useState<Array<{ label: string; at: number }>>(SINGLE_STEPS);
+  const [forceAllDone, setForceAllDone] = useState(false);
+
+  const currentStepIndex = useMemo(() => {
+    if (forceAllDone) return narrativeSteps.length;
+    let idx = 0;
+    for (let i = 0; i < narrativeSteps.length; i++) {
+      if (elapsedTime >= narrativeSteps[i].at) idx = i;
+    }
+    return idx;
+  }, [elapsedTime, narrativeSteps, forceAllDone]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
