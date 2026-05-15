@@ -35,6 +35,7 @@ export function MainLayout() {
       <BottomTabBar />
       <Suspense fallback={null}>
         <FloatingDashboard />
+        <LevelUpWatcher />
       </Suspense>
     </div>
   );
