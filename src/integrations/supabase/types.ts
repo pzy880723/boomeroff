@@ -332,6 +332,39 @@ export type Database = {
         }
         Relationships: []
       }
+      exp_pending: {
+        Row: {
+          amount: number
+          claimed_at: string | null
+          created_at: string
+          id: string
+          source: string
+          source_ref: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          claimed_at?: string | null
+          created_at?: string
+          id?: string
+          source: string
+          source_ref?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          claimed_at?: string | null
+          created_at?: string
+          id?: string
+          source?: string
+          source_ref?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       guest_daily_usage: {
         Row: {
           id: string
@@ -1116,6 +1149,30 @@ export type Database = {
           },
         ]
       }
+      task_claims: {
+        Row: {
+          amount: number
+          claim_date: string
+          claimed_at: string
+          task_key: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          claim_date: string
+          claimed_at?: string
+          task_key: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          claim_date?: string
+          claimed_at?: string
+          task_key?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_check_ins: {
         Row: {
           check_in_date: string
@@ -1242,6 +1299,8 @@ export type Database = {
         Args: { _amount: number; _user_id: string }
         Returns: number
       }
+      claim_daily_task: { Args: { _task_key: string }; Returns: Json }
+      claim_pending_exp: { Args: { _id: string }; Returns: Json }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
