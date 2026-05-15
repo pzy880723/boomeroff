@@ -357,6 +357,11 @@ export function ScheduleManager() {
         <Card className="p-6 text-sm text-muted-foreground text-center">请先在「门店管理」创建门店</Card>
       ) : loading ? (
         <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" /></div>
+      ) : shifts.length === 0 ? (
+        <Card className="p-6 text-sm text-center space-y-2">
+          <p className="text-muted-foreground">{shops.find(s => s.id === shopId)?.name || '该门店'} 还未配置班次。</p>
+          <p className="text-xs text-muted-foreground">请到上方「班次设置」标签页为该店新增班次后再进行排班。</p>
+        </Card>
       ) : (
         <Card className="overflow-x-auto">
           <table className="w-full text-sm min-w-[600px]">
