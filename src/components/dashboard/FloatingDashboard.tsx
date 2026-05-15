@@ -19,6 +19,7 @@ import { quoteOfDay, dashboardAutoOpenKey } from '@/lib/dailyQuote';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import logo from '@/assets/boomer-off-vintage-logo.png';
 
 const POS_KEY = 'dashboard_capsule_pos_v2';
 const AUTO_OPEN_KEY = 'dashboard_last_auto_open';
@@ -268,7 +269,7 @@ function DashboardFullscreen({
     <div
       onAnimationEnd={onAnimEnd}
       className={cn(
-        'fixed inset-0 z-[60] bg-background flex flex-col will-change-transform',
+        'fixed inset-0 z-[60] bg-gradient-surface flex flex-col will-change-transform overflow-hidden',
         open ? 'animate-dashboard-zoom-in' : 'animate-dashboard-zoom-out'
       )}
       style={{
@@ -276,22 +277,29 @@ function DashboardFullscreen({
         paddingTop: 'env(safe-area-inset-top)',
       }}
     >
+      {/* 装饰光晕 */}
+      <div className="absolute inset-0 pointer-events-none opacity-40 [background:radial-gradient(circle_at_20%_10%,hsl(var(--accent)/0.15),transparent_40%),radial-gradient(circle_at_80%_90%,hsl(var(--primary)/0.12),transparent_40%)]" />
+
       {/* 顶栏 */}
-      <div className="px-5 pt-5 pb-2 shrink-0">
-        <div className="flex items-end justify-between">
-          <h2 className="text-2xl font-bold tracking-tight leading-none">仪表盘</h2>
-          <p className="text-xs text-muted-foreground">
-            {todayLabel} · {greet()},{data.profile?.display_name || '店员'}
+      <div className="relative px-5 pt-5 pb-2 shrink-0">
+        <div className="flex items-center justify-between gap-3">
+          <img src={logo} alt="BOOMER-OFF" className="h-9 w-auto object-contain drop-shadow-sm" />
+          <p className="text-[11px] text-muted-foreground text-right leading-tight">
+            {todayLabel}<br />
+            {greet()}，{data.profile?.display_name || '店员'}
           </p>
         </div>
       </div>
 
       {/* 内容区 */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 pt-3 pb-28 space-y-4">
+      <div className="relative flex-1 overflow-y-auto overscroll-contain px-4 pt-3 pb-28 space-y-4">
         {/* 打气标语 Hero */}
-        <div className="relative rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/15 px-6 py-7 overflow-hidden animate-fade-in">
-          <Sparkles className="absolute top-4 right-4 w-5 h-5 text-primary/60" />
-          <p className="text-xl font-bold leading-snug text-foreground pr-8">
+        <div className="relative rounded-2xl bg-gradient-to-br from-accent/15 via-primary/8 to-transparent border border-primary/15 px-6 py-6 overflow-hidden animate-fade-in">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            <span className="text-[11px] font-semibold tracking-[0.2em] text-primary/80">今日标语</span>
+          </div>
+          <p className="text-xl font-bold leading-snug text-foreground">
             {quote}
           </p>
         </div>
@@ -376,60 +384,86 @@ function NotificationCard({
 function ShiftHeroCard({ data, navigate }: { data: ReturnType<typeof useDashboardData>; navigate: (p: string) => void }) {
   const shift = data.todayShift;
   const peers = data.colleaguesToday || [];
-
-  if (!shift) {
-    return (
-      <Card
-        onClick={() => navigate('/me')}
-        className="p-5 border-border/50 shadow-sm rounded-2xl cursor-pointer hover:border-border transition-colors flex items-center gap-4"
-      >
-        <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center shrink-0">
-          <Coffee className="w-6 h-6 text-muted-foreground" />
-        </div>
-        <div className="flex-1">
-          <p className="text-base font-bold">今日休息</p>
-          <p className="text-xs text-muted-foreground mt-0.5">好好放松一天 🌿</p>
-        </div>
-        <ChevronRight className="w-4 h-4 text-muted-foreground" />
-      </Card>
-    );
-  }
+  const tomorrow = data.weekShifts?.[1]?.shift ?? null;
+  const hasTomorrowData = (data.weekShifts?.length ?? 0) >= 2;
 
   return (
     <Card
       onClick={() => navigate('/me')}
-      className="p-4 border-border/50 shadow-sm rounded-2xl cursor-pointer hover:border-border transition-colors flex items-center gap-4"
+      className="border-border/50 shadow-sm rounded-2xl cursor-pointer hover:border-border transition-colors overflow-hidden"
     >
-      <div
-        className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md shrink-0"
-        style={{ backgroundColor: shift.color || 'hsl(var(--primary))' }}
-      >
-        {shift.code}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-base font-semibold leading-tight">{shift.name}</span>
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {formatShiftTime(shift.start_time, shift.end_time)}
-          </span>
-        </div>
-        {peers.length > 0 ? (
-          <div className="flex items-center gap-2 mt-2">
-            <div className="flex -space-x-2">
-              {peers.slice(0, 4).map(c => (
-                <Avatar key={c.user_id} className="w-6 h-6 border-2 border-background">
-                  <AvatarImage src={c.avatar_url || undefined} />
-                  <AvatarFallback className="text-[9px] bg-muted">{(c.display_name || '同')[0]}</AvatarFallback>
-                </Avatar>
-              ))}
-            </div>
-            <span className="text-xs text-muted-foreground">{peers.length} 位同事在岗</span>
+      {/* 今日 */}
+      <div className="p-4 flex items-center gap-4">
+        {shift ? (
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md shrink-0"
+            style={{ backgroundColor: shift.color || 'hsl(var(--primary))' }}
+          >
+            {shift.code}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground mt-1.5">今日独自当班</p>
+          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center shrink-0">
+            <Coffee className="w-7 h-7 text-muted-foreground" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] font-semibold tracking-[0.2em] text-primary/80 mb-1">今日</div>
+          {shift ? (
+            <>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-base font-semibold leading-tight">{shift.name}</span>
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  {formatShiftTime(shift.start_time, shift.end_time)}
+                </span>
+              </div>
+              {peers.length > 0 ? (
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="flex -space-x-2">
+                    {peers.slice(0, 4).map(c => (
+                      <Avatar key={c.user_id} className="w-6 h-6 border-2 border-background">
+                        <AvatarImage src={c.avatar_url || undefined} />
+                        <AvatarFallback className="text-[9px] bg-muted">{(c.display_name || '同')[0]}</AvatarFallback>
+                      </Avatar>
+                    ))}
+                  </div>
+                  <span className="text-xs text-muted-foreground">{peers.length} 位同事在岗</span>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1.5">今日独自当班</p>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="text-base font-bold">今日休息</p>
+              <p className="text-xs text-muted-foreground mt-0.5">好好放松一天 🌿</p>
+            </>
+          )}
+        </div>
+        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+      </div>
+
+      {/* 明日 */}
+      <div className="border-t border-border/50 px-4 py-3 flex items-center gap-3 bg-muted/20">
+        <div className="text-[10px] font-semibold tracking-[0.2em] text-muted-foreground shrink-0 w-8">明日</div>
+        {tomorrow ? (
+          <>
+            <span
+              className="px-1.5 py-0.5 rounded text-[11px] text-white font-medium shrink-0"
+              style={{ background: tomorrow.color || 'hsl(var(--primary))' }}
+            >
+              {tomorrow.code}
+            </span>
+            <span className="text-sm font-medium truncate">{tomorrow.name}</span>
+            <span className="text-xs text-muted-foreground tabular-nums ml-auto shrink-0">
+              {formatShiftTime(tomorrow.start_time, tomorrow.end_time)}
+            </span>
+          </>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {hasTomorrowData ? '明日休息 🌿' : '明日待排'}
+          </span>
         )}
       </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
     </Card>
   );
 }
