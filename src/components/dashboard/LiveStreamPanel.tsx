@@ -13,6 +13,9 @@ import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
 import { InlineRefineChat } from '@/components/recognition/InlineRefineChat';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
+import { RecognitionProgress, type RecognitionPhase } from '@/components/recognition/RecognitionProgress';
+import { RecognitionFailure } from '@/components/recognition/RecognitionFailure';
+import { HintInputSheet } from '@/components/recognition/HintInputSheet';
 import { serializeTips, normalizeSellingPoints, normalizeTips } from '@/lib/script';
 
 type CaptureMode = 'single' | 'multi';
@@ -38,8 +41,11 @@ export function LiveStreamPanel() {
   const enrichKeyRef = useRef<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const timerStartRef = useRef<number>(0);
-  const lastRecognitionInputRef = useRef<{ images: string[]; opts: { forceRefresh?: boolean } } | null>(null);
+  const lastRecognitionInputRef = useRef<{ images: string[]; opts: { forceRefresh?: boolean }; userHint?: string } | null>(null);
   const [recognitionFailed, setRecognitionFailed] = useState(false);
+  const [phase, setPhase] = useState<RecognitionPhase>('reading');
+  const [pipelineSource, setPipelineSource] = useState<string | undefined>(undefined);
+  const [hintSheetOpen, setHintSheetOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -339,7 +345,11 @@ export function LiveStreamPanel() {
     }
   };
 
-  const handleRecognition = async (imageList: string[], opts: { forceRefresh?: boolean } = {}) => {
+  const handleRecognition = async (
+    imageList: string[],
+    opts: { forceRefresh?: boolean } = {},
+    userHint?: string,
+  ) => {
     clearResult();
     setCurrentProductId(null);
     setRecognitionTime(null);
@@ -348,8 +358,10 @@ export function LiveStreamPanel() {
     setEnriched(null);
     setIsEnriching(false);
     setRecognitionFailed(false);
+    setPhase('reading');
+    setPipelineSource(undefined);
     enrichKeyRef.current = null;
-    lastRecognitionInputRef.current = { images: imageList, opts };
+    lastRecognitionInputRef.current = { images: imageList, opts, userHint };
 
     // ⚡ 用 rAF 驱动计时，主线程繁忙时不会被丢拍
     timerStartRef.current = performance.now();
@@ -366,7 +378,11 @@ export function LiveStreamPanel() {
     const tInvoke = Date.now();
     const recognitionResult = await recognizeProduct(
       imageList.length > 1 ? imageList : imageList[0],
-      { forceRefresh: opts.forceRefresh },
+      {
+        forceRefresh: opts.forceRefresh,
+        userHint,
+        onPhase: (p) => { if (p !== 'done') setPhase(p); },
+      },
     );
     console.log('[FE] recognize roundtrip:', Date.now() - tInvoke, 'ms');
 
@@ -379,6 +395,10 @@ export function LiveStreamPanel() {
       setRecognitionFailed(true);
       return;
     }
+
+    // 完成态：透传 pipeline source 给三段进度做"命中缓存"压缩显示
+    setPipelineSource((recognitionResult as any).__pipeline?.source);
+    setPhase('done');
 
     // ★ 命中缓存：直接复用历史 product
     if (recognitionResult.fromCache && recognitionResult.cachedProductId) {
@@ -690,49 +710,32 @@ export function LiveStreamPanel() {
           )}
 
           {isRecognizing && (
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in">
-              <div className="text-center text-white space-y-4">
-                <div className="relative w-16 h-16 mx-auto">
-                  <div className="absolute inset-0 rounded-full border-2 border-accent/20" />
-                  <Loader2 className="w-16 h-16 animate-spin text-accent" strokeWidth={1.5} />
-                </div>
-                <div className="flex items-center gap-2 justify-center">
-                  <Sparkles className="w-4 h-4 text-accent animate-pulse-glow" />
-                  <span className="text-sm tracking-wide uppercase">AI 识别中</span>
-                </div>
-                <div className="text-3xl font-display font-bold tabular-nums">
-                  {(elapsedTime / 1000).toFixed(1)}<span className="text-base font-sans font-normal text-white/60">s</span>
-                </div>
-              </div>
-            </div>
+            <RecognitionProgress
+              phase={phase}
+              elapsedMs={elapsedTime}
+              pipelineSource={pipelineSource}
+            />
           )}
 
           {!isRecognizing && recognitionFailed && (
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center animate-fade-in p-6">
-              <div className="text-center text-white space-y-4 max-w-xs">
-                <div className="w-14 h-14 mx-auto rounded-full bg-destructive/20 ring-1 ring-destructive/40 flex items-center justify-center">
-                  <X className="w-8 h-8 text-destructive" strokeWidth={2} />
-                </div>
-                <div className="space-y-1">
-                  <p className="font-display text-lg">识别未成功</p>
-                  <p className="text-white/60 text-xs leading-relaxed">网络较慢或商品角度不清，请检查信号或换个角度后重试。</p>
-                </div>
-                <div className="flex gap-2 justify-center">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      const last = lastRecognitionInputRef.current;
-                      if (last) handleRecognition(last.images, last.opts);
-                    }}
-                  >
-                    <RotateCcw className="w-4 h-4 mr-1.5" /> 重新识别
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setRecognitionFailed(false)}>
-                    取消
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <RecognitionFailure
+              onRetry={() => {
+                const last = lastRecognitionInputRef.current;
+                if (last) handleRecognition(last.images, last.opts, last.userHint);
+              }}
+              onAppendImage={(img) => {
+                const last = lastRecognitionInputRef.current;
+                const base = last?.images ?? [];
+                const next = [...base, img];
+                if (next.length > MAX_MULTI_IMAGES) next.splice(0, next.length - MAX_MULTI_IMAGES);
+                setCaptureMode('multi');
+                setCapturedImages(next);
+                setCapturedImage(next[0]);
+                void handleRecognition(next, {}, last?.userHint);
+              }}
+              onOpenHint={() => setHintSheetOpen(true)}
+              onCancel={() => setRecognitionFailed(false)}
+            />
           )}
 
           {/* 顶部状态条 */}
@@ -1045,6 +1048,15 @@ export function LiveStreamPanel() {
           }
           setEditDialogOpen(false);
           toast({ title: '商品信息已更新' });
+        }}
+      />
+
+      <HintInputSheet
+        open={hintSheetOpen}
+        onOpenChange={setHintSheetOpen}
+        onSubmit={(hint) => {
+          const last = lastRecognitionInputRef.current;
+          if (last) handleRecognition(last.images, last.opts, hint);
         }}
       />
 
