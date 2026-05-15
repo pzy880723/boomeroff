@@ -1,6 +1,7 @@
 import { Component, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCcw } from 'lucide-react';
+import { isChunkLoadError, scheduleChunkReload } from '@/lib/chunkLoadRecovery';
 
 interface Props {
   children: ReactNode;
@@ -11,16 +12,21 @@ interface Props {
 
 interface State {
   error: Error | null;
+  recovering: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, recovering: false };
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    return { error, recovering: isChunkLoadError(error) };
   }
 
   componentDidCatch(error: Error, info: { componentStack?: string }) {
+    if (isChunkLoadError(error)) {
+      scheduleChunkReload();
+    }
+
     // eslint-disable-next-line no-console
     console.error(
       `[ErrorBoundary${this.props.scope ? `:${this.props.scope}` : ''}]`,
@@ -50,6 +56,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       if (this.props.fallback) return this.props.fallback;
+      const isRecovering = this.state.recovering;
       return (
         <div className="min-h-[60vh] flex items-center justify-center p-6 bg-background">
           <div className="max-w-sm w-full rounded-2xl border border-border/60 bg-card p-6 shadow-soft text-center space-y-4">
@@ -59,7 +66,9 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-1">
               <h2 className="text-lg font-display font-semibold">页面出错了</h2>
               <p className="text-sm text-muted-foreground">
-                当前环境可能不支持某些浏览器特性，请刷新或换用系统浏览器打开。
+                {isRecovering
+                  ? '系统正在更新页面资源，马上为您自动刷新。'
+                  : '当前环境可能不支持某些浏览器特性，请刷新或换用系统浏览器打开。'}
               </p>
             </div>
             <details className="text-xs text-muted-foreground text-left bg-muted/40 rounded-lg p-2 max-h-32 overflow-auto">
@@ -70,8 +79,8 @@ export class ErrorBoundary extends Component<Props, State> {
             </details>
             <div className="flex gap-2">
               <Button onClick={this.handleReload} className="flex-1 gap-2">
-                <RefreshCcw className="w-4 h-4" />
-                刷新重试
+                <RefreshCcw className={`w-4 h-4 ${isRecovering ? 'animate-spin' : ''}`} />
+                {isRecovering ? '正在刷新' : '刷新重试'}
               </Button>
               <Button onClick={this.handleGoHome} variant="outline" className="flex-1">
                 返回首页
