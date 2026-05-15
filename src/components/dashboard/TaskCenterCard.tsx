@@ -115,18 +115,23 @@ export function TaskCenterCard({ tasks, onClaimed, onNavigate }: Props) {
               </div>
               {t.claimed ? (
                 <span className="text-[10px] text-muted-foreground shrink-0">已领 +{t.amount}</span>
+              ) : canClaim ? (
+                <Button
+                  size="sm"
+                  disabled={busyKey === t.key}
+                  onClick={() => handleClaimDaily(t.key, t.amount)}
+                  className="h-7 px-2 text-[11px] shrink-0 bg-amber-500 hover:bg-amber-600 text-white border-0"
+                >
+                  {busyKey === t.key ? <Loader2 className="w-3 h-3 animate-spin" /> : `领 +${t.amount}`}
+                </Button>
               ) : (
                 <Button
                   size="sm"
-                  variant={canClaim ? 'default' : 'outline'}
-                  disabled={!canClaim || busyKey === t.key}
-                  onClick={() => handleClaimDaily(t.key, t.amount)}
-                  className={cn(
-                    'h-7 px-2 text-[11px] shrink-0',
-                    canClaim && 'bg-amber-500 hover:bg-amber-600 text-white border-0'
-                  )}
+                  variant="outline"
+                  onClick={() => onNavigate?.(TASK_ROUTE[t.key])}
+                  className="h-7 px-2 text-[11px] shrink-0 gap-0.5"
                 >
-                  {busyKey === t.key ? <Loader2 className="w-3 h-3 animate-spin" /> : canClaim ? `领 +${t.amount}` : `+${t.amount}`}
+                  去完成 <ArrowRight className="w-3 h-3" />
                 </Button>
               )}
             </div>
