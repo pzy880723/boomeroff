@@ -7,6 +7,9 @@ import { ErrorBoundary } from '@/components/system/ErrorBoundary';
 const FloatingDashboard = lazy(() =>
   import('@/components/dashboard/FloatingDashboard').then(m => ({ default: m.FloatingDashboard }))
 );
+const LevelUpWatcher = lazy(() =>
+  import('@/components/system/LevelUpWatcher').then(m => ({ default: m.LevelUpWatcher }))
+);
 
 export function MainLayout() {
   return (
