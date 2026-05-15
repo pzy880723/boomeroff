@@ -1,13 +1,28 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import {
   Camera, Upload, X, Loader2, Sparkles, SwitchCamera,
-  Layers, Image as ImageIcon, RotateCcw,
+  Layers, Image as ImageIcon, RotateCcw, Check,
 } from 'lucide-react';
 
 type CaptureMode = 'single' | 'multi';
 const MAX_MULTI_IMAGES = 5;
+
+/** 识别叙事步骤:让等待过程"有事情在发生",而不是干瞪倒计时。 */
+const SINGLE_STEPS: Array<{ label: string; at: number }> = [
+  { label: '正在解析图片细节', at: 0 },
+  { label: '正在比对商品知识库', at: 800 },
+  { label: '正在全网检索同款资料', at: 1600 },
+  { label: '正在整理年代 · 产地 · 故事', at: 2600 },
+];
+const buildMultiSteps = (n: number): Array<{ label: string; at: number }> => [
+  { label: `正在对齐 ${n} 张图像`, at: 0 },
+  { label: '正在解析每张图的关键特征', at: 700 },
+  { label: '正在比对商品知识库', at: 1600 },
+  { label: '正在全网检索同款资料', at: 2600 },
+  { label: '正在整理年代 · 产地 · 故事', at: 3800 },
+];
 
 export interface CameraStageHandle {
   /** 外部重置：回到「未启动」状态 */
