@@ -175,9 +175,9 @@ export function FloatingDashboard() {
   const capsuleX = dragging && dragXY ? dragXY.x : getCapsuleX(pos.side);
   const capsuleY = dragging && dragXY ? dragXY.y : pos.y;
   const todayCode = data.todayShift?.code;
-  const hasUnread = notif.unreadCount > 0
-    || (!data.checkedToday)
-    || (data.todos.pendingShares + data.todos.pendingCorrections > 0);
+  const claimableCount = tasks.totalUnclaimedCount;
+  const hasClaimable = claimableCount > 0;
+  const hasOtherUnread = notif.unreadCount > 0;
 
   return (
     <>
