@@ -95,6 +95,7 @@ serve(async (req) => {
       rarity, collectionValue, marketValue, buyReason,
       imageBase64, // 新上传图片
       imageUrl,    // 复用公共 URL（如 hash_cache 命中的历史 image_url）
+      thumbnailBase64, // 客户端生成的小图缩略图（480px）
     } = body as {
       name?: string; category?: string; era?: string | null; origin?: string | null;
       sellingPoints?: any; tips?: any;
@@ -102,7 +103,7 @@ serve(async (req) => {
       material?: string | null; craft?: string | null; dimensions?: string | null; condition?: string | null;
       confidence?: number | null;
       rarity?: number | null; collectionValue?: string | null; marketValue?: string | null; buyReason?: string | null;
-      imageBase64?: string; imageUrl?: string | null;
+      imageBase64?: string; imageUrl?: string | null; thumbnailBase64?: string;
     };
 
     if (!name || typeof name !== 'string' || !name.trim()) {
