@@ -43,10 +43,16 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const displayName: string = (body.display_name || user.email?.split("@")[0] || "店员").toString().trim();
-    const initial = displayName.charAt(0) || "店";
     const palette = PALETTES[Math.floor(Math.random() * PALETTES.length)];
+    const ANIMALS = [
+      "shiba inu puppy", "orange tabby cat", "panda", "fox", "brown bear",
+      "bunny rabbit", "hamster", "koala", "penguin", "corgi puppy",
+      "raccoon", "deer fawn", "owl", "lion cub", "tiger cub",
+      "sheep lamb", "polar bear", "frog", "duckling", "red panda",
+    ];
+    const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
 
-    const prompt = `A cute flat-illustration circular avatar with a single big stylized character "${initial}" in the center, ${palette} color palette, minimal cartoon style, soft gradients, clean shapes, no text other than the single character, on a solid pastel background, 1:1 square. Friendly and approachable, suitable as a profile picture for a retail staff app.`;
+    const prompt = `A cute kawaii cartoon animal avatar: a ${animal} with a friendly smiling face, big round eyes, head-and-shoulders portrait centered in a circular frame. Flat illustration style, minimal cartoon, soft gradients, clean shapes, ${palette} color palette, on a solid pastel background, 1:1 square. Absolutely NO text, NO letters, NO numbers, NO logos. Friendly and approachable, suitable as a profile picture.`;
 
     // Call Lovable AI Gateway image model
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
