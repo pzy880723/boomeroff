@@ -5,11 +5,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
-  Calendar, Flame, BookOpen, MessagesSquare, Sparkles,
+  Flame, BookOpen, MessagesSquare, Sparkles,
   Camera, Star, Image as ImageIcon, TrendingUp, ChevronRight, Check,
   ClipboardList, Users as UsersIcon, AlertCircle, ChevronDown,
-  LayoutDashboard, Megaphone, BellDot,
+  LayoutDashboard, Megaphone, BellDot, Coffee,
 } from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useNotifications, type NotificationItem } from '@/hooks/useNotifications';
@@ -275,33 +276,30 @@ function DashboardFullscreen({
         paddingTop: 'env(safe-area-inset-top)',
       }}
     >
-      {/* Hero */}
-      <div className="relative px-5 pt-5 pb-6 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border-b border-border/40 shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center shadow-md">
-              <LayoutDashboard className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-lg font-display font-bold tracking-tight leading-none">仪表盘</h2>
-              <p className="text-[11px] text-muted-foreground mt-1">{todayLabel}</p>
-            </div>
-          </div>
-          <p className="text-sm font-medium text-foreground/80">
-            {greet()},{data.profile?.display_name || '店员'}
+      {/* 顶栏 */}
+      <div className="px-5 pt-5 pb-2 shrink-0">
+        <div className="flex items-end justify-between">
+          <h2 className="text-2xl font-bold tracking-tight leading-none">仪表盘</h2>
+          <p className="text-xs text-muted-foreground">
+            {todayLabel} · {greet()},{data.profile?.display_name || '店员'}
           </p>
-        </div>
-
-        {/* 每日打气标语 */}
-        <div className="rounded-xl bg-card/70 backdrop-blur border border-border/50 px-3.5 py-2.5 flex items-start gap-2 shadow-sm animate-fade-in">
-          <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-          <p className="text-sm text-foreground/90 leading-relaxed font-medium">{quote}</p>
         </div>
       </div>
 
       {/* 内容区 */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3 pb-24">
-        <NotificationCard items={notif.items} unread={notif.unreadCount} onRead={notif.markRead} onReadAll={notif.markAllRead} todayShift={data.todayShift} />
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 pt-3 pb-28 space-y-4">
+        {/* 打气标语 Hero */}
+        <div className="relative rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/15 px-6 py-7 overflow-hidden animate-fade-in">
+          <Sparkles className="absolute top-4 right-4 w-5 h-5 text-primary/60" />
+          <p className="text-xl font-bold leading-snug text-foreground pr-8">
+            {quote}
+          </p>
+        </div>
+
+        {/* 排班 Hero 卡 */}
+        <ShiftHeroCard data={data} navigate={go} />
+
+        <NotificationCard items={notif.items} unread={notif.unreadCount} onRead={notif.markRead} onReadAll={notif.markAllRead} />
         <TodayOpsCard data={data} />
         <LearningCard learning={data.learning} navigate={go} />
         <TodoActivityCard data={data} navigate={go} />
@@ -328,68 +326,110 @@ function DashboardFullscreen({
 /* ===================== 卡片们 ===================== */
 
 function NotificationCard({
-  items, unread, onRead, onReadAll, todayShift,
+  items, unread, onRead, onReadAll,
 }: {
   items: NotificationItem[];
   unread: number;
   onRead: (id: string) => void;
   onReadAll: () => void;
-  todayShift: ReturnType<typeof useDashboardData>['todayShift'];
 }) {
   return (
-    <Card className="p-4 border-border/60 shadow-sm">
+    <Card className="p-4 border-border/50 shadow-sm rounded-2xl">
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
-            {unread > 0 ? <BellDot className="w-4 h-4 text-primary" /> : <Megaphone className="w-4 h-4 text-primary" />}
-          </div>
+          {unread > 0 ? <BellDot className="w-4 h-4 text-primary" /> : <Megaphone className="w-4 h-4 text-muted-foreground" />}
           <span className="text-sm font-semibold">系统通知</span>
-          {unread > 0 && <Badge variant="destructive" className="text-[10px] h-5">{unread} 条未读</Badge>}
+          {unread > 0 && <span className="text-[11px] text-primary font-medium">{unread} 未读</span>}
         </div>
         {unread > 0 && (
           <button onClick={onReadAll} className="text-[11px] text-muted-foreground hover:text-foreground">全部已读</button>
         )}
       </div>
 
-      {/* 今日班次提醒(简洁) */}
-      <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40">
-        <Calendar className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        {todayShift ? (
-          <p className="text-xs">
-            <span className="text-muted-foreground">今日班次 · </span>
-            <span className="font-semibold">{todayShift.name}</span>
-            <span className="ml-2 text-muted-foreground tabular-nums">{formatShiftTime(todayShift.start_time, todayShift.end_time)}</span>
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">今日休息 · 好好放松一天 🌿</p>
-        )}
-      </div>
-
       {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-3">暂无系统通知</p>
+        <p className="text-xs text-muted-foreground text-center py-4">暂无系统通知</p>
       ) : (
-        <div className="space-y-2 max-h-64 overflow-y-auto">
+        <div className="space-y-1.5 max-h-64 overflow-y-auto">
           {items.slice(0, 5).map(n => (
             <button
               key={n.id}
               onClick={() => !n.read && onRead(n.id)}
               className={cn(
-                'w-full text-left p-2.5 rounded-lg border transition-colors',
-                n.read ? 'border-border/40 bg-background' : 'border-primary/30 bg-primary/5 hover:bg-primary/10'
+                'w-full text-left p-2.5 rounded-lg transition-colors flex gap-3',
+                n.read ? 'bg-transparent hover:bg-muted/40' : 'bg-primary/[0.04] hover:bg-primary/[0.08]'
               )}
             >
-              <div className="flex items-start gap-2">
-                {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />}
-                <div className="flex-1 min-w-0">
-                  <p className={cn('text-sm', !n.read && 'font-semibold')}>{n.title}</p>
-                  {n.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 whitespace-pre-wrap">{n.body}</p>}
-                  <p className="text-[10px] text-muted-foreground mt-1">{new Date(n.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
-                </div>
+              <div className={cn('w-0.5 rounded-full shrink-0', n.read ? 'bg-transparent' : 'bg-primary')} />
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-sm', !n.read && 'font-semibold')}>{n.title}</p>
+                {n.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 whitespace-pre-wrap">{n.body}</p>}
+                <p className="text-[10px] text-muted-foreground mt-1">{new Date(n.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
               </div>
             </button>
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+function ShiftHeroCard({ data, navigate }: { data: ReturnType<typeof useDashboardData>; navigate: (p: string) => void }) {
+  const shift = data.todayShift;
+  const peers = data.colleaguesToday || [];
+
+  if (!shift) {
+    return (
+      <Card
+        onClick={() => navigate('/me')}
+        className="p-5 border-border/50 shadow-sm rounded-2xl cursor-pointer hover:border-border transition-colors flex items-center gap-4"
+      >
+        <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center shrink-0">
+          <Coffee className="w-6 h-6 text-muted-foreground" />
+        </div>
+        <div className="flex-1">
+          <p className="text-base font-bold">今日休息</p>
+          <p className="text-xs text-muted-foreground mt-0.5">好好放松一天 🌿</p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+      </Card>
+    );
+  }
+
+  return (
+    <Card
+      onClick={() => navigate('/me')}
+      className="p-4 border-border/50 shadow-sm rounded-2xl cursor-pointer hover:border-border transition-colors flex items-center gap-4"
+    >
+      <div
+        className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md shrink-0"
+        style={{ backgroundColor: shift.color || 'hsl(var(--primary))' }}
+      >
+        {shift.code}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-base font-semibold leading-tight">{shift.name}</span>
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {formatShiftTime(shift.start_time, shift.end_time)}
+          </span>
+        </div>
+        {peers.length > 0 ? (
+          <div className="flex items-center gap-2 mt-2">
+            <div className="flex -space-x-2">
+              {peers.slice(0, 4).map(c => (
+                <Avatar key={c.user_id} className="w-6 h-6 border-2 border-background">
+                  <AvatarImage src={c.avatar_url || undefined} />
+                  <AvatarFallback className="text-[9px] bg-muted">{(c.display_name || '同')[0]}</AvatarFallback>
+                </Avatar>
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground">{peers.length} 位同事在岗</span>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground mt-1.5">今日独自当班</p>
+        )}
+      </div>
+      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
     </Card>
   );
 }
@@ -416,63 +456,69 @@ function TodayOpsCard({ data }: { data: ReturnType<typeof useDashboardData> }) {
     : (data.stats.weekScans > 0 ? 100 : 0);
 
   return (
-    <Card className="p-4 border-border/60 shadow-sm">
+    <Card className="p-4 border-border/50 shadow-sm rounded-2xl">
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-amber-500/10 flex items-center justify-center">
-            <Flame className="w-4 h-4 text-amber-600" />
-          </div>
+          <Flame className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-semibold">今日运营</span>
         </div>
-        <Badge variant={trend >= 0 ? 'default' : 'secondary'} className="text-[10px]">
+        <span className={cn('text-xs font-medium tabular-nums', trend >= 0 ? 'text-primary' : 'text-muted-foreground')}>
           本周 {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}%
-        </Badge>
+        </span>
       </div>
 
       {/* 一键打卡 */}
       {!data.checkedToday ? (
-        <Button onClick={handleCheckIn} disabled={submitting} className="w-full h-10 mb-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white border-none shadow-md hover:opacity-90">
+        <Button
+          onClick={handleCheckIn}
+          disabled={submitting}
+          className="w-full h-12 mb-4 rounded-xl bg-foreground text-background hover:bg-foreground/90 font-semibold"
+        >
           <Flame className="w-4 h-4 mr-2" />
           {submitting ? '签到中…' : `一键打卡 ${data.currentStreak > 0 ? `· 连签 ${data.currentStreak} 天` : ''}`}
         </Button>
       ) : (
-        <div className="flex items-center justify-center gap-2 h-10 mb-3 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm font-medium">
-          <Check className="w-4 h-4" /> 今日已打卡 · 连签 {data.currentStreak} 天
+        <div className="flex items-center justify-center gap-2 h-12 mb-4 rounded-xl bg-muted/60 text-foreground text-sm font-medium">
+          <Check className="w-4 h-4 text-primary" /> 今日已打卡 · 连签 {data.currentStreak} 天
         </div>
       )}
 
-      {/* 数据 */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <div className="text-center py-1.5 rounded-md bg-muted/40">
-          <Camera className="w-3.5 h-3.5 mx-auto mb-0.5 text-primary" />
-          <p className="text-base font-bold tabular-nums leading-tight">{data.stats.weekScans}</p>
-          <p className="text-[10px] text-muted-foreground">本周识物</p>
+      {/* 数据三联 */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{data.stats.weekScans}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">本周识物</p>
         </div>
-        <div className="text-center py-1.5 rounded-md bg-muted/40">
-          <Star className="w-3.5 h-3.5 mx-auto mb-0.5 text-yellow-500" />
-          <p className="text-base font-bold tabular-nums leading-tight">{data.stats.weekFavs}</p>
-          <p className="text-[10px] text-muted-foreground">本周收藏</p>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{data.stats.weekFavs}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">本周收藏</p>
         </div>
-        <div className="text-center py-1.5 rounded-md bg-muted/40">
-          <ImageIcon className="w-3.5 h-3.5 mx-auto mb-0.5 text-accent" />
-          <p className="text-base font-bold tabular-nums leading-tight">{data.stats.weekPosts}</p>
-          <p className="text-[10px] text-muted-foreground">本周发布</p>
+        <div>
+          <p className="text-2xl font-bold tabular-nums leading-none">{data.stats.weekPosts}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">本周发布</p>
         </div>
       </div>
 
-      {/* Sparkline */}
+      {/* Sparkline 线性化 */}
       <div>
-        <div className="flex items-end justify-between gap-1 h-10">
-          {data.stats.weeklySpark.map((v, i) => (
-            <div key={i} className="flex-1 flex items-end h-full">
-              <div
-                className="w-full rounded-sm bg-gradient-to-t from-primary/40 to-primary"
-                style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? 4 : 2, opacity: v > 0 ? 1 : 0.25 }}
-              />
-            </div>
-          ))}
+        <div className="flex items-end justify-between gap-1.5 h-8">
+          {data.stats.weeklySpark.map((v, i) => {
+            const isLast = i === data.stats.weeklySpark.length - 1;
+            const h = Math.max(2, (v / max) * 100);
+            return (
+              <div key={i} className="flex-1 flex items-end h-full">
+                <div
+                  className={cn(
+                    'w-full rounded-full',
+                    isLast ? 'bg-primary' : 'bg-muted-foreground/25'
+                  )}
+                  style={{ height: `${h}%` }}
+                />
+              </div>
+            );
+          })}
         </div>
-        <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
           <span>7 天前</span><span>今天</span>
         </div>
       </div>
@@ -497,11 +543,9 @@ function LearningCard({
   if (items.length === 0) return null;
 
   return (
-    <Card className="p-4 border-border/60 shadow-sm">
+    <Card className="p-4 border-border/50 shadow-sm rounded-2xl">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-7 h-7 rounded-md bg-purple-500/10 flex items-center justify-center">
-          <BookOpen className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-        </div>
+        <BookOpen className="w-4 h-4 text-muted-foreground" />
         <span className="text-sm font-semibold">今日学习</span>
       </div>
       <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
@@ -537,12 +581,10 @@ function TodoActivityCard({
   // 管理员:有待办优先显示待办
   if (todoCount > 0) {
     return (
-      <Card className="p-4 border-border/60 shadow-sm">
+      <Card className="p-4 border-border/50 shadow-sm rounded-2xl">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-destructive/10 flex items-center justify-center">
-              <ClipboardList className="w-4 h-4 text-destructive" />
-            </div>
+            <ClipboardList className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm font-semibold">待办事项</span>
           </div>
           <Badge variant="destructive" className="text-[10px]">{todoCount}</Badge>
@@ -564,12 +606,10 @@ function TodoActivityCard({
   // 店员:同事最新动态
   if (data.social.posts.length === 0) return null;
   return (
-    <Card className="p-4 border-border/60 shadow-sm">
+    <Card className="p-4 border-border/50 shadow-sm rounded-2xl">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
-            <UsersIcon className="w-4 h-4 text-emerald-600" />
-          </div>
+          <UsersIcon className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-semibold">同事最新动态</span>
         </div>
         <button onClick={() => navigate('/community')} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center">
