@@ -105,6 +105,23 @@ export default {
           "0%": { opacity: "0", transform: "translateX(-6px) scale(0.9)" },
           "100%": { opacity: "1", transform: "translateX(0) scale(1)" },
         },
+        "card-enter": {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "progress-fill": {
+          "0%": { transform: "scaleX(0)", transformOrigin: "left" },
+          "100%": { transform: "scaleX(1)", transformOrigin: "left" },
+        },
+        "shine-once": {
+          "0%": { transform: "translateX(-120%)" },
+          "100%": { transform: "translateX(220%)" },
+        },
+        "badge-pop": {
+          "0%": { transform: "scale(0.6)", opacity: "0" },
+          "60%": { transform: "scale(1.15)", opacity: "1" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -116,6 +133,9 @@ export default {
         "dashboard-zoom-in": "dashboard-zoom-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "dashboard-zoom-out": "dashboard-zoom-out 0.32s cubic-bezier(0.4, 0, 0.2, 1) forwards",
         "label-bubble-in": "label-bubble-in 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+        "card-enter": "card-enter 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
+        "progress-fill": "progress-fill 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
+        "badge-pop": "badge-pop 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
       },
     },
   },
