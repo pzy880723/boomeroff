@@ -193,14 +193,14 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
     }
   };
 
-  const runRecognize = async (images: string[]) => {
+  const runRecognize = async (images: string[], userHint?: string) => {
     if (images.length === 0) return;
     lastInputRef.current = images;
     setRecognitionFailed(false);
     setRecognitionTime(null);
     setElapsedTime(0);
-    setForceAllDone(false);
-    setNarrativeSteps(images.length > 1 ? buildMultiSteps(images.length) : SINGLE_STEPS);
+    setPhase('reading');
+    setPipelineSource(undefined);
     setIsRecognizing(true);
 
     timerStartRef.current = performance.now();
@@ -213,7 +213,12 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
 
     let ok = false;
     try {
-      ok = await onRecognize(images);
+      ok = await onRecognize(images, {
+        userHint,
+        onPhase: (p) => {
+          if (p !== 'done') setPhase(p);
+        },
+      });
     } catch (e) {
       console.error('[CameraStage] recognize error:', e);
       ok = false;
@@ -223,9 +228,9 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
       setElapsedTime(finalTime);
       setRecognitionTime(finalTime);
       if (ok) {
-        // 让用户看到一次"全部 ✓"的完成感再收起遮罩
-        setForceAllDone(true);
-        await new Promise((r) => setTimeout(r, 260));
+        setPhase('done');
+        // 短暂停顿,让用户看到三段全打勾
+        await new Promise((r) => setTimeout(r, 280));
       }
       setIsRecognizing(false);
     }
