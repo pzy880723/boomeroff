@@ -27,7 +27,6 @@ export class ErrorBoundary extends Component<Props, State> {
       scheduleChunkReload();
     }
 
-    // eslint-disable-next-line no-console
     console.error(
       `[ErrorBoundary${this.props.scope ? `:${this.props.scope}` : ''}]`,
       error,
