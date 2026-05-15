@@ -112,7 +112,7 @@ export function TasksPanel({ tasks, onClaimed, onNavigate }: Props) {
                     size="sm"
                     disabled={busyKey === t.key}
                     onClick={() => handleClaimDaily(t.key, t.amount)}
-                    className="h-8 px-3 text-xs shrink-0 bg-primary hover:bg-primary/90 relative overflow-hidden animate-shine-once"
+                    className="h-8 px-3 text-xs shrink-0 bg-primary hover:bg-primary/90 relative overflow-hidden btn-shine"
                   >
                     {busyKey === t.key
                       ? <Loader2 className="w-3 h-3 animate-spin" />
@@ -148,7 +148,7 @@ export function TasksPanel({ tasks, onClaimed, onNavigate }: Props) {
                 size="sm"
                 disabled={claimingAll}
                 onClick={handleClaimAll}
-                className="h-7 px-3 text-xs bg-primary hover:bg-primary/90 relative overflow-hidden animate-shine-once"
+                className="h-7 px-3 text-xs bg-primary hover:bg-primary/90 relative overflow-hidden btn-shine"
               >
                 {claimingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : `一键领取 +${pendingExp}`}
               </Button>
