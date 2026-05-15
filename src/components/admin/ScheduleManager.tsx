@@ -46,6 +46,16 @@ export function ScheduleManager() {
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
 
+  // 同门店所有出现的员工（含已排但已离开列表的用户）按稳定顺序生成唯一颜色
+  const userColorMap = useMemo(() => {
+    const ids = [
+      ...users.map(u => u.user_id),
+      ...scheds.map(s => s.user_id).filter(id => !users.find(u => u.user_id === id)),
+    ];
+    return buildUserColorMap(ids);
+  }, [users, scheds]);
+  const colorOf = (uid: string) => userColorMap.get(uid) || { bg: 'hsl(0 0% 92%)', fg: 'hsl(0 0% 25%)', border: 'hsl(0 0% 75%)' };
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from('shops' as any).select('id, name').eq('active', true).order('sort_order').order('name');
