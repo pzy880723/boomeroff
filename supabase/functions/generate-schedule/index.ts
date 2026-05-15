@@ -82,8 +82,8 @@ Deno.serve(async (req) => {
     );
     const { data: userData } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
     if (!userData?.user) return new Response(JSON.stringify({ error: '未授权' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', userData.user.id).eq('role', 'admin').maybeSingle();
-    if (!roleRow) return new Response(JSON.stringify({ error: '仅管理员可调用' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const { data: hasPerm } = await supabase.rpc('user_has_permission', { _user_id: userData.user.id, _perm: 'schedule.write' });
+    if (!hasPerm) return new Response(JSON.stringify({ error: '无排班权限' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     const body = await req.json().catch(() => ({}));
     const weekStart: string = body.week_start;
