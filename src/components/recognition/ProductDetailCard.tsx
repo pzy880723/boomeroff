@@ -12,7 +12,7 @@ import {
 import { ShareMenu } from '@/components/share/ShareMenu';
 import { KnowledgeCardSections } from '@/components/knowledge/KnowledgeCardSections';
 import { pickKnowledgeCard } from '@/lib/knowledgeCard';
-import { XianyuPriceCard } from '@/components/recognition/XianyuPriceCard';
+
 import { useAuth } from '@/hooks/useAuth';
 
 interface ProductDetailCardProps {
@@ -242,14 +242,6 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
         card={pickKnowledgeCard(enriched)}
         loading={!!result.isEnriching}
         loadingText="正在为本次识别生成知识卡…"
-      />
-
-      {/* 闲鱼行情参考（按需查询） */}
-      <XianyuPriceCard
-        name={result.name}
-        era={result.era}
-        category={result.category}
-        canRefetch={role === 'admin'}
       />
 
       {/* 完整介绍（折叠） */}

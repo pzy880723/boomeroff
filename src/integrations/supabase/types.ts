@@ -1233,57 +1233,6 @@ export type Database = {
         }
         Relationships: []
       }
-      xianyu_price_snapshots: {
-        Row: {
-          avg_price: number | null
-          created_at: string
-          created_by: string | null
-          display_name: string | null
-          id: string
-          max_price: number | null
-          min_price: number | null
-          notes: string | null
-          product_id: string | null
-          query_key: string
-          sample_count: number
-          samples: Json
-          suggested_price: number | null
-          updated_at: string
-        }
-        Insert: {
-          avg_price?: number | null
-          created_at?: string
-          created_by?: string | null
-          display_name?: string | null
-          id?: string
-          max_price?: number | null
-          min_price?: number | null
-          notes?: string | null
-          product_id?: string | null
-          query_key: string
-          sample_count?: number
-          samples?: Json
-          suggested_price?: number | null
-          updated_at?: string
-        }
-        Update: {
-          avg_price?: number | null
-          created_at?: string
-          created_by?: string | null
-          display_name?: string | null
-          id?: string
-          max_price?: number | null
-          min_price?: number | null
-          notes?: string | null
-          product_id?: string | null
-          query_key?: string
-          sample_count?: number
-          samples?: Json
-          suggested_price?: number | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never

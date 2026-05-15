@@ -10,7 +10,7 @@ const ANY_PORTAL_PERM = [
   'shop.write', 'schedule.write', 'shift.write',
   'shop.kb.write', 'knowledge.official.write',
   'community.moderate', 'correction.review',
-  'settings.ai', 'xianyu.manage',
+  'settings.ai',
 ] as const;
 
 export function PortalGuard({ children }: { children: ReactNode }) {

@@ -6,7 +6,7 @@ import { OfficialKnowledgeManager } from '@/components/admin/OfficialKnowledgeMa
 import { CommunityModeration } from '@/components/admin/CommunityModeration';
 import { AISettingsPanel } from '@/components/admin/AISettingsPanel';
 import { CorrectionReviewPanel } from '@/components/admin/CorrectionReviewPanel';
-import { XianyuCacheManager } from '@/components/admin/XianyuCacheManager';
+
 import { ShiftSettingsPanel } from '@/components/admin/ShiftSettingsPanel';
 import { ScheduleManager } from '@/components/admin/ScheduleManager';
 import { KbManager } from '@/components/admin/KbManager';
@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/accordion';
 import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
-  MessageSquare, MessageSquareWarning, TrendingUp, Menu,
+  MessageSquare, MessageSquareWarning, Menu,
   CalendarDays, Clock, BookOpen, MessagesSquare, Store, ShieldCheck,
   UserCog, Building2, Library, Megaphone, Settings,
 } from 'lucide-react';
@@ -34,7 +34,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'xianyu' | 'notifications';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'notifications';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -70,7 +70,6 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     key: 'system', label: '系统', icon: Settings, items: [
       { key: 'ai', label: 'AI 模型', icon: Sparkles, perm: 'settings.ai' },
-      { key: 'xianyu', label: '闲鱼行情', icon: TrendingUp, perm: 'xianyu.manage' },
     ],
   },
 ];
@@ -225,7 +224,7 @@ export default function Portal() {
             {effectiveTab === 'community' && can('community.moderate') && <CommunityModeration />}
             {effectiveTab === 'corrections' && can('correction.review') && <CorrectionReviewPanel />}
             {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}
-            {effectiveTab === 'xianyu' && can('xianyu.manage') && <XianyuCacheManager />}
+            
             {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
           </Card>
         )}
