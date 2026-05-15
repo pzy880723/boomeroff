@@ -26,7 +26,7 @@ export type PermissionKey =
   | 'community.post' | 'community.moderate'
   // 系统
   | 'settings.ai' | 'settings.recognition'
-  | 'xianyu.manage' | 'correction.review'
+  | 'correction.review'
   | 'role.manage';
 
 interface Ctx {
