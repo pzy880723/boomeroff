@@ -6,13 +6,16 @@ import { useProductRecognition } from '@/hooks/useProductRecognition';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Camera, Upload, X, Loader2, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Star,
+  Camera, Upload, X, Sparkles, Trash2, Edit, SwitchCamera, BookmarkPlus, Check, Layers, Image as ImageIcon, RotateCcw, Star,
 } from 'lucide-react';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { ProductEditDialog } from '@/components/history/ProductEditDialog';
 import { ProductDetailCard } from '@/components/recognition/ProductDetailCard';
 import { InlineRefineChat } from '@/components/recognition/InlineRefineChat';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
+import { RecognitionProgress, type RecognitionPhase } from '@/components/recognition/RecognitionProgress';
+import { RecognitionFailure } from '@/components/recognition/RecognitionFailure';
+import { HintInputSheet } from '@/components/recognition/HintInputSheet';
 import { serializeTips, normalizeSellingPoints, normalizeTips } from '@/lib/script';
 
 type CaptureMode = 'single' | 'multi';
