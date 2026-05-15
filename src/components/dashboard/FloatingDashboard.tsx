@@ -84,6 +84,7 @@ export function FloatingDashboard() {
   const [showLabel, setShowLabel] = useState(true);
   const data = useDashboardData(!!user);
   const notif = useNotifications();
+  const tasks = useTasks();
 
   // 标签气泡 3 秒后渐隐
   useEffect(() => {
