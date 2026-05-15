@@ -11,7 +11,7 @@ import {
 import { Loader2, ChevronLeft, ChevronRight, Sparkles, Eraser, Settings2, Plus, X, Store, ArrowLeftRight } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  todayISO, weekStartISO, weekDays, addDaysISO, weekdayLabel, shortDateLabel, formatShiftTime, colorForUser,
+  todayISO, weekStartISO, weekDays, addDaysISO, weekdayLabel, shortDateLabel, formatShiftTime, buildUserColorMap,
 } from '@/lib/scheduleUtils';
 import { StaffProfileDialog } from './StaffProfileDialog';
 import { cn } from '@/lib/utils';
