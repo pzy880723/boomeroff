@@ -55,3 +55,16 @@ export function nextNDays(startISO: string, n: number): string[] {
   return Array.from({ length: n }, (_, i) => addDaysISO(startISO, i));
 }
 
+
+// 为每个用户生成稳定的色块（HSL 浅底深字），便于排班识别
+const USER_COLOR_HUES = [200, 25, 280, 140, 340, 50, 175, 305, 95, 15, 250, 120];
+export function colorForUser(userId: string): { bg: string; fg: string; border: string } {
+  let h = 0;
+  for (let i = 0; i < userId.length; i++) h = (h * 31 + userId.charCodeAt(i)) >>> 0;
+  const hue = USER_COLOR_HUES[h % USER_COLOR_HUES.length];
+  return {
+    bg: `hsl(${hue} 70% 88%)`,
+    fg: `hsl(${hue} 55% 25%)`,
+    border: `hsl(${hue} 60% 70%)`,
+  };
+}

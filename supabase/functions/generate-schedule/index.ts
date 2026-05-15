@@ -82,8 +82,8 @@ Deno.serve(async (req) => {
     );
     const { data: userData } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
     if (!userData?.user) return new Response(JSON.stringify({ error: '未授权' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', userData.user.id).eq('role', 'admin').maybeSingle();
-    if (!roleRow) return new Response(JSON.stringify({ error: '仅管理员可调用' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const { data: hasPerm } = await supabase.rpc('user_has_permission', { _user_id: userData.user.id, _perm: 'schedule.write' });
+    if (!hasPerm) return new Response(JSON.stringify({ error: '无排班权限' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     const body = await req.json().catch(() => ({}));
     const weekStart: string = body.week_start;
@@ -95,13 +95,18 @@ Deno.serve(async (req) => {
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
     const weekEnd = days[6];
 
-    const [{ data: shifts }, { data: profiles }, { data: holidays }, { data: roleList }, { data: dayOffs }] = await Promise.all([
+    const [{ data: shifts }, { data: profiles }, { data: holidays }, { data: roleList }, { data: dayOffs }, { data: existing }] = await Promise.all([
       supabase.from('shop_shifts').select('*').eq('active', true).or(`shop_id.eq.${shopId},shop_id.is.null`).order('sort_order'),
       supabase.from('staff_profiles').select('*'),
       supabase.from('shop_holidays').select('*').or(`shop_id.eq.${shopId},shop_id.is.null`).gte('date', weekStart).lte('date', weekEnd),
       supabase.from('user_roles').select('user_id').eq('suspended', false),
       supabase.from('staff_day_offs').select('*').gte('off_date', weekStart).lte('off_date', weekEnd),
+      supabase.from('shift_schedules').select('work_date, shift_code, user_id, source').eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', weekEnd),
     ]);
+    const existingRows: any[] = existing || [];
+    const occupiedUserDate = new Set<string>(existingRows.map((r: any) => `${r.work_date}_${r.user_id}`));
+    const weekCountByUser = new Map<string, number>();
+    existingRows.forEach((r: any) => weekCountByUser.set(r.user_id, (weekCountByUser.get(r.user_id) || 0) + 1));
 
     const userIds = (roleList || []).map((r: any) => r.user_id);
     const { data: profs } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
@@ -152,18 +157,20 @@ Deno.serve(async (req) => {
 3. 仅在该员工的 available_weekdays 内排班；
 4. 员工的 blocked_weekdays（固定休息日）和 day_offs（具体禁排日期）绝不安排；
 5. 员工的 blocked_shifts 列表中的班次绝不安排该员工；
-6. 每个员工每周上班天数不得超过 max_per_week，尽量接近 weekly_workdays；
+6. 每个员工每周上班天数绝对不得超过 5 天，也不得超过 max_per_week，已包含 existing_count 中已有天数；尽量接近 weekly_workdays；
 7. 优先匹配员工的 preferred_shifts（如为空则不限）；
 8. 节假日规则：当日 full_staff_off=true 时正式员工(type=regular)不排；intern_works=true 时实习生照常排，否则也不排；
 9. 同一员工不要连续上班超过 6 天；
-10. 每个班次每天至少安排 1 名员工，尽量人员均衡。
+10. 每个班次每天至少安排 1 名员工，尽量人员均衡；
+11. 已存在的 occupied (date,user_id) 列表绝不能再排该员工到该日期；只填补空缺的人/日。
 输出工具 submit_schedule 严格 JSON。日期使用 ISO YYYY-MM-DD。`;
 
     const user = JSON.stringify({
       shop_id: shopId,
       week: days.map(d => ({ date: d, weekday: WEEK_LABEL[dow(d)], holiday: holMap.get(d) || null })),
       shifts: (shifts || []).map((s: any) => ({ code: s.code, name: s.name, time: `${s.start_time}-${s.end_time}` })),
-      staff: staffList,
+      staff: staffList.map(s => ({ ...s, existing_count: weekCountByUser.get(s.user_id) || 0 })),
+      occupied: existingRows.map((r: any) => ({ date: r.work_date, user_id: r.user_id })),
     }, null, 2);
 
     if (staffList.length === 0) {
@@ -177,6 +184,8 @@ Deno.serve(async (req) => {
 
     if (overwrite) {
       await supabase.from('shift_schedules').delete().eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', weekEnd);
+      occupiedUserDate.clear();
+      weekCountByUser.clear();
     }
 
     const validShifts = new Set((shifts || []).map((s: any) => s.code));
@@ -190,28 +199,29 @@ Deno.serve(async (req) => {
       for (const uid of (a.user_ids || [])) {
         if (!validUsers.has(uid)) continue;
         const st = staffIndex.get(uid)!;
-        // 二次校验硬约束
         if (st.blocked_shifts.includes(a.shift_code)) continue;
         if (st.blocked_weekdays.includes(wd)) continue;
         if (st.day_offs.includes(a.date)) continue;
         if (!st.available_weekdays.includes(wd)) continue;
+        // 不覆盖已存在
+        if (occupiedUserDate.has(`${a.date}_${uid}`)) continue;
+        // 5 天/周 硬上限（含已有 + 本次新增）
+        const cap = Math.min(typeof st.max_per_week === 'number' ? st.max_per_week : 5, 5);
+        const cur = weekCountByUser.get(uid) || 0;
+        if (cur + 1 > cap) continue;
+        weekCountByUser.set(uid, cur + 1);
+        occupiedUserDate.add(`${a.date}_${uid}`);
         rows.push({ work_date: a.date, shift_code: a.shift_code, user_id: uid, source: 'ai', shop_id: shopId, created_by: userData.user.id });
       }
     }
 
-    const seen = new Set<string>();
-    const dedup = rows.filter(r => {
-      const k = `${r.work_date}_${r.user_id}`;
-      if (seen.has(k)) return false;
-      seen.add(k); return true;
-    });
-
-    if (dedup.length) {
-      const { error } = await supabase.from('shift_schedules').upsert(dedup, { onConflict: 'work_date,user_id' });
+    if (rows.length) {
+      // 用 insert 而非 upsert，确保不覆盖手动；冲突时由前面的 occupiedUserDate 已经过滤
+      const { error } = await supabase.from('shift_schedules').insert(rows);
       if (error) throw error;
     }
 
-    return new Response(JSON.stringify({ ok: true, count: dedup.length }), {
+    return new Response(JSON.stringify({ ok: true, count: rows.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e: any) {
