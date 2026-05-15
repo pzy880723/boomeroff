@@ -1,0 +1,111 @@
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { SectionCard } from './primitives/SectionCard';
+import { Coffee, ChevronRight } from 'lucide-react';
+import { formatShiftTime } from '@/lib/scheduleUtils';
+import type { useDashboardData } from '@/hooks/useDashboardData';
+
+interface Props {
+  data: ReturnType<typeof useDashboardData>;
+  navigate: (p: string) => void;
+}
+
+export function SchedulePanel({ data, navigate }: Props) {
+  const shift = data.todayShift;
+  const peers = data.colleaguesToday || [];
+  const tomorrow = data.weekShifts?.[1]?.shift ?? null;
+  const hasTomorrowData = (data.weekShifts?.length ?? 0) >= 2;
+
+  return (
+    <div className="space-y-3">
+      {/* 今日班次 */}
+      <SectionCard className="overflow-hidden" delay={0} onClick={() => navigate('/me')}>
+        <div className="p-4 flex items-center gap-4">
+          {shift ? (
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md shrink-0"
+              style={{ backgroundColor: shift.color || 'hsl(var(--primary))' }}
+            >
+              {shift.code}
+            </div>
+          ) : (
+            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center shrink-0">
+              <Coffee className="w-7 h-7 text-white/40" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] tracking-[0.2em] text-white/45 mb-1">今日班次</div>
+            {shift ? (
+              <>
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-base font-semibold text-white">{shift.name}</span>
+                  <span className="text-sm text-white/55 tabular-nums">
+                    {formatShiftTime(shift.start_time, shift.end_time)}
+                  </span>
+                </div>
+                <p className="text-xs text-white/45 mt-1">
+                  {peers.length > 0 ? `${peers.length} 位同事在岗` : '今日独自当班'}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-base font-semibold text-white">今日休息</p>
+                <p className="text-xs text-white/45 mt-0.5">好好放松一天</p>
+              </>
+            )}
+          </div>
+          <ChevronRight className="w-4 h-4 text-white/35 shrink-0" />
+        </div>
+      </SectionCard>
+
+      {/* 同班同事 */}
+      {peers.length > 0 && (
+        <SectionCard className="p-4" delay={60}>
+          <div className="text-[11px] tracking-[0.18em] text-white/50 mb-3">同班同事</div>
+          <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            {peers.map(c => (
+              <div key={c.user_id} className="flex flex-col items-center gap-1.5 shrink-0 w-14">
+                <div className="relative">
+                  <Avatar className="w-12 h-12 border border-white/10">
+                    <AvatarImage src={c.avatar_url || undefined} />
+                    <AvatarFallback className="bg-white/10 text-white text-sm">
+                      {(c.display_name || '同')[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#13182a]" />
+                </div>
+                <span className="text-[11px] text-white/65 truncate w-full text-center">
+                  {c.display_name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* 明日 */}
+      <SectionCard className="p-3 px-4" delay={120}>
+        <div className="flex items-center gap-3">
+          <div className="text-[10px] tracking-[0.2em] text-white/45 shrink-0 w-10">明日</div>
+          {tomorrow ? (
+            <>
+              <span
+                className="px-1.5 py-0.5 rounded text-[11px] text-white font-medium shrink-0"
+                style={{ background: tomorrow.color || 'hsl(var(--primary))' }}
+              >
+                {tomorrow.code}
+              </span>
+              <span className="text-sm text-white/85 truncate">{tomorrow.name}</span>
+              <span className="text-xs text-white/55 tabular-nums ml-auto shrink-0">
+                {formatShiftTime(tomorrow.start_time, tomorrow.end_time)}
+              </span>
+            </>
+          ) : (
+            <span className="text-sm text-white/55">
+              {hasTomorrowData ? '明日休息' : '明日待排'}
+            </span>
+          )}
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
