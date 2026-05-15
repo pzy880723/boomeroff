@@ -367,7 +367,7 @@ function LearningRow({ learning, navigate }: { learning: ReturnType<typeof useDa
   return (
     <div>
       <p className="text-xs font-semibold text-muted-foreground mb-2 px-1">📚 今日学习</p>
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 snap-x snap-mandatory scrollbar-none">
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
         {items.map(it => {
           const Icon = it.icon;
           return (
