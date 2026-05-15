@@ -269,7 +269,7 @@ function DashboardFullscreen({
     <div
       onAnimationEnd={onAnimEnd}
       className={cn(
-        'fixed inset-0 z-[60] bg-background flex flex-col will-change-transform',
+        'fixed inset-0 z-[60] bg-gradient-surface flex flex-col will-change-transform overflow-hidden',
         open ? 'animate-dashboard-zoom-in' : 'animate-dashboard-zoom-out'
       )}
       style={{
@@ -277,22 +277,29 @@ function DashboardFullscreen({
         paddingTop: 'env(safe-area-inset-top)',
       }}
     >
+      {/* 装饰光晕 */}
+      <div className="absolute inset-0 pointer-events-none opacity-40 [background:radial-gradient(circle_at_20%_10%,hsl(var(--accent)/0.15),transparent_40%),radial-gradient(circle_at_80%_90%,hsl(var(--primary)/0.12),transparent_40%)]" />
+
       {/* 顶栏 */}
-      <div className="px-5 pt-5 pb-2 shrink-0">
-        <div className="flex items-end justify-between">
-          <h2 className="text-2xl font-bold tracking-tight leading-none">仪表盘</h2>
-          <p className="text-xs text-muted-foreground">
-            {todayLabel} · {greet()},{data.profile?.display_name || '店员'}
+      <div className="relative px-5 pt-5 pb-2 shrink-0">
+        <div className="flex items-center justify-between gap-3">
+          <img src={logo} alt="BOOMER-OFF" className="h-9 w-auto object-contain drop-shadow-sm" />
+          <p className="text-[11px] text-muted-foreground text-right leading-tight">
+            {todayLabel}<br />
+            {greet()}，{data.profile?.display_name || '店员'}
           </p>
         </div>
       </div>
 
       {/* 内容区 */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 pt-3 pb-28 space-y-4">
+      <div className="relative flex-1 overflow-y-auto overscroll-contain px-4 pt-3 pb-28 space-y-4">
         {/* 打气标语 Hero */}
-        <div className="relative rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/15 px-6 py-7 overflow-hidden animate-fade-in">
-          <Sparkles className="absolute top-4 right-4 w-5 h-5 text-primary/60" />
-          <p className="text-xl font-bold leading-snug text-foreground pr-8">
+        <div className="relative rounded-2xl bg-gradient-to-br from-accent/15 via-primary/8 to-transparent border border-primary/15 px-6 py-6 overflow-hidden animate-fade-in">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            <span className="text-[11px] font-semibold tracking-[0.2em] text-primary/80">今日标语</span>
+          </div>
+          <p className="text-xl font-bold leading-snug text-foreground">
             {quote}
           </p>
         </div>
