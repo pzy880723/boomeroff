@@ -212,6 +212,8 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
     setRecognitionFailed(false);
     setRecognitionTime(null);
     setElapsedTime(0);
+    setForceAllDone(false);
+    setNarrativeSteps(images.length > 1 ? buildMultiSteps(images.length) : SINGLE_STEPS);
     setIsRecognizing(true);
 
     timerStartRef.current = performance.now();
@@ -233,6 +235,11 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
       const finalTime = performance.now() - timerStartRef.current;
       setElapsedTime(finalTime);
       setRecognitionTime(finalTime);
+      if (ok) {
+        // 让用户看到一次"全部 ✓"的完成感再收起遮罩
+        setForceAllDone(true);
+        await new Promise((r) => setTimeout(r, 260));
+      }
       setIsRecognizing(false);
     }
 
