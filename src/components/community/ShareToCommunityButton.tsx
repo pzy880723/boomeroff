@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Share2, Check, Loader2 } from 'lucide-react';
 import type { ProductCategory } from '@/types';
 import { serializeTips, type SellingPoint, type TipsObj } from '@/lib/script';
+import { makeThumbnail } from '@/lib/imageThumb';
 
 interface ShareToCommunityButtonProps {
   productId: string;
