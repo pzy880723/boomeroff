@@ -21,6 +21,7 @@ interface Post {
   user_id: string;
   product_id: string | null;
   image_url: string | null;
+  thumbnail_url: string | null;
   name: string;
   category: ProductCategory;
   era: string | null;
