@@ -10,7 +10,7 @@ import {
   Flame, BookOpen, MessagesSquare, Sparkles,
   Camera, Star, Image as ImageIcon, TrendingUp, ChevronRight, Check,
   ClipboardList, Users as UsersIcon, AlertCircle, ChevronDown,
-  Megaphone, BellDot, Coffee,
+  LayoutDashboard, Megaphone, BellDot, Coffee,
 } from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useNotifications, type NotificationItem } from '@/hooks/useNotifications';
