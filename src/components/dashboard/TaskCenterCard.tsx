@@ -2,17 +2,25 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Gift, Check, Sparkles, Loader2 } from 'lucide-react';
+import { Gift, Check, Sparkles, Loader2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { useTasks } from '@/hooks/useTasks';
+import type { useTasks, DailyTaskKey } from '@/hooks/useTasks';
 
 interface Props {
   tasks: ReturnType<typeof useTasks>;
   onClaimed?: () => void;
+  onNavigate?: (path: string) => void;
 }
 
-export function TaskCenterCard({ tasks, onClaimed }: Props) {
+const TASK_ROUTE: Record<DailyTaskKey, string> = {
+  daily_first_scan: '/scan',
+  daily_3_scans: '/scan',
+  daily_quiz: '/library',
+  daily_post: '/community',
+};
+
+export function TaskCenterCard({ tasks, onClaimed, onNavigate }: Props) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [claimingAll, setClaimingAll] = useState(false);
 
@@ -107,18 +115,23 @@ export function TaskCenterCard({ tasks, onClaimed }: Props) {
               </div>
               {t.claimed ? (
                 <span className="text-[10px] text-muted-foreground shrink-0">已领 +{t.amount}</span>
+              ) : canClaim ? (
+                <Button
+                  size="sm"
+                  disabled={busyKey === t.key}
+                  onClick={() => handleClaimDaily(t.key, t.amount)}
+                  className="h-7 px-2 text-[11px] shrink-0 bg-amber-500 hover:bg-amber-600 text-white border-0"
+                >
+                  {busyKey === t.key ? <Loader2 className="w-3 h-3 animate-spin" /> : `领 +${t.amount}`}
+                </Button>
               ) : (
                 <Button
                   size="sm"
-                  variant={canClaim ? 'default' : 'outline'}
-                  disabled={!canClaim || busyKey === t.key}
-                  onClick={() => handleClaimDaily(t.key, t.amount)}
-                  className={cn(
-                    'h-7 px-2 text-[11px] shrink-0',
-                    canClaim && 'bg-amber-500 hover:bg-amber-600 text-white border-0'
-                  )}
+                  variant="outline"
+                  onClick={() => onNavigate?.(TASK_ROUTE[t.key])}
+                  className="h-7 px-2 text-[11px] shrink-0 gap-0.5"
                 >
-                  {busyKey === t.key ? <Loader2 className="w-3 h-3 animate-spin" /> : canClaim ? `领 +${t.amount}` : `+${t.amount}`}
+                  去完成 <ArrowRight className="w-3 h-3" />
                 </Button>
               )}
             </div>
