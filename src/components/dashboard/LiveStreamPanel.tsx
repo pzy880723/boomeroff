@@ -345,7 +345,11 @@ export function LiveStreamPanel() {
     }
   };
 
-  const handleRecognition = async (imageList: string[], opts: { forceRefresh?: boolean } = {}) => {
+  const handleRecognition = async (
+    imageList: string[],
+    opts: { forceRefresh?: boolean } = {},
+    userHint?: string,
+  ) => {
     clearResult();
     setCurrentProductId(null);
     setRecognitionTime(null);
@@ -354,8 +358,10 @@ export function LiveStreamPanel() {
     setEnriched(null);
     setIsEnriching(false);
     setRecognitionFailed(false);
+    setPhase('reading');
+    setPipelineSource(undefined);
     enrichKeyRef.current = null;
-    lastRecognitionInputRef.current = { images: imageList, opts };
+    lastRecognitionInputRef.current = { images: imageList, opts, userHint };
 
     // ⚡ 用 rAF 驱动计时，主线程繁忙时不会被丢拍
     timerStartRef.current = performance.now();
@@ -372,7 +378,11 @@ export function LiveStreamPanel() {
     const tInvoke = Date.now();
     const recognitionResult = await recognizeProduct(
       imageList.length > 1 ? imageList : imageList[0],
-      { forceRefresh: opts.forceRefresh },
+      {
+        forceRefresh: opts.forceRefresh,
+        userHint,
+        onPhase: (p) => { if (p !== 'done') setPhase(p); },
+      },
     );
     console.log('[FE] recognize roundtrip:', Date.now() - tInvoke, 'ms');
 
@@ -385,6 +395,10 @@ export function LiveStreamPanel() {
       setRecognitionFailed(true);
       return;
     }
+
+    // 完成态：透传 pipeline source 给三段进度做"命中缓存"压缩显示
+    setPipelineSource((recognitionResult as any).__pipeline?.source);
+    setPhase('done');
 
     // ★ 命中缓存：直接复用历史 product
     if (recognitionResult.fromCache && recognitionResult.cachedProductId) {
