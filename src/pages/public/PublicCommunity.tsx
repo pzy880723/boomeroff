@@ -159,19 +159,26 @@ export default function PublicCommunity() {
           </CardContent>
         </Card>
       ) : (
+        <>
         <div className="masonry-2col">
-          {posts.map((post) => (
+          {posts.map((post, idx) => {
+            const src = post.thumbnail_url || post.image_url;
+            const eager = idx < 4;
+            return (
             <button
               key={post.id}
               onClick={() => setActive(post)}
               className="masonry-item group block w-full text-left rounded-2xl overflow-hidden bg-card ring-1 ring-border/50 shadow-soft hover:shadow-elevated hover:ring-border transition-all"
             >
               <div className="relative">
-                {post.image_url ? (
+                {src ? (
                   <img
-                    src={post.image_url}
+                    src={src}
                     alt={post.name}
-                    loading="lazy"
+                    loading={eager ? 'eager' : 'lazy'}
+                    decoding="async"
+                    // @ts-expect-error fetchpriority is a valid HTML attribute
+                    fetchpriority={eager ? 'high' : 'low'}
                     className="w-full h-auto block bg-muted transition-transform duration-500 group-hover:scale-[1.02]"
                   />
                 ) : (
@@ -190,8 +197,21 @@ export default function PublicCommunity() {
                 )}
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
+        {hasMore && (
+          <div className="flex justify-center pt-3 pb-1">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="px-5 h-10 rounded-full bg-card ring-1 ring-border/60 text-[12.5px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-60"
+            >
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          </div>
+        )}
+        </>
       )}
 
       {active && <PostDetailSheet post={active} onClose={() => setActive(null)} />}
