@@ -215,3 +215,49 @@
   }
 }
 
+
+/* ===== 仪表盘工作台 ===== */
+.dashboard-deep-surface {
+  background: linear-gradient(180deg, #0f1320 0%, #161b2c 60%, #1a1f33 100%);
+  color: #e8ebf2;
+}
+.dashboard-deep-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 8%, hsl(var(--primary) / 0.18), transparent 40%),
+    radial-gradient(circle at 88% 92%, hsl(var(--accent) / 0.12), transparent 45%);
+}
+
+/* 主色按钮上一次性高光扫过 */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.btn-shine::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 40%;
+  left: -120%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: skewX(-20deg);
+  animation: shine-once 1.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s 1 forwards;
+  pointer-events: none;
+}
+@keyframes shine-once {
+  0% { left: -120%; }
+  100% { left: 220%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-card-enter,
+  .animate-progress-fill,
+  .animate-badge-pop,
+  .btn-shine::after {
+    animation: none !important;
+  }
+}
