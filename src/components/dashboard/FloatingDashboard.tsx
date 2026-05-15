@@ -5,11 +5,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
-  Calendar, Flame, BookOpen, MessagesSquare, Sparkles,
+  Flame, BookOpen, MessagesSquare, Sparkles,
   Camera, Star, Image as ImageIcon, TrendingUp, ChevronRight, Check,
   ClipboardList, Users as UsersIcon, AlertCircle, ChevronDown,
-  LayoutDashboard, Megaphone, BellDot,
+  Megaphone, BellDot, Coffee,
 } from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useNotifications, type NotificationItem } from '@/hooks/useNotifications';
