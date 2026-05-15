@@ -11,12 +11,21 @@ const VALID_CATS: ProductCategory[] = [
   'hobby', 'other',
 ];
 
+export type RecognitionPhase = 'reading' | 'matching' | 'generating' | 'done';
+
 export interface GuestRecognitionResult extends RecognitionResult {
   remaining?: number;
   /** 顾客视角扩展字段（顾客版独有） */
   story?: string;
   appreciation?: string;
   careTips?: string;
+}
+
+interface RecognizeOptions {
+  /** 失败兜底:用户文字补充线索 */
+  userHint?: string;
+  /** 阶段回调 */
+  onPhase?: (phase: RecognitionPhase) => void;
 }
 
 /** 游客版识别 hook：调用 recognize-product-public，无需登录 */
@@ -26,9 +35,10 @@ export function useGuestRecognition() {
   const [remaining, setRemaining] = useState<number | null>(null);
   const { toast } = useToast();
 
-  const recognize = async (input: string | string[]) => {
+  const recognize = async (input: string | string[], options: RecognizeOptions = {}) => {
     setIsRecognizing(true);
     setResult(null);
+    options.onPhase?.('reading');
     try {
       const firstImage = Array.isArray(input) ? input[0] : input;
       const imageHash = firstImage ? await computeImageHash(firstImage) : null;
@@ -36,6 +46,8 @@ export function useGuestRecognition() {
         ? { imageBase64: input[0], images: input }
         : { imageBase64: input };
       if (imageHash) body.imageHash = imageHash;
+      if (options.userHint && options.userHint.trim()) body.userHint = options.userHint.trim();
+      options.onPhase?.('matching');
 
       const { data, error } = await supabase.functions.invoke('recognize-product-public', { body });
 
@@ -81,9 +93,11 @@ export function useGuestRecognition() {
       };
       setResult(out);
       if (typeof data.remaining === 'number') setRemaining(data.remaining);
+      options.onPhase?.('done');
       return out;
     } catch (e: any) {
       toast({ title: '识别失败', description: e?.message || '请重试', variant: 'destructive' });
+      options.onPhase?.('done');
       return null;
     } finally {
       setIsRecognizing(false);
