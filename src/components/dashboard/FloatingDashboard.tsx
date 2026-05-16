@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 
 const POS_KEY = 'dashboard_capsule_pos_v2';
 const AUTO_OPEN_KEY = 'dashboard_auto_opened_session';
-const BTN = 64;
+const BTN = 88;
 const EDGE = 8;
 const BOTTOM_TAB = 64;
 type Side = 'left' | 'right';

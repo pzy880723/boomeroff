@@ -50,7 +50,7 @@ export function SpiritChatPanel() {
     <div className="flex flex-col h-full">
       {/* 顶部小精灵气泡区 */}
       <div className="shrink-0 px-4 pt-3 pb-2 flex items-center gap-3">
-        <SpiritMascot size={48} state={spiritState} />
+        <SpiritMascot size={64} state={spiritState} />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-bold text-[hsl(var(--primary-foreground))]">中古小精灵</div>
           <div className="text-[11px] text-[hsl(var(--primary-foreground)/0.6)] truncate">
@@ -140,7 +140,7 @@ export function SpiritChatPanel() {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center text-center pt-8 pb-4 px-6">
-      <SpiritMascot size={120} state="idle" />
+      <SpiritMascot size={180} state="idle" />
       <div className="mt-4 text-[hsl(var(--primary-foreground))] text-sm font-semibold flex items-center gap-1.5">
         <Sparkles className="w-3.5 h-3.5" />
         你好呀～我是中古小精灵
@@ -164,7 +164,7 @@ function MessageBubble({ role, content, streaming }: { role: 'user' | 'assistant
   }
   return (
     <div className="flex items-start gap-2">
-      <SpiritMascot size={28} flat />
+      <SpiritMascot size={36} flat />
       <div className="max-w-[85%] text-[hsl(var(--primary-foreground)/0.95)] text-[13px] leading-relaxed">
         {content ? (
           <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0">
