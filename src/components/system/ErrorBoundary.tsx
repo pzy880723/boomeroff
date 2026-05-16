@@ -1,6 +1,6 @@
 import { Component, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, RefreshCcw } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCcw } from 'lucide-react';
 import { isChunkLoadError, scheduleChunkReload } from '@/lib/chunkLoadRecovery';
 
 interface Props {
