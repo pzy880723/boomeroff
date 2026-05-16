@@ -178,6 +178,8 @@ export function FloatingDashboard() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
           aria-label="召唤中古小精灵"
           className={cn(
             'relative flex items-center justify-center rounded-full active:scale-95 transition-transform',
@@ -185,7 +187,18 @@ export function FloatingDashboard() {
           )}
           style={{ width: BTN, height: BTN }}
         >
-          <SpiritMascot size={BTN} state={hasAlert ? 'talking' : 'idle'} />
+          <SpiritMascot
+            size={BTN}
+            state={
+              (dragging
+                ? 'dragging'
+                : hovering
+                ? 'hover'
+                : hasAlert
+                ? 'alert'
+                : 'idle') as SpiritState
+            }
+          />
 
           {/* 提醒徽标 */}
           {hasClaimable ? (
@@ -197,9 +210,9 @@ export function FloatingDashboard() {
           ) : null}
         </button>
 
-        {showLabel && !dragging && (
+        {labelText && !dragging && (
           <div className="mx-1.5 px-3 py-1.5 rounded-2xl rounded-bl-sm bg-card/95 backdrop-blur border border-border/60 shadow-md text-xs font-medium text-foreground whitespace-nowrap pointer-events-none spirit-bubble-in">
-            你好呀～
+            {labelText}
           </div>
         )}
       </div>
