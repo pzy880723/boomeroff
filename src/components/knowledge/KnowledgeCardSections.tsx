@@ -1,16 +1,27 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Quote, Volume2, Square, Copy, Sparkles } from 'lucide-react';
+import { Quote, Volume2, Square, Copy, Sparkles, BookOpen } from 'lucide-react';
 import { KnowledgeCard } from '@/lib/knowledgeCard';
 import { useSpeech } from '@/hooks/useSpeech';
 import { toast } from 'sonner';
+
+interface Hints {
+  name?: string;
+  category?: string;
+  era?: string | null;
+  origin?: string | null;
+  ip?: string | null;
+}
 
 interface Props {
   card: KnowledgeCard | null;
   loading?: boolean;
   /** 占位提示文案，例如「正在为本次识别生成知识卡…」 */
   loadingText?: string;
+  /** 用于在等待期渲染"边看边等"的趣味提示卡 */
+  hints?: Hints;
 }
 
 /**
@@ -18,7 +29,7 @@ interface Props {
  * 用于：官方知识详情、个人识别历史、个人手建词条、AI 识别结果
  * 不渲染 body（深度阅读）
  */
-export function KnowledgeCardSections({ card, loading, loadingText }: Props) {
+export function KnowledgeCardSections({ card, loading, loadingText, hints }: Props) {
   const { isSpeaking, speak, stop } = useSpeech();
   const speakOrStop = (t: string) => (isSpeaking ? stop() : speak(t));
   const copyText = (t: string) =>
@@ -29,12 +40,7 @@ export function KnowledgeCardSections({ card, loading, loadingText }: Props) {
 
   if (!card) {
     if (!loading) return null;
-    return (
-      <Card className="p-3 text-xs text-muted-foreground border-dashed flex items-center gap-2">
-        <Sparkles className="w-3.5 h-3.5 animate-pulse text-primary" />
-        {loadingText || '正在生成知识卡…（约 5-15 秒）'}
-      </Card>
-    );
+    return <EnrichingPlaceholder hints={hints} loadingText={loadingText} />;
   }
 
   return (
