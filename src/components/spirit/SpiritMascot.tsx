@@ -113,8 +113,12 @@ export function SpiritMascot({
         <div className={cn('relative w-full h-full', midAnim)}>
           {/* 内层：一次性彩蛋动作 */}
           <div
-            key={actionClass /* 重新触发动画 */}
-            className={cn('relative w-full h-full', actionClass)}
+            key={actionClass}
+            className={cn(
+              'relative w-full h-full',
+              actionClass,
+            )}
+            style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.25))' }}
           >
             {videoFailed ? (
               <img
@@ -123,7 +127,7 @@ export function SpiritMascot({
                 width={size}
                 height={size}
                 loading="lazy"
-                className="w-full h-full object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.25)] select-none pointer-events-none"
+                className="w-full h-full object-contain select-none pointer-events-none"
                 draggable={false}
               />
             ) : (
@@ -139,7 +143,27 @@ export function SpiritMascot({
                 playsInline
                 preload="auto"
                 onError={() => setVideoFailed(true)}
-                className="w-full h-full object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.25)] select-none pointer-events-none"
+                onLoadedData={() => {
+                  // 部分浏览器不支持 vp9 alpha，会渲染成黑色 —
+                  // 通过解码首帧像素检测：抽样若全黑，则回退到 PNG
+                  const v = videoRef.current;
+                  if (!v) return;
+                  try {
+                    const c = document.createElement('canvas');
+                    c.width = 16; c.height = 16;
+                    const ctx = c.getContext('2d');
+                    if (!ctx) return;
+                    ctx.clearRect(0, 0, 16, 16);
+                    ctx.drawImage(v, 0, 0, 16, 16);
+                    const data = ctx.getImageData(0, 0, 16, 16).data;
+                    let opaque = 0;
+                    for (let i = 3; i < data.length; i += 4) if (data[i] > 20) opaque++;
+                    // 没有任何半透明像素说明 alpha 通道丢失（被当成实体）
+                    // 或全透明（错误抠图）→ fallback
+                    if (opaque === 0 || opaque === 256) setVideoFailed(true);
+                  } catch { /* CORS/SecurityError 时忽略 */ }
+                }}
+                className="w-full h-full object-contain select-none pointer-events-none"
               />
             )}
           </div>

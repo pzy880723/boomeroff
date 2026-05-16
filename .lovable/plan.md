@@ -1,55 +1,45 @@
-## 目标
-1. 让小精灵真正"动起来"（角色有肢体动作），而不是整张图缩放跳动
-2. 修复点开抽屉里仪表盘 Tab 加载不出来的问题
+## 问题诊断
+截图里小精灵几乎不可见，只剩暗影 + 背景光晕。根因：
 
-## 一、验证阶段：先做 2 段透明 WebM 动画
+**VP9 WebM 缺 `alpha_mode=1` 元数据**。上一轮用 `libvpx-vp9 -pix_fmt yuva420p` 编码，但没写 `-metadata:s:v:0 alpha_mode="1"`。Chrome/Edge 看到 webm 没有这个 tag 就不启用 alpha 通道，把 alpha 平面当垃圾丢掉，原本透明的区域渲染成黑色，叠在抽屉的深色 BG 上 → 整个角色变成暗影。
 
-### 资产生成
-以 `src/assets/spirit-mascot-canonical.png` 作为首帧，用 `videogen--generate_video` 各出 1 段 5s 1080p 视频：
+## 修复方案
 
-1. **idle-float.mp4** —— 默认漂浮 + 呼吸 + 偶尔眨眼 + 围巾末端轻飘
-   - prompt: "Chibi watercolor mascot in bowler hat gently floating, soft breathing, scarf end swaying, occasional blink. Static background, character stays centered, no camera movement."
-2. **wave.mp4** —— 抬手挥手打招呼
-   - prompt: "Same chibi mascot raises right hand and waves cheerfully, head tilts slightly, smile, scarf sways. Character centered, no camera movement."
-
-均使用 `camera_fixed: true`、`starting_frame` 锁形象。
-
-### 转码为透明循环 WebM
-用 ffmpeg：
-- 自动去白底 → alpha 通道（`colorkey=white:0.15:0.05`，必要时叠加 `geq` 羽化）
-- 输出 VP9 alpha + opus 静音，循环友好（首尾交叉淡入，避免跳帧）
-- 目标 < 400KB/段
-- 路径：`src/assets/spirit/idle-float.webm`、`src/assets/spirit/wave.webm`
-- 同时输出 GIF 兜底（可选，先不做）
-
-### 前端接入 `SpiritMascot.tsx`
-- 把当前的 `<img>` 换成 `<video autoplay loop muted playsinline preload="auto">`
-- 保留外层 CSS `spirit-float`/`spirit-sway` 整体轻晃（叠加效果而非替代）
-- 根据 state 切 src：`idle` → idle-float.webm，hover/click 触发 → wave.webm 播一次后回 idle
-- 加载失败 fallback 回 canonical PNG
-- 拖拽态、thinking 态先沿用现有 CSS 动画，等验证 OK 再补齐 4 段
-
-## 二、修复仪表盘加载报错
-
-`useTasks` 在 `FloatingDashboard`（角标用）和 `DashboardInner`（面板用）各实例化一次，两者订阅同一个 Supabase Realtime channel `exp-pending-${user.id}`，第二次 subscribe 静默失败导致面板数据拉不出来。
-
-修复：在 `src/hooks/useTasks.ts` 里把 channel 名加随机后缀
-```ts
-const channel = supabase.channel(`exp-pending-${user.id}-${crypto.randomUUID()}`)
+### 一、重编码两段 WebM
+在 `/mnt/documents` 用 ffmpeg 重新做：
+```
+ffmpeg -y -i spirit-{name}-raw.mp4 -an \
+  -vf "chromakey=color=0xF3F5F2:similarity=0.18:blend=0.12,\
+       despill=type=green:mix=0,\
+       scale=512:512:flags=lanczos,format=yuva420p" \
+  -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 0 -crf 32 -row-mt 1 -auto-alt-ref 0 \
+  -metadata:s:v:0 alpha_mode="1" \
+  spirit-{name}.webm
 ```
 
-顺手 grep 一遍 `useNotifications` 和其他 hook，确认没有同名 channel 冲突；如有，同样处理。
+关键差异：
+- 加 `-metadata:s:v:0 alpha_mode="1"` ← **核心修复**
+- chromakey similarity 0.13 → 0.18，blend 0.08 → 0.12（边缘更干净）
 
-## 三、验证
-- 浏览器预览：打开浮窗 → 看小精灵是否真在挥手/漂浮（而非整图缩放）
-- 点抽屉里的"仪表盘"Tab → 4 个子 Tab 应能正常加载
-- console 无 "channel already subscribed" 类报错
+### 二、校验
+1. `ffprobe -show_streams` 确认 alpha_mode tag 存在
+2. 提第 30 帧 → 落到红色 BG → 肉眼看角色是否清晰、边缘干净、无暗带
+3. 如果还有问题，回退到 **APNG**（`ffmpeg -plays 0 -f apng`），所有浏览器原生 alpha 支持，体积约 1MB 可接受
 
-## 后续（本轮不做，验证通过后再做）
-- 补齐 nod / jump / camera-shoot / talk 4 段
-- 加预加载、状态机 transition、点击彩蛋随机播放
+### 三、前端微调（`SpiritMascot.tsx`）
+- `drop-shadow` filter 从 `<video>` 元素移到外层 wrapper `<div>`，避开 Safari/Chrome 对带 alpha video 套 filter 的渲染差异
+- 加 `onLoadedData` + 2s 超时检测：拿不到帧就 fallback 到 canonical PNG
+- 大头像（SpiritChatPanel 那个 ~120px）和浮窗都保留视频（按用户选择）
+
+### 四、验证
+- 浏览器预览刷新，浮窗 + 抽屉都看小精灵是否清晰
+- console 看是否有 video decode 报错
+- 用 image_tools 把 preview 截图 zoom 到小精灵区域核对
+
+## 不动的部分
+- canonical PNG、首帧 mp4 源、idle/wave 动作内容都不重新生成
+- useTasks 修复不动
+- SpiritChatPanel 布局不动
 
 ## 技术细节
-- 视频文件放 `src/assets/spirit/`，ES6 import 即可
-- WebM VP9 alpha 在 Chrome/Edge/Firefox/Safari 16+ 全支持；老 Safari fallback 到 PNG
-- 视频元素需 `muted` 才能 autoplay；`playsinline` 防止 iOS 全屏
+关于 alpha_mode：这是 WebM/Matroska 容器层的字符串元数据，浏览器据此决定是否把 VP9 的 yuva420p 平面分离出 alpha。无此 tag 时绝大多数浏览器忽略 alpha → 黑底；有此 tag 时正常透明。这是 webm + alpha 路线最常见的坑。
