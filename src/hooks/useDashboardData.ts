@@ -85,7 +85,7 @@ export function useDashboardData(enabled: boolean): DashData {
     const today = todayShanghai();
     const weekAgo = addDaysISO(today, -6);
     const twoWeekAgo = addDaysISO(today, -13);
-    const isAdmin = can('correction.review') || can('user.create');
+    // isAdmin 来自外层 props，避免 can 函数引用变化触发重 load
 
     const [
       { data: profile },
