@@ -34,7 +34,8 @@ export function SpiritMascot({
   disableActions = false,
 }: Props) {
   const [actionClass, setActionClass] = useState<string>('');
-  const [videoFailed, setVideoFailed] = useState(false);
+  // 0 = webm, 1 = apng, 2 = static png
+  const [tier, setTier] = useState<0 | 1 | 2>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -42,13 +43,26 @@ export function SpiritMascot({
   const wantWave =
     !disableActions && (state === 'hover' || state === 'alert' || state === 'talking');
   const videoSrc = wantWave ? waveVideo : idleVideo;
+  const apngSrc = wantWave ? waveApng : idleApng;
 
   // 切源时让 video 从头播放
   useEffect(() => {
+    if (tier !== 0) return;
     const v = videoRef.current;
     if (!v) return;
     try { v.currentTime = 0; v.play().catch(() => {}); } catch {}
-  }, [videoSrc]);
+  }, [videoSrc, tier]);
+
+  // WebM 加载超时兜底：3s 内没拿到帧 → 切 APNG
+  useEffect(() => {
+    if (tier !== 0) return;
+    const v = videoRef.current;
+    if (!v) return;
+    const t = setTimeout(() => {
+      if (v.readyState < 2) setTier(1);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [videoSrc, tier]);
 
   // 仅 idle 时随机叠加一点 CSS 微动作（让整体不死板）
   useEffect(() => {
