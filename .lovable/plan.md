@@ -1,107 +1,129 @@
-# 性能体检报告
+# 中古小精灵 · 系统 Agent 改造方案
 
-不是改造方案，是一份「按优先级排好」的清单，看完再决定改什么。
-
----
-
-## A. 素材 / 静态资源加载
-
-### 当前状况
-- `index.html`：字体已用 `preload + media=print` 非阻塞，preconnect 到 Supabase 和 Google Fonts，已经做得不错。
-- `public/icon-512.png` **188KB**，`src/assets/shop-wechat-qr.png` **192KB**，`boomer-off-vintage-logo.png` **54KB**。三张图全是 PNG，没有 webp / avif。
-- 项目里**没有 `vite-imagetools`**，所有图片按原格式打包，浏览器无法用现代格式。
-- 字体只加载了 2 个字重（Noto Sans SC 400/600 + Playfair Display 700），已优化。
-- favicon 4KB、apple-touch-icon 24KB，OK。
-
-### 主要问题
-| # | 问题 | 影响 | 难度 |
-|---|------|------|------|
-| A1 | `icon-512.png` 188KB 太大（仅 PWA 安装时用） | 首屏其实不加载，但 manifest 抓取会拉一次 | 低 |
-| A2 | `shop-wechat-qr.png` 192KB 在 bundle 里 | 哪个页面 import 了就强制加载 | 低 |
-| A3 | 所有 PNG 没 WebP 版本 | 用户头像、商品图、官方知识封面都用 PNG/JPG 直链 | 中 |
-| A4 | Supabase Storage（avatars / product-images）**没有图片转换层** | 列表页/瀑布流加载原图 | 中 |
-| A5 | LCP 图片没有 `<link rel="preload" as="image">` | 首屏识别页 hero 图未优先 | 低 |
-
-### 建议
-- **必做**：用 `squoosh` 或 `sharp` 把 `icon-512.png` / `shop-wechat-qr.png` 压到 < 50KB。
-- **应做**：community / library 列表用 `<img loading="lazy" decoding="async" width height>`（防 CLS + 懒加载），检查是否已有。
-- **可做**：接入 `vite-imagetools`，或在 Supabase 前面加 Cloudflare Image Resizing / imgproxy 做 WebP/AVIF 转换。
-- **不建议**：自己写 SSR 图片代理（SSRF 风险）。
+把右下角的胶囊换成一只会动的拟人小精灵，点击展开「对话 ↔ 仪表盘」两个 Tab 的抽屉，原有 6 个面板全部保留。
 
 ---
 
-## B. 页面打开速度（JS bundle + 首屏）
+## 一、视觉与动效
 
-### 当前状况
-- `vite.config.ts` 已做 `manualChunks`：react-vendor、radix、supabase、charts、markdown、date、dnd、carousel、html-to-image、icons 全拆开 ✅
-- 路由全部 `lazyWithRetry` 懒加载 ✅
-- 生产构建 `drop console / debugger` ✅
-- `Scan.tsx` 把 `AuthPage`、`LiveStreamPanel` 都拆成单独 chunk ✅
-- 这一块整体水平已经不错。
+### 1.1 小精灵形象
+- 用 imagegen 生成一张 **透明背景 PNG**：拟人小精灵，戴小礼帽 / 围巾，怀里抱着一台小相机或老茶杯，柔和水彩 + 描边风格，与项目 `bg-gradient-primary` 色调一致。
+- 尺寸 ~256×256，约 30-60KB。文件落到 `src/assets/spirit-mascot.png`。
+- 同时生成 **眨眼帧 / 张嘴帧** 备用（可选，若一张图够灵动就先省）。
 
-### 仍存在的痛点
-| # | 问题 | 影响 |
-|---|------|------|
-| B1 | **`recharts` (charts chunk) 通常 150–200KB gzip**，但仪表盘只用了 `Sparkline`（自己手写 SVG），看着没真正用 recharts。需要确认是否还能整个去掉。 | 大 |
-| B2 | `html-to-image` 只在生成分享卡时用，但若被同步 import 会进首包 | 中 |
-| B3 | `useDashboardData` 一次发 **15+ 个并行 Supabase 查询**（profiles/shift_schedules/shop_shifts/user_experience/check_ins/sop/qa/daily_knowledge/products×2/favorites/community_posts×2/peer profiles…）。RLS 多策略表查询累计往返 + 函数调用容易 800ms–1.5s。 | 大 |
-| B4 | `FloatingDashboard` 全局挂载在 `MainLayout`，每个页面都会跑这套查询（即便胶囊收起） | 大 |
-| B5 | `index.html` 没有 `<link rel="modulepreload">` 给关键路由 chunk | 小 |
-| B6 | 项目里依然装着 `recharts + d3-*`、`embla-carousel`、`react-day-picker`、`vaul`、`cmdk`、`input-otp`、`@dnd-kit/*` 等，需要核实是否真在用 | 中 |
-
-### 建议（按性价比）
-1. **拆 `useDashboardData`**：分成「胶囊必需（头像+今日班次）」和「抽屉打开后才加载（学习/数据/待办/同事）」两层；用 `useQuery` 替代手写 effect，自动缓存+复用。
-2. **审计未用依赖**：跑 `npx depcheck`，确认 recharts / d3 / dnd / carousel / day-picker / vaul 是否真用，无用的删掉能砍 200–400KB。
-3. **`FloatingDashboard` 路由白名单**：登录页、`/u/*` 游客页、`/reset-password` 不挂。
-4. **压缩 2 张大 PNG**（参见 A1/A2）。
-5. **可选**：给 `/scan`（首屏）的 `LiveStreamPanel` chunk 加 `<link rel="modulepreload">`，登录后立刻可用。
+### 1.2 动效（全部 CSS，零依赖）
+- **idle 漂浮**：3s 周期上下 ±4px + 轻微旋转 ±2°。
+- **眨眼**：每 4-6s 一次 scaleY(0.05) 100ms。
+- **说话时**：上下抖动加快到 0.8s 周期，头顶冒出 1-2 个小气泡（`<span>` + ping 动画）。
+- **未读 / 提醒**：头顶挂红色小圆点（沿用现在的徽标）。
+- **首次出现**：fade + scale-in，停 2s 自动说一句"你好呀～"气泡（沿用现在的 `showLabel` 机制）。
+- 拖拽、贴边、记忆位置 → 沿用 `FloatingDashboard` 现有逻辑。
 
 ---
 
-## C. AI 识别速度
+## 二、交互结构
 
-### 当前状况
-- 主识别硬编码 `google/gemini-2.5-flash-lite`（最快档），不走 admin 配置 ✅
-- Edge function 已写好 hash_cache → name_cache → AI 三级 pipeline ✅
-- 前端单图压缩到 **640px / q=0.62**，多图 576px / q=0.6 ✅（已经很激进）
-- 前端进入识别页 **预热 OPTIONS** 一次，避免冷启动 ✅
-- 前端用 8×8 pHash 做去重 ✅
-- 上传图片到 storage 与 AI 调用是 **Promise.all 并行** ✅
+```
+┌─ 小精灵胶囊（拖拽 / 提醒徽标）
+└─ 点击 → 底部抽屉（85vh）
+       ┌─ 顶部：小精灵头像 + "中古小精灵" + 关闭
+       ├─ Tabs:  [💬 对话]  [📊 仪表盘]
+       │
+       ├─ [💬 对话] Tab
+       │   - 消息流（AI Elements: Conversation/Message/MessageResponse）
+       │   - 顶部一排 chip 快捷：今日排班 / 我的等级 / 待办 / 帮我打气
+       │   - 输入框（PromptInput + Submit + 📎 拍照按钮）
+       │   - 拍照走现有 CameraCapture，图片以 image part 发给 agent
+       │
+       └─ [📊 仪表盘] Tab
+           - 现有 ProfileHeaderCard / TodayPanel / TasksPanel /
+             MessagesPanel / SchedulePanel 原样塞进来
+```
 
-### 仍有空间
-| # | 问题 | 影响 |
-|---|------|------|
-| C1 | 预热用 `OPTIONS` 实际不会执行 handler，**冷启动不会被预热**。应该 POST 一个轻量探活 body。 | 中 |
-| C2 | Edge function 内 `tryQuickClassify` + `tryNameMatch` + 主识别可能串行调用，多走一跳 = +800ms–1.5s。需要确认是否在缓存未命中时多调一次 AI。 | 大 |
-| C3 | 图像 base64 通过 JSON body 发送，比 multipart 多 33% 体积。640px JPG q0.62 通常 40–80KB → base64 后 55–110KB，4G 上行 200–500ms。 | 中 |
-| C4 | 识别后 `enrich-recognition` 在后台跑，但前端是否等待 enrich 完才显示长话术？需要确认 UX。 | 中 |
-| C5 | `useGuestRecognition` / `useProductRecognition` 两套 hook 调两个 edge function（`recognize-product` / `recognize-product-public`），代码重复 600+ 行，维护成本高，无性能影响。 | 维护 |
-
-### 建议
-1. **改预热**：把 `OPTIONS` 换成 `POST {ping:true}`，edge function 早返回，能真正预热 V8 isolate。
-2. **审 pipeline**：确认 `tryQuickClassify` 是否在主识别之外**额外**调了一次 AI。如果是，砍掉它或改为「主识别失败再兜底」。
-3. **缓存命中率监控**：往日志加 `hash_hit / name_hit / ai_miss` 三段计数，按周看命中率，决定是否值得加 CLIP embedding 召回。
-4. **可选**：上行用 `Blob + FormData` 替代 base64 JSON，省 30% 体积；但需要 edge function 改 parser。
-5. **不建议**：换更贵模型。Lite 已是 1–3s 档，换 Flash/Pro 只会更慢更贵。
+抽屉是同一个，Tab 用 `localStorage` 记忆上次选择。
 
 ---
 
-## D. 一句话结论
+## 三、AI Agent 后端（edge function）
 
-- **改造性价比最高的三件事**：①拆 `useDashboardData` + 路由白名单挂 `FloatingDashboard`；②`depcheck` 砍掉没用的依赖（重点看 recharts/d3）；③压缩 `icon-512.png` 和 `shop-wechat-qr.png`。
-- **识别速度**目前已经压到接近 lite 模型物理极限，最大变量是**冷启动**和**缓存命中率**，不是模型本身。
-- **图片现代格式（WebP/AVIF）**收益大但工作量也大，建议放在第二轮。
+新建 `supabase/functions/spirit-chat/index.ts`，用 AI SDK + Lovable AI Gateway：
+
+- 模型：`google/gemini-3-flash-preview`
+- `streamText` + `toUIMessageStreamResponse`
+- system prompt（中文）：温暖、幽默、像店里一位懂行的老前辈，会主动鼓励、偶尔讲个冷知识；不用"主播"，称呼"你"。
+- 工具集（AI SDK `tool({ inputSchema, execute })`）：
+
+| 工具 | 作用 | 数据源 |
+|---|---|---|
+| `get_my_schedule` | 今日 / 本周班次 + 同班同事 | `shift_schedules` + `shop_shifts` |
+| `get_my_progress` | 经验值 / 等级 / 连续打卡 | `user_experience` + `user_check_ins` |
+| `get_pending_todos` | 我的待办（识别纠错、未读、审核） | 现有 `useTasks` / `useNotifications` 同源表 |
+| `search_knowledge` | 中古知识 RAG | `official_knowledge` 全文检索 |
+| `search_shop_kb` | 门店 SOP / 顾客 Q&A | `shop_kb_entries` |
+| `daily_pep_talk` | 抽取一条打气文案 | 内联模板 + 当日日期 / 用户连胜 |
+| `recognize_image` | 把图转交识别管线 | 调 `recognize-product` |
+
+- 鉴权：从 `Authorization` 取 JWT，校验 `user_roles`，把 `user_id` 注入工具上下文。
+- `stopWhen: stepCountIs(50)`。
+- CORS、`verify_jwt = false`、错误 (429/402/500) 一律以可读 JSON 返回。
 
 ---
 
-## 等你决定
+## 四、前端实现
 
-请告诉我你想先做哪几项，我再展开具体改造方案。可选：
+### 4.1 新文件
+- `src/assets/spirit-mascot.png`（生成）
+- `src/components/spirit/SpiritMascot.tsx` — 纯 CSS 动效的小精灵组件（接收 `state: idle|talking|alert`）
+- `src/components/spirit/SpiritChatPanel.tsx` — 对话 Tab 内容，`useChat` + AI Elements
+- `src/components/spirit/QuickChips.tsx` — 顶部快捷指令
+- `src/components/spirit/SpiritDrawer.tsx` — 两 Tab 抽屉
 
-1. 拆 `useDashboardData` + FloatingDashboard 路由白名单
-2. 跑 depcheck，砍未用依赖
-3. 压缩两张大 PNG + LCP preload
-4. 把识别预热改成真预热 POST
-5. 审 edge function pipeline 是否多调一次 AI
-6. 接入 WebP / 图片转换层
-7. 全做（按 1→5→2→3→4→6 顺序）
+### 4.2 改造文件
+- `src/components/dashboard/FloatingDashboard.tsx`：
+  - 胶囊视图换成 `<SpiritMascot />`
+  - 抽屉内容替换为 `<SpiritDrawer />`
+  - 拖拽 / 位置记忆 / 自动打开 / 提醒徽标逻辑保留
+- `MainLayout.tsx`：不变
+- `useDashboardData.ts` / `useNotifications` / `useTasks`：仪表盘 Tab 复用，不动
+
+### 4.3 依赖
+- `bun add ai @ai-sdk/react @ai-sdk/openai-compatible zod`
+- AI Elements：`bunx ai-elements@latest add conversation message prompt-input shimmer tool`
+- 已存在 `react-markdown` 渲染 MessageResponse。
+
+### 4.4 对话不持久化
+- `useChat` 不传 `id`，刷新即清空（用户已选「不保存」）。
+- 关闭抽屉不清空；切 Tab 不清空；点"清空对话"按钮清空。
+
+---
+
+## 五、安全 / 性能
+
+- LOVABLE_API_KEY 已在 secrets 中，无需新增。
+- 工具内所有 DB 调用走 service-role client 但只读用户自己的数据（`.eq('user_id', user.id)`）。
+- 小精灵 PNG 走 pngquant 压缩，控制在 50KB 内。
+- 抽屉懒加载（仅打开后 import `SpiritChatPanel`），不增加首屏体积。
+- 对话流即时显示（status='submitted' → shimmer "小精灵在想..."）。
+
+---
+
+## 六、不在本轮做
+
+- 持久化历史（用户明确不要）
+- 多会话切换
+- 主动 push（已选要，但需配合现有 `useNotifications` 红点 + 抽屉打开时由小精灵主动开口；不做服务端推送）
+
+---
+
+## 七、验证清单
+
+1. 登录后右下角出现会动的小精灵，3s 内自动说"你好呀～"气泡。
+2. 拖动小精灵 → 松手贴边 → 刷新位置仍在。
+3. 点小精灵 → 抽屉打开 → 默认在对话 Tab，输入框自动 focus。
+4. 输入"今天我和谁一起上班"→ 工具调用 → 流式输出班次 + 同事。
+5. 切到仪表盘 Tab → 现有 6 个面板完整显示。
+6. 关掉抽屉再打开 → 对话仍在，刷新页面 → 对话清空。
+7. 顶部 chip "帮我打气"→ 输出一段温暖鼓励文案。
+8. 点 📎 拍照 → 拍一张 → 小精灵识别后用自然语言回答。
+
+确认这个方案后我开工。
