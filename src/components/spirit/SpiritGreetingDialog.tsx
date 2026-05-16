@@ -87,7 +87,7 @@ export function SpiritGreetingDialog({ open, onClose }: Props) {
             type="button"
             onClick={onClose}
             className={cn(
-              'spirit-greet-button mt-6 h-11 px-7 rounded-full text-[13.5px] font-semibold',
+              'spirit-greet-button mt-5 h-11 px-7 rounded-full text-[13.5px] font-semibold',
               'bg-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.92)] text-[hsl(var(--accent-foreground))]',
               'shadow-[0_8px_24px_-6px_hsl(var(--accent)/0.55)] active:scale-95 transition-transform',
             )}
