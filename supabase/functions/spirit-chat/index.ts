@@ -66,6 +66,14 @@ Deno.serve(async (req) => {
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
     const queryText = extractQuery(lastUserMsg);
     const today = tzDate();
+    // 明天日期（Asia/Shanghai）
+    const tomorrow = (() => {
+      const d = new Date(today + 'T00:00:00+08:00');
+      d.setDate(d.getDate() + 1);
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(d);
+    })();
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE);
 
@@ -74,6 +82,8 @@ Deno.serve(async (req) => {
       profileRes,
       staffRes,
       todayScheduleRes,
+      tomorrowScheduleRes,
+      myRecentScheduleRes,
       expRes,
       pendingCorrRes,
       pendingSharesRes,
@@ -81,7 +91,11 @@ Deno.serve(async (req) => {
     ] = await Promise.all([
       admin.from('profiles').select('display_name, avatar_url').eq('user_id', uid).maybeSingle(),
       admin.from('staff_profiles').select('shop_id, position, real_name').eq('user_id', uid).maybeSingle(),
-      admin.from('shift_schedules').select('user_id, shift_code, work_date').eq('work_date', today),
+      admin.from('shift_schedules').select('user_id, shift_code, work_date, shop_id').eq('work_date', today),
+      admin.from('shift_schedules').select('user_id, shift_code, work_date, shop_id').eq('work_date', tomorrow),
+      // 用我自己最近 30 天的排班反推默认门店（兜底当 staff_profiles.shop_id 为空时）
+      admin.from('shift_schedules').select('shop_id, work_date').eq('user_id', uid)
+        .gte('work_date', today).order('work_date', { ascending: true }).limit(5),
       admin.from('user_experience').select('total_exp, current_streak, longest_streak, last_check_in_date').eq('user_id', uid).maybeSingle(),
       admin.from('app_settings').select('value').eq('key', 'pending_corrections').maybeSingle(),
       admin.from('app_settings').select('value').eq('key', 'pending_shares').maybeSingle(),
@@ -94,54 +108,84 @@ Deno.serve(async (req) => {
         : Promise.resolve({ data: [] as any[] }),
     ]);
 
-    const myName = profileRes.data?.display_name || '店员';
-    const myShop = staffRes.data?.shop_id;
+    const myName = profileRes.data?.display_name || staffRes.data?.real_name || '店员';
+    // 推断 shop_id：优先 staff_profiles → 否则取我自己今天/明天/最近排班里的 shop_id
+    const myShop: string | null =
+      staffRes.data?.shop_id ??
+      todayScheduleRes.data?.find((s: any) => s.user_id === uid)?.shop_id ??
+      tomorrowScheduleRes.data?.find((s: any) => s.user_id === uid)?.shop_id ??
+      myRecentScheduleRes.data?.[0]?.shop_id ??
+      null;
 
-    // 今日班次 + 同班同事
-    const mySched = todayScheduleRes.data?.find((s: any) => s.user_id === uid);
-    const myShiftCode: string | null = mySched?.shift_code ?? null;
+    // 加载该门店班次定义（一次拉，今天/明天共用）
+    const shiftsRes = myShop
+      ? await admin.from('shop_shifts').select('code, name, start_time, end_time')
+          .or(`shop_id.eq.${myShop},shop_id.is.null`).eq('active', true)
+      : { data: [] as any[] };
+    const shiftMap = new Map<string, any>();
+    for (const s of (shiftsRes.data || []) as any[]) shiftMap.set(s.code, s);
 
-    let shiftDesc = '今天没有排班';
-    const colleagueNames: string[] = [];
-    if (myShiftCode && myShop) {
-      // 取同班同事
-      const sameShiftIds = (todayScheduleRes.data || [])
-        .filter((s: any) => s.shift_code === myShiftCode && s.user_id !== uid)
-        .map((s: any) => s.user_id);
-      if (sameShiftIds.length > 0) {
-        const peerStaff = await admin
-          .from('staff_profiles')
-          .select('user_id, shop_id')
-          .in('user_id', sameShiftIds)
-          .eq('shop_id', myShop);
-        const sameShopIds = (peerStaff.data || []).map((s: any) => s.user_id);
-        if (sameShopIds.length > 0) {
-          const peerProfiles = await admin.from('profiles').select('user_id, display_name').in('user_id', sameShopIds);
-          for (const p of peerProfiles.data || []) {
-            colleagueNames.push(p.display_name || '同事');
-          }
-        }
-      }
-      // 班次详情
-      const shiftDef = await admin
-        .from('shop_shifts')
-        .select('name, start_time, end_time')
-        .eq('shop_id', myShop)
-        .eq('code', myShiftCode)
-        .maybeSingle();
-      if (shiftDef.data) {
-        shiftDesc = `${myShiftCode} 班（${shiftDef.data.name}） ${shiftDef.data.start_time?.slice(0, 5)}–${shiftDef.data.end_time?.slice(0, 5)}`;
-      } else {
-        shiftDesc = `${myShiftCode} 班`;
+    function fmtShift(code: string | null | undefined): string {
+      if (!code) return '休';
+      const def = shiftMap.get(code);
+      if (!def) return `${code} 班`;
+      return `${code} 班（${def.name}） ${String(def.start_time).slice(0, 5)}–${String(def.end_time).slice(0, 5)}`;
+    }
+
+    // 一次性把当天/明天涉及到的所有 user_id 拉真实姓名
+    const allUserIds = new Set<string>();
+    for (const s of (todayScheduleRes.data || []) as any[]) allUserIds.add(s.user_id);
+    for (const s of (tomorrowScheduleRes.data || []) as any[]) allUserIds.add(s.user_id);
+    allUserIds.delete(uid);
+    let nameMap = new Map<string, string>();
+    if (allUserIds.size > 0) {
+      const ids = Array.from(allUserIds);
+      const [sp, pf] = await Promise.all([
+        admin.from('staff_profiles').select('user_id, real_name').in('user_id', ids),
+        admin.from('profiles').select('user_id, display_name').in('user_id', ids),
+      ]);
+      for (const r of (pf.data || []) as any[]) nameMap.set(r.user_id, r.display_name || '同事');
+      for (const r of (sp.data || []) as any[]) {
+        if (r.real_name) nameMap.set(r.user_id, r.real_name);
       }
     }
+
+    function describeDay(label: string, rows: any[]): string {
+      const myRow = rows.find((s: any) => s.user_id === uid && (!myShop || s.shop_id === myShop));
+      const myShift = myRow?.shift_code || null;
+      const sameShift = rows
+        .filter((s: any) => myShift && s.shift_code === myShift && s.user_id !== uid && (!myShop || s.shop_id === myShop))
+        .map((s: any) => nameMap.get(s.user_id) || '同事');
+      // 同店全部班次概览（按班次分组）
+      const byShift = new Map<string, string[]>();
+      for (const s of rows) {
+        if (myShop && s.shop_id !== myShop) continue;
+        const arr = byShift.get(s.shift_code) || [];
+        const nm = s.user_id === uid ? `${myName}(你)` : (nameMap.get(s.user_id) || '同事');
+        arr.push(nm);
+        byShift.set(s.shift_code, arr);
+      }
+      const overview = Array.from(byShift.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([code, names]) => `${code}班：${names.join('、')}`)
+        .join('；');
+      const lines = [
+        `【${label}班次】${myShift ? fmtShift(myShift) : '没有排班（可以休息）'}`,
+        `【${label}同班同事】${sameShift.length > 0 ? sameShift.join('、') : (myShift ? '暂无（可能独立值班）' : '—')}`,
+      ];
+      if (overview) lines.push(`【${label}门店班表】${overview}`);
+      return lines.join('\n');
+    }
+
+    const todayBlock = describeDay('今日', (todayScheduleRes.data || []) as any[]);
+    const tomorrowBlock = describeDay('明日', (tomorrowScheduleRes.data || []) as any[]);
 
     // 等级
     const totalExp = expRes.data?.total_exp ?? 0;
     const streak = expRes.data?.current_streak ?? 0;
     const checkedToday = expRes.data?.last_check_in_date === today;
 
-    // 待办（仅相关）
+    // 待办
     const pendingCorr =
       Array.isArray(pendingCorrRes.data?.value) ? (pendingCorrRes.data?.value as any[]).length : 0;
     const pendingShares =
@@ -158,12 +202,10 @@ Deno.serve(async (req) => {
 
     // ── 构建 system prompt ───────────────────────────────
     const contextBlock = [
-      `【当前店员】${myName}`,
-      `【今日日期】${today}`,
-      `【今日班次】${shiftDesc}`,
-      colleagueNames.length > 0
-        ? `【今日同班同事】${colleagueNames.join('、')}`
-        : `【今日同班同事】暂无（你可能是独立值班，或同班同事还没排）`,
+      `【当前店员】${myName}${staffRes.data?.real_name && staffRes.data.real_name !== myName ? `（真实姓名：${staffRes.data.real_name}）` : ''}`,
+      `【今日日期】${today}　【明日日期】${tomorrow}`,
+      todayBlock,
+      tomorrowBlock,
       `【经验值】${totalExp} · 连续打卡 ${streak} 天 · 今日${checkedToday ? '已' : '未'}打卡`,
       pendingCorr > 0 ? `【待审核纠错】${pendingCorr} 条` : null,
       pendingShares > 0 ? `【待审核分享】${pendingShares} 条` : null,
