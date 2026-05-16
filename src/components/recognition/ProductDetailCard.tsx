@@ -241,7 +241,13 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
       <KnowledgeCardSections
         card={pickKnowledgeCard(enriched)}
         loading={!!result.isEnriching}
-        loadingText="正在为本次识别生成知识卡…"
+        loadingText="小精灵正在翻它的中古笔记本…"
+        hints={{
+          name: result.name,
+          category: CATEGORY_LABELS[result.category],
+          era: result.era,
+          origin: result.origin,
+        }}
       />
 
       {/* 完整介绍（折叠） */}
