@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import {
+  createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode,
+} from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
@@ -12,7 +14,18 @@ export interface NotificationItem {
   read: boolean;
 }
 
-export function useNotifications() {
+interface Ctx {
+  items: NotificationItem[];
+  loading: boolean;
+  unreadCount: number;
+  markRead: (id: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
+  refresh: () => Promise<void>;
+}
+
+const NotificationsContext = createContext<Ctx | undefined>(undefined);
+
+export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,5 +71,22 @@ export function useNotifications() {
 
   const unreadCount = items.filter(n => !n.read).length;
 
-  return { items, loading, unreadCount, markRead, markAllRead, refresh: load };
+  const value = useMemo<Ctx>(
+    () => ({ items, loading, unreadCount, markRead, markAllRead, refresh: load }),
+    [items, loading, unreadCount, markRead, markAllRead, load],
+  );
+
+  return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
+}
+
+export function useNotifications(): Ctx {
+  const ctx = useContext(NotificationsContext);
+  if (!ctx) {
+    // 兜底：未挂 Provider 时返回空，避免崩溃
+    return {
+      items: [], loading: false, unreadCount: 0,
+      markRead: async () => {}, markAllRead: async () => {}, refresh: async () => {},
+    };
+  }
+  return ctx;
 }
