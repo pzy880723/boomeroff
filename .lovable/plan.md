@@ -1,43 +1,41 @@
-## 诊断结论
+## 目标
+在 Lovable 预览域名（`*.lovable.app` / `localhost`）下自动登录一个固定开发账号，省去每次手动输入。生产域名（`boomeroff.lovable.app` 等正式发布地址）保持现有登录流程不变。
 
-当前问题不是前端尺寸或阴影问题，而是**抠像方案本身不可靠**：原视频是浅色背景，小精灵的脸、围巾、手、相机高光也接近浅色背景。上一版用 `colorkey/chromakey` 抠白底时，把脸部肤色和浅色高光一起当成背景扣掉了，所以你看到“脸都没有了、透明掉了”。
+## 方案
 
-另外我检查到当前 WebM 虽然有 `ALPHA_MODE=1` 标签，但用 ffmpeg 解码时是 `yuv420p`，`alphaextract` 直接失败，说明这条 WebM alpha 路线在当前产物上也不够稳定。
+### 1. 准备开发账号
+- 在 Lovable Cloud 用户里创建一个固定账号，例如 `dev@boomeroff.local` / 一个固定密码。
+- 角色给 `admin`（方便编辑模式下测试所有功能），`suspended=false`。
+- 账号的邮箱和密码通过 secrets 注入到前端：
+  - `VITE_DEV_AUTOLOGIN_EMAIL`
+  - `VITE_DEV_AUTOLOGIN_PASSWORD`
+- 这两个值只在预览域名下读取，不会影响正式用户。
 
-## 修复方案
+### 2. 修改 `src/hooks/useAuth.tsx`
+在初始化 `getSession()` 之后加一段逻辑：
 
-### 1. 停止用白底视频抠像
-不再从 AI 生成的白底 mp4 里用颜色阈值抠透明，因为它会继续误删脸部、围巾和高光。
+```text
+if (没有 session
+    且 hostname 命中 lovable.app / localhost / 127.0.0.1
+    且 VITE_DEV_AUTOLOGIN_EMAIL/PASSWORD 都存在) {
+  await supabase.auth.signInWithPassword({ email, password })
+}
+```
 
-### 2. 改用官方透明 PNG 作为唯一视觉源
-用已经确认清晰的 `spirit-mascot.png` 透明图作为动图源，直接保留原始 alpha 通道，不再抠色。
+- 用 `sessionStorage` 标记 `dev-autologin-tried`，避免登录失败时进入死循环。
+- 失败时打日志、回退到正常登录页，不阻塞 UI。
 
-生成两段透明动效：
-- `idle.webm`：轻微上下漂浮、呼吸缩放、柔和摆动
-- `wave.webm`：更明显的点头/摆动/弹跳反馈，用于说话、悬停、提醒状态
+### 3. 安全边界
+- 域名判断硬编码在前端：只在 `*.lovable.app` 或 `localhost` 触发，正式自定义域不会自动登录。
+- 即便有人在生产环境拿到 env 值，也因为域名不匹配而不会自动执行。
+- 仍保留显式 `signOut` 按钮，登出后下次刷新会再次自动登录（这是想要的效果）。
 
-这样角色五官、脸、围巾、相机全部来自原图，不会再被透明掉。
+### 4. 不改动的部分
+- 登录页 `Auth.tsx`、注册流程、权限/RLS、其他业务逻辑都不动。
+- 正式访客和已登录用户行为完全不变。
 
-### 3. 输出格式改成“双保险”
-主格式仍保留用户选择的透明 WebM，同时生成 APNG 兜底：
-- `idle.webm` / `wave.webm`：优先播放
-- `idle.apng` / `wave.apng`：浏览器不支持 WebM alpha 或检测异常时使用
-- 最后兜底仍是静态 PNG
+## 需要你确认/提供
+1. 开发账号的 **邮箱** 和 **密码**（我会用 add_secret 让你填，不会留在代码里）。
+2. 是否同意这个账号默认是 `admin` 角色。
 
-### 4. 修正前端检测逻辑
-当前 `SpiritMascot.tsx` 的 canvas 检测过于粗暴，抽样区域可能误判透明视频失败。改成：
-- 先尝试 WebM
-- video `error`、加载超时、或检测到全透明/全黑时切 APNG
-- APNG 加载失败才回退 PNG
-- 不再因为抽样全不透明就立即判失败，因为部分浏览器 canvas 抽帧会把透明合成掉
-
-### 5. QA 校验
-生成后逐帧抽样检查：
-- 抽第 1、15、30 帧合成到深棕背景和红色背景
-- 确认脸、眼睛、围巾、手、相机都完整可见
-- 确认背景透明，没有白底方块
-- 再检查浮窗小尺寸和抽屉大头像尺寸都清晰
-
-## 预期结果
-
-小精灵会恢复清晰完整的脸和五官；动效会是稳定的轻动画，不再出现白底、黑底、脸部被扣空或透明错乱。
+确认后我就执行：创建账号 + 加 secrets + 改 `useAuth.tsx`。
