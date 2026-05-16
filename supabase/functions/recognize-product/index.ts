@@ -485,7 +485,7 @@ serve(async (req) => {
         const quick = await tryQuickClassify(imageList);
         console.log('[Timing] quickClassify:', Date.now() - tQ0, 'ms', quick ? `→ ${quick.name}` : '(no result)');
         if (quick?.name && quick?.category) {
-          const nameMatch = await tryNameMatch(adminClient, quick.name, quick.category);
+          const nameMatch = await tryNameMatch(adminClient, quick.name, quick.category, user.id);
           if (nameMatch) {
             const recentPrice = nameMatch.product_id
               ? await loadRecentPrice(adminClient, nameMatch.product_id)
