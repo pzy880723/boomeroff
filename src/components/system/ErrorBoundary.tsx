@@ -1,6 +1,6 @@
 import { Component, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, RefreshCcw } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCcw } from 'lucide-react';
 import { isChunkLoadError, scheduleChunkReload } from '@/lib/chunkLoadRecovery';
 
 interface Props {
@@ -56,6 +56,17 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.error) {
       if (this.props.fallback) return this.props.fallback;
       const isRecovering = this.state.recovering;
+
+      // chunk 失败的自动恢复路径——只显示安静的 loading，避免红色"出错"惊吓用户
+      if (isRecovering) {
+        return (
+          <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 bg-background">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">正在加载新版页面…</p>
+          </div>
+        );
+      }
+
       return (
         <div className="min-h-[60vh] flex items-center justify-center p-6 bg-background">
           <div className="max-w-sm w-full rounded-2xl border border-border/60 bg-card p-6 shadow-soft text-center space-y-4">
@@ -65,9 +76,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-1">
               <h2 className="text-lg font-display font-semibold">页面出错了</h2>
               <p className="text-sm text-muted-foreground">
-                {isRecovering
-                  ? '系统正在更新页面资源，马上为您自动刷新。'
-                  : '当前环境可能不支持某些浏览器特性，请刷新或换用系统浏览器打开。'}
+                当前环境可能不支持某些浏览器特性，请刷新或换用系统浏览器打开。
               </p>
             </div>
             <details className="text-xs text-muted-foreground text-left bg-muted/40 rounded-lg p-2 max-h-32 overflow-auto">
@@ -78,8 +87,8 @@ export class ErrorBoundary extends Component<Props, State> {
             </details>
             <div className="flex gap-2">
               <Button onClick={this.handleReload} className="flex-1 gap-2">
-                <RefreshCcw className={`w-4 h-4 ${isRecovering ? 'animate-spin' : ''}`} />
-                {isRecovering ? '正在刷新' : '刷新重试'}
+                <RefreshCcw className="w-4 h-4" />
+                刷新重试
               </Button>
               <Button onClick={this.handleGoHome} variant="outline" className="flex-1">
                 返回首页

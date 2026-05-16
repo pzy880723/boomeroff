@@ -1,72 +1,66 @@
-## 问题
+## 真正的原因
 
-当前仪表盘用了独立的冷色深蓝 `#0f1320 → #1a1f33` + 青色高光，跟全站的暖色复古（米白底 / 浓缩咖啡棕 `--primary` / 古铜金 `--accent`）完全脱节，戴在 Me 页里像两个 App。
+用户看到的"失败界面"是 `src/components/system/ErrorBoundary.tsx` 里红色三角的"页面出错了"卡片。流程：
 
-## 方案：复用现有 design tokens，不再自造冷色
+1. 用户在 `/scan`（未登录）→ 只加载了 `AuthPage` 的 chunk。
+2. 登录成功 → `useAuth` 触发 SIGNED_IN → `Scan.tsx` 立刻渲染 `LiveStreamPanel`（懒加载，首次拉取它的 chunk）。
+3. 这个 chunk 首次请求时偶发失败（网络抖动 / Vite 预加载竞态），抛 `Failed to fetch dynamically imported module`。
+4. `ErrorBoundary` 捕获 → 显示"页面出错了 · 系统正在更新页面资源，马上为您自动刷新" → 350ms 后 `scheduleChunkReload` 调 `window.location.reload()` → 重新进入，登录态从 localStorage 恢复，看起来"马上又能进入"。
 
-### 1. 重做 `.dashboard-deep-surface`（src/index.css）
+console 也佐证：03:09:23 登录，03:10:50 出现第二次 `[Auth] Initializing auth state...`，正是 reload 重挂载 AuthProvider。
 
-从冷蓝改成深咖暖色，全部走 HSL token，亮/暗模式自动跟随：
+## 方案：三步消除这个闪烁
 
-```css
-.dashboard-deep-surface {
-  background:
-    linear-gradient(180deg,
-      hsl(25 18% 10%) 0%,
-      hsl(25 16% 13%) 60%,
-      hsl(28 18% 16%) 100%);
-  color: hsl(var(--primary-foreground));
-}
-.dashboard-deep-surface::before {
-  background:
-    radial-gradient(circle at 18% 8%, hsl(var(--accent) / 0.18), transparent 45%),
-    radial-gradient(circle at 88% 92%, hsl(var(--primary-glow) / 0.16), transparent 50%);
+### 1. ErrorBoundary：识别到"chunk 错误正在自动恢复"时，不要再展示红色"页面出错了"卡片，改成安静的小 spinner
+
+只动 `render()` 分支：当 `state.recovering === true`（即 `isChunkLoadError`）→ 返回简洁的居中 spinner + "正在加载新版页面…" 一行小字，背景沿用 `bg-background`，不出现红色三角、不出现"错误详情"、不出现按钮。真正的非 chunk 报错才走原来的红色卡片。
+
+### 2. 新增 `lazyWithRetry()` 工具：懒加载 chunk 第一次失败时自动重试 2 次再失败
+
+新建 `src/lib/lazyWithRetry.ts`：
+
+```ts
+import { lazy } from 'react';
+export function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+  retries = 2,
+  delay = 250,
+) {
+  return lazy(async () => {
+    let lastErr: unknown;
+    for (let i = 0; i <= retries; i++) {
+      try { return await factory(); }
+      catch (e) {
+        lastErr = e;
+        if (!isChunkLoadError(e)) throw e;
+        await new Promise(r => setTimeout(r, delay * (i + 1)));
+      }
+    }
+    throw lastErr;
+  });
 }
 ```
 
-效果：底色变成深咖啡，高光来自品牌古铜金 + 浓缩咖啡暖光，跟首页/我的页同源。
+把现有 `lazy(() => import('...'))` 全部换成 `lazyWithRetry(() => import('...'))`，覆盖范围：
 
-### 2. 卡片描边、文字、分隔线统一换 token
+- `src/App.tsx` 所有路由 lazy
+- `src/components/layout/MainLayout.tsx`（FloatingDashboard、LevelUpWatcher）
+- `src/pages/Scan.tsx`（AuthPage、LiveStreamPanel）
 
-把仪表盘内 5 个 Panel + `SectionCard` 中所有写死的 `white/8`、`white/[0.04]`、`#e8ebf2`、`text-white/60` 之类，全部换成：
+这样绝大多数偶发 chunk 失败在用户根本看不到的 250–500ms 内就被吞掉，不会进 ErrorBoundary。
 
-- 卡片底：`bg-[hsl(var(--accent)/0.05)]`，描边 `border-[hsl(var(--accent)/0.18)]`
-- 内发光：`shadow-[inset_0_1px_0_hsl(var(--accent)/0.12)]`
-- 主文字：`text-[hsl(var(--primary-foreground))]`
-- 次文字：`text-[hsl(var(--primary-foreground)/0.65)]`
-- 分隔线：`border-[hsl(var(--accent)/0.15)]`
+### 3. ErrorBoundary 自动恢复时间从 350ms 收紧 + 标题更柔和
 
-### 3. 强调色全部回到品牌古铜金
-
-- 进度条、Lv 徽章、Tab 高亮、"领取 +5 经验"按钮：从原来的 cyan / 自定义紫，统一改成 `bg-gradient-accent` + `text-accent-foreground`
-- 未读红点：保留 `bg-destructive`
-- 已完成对勾：`text-success`
-- 数字 / 数据高亮：`text-accent`（不再用 `#3FB8AF`）
-
-### 4. 顶部 Tab Bar、底部胶囊按钮
-
-- Tab Bar 底：`bg-[hsl(25_16%_13%/0.7)] backdrop-blur`，激活态下划线用 `bg-accent`
-- 胶囊：从纯黑/冷蓝换成 `bg-gradient-primary` + `ring-1 ring-accent/40`，未领取的金色脉冲点直接用 `bg-accent`
-
-### 5. `btn-shine` 高光颜色
-
-把扫光从纯白 `rgba(255,255,255,.35)` 改成暖白 `hsl(var(--accent) / 0.35)`，避免在暖底上显得刺眼。
-
-## 涉及文件（仅 UI / CSS，不动逻辑）
-
-- `src/index.css` —— `.dashboard-deep-surface` / `.btn-shine` 配色
-- `src/components/dashboard/primitives/SectionCard.tsx` —— 描边、底色、内发光
-- `src/components/dashboard/FloatingDashboard.tsx` —— Tab Bar、胶囊、容器底
-- `src/components/dashboard/ProfileHeaderCard.tsx`、`TodayPanel.tsx`、`TasksPanel.tsx`、`MessagesPanel.tsx`、`SchedulePanel.tsx`、`primitives/RingProgress.tsx`、`Sparkline.tsx` —— 移除所有硬编码颜色 / `text-white*`，统一换 token
+`scheduleChunkReload` 的 setTimeout 从 350ms 减到 200ms，文案改成"正在加载新版页面"，去掉"页面出错"字样——即使万一兜底进了 spinner 也只看到极短的 loading。
 
 ## 不动的
 
-- 所有数据、hooks、RPC、布局结构、4 个 Tab、动画时序
-- `tailwind.config.ts`（已有 keyframes 够用）
-- 浅色模式：因为仪表盘只在抽屉里出现且本就走深色调，仍保持深色底，但深色由 `--primary` 系暖色生成，跟 `.dark` 主题天然兼容
+- `useAuth.tsx` 逻辑（登录本身没问题，已在 1–3 秒内完成）
+- 路由结构、Supabase 调用
+- 业务页面
 
 ## 验收
 
-- 打开仪表盘，整体色调是"深咖啡 + 古铜金"，跟 Me 页 / 首页 logo / 历史卡片色系一致
-- 没有任何冷蓝 / 青色 / 纯白硬编码
-- 切换 4 个 Tab，按钮、进度、徽章高亮全部是品牌金色
+- 退出登录 → 在 /scan 重新登录 → 整个过程只看到登录按钮的 loading spinner + 直接进入识图页，不再出现红色"页面出错了"或刷新按钮
+- 触发真正 JS 报错（手动 throw）时仍能看到原本的红色卡片，不影响真错误暴露
+- Console 不再出现登录后的二次 `[Auth] Initializing auth state...`（因为不再触发整页 reload）
