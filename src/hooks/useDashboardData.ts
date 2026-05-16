@@ -78,14 +78,6 @@ export function useDashboardData(enabled: boolean): DashData {
     const twoWeekAgo = addDaysISO(today, -13);
     const isAdmin = can('correction.review') || can('user.create');
 
-    // Get shop id first
-    const { data: sp } = await supabase
-      .from('staff_profiles' as any)
-      .select('shop_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    const shopId: string | null = (sp as any)?.shop_id ?? null;
-
     const [
       { data: profile },
       { data: rows },
@@ -105,9 +97,9 @@ export function useDashboardData(enabled: boolean): DashData {
     ] = await Promise.all([
       supabase.from('profiles').select('display_name, avatar_url').eq('user_id', user.id).maybeSingle(),
       supabase.from('shift_schedules' as any)
-        .select('work_date, shift_code, user_id')
-        .gte('work_date', start).lte('work_date', end)
-        .or(shopId ? `user_id.eq.${user.id},shop_id.eq.${shopId}` : `user_id.eq.${user.id}`),
+        .select('work_date, shift_code, user_id, shop_id')
+        .eq('user_id', user.id)
+        .gte('work_date', start).lte('work_date', end),
       supabase.from('shop_shifts' as any).select('code, name, start_time, end_time, color').eq('active', true),
       supabase.from('user_experience').select('total_exp, current_streak').eq('user_id', user.id).maybeSingle(),
       supabase.from('user_check_ins').select('id').eq('user_id', user.id).eq('check_in_date', today).maybeSingle(),
@@ -128,8 +120,7 @@ export function useDashboardData(enabled: boolean): DashData {
     const sMap = new Map<string, DashShift>();
     (shifts as any[] || []).forEach(s => sMap.set(s.code, s));
 
-    const allRows = (rows as any[] || []) as DashSchedItem[];
-    const myRows = allRows.filter(r => r.user_id === user.id);
+    const myRows = ((rows as any[]) || []) as (DashSchedItem & { shop_id?: string | null })[];
     const todayRow = myRows.find(r => r.work_date === today);
     const futureRow = myRows.find(r => r.work_date > today);
     const todayShift = todayRow ? sMap.get(todayRow.shift_code) || null : null;
@@ -141,19 +132,35 @@ export function useDashboardData(enabled: boolean): DashData {
       return { date: d, shift: r ? sMap.get(r.shift_code) || null : null };
     });
 
-    // Today colleagues = same shift today
+    // Today colleagues = same shop + same shift today
     let colleaguesToday: DashColleague[] = [];
     if (todayRow) {
-      const peerIds = allRows
-        .filter(r => r.work_date === today && r.shift_code === todayRow.shift_code && r.user_id && r.user_id !== user.id)
-        .map(r => r.user_id!);
-      if (peerIds.length) {
-        const { data: peerProfiles } = await supabase.from('profiles').select('user_id, display_name, avatar_url').in('user_id', peerIds);
-        colleaguesToday = (peerProfiles as any[] || []).map(p => ({
-          user_id: p.user_id,
-          display_name: p.display_name || '同事',
-          avatar_url: p.avatar_url,
-        }));
+      let shopId: string | null = (todayRow as any).shop_id ?? null;
+      if (!shopId) {
+        const { data: sp } = await supabase
+          .from('staff_profiles' as any)
+          .select('shop_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        shopId = (sp as any)?.shop_id ?? null;
+      }
+      if (shopId) {
+        const { data: peerRows } = await supabase
+          .from('shift_schedules' as any)
+          .select('user_id')
+          .eq('work_date', today)
+          .eq('shop_id', shopId)
+          .eq('shift_code', todayRow.shift_code)
+          .neq('user_id', user.id);
+        const peerIds = Array.from(new Set(((peerRows as any[]) || []).map(r => r.user_id).filter(Boolean)));
+        if (peerIds.length) {
+          const { data: peerProfiles } = await supabase.from('profiles').select('user_id, display_name, avatar_url').in('user_id', peerIds);
+          colleaguesToday = (peerProfiles as any[] || []).map(p => ({
+            user_id: p.user_id,
+            display_name: p.display_name || '同事',
+            avatar_url: p.avatar_url,
+          }));
+        }
       }
     }
 
