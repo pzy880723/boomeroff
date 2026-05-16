@@ -1,11 +1,36 @@
 import { lazy, Suspense, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { MessageCircle, LayoutDashboard, ChevronDown, X } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, ChevronDown, X, AlertTriangle, RefreshCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SpiritChatPanel } from './SpiritChatPanel';
+import { ErrorBoundary } from '@/components/system/ErrorBoundary';
 import { cn } from '@/lib/utils';
 
 const DashboardInner = lazy(() => import('./DashboardInner').then((m) => ({ default: m.DashboardInner })));
+
+function DashboardErrorFallback() {
+  return (
+    <div className="h-full flex items-center justify-center p-6">
+      <div className="max-w-xs w-full rounded-2xl border border-[hsl(var(--accent)/0.2)] bg-[hsl(var(--accent)/0.06)] p-5 text-center space-y-3">
+        <div className="mx-auto w-10 h-10 rounded-full bg-destructive/15 flex items-center justify-center">
+          <AlertTriangle className="w-5 h-5 text-destructive" />
+        </div>
+        <div className="space-y-1">
+          <div className="text-sm font-semibold text-[hsl(var(--primary-foreground))]">仪表盘加载失败</div>
+          <div className="text-[12px] text-[hsl(var(--primary-foreground)/0.6)]">请下拉刷新页面后再试，问题持续请截图反馈。</div>
+        </div>
+        <Button
+          onClick={() => window.location.reload()}
+          size="sm"
+          className="gap-1.5 bg-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.9)] text-[hsl(var(--accent-foreground))]"
+        >
+          <RefreshCcw className="w-3.5 h-3.5" />
+          刷新重试
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 const TAB_KEY = 'spirit_drawer_tab_v1';
 
