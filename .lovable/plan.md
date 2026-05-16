@@ -1,129 +1,69 @@
-# 中古小精灵 · 系统 Agent 改造方案
+## 修复 + 动作设计方案
 
-把右下角的胶囊换成一只会动的拟人小精灵，点击展开「对话 ↔ 仪表盘」两个 Tab 的抽屉，原有 6 个面板全部保留。
+### 1. 修复脚下白色色块
+当前 `src/assets/spirit-mascot.png` 底部有一个白色矩形（AI 生成时残留的"展示底座"）。两步处理：
 
----
+- 用 `imagegen--edit_image` 重新出图：保留小精灵主体，去掉脚下白底/影子方块，输出真正透明背景的 PNG（"remove the white pedestal/box under the feet, fully transparent background, keep the character identical"）。
+- QA：本地把 PNG 渲到棕色/深色背景上自检一遍，确认无白边、无残底，再覆盖原文件。
 
-## 一、视觉与动效
+### 2. 动作系统设计（纯前端，不动业务逻辑）
 
-### 1.1 小精灵形象
-- 用 imagegen 生成一张 **透明背景 PNG**：拟人小精灵，戴小礼帽 / 围巾，怀里抱着一台小相机或老茶杯，柔和水彩 + 描边风格，与项目 `bg-gradient-primary` 色调一致。
-- 尺寸 ~256×256，约 30-60KB。文件落到 `src/assets/spirit-mascot.png`。
-- 同时生成 **眨眼帧 / 张嘴帧** 备用（可选，若一张图够灵动就先省）。
+把单一 `idle / talking / alert` 升级为一套"会做小动作"的状态机：
 
-### 1.2 动效（全部 CSS，零依赖）
-- **idle 漂浮**：3s 周期上下 ±4px + 轻微旋转 ±2°。
-- **眨眼**：每 4-6s 一次 scaleY(0.05) 100ms。
-- **说话时**：上下抖动加快到 0.8s 周期，头顶冒出 1-2 个小气泡（`<span>` + ping 动画）。
-- **未读 / 提醒**：头顶挂红色小圆点（沿用现在的徽标）。
-- **首次出现**：fade + scale-in，停 2s 自动说一句"你好呀～"气泡（沿用现在的 `showLabel` 机制）。
-- 拖拽、贴边、记忆位置 → 沿用 `FloatingDashboard` 现有逻辑。
+**基础常驻动作**（无操作时随机循环，每 4-8s 触发一个）
+- `float`：上下浮 6px（已有，调更柔）
+- `blink`：眨眼（已有）
+- `breathe`：整体 scale 1 → 1.03 → 1（呼吸感）
+- `sway`：左右轻摆 ±2°
 
----
+**小彩蛋动作**（idle 时随机抽一个播放，每个 ~1.2s）
+- `wave`：右手挥手（整体 rotate + 轻微 translateX）
+- `peek`：探头，头部短暂前倾 + 放大
+- `spin`：原地转 360°（罕见，~5% 概率）
+- `nod`：点头同意
+- `shake`：左右小摇头
+- `jump`：开心小跳 + 落地压扁回弹
 
-## 二、交互结构
+**交互触发动作**
+- hover：`bounce`（轻跳一下 + 光晕加亮）
+- 点击打开抽屉：`spin` + sparkle 加密
+- 拖动：`wiggle` 持续摆动
+- `talking`（AI 回复中）：嘴部区域上下抖 + 头部小幅点动（替换现在过于机械的整体抖）
+- `thinking`（等待首 token）：头顶冒 3 个小点 "…" 渐显
+- `alert`（有未读/提醒）：耳朵抖 + 头顶 ✦ 闪烁加快
+- 新消息到达：`jump` + 临时气泡 "有新消息哦～"
 
+**情绪气泡**（每天首次出现 / 长时间无操作）
+随机轮播：「今天也辛苦啦～」「要不要喝口水？」「你最棒了 ✨」「来摸摸我？」点击精灵触发情绪鼓励气泡（不调用 AI，纯本地文案池）。
+
+### 3. 技术实现
+
+**CSS**（`src/index.css` 追加 keyframes）
+```text
+spirit-breathe / spirit-sway / spirit-wave / spirit-peek
+spirit-spin / spirit-nod / spirit-shake / spirit-jump
+spirit-bounce / spirit-wiggle / spirit-thinking-dots
 ```
-┌─ 小精灵胶囊（拖拽 / 提醒徽标）
-└─ 点击 → 底部抽屉（85vh）
-       ┌─ 顶部：小精灵头像 + "中古小精灵" + 关闭
-       ├─ Tabs:  [💬 对话]  [📊 仪表盘]
-       │
-       ├─ [💬 对话] Tab
-       │   - 消息流（AI Elements: Conversation/Message/MessageResponse）
-       │   - 顶部一排 chip 快捷：今日排班 / 我的等级 / 待办 / 帮我打气
-       │   - 输入框（PromptInput + Submit + 📎 拍照按钮）
-       │   - 拍照走现有 CameraCapture，图片以 image part 发给 agent
-       │
-       └─ [📊 仪表盘] Tab
-           - 现有 ProfileHeaderCard / TodayPanel / TasksPanel /
-             MessagesPanel / SchedulePanel 原样塞进来
-```
+所有动画都尊重 `prefers-reduced-motion`。
 
-抽屉是同一个，Tab 用 `localStorage` 记忆上次选择。
+**组件**（重写 `src/components/spirit/SpiritMascot.tsx`）
+- 扩展 `SpiritState`：`'idle' | 'talking' | 'thinking' | 'alert' | 'hover' | 'dragging'`
+- 内部新增 `actionRef`：idle 时用 `setInterval` 每 5-8s 随机挑一个彩蛋动作，给主体 div 临时加 class，动画结束移除。
+- 多层叠加：外层 `sway` + 中层 `breathe` + 内层 action class，互不干扰。
+- talking 状态：嘴部 mask 区单独抖动（绝对定位一个透明 div，仅播 mouth 动画），不让整体抖。
+- thinking 状态：头顶渲染 3 个 `<span>` 点，按 0/200/400ms 错峰淡入。
+- 新增 `<SpiritBubble>`：小气泡，自动 3s 后消失；情绪文案池放 `src/components/spirit/spiritMoods.ts`。
 
----
+**接入点**
+- `FloatingDashboard.tsx`：把 mascot 包一层 `onMouseEnter→hover`、`onClick→spin+open`、拖动时 `dragging`。
+- `useSpiritChat.ts`：streaming 中 → `talking`；等待首 token → `thinking`。
+- 抽屉关闭后 30s 无操作 → 触发一次情绪气泡。
 
-## 三、AI Agent 后端（edge function）
+### 4. 验收
+- 不同尺寸（28/40/56/72）下精灵无白底、无裁切
+- idle 一分钟内能看到至少 2 种不同小动作
+- talking / thinking 状态视觉可区分
+- 点击精灵能看到情绪气泡
+- 开启系统"减少动态效果"后所有动画停止
 
-新建 `supabase/functions/spirit-chat/index.ts`，用 AI SDK + Lovable AI Gateway：
-
-- 模型：`google/gemini-3-flash-preview`
-- `streamText` + `toUIMessageStreamResponse`
-- system prompt（中文）：温暖、幽默、像店里一位懂行的老前辈，会主动鼓励、偶尔讲个冷知识；不用"主播"，称呼"你"。
-- 工具集（AI SDK `tool({ inputSchema, execute })`）：
-
-| 工具 | 作用 | 数据源 |
-|---|---|---|
-| `get_my_schedule` | 今日 / 本周班次 + 同班同事 | `shift_schedules` + `shop_shifts` |
-| `get_my_progress` | 经验值 / 等级 / 连续打卡 | `user_experience` + `user_check_ins` |
-| `get_pending_todos` | 我的待办（识别纠错、未读、审核） | 现有 `useTasks` / `useNotifications` 同源表 |
-| `search_knowledge` | 中古知识 RAG | `official_knowledge` 全文检索 |
-| `search_shop_kb` | 门店 SOP / 顾客 Q&A | `shop_kb_entries` |
-| `daily_pep_talk` | 抽取一条打气文案 | 内联模板 + 当日日期 / 用户连胜 |
-| `recognize_image` | 把图转交识别管线 | 调 `recognize-product` |
-
-- 鉴权：从 `Authorization` 取 JWT，校验 `user_roles`，把 `user_id` 注入工具上下文。
-- `stopWhen: stepCountIs(50)`。
-- CORS、`verify_jwt = false`、错误 (429/402/500) 一律以可读 JSON 返回。
-
----
-
-## 四、前端实现
-
-### 4.1 新文件
-- `src/assets/spirit-mascot.png`（生成）
-- `src/components/spirit/SpiritMascot.tsx` — 纯 CSS 动效的小精灵组件（接收 `state: idle|talking|alert`）
-- `src/components/spirit/SpiritChatPanel.tsx` — 对话 Tab 内容，`useChat` + AI Elements
-- `src/components/spirit/QuickChips.tsx` — 顶部快捷指令
-- `src/components/spirit/SpiritDrawer.tsx` — 两 Tab 抽屉
-
-### 4.2 改造文件
-- `src/components/dashboard/FloatingDashboard.tsx`：
-  - 胶囊视图换成 `<SpiritMascot />`
-  - 抽屉内容替换为 `<SpiritDrawer />`
-  - 拖拽 / 位置记忆 / 自动打开 / 提醒徽标逻辑保留
-- `MainLayout.tsx`：不变
-- `useDashboardData.ts` / `useNotifications` / `useTasks`：仪表盘 Tab 复用，不动
-
-### 4.3 依赖
-- `bun add ai @ai-sdk/react @ai-sdk/openai-compatible zod`
-- AI Elements：`bunx ai-elements@latest add conversation message prompt-input shimmer tool`
-- 已存在 `react-markdown` 渲染 MessageResponse。
-
-### 4.4 对话不持久化
-- `useChat` 不传 `id`，刷新即清空（用户已选「不保存」）。
-- 关闭抽屉不清空；切 Tab 不清空；点"清空对话"按钮清空。
-
----
-
-## 五、安全 / 性能
-
-- LOVABLE_API_KEY 已在 secrets 中，无需新增。
-- 工具内所有 DB 调用走 service-role client 但只读用户自己的数据（`.eq('user_id', user.id)`）。
-- 小精灵 PNG 走 pngquant 压缩，控制在 50KB 内。
-- 抽屉懒加载（仅打开后 import `SpiritChatPanel`），不增加首屏体积。
-- 对话流即时显示（status='submitted' → shimmer "小精灵在想..."）。
-
----
-
-## 六、不在本轮做
-
-- 持久化历史（用户明确不要）
-- 多会话切换
-- 主动 push（已选要，但需配合现有 `useNotifications` 红点 + 抽屉打开时由小精灵主动开口；不做服务端推送）
-
----
-
-## 七、验证清单
-
-1. 登录后右下角出现会动的小精灵，3s 内自动说"你好呀～"气泡。
-2. 拖动小精灵 → 松手贴边 → 刷新位置仍在。
-3. 点小精灵 → 抽屉打开 → 默认在对话 Tab，输入框自动 focus。
-4. 输入"今天我和谁一起上班"→ 工具调用 → 流式输出班次 + 同事。
-5. 切到仪表盘 Tab → 现有 6 个面板完整显示。
-6. 关掉抽屉再打开 → 对话仍在，刷新页面 → 对话清空。
-7. 顶部 chip "帮我打气"→ 输出一段温暖鼓励文案。
-8. 点 📎 拍照 → 拍一张 → 小精灵识别后用自然语言回答。
-
-确认这个方案后我开工。
+不涉及后端、数据库、edge function 变动。
