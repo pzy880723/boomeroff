@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { MessageCircle, LayoutDashboard, ChevronDown } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, ChevronDown, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SpiritChatPanel } from './SpiritChatPanel';
 import { cn } from '@/lib/utils';
