@@ -1,41 +1,40 @@
-## 目标
-在 Lovable 预览域名（`*.lovable.app` / `localhost`）下自动登录一个固定开发账号，省去每次手动输入。生产域名（`boomeroff.lovable.app` 等正式发布地址）保持现有登录流程不变。
+## 诊断
+现在 `idle.webm` / `wave.webm` 的像素格式是 `yuv420p`（VP9 Profile 0，**无 alpha 通道**），所以视频是带不透明背景的方块。叠在小精灵浮窗 / 抽屉的深色背景上就会出现"头被切掉/糊一块"的观感——这就是你看到不对劲的根源。
 
-## 方案
+之前为了规避"白底 chromakey 误伤脸"的问题，我用 Python 从 PNG 渲染帧再合成 WebM，但导出时 alpha 通道被压成不透明黑底了。
 
-### 1. 准备开发账号
-- 在 Lovable Cloud 用户里创建一个固定账号，例如 `dev@boomeroff.local` / 一个固定密码。
-- 角色给 `admin`（方便编辑模式下测试所有功能），`suspended=false`。
-- 账号的邮箱和密码通过 secrets 注入到前端：
-  - `VITE_DEV_AUTOLOGIN_EMAIL`
-  - `VITE_DEV_AUTOLOGIN_PASSWORD`
-- 这两个值只在预览域名下读取，不会影响正式用户。
+## 修复方案
 
-### 2. 修改 `src/hooks/useAuth.tsx`
-在初始化 `getSession()` 之后加一段逻辑：
+### 1. 用真正的 alpha WebM 重新生成两段动画
+- Python（Pillow）从 `src/assets/spirit-mascot.png`（带完整 alpha）渲染 PNG 序列，对每一帧做平移 / 缩放 / 微旋转，alpha 全程保留。
+  - `idle.webm`：呼吸 + 漂浮 + 轻摆，~3 秒、24fps 循环
+  - `wave.webm`：身体微点头 + 招手摆动 + 小跳，~2 秒、24fps 循环
+- 用 ffmpeg `libvpx-vp9` 编码：
+  - `-pix_fmt yuva420p`（带 alpha 的 VP9 Profile 0）
+  - `-metadata:s:v:0 alpha_mode=1`
+  - `-auto-alt-ref 0`（VP9 alpha 必须）
+  - `-b:v 0 -crf 30`，体积控制在 ~200KB 以内
 
-```text
-if (没有 session
-    且 hostname 命中 lovable.app / localhost / 127.0.0.1
-    且 VITE_DEV_AUTOLOGIN_EMAIL/PASSWORD 都存在) {
-  await supabase.auth.signInWithPassword({ email, password })
-}
-```
+### 2. 同步刷新 APNG 兜底
+用同一批帧再生成 12fps 的 `idle-anim.png` / `wave-anim.png`，保证 Safari/旧浏览器掉到 APNG 时观感一致、也是透明背景。
 
-- 用 `sessionStorage` 标记 `dev-autologin-tried`，避免登录失败时进入死循环。
-- 失败时打日志、回退到正常登录页，不阻塞 UI。
+### 3. 浏览器内 QA（必须）
+- `ffprobe` 确认两个 WebM 都是 `yuva420p` + `alpha_mode=1`。
+- 用 ffmpeg `alphaextract` 把 alpha 通道单独导出，肉眼检查脸、围巾、相机、手都在；背景完全透明。
+- 在浮窗深色背景下截图，检查没有黑色方块边缘。
 
-### 3. 安全边界
-- 域名判断硬编码在前端：只在 `*.lovable.app` 或 `localhost` 触发，正式自定义域不会自动登录。
-- 即便有人在生产环境拿到 env 值，也因为域名不匹配而不会自动执行。
-- 仍保留显式 `signOut` 按钮，登出后下次刷新会再次自动登录（这是想要的效果）。
+### 4. 前端只做最小调整
+`SpiritMascot.tsx` 的三级回退（webm → apng → 静态 png）逻辑保留不动，只是：
+- 视频已经带正确 alpha，不会再被误判，3 秒超时兜底的逻辑保留。
+- `wave` 状态由 hover / alert / talking 触发，保持现在的映射。
 
-### 4. 不改动的部分
-- 登录页 `Auth.tsx`、注册流程、权限/RLS、其他业务逻辑都不动。
-- 正式访客和已登录用户行为完全不变。
+## 涉及文件
+- `src/assets/spirit/idle.webm`（重新生成，带 alpha）
+- `src/assets/spirit/wave.webm`（重新生成，带 alpha）
+- `src/assets/spirit/idle-anim.png`（重新生成）
+- `src/assets/spirit/wave-anim.png`（重新生成）
+- `src/components/spirit/SpiritMascot.tsx`（如有必要的小调整）
 
-## 需要你确认/提供
-1. 开发账号的 **邮箱** 和 **密码**（我会用 add_secret 让你填，不会留在代码里）。
-2. 是否同意这个账号默认是 `admin` 角色。
+不动 `mem://design/spirit-mascot-canonical` 约定的官方形象，只是给它加动作。
 
-确认后我就执行：创建账号 + 加 secrets + 改 `useAuth.tsx`。
+确认后我就开始执行并在生成后做帧检验，确保脸、围巾、相机都完整再交付。
