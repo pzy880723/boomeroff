@@ -93,13 +93,15 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
         </TabsContent>
 
         <TabsContent value="dashboard" className="m-0 flex-1 min-h-0 outline-none overflow-hidden">
-          <Suspense fallback={
-            <div className="h-full flex items-center justify-center text-[hsl(var(--primary-foreground)/0.5)] text-xs">
-              加载中…
-            </div>
-          }>
-            <DashboardInner onClose={onClose} />
-          </Suspense>
+          <ErrorBoundary scope="spirit-dashboard" fallback={<DashboardErrorFallback />}>
+            <Suspense fallback={
+              <div className="h-full flex items-center justify-center text-[hsl(var(--primary-foreground)/0.5)] text-xs">
+                加载中…
+              </div>
+            }>
+              <DashboardInner onClose={onClose} />
+            </Suspense>
+          </ErrorBoundary>
         </TabsContent>
       </Tabs>
 
