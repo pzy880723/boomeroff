@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, useLayoutEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Sparkles, Trash2 } from 'lucide-react';
+import { Send, Sparkles, Trash2, Camera, ImagePlus, X } from 'lucide-react';
 import { useSpiritChat } from '@/hooks/useSpiritChat';
 import { SpiritMascot } from './SpiritMascot';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 const QUICK_CHIPS = [
@@ -14,31 +15,74 @@ const QUICK_CHIPS = [
   { label: '今天学点啥', prompt: '今天可以学点啥中古冷知识？讲一个有趣的给我听' },
 ];
 
+const MAX_IMAGES = 4;
+const MAX_FILE_MB = 10;
+
 export function SpiritChatPanel() {
   const { messages, status, send, clear } = useSpiritChat();
+  const { toast } = useToast();
   const [input, setInput] = useState('');
+  const [pending, setPending] = useState<{ file: File; preview: string }[]>([]);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
-  // 自动滚动到底
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, status]);
 
-  // 输入框自动聚焦
   useEffect(() => {
     inputRef.current?.focus();
   }, [status]);
 
-  const busy = status === 'sending' || status === 'streaming';
-  const spiritState = status === 'sending' ? 'thinking' : status === 'streaming' ? 'talking' : 'idle';
+  // cleanup previews
+  useEffect(() => () => pending.forEach((p) => URL.revokeObjectURL(p.preview)), []);
+
+  const busy = status === 'sending' || status === 'streaming' || status === 'uploading';
+  const spiritState =
+    status === 'sending' || status === 'uploading' ? 'thinking'
+      : status === 'streaming' ? 'talking'
+      : 'idle';
+
+  const addFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const arr = Array.from(files);
+    const room = MAX_IMAGES - pending.length;
+    if (room <= 0) {
+      toast({ title: `最多 ${MAX_IMAGES} 张图`, variant: 'destructive' });
+      return;
+    }
+    const accepted: { file: File; preview: string }[] = [];
+    for (const f of arr.slice(0, room)) {
+      if (!f.type.startsWith('image/')) continue;
+      if (f.size > MAX_FILE_MB * 1024 * 1024) {
+        toast({ title: `${f.name} 超过 ${MAX_FILE_MB}MB`, variant: 'destructive' });
+        continue;
+      }
+      accepted.push({ file: f, preview: URL.createObjectURL(f) });
+    }
+    if (accepted.length) setPending((p) => [...p, ...accepted]);
+  };
+
+  const removePending = (i: number) => {
+    setPending((p) => {
+      URL.revokeObjectURL(p[i].preview);
+      return p.filter((_, idx) => idx !== i);
+    });
+  };
 
   const handleSend = () => {
     const t = input.trim();
-    if (!t || busy) return;
+    if (busy) return;
+    if (!t && pending.length === 0) return;
+    const files = pending.map((p) => p.file);
+    // cleanup previews after we capture files
+    pending.forEach((p) => URL.revokeObjectURL(p.preview));
+    setPending([]);
     setInput('');
-    send(t);
+    send(t, files.length ? files : undefined);
   };
 
   const handleChip = (prompt: string) => {
@@ -54,7 +98,7 @@ export function SpiritChatPanel() {
         <div className="flex-1 min-w-0">
           <div className="text-sm font-bold text-[hsl(var(--primary-foreground))]">中古小精灵</div>
           <div className="text-[11px] text-[hsl(var(--primary-foreground)/0.6)] truncate">
-            {busy ? '正在思考…' : '随便问我点啥都行～'}
+            {status === 'uploading' ? '正在上传图片…' : busy ? '正在思考…' : '随便问我点啥都行～'}
           </div>
         </div>
         {messages.length > 0 && (
@@ -76,7 +120,13 @@ export function SpiritChatPanel() {
         ) : (
           <div className="flex flex-col gap-3 py-2">
             {messages.map((m) => (
-              <MessageBubble key={m.id} role={m.role} content={m.content} streaming={status === 'streaming' && m === messages[messages.length - 1]} />
+              <MessageBubble
+                key={m.id}
+                role={m.role}
+                content={m.content}
+                images={m.images}
+                streaming={status === 'streaming' && m === messages[messages.length - 1]}
+              />
             ))}
           </div>
         )}
@@ -102,12 +152,69 @@ export function SpiritChatPanel() {
         ))}
       </div>
 
+      {/* 待发送图片预览 */}
+      {pending.length > 0 && (
+        <div className="shrink-0 px-4 pt-2 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {pending.map((p, i) => (
+            <div key={i} className="relative shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-[hsl(var(--accent)/0.3)] bg-black/20">
+              <img src={p.preview} alt="" className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => removePending(i)}
+                disabled={busy}
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                aria-label="移除"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 输入框 */}
       <div
         className="shrink-0 px-4 pt-2"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
       >
-        <div className="flex items-end gap-2 rounded-2xl bg-[hsl(var(--accent)/0.1)] border border-[hsl(var(--accent)/0.22)] p-1.5 focus-within:border-[hsl(var(--accent)/0.5)] transition-colors">
+        <div className="flex items-end gap-1.5 rounded-2xl bg-[hsl(var(--accent)/0.1)] border border-[hsl(var(--accent)/0.22)] p-1.5 focus-within:border-[hsl(var(--accent)/0.5)] transition-colors">
+          {/* 拍照 */}
+          <button
+            type="button"
+            disabled={busy || pending.length >= MAX_IMAGES}
+            onClick={() => cameraRef.current?.click()}
+            className="shrink-0 h-9 w-9 rounded-xl flex items-center justify-center text-[hsl(var(--primary-foreground)/0.8)] hover:bg-[hsl(var(--accent)/0.18)] disabled:opacity-40"
+            aria-label="拍照"
+          >
+            <Camera className="w-[18px] h-[18px]" />
+          </button>
+          {/* 相册 */}
+          <button
+            type="button"
+            disabled={busy || pending.length >= MAX_IMAGES}
+            onClick={() => galleryRef.current?.click()}
+            className="shrink-0 h-9 w-9 rounded-xl flex items-center justify-center text-[hsl(var(--primary-foreground)/0.8)] hover:bg-[hsl(var(--accent)/0.18)] disabled:opacity-40"
+            aria-label="选图"
+          >
+            <ImagePlus className="w-[18px] h-[18px]" />
+          </button>
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+          />
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+          />
+
           <Textarea
             ref={inputRef}
             value={input}
@@ -118,15 +225,15 @@ export function SpiritChatPanel() {
                 handleSend();
               }
             }}
-            placeholder="跟小精灵聊聊吧…（Enter 发送）"
+            placeholder={pending.length > 0 ? '想问点啥？也可以直接发送…' : '跟小精灵聊聊吧…（Enter 发送）'}
             rows={1}
-            className="min-h-[40px] max-h-32 resize-none border-0 bg-transparent text-[13px] text-[hsl(var(--primary-foreground))] placeholder:text-[hsl(var(--primary-foreground)/0.4)] focus-visible:ring-0 focus-visible:ring-offset-0 px-2"
+            className="min-h-[40px] max-h-32 resize-none border-0 bg-transparent text-[13px] text-[hsl(var(--primary-foreground))] placeholder:text-[hsl(var(--primary-foreground)/0.4)] focus-visible:ring-0 focus-visible:ring-offset-0 px-1"
           />
           <Button
             type="button"
             size="icon"
             onClick={handleSend}
-            disabled={busy || !input.trim()}
+            disabled={busy || (!input.trim() && pending.length === 0)}
             className="h-9 w-9 shrink-0 rounded-xl bg-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.9)] text-[hsl(var(--accent-foreground))]"
           >
             <Send className="w-4 h-4" />
@@ -153,18 +260,42 @@ function EmptyState() {
         你好呀～我是中古小精灵
       </div>
       <div className="mt-2 text-[12px] leading-relaxed text-[hsl(var(--primary-foreground)/0.65)] max-w-[280px]">
-        可以问我中古知识、今天和谁一起上班、想要打打气，也可以让我讲个冷知识～
+        可以问我中古知识、今天和谁一起上班、想要打打气，也可以拍张照片让我帮你看看～
       </div>
     </div>
   );
 }
 
-function MessageBubble({ role, content, streaming }: { role: 'user' | 'assistant'; content: string; streaming: boolean }) {
+function MessageBubble({
+  role,
+  content,
+  images,
+  streaming,
+}: { role: 'user' | 'assistant'; content: string; images?: string[]; streaming: boolean }) {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-2xl rounded-br-md px-3.5 py-2 bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] text-[13px] leading-relaxed whitespace-pre-wrap">
-          {content}
+        <div className="max-w-[80%] flex flex-col items-end gap-1.5">
+          {images && images.length > 0 && (
+            <div className={cn('grid gap-1', images.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}>
+              {images.map((url, i) => (
+                <a
+                  key={i}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block rounded-xl overflow-hidden border border-[hsl(var(--accent)/0.3)]"
+                >
+                  <img src={url} alt="" className="w-32 h-32 object-cover" loading="lazy" />
+                </a>
+              ))}
+            </div>
+          )}
+          {content && (
+            <div className="rounded-2xl rounded-br-md px-3.5 py-2 bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] text-[13px] leading-relaxed whitespace-pre-wrap">
+              {content}
+            </div>
+          )}
         </div>
       </div>
     );
