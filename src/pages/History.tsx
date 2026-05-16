@@ -111,7 +111,7 @@ export default function History() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, user, can]);
 
   useEffect(() => {
     if (user) {
