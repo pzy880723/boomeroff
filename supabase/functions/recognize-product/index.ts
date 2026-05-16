@@ -427,12 +427,13 @@ serve(async (req) => {
       });
     }
 
-    // ① 图像哈希精确命中
+    // ① 图像哈希精确命中（仅命中当前用户自己识别过的，避免跨账号泄漏隐私）
     if (!forceRefresh && imageHash) {
       const { data: hit } = await adminClient
         .from('products')
         .select('*')
         .eq('image_hash', imageHash)
+        .eq('created_by', user.id)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
