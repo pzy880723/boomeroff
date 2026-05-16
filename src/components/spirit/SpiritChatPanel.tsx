@@ -224,7 +224,7 @@ export function SpiritChatPanel() {
             }}
             placeholder={pending.length > 0 ? '想问点啥？也可以直接发送…' : '跟小精灵聊聊吧…（Enter 发送）'}
             rows={1}
-            className="min-h-[40px] max-h-32 resize-none border-0 bg-transparent text-[13px] text-[hsl(var(--primary-foreground))] placeholder:text-[hsl(var(--primary-foreground)/0.4)] focus-visible:ring-0 focus-visible:ring-offset-0 px-1"
+            className="min-h-[40px] max-h-32 resize-none border-0 bg-transparent text-[16px] text-[hsl(var(--primary-foreground))] placeholder:text-[hsl(var(--primary-foreground)/0.4)] focus-visible:ring-0 focus-visible:ring-offset-0 px-1"
           />
           <Button
             type="button"
