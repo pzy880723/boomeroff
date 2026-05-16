@@ -259,10 +259,15 @@ function DashboardFullscreen({
 
   const tabBadge = (n: number) =>
     n > 0 ? (
-      <span className="ml-1 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-[9px] font-bold text-white inline-flex items-center justify-center tabular-nums">
+      <span className="ml-1 min-w-[16px] h-[16px] px-1 rounded-full bg-accent text-[9px] font-bold text-accent-foreground inline-flex items-center justify-center tabular-nums">
         {n > 9 ? '9+' : n}
       </span>
     ) : null;
+
+  const tabTriggerCls =
+    'flex-1 rounded-lg text-[12px] gap-1 py-1.5 ' +
+    'text-[hsl(var(--primary-foreground)/0.55)] ' +
+    'data-[state=active]:bg-[hsl(var(--accent)/0.18)] data-[state=active]:text-[hsl(var(--primary-foreground))]';
 
   return (
     <div
@@ -284,32 +289,20 @@ function DashboardFullscreen({
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTabPersist} className="flex-1 flex flex-col min-h-0 relative">
         <div className="px-4 shrink-0">
-          <TabsList className="w-full bg-white/5 border border-white/8 rounded-xl p-1 h-auto">
-            <TabsTrigger
-              value="today"
-              className="flex-1 rounded-lg text-[12px] data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/55 gap-1 py-1.5"
-            >
+          <TabsList className="w-full bg-[hsl(var(--accent)/0.06)] border border-[hsl(var(--accent)/0.18)] rounded-xl p-1 h-auto">
+            <TabsTrigger value="today" className={tabTriggerCls}>
               <BarChart3 className="w-3.5 h-3.5" />
               今日
             </TabsTrigger>
-            <TabsTrigger
-              value="tasks"
-              className="flex-1 rounded-lg text-[12px] data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/55 gap-1 py-1.5"
-            >
+            <TabsTrigger value="tasks" className={tabTriggerCls}>
               <ListChecks className="w-3.5 h-3.5" />
               任务{tabBadge(tasks.totalUnclaimedCount)}
             </TabsTrigger>
-            <TabsTrigger
-              value="messages"
-              className="flex-1 rounded-lg text-[12px] data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/55 gap-1 py-1.5"
-            >
+            <TabsTrigger value="messages" className={tabTriggerCls}>
               <Bell className="w-3.5 h-3.5" />
               消息{tabBadge(notif.unreadCount)}
             </TabsTrigger>
-            <TabsTrigger
-              value="schedule"
-              className="flex-1 rounded-lg text-[12px] data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/55 gap-1 py-1.5"
-            >
+            <TabsTrigger value="schedule" className={tabTriggerCls}>
               <CalendarDays className="w-3.5 h-3.5" />
               排班
             </TabsTrigger>
@@ -341,13 +334,16 @@ function DashboardFullscreen({
 
       {/* 收起 */}
       <div
-        className="absolute left-0 right-0 bottom-0 bg-gradient-to-t from-[#0f1320] via-[#0f1320]/95 to-transparent pt-6 pb-2"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
+        className="absolute left-0 right-0 bottom-0 pt-6 pb-2"
+        style={{
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
+          background: 'linear-gradient(to top, hsl(28 18% 16%) 0%, hsl(28 18% 16% / 0.95) 60%, transparent 100%)',
+        }}
       >
         <Button
           variant="ghost"
           onClick={onClose}
-          className="mx-auto flex h-10 px-5 rounded-full bg-white/8 hover:bg-white/12 text-white/85 text-xs"
+          className="mx-auto flex h-10 px-5 rounded-full bg-[hsl(var(--accent)/0.1)] hover:bg-[hsl(var(--accent)/0.16)] text-[hsl(var(--primary-foreground)/0.85)] text-xs"
         >
           <ChevronDown className="w-4 h-4 mr-1.5" />
           收起仪表盘
