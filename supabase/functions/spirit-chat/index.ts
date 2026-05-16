@@ -265,8 +265,22 @@ ${contextBlock}
           ...messages
             .filter((m) => m.role === 'user' || m.role === 'assistant')
             .slice(-20)
-            .map((m) => ({ role: m.role, content: String(m.content || '') })),
+            .map((m) => {
+              const textPart = extractText(m.content) || (Array.isArray(m.content) ? '' : String(m.content || ''));
+              const imgs = Array.isArray(m.images) ? m.images.filter((u) => typeof u === 'string') : [];
+              if (m.role === 'user' && imgs.length > 0) {
+                return {
+                  role: 'user',
+                  content: [
+                    ...(textPart ? [{ type: 'text', text: textPart }] : []),
+                    ...imgs.map((url: string) => ({ type: 'image_url', image_url: { url } })),
+                  ],
+                };
+              }
+              return { role: m.role, content: textPart };
+            }),
         ],
+
       }),
     });
 
