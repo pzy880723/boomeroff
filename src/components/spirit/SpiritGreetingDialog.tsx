@@ -44,28 +44,28 @@ export function SpiritGreetingDialog({ open, onClose }: Props) {
           {/* 大号小精灵 + 地面柔光 */}
           <div
             className="relative flex items-end justify-center spirit-greet-mascot"
-            style={{ width: 'min(60vw, 220px)', height: 'min(60vw, 220px)' }}
+            style={{ width: 'min(86vw, 340px)', height: 'min(86vw, 340px)' }}
           >
             <div
               aria-hidden
               className="absolute left-1/2 -translate-x-1/2 bottom-0 pointer-events-none"
               style={{
-                width: '120%',
-                height: '32%',
+                width: '130%',
+                height: '36%',
                 background:
                   'radial-gradient(ellipse at 50% 100%, hsl(var(--accent) / 0.45) 0%, hsl(var(--accent) / 0.12) 45%, transparent 75%)',
                 filter: 'blur(6px)',
               }}
             />
             <div className="relative w-full h-full">
-              <SpiritMascot size={Math.min(220, Math.floor(window.innerWidth * 0.6))} state="hover" />
+              <SpiritMascot size={Math.min(340, Math.floor(window.innerWidth * 0.86))} state="hover" />
             </div>
           </div>
 
           {/* 云朵气泡（尾巴朝上指向小精灵嘴部） */}
           <div
             className="relative spirit-greet-bubble"
-            style={{ width: 'min(86vw, 320px)', marginTop: '-6px' }}
+            style={{ width: 'min(86vw, 320px)', marginTop: '-2px' }}
           >
             <CloudBubble>
               <p className="text-[14px] leading-relaxed font-medium">
@@ -87,7 +87,7 @@ export function SpiritGreetingDialog({ open, onClose }: Props) {
             type="button"
             onClick={onClose}
             className={cn(
-              'spirit-greet-button mt-6 h-11 px-7 rounded-full text-[13.5px] font-semibold',
+              'spirit-greet-button mt-5 h-11 px-7 rounded-full text-[13.5px] font-semibold',
               'bg-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.92)] text-[hsl(var(--accent-foreground))]',
               'shadow-[0_8px_24px_-6px_hsl(var(--accent)/0.55)] active:scale-95 transition-transform',
             )}
@@ -108,7 +108,7 @@ function CloudBubble({ children }: { children: React.ReactNode }) {
       <svg
         aria-hidden
         viewBox="0 0 32 18"
-        className="absolute left-1/2 -translate-x-1/2 -top-[14px] w-[28px] h-[16px]"
+        className="absolute left-1/2 -translate-x-1/2 -top-[12px] w-[28px] h-[16px]"
         style={{ filter: 'drop-shadow(0 -2px 0 hsl(var(--accent) / 0.45))' }}
       >
         <path
