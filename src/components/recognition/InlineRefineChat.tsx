@@ -393,11 +393,11 @@ export function InlineRefineChat({
                     </div>
                   </div>
                 ))}
-                {streaming && (
+                {streaming && !messages[messages.length - 1]?.content && (
                   <div className="flex justify-start">
                     <div className="rounded-2xl px-3 py-2 bg-muted text-xs text-muted-foreground flex items-center gap-1.5">
                       <Loader2 className="w-3 h-3 animate-spin" />
-                      AI 正在重新分析…
+                      AI 正在看图，1-3 秒就开始说…
                     </div>
                   </div>
                 )}
