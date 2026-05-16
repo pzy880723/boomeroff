@@ -3,8 +3,8 @@ import { cn } from '@/lib/utils';
 import mascot from '@/assets/spirit-mascot.png';
 import idleVideo from '@/assets/spirit/idle.webm';
 import waveVideo from '@/assets/spirit/wave.webm';
-import idleApng from '@/assets/spirit/idle.apng';
-import waveApng from '@/assets/spirit/wave.apng';
+import idleApng from '@/assets/spirit/idle-anim.png';
+import waveApng from '@/assets/spirit/wave-anim.png';
 import { randomIdleAction } from './spiritMoods';
 
 export type SpiritState =
