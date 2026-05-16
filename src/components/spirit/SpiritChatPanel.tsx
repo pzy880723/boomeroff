@@ -83,7 +83,7 @@ export function SpiritChatPanel() {
       </div>
 
       {/* 快捷指令 chips */}
-      <div className="shrink-0 px-4 pt-2 flex gap-2 overflow-x-auto no-scrollbar">
+      <div className="shrink-0 px-4 pt-2 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {QUICK_CHIPS.map((c) => (
           <button
             key={c.label}
