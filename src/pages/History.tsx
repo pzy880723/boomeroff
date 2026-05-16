@@ -52,6 +52,7 @@ interface Product {
 
 export default function History() {
   const { user, loading: authLoading } = useAuth();
+  const { can } = usePermissions();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -76,6 +77,11 @@ export default function History() {
         .from('products')
         .select('id, name, category, era, origin, material, craft, description, dimensions, condition, created_at, selling_points, tips, image_url')
         .order('created_at', { ascending: false });
+
+      // 仅自己识别的（除非有"查看全部识别历史"权限）
+      if (user && !can('history.read_all')) {
+        query = query.eq('created_by', user.id);
+      }
 
       // 分类筛选
       if (selectedCategory !== 'all') {
