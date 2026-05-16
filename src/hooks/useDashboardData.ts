@@ -231,12 +231,21 @@ export function useDashboardData(enabled: boolean): DashData {
         pendingUsers: 0,
       },
       social: { posts: socialEnriched },
-    });
+    };
+    if (user) dashCache.set(user.id, { data: nextData, ts: Date.now() });
+    setData(nextData);
     setLoading(false);
-  }, [user, can]);
+  }, [user, isAdmin]);
 
   useEffect(() => {
     if (!enabled || !user) return;
+    const cached = dashCache.get(user.id);
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      // 命中缓存：直接显示，不再触发 load
+      setData(cached.data);
+      setLoading(false);
+      return;
+    }
     void load();
   }, [enabled, user, load]);
 
