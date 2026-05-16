@@ -340,6 +340,12 @@
 
 .spirit-sway   { animation: spirit-sway 5.5s ease-in-out infinite; transform-origin: 50% 90%; }
 .spirit-float  { animation: spirit-float 3.2s ease-in-out infinite; }
+/* 极轻的 CSS 浮动，配合视频肢体动效使用，避免叠加抖动 */
+@keyframes spirit-float-soft {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+.spirit-float-soft { animation: spirit-float-soft 4s ease-in-out infinite; }
 .spirit-talk   { animation: spirit-talk 0.9s ease-in-out infinite; }
 .spirit-blink  { animation: spirit-blink 5s ease-in-out infinite; }
 .spirit-sparkle{ animation: spirit-sparkle 2.6s ease-in-out infinite; }
