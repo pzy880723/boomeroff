@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useTasks } from '@/hooks/useTasks';
-import { SpiritMascot } from '../spirit/SpiritMascot';
+import { SpiritMascot, type SpiritState } from '../spirit/SpiritMascot';
 import { SpiritDrawer } from '../spirit/SpiritDrawer';
+import { randomMood } from '../spirit/spiritMoods';
 import { cn } from '@/lib/utils';
 
 const POS_KEY = 'dashboard_capsule_pos_v2';
