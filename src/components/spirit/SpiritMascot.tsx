@@ -5,7 +5,6 @@ import idleVideo from '@/assets/spirit/idle.webm';
 import waveVideo from '@/assets/spirit/wave.webm';
 import idleApng from '@/assets/spirit/idle-anim.png';
 import waveApng from '@/assets/spirit/wave-anim.png';
-import { randomIdleAction } from './spiritMoods';
 
 export type SpiritState =
   | 'idle'
@@ -25,7 +24,7 @@ interface Props {
   disableActions?: boolean;
 }
 
-/** 中古小精灵 — 漂浮、眨眼、随机小动作 */
+/** 中古小精灵 — 透明视频肢体动效 */
 export function SpiritMascot({
   size = 56,
   state = 'idle',
@@ -33,71 +32,37 @@ export function SpiritMascot({
   flat = false,
   disableActions = false,
 }: Props) {
-  const [actionClass, setActionClass] = useState<string>('');
   // 0 = webm, 1 = apng, 2 = static png
   const [tier, setTier] = useState<0 | 1 | 2>(0);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idleVideoRef = useRef<HTMLVideoElement | null>(null);
+  const waveVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  // hover / alert / talking → 播挥手；其他状态播 idle 循环
+  // 只在 hover / alert 时切到挥手；talking/thinking 仍保持 idle 视频稳定不切源
   const wantWave =
-    !disableActions && (state === 'hover' || state === 'alert' || state === 'talking');
-  const videoSrc = wantWave ? waveVideo : idleVideo;
-  const apngSrc = wantWave ? waveApng : idleApng;
+    !disableActions && (state === 'hover' || state === 'alert');
 
-  // 切源时让 video 从头播放
+  // WebM 加载失败/超时兜底
   useEffect(() => {
     if (tier !== 0) return;
-    const v = videoRef.current;
-    if (!v) return;
-    try { v.currentTime = 0; v.play().catch(() => {}); } catch {}
-  }, [videoSrc, tier]);
-
-  // WebM 加载超时兜底：3s 内没拿到帧 → 切 APNG
-  useEffect(() => {
-    if (tier !== 0) return;
-    const v = videoRef.current;
-    if (!v) return;
     const t = setTimeout(() => {
-      if (v.readyState < 2) setTier(1);
-    }, 3000);
+      const v = idleVideoRef.current;
+      if (!v || v.readyState < 2) setTier(1);
+    }, 2500);
     return () => clearTimeout(t);
-  }, [videoSrc, tier]);
+  }, [tier]);
 
-  // 仅 idle 时随机叠加一点 CSS 微动作（让整体不死板）
+  // 控制播放（不切换 src，只切换显示，避免视频重新加载）
   useEffect(() => {
-    if (disableActions || state !== 'idle') {
-      setActionClass('');
-      if (timerRef.current) clearTimeout(timerRef.current);
-      return;
+    if (tier !== 0) return;
+    const idle = idleVideoRef.current;
+    const wave = waveVideoRef.current;
+    if (!idle || !wave) return;
+    if (wantWave) {
+      try { wave.currentTime = 0; wave.play().catch(() => {}); } catch {}
+    } else {
+      idle.play().catch(() => {});
     }
-    let cancelled = false;
-    const schedule = () => {
-      const delay = 6000 + Math.random() * 6000;
-      timerRef.current = setTimeout(() => {
-        if (cancelled) return;
-        setActionClass(randomIdleAction());
-        timerRef.current = setTimeout(() => {
-          if (cancelled) return;
-          setActionClass('');
-          schedule();
-        }, 1300);
-      }, delay);
-    };
-    schedule();
-    return () => {
-      cancelled = true;
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [state, disableActions]);
-
-  // 各状态对应的中层动画
-  const midAnim =
-    state === 'talking'
-      ? 'spirit-talk'
-      : state === 'dragging'
-      ? 'spirit-wiggle'
-      : 'spirit-float';
+  }, [wantWave, tier]);
 
   const showThinking = state === 'thinking';
   const showAlertPing = state === 'alert';
@@ -112,7 +77,7 @@ export function SpiritMascot({
       {!flat && (
         <div
           className={cn(
-            'absolute inset-0 rounded-full transition-opacity duration-300',
+            'absolute inset-0 rounded-full transition-opacity duration-300 pointer-events-none',
             state === 'hover' ? 'opacity-100' : 'opacity-70',
           )}
           style={{
@@ -123,57 +88,70 @@ export function SpiritMascot({
         />
       )}
 
-      {/* 外层：左右轻摆 */}
-      <div className={cn('relative w-full h-full', !disableActions && 'spirit-sway')}>
-        {/* 中层：呼吸/浮动/说话/拖动 */}
-        <div className={cn('relative w-full h-full', midAnim)}>
-          {/* 内层：一次性彩蛋动作 */}
-          <div
-            key={actionClass}
-            className={cn(
-              'relative w-full h-full',
-              actionClass,
-            )}
-            style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.25))' }}
-          >
-            {tier === 2 ? (
-              <img
-                src={mascot}
-                alt=""
-                width={size}
-                height={size}
-                loading="lazy"
-                className="w-full h-full object-contain select-none pointer-events-none"
-                draggable={false}
-              />
-            ) : tier === 1 ? (
-              <img
-                src={apngSrc}
-                alt=""
-                width={size}
-                height={size}
-                onError={() => setTier(2)}
-                className="w-full h-full object-contain select-none pointer-events-none"
-                draggable={false}
-              />
-            ) : (
-              <video
-                ref={videoRef}
-                key={videoSrc}
-                src={videoSrc}
-                width={size}
-                height={size}
-                autoPlay
-                loop
-                muted
-                playsInline
-                preload="auto"
-                onError={() => setTier(1)}
-                className="w-full h-full object-contain select-none pointer-events-none"
-              />
-            )}
-          </div>
-        </div>
+      {/* 主体：只保留极轻的浮动 + drop-shadow；让视频本身负责肢体动效 */}
+      <div
+        className={cn(
+          'relative w-full h-full',
+          !disableActions && 'spirit-float-soft',
+        )}
+        style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.25))' }}
+      >
+        {tier === 2 ? (
+          <img
+            src={mascot}
+            alt=""
+            width={size}
+            height={size}
+            loading="lazy"
+            className="w-full h-full object-contain select-none pointer-events-none"
+            draggable={false}
+          />
+        ) : tier === 1 ? (
+          <img
+            src={wantWave ? waveApng : idleApng}
+            alt=""
+            width={size}
+            height={size}
+            onError={() => setTier(2)}
+            className="w-full h-full object-contain select-none pointer-events-none"
+            draggable={false}
+          />
+        ) : (
+          <>
+            {/* 同时挂载两个 video，切换只改可见性，避免源切换导致的重载/闪烁 */}
+            <video
+              ref={idleVideoRef}
+              src={idleVideo}
+              width={size}
+              height={size}
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              onError={() => setTier(1)}
+              className={cn(
+                'absolute inset-0 w-full h-full object-contain select-none pointer-events-none transition-opacity duration-200',
+                wantWave ? 'opacity-0' : 'opacity-100',
+              )}
+            />
+            <video
+              ref={waveVideoRef}
+              src={waveVideo}
+              width={size}
+              height={size}
+              loop
+              muted
+              playsInline
+              preload="auto"
+              onError={() => setTier(1)}
+              className={cn(
+                'absolute inset-0 w-full h-full object-contain select-none pointer-events-none transition-opacity duration-200',
+                wantWave ? 'opacity-100' : 'opacity-0',
+              )}
+            />
+          </>
+        )}
       </div>
 
       {/* thinking：头顶三个小点 */}
@@ -200,7 +178,7 @@ export function SpiritMascot({
       {!flat && (
         <>
           <span
-            className="spirit-sparkle absolute text-[10px] leading-none"
+            className="spirit-sparkle absolute text-[10px] leading-none pointer-events-none"
             style={{
               top: '10%',
               right: '6%',
@@ -209,7 +187,7 @@ export function SpiritMascot({
             }}
           >✦</span>
           <span
-            className="spirit-sparkle absolute text-[8px] leading-none"
+            className="spirit-sparkle absolute text-[8px] leading-none pointer-events-none"
             style={{
               bottom: '12%',
               left: '4%',
