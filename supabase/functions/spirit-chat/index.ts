@@ -28,8 +28,18 @@ function tzDate() {
   }).format(new Date());
 }
 
+function extractText(content: any): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((p: any) => (p?.type === 'text' ? String(p.text || '') : ''))
+      .join(' ')
+      .trim();
+  }
+  return '';
+}
+
 function extractQuery(text: string): string {
-  // 取最后一条用户消息里 2-12 字的关键词块
   return text.replace(/[\n\r]+/g, ' ').trim().slice(0, 60);
 }
 
@@ -58,13 +68,14 @@ Deno.serve(async (req) => {
     const uid = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
-    const messages: Array<{ role: string; content: string }> = Array.isArray(body?.messages)
+    const messages: Array<{ role: string; content: any; images?: string[] }> = Array.isArray(body?.messages)
       ? body.messages
       : [];
     if (messages.length === 0) return json({ error: '请说点什么吧～' }, 400);
 
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
-    const queryText = extractQuery(lastUserMsg);
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+    const queryText = extractQuery(extractText(lastUserMsg?.content));
+
     const today = tzDate();
     // 明天日期（Asia/Shanghai）
     const tomorrow = (() => {
@@ -254,8 +265,22 @@ ${contextBlock}
           ...messages
             .filter((m) => m.role === 'user' || m.role === 'assistant')
             .slice(-20)
-            .map((m) => ({ role: m.role, content: String(m.content || '') })),
+            .map((m) => {
+              const textPart = extractText(m.content) || (Array.isArray(m.content) ? '' : String(m.content || ''));
+              const imgs = Array.isArray(m.images) ? m.images.filter((u) => typeof u === 'string') : [];
+              if (m.role === 'user' && imgs.length > 0) {
+                return {
+                  role: 'user',
+                  content: [
+                    ...(textPart ? [{ type: 'text', text: textPart }] : []),
+                    ...imgs.map((url: string) => ({ type: 'image_url', image_url: { url } })),
+                  ],
+                };
+              }
+              return { role: m.role, content: textPart };
+            }),
         ],
+
       }),
     });
 

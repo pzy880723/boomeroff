@@ -5,6 +5,7 @@ export interface SpiritMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  images?: string[]; // public URLs
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -13,18 +14,76 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// 压缩到长边 1280px，jpeg 0.82
+async function compressImage(file: File, maxEdge = 1280, quality = 0.82): Promise<Blob> {
+  const dataUrl: string = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  const img: HTMLImageElement = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = dataUrl;
+  });
+  const ratio = Math.min(maxEdge / Math.max(img.width, img.height), 1);
+  const w = Math.round(img.width * ratio);
+  const h = Math.round(img.height * ratio);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('canvas 不支持');
+  ctx.drawImage(img, 0, 0, w, h);
+  return await new Promise<Blob>((res, rej) =>
+    canvas.toBlob((b) => (b ? res(b) : rej(new Error('压缩失败'))), 'image/jpeg', quality),
+  );
+}
+
+async function uploadOne(userId: string, file: File): Promise<string> {
+  const blob = await compressImage(file);
+  const path = `spirit-chat/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const { error } = await supabase.storage.from('product-images').upload(path, blob, {
+    contentType: 'image/jpeg',
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export function useSpiritChat() {
   const [messages, setMessages] = useState<SpiritMessage[]>([]);
-  const [status, setStatus] = useState<'idle' | 'sending' | 'streaming' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'sending' | 'streaming' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const send = useCallback(async (text: string) => {
-    const t = text.trim();
-    if (!t || status === 'sending' || status === 'streaming') return;
+  const send = useCallback(async (text: string, files?: File[]) => {
+    const t = (text || '').trim();
+    const hasFiles = !!files && files.length > 0;
+    if (!t && !hasFiles) return;
+    if (status === 'sending' || status === 'streaming' || status === 'uploading') return;
     setError(null);
 
-    const userMsg: SpiritMessage = { id: uid(), role: 'user', content: t };
+    let images: string[] = [];
+    if (hasFiles) {
+      try {
+        setStatus('uploading');
+        const { data: u } = await supabase.auth.getUser();
+        const userId = u.user?.id;
+        if (!userId) throw new Error('未登录');
+        images = await Promise.all(files!.slice(0, 4).map((f) => uploadOne(userId, f)));
+      } catch (e: any) {
+        setError(e?.message || '图片上传失败');
+        setStatus('error');
+        return;
+      }
+    }
+
+    const finalText = t || (hasFiles ? '帮我看看这个？' : '');
+    const userMsg: SpiritMessage = { id: uid(), role: 'user', content: finalText, images: images.length ? images : undefined };
     const asstMsg: SpiritMessage = { id: uid(), role: 'assistant', content: '' };
     const next = [...messages, userMsg, asstMsg];
     setMessages(next);
@@ -47,7 +106,11 @@ export function useSpiritChat() {
         body: JSON.stringify({
           messages: next
             .filter((m) => m.id !== asstMsg.id)
-            .map((m) => ({ role: m.role, content: m.content })),
+            .map((m) => ({
+              role: m.role,
+              content: m.content,
+              ...(m.images && m.images.length ? { images: m.images } : {}),
+            })),
         }),
         signal: ac.signal,
       });
@@ -101,7 +164,6 @@ export function useSpiritChat() {
       const msg = e?.message || '小精灵开小差了';
       setError(msg);
       setStatus('error');
-      // 把错误写进 assistant 占位
       setMessages((prev) =>
         prev.map((m, i) =>
           i === prev.length - 1 && m.role === 'assistant' && !m.content
