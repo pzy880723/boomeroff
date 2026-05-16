@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { PermissionsProvider } from "@/hooks/usePermissions";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Loader2 } from "lucide-react";
+import { lazyWithRetry as lazy } from "@/lib/lazyWithRetry";
 import Scan from "./pages/Scan";
 
 // 非首屏路由全部懒加载，减小首包体积
