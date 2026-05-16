@@ -30,17 +30,17 @@ export function MessagesPanel({ items, unread, onRead, onReadAll, learning, navi
       <SectionCard className="p-4" delay={0}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            {unread > 0 ? <BellDot className="w-4 h-4 text-primary" /> : <Megaphone className="w-4 h-4 text-white/50" />}
-            <span className="text-[11px] tracking-[0.18em] text-white/50">系统通知</span>
-            {unread > 0 && <span className="text-[11px] text-primary font-medium tabular-nums">{unread} 未读</span>}
+            {unread > 0 ? <BellDot className="w-4 h-4 text-accent" /> : <Megaphone className="w-4 h-4 text-[hsl(var(--primary-foreground)/0.5)]" />}
+            <span className="text-[11px] tracking-[0.18em] text-[hsl(var(--primary-foreground)/0.5)]">系统通知</span>
+            {unread > 0 && <span className="text-[11px] text-accent font-medium tabular-nums">{unread} 未读</span>}
           </div>
           {unread > 0 && (
-            <button onClick={onReadAll} className="text-[11px] text-white/50 hover:text-white/85">全部已读</button>
+            <button onClick={onReadAll} className="text-[11px] text-[hsl(var(--primary-foreground)/0.5)] hover:text-[hsl(var(--primary-foreground)/0.85)]">全部已读</button>
           )}
         </div>
 
         {items.length === 0 ? (
-          <p className="text-xs text-white/40 text-center py-4">暂无系统通知</p>
+          <p className="text-xs text-[hsl(var(--primary-foreground)/0.4)] text-center py-4">暂无系统通知</p>
         ) : (
           <div className="space-y-1 max-h-72 overflow-y-auto">
             {items.slice(0, 6).map(n => (
@@ -49,14 +49,14 @@ export function MessagesPanel({ items, unread, onRead, onReadAll, learning, navi
                 onClick={() => !n.read && onRead(n.id)}
                 className={cn(
                   'w-full text-left p-2.5 rounded-lg transition-colors flex gap-3',
-                  n.read ? 'hover:bg-white/[0.04]' : 'bg-primary/[0.06] hover:bg-primary/[0.10]'
+                  n.read ? 'hover:bg-[hsl(var(--accent)/0.05)]' : 'bg-[hsl(var(--accent)/0.08)] hover:bg-[hsl(var(--accent)/0.12)]'
                 )}
               >
-                <div className={cn('w-0.5 rounded-full shrink-0', n.read ? 'bg-transparent' : 'bg-primary')} />
+                <div className={cn('w-0.5 rounded-full shrink-0', n.read ? 'bg-transparent' : 'bg-accent')} />
                 <div className="flex-1 min-w-0">
-                  <p className={cn('text-sm', n.read ? 'text-white/75' : 'text-white font-semibold')}>{n.title}</p>
-                  {n.body && <p className="text-xs text-white/45 mt-0.5 line-clamp-2 whitespace-pre-wrap">{n.body}</p>}
-                  <p className="text-[10px] text-white/35 mt-1">
+                  <p className={cn('text-sm', n.read ? 'text-[hsl(var(--primary-foreground)/0.75)]' : 'text-[hsl(var(--primary-foreground))] font-semibold')}>{n.title}</p>
+                  {n.body && <p className="text-xs text-[hsl(var(--primary-foreground)/0.5)] mt-0.5 line-clamp-2 whitespace-pre-wrap">{n.body}</p>}
+                  <p className="text-[10px] text-[hsl(var(--primary-foreground)/0.35)] mt-1">
                     {new Date(n.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
@@ -69,8 +69,8 @@ export function MessagesPanel({ items, unread, onRead, onReadAll, learning, navi
       {lessons.length > 0 && (
         <SectionCard className="p-4" delay={80}>
           <div className="flex items-center gap-2 mb-3">
-            <BookOpen className="w-4 h-4 text-white/50" />
-            <span className="text-[11px] tracking-[0.18em] text-white/50">今日学习</span>
+            <BookOpen className="w-4 h-4 text-[hsl(var(--primary-foreground)/0.5)]" />
+            <span className="text-[11px] tracking-[0.18em] text-[hsl(var(--primary-foreground)/0.5)]">今日学习</span>
           </div>
           <div className="space-y-2">
             {lessons.map(l => {
@@ -79,14 +79,14 @@ export function MessagesPanel({ items, unread, onRead, onReadAll, learning, navi
                 <button
                   key={l.key}
                   onClick={() => navigate(l.path)}
-                  className="w-full text-left p-3 rounded-lg bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] transition-colors"
+                  className="w-full text-left p-3 rounded-lg bg-[hsl(var(--accent)/0.04)] border border-[hsl(var(--accent)/0.12)] hover:bg-[hsl(var(--accent)/0.08)] transition-colors"
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <Icon className="w-3.5 h-3.5 text-white/60" />
-                    <span className="text-[11px] text-white/50">{l.label}</span>
+                    <Icon className="w-3.5 h-3.5 text-[hsl(var(--primary-foreground)/0.6)]" />
+                    <span className="text-[11px] text-[hsl(var(--primary-foreground)/0.5)]">{l.label}</span>
                   </div>
-                  <p className="text-sm font-semibold text-white/90 line-clamp-1">{l.title}</p>
-                  {l.body && <p className="text-xs text-white/55 line-clamp-2 mt-0.5 leading-relaxed">{l.body}</p>}
+                  <p className="text-sm font-semibold text-[hsl(var(--primary-foreground)/0.9)] line-clamp-1">{l.title}</p>
+                  {l.body && <p className="text-xs text-[hsl(var(--primary-foreground)/0.55)] line-clamp-2 mt-0.5 leading-relaxed">{l.body}</p>}
                 </button>
               );
             })}
