@@ -1,27 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import {
-  LayoutDashboard, ChevronDown, BarChart3, ListChecks, Bell, CalendarDays,
-} from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useTasks } from '@/hooks/useTasks';
-import { ProfileHeaderCard } from './ProfileHeaderCard';
-import { TodayPanel } from './TodayPanel';
-import { TasksPanel } from './TasksPanel';
-import { MessagesPanel } from './MessagesPanel';
-import { SchedulePanel } from './SchedulePanel';
+import { SpiritMascot } from '../spirit/SpiritMascot';
+import { SpiritDrawer } from '../spirit/SpiritDrawer';
 import { cn } from '@/lib/utils';
 
 const POS_KEY = 'dashboard_capsule_pos_v2';
 const AUTO_OPEN_KEY = 'dashboard_auto_opened_session';
-const TAB_KEY = 'dashboard_active_tab_v1';
-const BTN = 48;
-const EDGE = 10;
+const BTN = 64;
+const EDGE = 8;
 const BOTTOM_TAB = 64;
 type Side = 'left' | 'right';
 interface Pos { side: Side; y: number }
@@ -36,7 +26,7 @@ function clampY(y: number): number {
 
 function defaultPos(): Pos {
   if (typeof window === 'undefined') return { side: 'right', y: 200 };
-  return { side: 'right', y: clampY(window.innerHeight - BTN - BOTTOM_TAB - EDGE - 32) };
+  return { side: 'right', y: clampY(window.innerHeight - BTN - BOTTOM_TAB - EDGE - 40) };
 }
 
 function loadPos(): Pos {
@@ -59,7 +49,6 @@ function getCapsuleX(side: Side): number {
 
 export function FloatingDashboard() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -67,7 +56,9 @@ export function FloatingDashboard() {
   const [dragXY, setDragXY] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; oy: number; moved: boolean } | null>(null);
   const [showLabel, setShowLabel] = useState(true);
-  const data = useDashboardData(!!user);
+
+  // 仅为提醒徽标加载;数据真正的消费在 DashboardInner 里
+  useDashboardData(!!user);
   const notif = useNotifications();
   const tasks = useTasks();
 
@@ -89,7 +80,7 @@ export function FloatingDashboard() {
     const opened = sessionStorage.getItem(AUTO_OPEN_KEY);
     if (!opened) {
       const t = setTimeout(() => {
-        openDashboard();
+        openDrawer();
         sessionStorage.setItem(AUTO_OPEN_KEY, '1');
       }, 700);
       return () => clearTimeout(t);
@@ -97,13 +88,13 @@ export function FloatingDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const openDashboard = () => {
+  const openDrawer = () => {
     setMounted(true);
     setClosing(false);
     requestAnimationFrame(() => setOpen(true));
   };
 
-  const closeDashboard = () => {
+  const closeDrawer = () => {
     setClosing(true);
     setOpen(false);
   };
@@ -136,7 +127,7 @@ export function FloatingDashboard() {
     dragRef.current = null;
     if (!moved) {
       setDragXY(null);
-      openDashboard();
+      openDrawer();
       return;
     }
     const cx = (dragXY?.x ?? getCapsuleX(pos.side)) + BTN / 2;
@@ -153,10 +144,10 @@ export function FloatingDashboard() {
   const dragging = !!dragRef.current || !!dragXY;
   const capsuleX = dragging && dragXY ? dragXY.x : getCapsuleX(pos.side);
   const capsuleY = dragging && dragXY ? dragXY.y : pos.y;
-  const todayCode = data.todayShift?.code;
   const claimableCount = tasks.totalUnclaimedCount;
   const hasClaimable = claimableCount > 0;
   const hasOtherUnread = notif.unreadCount > 0;
+  const hasAlert = hasClaimable || hasOtherUnread;
 
   return (
     <>
@@ -175,180 +166,43 @@ export function FloatingDashboard() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          aria-label="打开仪表盘"
+          aria-label="召唤中古小精灵"
           className={cn(
-            'relative flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-elegant border border-primary/30 active:scale-95 transition-transform',
+            'relative flex items-center justify-center rounded-full active:scale-95 transition-transform',
             dragging && 'opacity-95 scale-105',
           )}
           style={{ width: BTN, height: BTN }}
         >
-          <LayoutDashboard className="w-5 h-5" />
-          {todayCode && (
-            <span className="absolute -bottom-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-card border border-border text-[9px] font-bold text-foreground flex items-center justify-center">
-              {todayCode}
-            </span>
-          )}
+          <SpiritMascot size={BTN} state={hasAlert ? 'talking' : 'idle'} />
+
+          {/* 提醒徽标 */}
           {hasClaimable ? (
-            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent border-2 border-background text-[10px] font-bold text-accent-foreground flex items-center justify-center shadow-sm animate-badge-pop">
+            <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 rounded-full bg-accent border-2 border-background text-[10px] font-bold text-accent-foreground flex items-center justify-center shadow-sm animate-badge-pop">
               {claimableCount > 9 ? '9+' : claimableCount}
             </span>
           ) : hasOtherUnread ? (
-            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-destructive ring-2 ring-background" />
+            <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-destructive ring-2 ring-background" />
           ) : null}
         </button>
 
         {showLabel && !dragging && (
-          <div className="mx-1.5 px-2.5 py-1 rounded-full bg-card/95 backdrop-blur border border-border/60 shadow-md text-xs font-semibold text-foreground whitespace-nowrap pointer-events-none animate-label-bubble-in">
-            仪表盘
+          <div className="mx-1.5 px-3 py-1.5 rounded-2xl rounded-bl-sm bg-card/95 backdrop-blur border border-border/60 shadow-md text-xs font-medium text-foreground whitespace-nowrap pointer-events-none spirit-bubble-in">
+            你好呀～
           </div>
         )}
       </div>
 
       {mounted && createPortal(
-        <DashboardFullscreen
+        <SpiritDrawer
           open={open}
           closing={closing}
           originX={getCapsuleX(pos.side) + BTN / 2}
           originY={pos.y + BTN / 2}
           onAnimEnd={onAnimEnd}
-          onClose={closeDashboard}
-          data={data}
-          notif={notif}
-          tasks={tasks}
-          navigate={navigate}
+          onClose={closeDrawer}
         />,
         document.body,
       )}
     </>
-  );
-}
-
-function DashboardFullscreen({
-  open, closing, originX, originY, onAnimEnd, onClose, data, notif, tasks, navigate,
-}: {
-  open: boolean;
-  closing: boolean;
-  originX: number;
-  originY: number;
-  onAnimEnd: () => void;
-  onClose: () => void;
-  data: ReturnType<typeof useDashboardData>;
-  notif: ReturnType<typeof useNotifications>;
-  tasks: ReturnType<typeof useTasks>;
-  navigate: (p: string) => void;
-}) {
-  const [tab, setTab] = useState<string>(() => {
-    try { return localStorage.getItem(TAB_KEY) || 'today'; } catch { return 'today'; }
-  });
-  const setTabPersist = (v: string) => {
-    setTab(v);
-    try { localStorage.setItem(TAB_KEY, v); } catch {}
-  };
-
-  const go = (path: string) => {
-    onClose();
-    setTimeout(() => navigate(path), 240);
-  };
-
-  // 自动跳到有待领奖励的 tab
-  useEffect(() => {
-    if (open && tasks.totalUnclaimedCount > 0 && tab === 'today') {
-      // 仅首次打开提示，不强制
-    }
-  }, [open]);
-
-  const tabBadge = (n: number) =>
-    n > 0 ? (
-      <span className="ml-1 min-w-[16px] h-[16px] px-1 rounded-full bg-accent text-[9px] font-bold text-accent-foreground inline-flex items-center justify-center tabular-nums">
-        {n > 9 ? '9+' : n}
-      </span>
-    ) : null;
-
-  const tabTriggerCls =
-    'flex-1 rounded-lg text-[12px] gap-1 py-1.5 ' +
-    'text-[hsl(var(--primary-foreground)/0.55)] ' +
-    'data-[state=active]:bg-[hsl(var(--accent)/0.18)] data-[state=active]:text-[hsl(var(--primary-foreground))]';
-
-  return (
-    <div
-      onAnimationEnd={onAnimEnd}
-      className={cn(
-        'dashboard-deep-surface fixed inset-0 z-[60] flex flex-col will-change-transform overflow-hidden',
-        open ? 'animate-dashboard-zoom-in' : 'animate-dashboard-zoom-out',
-      )}
-      style={{
-        transformOrigin: `${originX}px ${originY}px`,
-        paddingTop: 'env(safe-area-inset-top)',
-      }}
-    >
-      {/* 顶部个人信息 */}
-      <div className="relative shrink-0">
-        <ProfileHeaderCard data={data} />
-      </div>
-
-      {/* Tabs */}
-      <Tabs value={tab} onValueChange={setTabPersist} className="flex-1 flex flex-col min-h-0 relative">
-        <div className="px-4 shrink-0">
-          <TabsList className="w-full bg-[hsl(var(--accent)/0.06)] border border-[hsl(var(--accent)/0.18)] rounded-xl p-1 h-auto">
-            <TabsTrigger value="today" className={tabTriggerCls}>
-              <BarChart3 className="w-3.5 h-3.5" />
-              今日
-            </TabsTrigger>
-            <TabsTrigger value="tasks" className={tabTriggerCls}>
-              <ListChecks className="w-3.5 h-3.5" />
-              任务{tabBadge(tasks.totalUnclaimedCount)}
-            </TabsTrigger>
-            <TabsTrigger value="messages" className={tabTriggerCls}>
-              <Bell className="w-3.5 h-3.5" />
-              消息{tabBadge(notif.unreadCount)}
-            </TabsTrigger>
-            <TabsTrigger value="schedule" className={tabTriggerCls}>
-              <CalendarDays className="w-3.5 h-3.5" />
-              排班
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
-        <div className="relative flex-1 overflow-y-auto overscroll-contain px-4 pt-4 pb-28">
-          <TabsContent value="today" className="m-0 outline-none">
-            <TodayPanel data={data} />
-          </TabsContent>
-          <TabsContent value="tasks" className="m-0 outline-none">
-            <TasksPanel tasks={tasks} onClaimed={() => data.refresh()} onNavigate={go} />
-          </TabsContent>
-          <TabsContent value="messages" className="m-0 outline-none">
-            <MessagesPanel
-              items={notif.items}
-              unread={notif.unreadCount}
-              onRead={notif.markRead}
-              onReadAll={notif.markAllRead}
-              learning={data.learning}
-              navigate={go}
-            />
-          </TabsContent>
-          <TabsContent value="schedule" className="m-0 outline-none">
-            <SchedulePanel data={data} navigate={go} />
-          </TabsContent>
-        </div>
-      </Tabs>
-
-      {/* 收起 */}
-      <div
-        className="absolute left-0 right-0 bottom-0 pt-6 pb-2"
-        style={{
-          paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
-          background: 'linear-gradient(to top, hsl(28 18% 16%) 0%, hsl(28 18% 16% / 0.95) 60%, transparent 100%)',
-        }}
-      >
-        <Button
-          variant="ghost"
-          onClick={onClose}
-          className="mx-auto flex h-10 px-5 rounded-full bg-[hsl(var(--accent)/0.1)] hover:bg-[hsl(var(--accent)/0.16)] text-[hsl(var(--primary-foreground)/0.85)] text-xs"
-        >
-          <ChevronDown className="w-4 h-4 mr-1.5" />
-          收起仪表盘
-        </Button>
-      </div>
-    </div>
   );
 }
