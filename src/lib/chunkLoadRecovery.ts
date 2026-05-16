@@ -31,7 +31,7 @@ export function scheduleChunkReload(): boolean {
     return false;
   }
 
-  window.setTimeout(() => window.location.reload(), 350);
+  window.setTimeout(() => window.location.reload(), 200);
   return true;
 }
 
