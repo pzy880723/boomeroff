@@ -12,8 +12,8 @@ export function RingProgress({
   size = 64,
   stroke = 4,
   progress,
-  trackColor = 'rgba(255,255,255,0.08)',
-  fillColor = 'hsl(var(--primary))',
+  trackColor = 'hsl(var(--accent) / 0.18)',
+  fillColor = 'hsl(var(--accent))',
   className,
   children,
 }: Props) {
