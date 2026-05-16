@@ -163,13 +163,6 @@ export function useDashboardData(enabled: boolean): DashData {
         }
       }
     }
-        colleaguesToday = (peerProfiles as any[] || []).map(p => ({
-          user_id: p.user_id,
-          display_name: p.display_name || '同事',
-          avatar_url: p.avatar_url,
-        }));
-      }
-    }
 
     // Sparkline: count per day
     const spark = Array(7).fill(0);
