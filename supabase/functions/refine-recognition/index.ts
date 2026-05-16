@@ -9,11 +9,13 @@ const corsHeaders = {
 
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const ALLOWED_MODELS = new Set([
+  'google/gemini-3-flash-preview',
   'google/gemini-2.5-flash-lite',
   'google/gemini-2.5-flash',
   'google/gemini-2.5-pro',
 ]);
-const REFINE_DEFAULT = 'google/gemini-2.5-pro'; // 纠错对话默认走 pro，准为先
+// 默认走 gemini-3-flash-preview：多模态强 + 首字 1-2s，纠错对话不必非走 pro
+const REFINE_DEFAULT = 'google/gemini-3-flash-preview';
 
 async function resolveModel(adminClient: any) {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY') || '';
@@ -21,7 +23,7 @@ async function resolveModel(adminClient: any) {
   try {
     const { data } = await adminClient.from('app_settings').select('value').eq('key', 'ai_model').maybeSingle();
     const v = data?.value;
-    // 用户在后台选了具体模型时尊重，否则纠错统一用 pro
+    // 管理员显式选了 pro / flash，尊重之；选了 lite 仍保留默认 flash-preview（lite 多模态偏弱）
     if (v && typeof v.model === 'string' && ALLOWED_MODELS.has(v.model) && v.model !== 'google/gemini-2.5-flash-lite') {
       model = v.model;
     }
