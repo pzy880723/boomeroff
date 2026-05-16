@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useDashboardData } from '@/hooks/useDashboardData';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useTasks } from '@/hooks/useTasks';
 import { SpiritMascot } from '../spirit/SpiritMascot';
@@ -58,7 +57,6 @@ export function FloatingDashboard() {
   const [showLabel, setShowLabel] = useState(true);
 
   // 仅为提醒徽标加载;数据真正的消费在 DashboardInner 里
-  useDashboardData(!!user);
   const notif = useNotifications();
   const tasks = useTasks();
 
