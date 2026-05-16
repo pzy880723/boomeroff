@@ -1,7 +1,6 @@
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { SpiritMascot } from './SpiritMascot';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 interface Props {
   open: boolean;
