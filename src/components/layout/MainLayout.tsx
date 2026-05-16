@@ -1,8 +1,9 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { BottomTabBar } from './BottomTabBar';
 import { ErrorBoundary } from '@/components/system/ErrorBoundary';
+import { lazyWithRetry as lazy } from '@/lib/lazyWithRetry';
 
 const FloatingDashboard = lazy(() =>
   import('@/components/dashboard/FloatingDashboard').then(m => ({ default: m.FloatingDashboard }))
