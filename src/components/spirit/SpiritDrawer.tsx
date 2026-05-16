@@ -50,7 +50,7 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
     >
       {/* Tabs 切换 */}
       <Tabs value={tab} onValueChange={setTabPersist} className="flex-1 flex flex-col min-h-0 relative">
-        <div className="px-4 pt-2 shrink-0">
+        <div className="pl-16 pr-4 pt-2 shrink-0">
           <TabsList className="w-full bg-[hsl(var(--accent)/0.06)] border border-[hsl(var(--accent)/0.18)] rounded-xl p-1 h-auto">
             <TabsTrigger value="chat" className={tabTriggerCls}>
               <MessageCircle className="w-3.5 h-3.5" />
