@@ -64,10 +64,17 @@ export function useRealtimeSession() {
       .from('products')
       .select('*')
       .eq('id', productId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching product:', error);
+      setCurrentProduct(null);
+      return;
+    }
+
+    // RLS 已经收紧：如果商品不是自己识别的，data 会是 null —— 当作没有当前商品
+    if (!data) {
+      setCurrentProduct(null);
       return;
     }
 
