@@ -103,23 +103,37 @@ serve(async (req) => {
     }
 
     // 首条 user 消息：注入原图 + 原识别结果 + 店员提示
+    // 关键优化：只有第一轮（restMessages 为空）才把图片发给模型；
+    // 之后追问由模型上下文 + 原识别结果文本承载，避免每轮重传图片导致 token 爆炸 & 首字延迟。
     const firstHint = messages.find((m) => m.role === 'user')?.content || '请帮我重新识别';
     const restMessages = messages.slice(1);
-
-    const imgPart = imageBase64
-      ? { type: 'image_url' as const, image_url: { url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}` } }
-      : imageUrl
-      ? { type: 'image_url' as const, image_url: { url: imageUrl } }
-      : null;
+    const isFirstRound = restMessages.length === 0;
+    const hasImages = isFirstRound && (!!imageBase64 || !!imageUrl || extraImages.length > 0);
 
     const firstUserContent: any[] = [
-      { type: 'text', text: `这是上次识别的结果（可能有错）：\n${JSON.stringify(originalPayload || {}, null, 2)}\n\n店员的纠正/提示：${firstHint}\n\n请结合下方图片重新判断。${extraImages.length ? `\n注意：第一张是原图，后 ${extraImages.length} 张是店员补拍的细节图（底款/侧面/包装等），请重点参考。` : ''}` },
+      {
+        type: 'text',
+        text:
+          `这是上次识别的结果（可能有错）：\n${JSON.stringify(originalPayload || {}, null, 2)}\n\n` +
+          `店员的纠正/提示：${firstHint}\n\n` +
+          (isFirstRound
+            ? `请结合下方图片重新判断。${extraImages.length ? `\n注意：第一张是原图，后 ${extraImages.length} 张是店员补拍的细节图（底款/侧面/包装等），请重点参考。` : ''}`
+            : `（图片在前几轮已给过，按你已经看到的内容继续讨论即可。）`),
+      },
     ];
-    if (imgPart) firstUserContent.push(imgPart);
-    for (const b64 of extraImages) {
-      if (!b64) continue;
-      const url = b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
-      firstUserContent.push({ type: 'image_url' as const, image_url: { url } });
+
+    if (isFirstRound) {
+      const imgPart = imageBase64
+        ? { type: 'image_url' as const, image_url: { url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}` } }
+        : imageUrl
+        ? { type: 'image_url' as const, image_url: { url: imageUrl } }
+        : null;
+      if (imgPart) firstUserContent.push(imgPart);
+      for (const b64 of extraImages) {
+        if (!b64) continue;
+        const url = b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
+        firstUserContent.push({ type: 'image_url' as const, image_url: { url } });
+      }
     }
 
     const aiMessages: any[] = [
@@ -127,6 +141,9 @@ serve(async (req) => {
       { role: 'user', content: firstUserContent },
       ...restMessages.map((m) => ({ role: m.role, content: m.content })),
     ];
+
+    const tStart = Date.now();
+    console.log(`[Refine] model=${cfg.model} round=${isFirstRound ? 1 : restMessages.length + 1} images=${hasImages}`);
 
     const aiResp = await fetch(cfg.url, {
       method: 'POST',
@@ -140,6 +157,8 @@ serve(async (req) => {
         stream: true,
       }),
     });
+
+    console.log(`[Refine] gateway headers in ${Date.now() - tStart} ms, status=${aiResp.status}`);
 
     if (!aiResp.ok) {
       if (aiResp.status === 429) {
