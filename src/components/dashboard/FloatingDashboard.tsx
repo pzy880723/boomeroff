@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useTasks } from '@/hooks/useTasks';
-import { SpiritMascot } from '../spirit/SpiritMascot';
+import { SpiritMascot, type SpiritState } from '../spirit/SpiritMascot';
 import { SpiritDrawer } from '../spirit/SpiritDrawer';
+import { randomMood } from '../spirit/spiritMoods';
 import { cn } from '@/lib/utils';
 
 const POS_KEY = 'dashboard_capsule_pos_v2';
@@ -54,17 +55,30 @@ export function FloatingDashboard() {
   const [pos, setPos] = useState<Pos>(() => (typeof window !== 'undefined' ? loadPos() : { side: 'right', y: 0 }));
   const [dragXY, setDragXY] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; oy: number; moved: boolean } | null>(null);
-  const [showLabel, setShowLabel] = useState(true);
+  const [labelText, setLabelText] = useState<string | null>('你好呀～');
+  const [hovering, setHovering] = useState(false);
+  const labelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 仅为提醒徽标加载;数据真正的消费在 DashboardInner 里
   const notif = useNotifications();
   const tasks = useTasks();
 
+  // 首次问候 3.5s 后消失
   useEffect(() => {
-    if (!showLabel) return;
-    const t = setTimeout(() => setShowLabel(false), 3500);
+    if (!labelText) return;
+    if (labelTimerRef.current) clearTimeout(labelTimerRef.current);
+    labelTimerRef.current = setTimeout(() => setLabelText(null), 3500);
+    return () => {
+      if (labelTimerRef.current) clearTimeout(labelTimerRef.current);
+    };
+  }, [labelText]);
+
+  // 抽屉关闭后 30s 无操作弹一次情绪鼓励
+  useEffect(() => {
+    if (open || closing || !user) return;
+    const t = setTimeout(() => setLabelText(randomMood()), 30000);
     return () => clearTimeout(t);
-  }, [showLabel]);
+  }, [open, closing, user]);
 
   useEffect(() => {
     const onResize = () => setPos(p => ({ ...p, y: clampY(p.y) }));
@@ -164,6 +178,8 @@ export function FloatingDashboard() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
           aria-label="召唤中古小精灵"
           className={cn(
             'relative flex items-center justify-center rounded-full active:scale-95 transition-transform',
@@ -171,7 +187,18 @@ export function FloatingDashboard() {
           )}
           style={{ width: BTN, height: BTN }}
         >
-          <SpiritMascot size={BTN} state={hasAlert ? 'talking' : 'idle'} />
+          <SpiritMascot
+            size={BTN}
+            state={
+              (dragging
+                ? 'dragging'
+                : hovering
+                ? 'hover'
+                : hasAlert
+                ? 'alert'
+                : 'idle') as SpiritState
+            }
+          />
 
           {/* 提醒徽标 */}
           {hasClaimable ? (
@@ -183,9 +210,9 @@ export function FloatingDashboard() {
           ) : null}
         </button>
 
-        {showLabel && !dragging && (
+        {labelText && !dragging && (
           <div className="mx-1.5 px-3 py-1.5 rounded-2xl rounded-bl-sm bg-card/95 backdrop-blur border border-border/60 shadow-md text-xs font-medium text-foreground whitespace-nowrap pointer-events-none spirit-bubble-in">
-            你好呀～
+            {labelText}
           </div>
         )}
       </div>

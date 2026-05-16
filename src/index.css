@@ -258,15 +258,22 @@
 }
 
 /* ===== 小精灵动效 ===== */
-@keyframes spirit-float {
-  0%, 100% { transform: translateY(0) rotate(-1.2deg); }
-  50%      { transform: translateY(-5px) rotate(1.2deg); }
+/* 外层：左右轻摆 */
+@keyframes spirit-sway {
+  0%, 100% { transform: rotate(-2deg); }
+  50%      { transform: rotate(2deg); }
 }
+/* 中层：呼吸 + 浮动 */
+@keyframes spirit-float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-6px) scale(1.025); }
+}
+/* talking：头部点动（柔和），不再整体抖 */
 @keyframes spirit-talk {
-  0%, 100% { transform: translateY(0) rotate(-2deg); }
-  25%      { transform: translateY(-3px) rotate(2deg); }
-  50%      { transform: translateY(-1px) rotate(-1deg); }
-  75%      { transform: translateY(-3px) rotate(2deg); }
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  25%      { transform: translateY(-2px) rotate(1deg); }
+  50%      { transform: translateY(0) rotate(-0.5deg); }
+  75%      { transform: translateY(-2px) rotate(1deg); }
 }
 @keyframes spirit-blink {
   0%, 92%, 100% { opacity: 0; }
@@ -281,21 +288,79 @@
   60%  { opacity: 1; transform: translateY(-2px) scale(1.04); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* ===== 彩蛋小动作（一次性，1~1.4s） ===== */
+@keyframes spirit-wave {
+  0%, 100% { transform: rotate(0deg) translateX(0); }
+  20%      { transform: rotate(-10deg) translateX(-2px); }
+  50%      { transform: rotate(12deg) translateX(2px); }
+  80%      { transform: rotate(-6deg) translateX(-1px); }
+}
+@keyframes spirit-peek {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-4px) scale(1.08); }
+}
+@keyframes spirit-spin {
+  0%   { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(180deg) scale(0.95); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+@keyframes spirit-nod {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  25%      { transform: translateY(2px) rotate(6deg); }
+  50%      { transform: translateY(0) rotate(0); }
+  75%      { transform: translateY(2px) rotate(6deg); }
+}
+@keyframes spirit-shake {
+  0%, 100% { transform: rotate(0deg); }
+  20%      { transform: rotate(-10deg); }
+  40%      { transform: rotate(8deg); }
+  60%      { transform: rotate(-6deg); }
+  80%      { transform: rotate(4deg); }
+}
+@keyframes spirit-jump {
+  0%, 100% { transform: translateY(0) scaleY(1) scaleX(1); }
+  20%      { transform: translateY(0) scaleY(0.85) scaleX(1.15); }
+  50%      { transform: translateY(-18px) scaleY(1.1) scaleX(0.92); }
+  80%      { transform: translateY(0) scaleY(0.9) scaleX(1.1); }
+}
+@keyframes spirit-bounce {
+  0%, 100% { transform: translateY(0); }
+  40%      { transform: translateY(-10px); }
+  70%      { transform: translateY(-3px); }
+}
+@keyframes spirit-wiggle {
+  0%, 100% { transform: rotate(-6deg); }
+  50%      { transform: rotate(6deg); }
+}
+@keyframes spirit-thinking-dot {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-3px); }
+}
+
+.spirit-sway   { animation: spirit-sway 5.5s ease-in-out infinite; transform-origin: 50% 90%; }
 .spirit-float  { animation: spirit-float 3.2s ease-in-out infinite; }
-.spirit-talk   { animation: spirit-talk 0.7s ease-in-out infinite; }
+.spirit-talk   { animation: spirit-talk 0.9s ease-in-out infinite; }
 .spirit-blink  { animation: spirit-blink 5s ease-in-out infinite; }
 .spirit-sparkle{ animation: spirit-sparkle 2.6s ease-in-out infinite; }
 .spirit-bubble-in { animation: spirit-bubble-in 0.4s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+.spirit-action-wave  { animation: spirit-wave  1.1s ease-in-out 1; }
+.spirit-action-peek  { animation: spirit-peek  1.0s ease-in-out 1; }
+.spirit-action-spin  { animation: spirit-spin  1.2s cubic-bezier(0.6,-0.2,0.4,1.4) 1; }
+.spirit-action-nod   { animation: spirit-nod   1.0s ease-in-out 1; }
+.spirit-action-shake { animation: spirit-shake 0.9s ease-in-out 1; }
+.spirit-action-jump  { animation: spirit-jump  1.1s cubic-bezier(0.3,1.4,0.6,1) 1; transform-origin: 50% 100%; }
+.spirit-action-bounce{ animation: spirit-bounce 0.7s cubic-bezier(0.3,1.4,0.6,1) 1; }
+.spirit-wiggle { animation: spirit-wiggle 0.4s ease-in-out infinite; }
+.spirit-think-dot { animation: spirit-thinking-dot 1.2s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .animate-card-enter,
   .animate-progress-fill,
   .animate-badge-pop,
   .btn-shine::after,
-  .spirit-float,
-  .spirit-talk,
-  .spirit-blink,
-  .spirit-sparkle {
+  [class*="spirit-"] {
     animation: none !important;
   }
 }
