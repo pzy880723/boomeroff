@@ -143,7 +143,7 @@ function EmptyState() {
       <div className="relative overflow-visible" style={{ width: 260, height: 260 }}>
         <div
           className="absolute inset-0 flex items-center justify-center"
-          style={{ transform: 'scale(1.35) translateY(-4%)', transformOrigin: '50% 50%' }}
+          style={{ transform: 'scale(1.15) translateY(-2%)', transformOrigin: '50% 50%' }}
         >
           <SpiritMascot size={260} state="idle" />
         </div>
