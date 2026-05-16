@@ -1,7 +1,8 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { lazyWithRetry as lazy } from '@/lib/lazyWithRetry';
 
 // 把首屏不一定需要的重型模块拆出来：未登录用户只下载 AuthPage，已登录才下载 LiveStreamPanel（含相机/识别）
 const AuthPage = lazy(() =>
