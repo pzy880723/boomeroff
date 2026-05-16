@@ -32,7 +32,7 @@ export function SpiritChatPanel() {
   }, [status]);
 
   const busy = status === 'sending' || status === 'streaming';
-  const spiritState = busy ? 'talking' : 'idle';
+  const spiritState = status === 'sending' ? 'thinking' : status === 'streaming' ? 'talking' : 'idle';
 
   const handleSend = () => {
     const t = input.trim();
