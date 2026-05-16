@@ -49,23 +49,32 @@ function todayShanghai() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
+// 模块级缓存：60s 内重复打开抽屉直接命中缓存，后台静默刷新
+type CachedDash = Omit<DashData, 'loading' | 'refresh'>;
+const dashCache = new Map<string, { data: CachedDash; ts: number }>();
+const CACHE_TTL_MS = 60 * 1000;
+
 export function useDashboardData(enabled: boolean): DashData {
   const { user } = useAuth();
-  const { can } = usePermissions();
+  const { permissions } = usePermissions();
+  const isAdmin = permissions.has('correction.review') || permissions.has('user.create');
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<Omit<DashData, 'loading' | 'refresh'>>({
-    profile: null,
-    todayShift: null,
-    nextShift: null,
-    weekShifts: [],
-    colleaguesToday: [],
-    totalExp: 0,
-    currentStreak: 0,
-    checkedToday: false,
-    learning: { sop: null, qa: null, daily: null },
-    stats: { weekScans: 0, prevWeekScans: 0, weekFavs: 0, weekPosts: 0, weeklySpark: [0, 0, 0, 0, 0, 0, 0] },
-    todos: { pendingCorrections: 0, pendingShares: 0, pendingUsers: 0 },
-    social: { posts: [] },
+  const [data, setData] = useState<CachedDash>(() => {
+    const cached = user ? dashCache.get(user.id) : null;
+    return cached?.data ?? {
+      profile: null,
+      todayShift: null,
+      nextShift: null,
+      weekShifts: [],
+      colleaguesToday: [],
+      totalExp: 0,
+      currentStreak: 0,
+      checkedToday: false,
+      learning: { sop: null, qa: null, daily: null },
+      stats: { weekScans: 0, prevWeekScans: 0, weekFavs: 0, weekPosts: 0, weeklySpark: [0, 0, 0, 0, 0, 0, 0] },
+      todos: { pendingCorrections: 0, pendingShares: 0, pendingUsers: 0 },
+      social: { posts: [] },
+    };
   });
 
   const load = useCallback(async () => {
