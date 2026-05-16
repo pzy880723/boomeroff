@@ -28,8 +28,18 @@ function tzDate() {
   }).format(new Date());
 }
 
+function extractText(content: any): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((p: any) => (p?.type === 'text' ? String(p.text || '') : ''))
+      .join(' ')
+      .trim();
+  }
+  return '';
+}
+
 function extractQuery(text: string): string {
-  // 取最后一条用户消息里 2-12 字的关键词块
   return text.replace(/[\n\r]+/g, ' ').trim().slice(0, 60);
 }
 
