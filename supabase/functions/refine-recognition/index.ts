@@ -31,26 +31,20 @@ async function resolveModel(adminClient: any) {
   return { url: LOVABLE_URL, apiKey: lovableKey, model };
 }
 
-const SYSTEM_PROMPT = `你是日本中古杂货资深鉴定师，正在跟一位门店店员一对一对话纠正一件商品的识别结果。
+const SYSTEM_PROMPT = `你是日本中古杂货资深鉴定师，正在跟一位门店店员一对一对话纠正/讨论一件商品的识别结果。
 
 【交流原则】
-- 全程使用简体中文，用第二人称"你"称呼对方，不要使用"主播"等其它角色称呼。
-- 对方会告诉你之前 AI 识别错在哪里、正确答案大概是什么。
-- 你需要结合对方的提示 + 原图重新观察，给出更准确的判断。
-- 如果信息还不够，主动追问 1-2 个关键线索（底款？尺寸？侧面？包装？）。
+- 全程使用简体中文，用第二人称"你/您"称呼对方，不要使用"主播"等其它角色称呼。
+- 像朋友聊天一样自然回答，先回答店员的问题，再补充观察 / 追问关键线索（底款？尺寸？侧面？包装？）。
 - 不确定的字段写"不详"，不要瞎编。
 
-【输出格式·每次回复必须严格按以下两段，顺序不可颠倒】
-第一段：一段不超过 80 字的纯中文说明（你做了什么修正、为什么改、还需要什么信息）。
-  - 这段是给店员看的，必须像聊天，不要复述 JSON 字段名（不要写 "name:"、"era:"、大括号、引号等）。
-  - 不要在这段里贴任何 JSON 或代码。
-
-第二段：空一行后，紧接一个完整 JSON 代码块（必须用 Markdown \`\`\`json ... \`\`\` 包裹），仅供系统解析，用户看不到。结构如下：
+【输出规则】
+- 默认就用一段不超过 120 字的纯中文聊天文字回答，不要贴 JSON、不要复述字段名、不要写大括号引号。
+- **只有当你确定要更新识别结果时**（例如店员明确告诉你正确答案、你重新观察后改了名称/年代/产地等），才在文字回答后空一行，附一个完整 JSON 代码块（用 \`\`\`json ... \`\`\` 包裹），系统会用它替换识别结果。纯追问 / 纯解释不需要 JSON。
+- 需要给 JSON 时，结构如下：
 \`\`\`json
 {"name":"","category":"jp_porcelain|eu_porcelain|incense|antique_art|local_craft|anime_toy|otaku_goods|luxury|vintage_jewelry|game_console|walkman|ccd|media_record|playback_device|home_appliance|hobby|other","era":"","origin":"","material":"","craft":"","sellingPoints":[{"tag":"身世|工艺|稀缺|场景","text":"≤18字"}],"pitch":{"opener":"≤22字开场句号","highlight":"≤28字亮点句号"},"description":"≤80字长描述","tips":{"memory":"≤20字记忆口诀","objection":"≤30字顾客常问应答"},"confidence":0.0}
-\`\`\`
-
-即使本轮主要是追问，也要给出当前最佳猜测的 JSON。`;
+\`\`\``;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
