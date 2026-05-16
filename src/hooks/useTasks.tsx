@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode,
+} from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
@@ -37,7 +39,21 @@ function dayBoundsISO(): { start: string; end: string } {
   return { start: `${d}T00:00:00+08:00`, end: `${d}T23:59:59.999+08:00` };
 }
 
-export function useTasks() {
+interface Ctx {
+  loading: boolean;
+  pending: PendingEvent[];
+  dailyTasks: DailyTask[];
+  totalUnclaimedCount: number;
+  totalUnclaimedExp: number;
+  claimEvent: (id: string) => Promise<{ ok: boolean; amount?: number }>;
+  claimDaily: (key: DailyTaskKey) => Promise<{ ok: boolean; amount?: number }>;
+  claimAllPending: () => Promise<number>;
+  refresh: () => Promise<void>;
+}
+
+const TasksContext = createContext<Ctx | undefined>(undefined);
+
+export function TasksProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [pending, setPending] = useState<PendingEvent[]>([]);
   const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([]);
@@ -92,11 +108,11 @@ export function useTasks() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // realtime: 待领取奖励
+  // realtime: 待领取奖励（整个 session 仅一条 channel）
   useEffect(() => {
     if (!user) return;
     const ch = supabase
-      .channel(`exp-pending-${user.id}-${crypto.randomUUID()}`)
+      .channel(`exp-pending-${user.id}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'exp_pending', filter: `user_id=eq.${user.id}` },
         () => { void load(); })
@@ -140,15 +156,27 @@ export function useTasks() {
   const totalUnclaimedCount =
     pending.length + dailyTasks.filter(t => t.completed && !t.claimed).length;
 
-  return {
-    loading,
-    pending,
-    dailyTasks,
-    totalUnclaimedCount,
-    totalUnclaimedExp,
-    claimEvent,
-    claimDaily,
-    claimAllPending,
+  const value = useMemo<Ctx>(() => ({
+    loading, pending, dailyTasks,
+    totalUnclaimedCount, totalUnclaimedExp,
+    claimEvent, claimDaily, claimAllPending,
     refresh: load,
-  };
+  }), [loading, pending, dailyTasks, totalUnclaimedCount, totalUnclaimedExp, claimEvent, claimDaily, claimAllPending, load]);
+
+  return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>;
+}
+
+export function useTasks(): Ctx {
+  const ctx = useContext(TasksContext);
+  if (!ctx) {
+    return {
+      loading: false, pending: [], dailyTasks: [],
+      totalUnclaimedCount: 0, totalUnclaimedExp: 0,
+      claimEvent: async () => ({ ok: false }),
+      claimDaily: async () => ({ ok: false }),
+      claimAllPending: async () => 0,
+      refresh: async () => {},
+    };
+  }
+  return ctx;
 }
