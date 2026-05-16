@@ -65,7 +65,7 @@ export function SpiritGreetingDialog({ open, onClose }: Props) {
           {/* 云朵气泡（尾巴朝上指向小精灵嘴部） */}
           <div
             className="relative spirit-greet-bubble"
-            style={{ width: 'min(86vw, 320px)', marginTop: '-2px' }}
+            style={{ width: 'min(86vw, 320px)', marginTop: '-56px' }}
           >
             <CloudBubble>
               <p className="text-[14px] leading-relaxed font-medium">
