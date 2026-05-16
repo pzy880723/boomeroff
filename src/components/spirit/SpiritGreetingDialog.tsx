@@ -108,7 +108,7 @@ function CloudBubble({ children }: { children: React.ReactNode }) {
       <svg
         aria-hidden
         viewBox="0 0 32 18"
-        className="absolute left-1/2 -translate-x-1/2 -top-[14px] w-[28px] h-[16px]"
+        className="absolute left-1/2 -translate-x-1/2 -top-[12px] w-[28px] h-[16px]"
         style={{ filter: 'drop-shadow(0 -2px 0 hsl(var(--accent) / 0.45))' }}
       >
         <path
