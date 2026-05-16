@@ -1,45 +1,43 @@
-## 问题诊断
-截图里小精灵几乎不可见，只剩暗影 + 背景光晕。根因：
+## 诊断结论
 
-**VP9 WebM 缺 `alpha_mode=1` 元数据**。上一轮用 `libvpx-vp9 -pix_fmt yuva420p` 编码，但没写 `-metadata:s:v:0 alpha_mode="1"`。Chrome/Edge 看到 webm 没有这个 tag 就不启用 alpha 通道，把 alpha 平面当垃圾丢掉，原本透明的区域渲染成黑色，叠在抽屉的深色 BG 上 → 整个角色变成暗影。
+当前问题不是前端尺寸或阴影问题，而是**抠像方案本身不可靠**：原视频是浅色背景，小精灵的脸、围巾、手、相机高光也接近浅色背景。上一版用 `colorkey/chromakey` 抠白底时，把脸部肤色和浅色高光一起当成背景扣掉了，所以你看到“脸都没有了、透明掉了”。
+
+另外我检查到当前 WebM 虽然有 `ALPHA_MODE=1` 标签，但用 ffmpeg 解码时是 `yuv420p`，`alphaextract` 直接失败，说明这条 WebM alpha 路线在当前产物上也不够稳定。
 
 ## 修复方案
 
-### 一、重编码两段 WebM
-在 `/mnt/documents` 用 ffmpeg 重新做：
-```
-ffmpeg -y -i spirit-{name}-raw.mp4 -an \
-  -vf "chromakey=color=0xF3F5F2:similarity=0.18:blend=0.12,\
-       despill=type=green:mix=0,\
-       scale=512:512:flags=lanczos,format=yuva420p" \
-  -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 0 -crf 32 -row-mt 1 -auto-alt-ref 0 \
-  -metadata:s:v:0 alpha_mode="1" \
-  spirit-{name}.webm
-```
+### 1. 停止用白底视频抠像
+不再从 AI 生成的白底 mp4 里用颜色阈值抠透明，因为它会继续误删脸部、围巾和高光。
 
-关键差异：
-- 加 `-metadata:s:v:0 alpha_mode="1"` ← **核心修复**
-- chromakey similarity 0.13 → 0.18，blend 0.08 → 0.12（边缘更干净）
+### 2. 改用官方透明 PNG 作为唯一视觉源
+用已经确认清晰的 `spirit-mascot.png` 透明图作为动图源，直接保留原始 alpha 通道，不再抠色。
 
-### 二、校验
-1. `ffprobe -show_streams` 确认 alpha_mode tag 存在
-2. 提第 30 帧 → 落到红色 BG → 肉眼看角色是否清晰、边缘干净、无暗带
-3. 如果还有问题，回退到 **APNG**（`ffmpeg -plays 0 -f apng`），所有浏览器原生 alpha 支持，体积约 1MB 可接受
+生成两段透明动效：
+- `idle.webm`：轻微上下漂浮、呼吸缩放、柔和摆动
+- `wave.webm`：更明显的点头/摆动/弹跳反馈，用于说话、悬停、提醒状态
 
-### 三、前端微调（`SpiritMascot.tsx`）
-- `drop-shadow` filter 从 `<video>` 元素移到外层 wrapper `<div>`，避开 Safari/Chrome 对带 alpha video 套 filter 的渲染差异
-- 加 `onLoadedData` + 2s 超时检测：拿不到帧就 fallback 到 canonical PNG
-- 大头像（SpiritChatPanel 那个 ~120px）和浮窗都保留视频（按用户选择）
+这样角色五官、脸、围巾、相机全部来自原图，不会再被透明掉。
 
-### 四、验证
-- 浏览器预览刷新，浮窗 + 抽屉都看小精灵是否清晰
-- console 看是否有 video decode 报错
-- 用 image_tools 把 preview 截图 zoom 到小精灵区域核对
+### 3. 输出格式改成“双保险”
+主格式仍保留用户选择的透明 WebM，同时生成 APNG 兜底：
+- `idle.webm` / `wave.webm`：优先播放
+- `idle.apng` / `wave.apng`：浏览器不支持 WebM alpha 或检测异常时使用
+- 最后兜底仍是静态 PNG
 
-## 不动的部分
-- canonical PNG、首帧 mp4 源、idle/wave 动作内容都不重新生成
-- useTasks 修复不动
-- SpiritChatPanel 布局不动
+### 4. 修正前端检测逻辑
+当前 `SpiritMascot.tsx` 的 canvas 检测过于粗暴，抽样区域可能误判透明视频失败。改成：
+- 先尝试 WebM
+- video `error`、加载超时、或检测到全透明/全黑时切 APNG
+- APNG 加载失败才回退 PNG
+- 不再因为抽样全不透明就立即判失败，因为部分浏览器 canvas 抽帧会把透明合成掉
 
-## 技术细节
-关于 alpha_mode：这是 WebM/Matroska 容器层的字符串元数据，浏览器据此决定是否把 VP9 的 yuva420p 平面分离出 alpha。无此 tag 时绝大多数浏览器忽略 alpha → 黑底；有此 tag 时正常透明。这是 webm + alpha 路线最常见的坑。
+### 5. QA 校验
+生成后逐帧抽样检查：
+- 抽第 1、15、30 帧合成到深棕背景和红色背景
+- 确认脸、眼睛、围巾、手、相机都完整可见
+- 确认背景透明，没有白底方块
+- 再检查浮窗小尺寸和抽屉大头像尺寸都清晰
+
+## 预期结果
+
+小精灵会恢复清晰完整的脸和五官；动效会是稳定的轻动画，不再出现白底、黑底、脸部被扣空或透明错乱。

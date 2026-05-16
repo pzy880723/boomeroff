@@ -3,6 +3,8 @@ import { cn } from '@/lib/utils';
 import mascot from '@/assets/spirit-mascot.png';
 import idleVideo from '@/assets/spirit/idle.webm';
 import waveVideo from '@/assets/spirit/wave.webm';
+import idleApng from '@/assets/spirit/idle-anim.png';
+import waveApng from '@/assets/spirit/wave-anim.png';
 import { randomIdleAction } from './spiritMoods';
 
 export type SpiritState =
@@ -32,7 +34,8 @@ export function SpiritMascot({
   disableActions = false,
 }: Props) {
   const [actionClass, setActionClass] = useState<string>('');
-  const [videoFailed, setVideoFailed] = useState(false);
+  // 0 = webm, 1 = apng, 2 = static png
+  const [tier, setTier] = useState<0 | 1 | 2>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,13 +43,26 @@ export function SpiritMascot({
   const wantWave =
     !disableActions && (state === 'hover' || state === 'alert' || state === 'talking');
   const videoSrc = wantWave ? waveVideo : idleVideo;
+  const apngSrc = wantWave ? waveApng : idleApng;
 
   // 切源时让 video 从头播放
   useEffect(() => {
+    if (tier !== 0) return;
     const v = videoRef.current;
     if (!v) return;
     try { v.currentTime = 0; v.play().catch(() => {}); } catch {}
-  }, [videoSrc]);
+  }, [videoSrc, tier]);
+
+  // WebM 加载超时兜底：3s 内没拿到帧 → 切 APNG
+  useEffect(() => {
+    if (tier !== 0) return;
+    const v = videoRef.current;
+    if (!v) return;
+    const t = setTimeout(() => {
+      if (v.readyState < 2) setTier(1);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [videoSrc, tier]);
 
   // 仅 idle 时随机叠加一点 CSS 微动作（让整体不死板）
   useEffect(() => {
@@ -120,13 +136,23 @@ export function SpiritMascot({
             )}
             style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.25))' }}
           >
-            {videoFailed ? (
+            {tier === 2 ? (
               <img
                 src={mascot}
                 alt=""
                 width={size}
                 height={size}
                 loading="lazy"
+                className="w-full h-full object-contain select-none pointer-events-none"
+                draggable={false}
+              />
+            ) : tier === 1 ? (
+              <img
+                src={apngSrc}
+                alt=""
+                width={size}
+                height={size}
+                onError={() => setTier(2)}
                 className="w-full h-full object-contain select-none pointer-events-none"
                 draggable={false}
               />
@@ -142,27 +168,7 @@ export function SpiritMascot({
                 muted
                 playsInline
                 preload="auto"
-                onError={() => setVideoFailed(true)}
-                onLoadedData={() => {
-                  // 部分浏览器不支持 vp9 alpha，会渲染成黑色 —
-                  // 通过解码首帧像素检测：抽样若全黑，则回退到 PNG
-                  const v = videoRef.current;
-                  if (!v) return;
-                  try {
-                    const c = document.createElement('canvas');
-                    c.width = 16; c.height = 16;
-                    const ctx = c.getContext('2d');
-                    if (!ctx) return;
-                    ctx.clearRect(0, 0, 16, 16);
-                    ctx.drawImage(v, 0, 0, 16, 16);
-                    const data = ctx.getImageData(0, 0, 16, 16).data;
-                    let opaque = 0;
-                    for (let i = 3; i < data.length; i += 4) if (data[i] > 20) opaque++;
-                    // 没有任何半透明像素说明 alpha 通道丢失（被当成实体）
-                    // 或全透明（错误抠图）→ fallback
-                    if (opaque === 0 || opaque === 256) setVideoFailed(true);
-                  } catch { /* CORS/SecurityError 时忽略 */ }
-                }}
+                onError={() => setTier(1)}
                 className="w-full h-full object-contain select-none pointer-events-none"
               />
             )}
