@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -8,9 +8,13 @@ import { SpiritDrawer } from '../spirit/SpiritDrawer';
 import { randomMood } from '../spirit/spiritMoods';
 import { cn } from '@/lib/utils';
 
+const SpiritGreetingDialog = lazy(() =>
+  import('../spirit/SpiritGreetingDialog').then(m => ({ default: m.SpiritGreetingDialog })),
+);
+
 const POS_KEY = 'dashboard_capsule_pos_v2';
-const AUTO_OPEN_KEY = 'dashboard_auto_opened_session';
-const BTN = 88;
+const GREETED_KEY = 'spirit_greeted_session';
+const BTN = 104;
 const EDGE = 8;
 const BOTTOM_TAB = 64;
 type Side = 'left' | 'right';
@@ -55,19 +59,18 @@ export function FloatingDashboard() {
   const [pos, setPos] = useState<Pos>(() => (typeof window !== 'undefined' ? loadPos() : { side: 'right', y: 0 }));
   const [dragXY, setDragXY] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; oy: number; moved: boolean } | null>(null);
-  const [labelText, setLabelText] = useState<string | null>('你好呀～');
+  const [labelText, setLabelText] = useState<string | null>(null);
   const [hovering, setHovering] = useState(false);
+  const [greetOpen, setGreetOpen] = useState(false);
   const labelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 仅为提醒徽标加载;数据真正的消费在 DashboardInner 里
   const notif = useNotifications();
   const tasks = useTasks();
 
-  // 首次问候 3.5s 后消失
   useEffect(() => {
     if (!labelText) return;
     if (labelTimerRef.current) clearTimeout(labelTimerRef.current);
-    labelTimerRef.current = setTimeout(() => setLabelText(null), 3500);
+    labelTimerRef.current = setTimeout(() => setLabelText(null), 4500);
     return () => {
       if (labelTimerRef.current) clearTimeout(labelTimerRef.current);
     };
@@ -86,19 +89,20 @@ export function FloatingDashboard() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // 首次进入：不再自动打开抽屉，改为弹出问候对话框
   useEffect(() => {
     if (!user) return;
-    try { localStorage.removeItem('dashboard_last_auto_open'); } catch {}
-    const opened = sessionStorage.getItem(AUTO_OPEN_KEY);
-    if (!opened) {
-      const t = setTimeout(() => {
-        openDrawer();
-        sessionStorage.setItem(AUTO_OPEN_KEY, '1');
-      }, 700);
+    const greeted = sessionStorage.getItem(GREETED_KEY);
+    if (!greeted) {
+      const t = setTimeout(() => setGreetOpen(true), 600);
       return () => clearTimeout(t);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  const closeGreeting = () => {
+    setGreetOpen(false);
+    try { sessionStorage.setItem(GREETED_KEY, '1'); } catch {}
+  };
 
   const openDrawer = () => {
     setMounted(true);
@@ -161,16 +165,21 @@ export function FloatingDashboard() {
   const hasOtherUnread = notif.unreadCount > 0;
   const hasAlert = hasClaimable || hasOtherUnread;
 
+  // 气泡锚到按钮内侧（右胶囊→向左展开；左胶囊→向右展开）
+  const bubbleSide: Side = pos.side;
+  const bubbleStyle: React.CSSProperties = bubbleSide === 'right'
+    ? { right: BTN + 10, top: BTN / 2, transform: 'translateY(-50%)' }
+    : { left: BTN + 10, top: BTN / 2, transform: 'translateY(-50%)' };
+
   return (
     <>
       <div
         className={cn(
-          'fixed z-50 flex items-center select-none touch-none transition-all',
+          'fixed z-50 select-none touch-none transition-all',
           dragging ? 'duration-0' : 'duration-300 ease-out',
-          pos.side === 'right' && !dragging ? 'flex-row-reverse' : 'flex-row',
           (open || closing) && 'opacity-0 pointer-events-none',
         )}
-        style={{ left: capsuleX, top: capsuleY }}
+        style={{ left: capsuleX, top: capsuleY, width: BTN, height: BTN }}
       >
         <button
           type="button"
@@ -182,10 +191,9 @@ export function FloatingDashboard() {
           onMouseLeave={() => setHovering(false)}
           aria-label="召唤中古小精灵"
           className={cn(
-            'relative flex items-center justify-center rounded-full active:scale-95 transition-transform',
+            'relative flex items-center justify-center rounded-full active:scale-95 transition-transform w-full h-full',
             dragging && 'opacity-95 scale-105',
           )}
-          style={{ width: BTN, height: BTN }}
         >
           <SpiritMascot
             size={BTN}
@@ -200,18 +208,28 @@ export function FloatingDashboard() {
             }
           />
 
-          {/* 提醒徽标 */}
           {hasClaimable ? (
-            <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 rounded-full bg-accent border-2 border-background text-[10px] font-bold text-accent-foreground flex items-center justify-center shadow-sm animate-badge-pop">
+            <span className="absolute top-1 right-1 min-w-[20px] h-[20px] px-1 rounded-full bg-accent border-2 border-background text-[10px] font-bold text-accent-foreground flex items-center justify-center shadow-sm animate-badge-pop">
               {claimableCount > 9 ? '9+' : claimableCount}
             </span>
           ) : hasOtherUnread ? (
-            <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-destructive ring-2 ring-background" />
+            <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-destructive ring-2 ring-background" />
           ) : null}
         </button>
 
         {labelText && !dragging && (
-          <div className="mx-1.5 px-3 py-1.5 rounded-2xl rounded-bl-sm bg-card/95 backdrop-blur border border-border/60 shadow-md text-xs font-medium text-foreground whitespace-nowrap pointer-events-none spirit-bubble-in">
+          <div
+            className={cn(
+              'absolute px-3 py-1.5 rounded-2xl bg-card/95 backdrop-blur border border-border/60 shadow-md text-xs font-medium text-foreground pointer-events-none spirit-bubble-in break-words',
+              bubbleSide === 'right' ? 'rounded-br-sm text-right' : 'rounded-bl-sm text-left',
+            )}
+            style={{
+              ...bubbleStyle,
+              maxWidth: `min(220px, calc(100vw - ${BTN + 32}px))`,
+              whiteSpace: 'normal',
+              lineHeight: 1.4,
+            }}
+          >
             {labelText}
           </div>
         )}
@@ -228,6 +246,10 @@ export function FloatingDashboard() {
         />,
         document.body,
       )}
+
+      <Suspense fallback={null}>
+        {greetOpen && <SpiritGreetingDialog open={greetOpen} onClose={closeGreeting} />}
+      </Suspense>
     </>
   );
 }
