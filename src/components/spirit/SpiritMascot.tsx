@@ -31,40 +31,10 @@ export function SpiritMascot({
   flat = false,
   disableActions = false,
 }: Props) {
-  // 0 = webm, 1 = apng, 2 = static png
-  const [tier, setTier] = useState<0 | 1 | 2>(0);
-  const idleVideoRef = useRef<HTMLVideoElement | null>(null);
-  const waveVideoRef = useRef<HTMLVideoElement | null>(null);
-
-  // 只在 hover / alert 时切到挥手；talking/thinking 仍保持 idle 视频稳定不切源
-  const wantWave =
-    !disableActions && (state === 'hover' || state === 'alert');
-
-  // WebM 加载失败/超时兜底
-  useEffect(() => {
-    if (tier !== 0) return;
-    const t = setTimeout(() => {
-      const v = idleVideoRef.current;
-      if (!v || v.readyState < 2) setTier(1);
-    }, 2500);
-    return () => clearTimeout(t);
-  }, [tier]);
-
-  // 控制播放（不切换 src，只切换显示，避免视频重新加载）
-  useEffect(() => {
-    if (tier !== 0) return;
-    const idle = idleVideoRef.current;
-    const wave = waveVideoRef.current;
-    if (!idle || !wave) return;
-    if (wantWave) {
-      try { wave.currentTime = 0; wave.play().catch(() => {}); } catch {}
-    } else {
-      idle.play().catch(() => {});
-    }
-  }, [wantWave, tier]);
-
+  const wantWave = !disableActions && (state === 'hover' || state === 'alert');
   const showThinking = state === 'thinking';
   const showAlertPing = state === 'alert';
+  const [apngFailed, setApngFailed] = useState(false);
 
   return (
     <div
@@ -87,7 +57,7 @@ export function SpiritMascot({
         />
       )}
 
-      {/* 主体：只保留极轻的浮动 + drop-shadow；让视频本身负责肢体动效 */}
+      {/* 主体：透明 APNG（兼容 iOS Safari），失败回退静态 PNG */}
       <div
         className={cn(
           'relative w-full h-full',
@@ -95,7 +65,7 @@ export function SpiritMascot({
         )}
         style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.25))' }}
       >
-        {tier === 2 ? (
+        {apngFailed ? (
           <img
             src={mascot}
             alt=""
@@ -105,51 +75,16 @@ export function SpiritMascot({
             className="w-full h-full object-contain select-none pointer-events-none"
             draggable={false}
           />
-        ) : tier === 1 ? (
+        ) : (
           <img
             src={wantWave ? waveApng : idleApng}
             alt=""
             width={size}
             height={size}
-            onError={() => setTier(2)}
+            onError={() => setApngFailed(true)}
             className="w-full h-full object-contain select-none pointer-events-none"
             draggable={false}
           />
-        ) : (
-          <>
-            {/* 同时挂载两个 video，切换只改可见性，避免源切换导致的重载/闪烁 */}
-            <video
-              ref={idleVideoRef}
-              src={idleVideo}
-              width={size}
-              height={size}
-              autoPlay
-              loop
-              muted
-              playsInline
-              preload="auto"
-              onError={() => setTier(1)}
-              className={cn(
-                'absolute inset-0 w-full h-full object-contain select-none pointer-events-none transition-opacity duration-200',
-                wantWave ? 'opacity-0' : 'opacity-100',
-              )}
-            />
-            <video
-              ref={waveVideoRef}
-              src={waveVideo}
-              width={size}
-              height={size}
-              loop
-              muted
-              playsInline
-              preload="auto"
-              onError={() => setTier(1)}
-              className={cn(
-                'absolute inset-0 w-full h-full object-contain select-none pointer-events-none transition-opacity duration-200',
-                wantWave ? 'opacity-100' : 'opacity-0',
-              )}
-            />
-          </>
         )}
       </div>
 
