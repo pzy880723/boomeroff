@@ -33,9 +33,6 @@ export function SpiritChatPanel() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, status]);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, [status]);
 
   // cleanup previews
   useEffect(() => () => pending.forEach((p) => URL.revokeObjectURL(p.preview)), []);
