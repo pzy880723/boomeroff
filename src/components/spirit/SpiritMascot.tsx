@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import mascot from '@/assets/spirit-mascot.png';
-import idleVideo from '@/assets/spirit/idle.webm';
-import waveVideo from '@/assets/spirit/wave.webm';
 import idleApng from '@/assets/spirit/idle-anim.png';
 import waveApng from '@/assets/spirit/wave-anim.png';
+// 注：放弃 WebM/VP9-alpha（iOS Safari 渲染会带黑底），统一使用透明 APNG。
 
 export type SpiritState =
   | 'idle'
