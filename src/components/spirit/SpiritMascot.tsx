@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import mascot from '@/assets/spirit-mascot.png';
 import idleApng from '@/assets/spirit/idle-anim.png';
