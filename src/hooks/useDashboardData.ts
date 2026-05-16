@@ -97,9 +97,9 @@ export function useDashboardData(enabled: boolean): DashData {
     ] = await Promise.all([
       supabase.from('profiles').select('display_name, avatar_url').eq('user_id', user.id).maybeSingle(),
       supabase.from('shift_schedules' as any)
-        .select('work_date, shift_code, user_id')
-        .gte('work_date', start).lte('work_date', end)
-        .or(shopId ? `user_id.eq.${user.id},shop_id.eq.${shopId}` : `user_id.eq.${user.id}`),
+        .select('work_date, shift_code, user_id, shop_id')
+        .eq('user_id', user.id)
+        .gte('work_date', start).lte('work_date', end),
       supabase.from('shop_shifts' as any).select('code, name, start_time, end_time, color').eq('active', true),
       supabase.from('user_experience').select('total_exp, current_streak').eq('user_id', user.id).maybeSingle(),
       supabase.from('user_check_ins').select('id').eq('user_id', user.id).eq('check_in_date', today).maybeSingle(),
