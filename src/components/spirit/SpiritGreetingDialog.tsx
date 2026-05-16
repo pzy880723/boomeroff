@@ -44,28 +44,28 @@ export function SpiritGreetingDialog({ open, onClose }: Props) {
           {/* 大号小精灵 + 地面柔光 */}
           <div
             className="relative flex items-end justify-center spirit-greet-mascot"
-            style={{ width: 'min(60vw, 220px)', height: 'min(60vw, 220px)' }}
+            style={{ width: 'min(86vw, 340px)', height: 'min(86vw, 340px)' }}
           >
             <div
               aria-hidden
               className="absolute left-1/2 -translate-x-1/2 bottom-0 pointer-events-none"
               style={{
-                width: '120%',
-                height: '32%',
+                width: '130%',
+                height: '36%',
                 background:
                   'radial-gradient(ellipse at 50% 100%, hsl(var(--accent) / 0.45) 0%, hsl(var(--accent) / 0.12) 45%, transparent 75%)',
                 filter: 'blur(6px)',
               }}
             />
             <div className="relative w-full h-full">
-              <SpiritMascot size={Math.min(220, Math.floor(window.innerWidth * 0.6))} state="hover" />
+              <SpiritMascot size={Math.min(340, Math.floor(window.innerWidth * 0.86))} state="hover" />
             </div>
           </div>
 
           {/* 云朵气泡（尾巴朝上指向小精灵嘴部） */}
           <div
             className="relative spirit-greet-bubble"
-            style={{ width: 'min(86vw, 320px)', marginTop: '-6px' }}
+            style={{ width: 'min(86vw, 320px)', marginTop: '-2px' }}
           >
             <CloudBubble>
               <p className="text-[14px] leading-relaxed font-medium">
