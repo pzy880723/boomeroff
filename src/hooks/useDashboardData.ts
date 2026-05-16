@@ -78,14 +78,6 @@ export function useDashboardData(enabled: boolean): DashData {
     const twoWeekAgo = addDaysISO(today, -13);
     const isAdmin = can('correction.review') || can('user.create');
 
-    // Get shop id first
-    const { data: sp } = await supabase
-      .from('staff_profiles' as any)
-      .select('shop_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    const shopId: string | null = (sp as any)?.shop_id ?? null;
-
     const [
       { data: profile },
       { data: rows },
