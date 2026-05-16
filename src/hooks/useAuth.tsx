@@ -82,8 +82,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     console.log('[Auth] Initializing auth state...');
     
+    // 预览域名下自动登录开发账号（仅 lovable.app / localhost）
+    const tryDevAutoLogin = async () => {
+      try {
+        const host = window.location.hostname;
+        const isPreview =
+          host.endsWith('.lovable.app') ||
+          host === 'localhost' ||
+          host === '127.0.0.1';
+        if (!isPreview) return;
+        if (sessionStorage.getItem('dev-autologin-tried') === '1') return;
+        sessionStorage.setItem('dev-autologin-tried', '1');
+        console.log('[Auth] Preview detected, auto-login dev account...');
+        const { error } = await supabase.auth.signInWithPassword({
+          email: '87113911@qq.com',
+          password: 'pzy5565283',
+        });
+        if (error) console.warn('[Auth] Dev auto-login failed:', error.message);
+      } catch (e) {
+        console.warn('[Auth] Dev auto-login error:', e);
+      }
+    };
+
     // 获取初始会话
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       console.log('[Auth] Initial session:', session ? 'exists' : 'null');
       setSession(session);
       setUser(session?.user ?? null);
@@ -92,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         console.log('[Auth] No session, setting loading to false');
         setLoading(false);
+        await tryDevAutoLogin();
       }
     });
 
