@@ -363,6 +363,19 @@ async function tryNameMatch(adminClient: any, name: string, category: string) {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  // 轻量预热：前端进入识别页时发一次 {ping:true}，让 V8 isolate 提前加载
+  // 注意必须在鉴权之前返回，否则达不到预热效果
+  if (req.method === 'POST') {
+    try {
+      const url = new URL(req.url);
+      if (url.searchParams.get('ping') === '1') {
+        return new Response(JSON.stringify({ pong: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } catch { /* noop */ }
+  }
+
   console.log('[Recognition] === request received ===');
   try {
     const authHeader = req.headers.get('Authorization');
