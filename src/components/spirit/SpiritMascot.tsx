@@ -136,13 +136,23 @@ export function SpiritMascot({
             )}
             style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.25))' }}
           >
-            {videoFailed ? (
+            {tier === 2 ? (
               <img
                 src={mascot}
                 alt=""
                 width={size}
                 height={size}
                 loading="lazy"
+                className="w-full h-full object-contain select-none pointer-events-none"
+                draggable={false}
+              />
+            ) : tier === 1 ? (
+              <img
+                src={apngSrc}
+                alt=""
+                width={size}
+                height={size}
+                onError={() => setTier(2)}
                 className="w-full h-full object-contain select-none pointer-events-none"
                 draggable={false}
               />
@@ -158,27 +168,7 @@ export function SpiritMascot({
                 muted
                 playsInline
                 preload="auto"
-                onError={() => setVideoFailed(true)}
-                onLoadedData={() => {
-                  // 部分浏览器不支持 vp9 alpha，会渲染成黑色 —
-                  // 通过解码首帧像素检测：抽样若全黑，则回退到 PNG
-                  const v = videoRef.current;
-                  if (!v) return;
-                  try {
-                    const c = document.createElement('canvas');
-                    c.width = 16; c.height = 16;
-                    const ctx = c.getContext('2d');
-                    if (!ctx) return;
-                    ctx.clearRect(0, 0, 16, 16);
-                    ctx.drawImage(v, 0, 0, 16, 16);
-                    const data = ctx.getImageData(0, 0, 16, 16).data;
-                    let opaque = 0;
-                    for (let i = 3; i < data.length; i += 4) if (data[i] > 20) opaque++;
-                    // 没有任何半透明像素说明 alpha 通道丢失（被当成实体）
-                    // 或全透明（错误抠图）→ fallback
-                    if (opaque === 0 || opaque === 256) setVideoFailed(true);
-                  } catch { /* CORS/SecurityError 时忽略 */ }
-                }}
+                onError={() => setTier(1)}
                 className="w-full h-full object-contain select-none pointer-events-none"
               />
             )}
