@@ -317,7 +317,7 @@ async function tryQuickClassify(images: string[]): Promise<{ name: string; categ
   }
 }
 
-async function tryNameMatch(adminClient: any, name: string, category: string) {
+async function tryNameMatch(adminClient: any, name: string, category: string, userId?: string) {
   const keyword = name.trim().slice(0, 6);
   if (keyword.length < 2) return null;
   try {
@@ -340,11 +340,14 @@ async function tryNameMatch(adminClient: any, name: string, category: string) {
     }
   } catch (e) { console.warn('[Recognition] official match failed:', e); }
   try {
-    const { data: prodRow } = await adminClient
+    // 历史命中：仅命中当前用户自己识别过的，避免跨账号泄漏
+    let query = adminClient
       .from('products')
       .select('*')
       .eq('category', category)
-      .ilike('name', `%${keyword}%`)
+      .ilike('name', `%${keyword}%`);
+    if (userId) query = query.eq('created_by', userId);
+    const { data: prodRow } = await query
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
