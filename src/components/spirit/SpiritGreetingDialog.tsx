@@ -13,10 +13,8 @@ export function SpiritGreetingDialog({ open, onClose }: Props) {
       <DialogContent
         className="max-w-[340px] rounded-3xl border-[hsl(var(--accent)/0.35)] bg-[hsl(28_18%_16%)] p-5 gap-0"
       >
-        <VisuallyHidden>
-          <DialogTitle>中古小精灵的问候</DialogTitle>
-          <DialogDescription>关于小精灵的介绍</DialogDescription>
-        </VisuallyHidden>
+        <DialogTitle className="sr-only">中古小精灵的问候</DialogTitle>
+        <DialogDescription className="sr-only">关于小精灵的介绍</DialogDescription>
 
         <div className="flex items-start gap-3">
           <div className="shrink-0">
