@@ -55,17 +55,30 @@ export function FloatingDashboard() {
   const [pos, setPos] = useState<Pos>(() => (typeof window !== 'undefined' ? loadPos() : { side: 'right', y: 0 }));
   const [dragXY, setDragXY] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; oy: number; moved: boolean } | null>(null);
-  const [showLabel, setShowLabel] = useState(true);
+  const [labelText, setLabelText] = useState<string | null>('你好呀～');
+  const [hovering, setHovering] = useState(false);
+  const labelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 仅为提醒徽标加载;数据真正的消费在 DashboardInner 里
   const notif = useNotifications();
   const tasks = useTasks();
 
+  // 首次问候 3.5s 后消失
   useEffect(() => {
-    if (!showLabel) return;
-    const t = setTimeout(() => setShowLabel(false), 3500);
+    if (!labelText) return;
+    if (labelTimerRef.current) clearTimeout(labelTimerRef.current);
+    labelTimerRef.current = setTimeout(() => setLabelText(null), 3500);
+    return () => {
+      if (labelTimerRef.current) clearTimeout(labelTimerRef.current);
+    };
+  }, [labelText]);
+
+  // 抽屉关闭后 30s 无操作弹一次情绪鼓励
+  useEffect(() => {
+    if (open || closing || !user) return;
+    const t = setTimeout(() => setLabelText(randomMood()), 30000);
     return () => clearTimeout(t);
-  }, [showLabel]);
+  }, [open, closing, user]);
 
   useEffect(() => {
     const onResize = () => setPos(p => ({ ...p, y: clampY(p.y) }));
