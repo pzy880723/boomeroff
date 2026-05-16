@@ -58,8 +58,8 @@ export function TasksPanel({ tasks, onClaimed, onNavigate }: Props) {
       <SectionCard className="p-4" delay={0}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] tracking-[0.18em] text-white/50">今日任务</span>
-            <span className="text-[11px] text-white/70 tabular-nums">{dailyDone}/{dailyTotal}</span>
+            <span className="text-[11px] tracking-[0.18em] text-[hsl(var(--primary-foreground)/0.5)]">今日任务</span>
+            <span className="text-[11px] text-[hsl(var(--primary-foreground)/0.7)] tabular-nums">{dailyDone}/{dailyTotal}</span>
           </div>
         </div>
 
@@ -70,9 +70,9 @@ export function TasksPanel({ tasks, onClaimed, onNavigate }: Props) {
               key={t.key}
               className={cn(
                 'h-1.5 rounded-full transition-colors',
-                t.claimed ? 'bg-primary'
-                  : t.completed ? 'bg-amber-400/80'
-                  : 'bg-white/8'
+                t.claimed ? 'bg-accent'
+                  : t.completed ? 'bg-accent/60'
+                  : 'bg-[hsl(var(--accent)/0.12)]'
               )}
             />
           ))}
@@ -82,37 +82,37 @@ export function TasksPanel({ tasks, onClaimed, onNavigate }: Props) {
           {tasks.dailyTasks.map(t => {
             const canClaim = t.completed && !t.claimed;
             const status: 'todo' | 'claim' | 'done' = t.claimed ? 'done' : canClaim ? 'claim' : 'todo';
-            const stripe = status === 'done' ? 'bg-primary/70'
-              : status === 'claim' ? 'bg-amber-400'
-              : 'bg-white/15';
+            const stripe = status === 'done' ? 'bg-accent/70'
+              : status === 'claim' ? 'bg-accent'
+              : 'bg-[hsl(var(--primary-foreground)/0.15)]';
             return (
               <div
                 key={t.key}
-                className="relative flex items-center gap-3 pl-3 pr-2 py-2.5 rounded-lg bg-white/[0.03] border border-white/5 overflow-hidden"
+                className="relative flex items-center gap-3 pl-3 pr-2 py-2.5 rounded-lg bg-[hsl(var(--accent)/0.04)] border border-[hsl(var(--accent)/0.12)] overflow-hidden"
               >
                 <div className={cn('absolute left-0 top-2 bottom-2 w-1 rounded-r', stripe)} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    {status === 'done' && <Check className="w-3 h-3 text-primary shrink-0" />}
+                    {status === 'done' && <Check className="w-3 h-3 text-accent shrink-0" />}
                     <span className={cn(
                       'text-sm font-medium truncate',
-                      status === 'done' ? 'text-white/45 line-through' : 'text-white/90'
+                      status === 'done' ? 'text-[hsl(var(--primary-foreground)/0.45)] line-through' : 'text-[hsl(var(--primary-foreground)/0.9)]'
                     )}>
                       {t.label}
                     </span>
                   </div>
-                  <div className="text-[11px] text-white/45 tabular-nums mt-0.5">
+                  <div className="text-[11px] text-[hsl(var(--primary-foreground)/0.45)] tabular-nums mt-0.5">
                     进度 {t.progress}/{t.target} · 奖励 +{t.amount}
                   </div>
                 </div>
                 {status === 'done' ? (
-                  <span className="text-[11px] text-white/40 shrink-0 px-2">已领取</span>
+                  <span className="text-[11px] text-[hsl(var(--primary-foreground)/0.4)] shrink-0 px-2">已领取</span>
                 ) : status === 'claim' ? (
                   <Button
                     size="sm"
                     disabled={busyKey === t.key}
                     onClick={() => handleClaimDaily(t.key, t.amount)}
-                    className="h-8 px-3 text-xs shrink-0 bg-primary hover:bg-primary/90 relative overflow-hidden btn-shine"
+                    className="h-8 px-3 text-xs shrink-0 bg-gradient-accent text-accent-foreground hover:opacity-90 relative overflow-hidden btn-shine"
                   >
                     {busyKey === t.key
                       ? <Loader2 className="w-3 h-3 animate-spin" />
@@ -123,7 +123,7 @@ export function TasksPanel({ tasks, onClaimed, onNavigate }: Props) {
                     size="sm"
                     variant="outline"
                     onClick={() => onNavigate?.(TASK_ROUTE[t.key])}
-                    className="h-8 px-3 text-xs shrink-0 gap-1 bg-white/5 border-white/10 text-white/85 hover:bg-white/10 hover:text-white"
+                    className="h-8 px-3 text-xs shrink-0 gap-1 bg-[hsl(var(--accent)/0.06)] border-[hsl(var(--accent)/0.2)] text-[hsl(var(--primary-foreground)/0.85)] hover:bg-[hsl(var(--accent)/0.12)] hover:text-[hsl(var(--primary-foreground))]"
                   >
                     去完成 <ArrowRight className="w-3 h-3" />
                   </Button>
@@ -139,16 +139,16 @@ export function TasksPanel({ tasks, onClaimed, onNavigate }: Props) {
         <SectionCard className="p-4" delay={80}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Gift className="w-3.5 h-3.5 text-amber-300" />
-              <span className="text-[11px] tracking-[0.18em] text-white/50">待领取奖励</span>
-              <span className="text-[11px] text-amber-300/90 tabular-nums">{pendingCount} 项</span>
+              <Gift className="w-3.5 h-3.5 text-accent" />
+              <span className="text-[11px] tracking-[0.18em] text-[hsl(var(--primary-foreground)/0.5)]">待领取奖励</span>
+              <span className="text-[11px] text-accent tabular-nums">{pendingCount} 项</span>
             </div>
             {pendingCount > 1 && (
               <Button
                 size="sm"
                 disabled={claimingAll}
                 onClick={handleClaimAll}
-                className="h-7 px-3 text-xs bg-primary hover:bg-primary/90 relative overflow-hidden btn-shine"
+                className="h-7 px-3 text-xs bg-gradient-accent text-accent-foreground hover:opacity-90 relative overflow-hidden btn-shine"
               >
                 {claimingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : `一键领取 +${pendingExp}`}
               </Button>
@@ -158,15 +158,15 @@ export function TasksPanel({ tasks, onClaimed, onNavigate }: Props) {
             {tasks.pending.map(p => (
               <div
                 key={p.id}
-                className="relative flex items-center gap-3 pl-3 pr-2 py-2 rounded-lg bg-amber-500/[0.06] border border-amber-400/20"
+                className="relative flex items-center gap-3 pl-3 pr-2 py-2 rounded-lg bg-[hsl(var(--accent)/0.08)] border border-[hsl(var(--accent)/0.25)]"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                <span className="text-sm text-white/90 flex-1 min-w-0 truncate">{p.title}</span>
+                <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
+                <span className="text-sm text-[hsl(var(--primary-foreground)/0.9)] flex-1 min-w-0 truncate">{p.title}</span>
                 <Button
                   size="sm"
                   disabled={busyKey === p.id}
                   onClick={() => handleClaimEvent(p.id, p.amount)}
-                  className="h-7 px-3 text-xs shrink-0 bg-primary hover:bg-primary/90"
+                  className="h-7 px-3 text-xs shrink-0 bg-gradient-accent text-accent-foreground hover:opacity-90"
                 >
                   {busyKey === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : `领取 +${p.amount}`}
                 </Button>
@@ -177,7 +177,7 @@ export function TasksPanel({ tasks, onClaimed, onNavigate }: Props) {
       )}
 
       {tasks.totalUnclaimedCount === 0 && pendingCount === 0 && (
-        <p className="text-center text-xs text-white/40 py-2">今天的奖励都已领取完毕</p>
+        <p className="text-center text-xs text-[hsl(var(--primary-foreground)/0.4)] py-2">今天的奖励都已领取完毕</p>
       )}
     </div>
   );
