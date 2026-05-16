@@ -27,6 +27,7 @@ export type PermissionKey =
   // 系统
   | 'settings.ai' | 'settings.recognition'
   | 'correction.review'
+  | 'history.read_all'
   | 'role.manage';
 
 interface Ctx {

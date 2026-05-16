@@ -317,7 +317,7 @@ async function tryQuickClassify(images: string[]): Promise<{ name: string; categ
   }
 }
 
-async function tryNameMatch(adminClient: any, name: string, category: string) {
+async function tryNameMatch(adminClient: any, name: string, category: string, userId?: string) {
   const keyword = name.trim().slice(0, 6);
   if (keyword.length < 2) return null;
   try {
@@ -340,11 +340,14 @@ async function tryNameMatch(adminClient: any, name: string, category: string) {
     }
   } catch (e) { console.warn('[Recognition] official match failed:', e); }
   try {
-    const { data: prodRow } = await adminClient
+    // 历史命中：仅命中当前用户自己识别过的，避免跨账号泄漏
+    let query = adminClient
       .from('products')
       .select('*')
       .eq('category', category)
-      .ilike('name', `%${keyword}%`)
+      .ilike('name', `%${keyword}%`);
+    if (userId) query = query.eq('created_by', userId);
+    const { data: prodRow } = await query
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -427,12 +430,13 @@ serve(async (req) => {
       });
     }
 
-    // ① 图像哈希精确命中
+    // ① 图像哈希精确命中（仅命中当前用户自己识别过的，避免跨账号泄漏隐私）
     if (!forceRefresh && imageHash) {
       const { data: hit } = await adminClient
         .from('products')
         .select('*')
         .eq('image_hash', imageHash)
+        .eq('created_by', user.id)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -481,7 +485,7 @@ serve(async (req) => {
         const quick = await tryQuickClassify(imageList);
         console.log('[Timing] quickClassify:', Date.now() - tQ0, 'ms', quick ? `→ ${quick.name}` : '(no result)');
         if (quick?.name && quick?.category) {
-          const nameMatch = await tryNameMatch(adminClient, quick.name, quick.category);
+          const nameMatch = await tryNameMatch(adminClient, quick.name, quick.category, user.id);
           if (nameMatch) {
             const recentPrice = nameMatch.product_id
               ? await loadRecentPrice(adminClient, nameMatch.product_id)
