@@ -89,29 +89,18 @@ export function SpiritChatPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* 顶部小精灵气泡区 */}
-      <div className="shrink-0 px-4 pt-3 pb-2 flex items-center gap-3">
-        <SpiritMascot size={64} state={spiritState} />
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-bold text-[hsl(var(--primary-foreground))]">中古小精灵</div>
-          <div className="text-[11px] text-[hsl(var(--primary-foreground)/0.6)] truncate">
-            {status === 'uploading' ? '正在上传图片…' : busy ? '正在思考…' : '随便问我点啥都行～'}
-          </div>
-        </div>
+      {/* 消息流 */}
+      <div ref={scrollerRef} className="relative flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-2">
         {messages.length > 0 && (
           <button
             type="button"
             onClick={clear}
-            className="shrink-0 p-1.5 rounded-full text-[hsl(var(--primary-foreground)/0.5)] hover:text-[hsl(var(--primary-foreground)/0.9)] hover:bg-[hsl(var(--accent)/0.12)]"
+            className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-[hsl(var(--background)/0.6)] backdrop-blur text-[hsl(var(--primary-foreground)/0.55)] hover:text-[hsl(var(--primary-foreground)/0.9)] hover:bg-[hsl(var(--accent)/0.18)]"
             aria-label="清空对话"
           >
             <Trash2 className="w-4 h-4" />
           </button>
         )}
-      </div>
-
-      {/* 消息流 */}
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto overscroll-contain px-4 pb-2">
         {messages.length === 0 ? (
           <EmptyState />
         ) : (
