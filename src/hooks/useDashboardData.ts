@@ -204,7 +204,7 @@ export function useDashboardData(enabled: boolean): DashData {
     // Random pick from sop/qa
     const pickRand = <T,>(arr: T[]): T | null => arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
 
-    setData({
+    const nextData: CachedDash = {
       profile: profile as any || { display_name: user.email?.split('@')[0] || '店员', avatar_url: null },
       todayShift,
       nextShift: futureRow ? { date: futureRow.work_date, shift: sMap.get(futureRow.shift_code) || null } : null,
