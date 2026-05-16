@@ -4,6 +4,8 @@ import { Helmet } from 'react-helmet-async';
 import { BottomTabBar } from './BottomTabBar';
 import { ErrorBoundary } from '@/components/system/ErrorBoundary';
 import { lazyWithRetry as lazy } from '@/lib/lazyWithRetry';
+import { NotificationsProvider } from '@/hooks/useNotifications';
+import { TasksProvider } from '@/hooks/useTasks';
 
 const FloatingDashboard = lazy(() =>
   import('@/components/dashboard/FloatingDashboard').then(m => ({ default: m.FloatingDashboard }))
