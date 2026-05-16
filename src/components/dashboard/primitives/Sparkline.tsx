@@ -8,7 +8,7 @@ interface Props {
 }
 
 /** 7 天迷你柱状图 */
-export function Sparkline({ data, className, height = 36, accent = 'hsl(var(--primary))' }: Props) {
+export function Sparkline({ data, className, height = 36, accent = 'hsl(var(--accent))' }: Props) {
   const max = Math.max(1, ...data);
   return (
     <div className={cn('flex items-end gap-1', className)} style={{ height }}>
@@ -22,8 +22,9 @@ export function Sparkline({ data, className, height = 36, accent = 'hsl(var(--pr
                 className="w-full rounded-sm transition-all duration-700 ease-out"
                 style={{
                   height: `${h}%`,
-                  background: isLast ? accent : 'rgba(255,255,255,0.18)',
-                  boxShadow: isLast ? `0 0 8px ${accent}40` : 'none',
+                  background: isLast ? accent : 'hsl(var(--primary-foreground) / 0.18)',
+                  boxShadow: isLast ? `0 0 8px ${accent}` : 'none',
+                  opacity: isLast ? 1 : 0.85,
                 }}
                 title={`${v}`}
               />
