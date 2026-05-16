@@ -189,7 +189,7 @@ export function FloatingDashboard() {
             </span>
           )}
           {hasClaimable ? (
-            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 border-2 border-background text-[10px] font-bold text-white flex items-center justify-center shadow-sm animate-badge-pop">
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent border-2 border-background text-[10px] font-bold text-accent-foreground flex items-center justify-center shadow-sm animate-badge-pop">
               {claimableCount > 9 ? '9+' : claimableCount}
             </span>
           ) : hasOtherUnread ? (
