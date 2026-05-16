@@ -100,12 +100,21 @@ export function LiveStreamPanel() {
   // 进入识别页就预热 edge function，避免冷启动多花 1-2 秒
   // 用带 ?ping=1 的 POST，让 handler 真正执行一次，触发 V8 isolate 初始化
   useEffect(() => {
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recognize-product?ping=1`;
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '' },
-      body: '{"ping":true}',
-    }).catch(() => { /* noop */ });
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return; // 未登录就别预热，避免 401
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recognize-product?ping=1`;
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
+          Authorization: `Bearer ${token}`,
+        },
+        body: '{"ping":true}',
+      }).catch(() => { /* noop */ });
+    })();
   }, []);
 
   // 卸载时清理计时器
