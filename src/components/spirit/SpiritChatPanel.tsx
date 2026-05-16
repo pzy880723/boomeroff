@@ -139,13 +139,20 @@ export function SpiritChatPanel() {
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center text-center pt-8 pb-4 px-6">
-      <SpiritMascot size={180} state="idle" />
-      <div className="mt-4 text-[hsl(var(--primary-foreground))] text-sm font-semibold flex items-center gap-1.5">
+    <div className="flex flex-col items-center justify-center text-center pt-4 pb-4 px-6">
+      <div className="relative overflow-visible" style={{ width: 260, height: 260 }}>
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ transform: 'scale(1.35) translateY(-4%)', transformOrigin: '50% 50%' }}
+        >
+          <SpiritMascot size={260} state="idle" />
+        </div>
+      </div>
+      <div className="mt-2 text-[hsl(var(--primary-foreground))] text-sm font-semibold flex items-center gap-1.5">
         <Sparkles className="w-3.5 h-3.5" />
         你好呀～我是中古小精灵
       </div>
-      <div className="mt-2 text-[12px] leading-relaxed text-[hsl(var(--primary-foreground)/0.65)] max-w-[240px]">
+      <div className="mt-2 text-[12px] leading-relaxed text-[hsl(var(--primary-foreground)/0.65)] max-w-[280px]">
         可以问我中古知识、今天和谁一起上班、想要打打气，也可以让我讲个冷知识～
       </div>
     </div>
