@@ -1,156 +1,72 @@
-## 目标
+## 问题
 
-把当前"卡片堆叠 + 柔和渐变"的仪表盘升级成 **更精致、有节奏感、有数据可视化的"店员工作台"**——视觉上借鉴游戏 HUD 的清晰仪表感和反馈即时性，但**所有文案、按钮、状态保持职场化、克制**，不出现"出击 / 关卡 / 战况 / 战友 / 公会"这类游戏化词汇。
+当前仪表盘用了独立的冷色深蓝 `#0f1320 → #1a1f33` + 青色高光，跟全站的暖色复古（米白底 / 浓缩咖啡棕 `--primary` / 古铜金 `--accent`）完全脱节，戴在 Me 页里像两个 App。
 
-只动 `src/components/dashboard/*` 与少量 `index.css`，不改 hooks / 数据 / 迁移。
+## 方案：复用现有 design tokens，不再自造冷色
 
----
+### 1. 重做 `.dashboard-deep-surface`（src/index.css）
 
-## 一、视觉方向：精致工作台（Refined Workspace）
+从冷蓝改成深咖暖色，全部走 HSL token，亮/暗模式自动跟随：
 
-- **底色**：抽屉内部使用稍深的渐变 `#101218 → #1A1E2A`（与主 App 浅色形成"打开工作台"的仪式感），但不是纯黑赛博风
-- **主色**：保留品牌橙；新增一个克制的青绿 `#3FB8AF` 作为数据可视化高亮（仅用于图表/进度，不用于按钮）
-- **质感**：卡片 `rounded-2xl` + 1px 内描边 + 极轻的内发光；**不做切角、不做扫描线**
-- **字体**：数字统一 `tabular-nums` + 略宽字距，强调可读性
-- **微交互**：卡片 hover 轻微抬升；按钮按下有阻尼；数字进场用 0.4s 累加动画
-
-> 一句话：**像 Linear / Vercel Dashboard 的精致感，不是像原神主菜单。**
-
----
-
-## 二、结构：顶部信息卡 + 分段 Tab
-
-替换当前长滚动列表，改为更聚焦的两段式结构：
-
-```text
-┌─────────────────────────────────────┐
-│  顶部 个人信息卡 (常驻)               │
-│  头像 + 昵称 + 等级 + EXP 进度条      │
-├─────────────────────────────────────┤
-│  [今日] [任务] [消息] [排班]          │  ← 分段切换
-├─────────────────────────────────────┤
-│         当前 Tab 内容                │
-└─────────────────────────────────────┘
+```css
+.dashboard-deep-surface {
+  background:
+    linear-gradient(180deg,
+      hsl(25 18% 10%) 0%,
+      hsl(25 16% 13%) 60%,
+      hsl(28 18% 16%) 100%);
+  color: hsl(var(--primary-foreground));
+}
+.dashboard-deep-surface::before {
+  background:
+    radial-gradient(circle at 18% 8%, hsl(var(--accent) / 0.18), transparent 45%),
+    radial-gradient(circle at 88% 92%, hsl(var(--primary-glow) / 0.16), transparent 50%);
+}
 ```
 
-文案统一克制：用"今日 / 任务 / 消息 / 排班"，不用"战况 / 关卡 / 情报 / 战友"。
+效果：底色变成深咖啡，高光来自品牌古铜金 + 浓缩咖啡暖光，跟首页/我的页同源。
 
-### 1. 顶部 ProfileHeaderCard（替换现 logo+问候）
+### 2. 卡片描边、文字、分隔线统一换 token
 
-- 左：头像 + 一圈细 SVG 等级进度环（环本身是装饰，主信息仍是数字）
-- 中：昵称 · 职位 · 今日班次代号
-- 右：连续打卡天数（小字，"连续 N 天"，不用火焰夸张图标，用一个简洁的小日历点阵）
-- 底部一根 2px EXP 进度条 + 文案 "Lv.5 · 距下一级 240 经验"
+把仪表盘内 5 个 Panel + `SectionCard` 中所有写死的 `white/8`、`white/[0.04]`、`#e8ebf2`、`text-white/60` 之类，全部换成：
 
-### 2. Tab 一：今日（替换 TodayOpsCard）
+- 卡片底：`bg-[hsl(var(--accent)/0.05)]`，描边 `border-[hsl(var(--accent)/0.18)]`
+- 内发光：`shadow-[inset_0_1px_0_hsl(var(--accent)/0.12)]`
+- 主文字：`text-[hsl(var(--primary-foreground))]`
+- 次文字：`text-[hsl(var(--primary-foreground)/0.65)]`
+- 分隔线：`border-[hsl(var(--accent)/0.15)]`
 
-- 3 个并排小卡：识别 / 上架 / 学习时长，每个数字用累加动画进入
-- 下方一条 7 天迷你柱状图，hover 显示当日数值
-- 顶部一行小字"较昨日 +12%"，正负箭头用色，但不放大不闪烁
+### 3. 强调色全部回到品牌古铜金
 
-### 3. Tab 二：任务（升级 TaskCenterCard）
+- 进度条、Lv 徽章、Tab 高亮、"领取 +5 经验"按钮：从原来的 cyan / 自定义紫，统一改成 `bg-gradient-accent` + `text-accent-foreground`
+- 未读红点：保留 `bg-destructive`
+- 已完成对勾：`text-success`
+- 数字 / 数据高亮：`text-accent`（不再用 `#3FB8AF`）
 
-保留现有逻辑，重做 UI 层：
+### 4. 顶部 Tab Bar、底部胶囊按钮
 
-- 每条任务一行卡片：左侧 8px 状态色条（灰=未完成 / 金=可领取 / 绿=已领）+ 图标 + 任务名 + 进度（如 "2/3"）
-- 右侧按钮根据状态切换：
-  - 未完成：`去完成 →`（次要按钮）
-  - 可领取：`领取 +5 经验`（主色按钮，**仅一次**轻微高光扫过提示，非持续动画）
-  - 已领取：灰色文字 `已领取`
-- 顶部一条整体进度条 "今日任务 2/4"
-- 多条可领时显示 `一键领取` 按钮，领取后用一次性 0.6s 数字累加反馈，不放飞行金币粒子
+- Tab Bar 底：`bg-[hsl(25_16%_13%/0.7)] backdrop-blur`，激活态下划线用 `bg-accent`
+- 胶囊：从纯黑/冷蓝换成 `bg-gradient-primary` + `ring-1 ring-accent/40`，未领取的金色脉冲点直接用 `bg-accent`
 
-### 4. Tab 三：消息（合并通知 + 今日知识）
+### 5. `btn-shine` 高光颜色
 
-- 上半：通知列表（保留现有 NotificationCard 逻辑，未读项左侧细色条而非脉冲点）
-- 下半：今日知识卡，右上角小标"今日已学 / 待学"
+把扫光从纯白 `rgba(255,255,255,.35)` 改成暖白 `hsl(var(--accent) / 0.35)`，避免在暖底上显得刺眼。
 
-### 5. Tab 四：排班（重做 ShiftHero）
+## 涉及文件（仅 UI / CSS，不动逻辑）
 
-- 今日班次大卡（保留代号色块，去掉过度阴影）
-- 同班同事横向头像列表，下方小字姓名
-- 底部一行"明日 · 早班 09:00–14:00"
+- `src/index.css` —— `.dashboard-deep-surface` / `.btn-shine` 配色
+- `src/components/dashboard/primitives/SectionCard.tsx` —— 描边、底色、内发光
+- `src/components/dashboard/FloatingDashboard.tsx` —— Tab Bar、胶囊、容器底
+- `src/components/dashboard/ProfileHeaderCard.tsx`、`TodayPanel.tsx`、`TasksPanel.tsx`、`MessagesPanel.tsx`、`SchedulePanel.tsx`、`primitives/RingProgress.tsx`、`Sparkline.tsx` —— 移除所有硬编码颜色 / `text-white*`，统一换 token
 
----
+## 不动的
 
-## 三、悬浮胶囊小幅升级（不夸张）
+- 所有数据、hooks、RPC、布局结构、4 个 Tab、动画时序
+- `tailwind.config.ts`（已有 keyframes 够用）
+- 浅色模式：因为仪表盘只在抽屉里出现且本就走深色调，仍保持深色底，但深色由 `--primary` 系暖色生成，跟 `.dark` 主题天然兼容
 
-- 保留现有圆形按钮和班次代号徽章
-- **仅当有可领取任务时**：右上数字徽章保持金色 + 一次性 1.5s 呼吸动画后停止（不持续 pulse，避免烦躁）
-- 拖拽时按钮放大 1.05、阴影加深，不加粒子拖尾
-- 不加长按菜单（保持单一交互模型）
+## 验收
 
----
-
-## 四、动效原则
-
-新增/调整的动画都遵守"**克制、一次性、可读性优先**"：
-
-- `count-up`：数字从 0 累加到目标，0.4s
-- `progress-fill`：进度条首次进场填充，0.6s
-- `card-enter`：卡片错峰淡入 + 上移 8px，每张延迟 60ms
-- 通知未读：仅细色条，**不做脉冲**
-- 全部支持 `prefers-reduced-motion`
-
-去掉原方案里的：扫描线、环呼吸光、持续光斑扫过、金币飞行粒子、角标切角。
-
----
-
-## 五、文案对照（重要）
-
-| 旧/游戏化 | 改为 |
-|---|---|
-| 战况 / Stats | 今日 |
-| 关卡 / Quests | 任务 |
-| 出击 | 去完成 |
-| 情报 / Intel | 消息 |
-| 战友 / Squad | 排班 |
-| 经验值 +5 ✦ | 领取 +5 经验 |
-| 能量核心 | 仪表盘按钮 |
-| 角色卡 | 个人信息 |
-
-任何新增组件、注释、toast 都按右列措辞，不引入游戏术语。
-
----
-
-## 六、文件改动清单
-
-```text
-src/components/dashboard/
-  FloatingDashboard.tsx        改：顶栏 → ProfileHeaderCard；内容 → Tabs；胶囊微调
-  ProfileHeaderCard.tsx        新：头像 + 等级环 + EXP 进度条 + 班次
-  TodayPanel.tsx               新：3 数据小卡 + 7 天柱图
-  TasksPanel.tsx               新：包裹 useTasks，重写 UI 层（替代 TaskCenterCard 直接渲染）
-  MessagesPanel.tsx            新：通知 + 今日知识
-  SchedulePanel.tsx            新：今日班次 + 同事 + 明日预告（封装现 ShiftHeroCard 的数据）
-  primitives/
-    RingProgress.tsx           新：SVG 等级环
-    CountUp.tsx                新：数字累加
-    Sparkline.tsx              新：7 天迷你柱图
-    SectionCard.tsx            新：统一卡片容器（圆角+描边+内发光）
-  TaskCenterCard.tsx           保留：仅作为 TasksPanel 的内部实现细节，或并入 TasksPanel
-
-src/index.css                  追加 keyframes: count-up / progress-fill / card-enter
-tailwind.config.ts             追加: --surface-deep / --surface-deep-2 / --data-accent
-```
-
-不动：所有 hooks、所有 RPC、所有数据库结构。
-
----
-
-## 七、技术细节
-
-- Tab 用 shadcn `Tabs`，覆写成药丸 segmented，背景 `bg-white/5`，指示条 `bg-white/12`
-- 等级环：SVG 双 `<circle>` + `stroke-dashoffset` transition，无第三方依赖
-- 数字累加：自写 16 行 hook `useCountUp(target, 400)`，不引 framer-motion
-- 抽屉内部以 `data-surface="deep"` 局部包裹，定义一组 dark token，不污染全局主题
-- 所有改动 TypeScript 严格模式，复用现有 shadcn 组件
-
----
-
-## 八、不在本次范围
-
-- 真实音效 / 振动反馈
-- 排行榜 / 社交比对
-- 仪表盘以外的任何页面
-- 数据 / 权限 / 迁移
+- 打开仪表盘，整体色调是"深咖啡 + 古铜金"，跟 Me 页 / 首页 logo / 历史卡片色系一致
+- 没有任何冷蓝 / 青色 / 纯白硬编码
+- 切换 4 个 Tab，按钮、进度、徽章高亮全部是品牌金色
