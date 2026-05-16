@@ -1,69 +1,55 @@
-## 修复 + 动作设计方案
+## 目标
+1. 让小精灵真正"动起来"（角色有肢体动作），而不是整张图缩放跳动
+2. 修复点开抽屉里仪表盘 Tab 加载不出来的问题
 
-### 1. 修复脚下白色色块
-当前 `src/assets/spirit-mascot.png` 底部有一个白色矩形（AI 生成时残留的"展示底座"）。两步处理：
+## 一、验证阶段：先做 2 段透明 WebM 动画
 
-- 用 `imagegen--edit_image` 重新出图：保留小精灵主体，去掉脚下白底/影子方块，输出真正透明背景的 PNG（"remove the white pedestal/box under the feet, fully transparent background, keep the character identical"）。
-- QA：本地把 PNG 渲到棕色/深色背景上自检一遍，确认无白边、无残底，再覆盖原文件。
+### 资产生成
+以 `src/assets/spirit-mascot-canonical.png` 作为首帧，用 `videogen--generate_video` 各出 1 段 5s 1080p 视频：
 
-### 2. 动作系统设计（纯前端，不动业务逻辑）
+1. **idle-float.mp4** —— 默认漂浮 + 呼吸 + 偶尔眨眼 + 围巾末端轻飘
+   - prompt: "Chibi watercolor mascot in bowler hat gently floating, soft breathing, scarf end swaying, occasional blink. Static background, character stays centered, no camera movement."
+2. **wave.mp4** —— 抬手挥手打招呼
+   - prompt: "Same chibi mascot raises right hand and waves cheerfully, head tilts slightly, smile, scarf sways. Character centered, no camera movement."
 
-把单一 `idle / talking / alert` 升级为一套"会做小动作"的状态机：
+均使用 `camera_fixed: true`、`starting_frame` 锁形象。
 
-**基础常驻动作**（无操作时随机循环，每 4-8s 触发一个）
-- `float`：上下浮 6px（已有，调更柔）
-- `blink`：眨眼（已有）
-- `breathe`：整体 scale 1 → 1.03 → 1（呼吸感）
-- `sway`：左右轻摆 ±2°
+### 转码为透明循环 WebM
+用 ffmpeg：
+- 自动去白底 → alpha 通道（`colorkey=white:0.15:0.05`，必要时叠加 `geq` 羽化）
+- 输出 VP9 alpha + opus 静音，循环友好（首尾交叉淡入，避免跳帧）
+- 目标 < 400KB/段
+- 路径：`src/assets/spirit/idle-float.webm`、`src/assets/spirit/wave.webm`
+- 同时输出 GIF 兜底（可选，先不做）
 
-**小彩蛋动作**（idle 时随机抽一个播放，每个 ~1.2s）
-- `wave`：右手挥手（整体 rotate + 轻微 translateX）
-- `peek`：探头，头部短暂前倾 + 放大
-- `spin`：原地转 360°（罕见，~5% 概率）
-- `nod`：点头同意
-- `shake`：左右小摇头
-- `jump`：开心小跳 + 落地压扁回弹
+### 前端接入 `SpiritMascot.tsx`
+- 把当前的 `<img>` 换成 `<video autoplay loop muted playsinline preload="auto">`
+- 保留外层 CSS `spirit-float`/`spirit-sway` 整体轻晃（叠加效果而非替代）
+- 根据 state 切 src：`idle` → idle-float.webm，hover/click 触发 → wave.webm 播一次后回 idle
+- 加载失败 fallback 回 canonical PNG
+- 拖拽态、thinking 态先沿用现有 CSS 动画，等验证 OK 再补齐 4 段
 
-**交互触发动作**
-- hover：`bounce`（轻跳一下 + 光晕加亮）
-- 点击打开抽屉：`spin` + sparkle 加密
-- 拖动：`wiggle` 持续摆动
-- `talking`（AI 回复中）：嘴部区域上下抖 + 头部小幅点动（替换现在过于机械的整体抖）
-- `thinking`（等待首 token）：头顶冒 3 个小点 "…" 渐显
-- `alert`（有未读/提醒）：耳朵抖 + 头顶 ✦ 闪烁加快
-- 新消息到达：`jump` + 临时气泡 "有新消息哦～"
+## 二、修复仪表盘加载报错
 
-**情绪气泡**（每天首次出现 / 长时间无操作）
-随机轮播：「今天也辛苦啦～」「要不要喝口水？」「你最棒了 ✨」「来摸摸我？」点击精灵触发情绪鼓励气泡（不调用 AI，纯本地文案池）。
+`useTasks` 在 `FloatingDashboard`（角标用）和 `DashboardInner`（面板用）各实例化一次，两者订阅同一个 Supabase Realtime channel `exp-pending-${user.id}`，第二次 subscribe 静默失败导致面板数据拉不出来。
 
-### 3. 技术实现
-
-**CSS**（`src/index.css` 追加 keyframes）
-```text
-spirit-breathe / spirit-sway / spirit-wave / spirit-peek
-spirit-spin / spirit-nod / spirit-shake / spirit-jump
-spirit-bounce / spirit-wiggle / spirit-thinking-dots
+修复：在 `src/hooks/useTasks.ts` 里把 channel 名加随机后缀
+```ts
+const channel = supabase.channel(`exp-pending-${user.id}-${crypto.randomUUID()}`)
 ```
-所有动画都尊重 `prefers-reduced-motion`。
 
-**组件**（重写 `src/components/spirit/SpiritMascot.tsx`）
-- 扩展 `SpiritState`：`'idle' | 'talking' | 'thinking' | 'alert' | 'hover' | 'dragging'`
-- 内部新增 `actionRef`：idle 时用 `setInterval` 每 5-8s 随机挑一个彩蛋动作，给主体 div 临时加 class，动画结束移除。
-- 多层叠加：外层 `sway` + 中层 `breathe` + 内层 action class，互不干扰。
-- talking 状态：嘴部 mask 区单独抖动（绝对定位一个透明 div，仅播 mouth 动画），不让整体抖。
-- thinking 状态：头顶渲染 3 个 `<span>` 点，按 0/200/400ms 错峰淡入。
-- 新增 `<SpiritBubble>`：小气泡，自动 3s 后消失；情绪文案池放 `src/components/spirit/spiritMoods.ts`。
+顺手 grep 一遍 `useNotifications` 和其他 hook，确认没有同名 channel 冲突；如有，同样处理。
 
-**接入点**
-- `FloatingDashboard.tsx`：把 mascot 包一层 `onMouseEnter→hover`、`onClick→spin+open`、拖动时 `dragging`。
-- `useSpiritChat.ts`：streaming 中 → `talking`；等待首 token → `thinking`。
-- 抽屉关闭后 30s 无操作 → 触发一次情绪气泡。
+## 三、验证
+- 浏览器预览：打开浮窗 → 看小精灵是否真在挥手/漂浮（而非整图缩放）
+- 点抽屉里的"仪表盘"Tab → 4 个子 Tab 应能正常加载
+- console 无 "channel already subscribed" 类报错
 
-### 4. 验收
-- 不同尺寸（28/40/56/72）下精灵无白底、无裁切
-- idle 一分钟内能看到至少 2 种不同小动作
-- talking / thinking 状态视觉可区分
-- 点击精灵能看到情绪气泡
-- 开启系统"减少动态效果"后所有动画停止
+## 后续（本轮不做，验证通过后再做）
+- 补齐 nod / jump / camera-shoot / talk 4 段
+- 加预加载、状态机 transition、点击彩蛋随机播放
 
-不涉及后端、数据库、edge function 变动。
+## 技术细节
+- 视频文件放 `src/assets/spirit/`，ES6 import 即可
+- WebM VP9 alpha 在 Chrome/Edge/Firefox/Safari 16+ 全支持；老 Safari fallback 到 PNG
+- 视频元素需 `muted` 才能 autoplay；`playsinline` 防止 iOS 全屏
