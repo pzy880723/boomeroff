@@ -96,7 +96,7 @@ export function useTasks() {
   useEffect(() => {
     if (!user) return;
     const ch = supabase
-      .channel(`exp-pending-${user.id}`)
+      .channel(`exp-pending-${user.id}-${crypto.randomUUID()}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'exp_pending', filter: `user_id=eq.${user.id}` },
         () => { void load(); })

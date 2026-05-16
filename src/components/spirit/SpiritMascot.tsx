@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import mascot from '@/assets/spirit-mascot.png';
+import idleVideo from '@/assets/spirit/idle.webm';
+import waveVideo from '@/assets/spirit/wave.webm';
 import { randomIdleAction } from './spiritMoods';
 
 export type SpiritState =
@@ -30,25 +32,35 @@ export function SpiritMascot({
   disableActions = false,
 }: Props) {
   const [actionClass, setActionClass] = useState<string>('');
+  const [videoFailed, setVideoFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 仅 idle 时随机播放彩蛋动作；其他状态不打扰
+  // hover / alert / talking → 播挥手；其他状态播 idle 循环
+  const wantWave =
+    !disableActions && (state === 'hover' || state === 'alert' || state === 'talking');
+  const videoSrc = wantWave ? waveVideo : idleVideo;
+
+  // 切源时让 video 从头播放
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    try { v.currentTime = 0; v.play().catch(() => {}); } catch {}
+  }, [videoSrc]);
+
+  // 仅 idle 时随机叠加一点 CSS 微动作（让整体不死板）
   useEffect(() => {
     if (disableActions || state !== 'idle') {
       setActionClass('');
       if (timerRef.current) clearTimeout(timerRef.current);
       return;
     }
-
     let cancelled = false;
-
     const schedule = () => {
-      const delay = 4000 + Math.random() * 5000; // 4~9s
+      const delay = 6000 + Math.random() * 6000;
       timerRef.current = setTimeout(() => {
         if (cancelled) return;
-        const cls = randomIdleAction();
-        setActionClass(cls);
-        // 动画时长大约 1.2s 后清除
+        setActionClass(randomIdleAction());
         timerRef.current = setTimeout(() => {
           if (cancelled) return;
           setActionClass('');
@@ -56,7 +68,6 @@ export function SpiritMascot({
         }, 1300);
       }, delay);
     };
-
     schedule();
     return () => {
       cancelled = true;
@@ -105,38 +116,32 @@ export function SpiritMascot({
             key={actionClass /* 重新触发动画 */}
             className={cn('relative w-full h-full', actionClass)}
           >
-            <img
-              src={mascot}
-              alt=""
-              width={size}
-              height={size}
-              loading="lazy"
-              className="w-full h-full object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.25)] select-none pointer-events-none"
-              draggable={false}
-            />
-            {/* 眨眼覆盖 */}
-            <span
-              className="spirit-blink absolute"
-              style={{
-                top: '38%',
-                left: '34%',
-                width: '8%',
-                height: '3%',
-                background: 'rgba(60,40,30,0.95)',
-                borderRadius: '50%',
-              }}
-            />
-            <span
-              className="spirit-blink absolute"
-              style={{
-                top: '38%',
-                right: '34%',
-                width: '8%',
-                height: '3%',
-                background: 'rgba(60,40,30,0.95)',
-                borderRadius: '50%',
-              }}
-            />
+            {videoFailed ? (
+              <img
+                src={mascot}
+                alt=""
+                width={size}
+                height={size}
+                loading="lazy"
+                className="w-full h-full object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.25)] select-none pointer-events-none"
+                draggable={false}
+              />
+            ) : (
+              <video
+                ref={videoRef}
+                key={videoSrc}
+                src={videoSrc}
+                width={size}
+                height={size}
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="auto"
+                onError={() => setVideoFailed(true)}
+                className="w-full h-full object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.25)] select-none pointer-events-none"
+              />
+            )}
           </div>
         </div>
       </div>
