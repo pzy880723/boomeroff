@@ -1,66 +1,46 @@
-## 真正的原因
+## 问题定位
 
-用户看到的"失败界面"是 `src/components/system/ErrorBoundary.tsx` 里红色三角的"页面出错了"卡片。流程：
+数据库里今天 B 班实际有两人：`lebaibai` 和 `鹿哥`。但仪表盘"今日班次"只显示"今日独自当班"，没列出同事。
 
-1. 用户在 `/scan`（未登录）→ 只加载了 `AuthPage` 的 chunk。
-2. 登录成功 → `useAuth` 触发 SIGNED_IN → `Scan.tsx` 立刻渲染 `LiveStreamPanel`（懒加载，首次拉取它的 chunk）。
-3. 这个 chunk 首次请求时偶发失败（网络抖动 / Vite 预加载竞态），抛 `Failed to fetch dynamically imported module`。
-4. `ErrorBoundary` 捕获 → 显示"页面出错了 · 系统正在更新页面资源，马上为您自动刷新" → 350ms 后 `scheduleChunkReload` 调 `window.location.reload()` → 重新进入，登录态从 localStorage 恢复，看起来"马上又能进入"。
+排查 `src/hooks/useDashboardData.ts` 后发现两个连带 bug：
 
-console 也佐证：03:09:23 登录，03:10:50 出现第二次 `[Auth] Initializing auth state...`，正是 reload 重挂载 AuthProvider。
+1. **`鹿哥` 没有 `staff_profiles` 记录**（数据库已确认）。当前代码先查 `staff_profiles.shop_id`，若为空就只用 `user_id.eq.<self>` 过滤 `shift_schedules`，于是根本拉不到同事的排班行 → 自然认不出同班同事。
+2. 即使 `staff_profiles` 有 `shop_id`，代码仍只用一次 `.or(...)` 拼接过滤，逻辑脆弱。`shift_schedules` 表本身就带 `shop_id` 列，更稳妥的做法是直接基于"今日自己那一行的 shop_id"反查同店同班。
 
-## 方案：三步消除这个闪烁
+## 修复方案（只改 `src/hooks/useDashboardData.ts`）
 
-### 1. ErrorBoundary：识别到"chunk 错误正在自动恢复"时，不要再展示红色"页面出错了"卡片，改成安静的小 spinner
+把同事查询逻辑改成"先定位 shop_id，再二次查询同店同班"，与 `staff_profiles` 是否存在解耦：
 
-只动 `render()` 分支：当 `state.recovering === true`（即 `isChunkLoadError`）→ 返回简洁的居中 spinner + "正在加载新版页面…" 一行小字，背景沿用 `bg-background`，不出现红色三角、不出现"错误详情"、不出现按钮。真正的非 chunk 报错才走原来的红色卡片。
+1. 第一次并发查询里，**移除 `staff_profiles` 依赖**，先用 `user_id.eq.<self>` 拉自己未来 30 天的排班（其它字段照旧）。
+2. 得到 `todayRow` 后：
+   - 优先取 `todayRow.shop_id`（排班行本身有这个字段）。
+   - 没有则 fallback 到 `staff_profiles.shop_id`（保留作为兜底，单独一次小查询，且只在 todayRow 缺 shop_id 时才发）。
+3. 若拿到有效 `shopId` 且存在 `todayRow`，**再发一次**精准查询：
+   ```
+   shift_schedules
+     .select('user_id, shift_code')
+     .eq('work_date', today)
+     .eq('shop_id', shopId)
+     .eq('shift_code', todayRow.shift_code)
+     .neq('user_id', self)
+   ```
+   用结果的 `user_id` 列表去 `profiles` 拉 `display_name / avatar_url`，组装 `colleaguesToday`。
+4. `weekShifts` / `nextShift` 逻辑保持不变，仍基于自己的排班行计算。
 
-### 2. 新增 `lazyWithRetry()` 工具：懒加载 chunk 第一次失败时自动重试 2 次再失败
+## 顺带的小清理
 
-新建 `src/lib/lazyWithRetry.ts`：
+- 删掉原先 `.or(shopId ? ... : ...)` 那段不再需要的拼接。
+- `colleaguesToday` 兜底为空数组，文案保持现有的"X 位同事在岗 / 今日独自当班"。
 
-```ts
-import { lazy } from 'react';
-export function lazyWithRetry<T extends React.ComponentType<any>>(
-  factory: () => Promise<{ default: T }>,
-  retries = 2,
-  delay = 250,
-) {
-  return lazy(async () => {
-    let lastErr: unknown;
-    for (let i = 0; i <= retries; i++) {
-      try { return await factory(); }
-      catch (e) {
-        lastErr = e;
-        if (!isChunkLoadError(e)) throw e;
-        await new Promise(r => setTimeout(r, delay * (i + 1)));
-      }
-    }
-    throw lastErr;
-  });
-}
-```
+## 不改动
 
-把现有 `lazy(() => import('...'))` 全部换成 `lazyWithRetry(() => import('...'))`，覆盖范围：
+- `SchedulePanel.tsx`、`MainLayout`、其他 dashboard 面板。
+- 数据库结构、RLS、edge functions 都不动。
+- 历史 `staff_profiles` 缺失的账号（如 `鹿哥`）不在本次补录范围；本修复让仪表盘对这类账号也能正常显示同事。
 
-- `src/App.tsx` 所有路由 lazy
-- `src/components/layout/MainLayout.tsx`（FloatingDashboard、LevelUpWatcher）
-- `src/pages/Scan.tsx`（AuthPage、LiveStreamPanel）
+## 验证
 
-这样绝大多数偶发 chunk 失败在用户根本看不到的 250–500ms 内就被吞掉，不会进 ErrorBoundary。
-
-### 3. ErrorBoundary 自动恢复时间从 350ms 收紧 + 标题更柔和
-
-`scheduleChunkReload` 的 setTimeout 从 350ms 减到 200ms，文案改成"正在加载新版页面"，去掉"页面出错"字样——即使万一兜底进了 spinner 也只看到极短的 loading。
-
-## 不动的
-
-- `useAuth.tsx` 逻辑（登录本身没问题，已在 1–3 秒内完成）
-- 路由结构、Supabase 调用
-- 业务页面
-
-## 验收
-
-- 退出登录 → 在 /scan 重新登录 → 整个过程只看到登录按钮的 loading spinner + 直接进入识图页，不再出现红色"页面出错了"或刷新按钮
-- 触发真正 JS 报错（手动 throw）时仍能看到原本的红色卡片，不影响真错误暴露
-- Console 不再出现登录后的二次 `[Auth] Initializing auth state...`（因为不再触发整页 reload）
+实施后用 `lebaibai` 或 `鹿哥` 登录 `/me`，仪表盘应：
+- "今日班次"显示 B 班；
+- 副标题显示"1 位同事在岗"；
+- 同班同事卡片出现对方头像和昵称。
