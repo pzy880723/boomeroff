@@ -98,15 +98,15 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
         </div>
       )}
 
-      {/* 右上角关闭按钮（始终可见） */}
+      {/* 左上角关闭按钮（与 Tabs 错开，避免拥挤） */}
       <button
         type="button"
         onClick={onClose}
         aria-label="关闭"
-        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full flex items-center justify-center bg-[hsl(var(--accent)/0.12)] hover:bg-[hsl(var(--accent)/0.22)] text-[hsl(var(--primary-foreground)/0.7)]"
+        className="absolute left-3 z-20 w-9 h-9 rounded-full flex items-center justify-center bg-[hsl(var(--accent)/0.14)] hover:bg-[hsl(var(--accent)/0.26)] text-[hsl(var(--primary-foreground)/0.85)] backdrop-blur-sm"
         style={{ top: 'calc(env(safe-area-inset-top) + 8px)' }}
       >
-        <ChevronDown className="w-4 h-4" />
+        <X className="w-4 h-4" />
       </button>
     </div>
   );
