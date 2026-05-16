@@ -1,50 +1,72 @@
-## 目标
-小精灵的聊天窗口支持**拍照**和**发送图片**，小精灵能"看到"图片并回答（如「这是啥」「这个年代/产地」「能卖多少」）。
 
-## 改动概览
+# 识别后体验优化方案
 
-### 1. `src/components/spirit/SpiritChatPanel.tsx`（输入区 + 消息渲染）
-- 输入框左侧新增两个圆形小图标按钮：
-  - 📷 **拍照** → `<input type="file" accept="image/*" capture="environment">`，触发系统相机
-  - 🖼️ **相册** → `<input type="file" accept="image/*" multiple>`
-- 选择后进入「待发送区」：输入框上方显示缩略图横排（最多 4 张），每张右上角 ×可移除。
-- 发送时：若有图片，调用 `send(text, images)`；允许仅图片无文字（自动补一句「帮我看看这个？」作为提示词兜底）。
-- `MessageBubble` 支持渲染 user 消息里的图片：文字 + 缩略图网格（点击放大用现有 Dialog 或简单新窗）。
-- 流式过程中按钮禁用。
+我把整条链路看了一遍，定位到两个独立问题：
 
-### 2. `src/hooks/useSpiritChat.ts`（消息结构 + 上传）
-- `SpiritMessage` 扩展：`images?: string[]`（公开 URL 数组）。
-- `send` 签名改为 `send(text: string, files?: File[])`：
-  - 压缩 → 上传到 `product-images` bucket 下 `spirit-chat/{uid}/{ts}-{rand}.jpg`（已有 bucket 是 public，直接拿 publicUrl，零迁移）。
-  - 上传并行 `Promise.all`，失败给 toast 并中止。
-  - 把 publicUrl 数组放进 userMsg.images，并按 OpenAI vision 多模态格式发给 edge function。
-- 压缩复用现有 `src/lib/imageThumb.ts`（若签名不匹配则内联一个 `canvas` 压到长边 1280、jpeg 0.82）。
+```text
+拍照 → recognize-product (≈7s)            ← 主识别，已有三段进度条
+      └─ 出商品卡 → enrich-recognition (5-15s) ← ① 等知识卡时只有一行枯燥提示
+                  └─ 用户问 AI →
+                     refine-recognition (≈30-40s) ← ② "AI 问 AI" 极慢
+```
 
-### 3. `supabase/functions/spirit-chat/index.ts`（多模态透传）
-- 接收的 `messages[i]` 允许 content 为 string **或** OpenAI 多模态数组 `[{type:'text',text},{type:'image_url',image_url:{url}}]`。
-- 对 user 消息做归一化：若客户端传了 `images: string[]` 附在 message 上，则在 server 端拼成多模态数组再喂给 gateway。
-- 透传 `google/gemini-3-flash-preview`（已支持 vision）。
-- `extractQuery` 兼容非字符串 content：拿 text 部分。
+---
 
-### 4. 复用与不动
-- 上传：直接复用现有 `product-images` 公共 bucket（已 public、已有 RLS），无需新 migration。
-- 不动浮窗胶囊、问候弹窗、`SpiritMascot`。
+## ① 知识卡补全等待期：从"干等"变"边看边等"
 
-## 技术细节
-- 图片压缩用浏览器 Canvas，长边 ≤1280px，输出 jpeg quality 0.82，单张控制在 ~200KB 内，减少上传时间和 token 成本。
-- 多模态消息结构示例：
-  ```json
-  { "role": "user",
-    "content": [
-      {"type":"text","text":"这个能值多少？"},
-      {"type":"image_url","image_url":{"url":"https://.../a.jpg"}}
-    ]
-  }
-  ```
-- 历史消息持久化只保留在内存（保持现状不入库），但 user 消息的 images URL 跟着 messages 在前端保留，重发上下文时一并发出去。
-- 移动端 iOS Safari 相机：`capture="environment"` 在 input file 上即可弹出后置相机，无需额外原生权限。
+**现状**：`ProductDetailCard` 出来后，`KnowledgeCardSections` 在 `enrich-recognition` 回来前只显示一张虚框：
+> ✨ 正在为本次识别生成知识卡…（约 5-15 秒）
 
-## 边界
-- 单次最多 4 张图，超过提示「最多 4 张」。
-- 单文件 >10MB 直接拒绝（防误触）。
-- 仅图片无文字时，前端在发送给 server 的 text 里塞默认 "帮我看看这个？"。
+5-15 秒对店员来说很长，又没有可看的东西，体感很糟。
+
+**改动**（仅前端 `KnowledgeCardSections.tsx` + `ProductDetailCard.tsx`）：
+
+1. **骨架占位**：用 4 张和最终内容同结构的 skeleton 卡占住"一句话/速记卡/客户话术/易混对比"四个位置，shimmer 动效，宽度参差，让用户清楚知道"马上会出现这些内容"。
+2. **顶部 1 行实时状态条**："小精灵正在翻它的中古笔记本 · 已 3.2s"——读秒用现成 `elapsedMs` 同款 `rAF`，让用户知道系统在动。
+3. **轮播趣味提示卡**：在骨架上方挂一张"AI 小知识"卡片，每 2.5s 切换，内容用已识别出的字段动态生成：
+   - "{result.era} 那年，{result.origin} 还在用 ___ 工艺"
+   - "顾客最常问 {category}：____ "
+   - "{ip} 的同年代周边为什么越来越稀缺"
+   - 这些文案前端本地写死 4-6 条模板，不再额外调 AI，纯填字段。
+4. **enrich 成功 → fade-in 替换**：骨架直接淡出，内容淡入；中途若失败，骨架 toast 一次"知识卡稍后补"，不阻塞页面。
+
+> 不增加任何后端调用，纯粹把"沉默 10 秒"变成"有节奏的 10 秒"。
+
+---
+
+## ② "AI 问 AI"（卡片底部纠错对话）反应极慢
+
+**根因**：`supabase/functions/refine-recognition/index.ts`
+- 默认模型 `google/gemini-2.5-pro`（line 16 `REFINE_DEFAULT`）——重模型，多模态首字延迟 10-25s。
+- system prompt 强制**每轮都输出完整 JSON 代码块**（line 41-51），即使用户只是问"那为什么是 2002 年的？"——pro 模型还得跑完整结构化输出，30-40s 起步。
+- 每轮都把原图 + 所有补拍图重新塞回去（line 122-127），输入 token 巨大。
+- 前端 `InlineRefineChat.send` 起 spinner 时没有"首字到达"提示，用户体感更慢。
+
+**改动**：
+
+A. **edge function `refine-recognition`**
+- 默认模型换为 `google/gemini-3-flash-preview`（与 `chat-knowledge` 一致，多模态强且首字 1-2s）。`ALLOWED_MODELS` 加入新值；管理员在 `/portal` 选择 pro 仍尊重。
+- **JSON 仅在需要时输出**：把"每轮必须给完整 JSON"改成"只有当你确定要更新识别结果时，才在最后追加 \`\`\`json ... \`\`\`；纯追问或闲聊不需要 JSON"。前端 `extractJSON` 已经是"找不到就不更新"，天然兼容。
+- **图片只在第一轮发**：检测 `restMessages.length === 0` 时才拼图；后续轮次不再重发原图与补拍图，靠模型上下文记忆 + 文本概要。token 量直接砍到 1/10。
+- 加 `console.log` 输出耗时（首字 / 总时 / 模型 / 是否多模态），方便后续观察。
+
+B. **前端 `InlineRefineChat.tsx`**
+- spinner 文案分两段：未收到任何 delta → "AI 正在看图…"；收到第一段 delta → 自动隐藏 spinner，气泡里出现打字光标。
+- 顶部小 chip 显示当前用的模型（`gemini-3-flash` / `gemini-2.5-pro`），让用户对速度有预期。
+- 已有的"流式渲染 + stripJSONBlocks"逻辑不动，JSON 可有可无都能跑。
+
+---
+
+## 改动文件清单（不改业务表结构、不动后端鉴权）
+
+```text
+src/components/knowledge/KnowledgeCardSections.tsx   骨架 + 趣味提示卡 + 计时
+src/components/recognition/ProductDetailCard.tsx     把 elapsedMs 透传给上面
+src/components/dashboard/LiveStreamPanel.tsx         把 enrich 起始时间传下去
+src/components/recognition/InlineRefineChat.tsx      首字反馈 + 模型 chip
+supabase/functions/refine-recognition/index.ts       默认模型改 flash + JSON 选填 + 图片仅第一轮
+```
+
+预计纠错对话：**30-40s → 2-4s 首字**；知识卡等待期：**沉默 10s → 有内容、有读秒、有趣味提示**。
+
+按这个方向我就直接动手，可以吗？
