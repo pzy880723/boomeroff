@@ -68,13 +68,14 @@ Deno.serve(async (req) => {
     const uid = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
-    const messages: Array<{ role: string; content: string }> = Array.isArray(body?.messages)
+    const messages: Array<{ role: string; content: any; images?: string[] }> = Array.isArray(body?.messages)
       ? body.messages
       : [];
     if (messages.length === 0) return json({ error: '请说点什么吧～' }, 400);
 
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
-    const queryText = extractQuery(lastUserMsg);
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+    const queryText = extractQuery(extractText(lastUserMsg?.content));
+
     const today = tzDate();
     // 明天日期（Asia/Shanghai）
     const tomorrow = (() => {
