@@ -25,6 +25,7 @@ import { KnowledgeCardSections } from '@/components/knowledge/KnowledgeCardSecti
 import { pickKnowledgeCard, officialRowToCard, type KnowledgeCard } from '@/lib/knowledgeCard';
 import { Wand2 } from 'lucide-react';
 import type { Json } from '@/integrations/supabase/types';
+import { thumbUrl } from '@/lib/imageUrl';
 
 
 interface UnifiedItem {
