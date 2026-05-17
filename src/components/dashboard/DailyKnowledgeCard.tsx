@@ -293,7 +293,7 @@ export function DailyKnowledgeCard() {
                   <div key={k.id} className="p-2.5 bg-muted/40 rounded-lg space-y-1.5">
                     <div className="flex gap-2">
                       {k.image_url && (
-                        <img src={k.image_url} alt={k.product_name} className="w-12 h-12 rounded-md object-cover shrink-0" />
+                        <img src={thumbUrl(k.image_url, 96) || k.image_url} alt={k.product_name} className="w-12 h-12 rounded-md object-cover shrink-0" loading="lazy" decoding="async" />
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium truncate">{k.product_name}</div>
