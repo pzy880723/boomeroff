@@ -70,7 +70,7 @@ export function ShareToCommunityButton({
             const path = `community-thumb/${user.id}/${productId}-${Date.now()}.jpg`;
             const { error: upErr } = await supabase.storage
               .from('product-images')
-              .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+              .upload(path, blob, { contentType: 'image/jpeg', upsert: true, cacheControl: '604800' });
             if (!upErr) {
               const { data } = supabase.storage.from('product-images').getPublicUrl(path);
               thumbnailUrl = data?.publicUrl || null;
