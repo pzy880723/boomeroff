@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
         const path = `${prefix}/${f.name}`;
         try {
           // Fetch already-transformed webp via render endpoint
-          const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${BUCKET}/${path}?width=${TARGET_WIDTH}&quality=${TARGET_QUALITY}&format=origin`;
+          const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${BUCKET}/${path}?width=${TARGET_WIDTH}&quality=${TARGET_QUALITY}`;
           const resp = await fetch(transformUrl, { headers: { Accept: "image/webp" } });
           if (!resp.ok) {
             errors++; log.push({ path, stage: "fetch", status: resp.status }); continue;
