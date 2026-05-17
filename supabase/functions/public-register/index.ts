@@ -111,13 +111,15 @@ Deno.serve(async (req) => {
 
     const newUserId = created.user.id;
 
-    // handle_new_user trigger inserts default 'anchor' role.
-    // Mark suspended=true so user must wait for admin approval.
+    // handle_new_user trigger inserts default role='anchor' role_code='staff'.
+    // Mark suspended=true so user must wait for admin approval; also ensure role_code is set
+    // (兜底：老库历史触发器可能没写 role_code)
     const { error: suspendErr } = await admin
       .from("user_roles")
       .update({
         suspended: true,
         suspended_at: new Date().toISOString(),
+        role_code: "staff",
       })
       .eq("user_id", newUserId);
 
