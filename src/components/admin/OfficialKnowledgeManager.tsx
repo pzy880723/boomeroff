@@ -188,7 +188,7 @@ export function OfficialKnowledgeManager() {
               <TableRow key={it.id}>
                 <TableCell>
                   {it.cover_url ? (
-                    <img src={it.cover_url} alt={it.name} className="w-10 h-10 rounded-md object-cover" />
+                    <img src={thumbUrl(it.cover_url, 96) || it.cover_url} alt={it.name} className="w-10 h-10 rounded-md object-cover" loading="lazy" decoding="async" />
                   ) : (
                     <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
                       <ImageOff className="w-4 h-4 text-muted-foreground" />
