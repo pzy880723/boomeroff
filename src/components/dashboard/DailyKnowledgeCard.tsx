@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { BookOpen, Loader2, Sparkles, ChevronDown } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
+import { thumbUrl } from '@/lib/imageUrl';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -183,7 +184,7 @@ export function DailyKnowledgeCard() {
               {content.featured.map((f, i) => (
                 <div key={i} className="flex gap-2 p-2 bg-muted/60 rounded-lg">
                   {f.image_url && (
-                    <img src={f.image_url} alt={f.name} className="w-12 h-12 rounded-md object-cover shrink-0" />
+                    <img src={thumbUrl(f.image_url, 96) || f.image_url} alt={f.name} className="w-12 h-12 rounded-md object-cover shrink-0" loading="lazy" decoding="async" />
                   )}
                   <div className="text-xs min-w-0 flex-1">
                     <div className="font-medium truncate">{f.name}</div>
@@ -292,7 +293,7 @@ export function DailyKnowledgeCard() {
                   <div key={k.id} className="p-2.5 bg-muted/40 rounded-lg space-y-1.5">
                     <div className="flex gap-2">
                       {k.image_url && (
-                        <img src={k.image_url} alt={k.product_name} className="w-12 h-12 rounded-md object-cover shrink-0" />
+                        <img src={thumbUrl(k.image_url, 96) || k.image_url} alt={k.product_name} className="w-12 h-12 rounded-md object-cover shrink-0" loading="lazy" decoding="async" />
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium truncate">{k.product_name}</div>

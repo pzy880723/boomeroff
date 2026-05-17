@@ -659,7 +659,7 @@ export default function MyLibrary() {
               <>
                 <div className="aspect-square bg-muted rounded-lg overflow-hidden">
                   {isUsableImage(detail.cover_url) ? (
-                    <img src={detail.cover_url!} alt={detail.name} className="w-full h-full object-cover" />
+                    <img src={thumbUrl(detail.cover_url, 1080) || detail.cover_url!} alt={detail.name} className="w-full h-full object-cover" loading="eager" decoding="async" fetchPriority="high" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                       <ImageOff className="w-10 h-10" />

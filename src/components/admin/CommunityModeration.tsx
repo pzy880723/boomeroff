@@ -8,6 +8,7 @@ import {
 import { Loader2, Trash2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
+import { thumbUrl } from '@/lib/imageUrl';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -83,7 +84,7 @@ export function CommunityModeration() {
               <TableRow key={p.id}>
                 <TableCell>
                   {p.image_url ? (
-                    <img src={p.image_url} className="w-10 h-10 rounded-md object-cover" alt={p.name} />
+                    <img src={thumbUrl(p.image_url, 96) || p.image_url} className="w-10 h-10 rounded-md object-cover" alt={p.name} loading="lazy" decoding="async" />
                   ) : <div className="w-10 h-10 rounded-md bg-muted" />}
                 </TableCell>
                 <TableCell>

@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, Edit, Loader2, Search, ImageOff, Sparkles, Wand2 } from 'lucide-react';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
+import { thumbUrl } from '@/lib/imageUrl';
 import { toast } from 'sonner';
 import { AiKnowledgeDialog } from './AiKnowledgeDialog';
 import { AutoCategorizeButton } from './AutoCategorizeButton';
@@ -187,7 +188,7 @@ export function OfficialKnowledgeManager() {
               <TableRow key={it.id}>
                 <TableCell>
                   {it.cover_url ? (
-                    <img src={it.cover_url} alt={it.name} className="w-10 h-10 rounded-md object-cover" />
+                    <img src={thumbUrl(it.cover_url, 96) || it.cover_url} alt={it.name} className="w-10 h-10 rounded-md object-cover" loading="lazy" decoding="async" />
                   ) : (
                     <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
                       <ImageOff className="w-4 h-4 text-muted-foreground" />

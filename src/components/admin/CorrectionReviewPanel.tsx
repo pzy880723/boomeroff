@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/collapsible';
 import { Check, X, Inbox, MessageSquare, ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import { CATEGORY_LABELS } from '@/types';
+import { thumbUrl } from '@/lib/imageUrl';
 
 interface PendingItem {
   id: string;
@@ -110,9 +111,10 @@ export function CorrectionReviewPanel() {
               <div className="flex gap-3 items-start">
                 {it.image_url ? (
                   <img
-                    src={it.image_url}
+                    src={thumbUrl(it.image_url, 160) || it.image_url}
                     alt={c.name}
                     className="w-20 h-20 rounded-lg object-cover ring-1 ring-border/40 shrink-0"
+                    loading="lazy" decoding="async"
                   />
                 ) : (
                   <div className="w-20 h-20 rounded-lg bg-muted shrink-0" />

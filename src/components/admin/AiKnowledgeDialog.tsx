@@ -11,6 +11,7 @@ import { Loader2, Send, ImagePlus, Sparkles, RefreshCw, ImageOff, X, Quote, Maxi
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 import { compressForUpload, UPLOAD_CACHE_OPTS } from '@/lib/uploadImage';
+import { thumbUrl } from '@/lib/imageUrl';
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
 
@@ -1060,7 +1061,7 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, coverElap
       <div className="rounded-xl border bg-background overflow-hidden shadow-soft max-w-2xl mx-auto">
         <div className="aspect-square bg-muted flex items-center justify-center relative">
           {coverUrl && !painting ? (
-            <img src={coverUrl} alt={draft.name || ''} className="w-full h-full object-cover" />
+            <img src={thumbUrl(coverUrl, 1080) || coverUrl} alt={draft.name || ''} className="w-full h-full object-cover" loading="lazy" decoding="async" />
           ) : painting ? (
             <div className="flex flex-col items-center gap-2 text-muted-foreground text-xs w-2/3">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -1130,7 +1131,7 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, coverElap
               <div className="grid grid-cols-3 gap-2">
                 {gallery.map((u, i) => (
                   <div key={u + i} className="relative group rounded-md border overflow-hidden bg-muted aspect-square">
-                    <img src={u} alt="" className="w-full h-full object-cover" />
+                    <img src={thumbUrl(u, 240) || u} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                     {i === 0 && (
                       <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium flex items-center gap-0.5">
                         <Star className="w-2.5 h-2.5 fill-current" /> 主图
@@ -1246,7 +1247,7 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, coverElap
               )}
             </div>
             {backstampUrl ? (
-              <img src={backstampUrl} alt="底款" className={`${large ? 'w-32 h-32' : 'w-24 h-24'} rounded-md object-cover border`} />
+              <img src={thumbUrl(backstampUrl, 320) || backstampUrl} alt="底款" className={`${large ? 'w-32 h-32' : 'w-24 h-24'} rounded-md object-cover border`} loading="lazy" decoding="async" />
             ) : (
               <div className={`${t.mini} text-muted-foreground`}>{backstampBusy ? '正在联网搜索底款…' : '暂无底款图'}</div>
             )}

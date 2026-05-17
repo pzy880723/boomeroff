@@ -18,6 +18,7 @@ import { QuizDialog } from '@/components/library/QuizDialog';
 import { KnowledgeRichEditDialog } from '@/components/library/KnowledgeRichEditDialog';
 import { AiKnowledgeDialog } from '@/components/admin/AiKnowledgeDialog';
 import { KnowledgeChatPanel } from '@/components/library/KnowledgeChatPanel';
+import { thumbUrl } from '@/lib/imageUrl';
 import { normalizeTips } from '@/lib/script';
 import { ShareMenu } from '@/components/share/ShareMenu';
 
@@ -234,7 +235,7 @@ export default function OfficialDetail() {
       <div className="relative w-full bg-muted">
         <div className="aspect-[4/3] w-full max-w-screen-md mx-auto overflow-hidden">
           {item.cover_url ? (
-            <img src={item.cover_url} alt={item.name} className="w-full h-full object-cover" />
+            <img src={thumbUrl(item.cover_url, 1080) || item.cover_url} alt={item.name} className="w-full h-full object-cover" loading="eager" decoding="async" fetchPriority="high" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-muted-foreground">
               <ImageOff className="w-8 h-8" />
@@ -385,7 +386,7 @@ export default function OfficialDetail() {
               {gallery.map((url, i) => (
                 <button key={i} onClick={() => setLightbox(url)}
                   className="shrink-0 w-28 h-28 rounded-lg overflow-hidden bg-muted border">
-                  <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                  <img src={thumbUrl(url, 240) || url} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                 </button>
               ))}
             </div>
@@ -398,7 +399,7 @@ export default function OfficialDetail() {
             <h2 className="text-sm font-semibold mb-2 text-muted-foreground">底款 / 背面</h2>
             <button onClick={() => setLightbox(backstampUrl)}
               className="block w-40 h-40 rounded-lg overflow-hidden bg-muted border">
-              <img src={backstampUrl} alt="底款" className="w-full h-full object-cover" loading="lazy" />
+              <img src={thumbUrl(backstampUrl, 320) || backstampUrl} alt="底款" className="w-full h-full object-cover" loading="lazy" decoding="async" />
             </button>
           </div>
         )}

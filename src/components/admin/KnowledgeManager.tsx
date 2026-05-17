@@ -18,6 +18,7 @@ import {
   Plus, Trash2, Edit, Search, Loader2, ChevronLeft, ChevronRight, ImageOff, ArrowUpCircle, BadgeCheck,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
+import { thumbUrl } from '@/lib/imageUrl';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { KnowledgeEditDialog, KnowledgeRecord } from './KnowledgeEditDialog';
@@ -279,8 +280,8 @@ export function KnowledgeManager() {
                   </TableCell>
                   <TableCell>
                     {row.image_url ? (
-                      <img src={row.image_url} alt={row.product_name}
-                        className="w-10 h-10 rounded-md object-cover" />
+                      <img src={thumbUrl(row.image_url, 96) || row.image_url} alt={row.product_name}
+                        className="w-10 h-10 rounded-md object-cover" loading="lazy" decoding="async" />
                     ) : (
                       <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
                         <ImageOff className="w-4 h-4 text-muted-foreground" />
