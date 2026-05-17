@@ -4,10 +4,11 @@
 export function thumbUrl(
   url: string | null | undefined,
   width = 480,
-  quality = 70,
+  quality = 72,
 ): string | null {
   if (!url) return null;
   if (!url.includes('/storage/v1/object/public/')) return url;
   const base = url.replace('/object/public/', '/render/image/public/');
-  return `${base}?width=${width}&quality=${quality}&resize=cover`;
+  // resize=contain：只按宽度等比缩放，保留完整画面，永不裁剪
+  return `${base}?width=${width}&quality=${quality}&resize=contain`;
 }

@@ -290,7 +290,7 @@ export default function History() {
                         alt={product.name}
                         loading="lazy"
                         decoding="async"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain bg-muted/30"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
