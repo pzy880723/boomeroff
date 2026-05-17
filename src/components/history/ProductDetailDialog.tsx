@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import type { Json } from '@/integrations/supabase/types';
+import { thumbUrl } from '@/lib/imageUrl';
 import { ProductEditDialog } from './ProductEditDialog';
 import { ShareToCommunityButton } from '@/components/community/ShareToCommunityButton';
 import { normalizeSellingPoints, normalizeTips, SELLING_TAG_STYLE } from '@/lib/script';
