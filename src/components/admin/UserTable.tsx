@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { RoleEditor } from './RoleEditor';
 import { ROLE_LABELS, AppRole } from '@/types';
+import { legacyRoleOf } from '@/lib/roles';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound, IdCard, Store } from 'lucide-react';
@@ -143,8 +144,9 @@ export function UserTable() {
   }, []);
 
   const handleRoleChange = async (userId: string, newRoleCode: string) => {
-    // 同步写入旧 enum 字段，保持现有 RLS 不破：super_admin → admin，其它 → anchor
-    const legacy = newRoleCode === 'super_admin' ? 'admin' : 'anchor';
+    // 同步写入旧 enum 字段，保持现有 RLS 不破：
+    // super_admin / area_manager / shop_manager → admin，其它（staff / parttime / intern）→ anchor
+    const legacy = legacyRoleOf(newRoleCode);
     const { error } = await supabase
       .from('user_roles')
       .update({ role_code: newRoleCode, role: legacy })
