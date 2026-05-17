@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Loader2, Send, ImagePlus, Sparkles, RefreshCw, ImageOff, X, Quote, Maximize2, Wand2, Upload, Globe, ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
+import { compressForUpload, UPLOAD_CACHE_OPTS } from '@/lib/uploadImage';
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
 
@@ -364,9 +365,10 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       const uploaded: string[] = [];
       for (const f of arr) {
         if (f.size > 8 * 1024 * 1024) { toast.error(`${f.name} 超过 8MB，已跳过`); continue; }
-        const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+        const compressed = await compressForUpload(f, 1600, 0.82);
+        const ext = compressed.type === 'image/jpeg' ? 'jpg' : (f.name.split('.').pop() || 'jpg').toLowerCase();
         const path = `official-gallery/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-        const { error } = await supabase.storage.from('product-images').upload(path, f, { contentType: f.type, upsert: false });
+        const { error } = await supabase.storage.from('product-images').upload(path, compressed, { contentType: compressed.type || f.type, ...UPLOAD_CACHE_OPTS });
         if (error) { toast.error(`上传失败：${error.message}`); continue; }
         const { data } = supabase.storage.from('product-images').getPublicUrl(path);
         if (data?.publicUrl) uploaded.push(data.publicUrl);
