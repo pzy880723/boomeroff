@@ -51,11 +51,13 @@ export function AvatarPicker({ userId, displayName, avatarUrl, onChanged, size =
     }
     setBusy('upload');
     try {
-      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const compressed = await compressForUpload(file, 512, 0.85);
+      const ext = compressed.type === 'image/jpeg' ? 'jpg' : (file.name.split('.').pop() || 'png').toLowerCase();
       const path = `${userId}/me-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, {
-        contentType: file.type,
+      const { error: upErr } = await supabase.storage.from('avatars').upload(path, compressed, {
+        contentType: compressed.type || file.type,
         upsert: true,
+        cacheControl: '604800',
       });
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
