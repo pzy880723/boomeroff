@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, Edit, Loader2, Search, ImageOff, Sparkles, Wand2 } from 'lucide-react';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ProductCategory } from '@/types';
+import { thumbUrl } from '@/lib/imageUrl';
 import { toast } from 'sonner';
 import { AiKnowledgeDialog } from './AiKnowledgeDialog';
 import { AutoCategorizeButton } from './AutoCategorizeButton';
