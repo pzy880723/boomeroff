@@ -18,6 +18,7 @@ import { QuizDialog } from '@/components/library/QuizDialog';
 import { KnowledgeRichEditDialog } from '@/components/library/KnowledgeRichEditDialog';
 import { AiKnowledgeDialog } from '@/components/admin/AiKnowledgeDialog';
 import { KnowledgeChatPanel } from '@/components/library/KnowledgeChatPanel';
+import { thumbUrl } from '@/lib/imageUrl';
 import { normalizeTips } from '@/lib/script';
 import { ShareMenu } from '@/components/share/ShareMenu';
 
