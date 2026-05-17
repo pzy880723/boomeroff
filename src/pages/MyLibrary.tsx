@@ -443,7 +443,7 @@ export default function MyLibrary() {
     >
       <div className="aspect-square bg-muted relative">
         {it.cover_url ? (
-          <img src={it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" />
+          <img src={thumbUrl(it.cover_url, 480) || it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
             <ImageOff className="w-6 h-6" />
