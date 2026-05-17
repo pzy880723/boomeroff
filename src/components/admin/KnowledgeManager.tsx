@@ -280,8 +280,8 @@ export function KnowledgeManager() {
                   </TableCell>
                   <TableCell>
                     {row.image_url ? (
-                      <img src={row.image_url} alt={row.product_name}
-                        className="w-10 h-10 rounded-md object-cover" />
+                      <img src={thumbUrl(row.image_url, 96) || row.image_url} alt={row.product_name}
+                        className="w-10 h-10 rounded-md object-cover" loading="lazy" decoding="async" />
                     ) : (
                       <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
                         <ImageOff className="w-4 h-4 text-muted-foreground" />
