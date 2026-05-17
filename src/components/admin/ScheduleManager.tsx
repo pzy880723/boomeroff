@@ -325,7 +325,7 @@ export function ScheduleManager() {
                   >
                     <span className="w-3 h-3 rounded-full border" style={{ background: c.bg, borderColor: c.border }} />
                     <span className="flex-1">{u.display_name}</span>
-                    <span className="text-[10px] tabular-nums text-muted-foreground">{cnt}/{cap}</span>
+                    <span className="text-[10px] tabular-nums text-muted-foreground">{Math.max(0, cap - cnt)}/{cap}</span>
                   </button>
                 );
               })}
@@ -421,7 +421,7 @@ export function ScheduleManager() {
               <Button key={u.user_id} variant="outline" size="sm" onClick={() => setProfileFor(u)} className="gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full border" style={{ background: c.bg, borderColor: c.border }} />
                 {u.display_name}
-                <span className="text-[10px] tabular-nums text-muted-foreground">{cnt}/{cap}</span>
+                <span className="text-[10px] tabular-nums text-muted-foreground">{Math.max(0, cap - cnt)}/{cap}</span>
               </Button>
             );
           })}
