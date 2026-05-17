@@ -84,7 +84,7 @@ export function CommunityModeration() {
               <TableRow key={p.id}>
                 <TableCell>
                   {p.image_url ? (
-                    <img src={p.image_url} className="w-10 h-10 rounded-md object-cover" alt={p.name} />
+                    <img src={thumbUrl(p.image_url, 96) || p.image_url} className="w-10 h-10 rounded-md object-cover" alt={p.name} loading="lazy" decoding="async" />
                   ) : <div className="w-10 h-10 rounded-md bg-muted" />}
                 </TableCell>
                 <TableCell>
