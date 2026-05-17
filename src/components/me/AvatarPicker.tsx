@@ -7,6 +7,7 @@ import {
 import { Camera, Sparkles, Upload, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { compressForUpload } from '@/lib/uploadImage';
 
 interface Props {
   userId: string;
