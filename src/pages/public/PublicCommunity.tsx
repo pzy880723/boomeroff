@@ -6,6 +6,7 @@ import { Camera, X, ImageOff, Heart, MessageCircle, MessageSquareHeart } from 'l
 import { Card, CardContent } from '@/components/ui/card';
 import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import shopWechatQr from '@/assets/shop-wechat-qr.png';
+import { thumbUrl } from '@/lib/imageUrl';
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
