@@ -400,7 +400,7 @@ export default function Community() {
                 <SheetTitle className="text-left text-base leading-snug break-words">{active.name}</SheetTitle>
               </SheetHeader>
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {active.image_url && <img src={active.image_url} className="w-full rounded-lg" alt={active.name} />}
+                {active.image_url && <img src={thumbUrl(active.image_url, 1080) || active.image_url} className="w-full rounded-lg" alt={active.name} loading="eager" decoding="async" fetchPriority="high" />}
 
                 <div className="flex flex-wrap gap-1.5">
                   <Badge variant="secondary">{CATEGORY_LABELS[active.category]}</Badge>
