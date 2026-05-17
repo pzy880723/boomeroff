@@ -197,19 +197,19 @@ Deno.serve(async (req) => {
     if (overwrite) {
       await supabase.from('shift_schedules').delete().eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', weekEnd);
       // 仅移除本门店的占用与计数；其他门店的已排仍保留
-      for (const r of existingRows) {
-        const k = `${r.work_date}_${r.user_id}`;
-        // 仅当该 user+date 没有其他门店的记录时才从 occupied 移除
+      const thisShopPairs = new Set<string>();
+      existingRows.forEach((r: any) => thisShopPairs.add(`${r.work_date}_${r.user_id}`));
+      thisShopPairs.forEach(k => {
+        const [work_date, user_id] = k.split('_');
         const stillOccupiedElsewhere = existingAllRows.some(
-          (x: any) => x.user_id === r.user_id && x.work_date === r.work_date && x.shop_id !== shopId
+          (x: any) => x.user_id === user_id && x.work_date === work_date && x.shop_id !== shopId
         );
-        if (!stillOccupiedElsewhere) occupiedUserDate.delete(k);
-        // 计数同理：该 user+date 在别店没记录才减 1
         if (!stillOccupiedElsewhere) {
-          const cur = weekCountByUser.get(r.user_id) || 0;
-          weekCountByUser.set(r.user_id, Math.max(0, cur - 1));
+          occupiedUserDate.delete(k);
+          const cur = weekCountByUser.get(user_id) || 0;
+          weekCountByUser.set(user_id, Math.max(0, cur - 1));
         }
-      }
+      });
     }
 
     const validShifts = new Set((shifts || []).map((s: any) => s.code));
