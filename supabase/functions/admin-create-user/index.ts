@@ -13,10 +13,19 @@ const BodySchema = z.object({
     .trim()
     .regex(/^[a-zA-Z0-9_]{3,32}$/, "用户名仅支持字母、数字、下划线，3-32 位"),
   password: z.string().min(6, "密码至少 6 位").max(72),
-  role: z.enum(["admin", "anchor"]),
+  // 新：role_code 对应 app_roles.code；保留 role 做向后兼容
+  role_code: z.string().trim().min(1).optional(),
+  role: z.enum(["admin", "anchor"]).optional(),
   real_name: z.string().trim().max(32).optional(),
   shop_id: z.string().uuid("请选择所属门店").optional(),
 });
+
+// 把 role_code 映射到 legacy app_role 枚举
+function legacyRoleOf(code: string): "admin" | "anchor" {
+  return ["super_admin", "area_manager", "shop_manager"].includes(code)
+    ? "admin"
+    : "anchor";
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -67,7 +76,28 @@ Deno.serve(async (req) => {
       const first = parsed.error.errors[0]?.message ?? "参数错误";
       return json({ error: first }, 400);
     }
-    const { username, password, role, real_name, shop_id } = parsed.data;
+    const { username, password, role, role_code, real_name, shop_id } =
+      parsed.data;
+
+    // 计算最终 role_code：优先使用前端传的 role_code；否则根据 legacy role 兜底
+    let finalRoleCode = role_code?.trim() || "";
+    if (!finalRoleCode) {
+      finalRoleCode = role === "admin" ? "super_admin" : "staff";
+    }
+
+    // 校验 role_code 在 app_roles 中存在
+    const { data: roleRow, error: roleLookupErr } = await admin
+      .from("app_roles")
+      .select("code")
+      .eq("code", finalRoleCode)
+      .maybeSingle();
+    if (roleLookupErr) {
+      return json({ error: `角色校验失败：${roleLookupErr.message}` }, 500);
+    }
+    if (!roleRow) {
+      return json({ error: `未知的用户类型：${finalRoleCode}` }, 400);
+    }
+    const legacyRole = legacyRoleOf(finalRoleCode);
 
     const email = `${username.toLowerCase()}@boomeroff.local`;
     const displayName = real_name?.trim() || username;
@@ -104,19 +134,21 @@ Deno.serve(async (req) => {
 
     const newUserId = created.user.id;
 
-    // handle_new_user trigger inserts default 'anchor' role.
-    // If admin requested, replace it.
-    if (role === "admin") {
-      await admin.from("user_roles").delete().eq("user_id", newUserId);
-      const { error: insertRoleErr } = await admin
-        .from("user_roles")
-        .insert({ user_id: newUserId, role: "admin" });
-      if (insertRoleErr) {
-        return json(
-          { error: `用户已创建，但角色设置失败：${insertRoleErr.message}` },
-          500,
-        );
-      }
+    // handle_new_user trigger 默认插入 role='anchor'，role_code=NULL
+    // 这里统一覆盖为目标角色
+    await admin.from("user_roles").delete().eq("user_id", newUserId);
+    const { error: insertRoleErr } = await admin
+      .from("user_roles")
+      .insert({
+        user_id: newUserId,
+        role: legacyRole,
+        role_code: finalRoleCode,
+      });
+    if (insertRoleErr) {
+      return json(
+        { error: `用户已创建，但角色设置失败：${insertRoleErr.message}` },
+        500,
+      );
     }
 
     // Upsert staff_profile with real_name + shop binding
@@ -144,7 +176,8 @@ Deno.serve(async (req) => {
       success: true,
       user_id: newUserId,
       username,
-      role,
+      role: legacyRole,
+      role_code: finalRoleCode,
     });
   } catch (e) {
     console.error("admin-create-user error:", e);
