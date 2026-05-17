@@ -136,7 +136,7 @@ export function LiveStreamPanel() {
       const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
       const { error } = await supabase.storage
         .from('product-images')
-        .upload(fileName, blob, { contentType: 'image/jpeg' });
+        .upload(fileName, blob, { contentType: 'image/jpeg', cacheControl: '604800' });
       if (error) {
         console.error('[Upload] error:', error);
         return null;
