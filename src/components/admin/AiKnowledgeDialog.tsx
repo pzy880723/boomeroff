@@ -1247,7 +1247,7 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, coverElap
               )}
             </div>
             {backstampUrl ? (
-              <img src={backstampUrl} alt="底款" className={`${large ? 'w-32 h-32' : 'w-24 h-24'} rounded-md object-cover border`} />
+              <img src={thumbUrl(backstampUrl, 320) || backstampUrl} alt="底款" className={`${large ? 'w-32 h-32' : 'w-24 h-24'} rounded-md object-cover border`} loading="lazy" decoding="async" />
             ) : (
               <div className={`${t.mini} text-muted-foreground`}>{backstampBusy ? '正在联网搜索底款…' : '暂无底款图'}</div>
             )}
