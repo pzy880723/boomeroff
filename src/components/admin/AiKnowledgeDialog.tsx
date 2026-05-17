@@ -1061,7 +1061,7 @@ function PreviewCard({ draft, points, coverUrl, coverPrompt, painting, coverElap
       <div className="rounded-xl border bg-background overflow-hidden shadow-soft max-w-2xl mx-auto">
         <div className="aspect-square bg-muted flex items-center justify-center relative">
           {coverUrl && !painting ? (
-            <img src={coverUrl} alt={draft.name || ''} className="w-full h-full object-cover" />
+            <img src={thumbUrl(coverUrl, 1080) || coverUrl} alt={draft.name || ''} className="w-full h-full object-cover" loading="lazy" decoding="async" />
           ) : painting ? (
             <div className="flex flex-col items-center gap-2 text-muted-foreground text-xs w-2/3">
               <Loader2 className="w-5 h-5 animate-spin" />
