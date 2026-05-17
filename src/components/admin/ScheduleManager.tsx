@@ -126,8 +126,16 @@ export function ScheduleManager() {
     return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   };
 
-  const weekCountOf = (userId: string, excludeDate?: string) =>
-    scheds.filter(r => r.user_id === userId && r.work_date !== excludeDate).length;
+  // 跨门店统计：本周该员工在所有门店的排班天数（按 user+date 去重）
+  const weekCountOf = (userId: string, excludeDate?: string) => {
+    const dates = new Set<string>();
+    allWeekScheds.forEach(r => {
+      if (r.user_id !== userId) return;
+      if (excludeDate && r.work_date === excludeDate) return;
+      dates.add(r.work_date);
+    });
+    return dates.size;
+  };
 
   const validateAssign = (date: string, code: string, user: User, opts: { ignoreMax?: boolean } = {}): { hard: string[]; soft: string[] } => {
     const hard: string[] = [];
@@ -145,11 +153,18 @@ export function ScheduleManager() {
     if (user.day_offs && user.day_offs.includes(date)) {
       soft.push(`${user.display_name} 当天为禁排日`);
     }
+    // 同日跨店硬约束
+    const otherShopSameDay = allWeekScheds.find(
+      r => r.user_id === user.user_id && r.work_date === date && r.shop_id && r.shop_id !== shopId
+    );
+    if (otherShopSameDay) {
+      hard.push(`${user.display_name} 当天已在其他门店排班`);
+    }
     if (!opts.ignoreMax) {
       const cnt = weekCountOf(user.user_id, date);
       const cap = typeof user.max_per_week === 'number' ? user.max_per_week : 5;
       if (cnt + 1 > Math.min(cap, 5)) {
-        hard.push(`${user.display_name} 本周已排 ${cnt} 天，已达上限 ${Math.min(cap, 5)} 天（每周最多 5 天）`);
+        hard.push(`${user.display_name} 本周已排 ${cnt} 天，已达上限 ${Math.min(cap, 5)} 天（每周最多 5 天，跨门店合并统计）`);
       }
     }
     return { hard, soft };
