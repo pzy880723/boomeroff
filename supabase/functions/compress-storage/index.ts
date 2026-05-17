@@ -31,6 +31,7 @@ Deno.serve(async (req) => {
   const dryRun = !!body.dryRun;
   const maxFiles = Number(body.maxFiles ?? 1000);
   const prefixes: string[] = body.prefixes ?? PREFIXES;
+  const startOffset = Number(body.startOffset ?? 0);
 
   const log: any[] = [];
   let processed = 0, skipped = 0, savedBytes = 0, errors = 0;
