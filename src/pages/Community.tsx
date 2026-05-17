@@ -357,7 +357,7 @@ export default function Community() {
                       <img
                         src={p.thumbnail_url || thumbUrl(p.image_url, 480) || p.image_url || ''}
                         alt={p.name}
-                        className="w-full object-contain bg-muted/30"
+                        className="w-full h-auto"
                         loading="lazy"
                         decoding="async"
                       />
