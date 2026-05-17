@@ -8,6 +8,7 @@ import {
 import { Loader2, Trash2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
+import { thumbUrl } from '@/lib/imageUrl';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
