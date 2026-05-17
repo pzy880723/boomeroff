@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
   let processed = 0, skipped = 0, savedBytes = 0, errors = 0;
 
   for (const prefix of prefixes) {
-    let offset = 0;
+    let offset = startOffset;
     const pageSize = 100;
     while (true) {
       const { data: files, error } = await supabase.storage.from(BUCKET)
