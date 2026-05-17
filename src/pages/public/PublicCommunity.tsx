@@ -162,7 +162,7 @@ export default function PublicCommunity() {
         <>
         <div className="masonry-2col">
           {posts.map((post, idx) => {
-            const src = post.thumbnail_url || post.image_url;
+            const src = post.thumbnail_url || thumbUrl(post.image_url, 480) || post.image_url;
             const eager = idx < 4;
             return (
             <button
