@@ -115,6 +115,7 @@ export function ScheduleManager() {
     }
     setShifts((s as any) || []);
     setScheds((sc as any) || []);
+    setAllWeekScheds((scAll as any) || []);
     setUsers(usrs);
     setLoading(false);
   };
