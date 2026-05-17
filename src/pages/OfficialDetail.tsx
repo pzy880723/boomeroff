@@ -235,7 +235,7 @@ export default function OfficialDetail() {
       <div className="relative w-full bg-muted">
         <div className="aspect-[4/3] w-full max-w-screen-md mx-auto overflow-hidden">
           {item.cover_url ? (
-            <img src={item.cover_url} alt={item.name} className="w-full h-full object-cover" />
+            <img src={thumbUrl(item.cover_url, 1080) || item.cover_url} alt={item.name} className="w-full h-full object-cover" loading="eager" decoding="async" fetchPriority="high" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-muted-foreground">
               <ImageOff className="w-8 h-8" />
