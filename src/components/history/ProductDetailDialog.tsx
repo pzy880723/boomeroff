@@ -154,7 +154,7 @@ export function ProductDetailDialog({
           <div className="space-y-4">
             <div className="aspect-square max-w-xs mx-auto overflow-hidden rounded-lg bg-muted">
               {product.image_url ? (
-                <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                <img src={thumbUrl(product.image_url, 1080) || product.image_url} alt={product.name} className="w-full h-full object-cover" loading="eager" decoding="async" fetchPriority="high" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <Package className="w-16 h-16 text-muted-foreground/30" />
