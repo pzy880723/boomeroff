@@ -334,7 +334,7 @@ export default function OfficialLibrary() {
               <Card key={it.id} className="overflow-hidden cursor-pointer group" onClick={() => openDetail(it)}>
                 <div className="aspect-square bg-muted relative">
                   {it.cover_url ? (
-                    <img src={thumbUrl(it.cover_url, 480) || it.cover_url} alt={it.name} className="w-full h-full object-contain bg-muted/30" loading="lazy" decoding="async" />
+                    <img src={thumbUrl(it.cover_url, 480) || it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">无图</div>
                   )}
@@ -366,7 +366,7 @@ export default function OfficialLibrary() {
               >
                 <div className="w-14 h-14 rounded-md bg-muted shrink-0 overflow-hidden flex items-center justify-center">
                   {it.cover_url ? (
-                    <img src={thumbUrl(it.cover_url, 160) || it.cover_url} alt={it.name} className="w-full h-full object-contain bg-muted/30" loading="lazy" decoding="async" />
+                    <img src={thumbUrl(it.cover_url, 160) || it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                   ) : (
                     <ImageOff className="w-4 h-4 text-muted-foreground" />
                   )}
