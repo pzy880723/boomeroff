@@ -70,9 +70,10 @@ export function ScheduleManager() {
     if (!shopId) { setLoading(false); return; }
     setLoading(true);
     const end = addDaysISO(weekStart, 6);
-    const [{ data: s }, { data: sc }, { data: roles }, { data: profs }] = await Promise.all([
+    const [{ data: s }, { data: sc }, { data: scAll }, { data: roles }, { data: profs }] = await Promise.all([
       supabase.from('shop_shifts' as any).select('*').eq('active', true).or(`shop_id.eq.${shopId},shop_id.is.null`).order('sort_order'),
       supabase.from('shift_schedules' as any).select('*').eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', end),
+      supabase.from('shift_schedules' as any).select('user_id, work_date, shop_id').gte('work_date', weekStart).lte('work_date', end),
       supabase.from('user_roles').select('user_id').eq('suspended', false),
       supabase.from('staff_profiles' as any).select('user_id, allowed_shop_ids, shop_id, real_name, available_weekdays, blocked_weekdays, blocked_shifts, max_per_week'),
     ]);
