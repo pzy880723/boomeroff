@@ -28,6 +28,7 @@ import {
 import { Link } from 'react-router-dom';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import type { Json } from '@/integrations/supabase/types';
+import { thumbUrl } from '@/lib/imageUrl';
 import { ProductDetailDialog } from '@/components/history/ProductDetailDialog';
 import { normalizeSellingPoints } from '@/lib/script';
 
@@ -285,8 +286,10 @@ export default function History() {
                   <div className="aspect-square w-full overflow-hidden bg-muted">
                     {product.image_url ? (
                       <img 
-                        src={product.image_url} 
+                        src={thumbUrl(product.image_url, 480) || product.image_url} 
                         alt={product.name}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover"
                       />
                     ) : (

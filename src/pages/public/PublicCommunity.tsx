@@ -6,6 +6,7 @@ import { Camera, X, ImageOff, Heart, MessageCircle, MessageSquareHeart } from 'l
 import { Card, CardContent } from '@/components/ui/card';
 import { GuestProductCard } from '@/components/recognition/GuestProductCard';
 import shopWechatQr from '@/assets/shop-wechat-qr.png';
+import { thumbUrl } from '@/lib/imageUrl';
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -162,7 +163,7 @@ export default function PublicCommunity() {
         <>
         <div className="masonry-2col">
           {posts.map((post, idx) => {
-            const src = post.thumbnail_url || post.image_url;
+            const src = post.thumbnail_url || thumbUrl(post.image_url, 480) || post.image_url;
             const eager = idx < 4;
             return (
             <button

@@ -1,86 +1,79 @@
-## 全栈静态扫描结果
+## 诊断结论：不是数据库慢，是图片太大
 
-按你的要求，重点扫了「刚改的用户创建/角色流程」和全栈关键路径。逐项列严重等级，**高危**直接修，**中低**列清单等你决定。
+跑了一遍数据：
+- 所有业务表加起来才 ~3MB（products 432KB / official_knowledge 840KB），完全不可能慢。
+- **真正的瓶颈是图片**：`storage.objects` 里 product-images 桶最大的几张图：**4–5 MB / 张**（原始相机拍摄，未压缩）。
+- 列表页（History / OfficialLibrary / MyLibrary / Community 详情）目前直接 `<img src={image_url}>`，没有缩略图、没有 `loading="lazy"`、没有尺寸提示。
+- 一个 9 格历史页 = 9 × ~3MB ≈ **27 MB**，第二个店员登录走全国/跨网公网拉这么大图，2G/弱 4G 下就是「转半天」。
+- Community 已有 480px `thumbnail_url`（`ShareToCommunityButton` 走 `makeThumbnail`），证明方案可复用。
 
----
+附带几个次要点：
+- `useDashboardData` 一次并行 15 个查询 + Promise.all，本身 60s 缓存，正常情况下不是问题。
+- RLS 都走 `user_has_permission` SECURITY DEFINER 函数，已经够快。
 
-### 🔴 高危 1 — 改角色时 legacy enum 映射错误，会导致权限丢失
+## 修复方案（按性价比从高到低）
 
-**文件**：`src/components/admin/UserTable.tsx:147`
-
-```ts
-const legacy = newRoleCode === 'super_admin' ? 'admin' : 'anchor';
-```
-
-只有 `super_admin` 被映射为 `admin`，**`area_manager` / `shop_manager` 都被错映射成 `anchor`**。
-
-但 `admin-create-user/index.ts` 里已经有正确的 `legacyRoleOf()`：`super_admin / area_manager / shop_manager → admin`。两边逻辑不一致 → 同一个店长账号，**新建时是 admin、改角色后变成 anchor**。
-
-#### 影响（真实会出问题的地方）
-- 仍依赖 `has_role(uid,'admin')` 的 RLS 策略全部失效，例如：
-  - `community_posts` 管理员看私密帖
-  - `user_experience` 管理员看他人经验
-  - `current_session` ALL 策略（虽然 'anchor' 也能过）
-- `useAuth` 把 role 缓存为 'anchor'，前端管理员判定（部分组件仍用 `role === 'admin'`）失效
-- 配合 `handle_new_user` 触发器默认 anchor，体验更乱
-
-#### 修复方案
-在 `UserTable.handleRoleChange` 复用同一份映射表（提到 `src/lib/roles.ts`，前后端都用）：
+### 1. 列表页全部上 Supabase 图片变换 + lazy（**最高 ROI，半天就能做完**）
+Lovable Cloud 自带 Supabase 图片 CDN 变换。对所有「公网桶 + 原始 image_url」的展示位包一个工具函数：
 
 ```ts
-// src/lib/roles.ts (新增)
-export function legacyRoleOf(code: string): 'admin' | 'anchor' {
-  return ['super_admin', 'area_manager', 'shop_manager'].includes(code)
-    ? 'admin'
-    : 'anchor';
+// src/lib/imageUrl.ts
+export function thumbUrl(url: string | null, w = 480, q = 70): string | null {
+  if (!url) return null;
+  // 仅对自家 storage 的 public URL 加 ?width=&quality=&resize=cover
+  if (!url.includes('/storage/v1/object/public/')) return url;
+  const transformed = url.replace('/object/public/', '/render/image/public/');
+  return `${transformed}?width=${w}&quality=${q}&resize=cover`;
 }
 ```
 
-`UserTable.handleRoleChange` 改用 `legacyRoleOf(newRoleCode)`。
+替换点（grep `image_url` 出来的所有列表/卡片位置）：
+- `src/pages/History.tsx` 卡片缩略图（aspect-square，用 `thumbUrl(image_url, 480)`）
+- `src/pages/OfficialLibrary.tsx` 封面
+- `src/pages/MyLibrary.tsx` 封面
+- `src/pages/Community.tsx` 瀑布流（已有 thumbnail_url，但 fallback 走 `image_url` 时也包一下）
+- `src/pages/public/PublicCommunity.tsx` 同上
+- `src/components/dashboard/...` 仪表盘小图标用 `thumbUrl(url, 128, 60)`
+
+所有 `<img>` 同时加：
+```tsx
+<img loading="lazy" decoding="async" src={thumbUrl(...)} ... />
+```
+
+详情页/全屏查看才用原图 `image_url`。
+
+**单这一步：列表从 27MB → 约 500KB，肉眼瞬间打开。**
+
+### 2. 给 `products` 表加 `thumbnail_url`（中期保险）
+图片变换是 Supabase Pro 功能；如果将来变换 API 不可用或限流，我们要有兜底。
+- migration: `ALTER TABLE products ADD COLUMN thumbnail_url text;`
+- 识别落库时：在 `useProductRecognition` 上传原图后并行调用 `makeThumbnail(file, 480)` → 上传到 `product-thumb/{userId}/{productId}.jpg` → 写 `thumbnail_url`。
+- 历史数据可写个一次性 edge function 回填，或者先空着，新数据先享受。
+- 列表读取改用 `thumbnail_url ?? thumbUrl(image_url)`。
+
+### 3. 一次性把存量 5MB png 转 webp/jpg（可选）
+跑一个脚本：遍历 storage `product-images/*`，下载、用 sharp 压成 webp（80），覆盖。可以做，但有 #1 之后没那么紧急了。
+
+### 4. 列表请求只 select 真正用到的字段
+`History.tsx` select 里塞了 description / dimensions / condition / selling_points / tips —— 列表卡片只显示 name / category / date / image。砍掉这些字段虽然省不了几 KB，但少一次 JSON 解析也省点首屏 JS 时间。
+
+### 5. 给 HTTP 资源加合适的 Cache-Control（验证）
+Supabase storage 默认 cache-control 是 `3600`。我们可以在上传时显式传 `cacheControl: '604800'`（7 天），让同一个店员二次进入完全走浏览器缓存。
 
 ---
 
-### 🟡 中危 2 — `ScheduleManager` 的剩余天数计算包含当天，会少 1
+## 建议落地顺序
 
-`weekCountOf(userId, date)` 已经有 `excludeDate` 参数用于校验时排除"当前要排的那天"，但**底部员工 chip 和候选下拉里**调用时没传 `excludeDate`（这是合理的——展示已排天数）。剩余 = `cap - cnt`。这里**没有 bug**，只是确认一遍。
+```text
+P0（一上线就有感）       1 + 4
+P1（识别管线小改）       2（含 migration + 上传链路）
+P2（清扫存量）           3、5
+```
 
-→ 取消，无需改。
+## 用户能做的事
 
----
-
-### 🟡 中危 3 — `public-register` 注册成功但拿不到角色
-
-`handle_new_user` 触发器只写 `role='anchor'`，**没有 `role_code`**。`usePermissions` 兜底为 `'staff'`，所以暂停期间 OK；但管理员审核通过（清 suspended）后，账号仍然是 `role_code = NULL` → 兜底 `staff`，永远拿不到 `parttime/intern` 等差异化权限。
-
-#### 修复方案
-- `public-register` 在 update suspended 的同时把 `role_code='staff'` 一并写入。
-- 或者更彻底：让 `handle_new_user` 触发器写入 `role_code='staff'`（迁移）。
-
-建议两个都做：edge function 兜底 + 触发器修正。
+如果反馈集中在「**某几个店员**特别慢」，多半是网络。但即便如此，把图压到 500KB 也是从根本上消灭这个问题。Lovable Cloud 实例本身的 CPU/带宽目前看没有压力（数据量太小），暂时不需要升级实例。
 
 ---
 
-### 🟢 低危 4 — Supabase Linter 历史告警（与本次改动无关）
-
-`supabase--linter` 报 37 条，全是历史遗留（public bucket listing、SECURITY DEFINER 暴露给 anon 等），**与刚改的用户/角色流程无关**。不在本次"高危直接修"范围，列出供你决策是否单开任务。
-
----
-
-### 🟢 低危 5 — 控制台 `Missing Description` 警告
-
-部分 `<DialogContent>` 没有 `DialogDescription`，是 Radix a11y 警告，不影响功能。列清单，本次不修。
-
----
-
-## 本次要修的（高危直接动手）
-
-1. **新增 `src/lib/roles.ts`** 导出 `legacyRoleOf(code)`
-2. **改 `src/components/admin/UserTable.tsx`** 用 `legacyRoleOf(newRoleCode)` 替换原 ternary
-3. **改 `supabase/functions/admin-create-user/index.ts`** 改成 `import { legacyRoleOf }` 不可行（edge function 跨目录），改为内联保持一致；或保留现状（已正确）—— 仅前端 import 新 lib
-4. **改 `supabase/functions/public-register/index.ts`** 写入 `role_code='staff'`
-5. **新迁移**：修改 `handle_new_user` 触发器，给新注册用户默认 `role_code='staff'`
-
-## 验证
-- 在 /portal 用户列表把一个店员改成"店长"，回查 `user_roles` 表：`role='admin'`、`role_code='shop_manager'`
-- 新注册一个测试账号 → 检查 `user_roles.role_code='staff'`
-- 改完后该账号 `usePermissions().roleCode === 'shop_manager'` 且 `can('user.read')` 为 true
+确认后我会按 P0 先实施：新建 `src/lib/imageUrl.ts`，把上面 5 个列表组件批量替换为 `thumbUrl(...) + loading="lazy"`。

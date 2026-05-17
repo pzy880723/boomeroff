@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { thumbUrl } from '@/lib/imageUrl';
 
 interface Post {
   id: string;
@@ -354,7 +355,7 @@ export default function Community() {
                   <div className="rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm cursor-pointer" onClick={() => openDetail(p)}>
                     {(p.thumbnail_url || p.image_url) ? (
                       <img
-                        src={p.thumbnail_url || p.image_url || ''}
+                        src={p.thumbnail_url || thumbUrl(p.image_url, 480) || p.image_url || ''}
                         alt={p.name}
                         className="w-full object-cover"
                         loading="lazy"
