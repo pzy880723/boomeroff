@@ -285,8 +285,10 @@ export default function History() {
                   <div className="aspect-square w-full overflow-hidden bg-muted">
                     {product.image_url ? (
                       <img 
-                        src={product.image_url} 
+                        src={thumbUrl(product.image_url, 480) || product.image_url} 
                         alt={product.name}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover"
                       />
                     ) : (
