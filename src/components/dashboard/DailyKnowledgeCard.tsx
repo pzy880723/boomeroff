@@ -184,7 +184,7 @@ export function DailyKnowledgeCard() {
               {content.featured.map((f, i) => (
                 <div key={i} className="flex gap-2 p-2 bg-muted/60 rounded-lg">
                   {f.image_url && (
-                    <img src={f.image_url} alt={f.name} className="w-12 h-12 rounded-md object-cover shrink-0" />
+                    <img src={thumbUrl(f.image_url, 96) || f.image_url} alt={f.name} className="w-12 h-12 rounded-md object-cover shrink-0" loading="lazy" decoding="async" />
                   )}
                   <div className="text-xs min-w-0 flex-1">
                     <div className="font-medium truncate">{f.name}</div>
