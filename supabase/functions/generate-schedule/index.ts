@@ -95,18 +95,30 @@ Deno.serve(async (req) => {
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
     const weekEnd = days[6];
 
-    const [{ data: shifts }, { data: profiles }, { data: holidays }, { data: roleList }, { data: dayOffs }, { data: existing }] = await Promise.all([
+    const [{ data: shifts }, { data: profiles }, { data: holidays }, { data: roleList }, { data: dayOffs }, { data: existing }, { data: existingAll }] = await Promise.all([
       supabase.from('shop_shifts').select('*').eq('active', true).or(`shop_id.eq.${shopId},shop_id.is.null`).order('sort_order'),
       supabase.from('staff_profiles').select('*'),
       supabase.from('shop_holidays').select('*').or(`shop_id.eq.${shopId},shop_id.is.null`).gte('date', weekStart).lte('date', weekEnd),
       supabase.from('user_roles').select('user_id').eq('suspended', false),
       supabase.from('staff_day_offs').select('*').gte('off_date', weekStart).lte('off_date', weekEnd),
-      supabase.from('shift_schedules').select('work_date, shift_code, user_id, source').eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', weekEnd),
+      supabase.from('shift_schedules').select('work_date, shift_code, user_id, source, shop_id').eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', weekEnd),
+      supabase.from('shift_schedules').select('work_date, user_id, shop_id').gte('work_date', weekStart).lte('work_date', weekEnd),
     ]);
     const existingRows: any[] = existing || [];
-    const occupiedUserDate = new Set<string>(existingRows.map((r: any) => `${r.work_date}_${r.user_id}`));
+    const existingAllRows: any[] = existingAll || [];
+    // occupied 集合包含全门店：同一员工同一天只能排一处
+    const occupiedUserDate = new Set<string>(existingAllRows.map((r: any) => `${r.work_date}_${r.user_id}`));
+    // 跨门店周计数（按 user+date 去重）
     const weekCountByUser = new Map<string, number>();
-    existingRows.forEach((r: any) => weekCountByUser.set(r.user_id, (weekCountByUser.get(r.user_id) || 0) + 1));
+    {
+      const seen = new Set<string>();
+      existingAllRows.forEach((r: any) => {
+        const k = `${r.user_id}_${r.work_date}`;
+        if (seen.has(k)) return;
+        seen.add(k);
+        weekCountByUser.set(r.user_id, (weekCountByUser.get(r.user_id) || 0) + 1);
+      });
+    }
 
     const userIds = (roleList || []).map((r: any) => r.user_id);
     const { data: profs } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
