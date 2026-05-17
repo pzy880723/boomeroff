@@ -11,6 +11,7 @@ import { Loader2, Send, ImagePlus, Sparkles, RefreshCw, ImageOff, X, Quote, Maxi
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 import { compressForUpload, UPLOAD_CACHE_OPTS } from '@/lib/uploadImage';
+import { thumbUrl } from '@/lib/imageUrl';
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
 
