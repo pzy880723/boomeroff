@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AddOfficialFab } from '@/components/library/AddOfficialFab';
+import { thumbUrl } from '@/lib/imageUrl';
 
 interface OfficialItem {
   id: string;
