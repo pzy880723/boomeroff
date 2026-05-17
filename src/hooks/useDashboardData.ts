@@ -6,7 +6,7 @@ import { todayISO, addDaysISO } from '@/lib/scheduleUtils';
 
 export interface DashShift { code: string; name: string; start_time: string; end_time: string; color: string | null }
 export interface DashSchedItem { work_date: string; shift_code: string; user_id?: string }
-export interface DashColleague { user_id: string; display_name: string; avatar_url: string | null }
+export interface DashColleague { user_id: string; display_name: string; avatar_url: string | null; shift_code: string; shift_color: string | null }
 export interface DashLearning {
   sop: { id: string; title: string; body: string } | null;
   qa: { id: string; title: string; body: string } | null;
@@ -35,6 +35,7 @@ export interface DashData {
   nextShift: { date: string; shift: DashShift | null } | null;
   weekShifts: { date: string; shift: DashShift | null }[]; // 7 days from today
   colleaguesToday: DashColleague[];
+  shopName: string | null;
   totalExp: number;
   currentStreak: number;
   checkedToday: boolean;
@@ -67,6 +68,7 @@ export function useDashboardData(enabled: boolean): DashData {
       nextShift: null,
       weekShifts: [],
       colleaguesToday: [],
+      shopName: null,
       totalExp: 0,
       currentStreak: 0,
       checkedToday: false,
@@ -141,35 +143,51 @@ export function useDashboardData(enabled: boolean): DashData {
       return { date: d, shift: r ? sMap.get(r.shift_code) || null : null };
     });
 
-    // Today colleagues = same shop + same shift today
+    // Today colleagues = same shop today (all shifts), excluding self
     let colleaguesToday: DashColleague[] = [];
-    if (todayRow) {
-      let shopId: string | null = (todayRow as any).shop_id ?? null;
-      if (!shopId) {
-        const { data: sp } = await supabase
-          .from('staff_profiles' as any)
-          .select('shop_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        shopId = (sp as any)?.shop_id ?? null;
-      }
-      if (shopId) {
-        const { data: peerRows } = await supabase
-          .from('shift_schedules' as any)
-          .select('user_id')
-          .eq('work_date', today)
-          .eq('shop_id', shopId)
-          .eq('shift_code', todayRow.shift_code)
-          .neq('user_id', user.id);
-        const peerIds = Array.from(new Set(((peerRows as any[]) || []).map(r => r.user_id).filter(Boolean)));
-        if (peerIds.length) {
-          const { data: peerProfiles } = await supabase.from('profiles').select('user_id, display_name, avatar_url').in('user_id', peerIds);
-          colleaguesToday = (peerProfiles as any[] || []).map(p => ({
-            user_id: p.user_id,
-            display_name: p.display_name || '同事',
-            avatar_url: p.avatar_url,
-          }));
-        }
+    let shopName: string | null = null;
+    let shopId: string | null = (todayRow as any)?.shop_id ?? null;
+    if (!shopId) {
+      const { data: sp } = await supabase
+        .from('staff_profiles' as any)
+        .select('shop_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      shopId = (sp as any)?.shop_id ?? null;
+    }
+    if (shopId) {
+      const { data: shopRow } = await supabase
+        .from('shops' as any).select('name').eq('id', shopId).maybeSingle();
+      shopName = (shopRow as any)?.name ?? null;
+
+      const { data: peerRows } = await supabase
+        .from('shift_schedules' as any)
+        .select('user_id, shift_code')
+        .eq('work_date', today)
+        .eq('shop_id', shopId)
+        .neq('user_id', user.id);
+      const peers = ((peerRows as any[]) || []).filter(r => r.user_id);
+      const peerIds = Array.from(new Set(peers.map(r => r.user_id)));
+      if (peerIds.length) {
+        const [{ data: peerProfiles }, { data: peerStaff }] = await Promise.all([
+          supabase.from('profiles').select('user_id, display_name, avatar_url').in('user_id', peerIds),
+          supabase.from('staff_profiles' as any).select('user_id, real_name').in('user_id', peerIds),
+        ]);
+        const realMap = new Map<string, string>();
+        (peerStaff as any[] || []).forEach(s => { if (s.real_name) realMap.set(s.user_id, s.real_name); });
+        const profMap = new Map<string, any>();
+        (peerProfiles as any[] || []).forEach(p => profMap.set(p.user_id, p));
+        colleaguesToday = peers.map(r => {
+          const p = profMap.get(r.user_id);
+          const shift = sMap.get(r.shift_code);
+          return {
+            user_id: r.user_id,
+            display_name: realMap.get(r.user_id) || p?.display_name || '店员',
+            avatar_url: p?.avatar_url || null,
+            shift_code: r.shift_code,
+            shift_color: shift?.color ?? null,
+          };
+        });
       }
     }
 
@@ -210,6 +228,7 @@ export function useDashboardData(enabled: boolean): DashData {
       nextShift: futureRow ? { date: futureRow.work_date, shift: sMap.get(futureRow.shift_code) || null } : null,
       weekShifts,
       colleaguesToday,
+      shopName,
       totalExp: exp?.total_exp || 0,
       currentStreak: exp?.current_streak || 0,
       checkedToday: !!ci,
