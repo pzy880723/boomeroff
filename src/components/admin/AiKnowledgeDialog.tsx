@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Loader2, Send, ImagePlus, Sparkles, RefreshCw, ImageOff, X, Quote, Maximize2, Wand2, Upload, Globe, ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
+import { compressForUpload, UPLOAD_CACHE_OPTS } from '@/lib/uploadImage';
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
 
