@@ -399,7 +399,7 @@ export default function OfficialDetail() {
             <h2 className="text-sm font-semibold mb-2 text-muted-foreground">底款 / 背面</h2>
             <button onClick={() => setLightbox(backstampUrl)}
               className="block w-40 h-40 rounded-lg overflow-hidden bg-muted border">
-              <img src={backstampUrl} alt="底款" className="w-full h-full object-cover" loading="lazy" />
+              <img src={thumbUrl(backstampUrl, 320) || backstampUrl} alt="底款" className="w-full h-full object-cover" loading="lazy" decoding="async" />
             </button>
           </div>
         )}
