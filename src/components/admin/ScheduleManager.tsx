@@ -37,6 +37,7 @@ export function ScheduleManager() {
   const [shopId, setShopId] = useState<string>('');
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [scheds, setScheds] = useState<Sched[]>([]);
+  const [allWeekScheds, setAllWeekScheds] = useState<Sched[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [aiBusy, setAiBusy] = useState(false);
