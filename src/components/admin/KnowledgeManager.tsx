@@ -18,6 +18,7 @@ import {
   Plus, Trash2, Edit, Search, Loader2, ChevronLeft, ChevronRight, ImageOff, ArrowUpCircle, BadgeCheck,
 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
+import { thumbUrl } from '@/lib/imageUrl';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { KnowledgeEditDialog, KnowledgeRecord } from './KnowledgeEditDialog';
