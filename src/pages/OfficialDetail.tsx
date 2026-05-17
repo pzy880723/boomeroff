@@ -386,7 +386,7 @@ export default function OfficialDetail() {
               {gallery.map((url, i) => (
                 <button key={i} onClick={() => setLightbox(url)}
                   className="shrink-0 w-28 h-28 rounded-lg overflow-hidden bg-muted border">
-                  <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                  <img src={thumbUrl(url, 240) || url} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                 </button>
               ))}
             </div>
