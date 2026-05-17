@@ -26,6 +26,7 @@ import {
   SortableContext, arrayMove, rectSortingStrategy, useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { compressForUpload, UPLOAD_CACHE_OPTS } from '@/lib/uploadImage';
 
 interface Item {
   id: string;
