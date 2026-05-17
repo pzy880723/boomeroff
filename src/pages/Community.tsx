@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { thumbUrl } from '@/lib/imageUrl';
 
 interface Post {
   id: string;
