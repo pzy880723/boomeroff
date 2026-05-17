@@ -20,13 +20,13 @@ import {
 } from '@/components/ui/select';
 import { UserPlus, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { AppRole, ROLE_LABELS } from '@/types';
 
 interface CreateUserDialogProps {
   onCreated?: () => void;
 }
 
 interface Shop { id: string; name: string }
+interface RoleOption { code: string; name: string }
 
 export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
   const [open, setOpen] = useState(false);
@@ -35,19 +35,33 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
   const [realName, setRealName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState<AppRole>('anchor');
+  const [roleCode, setRoleCode] = useState('');
   const [shopId, setShopId] = useState('');
   const [shops, setShops] = useState<Shop[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
 
   useEffect(() => {
     if (!open) return;
     (async () => {
-      const { data } = await supabase
-        .from('shops' as any)
-        .select('id, name')
-        .eq('active', true)
-        .order('sort_order');
-      setShops((data as any) || []);
+      const [shopsRes, rolesRes] = await Promise.all([
+        supabase
+          .from('shops' as any)
+          .select('id, name')
+          .eq('active', true)
+          .order('sort_order'),
+        supabase
+          .from('app_roles')
+          .select('code, name')
+          .order('sort_order'),
+      ]);
+      setShops((shopsRes.data as any) || []);
+      const list = ((rolesRes.data as any) || []) as RoleOption[];
+      setRoles(list);
+      if (list.length > 0) {
+        // 默认选「正式店员」，找不到就取最后一项
+        const def = list.find((r) => r.code === 'staff') ?? list[list.length - 1];
+        setRoleCode(def.code);
+      }
     })();
   }, [open]);
 
@@ -56,7 +70,7 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
     setRealName('');
     setPassword('');
     setShowPassword(false);
-    setRole('anchor');
+    setRoleCode('');
     setShopId('');
   };
 
@@ -79,6 +93,10 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
       toast.error('请选择所属门店');
       return;
     }
+    if (!roleCode) {
+      toast.error('请选择用户类型');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -88,7 +106,7 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
           body: {
             username,
             password,
-            role,
+            role_code: roleCode,
             real_name: realName.trim() || undefined,
             shop_id: shopId,
           },
@@ -200,18 +218,29 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
 
           <div className="space-y-2">
             <Label>用户类型</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as AppRole)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="anchor">{ROLE_LABELS.anchor}</SelectItem>
-                <SelectItem value="admin">{ROLE_LABELS.admin}</SelectItem>
-              </SelectContent>
-            </Select>
+            {roles.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-2">
+                正在加载角色…
+              </div>
+            ) : (
+              <Select value={roleCode} onValueChange={setRoleCode}>
+                <SelectTrigger>
+                  <SelectValue placeholder="请选择用户类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((r) => (
+                    <SelectItem key={r.code} value={r.code}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
-          <Button type="submit" disabled={loading || shops.length === 0} className="w-full">
+          <Button
+            type="submit"
+            disabled={loading || shops.length === 0 || roles.length === 0}
+            className="w-full"
+          >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             创建用户
           </Button>
