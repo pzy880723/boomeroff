@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/collapsible';
 import { Check, X, Inbox, MessageSquare, ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import { CATEGORY_LABELS } from '@/types';
+import { thumbUrl } from '@/lib/imageUrl';
 
 interface PendingItem {
   id: string;
