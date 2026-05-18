@@ -77,14 +77,15 @@ Deno.serve(async (req) => {
     const queryText = extractQuery(extractText(lastUserMsg?.content));
 
     const today = tzDate();
-    // 明天日期（Asia/Shanghai）
-    const tomorrow = (() => {
-      const d = new Date(today + 'T00:00:00+08:00');
-      d.setDate(d.getDate() + 1);
+    function addDays(base: string, n: number): string {
+      const d = new Date(base + 'T00:00:00+08:00');
+      d.setDate(d.getDate() + n);
       return new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
       }).format(d);
-    })();
+    }
+    const tomorrow = addDays(today, 1);
+    const windowEnd = addDays(today, 13); // 未来 14 天
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE);
 
@@ -92,9 +93,9 @@ Deno.serve(async (req) => {
     const [
       profileRes,
       staffRes,
-      todayScheduleRes,
-      tomorrowScheduleRes,
-      myRecentScheduleRes,
+      scheduleRes,
+      shopsRes,
+      shiftsAllRes,
       expRes,
       pendingCorrRes,
       pendingSharesRes,
@@ -102,11 +103,11 @@ Deno.serve(async (req) => {
     ] = await Promise.all([
       admin.from('profiles').select('display_name, avatar_url').eq('user_id', uid).maybeSingle(),
       admin.from('staff_profiles').select('shop_id, position, real_name').eq('user_id', uid).maybeSingle(),
-      admin.from('shift_schedules').select('user_id, shift_code, work_date, shop_id').eq('work_date', today),
-      admin.from('shift_schedules').select('user_id, shift_code, work_date, shop_id').eq('work_date', tomorrow),
-      // 用我自己最近 30 天的排班反推默认门店（兜底当 staff_profiles.shop_id 为空时）
-      admin.from('shift_schedules').select('shop_id, work_date').eq('user_id', uid)
-        .gte('work_date', today).order('work_date', { ascending: true }).limit(5),
+      admin.from('shift_schedules').select('user_id, shift_code, work_date, shop_id')
+        .gte('work_date', today).lte('work_date', windowEnd)
+        .order('work_date', { ascending: true }),
+      admin.from('shops').select('id, name'),
+      admin.from('shop_shifts').select('code, name, start_time, end_time, shop_id').eq('active', true),
       admin.from('user_experience').select('total_exp, current_streak, longest_streak, last_check_in_date').eq('user_id', uid).maybeSingle(),
       admin.from('app_settings').select('value').eq('key', 'pending_corrections').maybeSingle(),
       admin.from('app_settings').select('value').eq('key', 'pending_shares').maybeSingle(),
@@ -120,35 +121,39 @@ Deno.serve(async (req) => {
     ]);
 
     const myName = profileRes.data?.display_name || staffRes.data?.real_name || '店员';
-    // 推断 shop_id：优先 staff_profiles → 否则取我自己今天/明天/最近排班里的 shop_id
+    const allSchedules = (scheduleRes.data || []) as any[];
+
+    // 门店 id → 名字
+    const shopMap = new Map<string, string>();
+    for (const s of (shopsRes.data || []) as any[]) shopMap.set(s.id, s.name);
+    const shopName = (id: string | null | undefined) => (id && shopMap.get(id)) || '未知门店';
+
+    // 推断我的默认门店：优先 staff_profiles → 否则取我未来最近一次排班的 shop_id
     const myShop: string | null =
       staffRes.data?.shop_id ??
-      todayScheduleRes.data?.find((s: any) => s.user_id === uid)?.shop_id ??
-      tomorrowScheduleRes.data?.find((s: any) => s.user_id === uid)?.shop_id ??
-      myRecentScheduleRes.data?.[0]?.shop_id ??
+      allSchedules.find((s: any) => s.user_id === uid)?.shop_id ??
       null;
 
-    // 加载该门店班次定义（一次拉，今天/明天共用）
-    const shiftsRes = myShop
-      ? await admin.from('shop_shifts').select('code, name, start_time, end_time')
-          .or(`shop_id.eq.${myShop},shop_id.is.null`).eq('active', true)
-      : { data: [] as any[] };
+    // 班次定义：按 (shop_id, code) 查；shop_id 为空作为全局兜底
     const shiftMap = new Map<string, any>();
-    for (const s of (shiftsRes.data || []) as any[]) shiftMap.set(s.code, s);
-
-    function fmtShift(code: string | null | undefined): string {
+    for (const s of (shiftsAllRes.data || []) as any[]) {
+      shiftMap.set(`${s.shop_id || '*'}|${s.code}`, s);
+    }
+    function shiftDef(shopId: string | null | undefined, code: string) {
+      return shiftMap.get(`${shopId || '*'}|${code}`) || shiftMap.get(`*|${code}`);
+    }
+    function fmtShift(shopId: string | null | undefined, code: string | null | undefined): string {
       if (!code) return '休';
-      const def = shiftMap.get(code);
+      const def = shiftDef(shopId, code);
       if (!def) return `${code} 班`;
       return `${code} 班（${def.name}） ${String(def.start_time).slice(0, 5)}–${String(def.end_time).slice(0, 5)}`;
     }
 
-    // 一次性把当天/明天涉及到的所有 user_id 拉真实姓名
+    // 拉所有出现的人的姓名
     const allUserIds = new Set<string>();
-    for (const s of (todayScheduleRes.data || []) as any[]) allUserIds.add(s.user_id);
-    for (const s of (tomorrowScheduleRes.data || []) as any[]) allUserIds.add(s.user_id);
+    for (const s of allSchedules) allUserIds.add(s.user_id);
     allUserIds.delete(uid);
-    let nameMap = new Map<string, string>();
+    const nameMap = new Map<string, string>();
     if (allUserIds.size > 0) {
       const ids = Array.from(allUserIds);
       const [sp, pf] = await Promise.all([
@@ -160,36 +165,65 @@ Deno.serve(async (req) => {
         if (r.real_name) nameMap.set(r.user_id, r.real_name);
       }
     }
+    const whoOf = (userId: string) =>
+      userId === uid ? `${myName}(你)` : (nameMap.get(userId) || '同事');
 
-    function describeDay(label: string, rows: any[]): string {
-      const myRow = rows.find((s: any) => s.user_id === uid && (!myShop || s.shop_id === myShop));
-      const myShift = myRow?.shift_code || null;
-      const sameShift = rows
-        .filter((s: any) => myShift && s.shift_code === myShift && s.user_id !== uid && (!myShop || s.shop_id === myShop))
-        .map((s: any) => nameMap.get(s.user_id) || '同事');
-      // 同店全部班次概览（按班次分组）
-      const byShift = new Map<string, string[]>();
-      for (const s of rows) {
-        if (myShop && s.shop_id !== myShop) continue;
-        const arr = byShift.get(s.shift_code) || [];
-        const nm = s.user_id === uid ? `${myName}(你)` : (nameMap.get(s.user_id) || '同事');
-        arr.push(nm);
-        byShift.set(s.shift_code, arr);
+    // ── 未来 14 天总表（按日期 → 门店 → 班次分组）──
+    function buildScheduleTable(): string {
+      const lines: string[] = [];
+      const byDate = new Map<string, any[]>();
+      for (const s of allSchedules) {
+        const arr = byDate.get(s.work_date) || [];
+        arr.push(s);
+        byDate.set(s.work_date, arr);
       }
-      const overview = Array.from(byShift.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([code, names]) => `${code}班：${names.join('、')}`)
-        .join('；');
-      const lines = [
-        `【${label}班次】${myShift ? fmtShift(myShift) : '没有排班（可以休息）'}`,
-        `【${label}同班同事】${sameShift.length > 0 ? sameShift.join('、') : (myShift ? '暂无（可能独立值班）' : '—')}`,
-      ];
-      if (overview) lines.push(`【${label}门店班表】${overview}`);
-      return lines.join('\n');
+      const dates = Array.from(byDate.keys()).sort();
+      for (const d of dates) {
+        const tag = d === today ? '(今)' : d === tomorrow ? '(明)' : '';
+        // 分门店
+        const byShop = new Map<string, any[]>();
+        for (const s of byDate.get(d)!) {
+          const k = s.shop_id || 'unknown';
+          const arr = byShop.get(k) || [];
+          arr.push(s);
+          byShop.set(k, arr);
+        }
+        const shopParts: string[] = [];
+        for (const [shopId, rows] of byShop) {
+          const byShift = new Map<string, string[]>();
+          for (const s of rows) {
+            const arr = byShift.get(s.shift_code) || [];
+            arr.push(whoOf(s.user_id));
+            byShift.set(s.shift_code, arr);
+          }
+          const segs = Array.from(byShift.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([code, names]) => `${code}班:${names.join('/')}`)
+            .join('  ');
+          shopParts.push(`${shopName(shopId)} ${segs}`);
+        }
+        lines.push(`${d}${tag} ｜ ${shopParts.join(' ｜ ')}`);
+      }
+      return lines.join('\n') || '（未来 14 天暂无排班数据）';
     }
 
-    const todayBlock = describeDay('今日', (todayScheduleRes.data || []) as any[]);
-    const tomorrowBlock = describeDay('明日', (tomorrowScheduleRes.data || []) as any[]);
+    // ── 我自己今天/明天的醒目摘要 ──
+    function myDay(date: string, label: string): string {
+      const mine = allSchedules.filter((s: any) => s.user_id === uid && s.work_date === date);
+      if (mine.length === 0) return `【${label} 我的班次】休`;
+      return mine.map((row: any) => {
+        const same = allSchedules
+          .filter((s: any) =>
+            s.work_date === date && s.shop_id === row.shop_id &&
+            s.shift_code === row.shift_code && s.user_id !== uid)
+          .map((s: any) => nameMap.get(s.user_id) || '同事');
+        return `【${label} 我的班次】${fmtShift(row.shop_id, row.shift_code)} @ ${shopName(row.shop_id)}${same.length ? `，同班：${same.join('、')}` : ''}`;
+      }).join('\n');
+    }
+
+    const scheduleTable = buildScheduleTable();
+    const myTodayLine = myDay(today, '今日');
+    const myTomorrowLine = myDay(tomorrow, '明日');
 
     // 等级
     const totalExp = expRes.data?.total_exp ?? 0;
@@ -213,10 +247,11 @@ Deno.serve(async (req) => {
 
     // ── 构建 system prompt ───────────────────────────────
     const contextBlock = [
-      `【当前店员】${myName}${staffRes.data?.real_name && staffRes.data.real_name !== myName ? `（真实姓名：${staffRes.data.real_name}）` : ''}`,
+      `【当前店员】${myName}${staffRes.data?.real_name && staffRes.data.real_name !== myName ? `（真实姓名：${staffRes.data.real_name}）` : ''}${myShop ? `　【我的门店】${shopName(myShop)}` : ''}`,
       `【今日日期】${today}　【明日日期】${tomorrow}`,
-      todayBlock,
-      tomorrowBlock,
+      myTodayLine,
+      myTomorrowLine,
+      `【未来 14 天排班总表】(每行：日期 ｜ 门店 班次:人员)\n${scheduleTable}`,
       `【经验值】${totalExp} · 连续打卡 ${streak} 天 · 今日${checkedToday ? '已' : '未'}打卡`,
       pendingCorr > 0 ? `【待审核纠错】${pendingCorr} 条` : null,
       pendingShares > 0 ? `【待审核分享】${pendingShares} 条` : null,
@@ -234,14 +269,16 @@ Deno.serve(async (req) => {
 
 【你的能力】
 - 回答中古商品、IP、年代、产地、保养相关知识。
-- 知道店员今天的排班、同事、等级、待办（资料见下）。
+- 知道店员未来 14 天的排班、同事、门店、等级、待办（资料见下）。
 - 不知道就大方说"这个我也不太确定哦"，绝不编造价格或事实。
 - 不会真的代店员操作系统（不打卡、不发帖、不改密码），只能给指引。
 
 【铁律】
 - 全程简体中文，**绝不使用「主播」一词**，统一称呼对方「你」或「店员」。
 - 回答控制在 50–250 字，多用短句、表情符号点缀（不滥用）。
-- 涉及人/班次的回答，请用上下文里的真实姓名，不要瞎编。
+- **涉及日期/排班/门店的回答，必须严格引用【未来 14 天排班总表】里实际出现的那一行**，禁止凭印象使用「今天/明天」；务必写出具体日期（如「5 月 19 日」或「明天 5/19」）和具体门店名。
+- 如果总表里查不到某人/某店/某日的排班，请直接说"我这边查不到这条排班哦"，**绝不编造**。
+- 涉及人名时只用上下文里出现的真实姓名，不要瞎编。
 
 ================ 当下情境 ================
 ${contextBlock}
