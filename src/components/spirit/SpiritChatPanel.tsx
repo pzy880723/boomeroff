@@ -232,7 +232,7 @@ export function SpiritChatPanel() {
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center text-center pt-4 pb-4 px-6">
+    <div className="flex flex-col items-center justify-center text-center px-6 min-h-full -translate-y-[6%]">
       <div className="relative overflow-visible" style={{ width: 260, height: 260 }}>
         <div
           className="absolute inset-0 flex items-center justify-center"
