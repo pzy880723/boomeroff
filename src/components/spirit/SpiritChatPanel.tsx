@@ -326,7 +326,8 @@ function MessageBubble({
   content,
   images,
   streaming,
-}: { role: 'user' | 'assistant'; content: string; images?: string[]; streaming: boolean }) {
+  hintMode,
+}: { role: 'user' | 'assistant'; content: string; images?: string[]; streaming: boolean; hintMode?: 'thinking' | 'uploading' | null }) {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
