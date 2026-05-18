@@ -96,6 +96,29 @@ export function SchedulePanel() {
       return { date, row, shift, shopName };
     }), [mine, shiftsMap, shopNameMap, start]);
 
+  // 每天 → 按班次分组的同事姓名（排除自己；A→B→C→其它）
+  const peersByDate = useMemo(() => {
+    const map = new Map<string, { code: string; names: string[] }[]>();
+    const byDate = new Map<string, Map<string, Set<string>>>();
+    allRows.forEach((r) => {
+      if (!r.user_id || r.user_id === user?.id) return;
+      const code = (r.shift_code || '').toUpperCase();
+      if (!byDate.has(r.work_date)) byDate.set(r.work_date, new Map());
+      const codeMap = byDate.get(r.work_date)!;
+      if (!codeMap.has(code)) codeMap.set(code, new Set());
+      const name = peerNameMap.get(r.user_id) || '店员';
+      codeMap.get(code)!.add(name);
+    });
+    const codeOrder = (c: string) => (c === 'A' ? 0 : c === 'B' ? 1 : c === 'C' ? 2 : 3);
+    byDate.forEach((codeMap, date) => {
+      const groups = Array.from(codeMap.entries())
+        .sort((a, b) => codeOrder(a[0]) - codeOrder(b[0]) || a[0].localeCompare(b[0]))
+        .map(([code, names]) => ({ code, names: Array.from(names).sort() }));
+      map.set(date, groups);
+    });
+    return map;
+  }, [allRows, peerNameMap, user?.id]);
+
   const workDays = mine.length;
   const first3 = days.slice(0, 3);
   const rest = days.slice(3);
@@ -134,7 +157,7 @@ export function SchedulePanel() {
       {/* 3 ticket rows */}
       <div className="px-3 pb-2 space-y-3">
         {first3.map((d, i) => (
-          <TicketRow key={d.date} item={d} index={i} />
+          <TicketRow key={d.date} item={d} index={i} peersByCode={peersByDate.get(d.date) || []} />
         ))}
       </div>
 
@@ -142,17 +165,8 @@ export function SchedulePanel() {
       {showAll && (
         <div className="px-3 pb-2 space-y-3 pt-1 border-t border-border">
           {rest.map((d) => (
-            <TicketRow key={d.date} item={d} index={-1} />
+            <TicketRow key={d.date} item={d} index={-1} peersByCode={peersByDate.get(d.date) || []} />
           ))}
-
-          {/* Today peers */}
-          <PeerStrip
-            day={days[0]}
-            allRows={allRows}
-            peerNameMap={peerNameMap}
-            defaultShopName={defaultShopName}
-            userId={user?.id}
-          />
         </div>
       )}
 
