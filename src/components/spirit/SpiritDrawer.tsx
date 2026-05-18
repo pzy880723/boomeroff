@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SpiritChatPanel } from './SpiritChatPanel';
 import { ErrorBoundary } from '@/components/system/ErrorBoundary';
 import { cn } from '@/lib/utils';
+import type { useSpiritChat } from '@/hooks/useSpiritChat';
 
 const DashboardInner = lazy(() => import('./DashboardInner').then((m) => ({ default: m.DashboardInner })));
 
