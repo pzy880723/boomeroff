@@ -94,16 +94,40 @@ export function SpiritChatPanel() {
     <div className="flex flex-col h-full">
       {/* 消息流 */}
       <div ref={scrollerRef} className="relative flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-2">
-        {messages.length > 0 && (
+        <div className="absolute top-2 right-2 z-10 flex gap-1">
           <button
             type="button"
-            onClick={clear}
-            className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-[hsl(var(--background)/0.6)] backdrop-blur text-[hsl(var(--primary-foreground)/0.55)] hover:text-[hsl(var(--primary-foreground)/0.9)] hover:bg-[hsl(var(--accent)/0.18)]"
-            aria-label="清空对话"
+            onClick={async () => {
+              setHistoryOpen(true);
+              setHistoryLoading(true);
+              try { setHistoryItems(await listSpiritConversations()); }
+              catch (e: any) { toast({ title: e?.message || '加载失败', variant: 'destructive' }); }
+              finally { setHistoryLoading(false); }
+            }}
+            className="p-1.5 rounded-full bg-[hsl(var(--background)/0.6)] backdrop-blur text-[hsl(var(--primary-foreground)/0.55)] hover:text-[hsl(var(--primary-foreground)/0.9)] hover:bg-[hsl(var(--accent)/0.18)]"
+            aria-label="历史会话"
           >
-            <Trash2 className="w-4 h-4" />
+            <History className="w-4 h-4" />
           </button>
-        )}
+          <button
+            type="button"
+            onClick={newConversation}
+            className="p-1.5 rounded-full bg-[hsl(var(--background)/0.6)] backdrop-blur text-[hsl(var(--primary-foreground)/0.55)] hover:text-[hsl(var(--primary-foreground)/0.9)] hover:bg-[hsl(var(--accent)/0.18)]"
+            aria-label="新对话"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={clear}
+              className="p-1.5 rounded-full bg-[hsl(var(--background)/0.6)] backdrop-blur text-[hsl(var(--primary-foreground)/0.55)] hover:text-[hsl(var(--primary-foreground)/0.9)] hover:bg-[hsl(var(--accent)/0.18)]"
+              aria-label="清空当前"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
         {messages.length === 0 ? (
           <EmptyState />
         ) : (
