@@ -33,7 +33,7 @@ export interface DashData {
   profile: { display_name: string; avatar_url: string | null } | null;
   todayShift: DashShift | null;
   nextShift: { date: string; shift: DashShift | null } | null;
-  weekShifts: { date: string; shift: DashShift | null }[]; // 7 days from today
+  weekShifts: { date: string; shift: DashShift | null; shopName: string | null }[]; // 7 days from today
   colleaguesToday: DashColleague[];
   shopName: string | null;
   totalExp: number;
