@@ -33,7 +33,7 @@ export interface DashData {
   profile: { display_name: string; avatar_url: string | null } | null;
   todayShift: DashShift | null;
   nextShift: { date: string; shift: DashShift | null } | null;
-  weekShifts: { date: string; shift: DashShift | null }[]; // 7 days from today
+  weekShifts: { date: string; shift: DashShift | null; shopName: string | null }[]; // 7 days from today
   colleaguesToday: DashColleague[];
   shopName: string | null;
   totalExp: number;
@@ -136,11 +136,21 @@ export function useDashboardData(enabled: boolean): DashData {
     const futureRow = myRows.find(r => r.work_date > today);
     const todayShift = todayRow ? sMap.get(todayRow.shift_code) || null : null;
 
+    // shop name lookup for per-day badge
+    const { data: allShops } = await supabase.from('shops' as any).select('id, name');
+    const shopNameById = new Map<string, string>();
+    (allShops as any[] || []).forEach(s => shopNameById.set(s.id, s.name));
+
     // 7-day week (today + 6)
     const weekShifts = Array.from({ length: 7 }, (_, i) => {
       const d = addDaysISO(today, i);
       const r = myRows.find(x => x.work_date === d);
-      return { date: d, shift: r ? sMap.get(r.shift_code) || null : null };
+      const sid = (r as any)?.shop_id ?? null;
+      return {
+        date: d,
+        shift: r ? sMap.get(r.shift_code) || null : null,
+        shopName: sid ? shopNameById.get(sid) ?? null : null,
+      };
     });
 
     // Today colleagues = same shop today (all shifts), excluding self
