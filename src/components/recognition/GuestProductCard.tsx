@@ -71,15 +71,14 @@ function Block({
 }
 
 function ValuationHero({
-  rarity, marketValue, buyReason, era, origin,
+  rarity, buyReason, era, origin,
 }: {
   rarity: number | null;
-  marketValue: string | null;
   buyReason: string | null;
   era: string | null;
   origin: string | null;
 }) {
-  const hasAny = (rarity != null) || marketValue || buyReason || era || origin;
+  const hasAny = (rarity != null) || buyReason || era || origin;
   if (!hasAny) return null;
 
   // 默认 4 星起步
@@ -97,35 +96,15 @@ function ValuationHero({
           <div className="text-[10px] tracking-[0.24em] uppercase font-medium">Valuation · 估值速览</div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-[1.3fr_1fr] gap-5">
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-[10.5px] tracking-[0.2em] uppercase text-muted-foreground/85">
-              <TrendingUp className="w-3 h-3" /> 市场参考价
-            </div>
-            {marketValue ? (
-              <div className="font-display text-[26px] sm:text-[30px] leading-tight tracking-tight text-foreground">
-                {marketValue}
-              </div>
-            ) : (
-              <div className="font-display text-[22px] text-muted-foreground/70">—</div>
-            )}
-            <div className="text-[10px] text-muted-foreground/70 tracking-wide">
-              来源公开二手市场估算 · 非本店售价
-            </div>
-          </div>
-
-          <div className="space-y-3 sm:border-l sm:border-border/50 sm:pl-5">
-            <div className="space-y-1">
-              <div className="text-[10.5px] tracking-[0.2em] uppercase text-muted-foreground/85">稀缺度</div>
-              <div className="flex items-center gap-0.5">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`w-4 h-4 ${i < stars ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground/30'}`}
-                  />
-                ))}
-              </div>
-            </div>
+        <div className="space-y-1">
+          <div className="text-[10.5px] tracking-[0.2em] uppercase text-muted-foreground/85">稀缺度</div>
+          <div className="flex items-center gap-0.5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star
+                key={i}
+                className={`w-4 h-4 ${i < stars ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground/30'}`}
+              />
+            ))}
           </div>
         </div>
 
