@@ -8,6 +8,60 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
+const THINKING_HINTS = [
+  '翻翻我的小本本…',
+  '让我想想怎么说更清楚～',
+  '正在认真组织语言 ✍️',
+  '嗯…这个问题有点意思',
+  '脑袋瓜在嗡嗡转 🌀',
+  '稍等，我去货架翻一下',
+  '调出小精灵知识库 📚',
+  '对一对今天的资料…',
+  '让我捋一捋思路',
+  '小爪子在打字了 🐾',
+  '正在挑最合适的说法',
+  '在记忆里搜一搜～',
+  '马上就来，别走开哦',
+  '让我先深呼吸一口 🌿',
+  '这个我得仔细想想',
+  '正在拼凑答案的小碎片',
+  '查查我的中古笔记本 📒',
+  '稍等，灵感正在赶来',
+];
+
+const UPLOADING_HINTS = [
+  '正在偷瞄你拍的图 👀',
+  '图片传输中，别走开～',
+  '在仔细看每一处细节',
+  '把照片送到我面前 📸',
+  '正在放大镜模式 🔍',
+  '让我端详端详…',
+];
+
+function ThinkingHint({ mode }: { mode: 'thinking' | 'uploading' }) {
+  const pool = mode === 'uploading' ? UPLOADING_HINTS : THINKING_HINTS;
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * pool.length));
+  useEffect(() => {
+    const t = setInterval(() => {
+      setIdx((prev) => {
+        if (pool.length <= 1) return prev;
+        let n = Math.floor(Math.random() * pool.length);
+        if (n === prev) n = (n + 1) % pool.length;
+        return n;
+      });
+    }, 2200);
+    return () => clearInterval(t);
+  }, [pool]);
+  return (
+    <span
+      key={idx}
+      className="text-[12px] text-[hsl(var(--primary-foreground)/0.6)] animate-in fade-in-0 duration-300"
+    >
+      {pool[idx]}
+    </span>
+  );
+}
+
 const QUICK_CHIPS = [
   { label: '今日和谁一起上班？', prompt: '今天我和谁一起上班？几点到几点？' },
   { label: '我的等级和打卡', prompt: '我现在多少经验？连续打卡几天了？' },
