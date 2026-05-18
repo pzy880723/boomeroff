@@ -1,56 +1,56 @@
-## 目标
+## 问题定位
 
-按选定的「暗色票根」方案重写仪表盘抽屉里的「排班」Tab：`src/components/dashboard/SchedulePanel.tsx`。
+当前仪表盘排班卡的“今日在岗”逻辑有两个错误：
 
-## 数据层
+1. **人数统计默认把自己算进在店人数**
+   - 代码用 `peers.length + 1` 显示“共 N 人在店”。
+   - 但如果你今天休息，就不应该把你算作在店人员，所以会出现“今日休息”同时又说“今日仅你在店”的矛盾。
 
-需要每行独立的门店名，当前 `useDashboardData` 已有 `todayShift` / `weekShifts` / `colleaguesToday` / `shopName`，但 `weekShifts` 每项只有 shift 信息没有 `shop_id`。
+2. **同事查询依赖当前用户的门店定位**
+   - 目前优先用“你今天排班里的 shop_id”，没有时才回退到你的默认门店。
+   - 当你今天休息时，查询逻辑容易只看不到正确的今日门店在岗列表，导致显示“暂无其他同事排班”。
 
-- 检查 `useDashboardData.ts` 的 `weekShifts` 查询，给每行带上 `shop_id` 和 `shopName`（join `shops` 表或借助已查的 shops map）。如果改 hook 影响面太大，则在 SchedulePanel 内单独补一个轻量 query（user_id + work_date in [today, +1, +2]）并拼上 shops map。优先改 hook，因为「我的」面板已经做了 shopNameMap，复用思路最干净。
+我查了数据库，今天实际有排班：同一门店今天有 A 班 1 人、B 班 2 人，所以前端显示确实是逻辑错，不是没有数据。
 
-## UI 层（参考已选 v3）
+## 修复计划
 
-整卡：`bg-white/[0.05] border-accent/15 rounded-2xl shadow-lg overflow-hidden`，外层抽屉底色保持现状。
+### 1. 修正数据结构
 
-### 顶部 Section — 今日在岗
-- 一行小标题 `今日在岗`（左，10px 古铜金）+ 右侧「N 位店员在岗」
-- 头像横滚：复用 `colleaguesToday` 数据（已包含 avatar_url、display_name、shift_code），尺寸 32px、`-space-x-2` 重叠、超过 6 个显示 `+N` 灰金气泡
-- 底部：dashed 古铜金 0.25 分割线，**不**做物理 notch 缺口（移动端实现成本高且画面密，改为单纯虚线即可）
+在 `src/hooks/useDashboardData.ts` 中新增一个明确字段：
 
-### 中部 Section — 三日票根行
-今日 / 明日 / 后天，每行布局：
-```
-[44px 日期柱]  [垂直分割线]  [主体：徽章+门店名 / 时间]  [右侧休息图标或 chevron]
-```
-- 日期柱：上 9px 古铜金小字 `TODAY/TMRW/DAY +2`（不要英文！改成「今日 / 明日 / 后天」竖排标题：第一行小号副字 `周几`，第二行 `今日`），主文用 `text-accent-soft`，非今日 opacity 60
-- 今日行：底色 `bg-foreground/[0.03]` 圆角，与其他日区分
-- 班次徽章配色（**禁止 shift.color 紫蓝**，强制覆盖）：
-  - A → 实底古铜金 `bg-accent text-primary`
-  - B → 描边款 `bg-transparent border border-accent text-accent`
-  - C → 砖红 `bg-destructive/85 text-destructive-foreground`
-  - 其他/未知 → 同 B
-  - 休息 → 不显示徽章，主文「今日休息」+ Coffee 图标
-- 时间：`HH:MM — HH:MM`，`tabular-nums`，accent-soft 色；非今日 opacity 60
-- 门店名：徽章右侧 10px 小标签 `bg-foreground/[0.06] px-1.5 py-0.5 rounded`，超长截断
+- `todayOnDutyStaff`：今天该门店所有在岗人员列表，包含你自己和其他同事。
+- `colleaguesToday` 保留给兼容旧逻辑，但仪表盘排班卡改用新的完整列表。
 
-### 底部 — 古铜金渐变细条
-1.5px 高，`bg-gradient-to-r from-transparent via-accent/30 to-transparent`，提示卡片完结，呼应票根撕边
+每个在岗人员包含：
 
-### 卡外底部 — 本周节奏 + 入口
-- 左侧 7 个 1.5px 小圆点（按未来 7 天上班/休息着色：上班 `bg-accent`，休息 `bg-foreground/15`），加 `本周节奏` 标签
-- 右侧 `查看 30 天排班 →` 按钮，点击关闭抽屉并 `navigate('/me')` 滚到排班区
+- 用户 ID
+- 显示姓名
+- 头像
+- 班次 code
+- 是否为当前用户
 
-## 配色 token 规则
+### 2. 修正门店选择逻辑
 
-- 抽屉是深色环境，沿用 dashboard 现有的 `text-[hsl(var(--primary-foreground)...)]` 写法或更简洁的 `text-accent / text-accent-soft / text-foreground`（dashboard 内部上下文，primary-foreground = 近白）
-- 禁止任何硬编码十六进制；禁止 indigo/violet/sky/blue 类
-- 班次原始 `shift.color`（可能是紫色）**完全忽略**，只用上面 A/B/C/默认 4 套映射
+今天在岗列表的门店来源改为：
 
-## 改动文件
+1. 如果你今天有班，用你今天班次的 `shop_id`。
+2. 如果你今天休息，用你的默认门店 `staff_profiles.shop_id`。
+3. 如果仍没有门店，则不显示“今日仅你在店”，改为“未绑定门店”。
 
-- `src/components/dashboard/SchedulePanel.tsx`：整体重写为 3 个 section（在岗头像 / 三日票根 / 周节奏+入口）
-- `src/hooks/useDashboardData.ts`：给 `weekShifts` 每项补 `shopName?: string | null`（join `shops` 或复用现有 query 拼接）；若已经有 `shop_id`，仅补 shops map 查询即可
+### 3. 修正“今日在岗”文案
 
-## 不动
+在 `src/components/dashboard/SchedulePanel.tsx` 中改为：
 
-- `me/SchedulePanel.tsx`、其他页面、DB schema、`shop_shifts.color` 字段（前端层覆盖即可，不动数据）
+- 如果今天你休息，并且有同事在岗：显示 `今日 N 位同事在岗`。
+- 如果今天你也上班：显示 `共 N 人在店`。
+- 如果你休息且确实没人：显示 `今日无人排班`。
+- 不再出现 `今日仅你在店` 与 `今日休息` 同屏矛盾。
+
+下方空状态也同步改：
+
+- 有门店但没人：`今日该门店暂无排班`
+- 未绑定门店：`未绑定门店，无法查看今日在岗`
+
+### 4. 保持暗色票根设计不变
+
+只修复逻辑和文案，不改变你确认过的“暗色票根”视觉方向。
