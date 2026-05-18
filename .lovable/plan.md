@@ -1,49 +1,48 @@
 ## 目标
-小精灵在 `sending` / `uploading` 阶段（首字未到之前），把现在那个三点跳动的占位符，替换成会随机轮换的"趣味小提示"，让用户不再干等。一旦开始 streaming（有内容了）就自动消失。
+让小精灵输入框上方的 4 个快捷提问，每次抽屉打开时从一个更大的池子里随机挑 4 条显示，不再每次都是同一组。
 
 ## 改动范围
-仅前端展示层，**只动一个文件**：`src/components/spirit/SpiritChatPanel.tsx`。
-不动 hook、不动 edge function、不动数据库。
+只动一个文件：`src/components/spirit/SpiritChatPanel.tsx`。不动 hook、edge function、数据库。
 
-## 具体做法
+## 做法
 
-### 1. 新增一个文案池（文件顶部常量）
-20 条左右、口吻贴合中古小精灵、Simplified Chinese、每条 8–18 字。分两类：
-- 普通思考（`sending` / `streaming` 前）：
-  - "翻翻我的小本本…"
-  - "让我想想怎么说更清楚～"
-  - "正在认真组织语言"
-  - "嗯…这个问题有点意思"
-  - "脑袋瓜在嗡嗡转 🌀"
-  - "稍等，我去货架翻一下"
-  - "调出小精灵知识库 📚"
-  - "对一对今天的资料…"
-  - 等等
-- 上传图片时（`uploading`）：
-  - "正在偷瞄你拍的图 👀"
-  - "图片传输中，别走开～"
-  - "在仔细看每一处细节"
-  - "把照片送到我面前"
+### 1. 扩充 `QUICK_CHIPS` 文案池（约 16–20 条）
+分几个口吻方向，全部贴合中古门店店员日常：
 
-### 2. 新增一个组件 `<ThinkingHint mode="thinking" | "uploading" />`
-- 内部 `useEffect` + `setInterval`，每 2.2 秒从对应文案池随机换一句（避免连续重复）。
-- 首次挂载随机一句。
-- 文案带轻微淡入淡出动画（用 `key` + `animate-in fade-in-0 duration-300` Tailwind 即可）。
-- 卸载时清理 interval。
+- 排班 / 同事：
+  - 今日和谁一起上班？
+  - 明天我上班吗？
+  - 这周谁休息？
+- 打卡 / 等级：
+  - 我的等级和打卡
+  - 离下一级还差多少？
+  - 这个月我打卡几天了？
+- 情绪 / 打气：
+  - 帮我打打气
+  - 来句鼓励的话
+  - 今天有点丧，安慰一下我
+- 中古冷知识：
+  - 今天学点啥
+  - 来个中古冷知识
+  - 讲个奢侈品小八卦
+- 工作小帮手：
+  - 顾客嫌贵怎么回？
+  - 这件怎么搭着卖？
+  - 帮我想个朋友圈文案
 
-### 3. 替换 `MessageBubble` 里现有空内容三点占位
-当前在 `content` 为空且未 streaming 时只显示三个跳动小点。改为：
-- 三点小点保留（视觉锚点）
-- 旁边/下方追加 `<ThinkingHint mode={...} />` 显示文案
-- `mode` 由 `MessageBubble` 新加的 prop `hintMode: 'thinking' | 'uploading'` 决定，由父组件根据 `status` 传入
+每条对应一个更完整的 `prompt`（沿用现有结构 `{ label, prompt }`）。
 
-### 4. 父组件传参
-在 `SpiritChatPanel` 渲染最后一条 assistant 消息时：
-- `status === 'uploading'` → `hintMode="uploading"`
-- 其它情况 → `hintMode="thinking"`
+### 2. 抽屉每次打开抽 4 条
+- 把当前展示的 4 条放进组件状态 `displayChips`。
+- 用 `useMemo` 或 `useState + useEffect` 在 **挂载时** 用 Fisher-Yates 洗牌 `QUICK_CHIPS`，取前 4 条赋给 `displayChips`。
+- 因为抽屉关闭时面板会卸载（或者父组件用 key 切换），下次打开就会重新挑；如果发现面板其实不卸载，则改成监听 `messages.length === 0` 从 0 变化的时机重新抽。
+- 渲染处把 `QUICK_CHIPS.map(...)` 换成 `displayChips.map(...)`。
+
+### 3. 保留现有行为
+- 点击后行为不变（往输入框塞 prompt 并发送）。
+- 仅当 `messages.length === 0` 时才显示这一排（现有逻辑），不变。
+- 不引入新依赖。
 
 ## 不动的地方
-- 文案池只在前端，不写数据库
-- streaming 一旦开始（有 token 进来），文案自动消失，回到正文 + 光标
-- 既有错误态、stop 按钮、图片上传逻辑保持不变
-- 不引入新依赖
+- ThinkingHint / 上传 / 流式 / 错误态 全部保持不变
+- SpiritChatPanel 的 props、useSpiritChat 都不动
