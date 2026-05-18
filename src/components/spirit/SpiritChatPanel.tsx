@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useLayoutEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Sparkles, Trash2, Camera, ImagePlus, X, Square, History, Plus } from 'lucide-react';
-import { useSpiritChat, listSpiritConversations, deleteSpiritConversation, type SpiritConversationSummary } from '@/hooks/useSpiritChat';
+import { Send, Sparkles, Camera, ImagePlus, X, Square } from 'lucide-react';
+import { useSpiritChat } from '@/hooks/useSpiritChat';
 import { SpiritMascot } from './SpiritMascot';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
