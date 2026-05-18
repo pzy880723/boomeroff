@@ -188,7 +188,6 @@ export function GuestProductCard({ result, imageUrl }: Props) {
         {/* 估值速览卡 */}
         <ValuationHero
           rarity={typeof result.rarity === 'number' ? result.rarity : null}
-          marketValue={result.marketValue ?? null}
           buyReason={result.buyReason ?? null}
           era={result.era ?? null}
           origin={displayOrigin}
