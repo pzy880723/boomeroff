@@ -91,7 +91,7 @@ export function SpiritChatPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="relative flex flex-col h-full">
       {/* 消息流 */}
       <div ref={scrollerRef} className="relative flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-2">
         <div className="absolute top-2 right-2 z-10 flex gap-1">
