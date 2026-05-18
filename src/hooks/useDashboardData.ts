@@ -6,7 +6,7 @@ import { todayISO, addDaysISO } from '@/lib/scheduleUtils';
 
 export interface DashShift { code: string; name: string; start_time: string; end_time: string; color: string | null }
 export interface DashSchedItem { work_date: string; shift_code: string; user_id?: string }
-export interface DashColleague { user_id: string; display_name: string; avatar_url: string | null; shift_code: string; shift_color: string | null }
+export interface DashColleague { user_id: string; display_name: string; avatar_url: string | null; shift_code: string; shift_color: string | null; is_self?: boolean }
 export interface DashLearning {
   sop: { id: string; title: string; body: string } | null;
   qa: { id: string; title: string; body: string } | null;
