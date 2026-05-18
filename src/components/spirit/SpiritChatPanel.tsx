@@ -111,6 +111,11 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  const [displayChips, setDisplayChips] = useState(() => pickChips(4));
+  // 每次回到空对话（新会话/清空）就重新抽 4 条
+  useEffect(() => {
+    if (messages.length === 0) setDisplayChips(pickChips(4));
+  }, [messages.length === 0]);
 
   useLayoutEffect(() => {
     const el = scrollerRef.current;
