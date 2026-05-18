@@ -19,13 +19,10 @@ const MAX_IMAGES = 4;
 const MAX_FILE_MB = 10;
 
 export function SpiritChatPanel() {
-  const { messages, status, send, stop, clear, conversationId, loadConversation, newConversation } = useSpiritChat();
+  const { messages, status, send, stop } = useSpiritChat();
   const { toast } = useToast();
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<{ file: File; preview: string }[]>([]);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyItems, setHistoryItems] = useState<SpiritConversationSummary[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
