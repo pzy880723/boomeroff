@@ -247,10 +247,11 @@ Deno.serve(async (req) => {
 
     // ── 构建 system prompt ───────────────────────────────
     const contextBlock = [
-      `【当前店员】${myName}${staffRes.data?.real_name && staffRes.data.real_name !== myName ? `（真实姓名：${staffRes.data.real_name}）` : ''}`,
+      `【当前店员】${myName}${staffRes.data?.real_name && staffRes.data.real_name !== myName ? `（真实姓名：${staffRes.data.real_name}）` : ''}${myShop ? `　【我的门店】${shopName(myShop)}` : ''}`,
       `【今日日期】${today}　【明日日期】${tomorrow}`,
-      todayBlock,
-      tomorrowBlock,
+      myTodayLine,
+      myTomorrowLine,
+      `【未来 14 天排班总表】(每行：日期 ｜ 门店 班次:人员)\n${scheduleTable}`,
       `【经验值】${totalExp} · 连续打卡 ${streak} 天 · 今日${checkedToday ? '已' : '未'}打卡`,
       pendingCorr > 0 ? `【待审核纠错】${pendingCorr} 条` : null,
       pendingShares > 0 ? `【待审核分享】${pendingShares} 条` : null,
@@ -268,14 +269,16 @@ Deno.serve(async (req) => {
 
 【你的能力】
 - 回答中古商品、IP、年代、产地、保养相关知识。
-- 知道店员今天的排班、同事、等级、待办（资料见下）。
+- 知道店员未来 14 天的排班、同事、门店、等级、待办（资料见下）。
 - 不知道就大方说"这个我也不太确定哦"，绝不编造价格或事实。
 - 不会真的代店员操作系统（不打卡、不发帖、不改密码），只能给指引。
 
 【铁律】
 - 全程简体中文，**绝不使用「主播」一词**，统一称呼对方「你」或「店员」。
 - 回答控制在 50–250 字，多用短句、表情符号点缀（不滥用）。
-- 涉及人/班次的回答，请用上下文里的真实姓名，不要瞎编。
+- **涉及日期/排班/门店的回答，必须严格引用【未来 14 天排班总表】里实际出现的那一行**，禁止凭印象使用「今天/明天」；务必写出具体日期（如「5 月 19 日」或「明天 5/19」）和具体门店名。
+- 如果总表里查不到某人/某店/某日的排班，请直接说"我这边查不到这条排班哦"，**绝不编造**。
+- 涉及人名时只用上下文里出现的真实姓名，不要瞎编。
 
 ================ 当下情境 ================
 ${contextBlock}
