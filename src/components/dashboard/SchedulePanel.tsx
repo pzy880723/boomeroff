@@ -25,6 +25,22 @@ export function SchedulePanel({ data, navigate }: Props) {
   const day2 = week[2];
 
   const fallbackShop = data.shopName;
+  const selfOnDuty = !!data.todayShift;
+  const shopBound = !!fallbackShop;
+
+  // 头部右侧文案：清楚区分「自己在岗 / 仅看同事 / 没人 / 未绑定门店」
+  let headerNote: string;
+  if (!shopBound) {
+    headerNote = '未绑定门店';
+  } else if (peers.length === 0 && !selfOnDuty) {
+    headerNote = '今日该门店无人排班';
+  } else if (peers.length === 0 && selfOnDuty) {
+    headerNote = '今日仅你在岗';
+  } else if (selfOnDuty) {
+    headerNote = `共 ${peers.length + 1} 人在店`;
+  } else {
+    headerNote = `今日 ${peers.length} 位同事在岗`;
+  }
 
   return (
     <div className="space-y-3">
@@ -35,7 +51,7 @@ export function SchedulePanel({ data, navigate }: Props) {
           <div className="flex justify-between items-center mb-2.5">
             <span className="text-[10px] tracking-[0.18em] font-semibold text-[hsl(var(--accent))]">今日在岗</span>
             <span className="text-[10px] text-[hsl(var(--primary-foreground)/0.55)]">
-              {peers.length > 0 ? `共 ${peers.length + 1} 人在店` : '今日仅你在店'}
+              {headerNote}
             </span>
           </div>
           {peers.length > 0 ? (
@@ -60,7 +76,13 @@ export function SchedulePanel({ data, navigate }: Props) {
               )}
             </div>
           ) : (
-            <p className="text-[11px] text-[hsl(var(--primary-foreground)/0.4)]">暂无其他同事排班</p>
+            <p className="text-[11px] text-[hsl(var(--primary-foreground)/0.4)]">
+              {!shopBound
+                ? '请联系管理员为你绑定门店'
+                : selfOnDuty
+                  ? '今日同店暂无其他同事排班'
+                  : '今日该门店暂无排班'}
+            </p>
           )}
         </div>
 
