@@ -366,10 +366,13 @@ function MessageBubble({
             {streaming && <span className="inline-block w-1.5 h-3 bg-[hsl(var(--accent))] align-middle ml-0.5 animate-pulse" />}
           </div>
         ) : (
-          <div className="flex gap-1 pt-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent)/0.7)] animate-bounce" />
-            <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent)/0.7)] animate-bounce" style={{ animationDelay: '120ms' }} />
-            <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent)/0.7)] animate-bounce" style={{ animationDelay: '240ms' }} />
+          <div className="flex items-center gap-2 pt-1.5">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent)/0.7)] animate-bounce" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent)/0.7)] animate-bounce" style={{ animationDelay: '120ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent)/0.7)] animate-bounce" style={{ animationDelay: '240ms' }} />
+            </div>
+            {hintMode && <ThinkingHint mode={hintMode} />}
           </div>
         )}
       </div>
