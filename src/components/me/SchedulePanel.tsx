@@ -96,6 +96,29 @@ export function SchedulePanel() {
       return { date, row, shift, shopName };
     }), [mine, shiftsMap, shopNameMap, start]);
 
+  // 每天 → 按班次分组的同事姓名（排除自己；A→B→C→其它）
+  const peersByDate = useMemo(() => {
+    const map = new Map<string, { code: string; names: string[] }[]>();
+    const byDate = new Map<string, Map<string, Set<string>>>();
+    allRows.forEach((r) => {
+      if (!r.user_id || r.user_id === user?.id) return;
+      const code = (r.shift_code || '').toUpperCase();
+      if (!byDate.has(r.work_date)) byDate.set(r.work_date, new Map());
+      const codeMap = byDate.get(r.work_date)!;
+      if (!codeMap.has(code)) codeMap.set(code, new Set());
+      const name = peerNameMap.get(r.user_id) || '店员';
+      codeMap.get(code)!.add(name);
+    });
+    const codeOrder = (c: string) => (c === 'A' ? 0 : c === 'B' ? 1 : c === 'C' ? 2 : 3);
+    byDate.forEach((codeMap, date) => {
+      const groups = Array.from(codeMap.entries())
+        .sort((a, b) => codeOrder(a[0]) - codeOrder(b[0]) || a[0].localeCompare(b[0]))
+        .map(([code, names]) => ({ code, names: Array.from(names).sort() }));
+      map.set(date, groups);
+    });
+    return map;
+  }, [allRows, peerNameMap, user?.id]);
+
   const workDays = mine.length;
   const first3 = days.slice(0, 3);
   const rest = days.slice(3);
@@ -134,7 +157,7 @@ export function SchedulePanel() {
       {/* 3 ticket rows */}
       <div className="px-3 pb-2 space-y-3">
         {first3.map((d, i) => (
-          <TicketRow key={d.date} item={d} index={i} />
+          <TicketRow key={d.date} item={d} index={i} peersByCode={peersByDate.get(d.date) || []} />
         ))}
       </div>
 
@@ -142,17 +165,8 @@ export function SchedulePanel() {
       {showAll && (
         <div className="px-3 pb-2 space-y-3 pt-1 border-t border-border">
           {rest.map((d) => (
-            <TicketRow key={d.date} item={d} index={-1} />
+            <TicketRow key={d.date} item={d} index={-1} peersByCode={peersByDate.get(d.date) || []} />
           ))}
-
-          {/* Today peers */}
-          <PeerStrip
-            day={days[0]}
-            allRows={allRows}
-            peerNameMap={peerNameMap}
-            defaultShopName={defaultShopName}
-            userId={user?.id}
-          />
         </div>
       )}
 
@@ -176,11 +190,17 @@ export function SchedulePanel() {
 
 /* ----------------------------- ticket row ----------------------------- */
 
-function TicketRow({ item, index }: { item: DayItem; index: number }) {
+const BIG_LABEL: Record<number, string> = { 0: '今天', 1: '明天', 2: '后天' };
+
+function TicketRow({ item, index, peersByCode }: {
+  item: DayItem;
+  index: number;
+  peersByCode: { code: string; names: string[] }[];
+}) {
   const { date, row, shift, shopName } = item;
   const isWorking = !!row && !!shift;
+  const isHero = index >= 0 && index <= 2;
 
-  // stub bg
   const stubBg = !isWorking
     ? 'bg-secondary'
     : index === 0
@@ -192,58 +212,80 @@ function TicketRow({ item, index }: { item: DayItem; index: number }) {
   const stubFg = stubBg === 'bg-primary' ? 'text-primary-foreground' : 'text-primary';
   const stubAccent = stubBg === 'bg-primary' ? 'text-accent' : 'text-muted-foreground';
 
-  const topLabel =
-    index === 0 ? 'TODAY' :
-    index === 1 ? 'NEXT' :
-    index === 2 ? 'UPCOMING' :
-    weekdayLabel(date).replace('周', 'WK ').toUpperCase();
-
   const [, m, d] = date.split('-');
   const dateText = `${parseInt(m, 10)}/${parseInt(d, 10)}`;
   const wd = weekdayLabel(date);
 
+  const codeColor = (c: string) =>
+    c === 'A' ? 'text-accent' :
+    c === 'B' ? 'text-accent' :
+    c === 'C' ? 'text-destructive' :
+    'text-muted-foreground';
+
   return (
-    <div className="relative flex items-stretch h-20 bg-background rounded-lg border border-border overflow-hidden">
+    <div className="relative flex items-stretch min-h-20 bg-background rounded-lg border border-border overflow-hidden">
       {/* stub */}
       <div className={cn(
-        'w-20 flex flex-col items-center justify-center border-r border-dashed relative shrink-0',
+        'w-20 flex flex-col items-center justify-center border-r border-dashed relative shrink-0 py-2',
         stubBg,
         stubBg === 'bg-primary' ? 'border-accent/30' : 'border-muted-foreground/30'
       )}>
-        <span className={cn('text-[10px] font-bold', stubAccent)} style={{ fontFamily: 'Oswald, sans-serif' }}>
-          {topLabel}
-        </span>
-        <span className={cn('text-xl font-bold leading-tight tabular-nums', stubFg)}>{dateText}</span>
-        <span className={cn('text-[10px]', stubAccent)}>{wd}</span>
+        {isHero ? (
+          <>
+            <span className={cn('text-xl font-extrabold leading-tight', stubFg)}>
+              {BIG_LABEL[index]}
+            </span>
+            <span className={cn('text-[11px] mt-1 tabular-nums font-semibold', stubAccent)}>
+              {dateText}
+            </span>
+            <span className={cn('text-[10px]', stubAccent)}>{wd}</span>
+          </>
+        ) : (
+          <>
+            <span className={cn('text-[10px] font-bold', stubAccent)}>{wd}</span>
+            <span className={cn('text-xl font-bold leading-tight tabular-nums', stubFg)}>{dateText}</span>
+          </>
+        )}
         <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-card rounded-full border border-border" />
         <span className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-card rounded-full border border-border" />
       </div>
 
       {/* body */}
-      <div className="flex-1 flex items-center px-4 min-w-0">
-        <div className="flex-1 flex items-center gap-3 min-w-0">
-          {isWorking ? (
-            <>
-              <ShiftBadge code={shift!.code} />
-              <span className="text-primary text-sm font-bold tabular-nums tracking-tight whitespace-nowrap">
-                {formatShiftTime(shift!.start_time, shift!.end_time)}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="px-3 py-1 rounded bg-secondary text-secondary-foreground text-xs font-bold tracking-widest">
-                休息
-              </span>
-              <span className="text-muted-foreground text-sm italic">FREE TIME</span>
-            </>
-          )}
-        </div>
-        <div className="text-right shrink-0 ml-2 max-w-[40%]">
-          <span className="text-muted-foreground text-[10px] block uppercase tracking-tighter">Location</span>
-          <span className="text-primary text-xs font-medium truncate block">
-            {shopName || '—'}
+      <div className="flex-1 flex flex-col justify-center px-4 py-2 min-w-0 gap-1.5">
+        {/* row 1: shift + time + shop */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex-1 flex items-center gap-3 min-w-0">
+            {isWorking ? (
+              <>
+                <ShiftBadge code={shift!.code} />
+                <span className="text-primary text-sm font-bold tabular-nums tracking-tight whitespace-nowrap">
+                  {formatShiftTime(shift!.start_time, shift!.end_time)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="px-3 py-1 rounded bg-secondary text-secondary-foreground text-xs font-bold tracking-widest">
+                  休息
+                </span>
+              </>
+            )}
+          </div>
+          <span className="text-primary text-xs font-medium truncate max-w-[45%] text-right shrink-0">
+            {shopName || (isWorking ? '—' : '')}
           </span>
         </div>
+
+        {/* row 2: peers by shift */}
+        {peersByCode.length > 0 && (
+          <div className="flex flex-col gap-0.5 pt-0.5 border-t border-dashed border-border/60">
+            {peersByCode.map((g) => (
+              <div key={g.code} className="text-[11px] text-muted-foreground leading-snug">
+                <span className={cn('font-bold mr-1', codeColor(g.code))}>{g.code} 班</span>
+                <span className="text-primary/80">· {g.names.join('、')}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -263,42 +305,5 @@ function ShiftBadge({ code }: { code: string }) {
     )}>
       {u}
     </span>
-  );
-}
-
-/* ----------------------------- peer strip ----------------------------- */
-
-function PeerStrip({
-  day, allRows, peerNameMap, defaultShopName, userId,
-}: {
-  day: DayItem;
-  allRows: Sched[];
-  peerNameMap: Map<string, string>;
-  defaultShopName: string | null;
-  userId: string | undefined;
-}) {
-  const peers = allRows.filter(r => r.work_date === day.date && r.user_id !== userId);
-  if (!peers.length) return null;
-
-  return (
-    <div className="rounded-lg border border-border bg-secondary/40 px-3 py-2.5">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] tracking-[0.18em] text-muted-foreground">今日同店在岗</span>
-        {defaultShopName && (
-          <span className="text-[10px] text-muted-foreground">{defaultShopName}</span>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {peers.map((p, i) => (
-          <span
-            key={`${p.user_id}-${i}`}
-            className="inline-flex items-center gap-1 text-[11px] text-primary bg-card border border-border rounded-full px-2 py-0.5"
-          >
-            <span className="font-medium">{peerNameMap.get(p.user_id) || '店员'}</span>
-            <span className="text-[10px] text-accent font-bold">{p.shift_code.toUpperCase()}</span>
-          </span>
-        ))}
-      </div>
-    </div>
   );
 }
