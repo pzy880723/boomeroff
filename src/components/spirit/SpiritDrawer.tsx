@@ -91,7 +91,7 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
         </div>
 
         <TabsContent value="chat" className="m-0 flex-1 min-h-0 outline-none">
-          <SpiritChatPanel />
+          <SpiritChatPanel chat={chat} />
         </TabsContent>
 
         <TabsContent value="dashboard" className="m-0 flex-1 min-h-0 outline-none overflow-hidden">
