@@ -1060,6 +1060,130 @@ export type Database = {
         }
         Relationships: []
       }
+      spirit_conversations: {
+        Row: {
+          archived: boolean
+          created_at: string
+          id: string
+          last_message_at: string
+          message_count: number
+          summary: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived?: boolean
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          message_count?: number
+          summary?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archived?: boolean
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          message_count?: number
+          summary?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      spirit_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          images: Json
+          meta: Json
+          role: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          images?: Json
+          meta?: Json
+          role: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          images?: Json
+          meta?: Json
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spirit_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "spirit_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spirit_usage: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          duration_ms: number
+          id: string
+          input_tokens: number
+          model: string
+          output_tokens: number
+          status: string
+          tool_calls: number
+          user_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          duration_ms?: number
+          id?: string
+          input_tokens?: number
+          model: string
+          output_tokens?: number
+          status?: string
+          tool_calls?: number
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          duration_ms?: number
+          id?: string
+          input_tokens?: number
+          model?: string
+          output_tokens?: number
+          status?: string
+          tool_calls?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spirit_usage_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "spirit_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_day_offs: {
         Row: {
           created_at: string
