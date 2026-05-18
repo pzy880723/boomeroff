@@ -40,20 +40,27 @@ export function SchedulePanel() {
         .from('staff_profiles' as any).select('shop_id').eq('user_id', user.id).maybeSingle();
       const defaultSid: string | null = (sp as any)?.shop_id ?? null;
 
-      const [{ data: myRows }, { data: shopRows }, { data: sh }, { data: shops }] = await Promise.all([
+      const [{ data: myRows }, { data: sh }, { data: shops }] = await Promise.all([
         supabase.from('shift_schedules' as any)
           .select('work_date, shift_code, user_id, shop_id')
           .eq('user_id', user.id)
           .gte('work_date', start).lte('work_date', end)
           .order('work_date'),
-        defaultSid ? supabase.from('shift_schedules' as any)
-          .select('work_date, shift_code, user_id, shop_id')
-          .eq('shop_id', defaultSid)
-          .gte('work_date', start).lte('work_date', end)
-          : Promise.resolve({ data: [] as any[] } as any),
         supabase.from('shop_shifts' as any).select('code, name, start_time, end_time').eq('active', true),
         supabase.from('shops' as any).select('id, name'),
       ]);
+
+      // 同事来源：默认门店 + 本人排班里出现过的所有门店
+      const shopIds = Array.from(new Set([
+        ...(defaultSid ? [defaultSid] : []),
+        ...(((myRows as any[]) || []).map((r: any) => r.shop_id).filter(Boolean) as string[]),
+      ]));
+      const { data: shopRows } = shopIds.length
+        ? await supabase.from('shift_schedules' as any)
+            .select('work_date, shift_code, user_id, shop_id')
+            .in('shop_id', shopIds)
+            .gte('work_date', start).lte('work_date', end)
+        : { data: [] as any[] } as any;
 
       const sMap = new Map<string, Shift>();
       (sh as any[] || []).forEach(s => sMap.set(s.code, s));

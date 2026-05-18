@@ -1,41 +1,46 @@
-## 修改范围
+## 问题定位
 
-只改 `src/components/me/SchedulePanel.tsx`，不动数据库、不动 hook、不动暗色票根配色。
+`SchedulePanel` 之所以一个同事都不显示，是因为获取「同店同事排班」的查询只在用户的 `staff_profiles.shop_id`（默认门店）存在时才触发：
 
-## 票根左侧（stub）改版
+```ts
+defaultSid ? supabase.from('shift_schedules')...eq('shop_id', defaultSid)... 
+           : Promise.resolve({ data: [] })
+```
 
-只改前 3 天票根（index 0/1/2）：
+当前账号的 `staff_profiles` 里 **没有绑定 shop_id**（实际行数 0），所以 `allRows = []`，`peersByDate` 全空，30 张票根都不会渲染同事行。
 
-- 大字（最突出）：`今天` / `明天` / `后天`
-- 下面小字：日期 `5/18` + 周几 `周一`
-- 删除原来的 `TODAY / NEXT / UPCOMING` 英文
+但数据库里 5/18 上海中信泰富店其实有 3 个同事在班、5/19 同店也有同事，应该显示。
 
-展开后的第 4~30 天保持原样（`周X` + 日期）。
+## 修复方案（仅改前端，单文件）
 
-## 票根右侧（body）改版（所有 30 天票根都改）
+文件：`src/components/me/SchedulePanel.tsx`
 
-每张票根右侧改为多行结构：
+### 1. 不再依赖默认门店来取同事
 
-- 第一行：班次徽章 `A/B/C` + 时间 `09:00–18:00`（休息日则显示 `休息`）
-- 第二行：门店名 `上海中信泰富店`
-- 第三行（新增，**所有票根**都显示）：当天同店一起上班的同事姓名，按班次分组：
-  - `A 班 · 李帆`
-  - `B 班 · 悦悦、Lifan_`
-  - `C 班 · …`
+把"取同店排班"改成基于用户实际排班里出现过的所有门店：
 
-排除自己；A/B/C 按字典序排；每个班次同组无人则不显示该行；如果当天该门店完全无人或未绑定门店，则不显示同事行（休息日空白即可）。
+- 先取 `mine`（本人 30 天排班）+ `defaultSid`（如果有的话）
+- 汇总成 `shopIds = unique([defaultSid, ...mine.map(m => m.shop_id)].filter(Boolean))`
+- 用 `shift_schedules.select(...).in('shop_id', shopIds).gte/.lte(date)` 一次拉回所有相关同事排班
 
-## 数据来源
+这样：
+- 用户绑定了门店 → 行为不变
+- 用户没绑门店但有排班 → 按"那天我在哪家店"反查同事
+- 用户那天休息且没有任何排班 → 该日仍空（符合预期，无门店锚点）
 
-`allRows`（同店 30 天内所有人排班）+ `peerNameMap` 已经在 hook 里，按 `work_date` 过滤即可。
+### 2. 同事行的展示规则保持不变
 
-`PeerStrip` 旧组件删除（其内容已并入每张票根的同事行）。
+- 排除自己
+- A → B → C → 其它 顺序
+- 每个班次一行：`A 班 · 张三、李四`
+- 票根右侧 body 底部展示，虚线分隔
 
-## 技术细节
+### 3. 默认门店名展示兜底
 
-- `TicketRow` 新增入参：
-  - `peersByCode: { code: string; names: string[] }[]`（已按 A→B→C→其它 排序、去重姓名、排除自己）
-- `SchedulePanel` 主组件统一计算 `Map<date, peersByCode>`，传给所有 `TicketRow`。
-- 票根从固定 `h-20` 改为 `min-h-20 h-auto`，让同事行能撑开。
-- 同事行样式：`text-[11px] text-muted-foreground`；班次字母小高亮（A=accent、B=accent、C=destructive）。
-- 不动 `ShiftBadge` 内部样式、不动展开按钮、不动 hook 查询、不动暗色配色 token。
+如果 `defaultSid` 为空，header 不再尝试显示默认门店（本来就没用到，保持现状）。
+
+## 不动的部分
+
+- 数据库 / RLS / hooks 都不动
+- 票根左侧"今天/明天/后天"大字 + 日期、暗色 stub 配色保持
+- 仅 `SchedulePanel.tsx` 一处改动
