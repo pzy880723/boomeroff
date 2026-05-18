@@ -1,4 +1,4 @@
-import { Sparkles, BookOpen, Eye, ShieldAlert, FileText, Star, Gem, TrendingUp, Quote } from 'lucide-react';
+import { Sparkles, BookOpen, Eye, ShieldAlert, FileText, Star, Gem, Quote } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { normalizeSellingPoints } from '@/lib/script';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
