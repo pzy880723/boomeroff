@@ -152,15 +152,23 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
           <EmptyState />
         ) : (
           <div className="flex flex-col gap-3 py-2">
-            {messages.map((m) => (
-              <MessageBubble
-                key={m.id}
-                role={m.role}
-                content={m.content}
-                images={m.images}
-                streaming={status === 'streaming' && m === messages[messages.length - 1]}
-              />
-            ))}
+            {messages.map((m, i) => {
+              const isLast = i === messages.length - 1;
+              return (
+                <MessageBubble
+                  key={m.id}
+                  role={m.role}
+                  content={m.content}
+                  images={m.images}
+                  streaming={status === 'streaming' && isLast}
+                  hintMode={
+                    isLast && m.role === 'assistant' && !m.content
+                      ? status === 'uploading' ? 'uploading' : 'thinking'
+                      : null
+                  }
+                />
+              );
+            })}
           </div>
         )}
       </div>
