@@ -42,9 +42,10 @@ interface Props {
   originY: number;
   onAnimEnd: () => void;
   onClose: () => void;
+  chat?: ReturnType<typeof useSpiritChat>;
 }
 
-export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClose }: Props) {
+export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClose, chat }: Props) {
   const [tab, setTab] = useState<'chat' | 'dashboard'>(() => {
     try {
       return (localStorage.getItem(TAB_KEY) as any) || 'chat';
