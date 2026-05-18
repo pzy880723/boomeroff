@@ -242,17 +242,100 @@ export function SpiritChatPanel() {
             rows={1}
             className="min-h-[40px] max-h-32 resize-none border-0 bg-transparent text-[16px] text-[hsl(var(--primary-foreground))] placeholder:text-[hsl(var(--primary-foreground)/0.4)] focus-visible:ring-0 focus-visible:ring-offset-0 px-1"
           />
-          <Button
-            type="button"
-            size="icon"
-            onClick={handleSend}
-            disabled={busy || (!input.trim() && pending.length === 0)}
-            className="h-9 w-9 shrink-0 rounded-xl bg-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.9)] text-[hsl(var(--accent-foreground))]"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
+          {busy ? (
+            <Button
+              type="button"
+              size="icon"
+              onClick={stop}
+              className="h-9 w-9 shrink-0 rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              aria-label="停止生成"
+            >
+              <Square className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="icon"
+              onClick={handleSend}
+              disabled={!input.trim() && pending.length === 0}
+              className="h-9 w-9 shrink-0 rounded-xl bg-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.9)] text-[hsl(var(--accent-foreground))]"
+              aria-label="发送"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* 历史会话抽屉 */}
+      {historyOpen && (
+        <div
+          className="absolute inset-0 z-30 bg-[hsl(var(--background)/0.85)] backdrop-blur-sm flex flex-col"
+          onClick={(e) => { if (e.target === e.currentTarget) setHistoryOpen(false); }}
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(var(--accent)/0.18)]">
+            <div className="text-sm font-semibold text-[hsl(var(--primary-foreground))]">历史会话</div>
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(false)}
+              className="p-1.5 rounded-full hover:bg-[hsl(var(--accent)/0.18)] text-[hsl(var(--primary-foreground)/0.7)]"
+              aria-label="关闭"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-3 py-2">
+            {historyLoading ? (
+              <div className="text-center text-xs text-[hsl(var(--primary-foreground)/0.5)] py-6">加载中…</div>
+            ) : historyItems.length === 0 ? (
+              <div className="text-center text-xs text-[hsl(var(--primary-foreground)/0.5)] py-6">还没有聊过呢～</div>
+            ) : (
+              <div className="space-y-1">
+                {historyItems.map((it) => (
+                  <div
+                    key={it.id}
+                    className={cn(
+                      'group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-colors',
+                      it.id === conversationId
+                        ? 'bg-[hsl(var(--accent)/0.22)]'
+                        : 'hover:bg-[hsl(var(--accent)/0.12)]',
+                    )}
+                    onClick={async () => {
+                      await loadConversation(it.id);
+                      setHistoryOpen(false);
+                    }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] text-[hsl(var(--primary-foreground))] truncate">{it.title || '新对话'}</div>
+                      <div className="text-[11px] text-[hsl(var(--primary-foreground)/0.45)]">
+                        {it.message_count} 条 · {new Date(it.last_message_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm('删除这条会话？')) return;
+                        try {
+                          await deleteSpiritConversation(it.id);
+                          setHistoryItems((p) => p.filter((x) => x.id !== it.id));
+                          if (it.id === conversationId) newConversation();
+                        } catch (err: any) {
+                          toast({ title: err?.message || '删除失败', variant: 'destructive' });
+                        }
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-[hsl(var(--primary-foreground)/0.5)] hover:text-destructive"
+                      aria-label="删除"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
