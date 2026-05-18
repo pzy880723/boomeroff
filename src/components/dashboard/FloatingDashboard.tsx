@@ -89,19 +89,8 @@ export function FloatingDashboard() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // 首次进入：不再自动打开抽屉，改为弹出问候对话框
-  useEffect(() => {
-    if (!user) return;
-    const greeted = sessionStorage.getItem(GREETED_KEY);
-    if (!greeted) {
-      const t = setTimeout(() => setGreetOpen(true), 600);
-      return () => clearTimeout(t);
-    }
-  }, [user]);
-
   const closeGreeting = () => {
     setGreetOpen(false);
-    try { sessionStorage.setItem(GREETED_KEY, '1'); } catch {}
   };
 
   const openDrawer = () => {
