@@ -1,43 +1,49 @@
-## 问题
+## 目标
+小精灵在 `sending` / `uploading` 阶段（首字未到之前），把现在那个三点跳动的占位符，替换成会随机轮换的"趣味小提示"，让用户不再干等。一旦开始 streaming（有内容了）就自动消失。
 
-`SpiritChatPanel` 自己调 `useSpiritChat()`，状态（`messages` / `conversationId` / `status`）挂在面板组件上。
-而 `FloatingDashboard` 在抽屉关闭动画结束后 `setMounted(false)`，整个 `SpiritDrawer → SpiritChatPanel` 卸载，hook 状态随之销毁。下次打开是全新的 hook 实例 → 聊天记录就空了。
+## 改动范围
+仅前端展示层，**只动一个文件**：`src/components/spirit/SpiritChatPanel.tsx`。
+不动 hook、不动 edge function、不动数据库。
 
-后端 `spirit_conversations / spirit_messages` 一直存着，所以记录其实没丢，只是前端没去取。
+## 具体做法
 
-## 修复思路
+### 1. 新增一个文案池（文件顶部常量）
+20 条左右、口吻贴合中古小精灵、Simplified Chinese、每条 8–18 字。分两类：
+- 普通思考（`sending` / `streaming` 前）：
+  - "翻翻我的小本本…"
+  - "让我想想怎么说更清楚～"
+  - "正在认真组织语言"
+  - "嗯…这个问题有点意思"
+  - "脑袋瓜在嗡嗡转 🌀"
+  - "稍等，我去货架翻一下"
+  - "调出小精灵知识库 📚"
+  - "对一对今天的资料…"
+  - 等等
+- 上传图片时（`uploading`）：
+  - "正在偷瞄你拍的图 👀"
+  - "图片传输中，别走开～"
+  - "在仔细看每一处细节"
+  - "把照片送到我面前"
 
-把 `useSpiritChat()` 上提到 **FloatingDashboard**（这个组件常驻不卸载），通过 props 传给 `SpiritDrawer`，再传给 `SpiritChatPanel`。这样：
+### 2. 新增一个组件 `<ThinkingHint mode="thinking" | "uploading" />`
+- 内部 `useEffect` + `setInterval`，每 2.2 秒从对应文案池随机换一句（避免连续重复）。
+- 首次挂载随机一句。
+- 文案带轻微淡入淡出动画（用 `key` + `animate-in fade-in-0 duration-300` Tailwind 即可）。
+- 卸载时清理 interval。
 
-- 抽屉开/关不再影响 hook 实例
-- `messages` / `conversationId` 自然保留
-- 不需要重新请求后端，体验是"原样恢复"
-- 即使刷新页面，也可以后续再加一层"启动时拉取最近一条会话"的兜底（本次先不做，避免扩大范围）
+### 3. 替换 `MessageBubble` 里现有空内容三点占位
+当前在 `content` 为空且未 streaming 时只显示三个跳动小点。改为：
+- 三点小点保留（视觉锚点）
+- 旁边/下方追加 `<ThinkingHint mode={...} />` 显示文案
+- `mode` 由 `MessageBubble` 新加的 prop `hintMode: 'thinking' | 'uploading'` 决定，由父组件根据 `status` 传入
 
-## 具体改动
-
-### 1. `src/hooks/useSpiritChat.ts`
-- 重新导出 `loadConversation` / `newConversation` / `clear` 等能力（之前精简掉了），保持现在的 `messages / status / send / stop / conversationId` 即可，无需 UI 入口
-
-### 2. `src/components/dashboard/FloatingDashboard.tsx`
-- 在组件顶部调用 `const spiritChat = useSpiritChat()`
-- 把 `spiritChat` 整个对象作为 prop 传给 `<SpiritDrawer ... chat={spiritChat} />`
-
-### 3. `src/components/spirit/SpiritDrawer.tsx`
-- 新增 `chat: ReturnType<typeof useSpiritChat>` prop
-- 把 `<SpiritChatPanel />` 改成 `<SpiritChatPanel chat={chat} />`
-
-### 4. `src/components/spirit/SpiritChatPanel.tsx`
-- 改为接收可选 `chat` prop；如果传了就用 prop，否则 fallback 到 `useSpiritChat()`（保持组件可独立使用）
-- 其余逻辑不动
+### 4. 父组件传参
+在 `SpiritChatPanel` 渲染最后一条 assistant 消息时：
+- `status === 'uploading'` → `hintMode="uploading"`
+- 其它情况 → `hintMode="thinking"`
 
 ## 不动的地方
-
-- `spirit-chat` / `spirit-conversations` edge function、数据库表、RLS：全不动
-- 输入框、快捷 chips、拍照/相册、发送/停止按钮、空状态、消息气泡：全不动
-- 小精灵浮窗外观、拖拽、抽屉动画：全不动
-
-## 副作用 / 注意
-
-- `useSpiritChat` 现在会在用户一登录就跑（FloatingDashboard 渲染时即挂载），但它本身只是几个 `useState` + `useRef`，不发请求，开销可忽略
-- `pending` 本地选图状态仍然留在 `SpiritChatPanel` 里 —— 抽屉关掉时还没发出去的图会被丢弃，这与用户当前预期一致（"记录保留"指的是已发送的对话）
+- 文案池只在前端，不写数据库
+- streaming 一旦开始（有 token 进来），文案自动消失，回到正文 + 光标
+- 既有错误态、stop 按钮、图片上传逻辑保持不变
+- 不引入新依赖
