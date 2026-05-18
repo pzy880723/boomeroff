@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SpiritChatPanel } from './SpiritChatPanel';
 import { ErrorBoundary } from '@/components/system/ErrorBoundary';
 import { cn } from '@/lib/utils';
+import type { useSpiritChat } from '@/hooks/useSpiritChat';
 
 const DashboardInner = lazy(() => import('./DashboardInner').then((m) => ({ default: m.DashboardInner })));
 
@@ -41,9 +42,10 @@ interface Props {
   originY: number;
   onAnimEnd: () => void;
   onClose: () => void;
+  chat?: ReturnType<typeof useSpiritChat>;
 }
 
-export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClose }: Props) {
+export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClose, chat }: Props) {
   const [tab, setTab] = useState<'chat' | 'dashboard'>(() => {
     try {
       return (localStorage.getItem(TAB_KEY) as any) || 'chat';
@@ -89,7 +91,7 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
         </div>
 
         <TabsContent value="chat" className="m-0 flex-1 min-h-0 outline-none">
-          <SpiritChatPanel />
+          <SpiritChatPanel chat={chat} />
         </TabsContent>
 
         <TabsContent value="dashboard" className="m-0 flex-1 min-h-0 outline-none overflow-hidden">

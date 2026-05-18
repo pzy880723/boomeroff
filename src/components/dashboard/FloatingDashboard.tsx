@@ -6,6 +6,7 @@ import { useTasks } from '@/hooks/useTasks';
 import { SpiritMascot, type SpiritState } from '../spirit/SpiritMascot';
 import { SpiritDrawer } from '../spirit/SpiritDrawer';
 import { randomMood } from '../spirit/spiritMoods';
+import { useSpiritChat } from '@/hooks/useSpiritChat';
 import { cn } from '@/lib/utils';
 
 const SpiritGreetingDialog = lazy(() =>
@@ -66,6 +67,7 @@ export function FloatingDashboard() {
 
   const notif = useNotifications();
   const tasks = useTasks();
+  const spiritChat = useSpiritChat();
 
   useEffect(() => {
     if (!labelText) return;
@@ -232,6 +234,7 @@ export function FloatingDashboard() {
           originY={pos.y + BTN / 2}
           onAnimEnd={onAnimEnd}
           onClose={closeDrawer}
+          chat={spiritChat}
         />,
         document.body,
       )}

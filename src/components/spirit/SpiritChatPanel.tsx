@@ -18,8 +18,11 @@ const QUICK_CHIPS = [
 const MAX_IMAGES = 4;
 const MAX_FILE_MB = 10;
 
-export function SpiritChatPanel() {
-  const { messages, status, send, stop } = useSpiritChat();
+type SpiritChatApi = ReturnType<typeof useSpiritChat>;
+
+export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
+  const fallback = useSpiritChat();
+  const { messages, status, send, stop } = chat ?? fallback;
   const { toast } = useToast();
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<{ file: File; preview: string }[]>([]);
