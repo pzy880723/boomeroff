@@ -1,9 +1,13 @@
-// 中古小精灵 · 系统 Agent 聊天
-// 入参: { messages: [{role,content}] }
-// 出参: SSE 流（OpenAI 兼容，直通 Lovable AI Gateway）
+// 中古小精灵 · 系统 Agent 聊天 v2
+// 入参: { conversationId?: string, messages: [{role, content, images?}] }
+// 出参: SSE 流（OpenAI 兼容 delta），最后追加一行 data: {"__meta":{...}} 把 conversationId / 用量返还给前端
 //
-// 服务端在每次对话前并行加载用户上下文（班次/同事/等级/待办/知识检索），
-// 拼进 system prompt，让小精灵既能聊天又能"懂你"。
+// 升级要点：
+// 1) 工具调用：模型按需查排班 / 等级 / 待办 / 知识 / 历史，不再每次塞超长 prompt
+// 2) 会话持久化：spirit_conversations + spirit_messages（RLS 仅本人）
+// 3) 限频：spirit_rate_limits（per_minute / per_day）
+// 4) 模型可配：app_settings.spirit_model
+// 5) 用量记录：spirit_usage
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
@@ -21,36 +25,98 @@ const json = (body: unknown, status = 200) =>
 
 function tzDate() {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
 }
-
+function addDays(base: string, n: number): string {
+  const d = new Date(base + 'T00:00:00+08:00');
+  d.setDate(d.getDate() + n);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d);
+}
 function extractText(content: any): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
-    return content
-      .map((p: any) => (p?.type === 'text' ? String(p.text || '') : ''))
-      .join(' ')
-      .trim();
+    return content.map((p: any) => (p?.type === 'text' ? String(p.text || '') : '')).join(' ').trim();
   }
   return '';
 }
 
-function extractQuery(text: string): string {
-  return text.replace(/[\n\r]+/g, ' ').trim().slice(0, 60);
-}
+// ── 工具定义（OpenAI tools 兼容格式）──────────────────
+const TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'query_schedule',
+      description: '查询排班。支持按人名（real_name / display_name 模糊匹配）或门店名过滤，日期范围最多 30 天。不传任何参数时返回我自己未来 7 天的排班。',
+      parameters: {
+        type: 'object',
+        properties: {
+          person: { type: 'string', description: '人员姓名（部分匹配），不填表示不限' },
+          shop: { type: 'string', description: '门店名（部分匹配），不填表示不限' },
+          date_from: { type: 'string', description: 'YYYY-MM-DD，默认今天' },
+          date_to: { type: 'string', description: 'YYYY-MM-DD，默认今天后 7 天' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'query_my_stats',
+      description: '查我当前的等级 / 经验 / 连续打卡 / 待领经验。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_knowledge',
+      description: '在官方中古知识库 official_knowledge 里搜索。返回匹配条目的名称、品类、IP、摘要、保养小贴士。',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: '关键词，2-30 字' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_shop_kb',
+      description: '在门店 SOP / 顾客问答知识库 shop_kb_entries 里搜索。',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: '关键词' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_my_history',
+      description: '搜索我（当前店员）自己识别过的商品历史，按名字模糊匹配。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+          limit: { type: 'number', description: '默认 5，最多 10' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+];
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
-  // 预热 ping
   const url = new URL(req.url);
-  if (url.searchParams.get('ping') === '1') {
-    return json({ pong: true });
-  }
+  if (url.searchParams.get('ping') === '1') return json({ pong: true });
+
+  const startedAt = Date.now();
 
   try {
     const authHeader = req.headers.get('Authorization');
@@ -68,268 +134,368 @@ Deno.serve(async (req) => {
     const uid = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
-    const messages: Array<{ role: string; content: any; images?: string[] }> = Array.isArray(body?.messages)
-      ? body.messages
-      : [];
-    if (messages.length === 0) return json({ error: '请说点什么吧～' }, 400);
-
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
-    const queryText = extractQuery(extractText(lastUserMsg?.content));
-
-    const today = tzDate();
-    function addDays(base: string, n: number): string {
-      const d = new Date(base + 'T00:00:00+08:00');
-      d.setDate(d.getDate() + n);
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-      }).format(d);
-    }
-    const tomorrow = addDays(today, 1);
-    const windowEnd = addDays(today, 13); // 未来 14 天
+    const incoming: Array<{ role: string; content: any; images?: string[] }> =
+      Array.isArray(body?.messages) ? body.messages : [];
+    if (incoming.length === 0) return json({ error: '请说点什么吧～' }, 400);
+    let conversationId: string | null = typeof body?.conversationId === 'string' ? body.conversationId : null;
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE);
 
-    // ── 并行加载用户上下文 ──────────────────────────────
-    const [
-      profileRes,
-      staffRes,
-      scheduleRes,
-      shopsRes,
-      shiftsAllRes,
-      expRes,
-      pendingCorrRes,
-      pendingSharesRes,
-      knowledgeRes,
-    ] = await Promise.all([
-      admin.from('profiles').select('display_name, avatar_url').eq('user_id', uid).maybeSingle(),
-      admin.from('staff_profiles').select('shop_id, position, real_name').eq('user_id', uid).maybeSingle(),
-      admin.from('shift_schedules').select('user_id, shift_code, work_date, shop_id')
-        .gte('work_date', today).lte('work_date', windowEnd)
-        .order('work_date', { ascending: true }),
-      admin.from('shops').select('id, name'),
-      admin.from('shop_shifts').select('code, name, start_time, end_time, shop_id').eq('active', true),
-      admin.from('user_experience').select('total_exp, current_streak, longest_streak, last_check_in_date').eq('user_id', uid).maybeSingle(),
-      admin.from('app_settings').select('value').eq('key', 'pending_corrections').maybeSingle(),
-      admin.from('app_settings').select('value').eq('key', 'pending_shares').maybeSingle(),
-      queryText.length >= 2
-        ? admin
-            .from('official_knowledge')
-            .select('name, category, ip_name, summary, tips')
-            .or(`name.ilike.%${queryText}%,ip_name.ilike.%${queryText}%,summary.ilike.%${queryText}%`)
-            .limit(4)
-        : Promise.resolve({ data: [] as any[] }),
+    // ── 1) 限频检查 ──
+    const [{ data: rateCfg }, { data: modelCfg }] = await Promise.all([
+      admin.from('app_settings').select('value').eq('key', 'spirit_rate_limits').maybeSingle(),
+      admin.from('app_settings').select('value').eq('key', 'spirit_model').maybeSingle(),
     ]);
+    const perMinute = Number(rateCfg?.value?.per_minute ?? 10);
+    const perDay = Number(rateCfg?.value?.per_day ?? 200);
+    const oneMinAgo = new Date(Date.now() - 60_000).toISOString();
+    const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+    const [{ count: minCount }, { count: dayCount }] = await Promise.all([
+      admin.from('spirit_usage').select('*', { count: 'exact', head: true }).eq('user_id', uid).gte('created_at', oneMinAgo),
+      admin.from('spirit_usage').select('*', { count: 'exact', head: true }).eq('user_id', uid).gte('created_at', dayStart.toISOString()),
+    ]);
+    if ((minCount ?? 0) >= perMinute) return json({ error: `太快啦，每分钟最多 ${perMinute} 条，喘口气～` }, 429);
+    if ((dayCount ?? 0) >= perDay) return json({ error: `今天聊得有点多啦（已 ${dayCount}/${perDay}），明天再来？` }, 429);
 
-    const myName = profileRes.data?.display_name || staffRes.data?.real_name || '店员';
-    const allSchedules = (scheduleRes.data || []) as any[];
+    const model = String(modelCfg?.value?.model ?? 'google/gemini-3-flash-preview');
+    const temperature = Number(modelCfg?.value?.temperature ?? 0.6);
+    const maxTokens = Number(modelCfg?.value?.max_tokens ?? 800);
 
-    // 门店 id → 名字
+    // ── 2) 加载/创建会话 ──
+    if (conversationId) {
+      const { data: c } = await admin.from('spirit_conversations').select('id, user_id').eq('id', conversationId).maybeSingle();
+      if (!c || c.user_id !== uid) conversationId = null;
+    }
+    if (!conversationId) {
+      const lastUser = [...incoming].reverse().find((m) => m.role === 'user');
+      const title = (extractText(lastUser?.content) || '新对话').slice(0, 30);
+      const { data: created, error: cErr } = await admin
+        .from('spirit_conversations')
+        .insert({ user_id: uid, title })
+        .select('id')
+        .single();
+      if (cErr) return json({ error: '会话创建失败' }, 500);
+      conversationId = created.id;
+    }
+
+    // ── 3) 持久化最新一条用户消息 ──
+    const lastIncomingUser = [...incoming].reverse().find((m) => m.role === 'user');
+    if (lastIncomingUser) {
+      await admin.from('spirit_messages').insert({
+        conversation_id: conversationId,
+        user_id: uid,
+        role: 'user',
+        content: extractText(lastIncomingUser.content),
+        images: Array.isArray(lastIncomingUser.images) ? lastIncomingUser.images : [],
+      });
+    }
+
+    // ── 4) 轻量上下文（最小 system 块；详细数据走工具）──
+    const today = tzDate();
+    const tomorrow = addDays(today, 1);
+    const [profileRes, staffRes, shopsRes] = await Promise.all([
+      admin.from('profiles').select('display_name').eq('user_id', uid).maybeSingle(),
+      admin.from('staff_profiles').select('shop_id, real_name, position').eq('user_id', uid).maybeSingle(),
+      admin.from('shops').select('id, name'),
+    ]);
     const shopMap = new Map<string, string>();
     for (const s of (shopsRes.data || []) as any[]) shopMap.set(s.id, s.name);
-    const shopName = (id: string | null | undefined) => (id && shopMap.get(id)) || '未知门店';
-
-    // 推断我的默认门店：优先 staff_profiles → 否则取我未来最近一次排班的 shop_id
-    const myShop: string | null =
-      staffRes.data?.shop_id ??
-      allSchedules.find((s: any) => s.user_id === uid)?.shop_id ??
-      null;
-
-    // 班次定义：按 (shop_id, code) 查；shop_id 为空作为全局兜底
-    const shiftMap = new Map<string, any>();
-    for (const s of (shiftsAllRes.data || []) as any[]) {
-      shiftMap.set(`${s.shop_id || '*'}|${s.code}`, s);
-    }
-    function shiftDef(shopId: string | null | undefined, code: string) {
-      return shiftMap.get(`${shopId || '*'}|${code}`) || shiftMap.get(`*|${code}`);
-    }
-    function fmtShift(shopId: string | null | undefined, code: string | null | undefined): string {
-      if (!code) return '休';
-      const def = shiftDef(shopId, code);
-      if (!def) return `${code} 班`;
-      return `${code} 班（${def.name}） ${String(def.start_time).slice(0, 5)}–${String(def.end_time).slice(0, 5)}`;
-    }
-
-    // 拉所有出现的人的姓名
-    const allUserIds = new Set<string>();
-    for (const s of allSchedules) allUserIds.add(s.user_id);
-    allUserIds.delete(uid);
-    const nameMap = new Map<string, string>();
-    if (allUserIds.size > 0) {
-      const ids = Array.from(allUserIds);
-      const [sp, pf] = await Promise.all([
-        admin.from('staff_profiles').select('user_id, real_name').in('user_id', ids),
-        admin.from('profiles').select('user_id, display_name').in('user_id', ids),
-      ]);
-      for (const r of (pf.data || []) as any[]) nameMap.set(r.user_id, r.display_name || '同事');
-      for (const r of (sp.data || []) as any[]) {
-        if (r.real_name) nameMap.set(r.user_id, r.real_name);
-      }
-    }
-    const whoOf = (userId: string) =>
-      userId === uid ? `${myName}(你)` : (nameMap.get(userId) || '同事');
-
-    // ── 未来 14 天总表（按日期 → 门店 → 班次分组）──
-    function buildScheduleTable(): string {
-      const lines: string[] = [];
-      const byDate = new Map<string, any[]>();
-      for (const s of allSchedules) {
-        const arr = byDate.get(s.work_date) || [];
-        arr.push(s);
-        byDate.set(s.work_date, arr);
-      }
-      const dates = Array.from(byDate.keys()).sort();
-      for (const d of dates) {
-        const tag = d === today ? '(今)' : d === tomorrow ? '(明)' : '';
-        // 分门店
-        const byShop = new Map<string, any[]>();
-        for (const s of byDate.get(d)!) {
-          const k = s.shop_id || 'unknown';
-          const arr = byShop.get(k) || [];
-          arr.push(s);
-          byShop.set(k, arr);
-        }
-        const shopParts: string[] = [];
-        for (const [shopId, rows] of byShop) {
-          const byShift = new Map<string, string[]>();
-          for (const s of rows) {
-            const arr = byShift.get(s.shift_code) || [];
-            arr.push(whoOf(s.user_id));
-            byShift.set(s.shift_code, arr);
-          }
-          const segs = Array.from(byShift.entries())
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([code, names]) => `${code}班:${names.join('/')}`)
-            .join('  ');
-          shopParts.push(`${shopName(shopId)} ${segs}`);
-        }
-        lines.push(`${d}${tag} ｜ ${shopParts.join(' ｜ ')}`);
-      }
-      return lines.join('\n') || '（未来 14 天暂无排班数据）';
-    }
-
-    // ── 我自己今天/明天的醒目摘要 ──
-    function myDay(date: string, label: string): string {
-      const mine = allSchedules.filter((s: any) => s.user_id === uid && s.work_date === date);
-      if (mine.length === 0) return `【${label} 我的班次】休`;
-      return mine.map((row: any) => {
-        const same = allSchedules
-          .filter((s: any) =>
-            s.work_date === date && s.shop_id === row.shop_id &&
-            s.shift_code === row.shift_code && s.user_id !== uid)
-          .map((s: any) => nameMap.get(s.user_id) || '同事');
-        return `【${label} 我的班次】${fmtShift(row.shop_id, row.shift_code)} @ ${shopName(row.shop_id)}${same.length ? `，同班：${same.join('、')}` : ''}`;
-      }).join('\n');
-    }
-
-    const scheduleTable = buildScheduleTable();
-    const myTodayLine = myDay(today, '今日');
-    const myTomorrowLine = myDay(tomorrow, '明日');
-
-    // 等级
-    const totalExp = expRes.data?.total_exp ?? 0;
-    const streak = expRes.data?.current_streak ?? 0;
-    const checkedToday = expRes.data?.last_check_in_date === today;
-
-    // 待办
-    const pendingCorr =
-      Array.isArray(pendingCorrRes.data?.value) ? (pendingCorrRes.data?.value as any[]).length : 0;
-    const pendingShares =
-      Array.isArray(pendingSharesRes.data?.value) ? (pendingSharesRes.data?.value as any[]).length : 0;
-
-    // 知识匹配
-    const kbLines: string[] = [];
-    for (const k of (knowledgeRes.data as any[]) || []) {
-      const parts = [k.name];
-      if (k.ip_name) parts.push(`(${k.ip_name})`);
-      if (k.category) parts.push(`· ${k.category}`);
-      kbLines.push(`- ${parts.join(' ')}：${(k.summary || k.tips || '').toString().slice(0, 120)}`);
-    }
-
-    // ── 构建 system prompt ───────────────────────────────
-    const contextBlock = [
-      `【当前店员】${myName}${staffRes.data?.real_name && staffRes.data.real_name !== myName ? `（真实姓名：${staffRes.data.real_name}）` : ''}${myShop ? `　【我的门店】${shopName(myShop)}` : ''}`,
-      `【今日日期】${today}　【明日日期】${tomorrow}`,
-      myTodayLine,
-      myTomorrowLine,
-      `【未来 14 天排班总表】(每行：日期 ｜ 门店 班次:人员)\n${scheduleTable}`,
-      `【经验值】${totalExp} · 连续打卡 ${streak} 天 · 今日${checkedToday ? '已' : '未'}打卡`,
-      pendingCorr > 0 ? `【待审核纠错】${pendingCorr} 条` : null,
-      pendingShares > 0 ? `【待审核分享】${pendingShares} 条` : null,
-      kbLines.length > 0 ? `【可能相关的知识库】\n${kbLines.join('\n')}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n');
+    const myName = profileRes.data?.display_name || staffRes.data?.real_name || '店员';
+    const myShopName = staffRes.data?.shop_id ? shopMap.get(staffRes.data.shop_id) : null;
 
     const systemPrompt = `你是「中古小精灵」——日本中古杂货店里一只懂行又温暖的小精灵助手，住在店员的手机角落里。
 
-【你的性格】
-- 像店里一位懂行的老前辈，又像怀里的毛绒玩具，温柔、幽默、爱讲冷知识。
-- 偶尔卖萌（"嘿嘿"、"诶——"、"我跟你说哦~"），但不油腻。
-- 主动给店员打气、提供情绪价值。如果对方累了/难过，先共情再给方案。
+【你的性格】像懂行的老前辈，又像怀里的毛绒玩具；温柔、幽默、爱讲冷知识；会主动共情和打气。
 
-【你的能力】
-- 回答中古商品、IP、年代、产地、保养相关知识。
-- 知道店员未来 14 天的排班、同事、门店、等级、待办（资料见下）。
-- 不知道就大方说"这个我也不太确定哦"，绝不编造价格或事实。
-- 不会真的代店员操作系统（不打卡、不发帖、不改密码），只能给指引。
+【你的能力 & 工具】
+- 你可以调用工具来查最新数据：query_schedule（排班）、query_my_stats（等级/打卡/待领经验）、search_knowledge（中古知识库）、search_shop_kb（门店SOP/顾客问答）、search_my_history（我识别过的商品）。
+- **凡是涉及具体日期、排班、人员安排、商品保养知识、店铺规章的问题，必须先调用工具拿到真实数据，再回答**。绝不凭印象编造。
+- 工具返回为空时，请直接说"我这边查不到这条哦"，不要瞎编。
 
 【铁律】
 - 全程简体中文，**绝不使用「主播」一词**，统一称呼对方「你」或「店员」。
 - 回答控制在 50–250 字，多用短句、表情符号点缀（不滥用）。
-- **涉及日期/排班/门店的回答，必须严格引用【未来 14 天排班总表】里实际出现的那一行**，禁止凭印象使用「今天/明天」；务必写出具体日期（如「5 月 19 日」或「明天 5/19」）和具体门店名。
-- 如果总表里查不到某人/某店/某日的排班，请直接说"我这边查不到这条排班哦"，**绝不编造**。
-- 涉及人名时只用上下文里出现的真实姓名，不要瞎编。
+- 涉及人名只用工具返回的真实姓名，不要瞎编。
+- 回答里出现日期时，请写出具体日期（如"5 月 19 日"或"明天 5/19"），不要只说"今天/明天"让人猜。
 
-================ 当下情境 ================
-${contextBlock}
-================ 情境结束 ================`;
+【当下基础情境】
+- 当前店员：${myName}${staffRes.data?.real_name && staffRes.data.real_name !== myName ? `（真实姓名：${staffRes.data.real_name}）` : ''}${staffRes.data?.position ? `，职位 ${staffRes.data.position}` : ''}${myShopName ? `，主门店：${myShopName}` : ''}
+- 今天：${today}（周${'日一二三四五六'[new Date(today + 'T00:00:00+08:00').getDay()]}）｜ 明天：${tomorrow}
+- 用户 ID（内部）：${uid}`;
 
-    // ── 调用 Lovable AI Gateway（流式）─────────
+    // ── 5) 工具实现 ──
+    async function execTool(name: string, args: any): Promise<any> {
+      try {
+        if (name === 'query_schedule') {
+          const from = String(args?.date_from || today);
+          const to = String(args?.date_to || addDays(from, 7));
+          let q = admin.from('shift_schedules')
+            .select('user_id, shift_code, work_date, shop_id')
+            .gte('work_date', from).lte('work_date', to)
+            .order('work_date');
+          const { data: rows } = await q;
+          if (!rows || rows.length === 0) return { rows: [], note: `${from} 至 ${to} 暂无排班数据` };
+
+          // 收集 user_id → 姓名
+          const ids = Array.from(new Set(rows.map((r: any) => r.user_id)));
+          const [sp, pf, shiftsRes] = await Promise.all([
+            admin.from('staff_profiles').select('user_id, real_name').in('user_id', ids),
+            admin.from('profiles').select('user_id, display_name').in('user_id', ids),
+            admin.from('shop_shifts').select('code, name, start_time, end_time, shop_id').eq('active', true),
+          ]);
+          const nameMap = new Map<string, string>();
+          for (const r of (pf.data || []) as any[]) nameMap.set(r.user_id, r.display_name || '同事');
+          for (const r of (sp.data || []) as any[]) if (r.real_name) nameMap.set(r.user_id, r.real_name);
+          const shiftMap = new Map<string, any>();
+          for (const s of (shiftsRes.data || []) as any[]) shiftMap.set(`${s.shop_id || '*'}|${s.code}`, s);
+
+          const personQ = (args?.person || '').toString().trim().toLowerCase();
+          const shopQ = (args?.shop || '').toString().trim().toLowerCase();
+
+          const out = rows
+            .map((r: any) => {
+              const who = r.user_id === uid ? `${myName}(你)` : (nameMap.get(r.user_id) || '同事');
+              const shop = shopMap.get(r.shop_id) || '未知门店';
+              const def = shiftMap.get(`${r.shop_id || '*'}|${r.shift_code}`) || shiftMap.get(`*|${r.shift_code}`);
+              const shiftLabel = def
+                ? `${r.shift_code}班(${def.name}) ${String(def.start_time).slice(0,5)}-${String(def.end_time).slice(0,5)}`
+                : `${r.shift_code}班`;
+              return { date: r.work_date, who, shop, shift: shiftLabel, shift_code: r.shift_code };
+            })
+            .filter((row) => {
+              if (personQ && !row.who.toLowerCase().includes(personQ)) return false;
+              if (shopQ && !row.shop.toLowerCase().includes(shopQ)) return false;
+              return true;
+            })
+            .slice(0, 100);
+
+          return { rows: out, total: out.length };
+        }
+
+        if (name === 'query_my_stats') {
+          const [expRes, pendingExpRes] = await Promise.all([
+            admin.from('user_experience').select('total_exp, current_streak, longest_streak, last_check_in_date').eq('user_id', uid).maybeSingle(),
+            admin.from('exp_pending').select('amount, title').eq('user_id', uid).is('claimed_at', null),
+          ]);
+          const pending = (pendingExpRes.data || []) as any[];
+          return {
+            total_exp: expRes.data?.total_exp ?? 0,
+            current_streak: expRes.data?.current_streak ?? 0,
+            longest_streak: expRes.data?.longest_streak ?? 0,
+            checked_in_today: expRes.data?.last_check_in_date === today,
+            pending_exp_count: pending.length,
+            pending_exp_total: pending.reduce((s, p) => s + (p.amount || 0), 0),
+          };
+        }
+
+        if (name === 'search_knowledge') {
+          const q = String(args?.query || '').slice(0, 30);
+          if (q.length < 2) return { rows: [] };
+          const { data } = await admin
+            .from('official_knowledge')
+            .select('name, category, ip_name, summary, tips, era, origin')
+            .or(`name.ilike.%${q}%,ip_name.ilike.%${q}%,summary.ilike.%${q}%,brand.ilike.%${q}%`)
+            .limit(5);
+          return { rows: data || [] };
+        }
+
+        if (name === 'search_shop_kb') {
+          const q = String(args?.query || '').slice(0, 30);
+          if (q.length < 2) return { rows: [] };
+          const { data } = await admin
+            .from('shop_kb_entries')
+            .select('title, type, body, tags')
+            .or(`title.ilike.%${q}%,body.ilike.%${q}%`)
+            .limit(5);
+          return { rows: (data || []).map((r: any) => ({ ...r, body: String(r.body || '').slice(0, 300) })) };
+        }
+
+        if (name === 'search_my_history') {
+          const q = String(args?.query || '').slice(0, 30);
+          const lim = Math.min(Math.max(Number(args?.limit) || 5, 1), 10);
+          if (q.length < 1) return { rows: [] };
+          const { data } = await admin
+            .from('products')
+            .select('name, category, era, origin, created_at')
+            .eq('created_by', uid)
+            .ilike('name', `%${q}%`)
+            .order('created_at', { ascending: false })
+            .limit(lim);
+          return { rows: data || [] };
+        }
+
+        return { error: 'unknown tool' };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : 'tool failed' };
+      }
+    }
+
+    // ── 6) 准备模型消息（最近 16 轮）──
+    const chatHistory = incoming
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .slice(-16)
+      .map((m) => {
+        const txt = extractText(m.content) || (typeof m.content === 'string' ? m.content : '');
+        const imgs = Array.isArray(m.images) ? m.images.filter((u) => typeof u === 'string') : [];
+        if (m.role === 'user' && imgs.length > 0) {
+          return {
+            role: 'user',
+            content: [
+              ...(txt ? [{ type: 'text', text: txt }] : []),
+              ...imgs.map((url: string) => ({ type: 'image_url', image_url: { url } })),
+            ],
+          };
+        }
+        return { role: m.role, content: txt };
+      });
+
+    let modelMessages: any[] = [
+      { role: 'system', content: systemPrompt },
+      ...chatHistory,
+    ];
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) return json({ error: 'LOVABLE_API_KEY 未配置' }, 500);
 
+    // ── 7) 工具循环（最多 5 步）→ 最后一步开 stream ──
+    let toolCallCount = 0;
+    const maxToolSteps = 5;
+
+    for (let step = 0; step < maxToolSteps; step++) {
+      const nonStream = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model, temperature, max_tokens: maxTokens,
+          messages: modelMessages,
+          tools: TOOLS,
+          tool_choice: 'auto',
+        }),
+      });
+
+      if (!nonStream.ok) {
+        if (nonStream.status === 429) return json({ error: '我有点累了，等我喘口气再聊？' }, 429);
+        if (nonStream.status === 402) return json({ error: 'AI 额度不足，请联系管理员充值' }, 402);
+        const t = await nonStream.text().catch(() => '');
+        console.error('[spirit-chat] gateway tool step error', nonStream.status, t);
+        return json({ error: '小精灵走神了，稍后再试' }, 500);
+      }
+
+      const data = await nonStream.json();
+      const choice = data?.choices?.[0];
+      const msg = choice?.message;
+      const toolCalls = msg?.tool_calls;
+
+      if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+        // 执行所有工具
+        modelMessages.push({
+          role: 'assistant',
+          content: msg.content || '',
+          tool_calls: toolCalls,
+        });
+        for (const call of toolCalls) {
+          let parsed: any = {};
+          try { parsed = JSON.parse(call.function?.arguments || '{}'); } catch {}
+          const result = await execTool(call.function?.name, parsed);
+          toolCallCount++;
+          modelMessages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify(result).slice(0, 4000),
+          });
+        }
+        continue; // 进入下一步，让模型基于 tool 结果继续
+      }
+
+      // 没有工具调用 → 切换到流式拿最终答案
+      break;
+    }
+
+    // 流式拿最终回答
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
-        stream: true,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages
-            .filter((m) => m.role === 'user' || m.role === 'assistant')
-            .slice(-20)
-            .map((m) => {
-              const textPart = extractText(m.content) || (Array.isArray(m.content) ? '' : String(m.content || ''));
-              const imgs = Array.isArray(m.images) ? m.images.filter((u) => typeof u === 'string') : [];
-              if (m.role === 'user' && imgs.length > 0) {
-                return {
-                  role: 'user',
-                  content: [
-                    ...(textPart ? [{ type: 'text', text: textPart }] : []),
-                    ...imgs.map((url: string) => ({ type: 'image_url', image_url: { url } })),
-                  ],
-                };
-              }
-              return { role: m.role, content: textPart };
-            }),
-        ],
-
+        model, temperature, max_tokens: maxTokens, stream: true,
+        messages: modelMessages,
       }),
     });
 
-    if (!aiResp.ok) {
+    if (!aiResp.ok || !aiResp.body) {
       if (aiResp.status === 429) return json({ error: '我有点累了，等我喘口气再聊？' }, 429);
       if (aiResp.status === 402) return json({ error: 'AI 额度不足，请联系管理员充值' }, 402);
       const t = await aiResp.text().catch(() => '');
-      console.error('[spirit-chat] gateway error', aiResp.status, t);
+      console.error('[spirit-chat] gateway stream error', aiResp.status, t);
       return json({ error: '小精灵走神了，稍后再试' }, 500);
     }
 
-    return new Response(aiResp.body, {
+    // 边转发边累计 assistant 回复 → 流结束后落库 + 写用量 + 追加 __meta
+    const reader = aiResp.body.getReader();
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    let assembled = '';
+    let buffer = '';
+
+    const stream = new ReadableStream({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          // 落库 assistant
+          try {
+            if (assembled.trim()) {
+              await admin.from('spirit_messages').insert({
+                conversation_id: conversationId,
+                user_id: uid,
+                role: 'assistant',
+                content: assembled,
+                meta: { tool_calls: toolCallCount, model },
+              });
+            }
+            await admin.from('spirit_usage').insert({
+              user_id: uid,
+              conversation_id: conversationId,
+              model,
+              input_tokens: 0,
+              output_tokens: assembled.length,
+              tool_calls: toolCallCount,
+              duration_ms: Date.now() - startedAt,
+              status: 'ok',
+            });
+          } catch (e) {
+            console.error('[spirit-chat] persist error', e);
+          }
+          // 追加 meta 帧
+          const meta = JSON.stringify({ __meta: { conversationId, toolCalls: toolCallCount, model } });
+          controller.enqueue(encoder.encode(`data: ${meta}\n\n`));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+          return;
+        }
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+        // 提取 delta 内容用于累计
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t.startsWith('data:')) continue;
+          const payload = t.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+          try {
+            const obj = JSON.parse(payload);
+            const delta = obj?.choices?.[0]?.delta?.content;
+            if (typeof delta === 'string') assembled += delta;
+          } catch {}
+        }
+        // 直接转发原始 chunk
+        controller.enqueue(value);
+      },
+      cancel() {
+        try { reader.cancel(); } catch {}
+      },
+    });
+
+    return new Response(stream, {
       headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' },
     });
   } catch (e) {
