@@ -63,11 +63,38 @@ function ThinkingHint({ mode }: { mode: 'thinking' | 'uploading' }) {
 }
 
 const QUICK_CHIPS = [
+  // 排班 / 同事
   { label: '今日和谁一起上班？', prompt: '今天我和谁一起上班？几点到几点？' },
+  { label: '明天我上班吗？', prompt: '我明天上班吗？是什么班次？' },
+  { label: '这周谁休息？', prompt: '这一周店里谁休息？分别哪天？' },
+  { label: '下周排班看一眼', prompt: '帮我看看下周我的排班情况' },
+  // 打卡 / 等级
   { label: '我的等级和打卡', prompt: '我现在多少经验？连续打卡几天了？' },
+  { label: '离下一级还差多少？', prompt: '我距离下一级还差多少经验？要怎么涨得快？' },
+  { label: '这个月打卡几天了？', prompt: '我这个月一共打卡几天了？' },
+  // 情绪 / 打气
   { label: '帮我打打气', prompt: '我有点累，给我一句温暖的话吧～' },
+  { label: '来句鼓励的话', prompt: '送我一句今天专属的鼓励吧' },
+  { label: '今天有点丧', prompt: '我今天心情不太好，安慰一下我' },
+  // 中古冷知识
   { label: '今天学点啥', prompt: '今天可以学点啥中古冷知识？讲一个有趣的给我听' },
+  { label: '来个中古冷知识', prompt: '随便给我讲一个中古行业的冷知识' },
+  { label: '讲个奢侈品小八卦', prompt: '讲一个奢侈品牌的小八卦或趣闻' },
+  // 工作小帮手
+  { label: '顾客嫌贵怎么回？', prompt: '顾客说东西太贵了，我应该怎么回应比较好？' },
+  { label: '这件怎么搭着卖？', prompt: '一件中古单品怎么搭配着推荐给顾客更容易成交？' },
+  { label: '帮我想个朋友圈文案', prompt: '帮我写一条卖中古的朋友圈文案，要有感觉一点' },
+  { label: '今天主推什么风格？', prompt: '今天比较好卖的中古风格是什么？给点搭配建议' },
 ];
+
+function pickChips(n = 4) {
+  const arr = [...QUICK_CHIPS];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, n);
+}
 
 const MAX_IMAGES = 4;
 const MAX_FILE_MB = 10;
@@ -84,6 +111,11 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  const [displayChips, setDisplayChips] = useState(() => pickChips(4));
+  // 每次回到空对话（新会话/清空）就重新抽 4 条
+  useEffect(() => {
+    if (messages.length === 0) setDisplayChips(pickChips(4));
+  }, [messages.length === 0]);
 
   useLayoutEffect(() => {
     const el = scrollerRef.current;
@@ -175,7 +207,7 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
 
       {/* 快捷指令 chips */}
       <div className="shrink-0 px-4 pt-2 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {QUICK_CHIPS.map((c) => (
+        {displayChips.map((c) => (
           <button
             key={c.label}
             type="button"
