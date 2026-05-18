@@ -67,6 +67,7 @@ export function FloatingDashboard() {
 
   const notif = useNotifications();
   const tasks = useTasks();
+  const spiritChat = useSpiritChat();
 
   useEffect(() => {
     if (!labelText) return;
