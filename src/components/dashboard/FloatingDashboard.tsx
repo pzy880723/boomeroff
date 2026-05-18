@@ -234,6 +234,7 @@ export function FloatingDashboard() {
           originY={pos.y + BTN / 2}
           onAnimEnd={onAnimEnd}
           onClose={closeDrawer}
+          chat={spiritChat}
         />,
         document.body,
       )}
