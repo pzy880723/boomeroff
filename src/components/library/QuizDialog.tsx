@@ -45,6 +45,8 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
     setAdvancing(false);
   };
   useEffect(() => () => clearAdvance(), []);
+
+  const load = async (force = false) => {
     setLoading(true);
     setQuestions([]); setStep(0); setAnswers([]); setPicked(null);
     try {
