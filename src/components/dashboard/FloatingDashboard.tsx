@@ -5,7 +5,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { useTasks } from '@/hooks/useTasks';
 import { SpiritMascot, type SpiritState } from '../spirit/SpiritMascot';
 import { SpiritDrawer } from '../spirit/SpiritDrawer';
-import { randomMood } from '../spirit/spiritMoods';
+
 import { useSpiritChat } from '@/hooks/useSpiritChat';
 import { cn } from '@/lib/utils';
 
@@ -60,30 +60,13 @@ export function FloatingDashboard() {
   const [pos, setPos] = useState<Pos>(() => (typeof window !== 'undefined' ? loadPos() : { side: 'right', y: 0 }));
   const [dragXY, setDragXY] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; oy: number; moved: boolean } | null>(null);
-  const [labelText, setLabelText] = useState<string | null>(null);
   const [hovering, setHovering] = useState(false);
   const [greetOpen, setGreetOpen] = useState(false);
-  const labelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const notif = useNotifications();
   const tasks = useTasks();
   const spiritChat = useSpiritChat();
 
-  useEffect(() => {
-    if (!labelText) return;
-    if (labelTimerRef.current) clearTimeout(labelTimerRef.current);
-    labelTimerRef.current = setTimeout(() => setLabelText(null), 4500);
-    return () => {
-      if (labelTimerRef.current) clearTimeout(labelTimerRef.current);
-    };
-  }, [labelText]);
-
-  // 抽屉关闭后 30s 无操作弹一次情绪鼓励
-  useEffect(() => {
-    if (open || closing || !user) return;
-    const t = setTimeout(() => setLabelText(randomMood()), 30000);
-    return () => clearTimeout(t);
-  }, [open, closing, user]);
 
   useEffect(() => {
     const onResize = () => setPos(p => ({ ...p, y: clampY(p.y) }));
@@ -156,11 +139,6 @@ export function FloatingDashboard() {
   const hasOtherUnread = notif.unreadCount > 0;
   const hasAlert = hasClaimable || hasOtherUnread;
 
-  // 气泡锚到按钮内侧（右胶囊→向左展开；左胶囊→向右展开）
-  const bubbleSide: Side = pos.side;
-  const bubbleStyle: React.CSSProperties = bubbleSide === 'right'
-    ? { right: BTN + 10, top: BTN / 2, transform: 'translateY(-50%)' }
-    : { left: BTN + 10, top: BTN / 2, transform: 'translateY(-50%)' };
 
   return (
     <>
@@ -208,22 +186,6 @@ export function FloatingDashboard() {
           ) : null}
         </button>
 
-        {labelText && !dragging && (
-          <div
-            className={cn(
-              'absolute px-3 py-1.5 rounded-2xl bg-card/95 backdrop-blur border border-border/60 shadow-md text-xs font-medium text-foreground pointer-events-none spirit-bubble-in break-words',
-              bubbleSide === 'right' ? 'rounded-br-sm text-right' : 'rounded-bl-sm text-left',
-            )}
-            style={{
-              ...bubbleStyle,
-              maxWidth: `min(220px, calc(100vw - ${BTN + 32}px))`,
-              whiteSpace: 'normal',
-              lineHeight: 1.4,
-            }}
-          >
-            {labelText}
-          </div>
-        )}
       </div>
 
       {mounted && createPortal(
