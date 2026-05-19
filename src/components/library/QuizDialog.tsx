@@ -150,7 +150,8 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
               {cur.options.map((opt, i) => (
                 <button
                   key={i}
-                  onClick={() => setPicked(i)}
+                  onClick={() => pickAndAdvance(i)}
+                  disabled={advancing && picked !== i}
                   className={`w-full text-left rounded-lg border px-3 py-2.5 text-sm transition-colors ${
                     picked === i ? 'border-primary bg-primary/10' : 'border-border bg-card hover:bg-accent'
                   }`}
@@ -161,14 +162,11 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
               ))}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} aria-label="退出">
+              <Button variant="outline" size="icon" onClick={() => { clearAdvance(); if (onExit) onExit(); else onOpenChange(false); }} aria-label="退出">
                 <LogOut className="w-4 h-4" />
               </Button>
-              <Button variant="outline" onClick={goBack} disabled={step === 0} className="shrink-0">
+              <Button variant="outline" onClick={goBack} disabled={step === 0} className="flex-1">
                 <ChevronLeft className="w-4 h-4 mr-1" />上一题
-              </Button>
-              <Button onClick={submit} disabled={picked == null} className="flex-1">
-                {step + 1 < questions.length ? '下一题' : '提交'}
               </Button>
             </div>
           </div>
