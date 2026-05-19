@@ -34,8 +34,17 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [picked, setPicked] = useState<number | null>(null);
+  const advanceTimer = useRef<number | null>(null);
+  const [advancing, setAdvancing] = useState(false);
 
-  const load = async (force = false) => {
+  const clearAdvance = () => {
+    if (advanceTimer.current != null) {
+      window.clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+    setAdvancing(false);
+  };
+  useEffect(() => () => clearAdvance(), []);
     setLoading(true);
     setQuestions([]); setStep(0); setAnswers([]); setPicked(null);
     try {
