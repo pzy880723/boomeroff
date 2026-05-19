@@ -1,21 +1,48 @@
-## 目标
-游客版（PublicResult / GuestProductCard）的识别结果卡片中，移除「市场参考价」（marketValue / 价格区间）的展示。其他字段（稀缺度、年代、产地、收藏理由等）保持不变。
+## 改动 1：在"今日测试任务"卡片下增加总览统计 + 大进度条
 
-## 改动范围
-仅前端展示层，单文件改动：
+位置：`src/pages/MyLibrary.tsx` 的 `Card` 内（顶部紧凑行下方，与现有 `taskExpanded` 展开区并列），始终展示（不需要展开）。
 
-**`src/components/recognition/GuestProductCard.tsx`**
-- `ValuationHero` 组件中删除「市场参考价」整块（含 `TrendingUp` 图标 + `市场参考价` 标签 + `marketValue` 数值 + 「来源公开二手市场估算 · 非本店售价」说明）。
-- 原先的 2 列 grid（`sm:grid-cols-[1.3fr_1fr]`）改为单列，「稀缺度」直接展示，去掉左侧分隔线。
-- `hasAny` 判断条件中移除 `marketValue`，避免误判空。
-- 移除 `marketValue` 相关 prop / 类型 / 调用处传参，清理未用到的 `TrendingUp` 引入。
+新增内容（已有数据，无需查库）：
+- **共计收藏**：`totalCount`
+- **待掌握**：`pending.length`
+- **已掌握**：`passedCount`
+- **大进度条**：`percent`（`passedCount / totalCount`）+ 百分比文字
 
-## 不改动
-- `useGuestRecognition` / `recognize-product-public` edge function 仍可返回 `marketValue`（数据层保留，仅 UI 不显示），便于以后恢复或在其他地方使用。
-- 店员版（`ProductDetailCard` 等）不动。
-- 估值速览卡的其他视觉（光晕、标题 Valuation · 估值速览、稀缺度星级、年代/产地胶囊、buyReason 引言）保持原样。
+视觉：3 个数字横向并排（数字大、label 小），下面一条 `h-2`/`h-2.5` 的 `<Progress>`，右侧显示 `{passedCount}/{totalCount} · {percent}%`。使用语义化 token，不写死颜色。
 
-## 验收
-- /公共识别结果页 不再出现"市场参考价"文案与金额。
-- 稀缺度、年代、产地、收藏理由仍正常显示。
-- 控制台无 TS / lint 报错。
+```text
+┌────────────────────────────────────────────┐
+│ ✦ 今日测试任务  ▰▱  2/5   [开始]    ⌄     │
+├────────────────────────────────────────────┤
+│   12        9         3                    │
+│  收藏     待掌握    已掌握                   │
+│  ▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱   3/12 · 25%        │
+└────────────────────────────────────────────┘
+```
+
+`totalCount === 0` 时不渲染该统计块。
+
+## 改动 2：测验选完答案自动跳到下一题
+
+位置：`src/components/library/QuizDialog.tsx`
+
+当前流程：选择选项 → 点"下一题"按钮 → 进入下一题。
+改为：选择选项后短暂延时（~250ms，给用户看到选中态反馈）自动调用 `submit()`。
+
+具体改动：
+- `onClick={() => setPicked(i)}` 改为同时触发自动提交：选中后用 `setTimeout` 调 `submit()`。
+- 用一个 `auto-advancing` ref/state 防抖，防止用户连点导致跨题误选。
+- 最后一题（`step + 1 === questions.length`）仍自动 `submit()`，自动结算。
+- 「上一题」按钮保留；「提交/下一题」按钮可以删除（保持简洁），也可以保留作为兜底。建议**保留**按钮但改为"提交答案"/"下一题"——避免最后一题如果延时被取消时无法提交。
+
+最终交互：
+- 点选项 → 选项高亮 → 250ms 后自动进入下一题
+- 上一题按钮仍可用，回到上题时已选答案保留并允许重新点击切换
+- 结束页（带成绩/解析）逻辑不变
+
+## 涉及文件
+
+- `src/pages/MyLibrary.tsx`（加统计 + 进度条）
+- `src/components/library/QuizDialog.tsx`（自动跳转）
+
+不涉及数据库、不涉及业务逻辑/RLS 变更。

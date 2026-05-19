@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,17 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [picked, setPicked] = useState<number | null>(null);
+  const advanceTimer = useRef<number | null>(null);
+  const [advancing, setAdvancing] = useState(false);
+
+  const clearAdvance = () => {
+    if (advanceTimer.current != null) {
+      window.clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+    setAdvancing(false);
+  };
+  useEffect(() => () => clearAdvance(), []);
 
   const load = async (force = false) => {
     setLoading(true);
@@ -58,10 +69,9 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
     if (open) void load(false);
   }, [open, knowledgeId]);
 
-  const submit = () => {
-    if (picked == null) return;
+  const submitWith = (choice: number) => {
     const next = [...answers];
-    next[step] = picked;
+    next[step] = choice;
     setAnswers(next);
     if (step + 1 < questions.length) {
       setStep(step + 1);
@@ -71,8 +81,20 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
     }
   };
 
+  const pickAndAdvance = (i: number) => {
+    if (advancing) return;
+    setPicked(i);
+    setAdvancing(true);
+    advanceTimer.current = window.setTimeout(() => {
+      advanceTimer.current = null;
+      setAdvancing(false);
+      submitWith(i);
+    }, 260);
+  };
+
   const goBack = () => {
     if (step === 0) return;
+    clearAdvance();
     // 保留当前选择（如已选）
     if (picked != null) {
       const next = [...answers];
@@ -128,7 +150,8 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
               {cur.options.map((opt, i) => (
                 <button
                   key={i}
-                  onClick={() => setPicked(i)}
+                  onClick={() => pickAndAdvance(i)}
+                  disabled={advancing && picked !== i}
                   className={`w-full text-left rounded-lg border px-3 py-2.5 text-sm transition-colors ${
                     picked === i ? 'border-primary bg-primary/10' : 'border-border bg-card hover:bg-accent'
                   }`}
@@ -139,14 +162,11 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
               ))}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={() => { if (onExit) onExit(); else onOpenChange(false); }} aria-label="退出">
+              <Button variant="outline" size="icon" onClick={() => { clearAdvance(); if (onExit) onExit(); else onOpenChange(false); }} aria-label="退出">
                 <LogOut className="w-4 h-4" />
               </Button>
-              <Button variant="outline" onClick={goBack} disabled={step === 0} className="shrink-0">
+              <Button variant="outline" onClick={goBack} disabled={step === 0} className="flex-1">
                 <ChevronLeft className="w-4 h-4 mr-1" />上一题
-              </Button>
-              <Button onClick={submit} disabled={picked == null} className="flex-1">
-                {step + 1 < questions.length ? '下一题' : '提交'}
               </Button>
             </div>
           </div>
