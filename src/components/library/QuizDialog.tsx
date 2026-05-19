@@ -69,10 +69,9 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
     if (open) void load(false);
   }, [open, knowledgeId]);
 
-  const submit = () => {
-    if (picked == null) return;
+  const submitWith = (choice: number) => {
     const next = [...answers];
-    next[step] = picked;
+    next[step] = choice;
     setAnswers(next);
     if (step + 1 < questions.length) {
       setStep(step + 1);
@@ -82,8 +81,20 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
     }
   };
 
+  const pickAndAdvance = (i: number) => {
+    if (advancing) return;
+    setPicked(i);
+    setAdvancing(true);
+    advanceTimer.current = window.setTimeout(() => {
+      advanceTimer.current = null;
+      setAdvancing(false);
+      submitWith(i);
+    }, 260);
+  };
+
   const goBack = () => {
     if (step === 0) return;
+    clearAdvance();
     // 保留当前选择（如已选）
     if (picked != null) {
       const next = [...answers];
