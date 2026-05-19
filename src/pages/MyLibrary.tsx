@@ -533,11 +533,36 @@ export default function MyLibrary() {
             />
           </div>
 
+          {totalCount > 0 && (
+            <div className="px-4 pb-3 pt-3 border-t border-border/40 space-y-2.5">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-lg font-semibold tabular-nums leading-none">{totalCount}</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">共计收藏</div>
+                </div>
+                <div>
+                  <div className="text-lg font-semibold tabular-nums leading-none text-foreground/80">{pending.length}</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">待掌握</div>
+                </div>
+                <div>
+                  <div className="text-lg font-semibold tabular-nums leading-none text-emerald-600 dark:text-emerald-400">{passedCount}</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">已掌握</div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Progress value={percent} className="h-2" />
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
+                  <span>掌握进度</span>
+                  <span>{passedCount}/{totalCount} · {percent}%</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {taskExpanded && totalCount > 0 && !todayDone && remainingToday.length > 0 && (
             <div className="px-4 pb-3 pt-2 border-t border-border/40">
-              <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center justify-between">
-                <span>今日剩余 {remainingToday.length} / {todayList.length} 条</span>
-                <span>累计：通过 {passedCount} / 共 {totalCount}</span>
+              <div className="text-[11px] text-muted-foreground mb-1.5">
+                今日剩余 {remainingToday.length} / {todayList.length} 条
               </div>
               <ul className="space-y-1">
                 {todayList.map((it) => {
