@@ -1,13 +1,15 @@
-// 中古小精灵 · 系统 Agent 聊天 v2
+// 中古小精灵 · 系统 Agent 聊天 v3（流式工具循环）
 // 入参: { conversationId?: string, messages: [{role, content, images?}] }
-// 出参: SSE 流（OpenAI 兼容 delta），最后追加一行 data: {"__meta":{...}} 把 conversationId / 用量返还给前端
+// 出参: SSE 流（OpenAI 兼容 delta），追加：
+//   data: {"__status":{...}}  工具执行/步骤进度
+//   data: {"__meta":{...}}    最后一帧：conversationId / 用量
 //
-// 升级要点：
-// 1) 工具调用：模型按需查排班 / 等级 / 待办 / 知识 / 历史，不再每次塞超长 prompt
-// 2) 会话持久化：spirit_conversations + spirit_messages（RLS 仅本人）
-// 3) 限频：spirit_rate_limits（per_minute / per_day）
-// 4) 模型可配：app_settings.spirit_model
-// 5) 用量记录：spirit_usage
+// v3 升级：
+// - 工具循环每一步都使用 stream:true，普通 content delta 直接透传给前端，tool_calls delta 由本端拼装
+// - 模型决定不再调工具时，第一帧 content 就已经流到了用户那里（不再额外发一次「最终回答」请求）
+// - 工具执行前后下发 __status 帧
+// - 上下文预查询并行 + shops 表内存缓存 60s
+// - 落库 + 用量写入用 EdgeRuntime.waitUntil，[DONE] 提前返回
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
@@ -43,7 +45,16 @@ function extractText(content: any): string {
   return '';
 }
 
-// ── 工具定义（OpenAI tools 兼容格式）──────────────────
+// 友好状态文案
+const TOOL_LABEL: Record<string, string> = {
+  query_schedule: '正在查排班表 📅',
+  query_my_stats: '看一眼你的等级和经验 ✨',
+  search_knowledge: '翻官方中古知识库 📚',
+  search_shop_kb: '翻门店笔记 / 顾客问答 📒',
+  search_my_history: '在你识别过的商品里搜 🔍',
+};
+
+// ── 工具定义 ──
 const TOOLS = [
   {
     type: 'function',
@@ -110,6 +121,18 @@ const TOOLS = [
   },
 ];
 
+// ── 容器内 shops 缓存（同一 isolate 复用 60s）──
+let SHOPS_CACHE: { at: number; map: Map<string, string> } | null = null;
+async function getShopsMap(admin: any): Promise<Map<string, string>> {
+  const now = Date.now();
+  if (SHOPS_CACHE && now - SHOPS_CACHE.at < 60_000) return SHOPS_CACHE.map;
+  const { data } = await admin.from('shops').select('id, name');
+  const map = new Map<string, string>();
+  for (const s of (data || []) as any[]) map.set(s.id, s.name);
+  SHOPS_CACHE = { at: now, map };
+  return map;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -141,19 +164,37 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE);
 
-    // ── 1) 限频检查 ──
-    const [{ data: rateCfg }, { data: modelCfg }] = await Promise.all([
-      admin.from('app_settings').select('value').eq('key', 'spirit_rate_limits').maybeSingle(),
-      admin.from('app_settings').select('value').eq('key', 'spirit_model').maybeSingle(),
-    ]);
-    const perMinute = Number(rateCfg?.value?.per_minute ?? 10);
-    const perDay = Number(rateCfg?.value?.per_day ?? 200);
+    // ── 1) 并行预查询：限频窗口 / 模型配置 / profiles / staff_profiles / shops / 会话校验 ──
     const oneMinAgo = new Date(Date.now() - 60_000).toISOString();
     const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-    const [{ count: minCount }, { count: dayCount }] = await Promise.all([
+    const dayStartIso = dayStart.toISOString();
+
+    const convCheckP = conversationId
+      ? admin.from('spirit_conversations').select('id, user_id').eq('id', conversationId).maybeSingle()
+      : Promise.resolve({ data: null, error: null } as any);
+
+    const [
+      { data: rateCfg },
+      { data: modelCfg },
+      { count: minCount },
+      { count: dayCount },
+      profileRes,
+      staffRes,
+      shopMap,
+      convCheck,
+    ] = await Promise.all([
+      admin.from('app_settings').select('value').eq('key', 'spirit_rate_limits').maybeSingle(),
+      admin.from('app_settings').select('value').eq('key', 'spirit_model').maybeSingle(),
       admin.from('spirit_usage').select('*', { count: 'exact', head: true }).eq('user_id', uid).gte('created_at', oneMinAgo),
-      admin.from('spirit_usage').select('*', { count: 'exact', head: true }).eq('user_id', uid).gte('created_at', dayStart.toISOString()),
+      admin.from('spirit_usage').select('*', { count: 'exact', head: true }).eq('user_id', uid).gte('created_at', dayStartIso),
+      admin.from('profiles').select('display_name').eq('user_id', uid).maybeSingle(),
+      admin.from('staff_profiles').select('shop_id, real_name, position').eq('user_id', uid).maybeSingle(),
+      getShopsMap(admin),
+      convCheckP,
     ]);
+
+    const perMinute = Number(rateCfg?.value?.per_minute ?? 10);
+    const perDay = Number(rateCfg?.value?.per_day ?? 200);
     if ((minCount ?? 0) >= perMinute) return json({ error: `太快啦，每分钟最多 ${perMinute} 条，喘口气～` }, 429);
     if ((dayCount ?? 0) >= perDay) return json({ error: `今天聊得有点多啦（已 ${dayCount}/${perDay}），明天再来？` }, 429);
 
@@ -161,9 +202,9 @@ Deno.serve(async (req) => {
     const temperature = Number(modelCfg?.value?.temperature ?? 0.6);
     const maxTokens = Number(modelCfg?.value?.max_tokens ?? 800);
 
-    // ── 2) 加载/创建会话 ──
+    // 会话校验 / 创建
     if (conversationId) {
-      const { data: c } = await admin.from('spirit_conversations').select('id, user_id').eq('id', conversationId).maybeSingle();
+      const c = (convCheck as any)?.data;
       if (!c || c.user_id !== uid) conversationId = null;
     }
     if (!conversationId) {
@@ -178,28 +219,23 @@ Deno.serve(async (req) => {
       conversationId = created.id;
     }
 
-    // ── 3) 持久化最新一条用户消息 ──
+    // ── 2) 用户消息落库（异步，不阻塞）──
     const lastIncomingUser = [...incoming].reverse().find((m) => m.role === 'user');
     if (lastIncomingUser) {
-      await admin.from('spirit_messages').insert({
+      const userMsgInsert = admin.from('spirit_messages').insert({
         conversation_id: conversationId,
         user_id: uid,
         role: 'user',
         content: extractText(lastIncomingUser.content),
         images: Array.isArray(lastIncomingUser.images) ? lastIncomingUser.images : [],
-      });
+      }).then(({ error }: any) => { if (error) console.error('[spirit-chat] user persist', error); });
+      // @ts-ignore Deno Edge Runtime
+      try { (globalThis as any).EdgeRuntime?.waitUntil?.(userMsgInsert); } catch {}
     }
 
-    // ── 4) 轻量上下文（最小 system 块；详细数据走工具）──
+    // ── 3) 轻量 system 上下文 ──
     const today = tzDate();
     const tomorrow = addDays(today, 1);
-    const [profileRes, staffRes, shopsRes] = await Promise.all([
-      admin.from('profiles').select('display_name').eq('user_id', uid).maybeSingle(),
-      admin.from('staff_profiles').select('shop_id, real_name, position').eq('user_id', uid).maybeSingle(),
-      admin.from('shops').select('id, name'),
-    ]);
-    const shopMap = new Map<string, string>();
-    for (const s of (shopsRes.data || []) as any[]) shopMap.set(s.id, s.name);
     const myName = profileRes.data?.display_name || staffRes.data?.real_name || '店员';
     const myShopName = staffRes.data?.shop_id ? shopMap.get(staffRes.data.shop_id) : null;
 
@@ -223,20 +259,18 @@ Deno.serve(async (req) => {
 - 今天：${today}（周${'日一二三四五六'[new Date(today + 'T00:00:00+08:00').getDay()]}）｜ 明天：${tomorrow}
 - 用户 ID（内部）：${uid}`;
 
-    // ── 5) 工具实现 ──
+    // ── 4) 工具实现 ──
     async function execTool(name: string, args: any): Promise<any> {
       try {
         if (name === 'query_schedule') {
           const from = String(args?.date_from || today);
           const to = String(args?.date_to || addDays(from, 7));
-          let q = admin.from('shift_schedules')
+          const { data: rows } = await admin.from('shift_schedules')
             .select('user_id, shift_code, work_date, shop_id')
             .gte('work_date', from).lte('work_date', to)
             .order('work_date');
-          const { data: rows } = await q;
           if (!rows || rows.length === 0) return { rows: [], note: `${from} 至 ${to} 暂无排班数据` };
 
-          // 收集 user_id → 姓名
           const ids = Array.from(new Set(rows.map((r: any) => r.user_id)));
           const [sp, pf, shiftsRes] = await Promise.all([
             admin.from('staff_profiles').select('user_id, real_name').in('user_id', ids),
@@ -330,7 +364,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 6) 准备模型消息（最近 16 轮）──
+    // ── 5) 模型消息（最近 16 轮）──
     const chatHistory = incoming
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .slice(-16)
@@ -349,7 +383,7 @@ Deno.serve(async (req) => {
         return { role: m.role, content: txt };
       });
 
-    let modelMessages: any[] = [
+    const modelMessages: any[] = [
       { role: 'system', content: systemPrompt },
       ...chatHistory,
     ];
@@ -357,146 +391,170 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) return json({ error: 'LOVABLE_API_KEY 未配置' }, 500);
 
-    // ── 7) 工具循环（最多 5 步）→ 最后一步开 stream ──
-    let toolCallCount = 0;
-    const maxToolSteps = 5;
-
-    for (let step = 0; step < maxToolSteps; step++) {
-      const nonStream = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model, temperature, max_tokens: maxTokens,
-          messages: modelMessages,
-          tools: TOOLS,
-          tool_choice: 'auto',
-        }),
-      });
-
-      if (!nonStream.ok) {
-        if (nonStream.status === 429) return json({ error: '我有点累了，等我喘口气再聊？' }, 429);
-        if (nonStream.status === 402) return json({ error: 'AI 额度不足，请联系管理员充值' }, 402);
-        const t = await nonStream.text().catch(() => '');
-        console.error('[spirit-chat] gateway tool step error', nonStream.status, t);
-        return json({ error: '小精灵走神了，稍后再试' }, 500);
-      }
-
-      const data = await nonStream.json();
-      const choice = data?.choices?.[0];
-      const msg = choice?.message;
-      const toolCalls = msg?.tool_calls;
-
-      if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-        // 执行所有工具
-        modelMessages.push({
-          role: 'assistant',
-          content: msg.content || '',
-          tool_calls: toolCalls,
-        });
-        for (const call of toolCalls) {
-          let parsed: any = {};
-          try { parsed = JSON.parse(call.function?.arguments || '{}'); } catch {}
-          const result = await execTool(call.function?.name, parsed);
-          toolCallCount++;
-          modelMessages.push({
-            role: 'tool',
-            tool_call_id: call.id,
-            content: JSON.stringify(result).slice(0, 4000),
-          });
-        }
-        continue; // 进入下一步，让模型基于 tool 结果继续
-      }
-
-      // 没有工具调用 → 切换到流式拿最终答案
-      break;
-    }
-
-    // 流式拿最终回答
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model, temperature, max_tokens: maxTokens, stream: true,
-        messages: modelMessages,
-      }),
-    });
-
-    if (!aiResp.ok || !aiResp.body) {
-      if (aiResp.status === 429) return json({ error: '我有点累了，等我喘口气再聊？' }, 429);
-      if (aiResp.status === 402) return json({ error: 'AI 额度不足，请联系管理员充值' }, 402);
-      const t = await aiResp.text().catch(() => '');
-      console.error('[spirit-chat] gateway stream error', aiResp.status, t);
-      return json({ error: '小精灵走神了，稍后再试' }, 500);
-    }
-
-    // 边转发边累计 assistant 回复 → 流结束后落库 + 写用量 + 追加 __meta
-    const reader = aiResp.body.getReader();
+    // ── 6) 流式工具循环 ──
+    // 输出 stream：我们自己构造的 SSE 流，前端读它
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
-    let assembled = '';
-    let buffer = '';
+
+    let toolCallCount = 0;
+    let assembledFinal = ''; // 最终回答（用于落库）
+    const maxToolSteps = 5;
 
     const stream = new ReadableStream({
-      async pull(controller) {
-        const { done, value } = await reader.read();
-        if (done) {
-          // 落库 assistant
-          try {
-            if (assembled.trim()) {
-              await admin.from('spirit_messages').insert({
-                conversation_id: conversationId,
-                user_id: uid,
-                role: 'assistant',
-                content: assembled,
-                meta: { tool_calls: toolCallCount, model },
-              });
-            }
-            await admin.from('spirit_usage').insert({
-              user_id: uid,
-              conversation_id: conversationId,
-              model,
-              input_tokens: 0,
-              output_tokens: assembled.length,
-              tool_calls: toolCallCount,
-              duration_ms: Date.now() - startedAt,
-              status: 'ok',
+      async start(controller) {
+        const emit = (obj: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        const emitRaw = (line: string) => controller.enqueue(encoder.encode(line));
+
+        try {
+          for (let step = 0; step < maxToolSteps; step++) {
+            const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model, temperature, max_tokens: maxTokens, stream: true,
+                messages: modelMessages,
+                tools: TOOLS,
+                tool_choice: 'auto',
+              }),
             });
-          } catch (e) {
-            console.error('[spirit-chat] persist error', e);
+
+            if (!resp.ok || !resp.body) {
+              if (resp.status === 429) { emit({ error: '我有点累了，等我喘口气再聊？' }); break; }
+              if (resp.status === 402) { emit({ error: 'AI 额度不足，请联系管理员充值' }); break; }
+              const t = await resp.text().catch(() => '');
+              console.error('[spirit-chat] gateway error', resp.status, t);
+              emit({ error: '小精灵走神了，稍后再试' });
+              break;
+            }
+
+            const reader = resp.body.getReader();
+            let buffer = '';
+            let finishReason: string | null = null;
+            let assistantContentThisStep = '';
+            // 按 index 累积 tool_calls
+            const toolBuf = new Map<number, { id?: string; name?: string; args: string }>();
+
+            // 读完这一步的全部 SSE 行
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() ?? '';
+              for (const rawLine of lines) {
+                const line = rawLine.trim();
+                if (!line.startsWith('data:')) continue;
+                const payload = line.slice(5).trim();
+                if (!payload || payload === '[DONE]') continue;
+                let obj: any;
+                try { obj = JSON.parse(payload); } catch { continue; }
+                const choice = obj?.choices?.[0];
+                const delta = choice?.delta;
+                if (!delta) continue;
+
+                // 普通 content delta：累计 + 直接透传给前端
+                if (typeof delta.content === 'string' && delta.content.length > 0) {
+                  assistantContentThisStep += delta.content;
+                  // 透传原始 OpenAI 兼容 chunk，前端 useSpiritChat 解析 delta.content
+                  emitRaw(`data: ${JSON.stringify({ choices: [{ delta: { content: delta.content } }] })}\n\n`);
+                }
+                // tool_calls delta：本端累积，不转发
+                if (Array.isArray(delta.tool_calls)) {
+                  for (const tc of delta.tool_calls) {
+                    const idx = typeof tc.index === 'number' ? tc.index : 0;
+                    const cur = toolBuf.get(idx) || { args: '' };
+                    if (tc.id) cur.id = tc.id;
+                    if (tc.function?.name) cur.name = tc.function.name;
+                    if (typeof tc.function?.arguments === 'string') cur.args += tc.function.arguments;
+                    toolBuf.set(idx, cur);
+                  }
+                }
+                if (choice?.finish_reason) finishReason = choice.finish_reason;
+              }
+            }
+
+            // 这一步结束。看是否有 tool_calls 要执行
+            if (toolBuf.size > 0 && (finishReason === 'tool_calls' || finishReason === null)) {
+              // 推入 assistant tool_call 消息
+              const toolCalls = Array.from(toolBuf.entries())
+                .sort(([a], [b]) => a - b)
+                .map(([_, v]) => ({
+                  id: v.id || `call_${Math.random().toString(36).slice(2, 10)}`,
+                  type: 'function',
+                  function: { name: v.name || '', arguments: v.args || '{}' },
+                }));
+
+              modelMessages.push({
+                role: 'assistant',
+                content: assistantContentThisStep || '',
+                tool_calls: toolCalls,
+              });
+
+              // 顺序执行（一般 1-2 个，且各工具内部已优化）
+              for (const call of toolCalls) {
+                emit({ __status: { phase: 'tool', tool: call.function.name, label: TOOL_LABEL[call.function.name] || '查一下…' } });
+                let parsed: any = {};
+                try { parsed = JSON.parse(call.function.arguments || '{}'); } catch {}
+                const result = await execTool(call.function.name, parsed);
+                toolCallCount++;
+                modelMessages.push({
+                  role: 'tool',
+                  tool_call_id: call.id,
+                  content: JSON.stringify(result).slice(0, 4000),
+                });
+              }
+              emit({ __status: { phase: 'thinking' } });
+              continue; // 下一步流式
+            }
+
+            // 没有 tool_calls → 这一步的 content 就是最终答案，已经全推给前端
+            assembledFinal += assistantContentThisStep;
+            break;
           }
-          // 追加 meta 帧
-          const meta = JSON.stringify({ __meta: { conversationId, toolCalls: toolCallCount, model } });
-          controller.enqueue(encoder.encode(`data: ${meta}\n\n`));
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
-          return;
+
+          // 落库 + 用量（异步，不阻塞 [DONE]）
+          const persist = (async () => {
+            try {
+              if (assembledFinal.trim()) {
+                await admin.from('spirit_messages').insert({
+                  conversation_id: conversationId,
+                  user_id: uid,
+                  role: 'assistant',
+                  content: assembledFinal,
+                  meta: { tool_calls: toolCallCount, model },
+                });
+              }
+              await admin.from('spirit_usage').insert({
+                user_id: uid,
+                conversation_id: conversationId,
+                model,
+                input_tokens: 0,
+                output_tokens: assembledFinal.length,
+                tool_calls: toolCallCount,
+                duration_ms: Date.now() - startedAt,
+                status: 'ok',
+              });
+            } catch (e) {
+              console.error('[spirit-chat] persist error', e);
+            }
+          })();
+          // @ts-ignore
+          try { (globalThis as any).EdgeRuntime?.waitUntil?.(persist); } catch {}
+
+          // meta + DONE
+          emit({ __meta: { conversationId, toolCalls: toolCallCount, model } });
+          emitRaw('data: [DONE]\n\n');
+        } catch (e) {
+          console.error('[spirit-chat] stream error', e);
+          try { emit({ error: e instanceof Error ? e.message : '小精灵开小差了' }); } catch {}
+        } finally {
+          try { controller.close(); } catch {}
         }
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-        // 提取 delta 内容用于累计
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
-          const t = line.trim();
-          if (!t.startsWith('data:')) continue;
-          const payload = t.slice(5).trim();
-          if (!payload || payload === '[DONE]') continue;
-          try {
-            const obj = JSON.parse(payload);
-            const delta = obj?.choices?.[0]?.delta?.content;
-            if (typeof delta === 'string') assembled += delta;
-          } catch {}
-        }
-        // 直接转发原始 chunk
-        controller.enqueue(value);
-      },
-      cancel() {
-        try { reader.cancel(); } catch {}
       },
     });
 
     return new Response(stream, {
-      headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' },
+      headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
     });
   } catch (e) {
     console.error('[spirit-chat] error', e);
