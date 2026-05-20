@@ -69,11 +69,9 @@ export const EXP_RULES = [
   { name: '连续签到 7 天', value: '额外 +10' },
   { name: '连续签到 30 天', value: '额外 +30' },
   { name: 'AI 识别商品入库', value: '+5' },
-  { name: '完善商品资料（描述/卖点/小贴士齐全）', value: '+8' },
-  { name: '收藏官方/他人知识（每日上限 5 次）', value: '+1' },
+  { name: '通过一条知识测试（每条独立计算）', value: '+15' },
   { name: '在中古圈发帖', value: '+5' },
   { name: '帖子被点赞', value: '+2' },
   { name: '帖子被评论', value: '+3' },
-  { name: '通过个人知识测试', value: '+15' },
   { name: '提交识别纠错被采纳', value: '+30' },
 ];
