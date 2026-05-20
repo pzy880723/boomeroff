@@ -1,19 +1,21 @@
-## 删除小精灵的随机说话气泡
+## 目标
+1. 清理"经验获取方式"展示列表里用户认为不存在的两条。
+2. 解释 +15 测试规则没拿到的真实原因（pending 需要去任务中心领取），并把说明文案写得更准确。
 
-用户指的是悬浮小精灵（FloatingDashboard）旁边每隔 30 秒冒出来的那种心情气泡（"记得抬头看一眼天哦" 之类）。完全去掉，不再说话。
+## 改动
 
-### 改动文件
+### 1) `src/lib/level.ts` — `EXP_RULES` 列表
+- 删除：`完善商品资料（描述/卖点/小贴士齐全） +8`
+- 删除：`收藏官方/他人知识（每日上限 5 次） +1`
+- 修改：`通过个人知识测试 +15` → 文案改成 `通过一条知识测试（每条独立计算）+15`，让用户明确"是每条都给，不是 5 条才给"
+- 其余条目保持不变（签到、识别入库、发帖、点赞、评论、纠错被采纳）
 
-**`src/components/dashboard/FloatingDashboard.tsx`**
-- 删除 `import { randomMood } from '../spirit/spiritMoods'`
-- 删除 `labelText` / `setLabelText` state 以及 `labelTimerRef`
-- 删除两个相关的 `useEffect`（一个 4.5s 自动消失，一个 30s 触发 `randomMood()`）
-- 删除底部 JSX 中 `{labelText && !dragging && (...气泡 div...)}` 整块
-- 删除 `bubbleSide` / `bubbleStyle` 这两个只为气泡服务的局部变量
+### 2) 不动数值
+- 后端触发器 `exp_on_test_pass / exp_on_test_insert`：保持每条通过 +15 → `exp_pending`
+- 每日一练任务 `daily_quiz`：保持目标 1 题、奖励 15
+- 后端 `exp_on_favorite_insert` 和 `exp_on_product_complete` 触发器**保留不删**（DB 里已有数据依赖、不影响 UI），仅从展示规则里去掉
 
-**`src/components/spirit/spiritMoods.ts`**
-- 整个文件删除（已无引用；`IDLE_ACTIONS` 也未被其它地方 import，一并清掉）
+## 关于"没增加"的回答
+通过测试后 +15 是**进入"待领取"列表**（`exp_pending`），不是自动加进 total_exp。用户需要去【我的 → 任务中心】或仪表盘的"待领取奖励"那里点一下"领取"才会真正进总经验。数据库里目前已经记录 9 条 quiz_pass 奖励（共 135 EXP），其中 105 EXP 已领取，30 EXP 还挂在 pending 等用户点。
 
-### 不动的地方
-- `SpiritGreetingDialog`（首次进入的大问候弹窗）保持不变 —— 它是显式的引导弹窗，不是"碎碎念"
-- 小精灵其它动画（漂浮、挥手、提示点）保持不变
+如需把"通过测试 +15"改成自动加（跳过 pending），可以另开一个任务。本次按你的回答先不动数值。
