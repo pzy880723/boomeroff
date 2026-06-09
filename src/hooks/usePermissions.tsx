@@ -28,7 +28,9 @@ export type PermissionKey =
   | 'settings.ai' | 'settings.recognition'
   | 'correction.review'
   | 'history.read_all'
-  | 'role.manage';
+  | 'role.manage'
+  // 抵用券
+  | 'voucher.manage' | 'voucher.redeem';
 
 interface Ctx {
   loading: boolean;

@@ -13,6 +13,8 @@ import { KbManager } from '@/components/admin/KbManager';
 import { ShopManager } from '@/components/admin/ShopManager';
 import { RolePermissionManager } from '@/components/admin/RolePermissionManager';
 import { NotificationManager } from '@/components/admin/NotificationManager';
+import { VoucherTypeManager } from '@/components/admin/VoucherTypeManager';
+import { VoucherReviewPanel } from '@/components/admin/VoucherReviewPanel';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -26,7 +28,7 @@ import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, Menu,
   CalendarDays, Clock, BookOpen, MessagesSquare, Store, ShieldCheck,
-  UserCog, Building2, Library, Megaphone, Settings,
+  UserCog, Building2, Library, Megaphone, Settings, Ticket,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
@@ -34,7 +36,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'notifications';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'notifications' | 'voucher_types' | 'voucher_review';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -65,6 +67,12 @@ const MENU_GROUPS: MenuGroup[] = [
       { key: 'community', label: '中古圈', icon: MessageSquare, perm: 'community.moderate' },
       { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning, perm: 'correction.review' },
       { key: 'notifications', label: '系统通知', icon: Megaphone, perm: 'role.manage' },
+    ],
+  },
+  {
+    key: 'vouchers', label: '抵用券', icon: Ticket, items: [
+      { key: 'voucher_review', label: '抵用券审核', icon: BadgeCheck, perm: 'voucher.manage' },
+      { key: 'voucher_types', label: '券类型管理', icon: Ticket, perm: 'voucher.manage' },
     ],
   },
   {
@@ -226,6 +234,8 @@ export default function Portal() {
             {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}
             
             {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
+            {effectiveTab === 'voucher_review' && can('voucher.manage') && <VoucherReviewPanel />}
+            {effectiveTab === 'voucher_types' && can('voucher.manage') && <VoucherTypeManager />}
           </Card>
         )}
       </main>

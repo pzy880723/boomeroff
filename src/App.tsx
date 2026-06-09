@@ -29,6 +29,9 @@ const CheckInHistory = lazy(() => import("./pages/CheckInHistory"));
 const MySop = lazy(() => import("./pages/MySop"));
 const MyQa = lazy(() => import("./pages/MyQa"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const VouchersMine = lazy(() => import("./pages/VouchersMine"));
+const VoucherRedeem = lazy(() => import("./pages/VoucherRedeem"));
+const PublicVoucher = lazy(() => import("./pages/public/PublicVoucher"));
 
 // 游客版（免登录）
 const PublicLayout = lazy(() =>
@@ -87,8 +90,11 @@ const App = () => (
               
               <Route path="/me/sop" element={<MySop />} />
               <Route path="/me/qa" element={<MyQa />} />
+              <Route path="/me/vouchers" element={<VouchersMine />} />
+              <Route path="/me/vouchers/redeem/:code" element={<VoucherRedeem />} />
 
               {/* 游客版（免登录） */}
+              <Route path="/u/voucher/:shareToken" element={<PublicVoucher />} />
               <Route path="/u" element={<PublicLayout />}>
                 <Route index element={<PublicScan />} />
                 <Route path="result" element={<PublicResult />} />
