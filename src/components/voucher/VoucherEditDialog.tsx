@@ -63,7 +63,7 @@ export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved
     if (!Number.isInteger(vd) || vd <= 0) { toast.error('请填写有效期天数'); return; }
 
     setSaving(true);
-    const payload: Record<string, unknown> = {
+    const payload = {
       name: name.trim(),
       threshold_type: thresholdType,
       discount_amount: da,
@@ -71,12 +71,12 @@ export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved
       valid_days: vd,
       template_terms: terms.trim() || null,
       active,
-    };
+    } as any;
     let result;
     if (editing && voucher) {
       result = await supabase.from('vouchers').update(payload).eq('id', voucher.id).select('id').maybeSingle();
     } else {
-      result = await supabase.from('vouchers').insert({ ...payload, created_by: userId }).select('id').maybeSingle();
+      result = await supabase.from('vouchers').insert({ ...payload, created_by: userId } as any).select('id').maybeSingle();
     }
     setSaving(false);
     if (result.error) { toast.error(result.error.message); return; }
