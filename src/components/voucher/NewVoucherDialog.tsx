@@ -57,7 +57,8 @@ export function NewVoucherDialog({ open, onOpenChange, userId, onCreated }: Prop
         type_id: typeId,
         created_by: userId,
         note: note.trim() || null,
-      })
+        code: '', // 由 DB trigger 自动生成短码
+      } as any)
       .select('id')
       .maybeSingle();
     setSaving(false);
