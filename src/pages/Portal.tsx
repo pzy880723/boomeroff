@@ -13,8 +13,7 @@ import { KbManager } from '@/components/admin/KbManager';
 import { ShopManager } from '@/components/admin/ShopManager';
 import { RolePermissionManager } from '@/components/admin/RolePermissionManager';
 import { NotificationManager } from '@/components/admin/NotificationManager';
-import { VoucherTypeManager } from '@/components/admin/VoucherTypeManager';
-import { VoucherReviewPanel } from '@/components/admin/VoucherReviewPanel';
+import { ActivityReviewPanel } from '@/components/admin/ActivityReviewPanel';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -36,7 +35,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'notifications' | 'voucher_types' | 'voucher_review';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'notifications' | 'activity_review';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -70,9 +69,8 @@ const MENU_GROUPS: MenuGroup[] = [
     ],
   },
   {
-    key: 'vouchers', label: '抵用券', icon: Ticket, items: [
-      { key: 'voucher_review', label: '抵用券审核', icon: BadgeCheck, perm: 'voucher.manage' },
-      { key: 'voucher_types', label: '券类型管理', icon: Ticket, perm: 'voucher.manage' },
+    key: 'vouchers', label: '活动审核', icon: Ticket, items: [
+      { key: 'activity_review', label: '活动申请审核', icon: BadgeCheck, perm: 'voucher.manage' },
     ],
   },
   {
@@ -234,8 +232,7 @@ export default function Portal() {
             {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}
             
             {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
-            {effectiveTab === 'voucher_review' && can('voucher.manage') && <VoucherReviewPanel />}
-            {effectiveTab === 'voucher_types' && can('voucher.manage') && <VoucherTypeManager />}
+            {effectiveTab === 'activity_review' && can('voucher.manage') && <ActivityReviewPanel />}
           </Card>
         )}
       </main>
