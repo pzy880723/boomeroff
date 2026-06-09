@@ -1,66 +1,138 @@
-// 状态文案与颜色（中文）
-export const VOUCHER_STATUS_LABEL: Record<string, string> = {
-  pending_apply: '待客户申请',
-  pending_review: '待审核',
-  approved: '已发放',
-  rejected: '已拒绝',
+// 抵用券与活动相关常量与类型
+
+export const CLAIM_STATUS_LABEL: Record<string, string> = {
+  unclaimed: '待领取',
+  claimed: '已领取',
   redeemed: '已核销',
   expired: '已过期',
-  revoked: '已撤销',
+  void: '已作废',
 };
 
-export const VOUCHER_STATUS_VARIANT: Record<
+export const CLAIM_STATUS_VARIANT: Record<
   string,
   'default' | 'secondary' | 'destructive' | 'outline'
 > = {
-  pending_apply: 'outline',
-  pending_review: 'secondary',
-  approved: 'default',
-  rejected: 'destructive',
+  unclaimed: 'outline',
+  claimed: 'default',
   redeemed: 'secondary',
   expired: 'outline',
-  revoked: 'destructive',
+  void: 'destructive',
 };
 
-export interface VoucherType {
+export const APPLICATION_STATUS_LABEL: Record<string, string> = {
+  pending: '待审核',
+  approved: '已通过',
+  rejected: '已拒绝',
+};
+
+export const APPLICATION_STATUS_VARIANT: Record<
+  string,
+  'default' | 'secondary' | 'destructive' | 'outline'
+> = {
+  pending: 'secondary',
+  approved: 'default',
+  rejected: 'destructive',
+};
+
+// 抵用券模板
+export interface VoucherTemplate {
+  id: string;
+  name: string;
+  threshold_type: 'none' | 'min_spend';
+  discount_amount: number;
+  min_spend: number | null;
+  valid_days: number;
+  template_terms: string | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+// 实例：每张领取/核销的券
+export interface VoucherClaim {
+  id: string;
+  voucher_id: string;
+  activity_application_id: string | null;
+  code: string;
+  share_token: string;
+  source: 'direct' | 'activity';
+  status: 'unclaimed' | 'claimed' | 'redeemed' | 'expired' | 'void';
+  recipient_name: string | null;
+  recipient_phone: string | null;
+  recipient_extra: Record<string, unknown>;
+  claimed_at: string | null;
+  expires_at: string | null;
+  redeemed_at: string | null;
+  redeemed_by: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+// 活动表单字段定义
+export interface ActivityField {
+  key: string;
+  label: string;
+  type: 'text' | 'phone' | 'url' | 'image' | 'textarea' | 'select';
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+}
+
+export interface Activity {
   id: string;
   name: string;
   description: string | null;
-  face_value: number;
-  valid_days: number;
-  terms: string | null;
-  active: boolean;
-  sort_order: number;
-}
-
-export interface Voucher {
-  id: string;
-  code: string;
-  type_id: string | null;
-  created_by: string | null;
+  cover_url: string | null;
+  voucher_id: string;
   share_token: string;
-  status: string;
-  note: string | null;
-  applicant_name: string | null;
-  applicant_phone: string | null;
-  applicant_screenshot_url: string | null;
-  applicant_submitted_at: string | null;
-  approved_by: string | null;
-  approved_at: string | null;
-  reject_reason: string | null;
-  redeemed_by: string | null;
-  redeemed_at: string | null;
-  expires_at: string | null;
+  form_fields: ActivityField[];
+  status: 'draft' | 'active' | 'closed';
+  max_applications: number | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  created_by: string | null;
   created_at: string;
-  voucher_types?: VoucherType | null;
 }
 
-// 生成给客户的分享链接 / 二维码 URL
-export function buildVoucherShareUrl(share_token: string): string {
-  return `${window.location.origin}/u/voucher/${share_token}`;
+export interface ActivityApplication {
+  id: string;
+  activity_id: string;
+  applicant_name: string;
+  applicant_phone: string;
+  form_data: Record<string, unknown>;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  reject_reason: string | null;
+  voucher_claim_id: string | null;
+  sms_sent_at: string | null;
+  sms_error: string | null;
+  created_at: string;
 }
 
-// 生成给店员的核销 URL（QR 内容）
-export function buildVoucherRedeemUrl(code: string, share_token: string): string {
-  return `${window.location.origin}/me/vouchers/redeem/${code}?t=${share_token}`;
+// 描述抵用券抵扣规则的中文
+export function formatVoucherRule(v: Pick<VoucherTemplate, 'threshold_type' | 'discount_amount' | 'min_spend'>): string {
+  if (v.threshold_type === 'min_spend') {
+    return `满 ¥${v.min_spend ?? 0} 抵 ¥${v.discount_amount}`;
+  }
+  return `无门槛抵 ¥${v.discount_amount}`;
 }
+
+// 公开领取链接（用户免登录领取直接转发的券）
+export function buildClaimShareUrl(share_token: string): string {
+  return `${window.location.origin}/u/claim/${share_token}`;
+}
+
+// 活动公开申请链接
+export function buildActivityShareUrl(share_token: string): string {
+  return `${window.location.origin}/u/activity/${share_token}`;
+}
+
+// 店员核销 URL（QR 内容）
+export function buildClaimRedeemUrl(code: string): string {
+  return `${window.location.origin}/me/vouchers/redeem/${code}`;
+}
+
+// 旧字段兼容（一些组件仍可能引用）
+export const VOUCHER_STATUS_LABEL = CLAIM_STATUS_LABEL;
+export const VOUCHER_STATUS_VARIANT = CLAIM_STATUS_VARIANT;

@@ -1,127 +1,144 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+// 抵用券详情：展示规则、生成"直接转发"链接、查看核销记录
+import { useEffect, useState } from 'react';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  buildVoucherRedeemUrl, buildVoucherShareUrl,
-  VOUCHER_STATUS_LABEL, VOUCHER_STATUS_VARIANT, type Voucher,
-} from '@/lib/voucher';
-import { QrCanvas } from './QrCanvas';
-import { Copy, Share2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Copy, Share2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import {
+  type VoucherTemplate, type VoucherClaim, formatVoucherRule,
+  buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT,
+} from '@/lib/voucher';
 import { format } from 'date-fns';
 
 interface Props {
   open: boolean;
-  voucher: Voucher | null;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange: (o: boolean) => void;
+  voucher: VoucherTemplate | null;
+  onEdit?: () => void;
 }
 
-export function VoucherDetailDialog({ open, voucher, onOpenChange }: Props) {
-  const [copied, setCopied] = useState(false);
-  if (!voucher) return null;
+export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Props) {
+  const [claims, setClaims] = useState<VoucherClaim[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
 
-  const shareUrl = buildVoucherShareUrl(voucher.share_token);
-  const redeemUrl = buildVoucherRedeemUrl(voucher.code, voucher.share_token);
-  const type = voucher.voucher_types;
+  useEffect(() => {
+    if (!open || !voucher) return;
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from('voucher_claims')
+        .select('*')
+        .eq('voucher_id', voucher.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      setClaims((data || []) as unknown as VoucherClaim[]);
+      setLoading(false);
+    })();
+  }, [open, voucher]);
 
-  const copy = async (text: string) => {
+  const createAndCopy = async () => {
+    if (!voucher) return;
+    setCreating(true);
+    const { data, error } = await supabase.functions.invoke('voucher-claim-create', {
+      body: { voucher_id: voucher.id },
+    });
+    setCreating(false);
+    if (error || (data as any)?.error) {
+      toast.error((data as any)?.error || error?.message || '生成失败');
+      return;
+    }
+    const url = buildClaimShareUrl((data as any).claim.share_token);
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      toast.success('已复制');
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(url);
+      toast.success('领取链接已复制');
     } catch {
-      toast.error('复制失败');
+      toast.success('已生成：' + url);
     }
+    // refresh list
+    const { data: rows } = await supabase
+      .from('voucher_claims')
+      .select('*').eq('voucher_id', voucher.id)
+      .order('created_at', { ascending: false }).limit(50);
+    setClaims((rows || []) as unknown as VoucherClaim[]);
   };
 
-  const share = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: type ? `${type.name} 抵用券` : '抵用券',
-          text: '送你一张探店抵用券,点击查看',
-          url: shareUrl,
-        });
-      } catch { /* user cancel */ }
-    } else {
-      copy(shareUrl);
-    }
-  };
+  if (!voucher) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {type?.name || '抵用券'}
-            <Badge variant={VOUCHER_STATUS_VARIANT[voucher.status]}>
-              {VOUCHER_STATUS_LABEL[voucher.status] || voucher.status}
-            </Badge>
+            {voucher.name}
+            {!voucher.active && <Badge variant="outline">已停用</Badge>}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3 text-sm">
-          {type && (
-            <Card className="p-3 bg-gradient-to-br from-primary/5 to-accent/10 border-primary/20">
-              <div className="flex items-baseline gap-1">
-                <span className="text-xs text-muted-foreground">面额</span>
-                <span className="text-2xl font-bold tabular-nums">¥{Number(type.face_value).toFixed(0)}</span>
-                <span className="text-xs text-muted-foreground ml-auto">有效 {type.valid_days} 天</span>
-              </div>
-              {type.terms && <p className="text-[11px] text-muted-foreground mt-1.5">{type.terms}</p>}
-            </Card>
-          )}
-
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p>券编号：<span className="font-mono text-foreground">{voucher.code}</span></p>
-            {voucher.note && <p>备注：{voucher.note}</p>}
-            <p>创建：{format(new Date(voucher.created_at), 'yyyy-MM-dd HH:mm')}</p>
-            {voucher.applicant_name && (
-              <p>申请人：{voucher.applicant_name} · {voucher.applicant_phone}</p>
-            )}
-            {voucher.expires_at && (
-              <p>有效期至：{format(new Date(voucher.expires_at), 'yyyy-MM-dd')}</p>
-            )}
-            {voucher.redeemed_at && (
-              <p className="text-foreground">核销时间：{format(new Date(voucher.redeemed_at), 'yyyy-MM-dd HH:mm')}</p>
-            )}
-            {voucher.reject_reason && (
-              <p className="text-destructive">拒绝原因：{voucher.reject_reason}</p>
+        <div className="space-y-3">
+          <div className="rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 p-4 text-center">
+            <p className="text-3xl font-bold tabular-nums text-primary">¥{voucher.discount_amount}</p>
+            <p className="text-xs text-muted-foreground mt-1">{formatVoucherRule(voucher)}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">有效期 {voucher.valid_days} 天</p>
+            {voucher.template_terms && (
+              <p className="text-[11px] text-muted-foreground mt-2">{voucher.template_terms}</p>
             )}
           </div>
 
-          {voucher.status === 'approved' && (
-            <Card className="p-4 flex flex-col items-center bg-background">
-              <p className="text-xs text-muted-foreground mb-2">核销二维码（店员扫码核销）</p>
-              <QrCanvas value={redeemUrl} size={200} />
-              <p className="mt-2 font-mono text-base tracking-widest">{voucher.code}</p>
-            </Card>
-          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={createAndCopy} disabled={creating || !voucher.active} className="h-10">
+              {creating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Share2 className="w-4 h-4 mr-1.5" />}
+              生成转发链接
+            </Button>
+            <Button variant="outline" onClick={onEdit} className="h-10">编辑</Button>
+          </div>
 
-          {/* 分享链接（所有状态都可分享，只要还没核销） */}
-          {!['redeemed', 'revoked'].includes(voucher.status) && (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">客户领取链接</p>
-              <div className="flex items-center gap-2">
-                <Card className="flex-1 px-3 py-2 text-[11px] truncate font-mono bg-muted/30">
-                  {shareUrl}
-                </Card>
-                <Button size="icon" variant="outline" onClick={() => copy(shareUrl)}>
-                  <Copy className="w-4 h-4" />
-                </Button>
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1.5">领取与核销记录</div>
+            {loading ? (
+              <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+            ) : claims.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-3">暂无</p>
+            ) : (
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {claims.map((c) => (
+                  <div key={c.id} className="text-xs flex items-center gap-2 border border-border/60 rounded-lg px-2.5 py-1.5">
+                    <span className="font-mono text-[11px]">{c.code}</span>
+                    <span className="text-muted-foreground flex-1 truncate">
+                      {c.recipient_name || (c.source === 'direct' ? '直接转发' : '活动')}
+                      {c.recipient_phone ? ` · ${c.recipient_phone}` : ''}
+                    </span>
+                    <Badge variant={CLAIM_STATUS_VARIANT[c.status]} className="shrink-0 text-[10px] px-1.5 py-0">
+                      {CLAIM_STATUS_LABEL[c.status]}
+                    </Badge>
+                    {c.status === 'unclaimed' && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(buildClaimShareUrl(c.share_token));
+                            toast.success('链接已复制');
+                          } catch { /* ignore */ }
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="复制链接"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-              <Button onClick={share} className="w-full" variant="default">
-                <Share2 className="w-4 h-4 mr-1.5" />
-                分享给客户
-              </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

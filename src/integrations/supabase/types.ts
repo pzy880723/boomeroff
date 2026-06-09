@@ -14,6 +14,131 @@ export type Database = {
   }
   public: {
     Tables: {
+      activities: {
+        Row: {
+          cover_url: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          ends_at: string | null
+          form_fields: Json
+          id: string
+          max_applications: number | null
+          name: string
+          share_token: string
+          starts_at: string | null
+          status: string
+          updated_at: string
+          voucher_id: string
+        }
+        Insert: {
+          cover_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          ends_at?: string | null
+          form_fields?: Json
+          id?: string
+          max_applications?: number | null
+          name: string
+          share_token?: string
+          starts_at?: string | null
+          status?: string
+          updated_at?: string
+          voucher_id: string
+        }
+        Update: {
+          cover_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          ends_at?: string | null
+          form_fields?: Json
+          id?: string
+          max_applications?: number | null
+          name?: string
+          share_token?: string
+          starts_at?: string | null
+          status?: string
+          updated_at?: string
+          voucher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activities_voucher_id_fkey"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_applications: {
+        Row: {
+          activity_id: string
+          applicant_name: string
+          applicant_phone: string
+          created_at: string
+          form_data: Json
+          id: string
+          reject_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          sms_error: string | null
+          sms_sent_at: string | null
+          status: string
+          updated_at: string
+          voucher_claim_id: string | null
+        }
+        Insert: {
+          activity_id: string
+          applicant_name: string
+          applicant_phone: string
+          created_at?: string
+          form_data?: Json
+          id?: string
+          reject_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sms_error?: string | null
+          sms_sent_at?: string | null
+          status?: string
+          updated_at?: string
+          voucher_claim_id?: string | null
+        }
+        Update: {
+          activity_id?: string
+          applicant_name?: string
+          applicant_phone?: string
+          created_at?: string
+          form_data?: Json
+          id?: string
+          reject_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sms_error?: string | null
+          sms_sent_at?: string | null
+          status?: string
+          updated_at?: string
+          voucher_claim_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_applications_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_applications_voucher_claim_id_fkey"
+            columns: ["voucher_claim_id"]
+            isOneToOne: false
+            referencedRelation: "voucher_claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_permissions: {
         Row: {
           description: string | null
@@ -1414,6 +1539,74 @@ export type Database = {
         }
         Relationships: []
       }
+      voucher_claims: {
+        Row: {
+          activity_application_id: string | null
+          claimed_at: string | null
+          code: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          recipient_extra: Json
+          recipient_name: string | null
+          recipient_phone: string | null
+          redeemed_at: string | null
+          redeemed_by: string | null
+          share_token: string
+          source: string
+          status: string
+          updated_at: string
+          voucher_id: string
+        }
+        Insert: {
+          activity_application_id?: string | null
+          claimed_at?: string | null
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          recipient_extra?: Json
+          recipient_name?: string | null
+          recipient_phone?: string | null
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          share_token?: string
+          source?: string
+          status?: string
+          updated_at?: string
+          voucher_id: string
+        }
+        Update: {
+          activity_application_id?: string | null
+          claimed_at?: string | null
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          recipient_extra?: Json
+          recipient_name?: string | null
+          recipient_phone?: string | null
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          share_token?: string
+          source?: string
+          status?: string
+          updated_at?: string
+          voucher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_claims_voucher_id_fkey"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voucher_logs: {
         Row: {
           action: string
@@ -1493,70 +1686,91 @@ export type Database = {
       }
       vouchers: {
         Row: {
+          active: boolean
           applicant_name: string | null
           applicant_phone: string | null
           applicant_screenshot_url: string | null
           applicant_submitted_at: string | null
           approved_at: string | null
           approved_by: string | null
-          code: string
+          code: string | null
           created_at: string
           created_by: string | null
+          discount_amount: number
           expires_at: string | null
           id: string
+          min_spend: number | null
+          name: string | null
           note: string | null
           redeemed_at: string | null
           redeemed_by: string | null
           reject_reason: string | null
-          share_token: string
+          share_token: string | null
           shop_id: string | null
-          status: string
+          status: string | null
+          template_terms: string | null
+          threshold_type: string
           type_id: string | null
           updated_at: string
+          valid_days: number
         }
         Insert: {
+          active?: boolean
           applicant_name?: string | null
           applicant_phone?: string | null
           applicant_screenshot_url?: string | null
           applicant_submitted_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
-          code: string
+          code?: string | null
           created_at?: string
           created_by?: string | null
+          discount_amount?: number
           expires_at?: string | null
           id?: string
+          min_spend?: number | null
+          name?: string | null
           note?: string | null
           redeemed_at?: string | null
           redeemed_by?: string | null
           reject_reason?: string | null
-          share_token?: string
+          share_token?: string | null
           shop_id?: string | null
-          status?: string
+          status?: string | null
+          template_terms?: string | null
+          threshold_type?: string
           type_id?: string | null
           updated_at?: string
+          valid_days?: number
         }
         Update: {
+          active?: boolean
           applicant_name?: string | null
           applicant_phone?: string | null
           applicant_screenshot_url?: string | null
           applicant_submitted_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
-          code?: string
+          code?: string | null
           created_at?: string
           created_by?: string | null
+          discount_amount?: number
           expires_at?: string | null
           id?: string
+          min_spend?: number | null
+          name?: string | null
           note?: string | null
           redeemed_at?: string | null
           redeemed_by?: string | null
           reject_reason?: string | null
-          share_token?: string
+          share_token?: string | null
           shop_id?: string | null
-          status?: string
+          status?: string | null
+          template_terms?: string | null
+          threshold_type?: string
           type_id?: string | null
           updated_at?: string
+          valid_days?: number
         }
         Relationships: [
           {
