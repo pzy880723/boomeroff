@@ -234,6 +234,8 @@ export default function Portal() {
             {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}
             
             {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
+            {effectiveTab === 'voucher_review' && can('voucher.manage') && <VoucherReviewPanel />}
+            {effectiveTab === 'voucher_types' && can('voucher.manage') && <VoucherTypeManager />}
           </Card>
         )}
       </main>
