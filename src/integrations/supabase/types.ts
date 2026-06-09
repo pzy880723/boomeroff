@@ -1414,6 +1414,160 @@ export type Database = {
         }
         Relationships: []
       }
+      voucher_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_label: string | null
+          created_at: string
+          detail: Json | null
+          id: string
+          voucher_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_label?: string | null
+          created_at?: string
+          detail?: Json | null
+          id?: string
+          voucher_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_label?: string | null
+          created_at?: string
+          detail?: Json | null
+          id?: string
+          voucher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_logs_voucher_id_fkey"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voucher_types: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          face_value: number
+          id: string
+          name: string
+          sort_order: number
+          terms: string | null
+          updated_at: string
+          valid_days: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          face_value?: number
+          id?: string
+          name: string
+          sort_order?: number
+          terms?: string | null
+          updated_at?: string
+          valid_days?: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          face_value?: number
+          id?: string
+          name?: string
+          sort_order?: number
+          terms?: string | null
+          updated_at?: string
+          valid_days?: number
+        }
+        Relationships: []
+      }
+      vouchers: {
+        Row: {
+          applicant_name: string | null
+          applicant_phone: string | null
+          applicant_screenshot_url: string | null
+          applicant_submitted_at: string | null
+          approved_at: string | null
+          approved_by: string | null
+          code: string
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          note: string | null
+          redeemed_at: string | null
+          redeemed_by: string | null
+          reject_reason: string | null
+          share_token: string
+          shop_id: string | null
+          status: string
+          type_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          applicant_name?: string | null
+          applicant_phone?: string | null
+          applicant_screenshot_url?: string | null
+          applicant_submitted_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          code: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          note?: string | null
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          reject_reason?: string | null
+          share_token?: string
+          shop_id?: string | null
+          status?: string
+          type_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          applicant_name?: string | null
+          applicant_phone?: string | null
+          applicant_screenshot_url?: string | null
+          applicant_submitted_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          note?: string | null
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          reject_reason?: string | null
+          share_token?: string
+          shop_id?: string | null
+          status?: string
+          type_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vouchers_type_id_fkey"
+            columns: ["type_id"]
+            isOneToOne: false
+            referencedRelation: "voucher_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1425,6 +1579,7 @@ export type Database = {
       }
       claim_daily_task: { Args: { _task_key: string }; Returns: Json }
       claim_pending_exp: { Args: { _id: string }; Returns: Json }
+      gen_voucher_code: { Args: never; Returns: string }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
