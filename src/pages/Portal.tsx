@@ -13,6 +13,8 @@ import { KbManager } from '@/components/admin/KbManager';
 import { ShopManager } from '@/components/admin/ShopManager';
 import { RolePermissionManager } from '@/components/admin/RolePermissionManager';
 import { NotificationManager } from '@/components/admin/NotificationManager';
+import { VoucherTypeManager } from '@/components/admin/VoucherTypeManager';
+import { VoucherReviewPanel } from '@/components/admin/VoucherReviewPanel';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
