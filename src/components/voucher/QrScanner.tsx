@@ -40,7 +40,9 @@ export function QrScanner({ onScanned, onClose }: Props) {
     return () => {
       const s = scannerRef.current;
       if (s) {
-        s.stop().catch(() => undefined).finally(() => s.clear().catch(() => undefined));
+        Promise.resolve(s.stop()).catch(() => undefined).finally(() => {
+          try { s.clear(); } catch { /* noop */ }
+        });
       }
     };
   }, [onScanned]);
