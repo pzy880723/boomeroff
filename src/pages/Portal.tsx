@@ -28,7 +28,7 @@ import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, Menu,
   CalendarDays, Clock, BookOpen, MessagesSquare, Store, ShieldCheck,
-  UserCog, Building2, Library, Megaphone, Settings,
+  UserCog, Building2, Library, Megaphone, Settings, Ticket,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
