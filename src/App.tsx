@@ -90,8 +90,11 @@ const App = () => (
               
               <Route path="/me/sop" element={<MySop />} />
               <Route path="/me/qa" element={<MyQa />} />
+              <Route path="/me/vouchers" element={<VouchersMine />} />
+              <Route path="/me/vouchers/redeem/:code" element={<VoucherRedeem />} />
 
               {/* 游客版（免登录） */}
+              <Route path="/u/voucher/:shareToken" element={<PublicVoucher />} />
               <Route path="/u" element={<PublicLayout />}>
                 <Route index element={<PublicScan />} />
                 <Route path="result" element={<PublicResult />} />
