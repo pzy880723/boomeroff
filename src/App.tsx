@@ -29,6 +29,9 @@ const CheckInHistory = lazy(() => import("./pages/CheckInHistory"));
 const MySop = lazy(() => import("./pages/MySop"));
 const MyQa = lazy(() => import("./pages/MyQa"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const VouchersMine = lazy(() => import("./pages/VouchersMine"));
+const VoucherRedeem = lazy(() => import("./pages/VoucherRedeem"));
+const PublicVoucher = lazy(() => import("./pages/public/PublicVoucher"));
 
 // 游客版（免登录）
 const PublicLayout = lazy(() =>
