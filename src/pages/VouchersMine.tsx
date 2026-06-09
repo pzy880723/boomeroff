@@ -75,7 +75,7 @@ export default function VouchersMine() {
 
   return (
     <>
-      <PageHeader title="我的抵用券" backTo="/me" />
+      <PageHeader title="我的抵用券" back="/me" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-3">
         <div className="grid grid-cols-2 gap-2">
           <Button onClick={() => setNewOpen(true)} className="h-12">
