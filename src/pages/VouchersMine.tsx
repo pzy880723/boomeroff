@@ -90,11 +90,8 @@ export default function VouchersMine() {
           )}
         </div>
 
-        {can('voucher.manage') && (
-          <Button variant="outline" className="w-full h-11" onClick={() => navigate('/me/activities')}>
-            <Megaphone className="w-4 h-4 mr-1.5" /> 我的活动
-          </Button>
-        )}
+
+
 
         {loading ? (
           <div className="flex items-center justify-center py-10">
