@@ -1,92 +1,116 @@
-# 抵用券核销系统
+## 抵用券与活动系统重构方案
 
-## 业务流程
+### 一、整体结构变化
 
-```
-管理员创建券类型 (/portal · 券类型管理)
-        ↓
-店员/管理员 在「我的」新建抵用券 → 选择券类型 → 生成专属链接
-        ↓ 转发
-客户(免登录) 打开链接 → 填写 姓名 / 电话 / 主页截图 → 提交申请
-        ↓
-管理员在 /portal「抵用券审核」查看 → 通过/拒绝
-        ↓ 通过
-客户领券页自动显示 二维码 + 券编号 (凭手机号或券码查询)
-        ↓ 到店
-店员在「我的 · 核销」扫码 → 登录态确认 → 标记已核销
-        ↓
-客户端实时同步状态为「已核销」+ 后台留记录
+```text
+旧结构：voucher_types(模板) → vouchers(实例,绑定 share_token)
+新结构：
+  vouchers(抵用券=模板,带门槛规则) ──┬─→ voucher_claims(直接转发链接产生的领取/核销实例)
+                                    └─→ activities(活动) → activity_applications(用户申请+自定义字段) → 审核 → 短信 → voucher_claims
 ```
 
-## 数据库
+废弃 `voucher_types` 表（保留迁移，不删数据）。
 
-新增 4 张表（全部加 RLS + GRANT）：
+### 二、数据库改动（一个 migration）
 
-- **`voucher_types`** — 券类型字典  
-  字段：name / description / face_value (numeric) / valid_days (int) / terms (text) / active (bool)  
-  读：authenticated + anon (领券页要看)；写：admin
+**1. 改造 `vouchers` 表（变模板）**
+- 新增字段：`threshold_type`（`'none'` 无门槛 / `'min_spend'` 满减）、`discount_amount`（抵扣金额）、`min_spend`（门槛金额，门槛模式必填）、`valid_days`（有效期天数）、`terms`（使用说明）、`active`（是否启用）
+- 移除/弃用：`applicant_name`、`applicant_phone`、`screenshot_url`、`status`、`share_token`、`code` 这些"实例字段"——迁移到 `voucher_claims`
+- 兼容策略：保留旧字段允许 NULL，新逻辑只读写新字段
 
-- **`vouchers`** — 抵用券实例（一张实物券）  
-  字段：code (短码 8 位唯一)、type_id、created_by、shop_id、note、share_token (uuid，用于公开链接)、status (`pending_apply` → 待客户申请 / `pending_review` → 待审核 / `approved` → 已发放 / `rejected` / `redeemed` → 已核销 / `expired`)、applicant_name / applicant_phone / applicant_screenshot_url、approved_by / approved_at、redeemed_by / redeemed_at、expires_at  
-  读：店员/管理员看自己创建的 + admin 全看；公开领券页通过 edge function 凭 share_token 读；写：店员/管理员创建，admin 改状态
+**2. 新建 `voucher_claims`（核销实例）**
+- `voucher_id`、`activity_application_id`（可空）、`code`（8 位唯一，复用 `gen_voucher_code()`）、`share_token`（uuid，免登录领取入口）
+- `recipient_name`、`recipient_phone`、`recipient_extra`（jsonb，存活动自定义字段）
+- `status`：`unclaimed` → `claimed` → `redeemed` / `expired` / `void`
+- `claimed_at`、`redeemed_at`、`redeemed_by`、`expires_at`
+- 来源标记：`source`（`'direct'` 直接转发 / `'activity'` 活动审核通过）
 
-- **`voucher_logs`** — 操作流水（创建/申请/审核/核销）  
-  读：admin；写：触发器或 edge function
+**3. 新建 `activities`（活动）**
+- `name`、`description`、`cover_url`、`voucher_id`（关联模板）、`share_token`（公开申请入口）
+- `form_fields` jsonb：动态字段定义（每项含 `key/label/type/required/options/placeholder`，type 支持 `text/phone/url/image/textarea/select`）
+- `status`：`draft` / `active` / `closed`
+- `created_by`、`starts_at`、`ends_at`、`max_applications`（可空）
 
-- **存储桶 `voucher-screenshots`** — 公开桶，存客户上传的主页截图  
-  写策略：通过 edge function 上传（无需登录），路径含 share_token
+**4. 新建 `activity_applications`（活动申请）**
+- `activity_id`、`applicant_name`、`applicant_phone`（必填，用于发短信）、`form_data` jsonb（按 form_fields 收集）
+- `status`：`pending` / `approved` / `rejected`
+- `reviewed_by`、`reviewed_at`、`reject_reason`
+- `voucher_claim_id`（审核通过后生成的 claim）
+- `sms_sent_at`、`sms_error`
 
-## 后端 Edge Functions（免登录入口）
+**5. 新建 `voucher_logs` 扩展**
+- 已存在，增加 `claim_id`、`activity_id` 列以记录新流程
 
-- `voucher-apply` — 公开。入参 share_token + 姓名/电话 + 截图(base64 或预签名上传)。校验券处于 `pending_apply`，写入申请字段，状态置 `pending_review`。
-- `voucher-status` — 公开。凭 share_token 或 (code + phone) 查询券的当前状态、二维码内容、券类型。
-- `voucher-redeem` — 需登录(店员/管理员)。入参 redeem_token (二维码内容)，校验状态 `approved` + 未过期，置 `redeemed`，记录 redeemed_by/at。
-- 核销 token：用 vouchers.code + 一个 redeem_secret 拼短签名，二维码内容 = `https://<app>/u/voucher/<code>?t=<sig>`，登录态店员扫到即跳确认页。
+**RLS 与 GRANT**（关键点）
+- `vouchers`、`activities`：管理员可写，所有员工可读（已存在权限 key `voucher.manage`）
+- `voucher_claims`、`activity_applications`：仅服务端写入；普通用户走 edge function 公开接口
+- 公开读取（凭 `share_token` 查询）一律通过 edge function 而非 RLS 暴露
 
-## 前端
+### 三、Edge Functions
 
-### /portal 新增两个 Tab
-1. **券类型管理** — CRUD `voucher_types`
-2. **抵用券审核** — 列表（按状态过滤），点开看申请人信息+截图 → 通过/拒绝；也能看核销状态、撤销、导出
+| 函数 | 鉴权 | 作用 |
+|---|---|---|
+| `voucher-claim-create` | 管理员 | 直接转发模式：管理员选模板 → 生成一条 `voucher_claims` → 返回 share_token |
+| `voucher-claim-status` | 公开 | 凭 share_token 或 (code+phone) 查询 claim 状态 |
+| `voucher-claim-accept` | 公开 | 用户在领取页填姓名/手机 → 把 claim 从 `unclaimed` 改为 `claimed` |
+| `voucher-redeem` | 登录+`voucher.redeem` | 现有函数改造为操作 `voucher_claims`（按 code 或扫码 token） |
+| `activity-apply` | 公开 | 凭 activity share_token 提交申请；按 form_fields 校验；图片字段走 base64 上传到 `voucher-screenshots` bucket |
+| `activity-review` | 管理员 | 通过/拒绝；通过则生成 `voucher_claims` + 调短信函数 |
+| `send-sms` | 内部 | 阿里云**或**腾讯云短信发送，签名+模板 ID 从 secrets 读取；返回结果写回 `sms_sent_at/sms_error` |
 
-### 「我的」页新增模块「抵用券」
-- 入口卡片：`抵用券` → 进入 `/me/vouchers`
-- 列表：我创建的所有券，按状态分组（待申请/待审核/已发放/已核销/已过期）
-- 「新建抵用券」按钮 → 弹窗：选券类型、备注、(可选)预填客户信息 → 创建后展示 **分享链接 + 复制按钮 + 微信/系统分享**
-- 「扫码核销」按钮 → 打开摄像头扫码（复用现有 camera hook）→ 跳到 `/me/vouchers/redeem/:code?t=...` 确认页
-- 点开任一券：看详情 + 申请人信息 + 二维码（仅 approved 状态显示）+ 核销记录
+短信内容示例：`【店名】您申请的"小红书探店活动"已通过审核，点击领取专属优惠：https://app.com/u/claim/{token}` （短链 token 即 claim.share_token）
 
-### 公开领券页 `/u/voucher/:shareToken`
-- 未提交：表单（姓名 / 手机号 / 主页截图上传），提交后调用 `voucher-apply`
-- 待审核：显示「申请已提交，正在审核」+ 凭手机号自动轮询状态
-- 已通过：大幅展示 二维码 + 券编号 + 面额 + 有效期 + 使用说明 + 「保存图片」
-- 已核销：显示「已核销 · 核销时间」灰色态
-- 已拒绝/过期：对应提示
+### 四、需要您准备的短信凭证（任选其一）
 
-### 实时同步
-- 客户端领券页订阅 `vouchers` 表 realtime（按 share_token 过滤）→ 审核通过/核销后立刻刷新
-- 「我的 · 抵用券」列表同样订阅
+**阿里云**：`ALIYUN_SMS_ACCESS_KEY_ID`、`ALIYUN_SMS_ACCESS_KEY_SECRET`、`ALIYUN_SMS_SIGN_NAME`（已审核签名）、`ALIYUN_SMS_TEMPLATE_CODE`（已审核模板）
 
-## 路由新增
-- `/me/vouchers` — 我的券列表
-- `/me/vouchers/new` — 新建（或弹窗）
-- `/me/vouchers/redeem/:code` — 扫码后的确认核销页（登录态）
-- `/u/voucher/:shareToken` — 公开领券/状态页（PublicLayout 下）
+**腾讯云**：`TENCENT_SMS_SECRET_ID`、`TENCENT_SMS_SECRET_KEY`、`TENCENT_SMS_SDK_APP_ID`、`TENCENT_SMS_SIGN_NAME`、`TENCENT_SMS_TEMPLATE_ID`
 
-## 安全要点
-- 公开 edge function 用 share_token (uuid v4) 做凭据，不暴露内部 id
-- 截图上传走 edge function 服务端转存，避免直接给 anon 写 storage 权限
-- 核销二维码包含 HMAC 签名 (`crypto.subtle` + 服务端 secret)，防伪造
-- 手机号查询带速率限制（per-IP）
-- `redeem` 操作必须验证调用者有 `voucher.redeem` 权限（在 app_permissions 里新增）
+实施时我会先建好基础设施，到调用短信那一步停下来请您把对应 secret 填入。模板变量约定 `{1}=活动名` `{2}=领取链接短码`。
 
-## 不做（本期）
-- 不做客户端账户体系（完全免登录）
-- 不做支付/核销金额抵扣计算（只标记状态，金额仅展示）
-- 不做批量发券（一次一张，转发即可复用）
+### 五、前端页面
 
-## 估算改动
-- 1 个迁移（4 表 + RLS + GRANT + storage bucket + 2 个新权限）
-- 3 个 edge functions
-- 6~8 个新前端文件（VouchersPanel、NewVoucherDialog、RedeemPage、PublicVoucherPage、PortalVoucherTypes、PortalVoucherReview 等）
-- 路由 + Me 页入口接线
+**管理员 / 店员（`/me/vouchers` 改造 + `/me/activities` 新增）**
+- `VouchersMine.tsx` 改名职责：列出"抵用券（模板）"，新建按钮打开 `VoucherEditDialog`
+  - 字段：名称、门槛类型 RadioGroup（无门槛 / 满减）、抵扣金额、（满减时）门槛金额、有效期天数、使用说明
+  - 列表每条卡片：编辑、停用、"直接转发"按钮（生成 claim 并复制链接）、查看核销记录
+- 新增 `MyActivities.tsx`：活动列表 + 新建活动
+  - `ActivityEditDialog`：名称、描述、封面、选抵用券、动态字段编辑器（增删字段、设字段名/类型/是否必填）、生效时间
+  - 详情页 `ActivityDetail.tsx`：申请列表（待审/通过/拒绝 Tab）、每条申请查看自定义字段+截图、通过/拒绝按钮、短信发送状态
+- `Me.tsx` 入口新增"我的活动"
+
+**Portal（管理员后台）**
+- 删除"券类型管理"tab；改为"抵用券审核"已不再需要（直接转发模式无审核），保留为"活动审核"——管理员能看到所有活动的待审申请，集中处理
+
+**公开页（免登录）**
+- `/u/claim/:token`：用户领取抵用券页面（直接转发模式入口）。展示券面 → 填姓名+手机 → 显示二维码（含 redeem code）
+- `/u/activity/:token`：活动申请页。展示活动信息 → 动态渲染 form_fields 表单 → 提交后展示"审核中" → 凭手机号可查询状态
+- `/u/claim-status`：凭手机号或 code 查询状态（小工具页）
+- 短信中链接直达 `/u/claim/:token`，已审核通过的 claim 会跳过表单直接展示二维码
+
+**核销页（已有）**
+- `/me/vouchers/redeem/:code` 改为对接 `voucher_claims`
+
+### 六、技术细节
+
+- `voucher_claims.code` 复用现有 `gen_voucher_code()` + trigger
+- `voucher_claims.expires_at` 由 trigger 在 `claimed_at` 写入时按 `voucher.valid_days` 计算
+- 动态表单字段在前端用一个统一 `<DynamicForm fields={...} />` 组件渲染；图片字段在 edge function 端做 base64 上传
+- 短信失败不阻塞审核：审核通过先入库，再异步调 `send-sms`，失败把错误存进 `sms_error` 并在管理员后台显示"重发短信"按钮
+
+### 七、不在本次范围
+
+- 抵用券核销金额结算 / 收银台对接（仅状态变更）
+- 微信小程序原生分享卡片（继续用 H5 链接）
+- 短信营销/群发（仅事务性"审核通过"通知）
+
+### 八、实施步骤
+
+1. Migration：改造 `vouchers`，新建 `voucher_claims` / `activities` / `activity_applications`，加 GRANT/RLS/trigger
+2. 删除/废弃旧 edge functions（`voucher-apply`、`voucher-review`、`voucher-status`）
+3. 新建 7 个 edge functions
+4. 前端：编辑器、列表、详情、动态表单组件
+5. 公开页：claim / activity / status
+6. 短信：等您选定阿里云或腾讯云后我请求对应 secrets，再写 `send-sms`
+
+预计工作量：1 migration + 7 edge functions + 约 10 个前端文件改/新建。
