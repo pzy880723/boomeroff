@@ -46,11 +46,6 @@ export default function VoucherRedeem() {
     if (!t) { setError('二维码缺少参数'); setLoading(false); return; }
     (async () => {
       setLoading(true);
-      const { data, error: e } = await supabase.functions.invoke('voucher-status', {
-        body: undefined,
-        method: 'GET' as any,
-      } as any).catch(() => ({ data: null, error: { message: 'network' } } as any));
-      // fallback to direct fetch since invoke doesn't support GET easily
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voucher-status?share_token=${encodeURIComponent(t)}`;
       const resp = await fetch(url, {
         headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '' },
