@@ -157,7 +157,12 @@ export default function Me() {
 
         {/* Settings */}
         <Card className="overflow-hidden">
-          <Link to="/me/sop" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors">
+          <Link to="/me/vouchers" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors">
+            <Ticket className="w-5 h-5 text-muted-foreground" />
+            <span className="flex-1 text-sm">抵用券</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </Link>
+          <Link to="/me/sop" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
             <BookOpen className="w-5 h-5 text-muted-foreground" />
             <span className="flex-1 text-sm">门店 SOP</span>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
