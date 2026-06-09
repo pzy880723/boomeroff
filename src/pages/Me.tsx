@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut,
-  ChevronRight, Edit2, CalendarCheck, BookOpen, MessagesSquare, MapPin, Briefcase,
+  ChevronRight, Edit2, CalendarCheck, BookOpen, MessagesSquare, MapPin, Briefcase, Ticket,
 } from 'lucide-react';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 import { Link } from 'react-router-dom';
