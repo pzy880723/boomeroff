@@ -42,7 +42,7 @@ export default function ActivitiesMine() {
   if (!can('voucher.manage')) {
     return (
       <>
-        <PageHeader title="我的活动" back="/me/vouchers" />
+        <PageHeader title="我的活动" back="/me" />
         <div className="container max-w-screen-md mx-auto px-3 py-6">
           <Card className="p-6 text-center text-sm text-muted-foreground">当前账号没有活动管理权限</Card>
         </div>
@@ -52,7 +52,7 @@ export default function ActivitiesMine() {
 
   return (
     <>
-      <PageHeader title="我的活动" back="/me/vouchers" />
+      <PageHeader title="我的活动" back="/me" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-3">
         <Button onClick={() => setEditOpen(true)} className="w-full h-12">
           <Plus className="w-4 h-4 mr-1.5" /> 新建活动
