@@ -70,6 +70,12 @@ const MENU_GROUPS: MenuGroup[] = [
     ],
   },
   {
+    key: 'vouchers', label: '抵用券', icon: Ticket, items: [
+      { key: 'voucher_review', label: '抵用券审核', icon: BadgeCheck, perm: 'voucher.manage' },
+      { key: 'voucher_types', label: '券类型管理', icon: Ticket, perm: 'voucher.manage' },
+    ],
+  },
+  {
     key: 'system', label: '系统', icon: Settings, items: [
       { key: 'ai', label: 'AI 模型', icon: Sparkles, perm: 'settings.ai' },
     ],
