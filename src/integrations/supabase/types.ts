@@ -241,6 +241,47 @@ export type Database = {
         }
         Relationships: []
       }
+      claim_otp: {
+        Row: {
+          attempts: number
+          claim_id: string
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          phone: string
+          verified_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          claim_id: string
+          code: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          phone: string
+          verified_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          claim_id?: string
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          phone?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_otp_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "voucher_claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       community_comments: {
         Row: {
           content: string
@@ -1554,6 +1595,7 @@ export type Database = {
           redeemed_at: string | null
           redeemed_by: string | null
           share_token: string
+          short_code: string | null
           source: string
           status: string
           updated_at: string
@@ -1573,6 +1615,7 @@ export type Database = {
           redeemed_at?: string | null
           redeemed_by?: string | null
           share_token?: string
+          short_code?: string | null
           source?: string
           status?: string
           updated_at?: string
@@ -1592,6 +1635,7 @@ export type Database = {
           redeemed_at?: string | null
           redeemed_by?: string | null
           share_token?: string
+          short_code?: string | null
           source?: string
           status?: string
           updated_at?: string
@@ -1793,6 +1837,7 @@ export type Database = {
       }
       claim_daily_task: { Args: { _task_key: string }; Returns: Json }
       claim_pending_exp: { Args: { _id: string }; Returns: Json }
+      gen_short_code: { Args: never; Returns: string }
       gen_voucher_code: { Args: never; Returns: string }
       get_user_role: {
         Args: { _user_id: string }
