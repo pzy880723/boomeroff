@@ -1,18 +1,18 @@
-// 抵用券详情：展示规则、生成"直接转发"链接、查看核销记录
+// 抵用券详情：洋气券面 + 定向发放 + 编辑 + 领取记录
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Copy, Share2 } from 'lucide-react';
+import { Loader2, Copy, Send, Pencil } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   type VoucherTemplate, type VoucherClaim, formatVoucherRule,
   buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT,
 } from '@/lib/voucher';
-import { format } from 'date-fns';
 
 interface Props {
   open: boolean;
@@ -22,6 +22,7 @@ interface Props {
 }
 
 export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Props) {
+  const navigate = useNavigate();
   const [claims, setClaims] = useState<VoucherClaim[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -41,7 +42,7 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Pro
     })();
   }, [open, voucher]);
 
-  const createAndCopy = async () => {
+  const directRelease = async () => {
     if (!voucher) return;
     setCreating(true);
     const { data, error } = await supabase.functions.invoke('voucher-claim-create', {
@@ -52,49 +53,68 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Pro
       toast.error((data as any)?.error || error?.message || '生成失败');
       return;
     }
-    const url = buildClaimShareUrl((data as any).claim.share_token);
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success('领取链接已复制');
-    } catch {
-      toast.success('已生成：' + url);
-    }
-    // refresh list
-    const { data: rows } = await supabase
-      .from('voucher_claims')
-      .select('*').eq('voucher_id', voucher.id)
-      .order('created_at', { ascending: false }).limit(50);
-    setClaims((rows || []) as unknown as VoucherClaim[]);
+    const claim = (data as any).claim;
+    onOpenChange(false);
+    navigate(`/me/vouchers/share/${claim.id}`);
   };
 
   if (!voucher) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0 gap-0">
+        <DialogHeader className="px-4 pt-4 pb-2">
+          <DialogTitle className="flex items-center gap-2 text-base">
             {voucher.name}
             {!voucher.active && <Badge variant="outline">已停用</Badge>}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <div className="rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 p-4 text-center">
-            <p className="text-3xl font-bold tabular-nums text-primary">¥{voucher.discount_amount}</p>
-            <p className="text-xs text-muted-foreground mt-1">{formatVoucherRule(voucher)}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">有效期 {voucher.valid_days} 天</p>
-            {voucher.template_terms && (
-              <p className="text-[11px] text-muted-foreground mt-2">{voucher.template_terms}</p>
-            )}
+        <div className="px-4 space-y-3">
+          <div
+            className="relative overflow-hidden rounded-2xl p-5 text-white"
+            style={{
+              background:
+                'linear-gradient(135deg, #2a1808 0%, #4a2a12 45%, #8a5424 100%)',
+            }}
+          >
+            <div
+              className="absolute -top-12 -right-12 w-40 h-40 rounded-full opacity-30 blur-2xl"
+              style={{ background: '#f5c66e' }}
+            />
+            <div className="relative">
+              <div className="text-[11px] tracking-[0.25em] opacity-70">BOOMER-OFF · 专属券</div>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-xl font-bold" style={{ color: '#ffd28a' }}>¥</span>
+                <span
+                  className="font-bold tabular-nums leading-none"
+                  style={{ fontSize: '56px', color: '#ffd28a' }}
+                >
+                  {voucher.discount_amount}
+                </span>
+              </div>
+              <div className="mt-1 text-sm" style={{ color: '#ffe7bd' }}>
+                {formatVoucherRule(voucher)}
+              </div>
+              <div className="mt-0.5 text-[11px] opacity-70">
+                有效期 {voucher.valid_days} 天 · 仅到店消费
+              </div>
+              {voucher.template_terms && (
+                <p className="mt-3 pt-2 border-t border-white/10 text-[11px] opacity-75 line-clamp-2">
+                  {voucher.template_terms}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <Button onClick={createAndCopy} disabled={creating || !voucher.active} className="h-10">
-              {creating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Share2 className="w-4 h-4 mr-1.5" />}
-              生成转发链接
+            <Button onClick={directRelease} disabled={creating || !voucher.active} className="h-11">
+              {creating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
+              定向发放
             </Button>
-            <Button variant="outline" onClick={onEdit} className="h-10">编辑</Button>
+            <Button variant="outline" onClick={onEdit} className="h-11">
+              <Pencil className="w-4 h-4 mr-1.5" />编辑
+            </Button>
           </div>
 
           <div>
@@ -107,9 +127,9 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Pro
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {claims.map((c) => (
                   <div key={c.id} className="text-xs flex items-center gap-2 border border-border/60 rounded-lg px-2.5 py-1.5">
-                    <span className="font-mono text-[11px]">{c.code}</span>
+                    <span className="font-mono text-[11px]">{c.short_code || c.code}</span>
                     <span className="text-muted-foreground flex-1 truncate">
-                      {c.recipient_name || (c.source === 'direct' ? '直接转发' : '活动')}
+                      {c.recipient_name || (c.source === 'direct' ? '直接发放' : '活动')}
                       {c.recipient_phone ? ` · ${c.recipient_phone}` : ''}
                     </span>
                     <Badge variant={CLAIM_STATUS_VARIANT[c.status]} className="shrink-0 text-[10px] px-1.5 py-0">
@@ -119,12 +139,12 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Pro
                       <button
                         onClick={async () => {
                           try {
-                            await navigator.clipboard.writeText(buildClaimShareUrl(c.share_token));
-                            toast.success('链接已复制');
+                            await navigator.clipboard.writeText(buildClaimShareUrl(c.short_code || c.share_token));
+                            toast.success('短链已复制');
                           } catch { /* ignore */ }
                         }}
                         className="text-muted-foreground hover:text-foreground"
-                        title="复制链接"
+                        title="复制短链"
                       >
                         <Copy className="w-3 h-3" />
                       </button>
@@ -136,9 +156,9 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Pro
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-        </DialogFooter>
+        <div className="px-4 py-3 mt-3">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">关闭</Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

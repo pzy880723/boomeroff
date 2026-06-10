@@ -32,7 +32,6 @@ Deno.serve(async (req) => {
     if (e1 || !claim) return json({ error: '抵用券不存在' }, 404);
     if (claim.status !== 'unclaimed') return json({ ok: true, already: true });
 
-    // 查询最新一条 OTP
     const { data: otpRow } = await admin.from('claim_otp')
       .select('*')
       .eq('claim_id', claim.id)
@@ -50,7 +49,6 @@ Deno.serve(async (req) => {
       return json({ error: '验证码不正确' }, 400);
     }
 
-    // 标记 OTP 已用
     await admin.from('claim_otp').update({ verified_at: new Date().toISOString() }).eq('id', otpRow.id);
 
     const { error: e2 } = await admin

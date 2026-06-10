@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     });
     if (e2) return json({ error: e2.message }, 400);
 
-    // 调 send-sms，把 OTP 直接拼到 activity_name 里（兼容现有 SMS 模板：{name}+{link}）
+    // 调 send-sms，把 OTP 拼到 activity_name（兼容现有 SMS 模板：{name}+{link}）
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const smsResp = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
       method: 'POST',
