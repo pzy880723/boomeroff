@@ -31,6 +31,7 @@ const MyQa = lazy(() => import("./pages/MyQa"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const VouchersMine = lazy(() => import("./pages/VouchersMine"));
 const VoucherRedeem = lazy(() => import("./pages/VoucherRedeem"));
+const VoucherSharePoster = lazy(() => import("./pages/VoucherSharePoster"));
 const PublicClaim = lazy(() => import("./pages/public/PublicClaim"));
 const PublicActivity = lazy(() => import("./pages/public/PublicActivity"));
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
@@ -95,10 +96,12 @@ const App = () => (
               <Route path="/me/qa" element={<MyQa />} />
               <Route path="/me/vouchers" element={<VouchersMine />} />
               <Route path="/me/vouchers/redeem/:code" element={<VoucherRedeem />} />
+              <Route path="/me/vouchers/share/:claimId" element={<VoucherSharePoster />} />
               <Route path="/me/activities" element={<ActivitiesMine />} />
               <Route path="/me/activities/:id" element={<ActivityDetail />} />
 
               {/* 游客版（免登录） */}
+              <Route path="/u/c/:short" element={<PublicClaim />} />
               <Route path="/u/claim/:shareToken" element={<PublicClaim />} />
               <Route path="/u/activity/:shareToken" element={<PublicActivity />} />
               <Route path="/u" element={<PublicLayout />}>

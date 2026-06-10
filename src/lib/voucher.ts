@@ -55,6 +55,7 @@ export interface VoucherClaim {
   activity_application_id: string | null;
   code: string;
   share_token: string;
+  short_code: string | null;
   source: 'direct' | 'activity';
   status: 'unclaimed' | 'claimed' | 'redeemed' | 'expired' | 'void';
   recipient_name: string | null;
@@ -118,9 +119,9 @@ export function formatVoucherRule(v: Pick<VoucherTemplate, 'threshold_type' | 'd
   return `无门槛抵 ¥${v.discount_amount}`;
 }
 
-// 公开领取链接（用户免登录领取直接转发的券）
-export function buildClaimShareUrl(share_token: string): string {
-  return `${window.location.origin}/u/claim/${share_token}`;
+// 公开领取短链（优先 short_code，回退 share_token）
+export function buildClaimShareUrl(token: string): string {
+  return `${window.location.origin}/u/c/${token}`;
 }
 
 // 活动公开申请链接
@@ -133,6 +134,5 @@ export function buildClaimRedeemUrl(code: string): string {
   return `${window.location.origin}/me/vouchers/redeem/${code}`;
 }
 
-// 旧字段兼容（一些组件仍可能引用）
 export const VOUCHER_STATUS_LABEL = CLAIM_STATUS_LABEL;
 export const VOUCHER_STATUS_VARIANT = CLAIM_STATUS_VARIANT;
