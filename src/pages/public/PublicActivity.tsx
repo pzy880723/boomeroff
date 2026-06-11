@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Megaphone, CheckCircle2, AlertTriangle, Upload } from 'lucide-react';
+import { Loader2, Megaphone, AlertTriangle, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ActivityField } from '@/lib/voucher';
