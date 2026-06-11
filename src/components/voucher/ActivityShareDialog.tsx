@@ -30,6 +30,8 @@ interface Props {
 
 const W = 750;
 const H = 1334;
+const POSTER_VERSION = 'v2';
+
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
