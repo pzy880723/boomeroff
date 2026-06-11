@@ -92,7 +92,22 @@ export default function PublicClaimByPhone() {
     >
       <div className="max-w-sm w-full space-y-5">
         <div className="flex justify-center animate-fade-in">
-          <img src={logo} alt="BOOMER-OFF" className="h-14 w-auto" />
+          <div
+            role="img"
+            aria-label="BOOMER-OFF"
+            className="h-14 w-40"
+            style={{
+              backgroundColor: '#fde68a',
+              WebkitMaskImage: `url(${logo})`,
+              maskImage: `url(${logo})`,
+              WebkitMaskRepeat: 'no-repeat',
+              maskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskPosition: 'center',
+              WebkitMaskSize: 'contain',
+              maskSize: 'contain',
+            }}
+          />
         </div>
 
         <div className="text-center text-amber-100/90 space-y-1">
