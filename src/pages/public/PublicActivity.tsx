@@ -101,7 +101,7 @@ export default function PublicActivity() {
           {activity.description && <p className="text-xs text-muted-foreground">{activity.description}</p>}
           {v && (
             <div className="bg-primary/10 rounded-lg p-3 text-center">
-              <p className="text-xs text-muted-foreground">通过审核可获</p>
+              <p className="text-xs text-muted-foreground">报名后可领</p>
               <p className="text-2xl font-bold text-primary tabular-nums">¥{v.discount_amount}</p>
               <p className="text-xs text-muted-foreground">{formatVoucherRule(v)} · 有效期 {v.valid_days} 天</p>
             </div>
