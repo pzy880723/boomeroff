@@ -45,7 +45,6 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const [vouchers, setVouchers] = useState<VoucherTemplate[]>([]);
   const [fields, setFields] = useState<ActivityField[]>(DEFAULT_FIELDS);
   const [active, setActive] = useState(true);
-  const [requiresReview, setRequiresReview] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
