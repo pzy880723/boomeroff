@@ -94,11 +94,12 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       setDisplayUrl(null);
       return;
     }
-    // 已有缓存 → 直接展示
-    if (activity.poster_url) {
+    // 已有缓存 + 版本匹配 → 直接展示
+    if (activity.poster_url && activity.poster_url.includes(`_${POSTER_VERSION}.png`)) {
       setDisplayUrl(activity.poster_url);
       return;
     }
+
     let cancelled = false;
     setGenerating(true);
     setDisplayUrl(null);
