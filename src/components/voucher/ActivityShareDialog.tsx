@@ -317,8 +317,9 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       ctx.textAlign = 'center';
       ctx.fillText(`活动时间　${timeText}`, W / 2, cursorY);
       cursorY += 32;
-      ctx.fillText(`参与方式　${activity.requires_review ? '需 审 核' : '免 审 核'}`, W / 2, cursorY);
+      ctx.fillText('扫码即可填表领券', W / 2, cursorY);
       cursorY += 30;
+
 
       ctx.beginPath();
       ctx.moveTo(cardX + 30, cursorY); ctx.lineTo(W - cardX - 30, cursorY);
