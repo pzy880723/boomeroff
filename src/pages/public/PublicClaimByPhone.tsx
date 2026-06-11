@@ -77,6 +77,7 @@ export default function PublicClaimByPhone() {
     }
     const shortCode = (data as any)?.short_code;
     if (shortCode) {
+      fireFirework();
       navigate(`/u/c/${shortCode}`, { replace: true });
     } else {
       setErrorMsg('不好意思，没有搜索到对应的优惠券，请检查您的手机号是否输入正确');
