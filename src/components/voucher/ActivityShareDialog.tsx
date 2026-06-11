@@ -35,29 +35,27 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number): string[] {
   const lines: string[] = [];
   let current = '';
-  for (const ch of text) {
-    const test = current + ch;
+  let i = 0;
+  const chars = Array.from(text);
+  while (i < chars.length) {
+    const test = current + chars[i];
     if (ctx.measureText(test).width > maxWidth) {
-      lines.push(current);
-      current = ch;
       if (lines.length === maxLines - 1) {
-        // last line, add ellipsis if overflow
-        let rest = current;
-        for (let i = 0; i < text.length; i++) {
-          // append remaining chars until overflow then ellipsis
+        // last allowed line: fit remaining + ellipsis
+        let remaining = chars.slice(i).join('');
+        let lastLine = current;
+        while (remaining.length && ctx.measureText(lastLine + '…').width > maxWidth) {
+          lastLine = lastLine.slice(0, -1);
         }
-        // simpler: take remaining text and truncate with ellipsis
-        const idx = text.indexOf(ch);
-        let remaining = text.slice(idx);
-        while (remaining.length && ctx.measureText(remaining + '…').width > maxWidth) {
-          remaining = remaining.slice(0, -1);
-        }
-        lines.push(remaining + (remaining.length < text.slice(idx).length ? '…' : ''));
+        lines.push(lastLine + '…');
         return lines;
       }
+      lines.push(current);
+      current = chars[i];
     } else {
       current = test;
     }
+    i++;
   }
   if (current) lines.push(current);
   return lines;
