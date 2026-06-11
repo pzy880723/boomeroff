@@ -324,7 +324,13 @@ export default function ActivityDetail() {
         />
       )}
 
-      <ActivityShareDialog open={shareOpen} onOpenChange={setShareOpen} activity={activity} />
+      <ActivityShareDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        activity={activity}
+        onPosterSaved={(url) => setActivity((a) => a ? { ...a, poster_url: url } : a)}
+      />
+
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
