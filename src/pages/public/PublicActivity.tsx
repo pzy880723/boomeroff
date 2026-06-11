@@ -71,6 +71,7 @@ export default function PublicActivity() {
       return;
     }
     toast.error('提交成功但未生成抵用券，请联系客服');
+  };
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
@@ -81,19 +82,6 @@ export default function PublicActivity() {
         <Card className="p-6 text-center max-w-sm w-full space-y-2">
           <AlertTriangle className="w-10 h-10 mx-auto text-destructive" />
           <p className="text-sm">{error || '活动不存在'}</p>
-        </Card>
-      </div>
-    );
-  }
-
-  if (done) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="p-6 text-center max-w-sm w-full space-y-2">
-          <CheckCircle2 className="w-10 h-10 mx-auto text-green-600" />
-          <p className="text-base font-medium">申请已提交</p>
-          <p className="text-xs text-muted-foreground">待审核通过后将通过短信通知您领取抵用券</p>
-
         </Card>
       </div>
     );
