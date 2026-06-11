@@ -52,23 +52,8 @@ export default function ActivityDetail() {
 
   useEffect(() => { load(); }, [load]);
 
-  const review = async (appId: string, decision: 'approve' | 'reject') => {
-    setProcessing(appId);
-    const { data, error } = await supabase.functions.invoke('activity-review', {
-      body: { application_id: appId, decision },
-    });
-    setProcessing(null);
-    if (error || (data as any)?.error) {
-      toast.error((data as any)?.error || error?.message || '操作失败');
-      return;
-    }
-    if (decision === 'approve' && (data as any).sms_error) {
-      toast.warning('已通过，但短信发送失败：' + (data as any).sms_error);
-    } else {
-      toast.success(decision === 'approve' ? '已通过并发送通知' : '已拒绝');
-    }
-    load();
-  };
+
+
 
   const handleDelete = async () => {
     if (!activity) return;
