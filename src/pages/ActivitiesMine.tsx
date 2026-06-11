@@ -8,9 +8,10 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Megaphone, Copy, MoreVertical, Pencil, Trash2, CalendarRange, ChevronRight } from 'lucide-react';
+import { Loader2, Plus, Megaphone, Share2, MoreVertical, Pencil, Trash2, CalendarRange, ChevronRight } from 'lucide-react';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
-import { type Activity, buildActivityShareUrl } from '@/lib/voucher';
+import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
+import { type Activity } from '@/lib/voucher';
 import { AuthPage } from '@/components/auth/AuthPage';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -33,6 +34,7 @@ export default function ActivitiesMine() {
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [shareActivity, setShareActivity] = useState<Activity | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -146,12 +148,8 @@ export default function ActivitiesMine() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={async () => {
-                            const url = buildActivityShareUrl(a.share_token);
-                            try { await navigator.clipboard.writeText(url); toast.success('活动链接已复制'); }
-                            catch { toast.success(url); }
-                          }}>
-                            <Copy className="w-3.5 h-3.5 mr-2" />复制链接
+                          <DropdownMenuItem onClick={() => setShareActivity(a)}>
+                            <Share2 className="w-3.5 h-3.5 mr-2" />分享海报
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => { setEditId(a.id); setEditOpen(true); }}>
                             <Pencil className="w-3.5 h-3.5 mr-2" />编辑
@@ -190,6 +188,12 @@ export default function ActivitiesMine() {
         userId={user.id}
         activityId={editId}
         onSaved={() => load()}
+      />
+
+      <ActivityShareDialog
+        open={!!shareActivity}
+        onOpenChange={(o) => !o && setShareActivity(null)}
+        activity={shareActivity}
       />
 
       <AlertDialog open={!!deletingId} onOpenChange={(o) => !o && setDeletingId(null)}>
