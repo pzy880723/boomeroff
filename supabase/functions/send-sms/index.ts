@@ -20,14 +20,20 @@ Deno.serve(async (req) => {
     if (!/^1[3-9]\d{9}$/.test(String(phone))) return json({ error: '手机号格式不正确' }, 400);
 
     // 构造模板参数数组（决定调用哪种模板）
-    let mode: 'otp' | 'link';
+    // 模式：
+    //   otp     -> 验证码短信，1 个变量
+    //   notify  -> 通知短信（活动审核通过），0 变量
+    //   link    -> 旧版（保留兼容），2 个变量
+    let mode: 'otp' | 'notify' | 'link';
     let templateParams: string[];
-    let link = '';
     if (template === 'otp') {
       const code = params?.code ? String(params.code) : '';
       if (!/^\d{4,8}$/.test(code)) return json({ error: 'invalid otp code' }, 400);
       mode = 'otp';
       templateParams = [code];
+    } else if (template === 'notify') {
+      mode = 'notify';
+      templateParams = [];
     } else {
       if (!claim_share_token) return json({ error: 'missing claim_share_token' }, 400);
       const supabase = createClient(
@@ -37,7 +43,7 @@ Deno.serve(async (req) => {
       const { data: settings } = await supabase
         .from('app_settings').select('value').eq('key', 'public_site_url').maybeSingle();
       const baseUrl = (settings?.value as any)?.url || 'https://boomeroff.lovable.app';
-      link = `${baseUrl}/u/claim/${claim_share_token}`;
+      const link = `${baseUrl}/u/claim/${claim_share_token}`;
       mode = 'link';
       templateParams = [truncate(activity_name, 20), link];
     }
@@ -58,15 +64,16 @@ Deno.serve(async (req) => {
 
 async function sendTencent(
   phone: string,
-  mode: 'otp' | 'link',
+  mode: 'otp' | 'notify' | 'link',
   templateParams: string[],
   secretId: string,
   secretKey: string,
 ) {
   const sdkAppId = Deno.env.get('TENCENT_SMS_SDK_APP_ID');
   const signName = Deno.env.get('TENCENT_SMS_SIGN_NAME');
-  const templateId = mode === 'otp'
-    ? Deno.env.get('TENCENT_SMS_OTP_TEMPLATE_ID')
+  const templateId =
+    mode === 'otp' ? Deno.env.get('TENCENT_SMS_OTP_TEMPLATE_ID')
+    : mode === 'notify' ? Deno.env.get('TENCENT_SMS_NOTIFY_TEMPLATE_ID')
     : Deno.env.get('TENCENT_SMS_TEMPLATE_ID');
   if (!sdkAppId || !signName || !templateId) {
     return { ok: false, error: `Tencent SMS config missing (${mode})` };
