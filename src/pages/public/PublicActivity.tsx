@@ -23,6 +23,7 @@ async function fileToDataUrl(file: File): Promise<string> {
 
 export default function PublicActivity() {
   const { shareToken = '' } = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activity, setActivity] = useState<any | null>(null);
