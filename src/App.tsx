@@ -33,6 +33,7 @@ const VouchersMine = lazy(() => import("./pages/VouchersMine"));
 const VoucherRedeem = lazy(() => import("./pages/VoucherRedeem"));
 const VoucherSharePoster = lazy(() => import("./pages/VoucherSharePoster"));
 const PublicClaim = lazy(() => import("./pages/public/PublicClaim"));
+const PublicClaimByPhone = lazy(() => import("./pages/public/PublicClaimByPhone"));
 const PublicActivity = lazy(() => import("./pages/public/PublicActivity"));
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
@@ -101,6 +102,7 @@ const App = () => (
               <Route path="/me/activities/:id" element={<ActivityDetail />} />
 
               {/* 游客版（免登录） */}
+              <Route path="/q" element={<PublicClaimByPhone />} />
               <Route path="/u/c/:short" element={<PublicClaim />} />
               <Route path="/u/claim/:shareToken" element={<PublicClaim />} />
               <Route path="/u/activity/:shareToken" element={<PublicActivity />} />
