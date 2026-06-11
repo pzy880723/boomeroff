@@ -190,6 +190,12 @@ export default function ActivitiesMine() {
         onSaved={() => load()}
       />
 
+      <ActivityShareDialog
+        open={!!shareActivity}
+        onOpenChange={(o) => !o && setShareActivity(null)}
+        activity={shareActivity}
+      />
+
       <AlertDialog open={!!deletingId} onOpenChange={(o) => !o && setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
