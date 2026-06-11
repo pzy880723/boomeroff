@@ -25,6 +25,7 @@ export type Database = {
           id: string
           max_applications: number | null
           name: string
+          poster_url: string | null
           requires_review: boolean
           share_token: string
           starts_at: string | null
@@ -42,6 +43,7 @@ export type Database = {
           id?: string
           max_applications?: number | null
           name: string
+          poster_url?: string | null
           requires_review?: boolean
           share_token?: string
           starts_at?: string | null
@@ -59,6 +61,7 @@ export type Database = {
           id?: string
           max_applications?: number | null
           name?: string
+          poster_url?: string | null
           requires_review?: boolean
           share_token?: string
           starts_at?: string | null
