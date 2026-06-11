@@ -415,7 +415,7 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       try {
         if (user) {
           const blob = await dataUrlToBlob(out);
-          const path = `${user.id}/${activity.id}.png`;
+          const path = `${user.id}/${activity.id}_${POSTER_VERSION}.png`;
           const { error: upErr } = await supabase.storage
             .from('activity-posters')
             .upload(path, blob, { upsert: true, contentType: 'image/png' });
