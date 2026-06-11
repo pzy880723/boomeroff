@@ -1,4 +1,4 @@
-// 新建/编辑活动：名称、描述、选抵用券、是否审核、自定义字段、状态
+// 新建/编辑活动：名称、描述、选抵用券、自定义字段、状态
 import { useEffect, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -15,7 +15,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { Activity, ActivityField, VoucherTemplate } from '@/lib/voucher';
-import { cn } from '@/lib/utils';
+
 
 interface Props {
   open: boolean;
@@ -45,7 +45,6 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const [vouchers, setVouchers] = useState<VoucherTemplate[]>([]);
   const [fields, setFields] = useState<ActivityField[]>(DEFAULT_FIELDS);
   const [active, setActive] = useState(true);
-  const [requiresReview, setRequiresReview] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
@@ -76,7 +75,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
           setVoucherId(a.voucher_id);
           setFields((a.form_fields && a.form_fields.length ? a.form_fields : DEFAULT_FIELDS) as ActivityField[]);
           setActive(a.status !== 'closed');
-          setRequiresReview(a.requires_review !== false);
+          
         }
         setLoadingDetail(false);
       })();
@@ -84,7 +83,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       setName(''); setDescription(''); setVoucherId('');
       setFields(DEFAULT_FIELDS);
       setActive(true);
-      setRequiresReview(true);
+      
     }
   }, [open, activityId]);
 
@@ -112,7 +111,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       voucher_id: voucherId,
       form_fields: fields as any,
       status: active ? 'active' : 'draft',
-      requires_review: requiresReview,
+      requires_review: false,
     };
     let error;
     if (isEdit && activityId) {
@@ -155,33 +154,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
             </Select>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">领取方式</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setRequiresReview(true)}
-                className={cn(
-                  'rounded-lg border p-2.5 text-left transition',
-                  requiresReview ? 'border-primary bg-primary/5' : 'border-border'
-                )}
-              >
-                <p className="text-xs font-medium">需要审核</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">申请后由管理员审核，通过后短信通知</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setRequiresReview(false)}
-                className={cn(
-                  'rounded-lg border p-2.5 text-left transition',
-                  !requiresReview ? 'border-primary bg-primary/5' : 'border-border'
-                )}
-              >
-                <p className="text-xs font-medium">无需审核</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">分享页填写信息后直接领取抵用券</p>
-              </button>
-            </div>
-          </div>
+
+
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">

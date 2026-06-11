@@ -127,8 +127,6 @@ export default function ActivitiesMine() {
                         <div className="flex items-center gap-1.5">
                           <span className={`w-1.5 h-1.5 rounded-full ${statusTone}`} />
                           <span className="text-[10px] text-muted-foreground">{STATUS_LABEL[a.status]}</span>
-                          <span className="text-muted-foreground/40">·</span>
-                          <span className="text-[10px] text-muted-foreground">{a.requires_review ? '需审核' : '免审核'}</span>
                         </div>
                         <div className="font-medium text-sm mt-0.5 truncate">{a.name}</div>
                         {a.description && (

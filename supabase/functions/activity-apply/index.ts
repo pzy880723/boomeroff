@@ -75,24 +75,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const requiresReview = activity.requires_review !== false;
-
-    if (requiresReview) {
-      const { data: app, error: iErr } = await admin
-        .from('activity_applications')
-        .insert({
-          activity_id: activity.id,
-          applicant_name,
-          applicant_phone,
-          form_data: cleaned,
-        })
-        .select('id')
-        .single();
-      if (iErr) return json({ error: iErr.message }, 400);
-      return json({ ok: true, requires_review: true, application_id: app.id });
-    }
-
-    // 无需审核：检查是否已领过；否则直接生成 application(approved) + voucher_claim(claimed)
+    // 统一走"直接领取"流程（不再有审核分支）
     const { data: existing } = await admin
       .from('activity_applications')
       .select('id, voucher_claim_id, voucher_claim:voucher_claims(short_code)')
