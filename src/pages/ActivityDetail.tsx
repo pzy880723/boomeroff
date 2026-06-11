@@ -144,9 +144,6 @@ export default function ActivityDetail() {
               <span className={`h-1.5 w-1.5 rounded-full ${statusDot} ${activity.status === 'active' ? 'animate-pulse' : ''}`} />
               {statusLabel}
             </span>
-            <Badge variant="outline" className="text-[10px] font-normal">
-              {activity.requires_review ? '需审核' : '免审核'}
-            </Badge>
           </div>
 
           <div>
