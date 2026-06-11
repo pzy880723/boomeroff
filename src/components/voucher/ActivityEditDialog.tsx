@@ -154,33 +154,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
             </Select>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">领取方式</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setRequiresReview(true)}
-                className={cn(
-                  'rounded-lg border p-2.5 text-left transition',
-                  requiresReview ? 'border-primary bg-primary/5' : 'border-border'
-                )}
-              >
-                <p className="text-xs font-medium">需要审核</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">申请后由管理员审核，通过后短信通知</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setRequiresReview(false)}
-                className={cn(
-                  'rounded-lg border p-2.5 text-left transition',
-                  !requiresReview ? 'border-primary bg-primary/5' : 'border-border'
-                )}
-              >
-                <p className="text-xs font-medium">无需审核</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">分享页填写信息后直接领取抵用券</p>
-              </button>
-            </div>
-          </div>
+
+
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
