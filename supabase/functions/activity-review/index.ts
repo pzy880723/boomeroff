@@ -84,14 +84,13 @@ Deno.serve(async (req) => {
       })
       .eq('id', app.id);
 
-    // 尝试发短信（如未配置 secret，仅记录 sms_error）
+    // 尝试发短信：通知短信（无变量），引导到 /q 输入手机号领取
     let smsError: string | null = null;
     try {
       const res = await supabase.functions.invoke('send-sms', {
         body: {
           phone: app.applicant_phone,
-          activity_name: (app.activity as any).name,
-          claim_share_token: claim.share_token,
+          template: 'notify',
         },
       });
       if (res.error) smsError = String(res.error.message || res.error);
