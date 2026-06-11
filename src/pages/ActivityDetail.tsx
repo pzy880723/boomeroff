@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Loader2, CheckCircle2, XCircle, Copy, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Share2, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
@@ -15,6 +15,7 @@ import {
   APPLICATION_STATUS_VARIANT, buildActivityShareUrl, CLAIM_STATUS_LABEL,
 } from '@/lib/voucher';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
+import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -35,6 +36,7 @@ export default function ActivityDetail() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -169,10 +171,10 @@ export default function ActivityDetail() {
             <MetaRow label="创建时间">
               <span className="truncate">{format(new Date(activity.created_at), 'yyyy-MM-dd HH:mm')}</span>
             </MetaRow>
-            <MetaRow label="分享链接">
+            <MetaRow label="分享">
               <span className="truncate text-muted-foreground">{sharePath}</span>
-              <Button size="sm" variant="ghost" className="h-7 px-2 -mr-2 shrink-0" onClick={copyLink}>
-                <Copy className="w-3.5 h-3.5 mr-1" /> 复制
+              <Button size="sm" variant="ghost" className="h-7 px-2 -mr-2 shrink-0" onClick={() => setShareOpen(true)}>
+                <Share2 className="w-3.5 h-3.5 mr-1" /> 海报
               </Button>
             </MetaRow>
           </div>
@@ -329,6 +331,8 @@ export default function ActivityDetail() {
           onSaved={() => load()}
         />
       )}
+
+      <ActivityShareDialog open={shareOpen} onOpenChange={setShareOpen} activity={activity} />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
