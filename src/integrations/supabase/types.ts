@@ -1226,6 +1226,39 @@ export type Database = {
         }
         Relationships: []
       }
+      sms_test_otp: {
+        Row: {
+          code: string
+          consumed_at: string | null
+          created_at: string
+          created_by: string
+          expires_at: string
+          id: string
+          phone: string
+          tencent_response: Json | null
+        }
+        Insert: {
+          code: string
+          consumed_at?: string | null
+          created_at?: string
+          created_by: string
+          expires_at: string
+          id?: string
+          phone: string
+          tencent_response?: Json | null
+        }
+        Update: {
+          code?: string
+          consumed_at?: string | null
+          created_at?: string
+          created_by?: string
+          expires_at?: string
+          id?: string
+          phone?: string
+          tencent_response?: Json | null
+        }
+        Relationships: []
+      }
       spirit_conversations: {
         Row: {
           archived: boolean
