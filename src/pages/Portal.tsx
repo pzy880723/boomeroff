@@ -14,6 +14,7 @@ import { ShopManager } from '@/components/admin/ShopManager';
 import { RolePermissionManager } from '@/components/admin/RolePermissionManager';
 import { NotificationManager } from '@/components/admin/NotificationManager';
 import { ActivityReviewPanel } from '@/components/admin/ActivityReviewPanel';
+import { SmsTestPanel } from '@/components/admin/SmsTestPanel';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -35,7 +36,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'notifications' | 'activity_review';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'notifications' | 'activity_review' | 'sms_test';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -76,6 +77,7 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     key: 'system', label: '系统', icon: Settings, items: [
       { key: 'ai', label: 'AI 模型', icon: Sparkles, perm: 'settings.ai' },
+      { key: 'sms_test', label: '短信测试', icon: MessageSquare, perm: 'settings.ai' },
     ],
   },
 ];
@@ -233,6 +235,7 @@ export default function Portal() {
             
             {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
             {effectiveTab === 'activity_review' && can('voucher.manage') && <ActivityReviewPanel />}
+            {effectiveTab === 'sms_test' && can('settings.ai') && <SmsTestPanel />}
           </Card>
         )}
       </main>
