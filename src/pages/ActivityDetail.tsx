@@ -129,10 +129,6 @@ export default function ActivityDetail() {
     try { return new URL(shareUrl).pathname; } catch { return shareUrl; }
   })();
 
-  const copyLink = async () => {
-    try { await navigator.clipboard.writeText(shareUrl); toast.success('链接已复制'); }
-    catch { toast.success(shareUrl); }
-  };
 
   const MetaRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div className="flex items-center gap-3 text-xs">
