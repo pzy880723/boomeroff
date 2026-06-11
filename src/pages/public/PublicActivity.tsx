@@ -1,6 +1,6 @@
 // 公开：活动申请页（免登录）
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ async function fileToDataUrl(file: File): Promise<string> {
 
 export default function PublicActivity() {
   const { shareToken = '' } = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activity, setActivity] = useState<any | null>(null);
@@ -62,6 +63,11 @@ export default function PublicActivity() {
     setSubmitting(false);
     if (e || (data as any)?.error) {
       toast.error((data as any)?.error || e?.message || '提交失败');
+      return;
+    }
+    if ((data as any)?.requires_review === false && (data as any)?.short_code) {
+      if ((data as any).already) toast.info('您已领取过该活动的抵用券');
+      navigate(`/u/c/${(data as any).short_code}`, { replace: true });
       return;
     }
     setDone(true);

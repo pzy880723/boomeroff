@@ -25,6 +25,7 @@ export type Database = {
           id: string
           max_applications: number | null
           name: string
+          requires_review: boolean
           share_token: string
           starts_at: string | null
           status: string
@@ -41,6 +42,7 @@ export type Database = {
           id?: string
           max_applications?: number | null
           name: string
+          requires_review?: boolean
           share_token?: string
           starts_at?: string | null
           status?: string
@@ -57,6 +59,7 @@ export type Database = {
           id?: string
           max_applications?: number | null
           name?: string
+          requires_review?: boolean
           share_token?: string
           starts_at?: string | null
           status?: string
@@ -1675,6 +1678,13 @@ export type Database = {
           voucher_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "voucher_claims_activity_application_id_fkey"
+            columns: ["activity_application_id"]
+            isOneToOne: false
+            referencedRelation: "activity_applications"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "voucher_claims_voucher_id_fkey"
             columns: ["voucher_id"]

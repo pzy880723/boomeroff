@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
 
     const { data: a, error } = await admin
       .from('activities')
-      .select('id, name, description, cover_url, form_fields, status, starts_at, ends_at, voucher:vouchers(name, threshold_type, discount_amount, min_spend, valid_days, template_terms)')
+      .select('id, name, description, cover_url, form_fields, status, requires_review, starts_at, ends_at, voucher:vouchers(name, threshold_type, discount_amount, min_spend, valid_days, template_terms)')
       .eq('share_token', share_token)
       .maybeSingle();
     if (error || !a) return json({ error: '活动不存在' }, 404);

@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
     const { data: activity, error: aErr } = await admin
       .from('activities')
-      .select('id, status, form_fields, max_applications, ends_at')
+      .select('id, status, form_fields, max_applications, ends_at, requires_review, voucher_id')
       .eq('share_token', share_token)
       .maybeSingle();
     if (aErr || !activity) return json({ error: '活动不存在' }, 404);
@@ -75,6 +75,42 @@ Deno.serve(async (req) => {
       }
     }
 
+    const requiresReview = activity.requires_review !== false;
+
+    if (requiresReview) {
+      const { data: app, error: iErr } = await admin
+        .from('activity_applications')
+        .insert({
+          activity_id: activity.id,
+          applicant_name,
+          applicant_phone,
+          form_data: cleaned,
+        })
+        .select('id')
+        .single();
+      if (iErr) return json({ error: iErr.message }, 400);
+      return json({ ok: true, requires_review: true, application_id: app.id });
+    }
+
+    // 无需审核：检查是否已领过；否则直接生成 application(approved) + voucher_claim(claimed)
+    const { data: existing } = await admin
+      .from('activity_applications')
+      .select('id, voucher_claim_id, voucher_claim:voucher_claims(short_code)')
+      .eq('activity_id', activity.id)
+      .eq('applicant_phone', applicant_phone)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing?.voucher_claim_id && (existing as any).voucher_claim?.short_code) {
+      return json({
+        ok: true,
+        requires_review: false,
+        already: true,
+        short_code: (existing as any).voucher_claim.short_code,
+      });
+    }
+
+    const nowIso = new Date().toISOString();
     const { data: app, error: iErr } = await admin
       .from('activity_applications')
       .insert({
@@ -82,12 +118,34 @@ Deno.serve(async (req) => {
         applicant_name,
         applicant_phone,
         form_data: cleaned,
+        status: 'approved',
+        reviewed_at: nowIso,
       })
       .select('id')
       .single();
     if (iErr) return json({ error: iErr.message }, 400);
 
-    return json({ ok: true, application_id: app.id });
+    const { data: claim, error: cErr } = await admin
+      .from('voucher_claims')
+      .insert({
+        voucher_id: activity.voucher_id,
+        activity_application_id: app.id,
+        source: 'activity',
+        status: 'claimed',
+        recipient_name: applicant_name,
+        recipient_phone: applicant_phone,
+        claimed_at: nowIso,
+      })
+      .select('id, short_code')
+      .single();
+    if (cErr) return json({ error: cErr.message }, 400);
+
+    await admin
+      .from('activity_applications')
+      .update({ voucher_claim_id: claim.id })
+      .eq('id', app.id);
+
+    return json({ ok: true, requires_review: false, short_code: claim.short_code });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
