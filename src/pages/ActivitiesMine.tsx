@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Megaphone, Copy, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Megaphone, Copy, MoreVertical, Pencil, Trash2, CalendarRange, ChevronRight } from 'lucide-react';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { type Activity, buildActivityShareUrl } from '@/lib/voucher';
 import { AuthPage } from '@/components/auth/AuthPage';
