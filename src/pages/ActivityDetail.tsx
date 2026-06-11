@@ -118,59 +118,80 @@ export default function ActivityDetail() {
     return 'default';
   };
 
+  const statusLabel = activity.status === 'active' ? '进行中' : activity.status === 'draft' ? '草稿' : '已关闭';
+  const statusDot = activity.status === 'active' ? 'bg-emerald-500' : activity.status === 'draft' ? 'bg-muted-foreground' : 'bg-destructive';
+
+  const copyLink = async () => {
+    const url = buildActivityShareUrl(activity.share_token);
+    try { await navigator.clipboard.writeText(url); toast.success('链接已复制'); }
+    catch { toast.success(url); }
+  };
+
   return (
     <>
       <PageHeader title={activity.name} back="/me/activities" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-3">
-        <Card className="p-3 space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant={activity.status === 'active' ? 'default' : 'outline'} className="text-[10px]">
-              {activity.status === 'active' ? '进行中' : activity.status === 'draft' ? '草稿' : '已关闭'}
-            </Badge>
-            <Badge variant="outline" className="text-[10px]">
-              {activity.requires_review ? '需要审核' : '无需审核'}
-            </Badge>
-          </div>
-          <div className="text-xs space-y-1">
-            <div className="flex gap-2"><span className="text-muted-foreground shrink-0">活动时间：</span><span>{timeRange}</span></div>
-            <div className="flex gap-2"><span className="text-muted-foreground shrink-0">创建时间：</span><span>{format(new Date(activity.created_at), 'yyyy-MM-dd HH:mm')}</span></div>
+        {/* Hero card */}
+        <Card className="overflow-hidden border-none shadow-sm">
+          <div className="relative bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-4 pb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-background/80 backdrop-blur px-2.5 py-1 text-[11px] font-medium shadow-sm">
+                <span className={`h-1.5 w-1.5 rounded-full ${statusDot} ${activity.status === 'active' ? 'animate-pulse' : ''}`} />
+                {statusLabel}
+              </span>
+              <span className="inline-flex items-center rounded-full bg-background/80 backdrop-blur px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+                {activity.requires_review ? '需审核' : '直接领取'}
+              </span>
+            </div>
+            <h2 className="text-lg font-semibold leading-tight tracking-tight">{activity.name}</h2>
             {activity.description && (
-              <div className="flex gap-2"><span className="text-muted-foreground shrink-0">活动内容：</span><span className="break-all">{activity.description}</span></div>
+              <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed line-clamp-3">{activity.description}</p>
             )}
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 pt-1">
-            <div className="rounded-lg bg-muted/50 p-2 text-center">
-              <p className="text-lg font-bold tabular-nums">{counts.total}</p>
-              <p className="text-[11px] text-muted-foreground">已申请</p>
-            </div>
-            <div className="rounded-lg bg-muted/50 p-2 text-center">
-              <p className="text-lg font-bold tabular-nums text-green-600">{counts.approved}</p>
-              <p className="text-[11px] text-muted-foreground">已通过</p>
-            </div>
-            <div className="rounded-lg bg-muted/50 p-2 text-center">
-              <p className="text-lg font-bold tabular-nums text-destructive">{counts.rejected}</p>
-              <p className="text-[11px] text-muted-foreground">已拒绝</p>
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+              <span>🗓 {timeRange}</span>
+              <span>✎ {format(new Date(activity.created_at), 'yyyy-MM-dd HH:mm')}</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 pt-1">
-            <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-              <Pencil className="w-3.5 h-3.5 mr-1" />修改
-            </Button>
-            <Button size="sm" variant="outline" className="text-destructive" onClick={() => setConfirmDelete(true)}>
-              <Trash2 className="w-3.5 h-3.5 mr-1" />删除
-            </Button>
-            <Button
-              size="sm" variant="outline"
-              onClick={async () => {
-                const url = buildActivityShareUrl(activity.share_token);
-                try { await navigator.clipboard.writeText(url); toast.success('链接已复制'); }
-                catch { toast.success(url); }
-              }}
+          {/* Stats */}
+          <div className="grid grid-cols-3 divide-x border-t bg-card">
+            <div className="px-2 py-3 text-center">
+              <p className="text-xl font-bold tabular-nums">{counts.total}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">已申请</p>
+            </div>
+            <div className="px-2 py-3 text-center">
+              <p className="text-xl font-bold tabular-nums text-emerald-600">{counts.approved}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">已通过</p>
+            </div>
+            <div className="px-2 py-3 text-center">
+              <p className="text-xl font-bold tabular-nums text-rose-500">{counts.rejected}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">已拒绝</p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="grid grid-cols-3 border-t">
+            <button
+              onClick={() => setEditOpen(true)}
+              className="flex flex-col items-center justify-center gap-1 py-2.5 text-xs hover:bg-muted/60 active:bg-muted transition-colors"
             >
-              <Copy className="w-3.5 h-3.5 mr-1" />复制链接
-            </Button>
+              <Pencil className="w-4 h-4 text-muted-foreground" />
+              <span>修改</span>
+            </button>
+            <button
+              onClick={copyLink}
+              className="flex flex-col items-center justify-center gap-1 py-2.5 text-xs hover:bg-muted/60 active:bg-muted border-x transition-colors"
+            >
+              <Copy className="w-4 h-4 text-muted-foreground" />
+              <span>复制链接</span>
+            </button>
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex flex-col items-center justify-center gap-1 py-2.5 text-xs text-destructive hover:bg-destructive/5 active:bg-destructive/10 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>删除</span>
+            </button>
           </div>
         </Card>
 
