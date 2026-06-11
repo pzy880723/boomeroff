@@ -124,11 +124,7 @@ export default function ActivityDetail() {
   const statusLabel = activity.status === 'active' ? '进行中' : activity.status === 'draft' ? '草稿' : '已关闭';
   const statusDot = activity.status === 'active' ? 'bg-emerald-500' : activity.status === 'draft' ? 'bg-muted-foreground' : 'bg-destructive';
 
-  const shareUrl = buildActivityShareUrl(activity.share_token);
-  const sharePath = (() => {
-    try { return new URL(shareUrl).pathname; } catch { return shareUrl; }
-  })();
-
+  const hasPoster = !!activity.poster_url;
 
   const MetaRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div className="flex items-center gap-3 text-xs">
@@ -156,7 +152,7 @@ export default function ActivityDetail() {
           <div>
             <h2 className="text-xl font-semibold leading-tight tracking-tight">{activity.name}</h2>
             {activity.description && (
-              <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed line-clamp-3 whitespace-pre-wrap">{activity.description}</p>
+              <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">{activity.description}</p>
             )}
           </div>
 
@@ -167,14 +163,14 @@ export default function ActivityDetail() {
             <MetaRow label="创建时间">
               <span className="truncate">{format(new Date(activity.created_at), 'yyyy-MM-dd HH:mm')}</span>
             </MetaRow>
-            <MetaRow label="分享">
-              <span className="truncate text-muted-foreground">{sharePath}</span>
-              <Button size="sm" variant="ghost" className="h-7 px-2 -mr-2 shrink-0" onClick={() => setShareOpen(true)}>
-                <Share2 className="w-3.5 h-3.5 mr-1" /> 海报
-              </Button>
-            </MetaRow>
           </div>
+
+          <Button onClick={() => setShareOpen(true)} className="w-full h-10 mt-1">
+            <Share2 className="w-4 h-4 mr-1.5" />
+            {hasPoster ? '打开转发海报' : '生成分享海报'}
+          </Button>
         </Card>
+
 
         {/* 统计卡 */}
         <Card className="p-0 overflow-hidden">
