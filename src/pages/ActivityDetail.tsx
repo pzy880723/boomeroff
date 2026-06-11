@@ -79,13 +79,9 @@ export default function ActivityDetail() {
 
   const counts = {
     total: apps.length,
-    approved: apps.filter((a) => a.status === 'approved').length,
-    rejected: apps.filter((a) => a.status === 'rejected').length,
-    pending: apps.filter((a) => a.status === 'pending').length,
     redeemed: apps.filter((a) => a.voucher_claim?.status === 'redeemed').length,
   };
 
-  const filtered = (status: string) => apps.filter((a) => a.status === status);
 
   const timeRange = activity.starts_at || activity.ends_at
     ? `${activity.starts_at ? format(new Date(activity.starts_at), 'yyyy-MM-dd') : '不限'} ~ ${activity.ends_at ? format(new Date(activity.ends_at), 'yyyy-MM-dd') : '不限'}`
