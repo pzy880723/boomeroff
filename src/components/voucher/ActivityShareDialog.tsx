@@ -343,7 +343,7 @@ export function ActivityShareDialog({ open, onOpenChange, activity }: Props) {
         </DialogHeader>
 
         <div className="px-5 pb-3">
-          <div className="aspect-[750/1180] w-full bg-muted rounded-lg overflow-hidden flex items-center justify-center relative">
+          <div className="aspect-[750/1334] w-full bg-muted rounded-lg overflow-hidden flex items-center justify-center relative">
             {generating && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/80 backdrop-blur-sm z-10">
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
