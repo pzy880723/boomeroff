@@ -75,7 +75,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
           setVoucherId(a.voucher_id);
           setFields((a.form_fields && a.form_fields.length ? a.form_fields : DEFAULT_FIELDS) as ActivityField[]);
           setActive(a.status !== 'closed');
-          setRequiresReview(a.requires_review !== false);
+          
         }
         setLoadingDetail(false);
       })();
