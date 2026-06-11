@@ -1,96 +1,75 @@
-## 目标
+# 接入腾讯云短信通知
 
-把"抵用券详情/转发/领取"这一整条链路改得更洋气好用：
+## 你需要在腾讯云控制台做的准备
 
-1. 视觉重做（详情弹窗 + 公开领取页 + 新增"定向发放页"）
-2. "生成转发链接" → 改名 **定向发放**，点击跳转一个独立页面：上半是好看的抵用券海报图，下半是短链 + 二维码 + 复制按钮，支持长按图片保存
-3. 转发链接走短链（站内 `/u/c/:short` 跳转）
-4. 用户领取流程改为**短信二次确认**：
-   - 用户在领取页输姓名+手机 → 发短信验证码 → 输验证码 → 才算领取成功
-   - 防止误领、刷领、转发被陌生人薅羊毛
+1. **开通短信 SMS 服务**(国内短信)
+2. **申请签名**:中文 1-12 字,例如 `BOOMER-OFF` 或店铺名称,需要营业执照,1-2 工作日审核
+3. **申请正文模板**(验证码类型):
+   - 内容示例:`您的验证码为{1},5分钟内有效,请勿泄露。`
+   - 审核通过后记下 **模板 ID**(纯数字,如 `1234567`)
+4. **应用管理 → 应用列表**,记下 `SdkAppId`(如 `1400xxxxxx`)
+5. **访问管理 → API 密钥管理**,新建 `SecretId` / `SecretKey`(子账号策略仅授予 `QcloudSMSFullAccess`)
 
-## 用户流程
+## 需要存入 Lovable Cloud 的 Secret
 
-### 管理员侧
+| Secret 名 | 值 |
+|---|---|
+| `TENCENT_SMS_SECRET_ID` | API SecretId |
+| `TENCENT_SMS_SECRET_KEY` | API SecretKey |
+| `TENCENT_SMS_SDK_APP_ID` | SdkAppId(纯数字) |
+| `TENCENT_SMS_SIGN_NAME` | 签名内容(不含【】) |
+| `TENCENT_SMS_OTP_TEMPLATE_ID` | OTP 模板 ID(纯数字) |
+
+区域固定 `ap-guangzhou`,写死在代码里。
+
+## 代码改造
+
+### 1. `supabase/functions/send-sms/index.ts` 改造为腾讯云真实实现
+
+- 直接调用 `https://sms.tencentcloudapi.com` REST 接口(Action=`SendSms`,Version=`2021-01-11`)
+- 自行实现 **TC3-HMAC-SHA256 签名**(Deno 标准库 `crypto.subtle` 即可,无需引入 SDK)
+- 入参:
+  - `PhoneNumberSet`:`["+86" + phone]`(仅中国大陆)
+  - `SmsSdkAppId`:env
+  - `SignName`:env
+  - `TemplateId`:env(根据调用方传入的 `template` 字段路由,目前只有 `otp`)
+  - `TemplateParamSet`:`[code]`
+- 检查环境变量缺失时返回 503 `{ error: 'sms_not_configured' }`,前端提示"管理员后台仍可手动核销"
+- 腾讯云返回的 `Response.Error.Code` 不为空时,把 Code 和 Message 透传到调用方,并写入 `voucher_logs`(便于排查)
+
+### 2. `voucher-claim-send-otp` — 无需改动
+
+它已经通过 `supabase.functions.invoke('send-sms', ...)` 调用,自动走新实现。
+
+### 3. 失败回退
+
+- 若 `send-sms` 返回 503/失败:`voucher-claim-send-otp` 返回 `{ ok:false, reason:'sms_unavailable' }`,前端 `PublicClaim.tsx` 提示"短信暂不可用,请联系门店店员手动核销"
+- 管理员在 `VoucherClaimsAdminPanel`(已存在)中可手动把 claim 标记为 `claimed`,无需 OTP
+
+## 技术细节(TC3 签名实现要点)
+
 ```text
-我的抵用券 → 点某张券 → 详情弹窗
-                       ├─ [定向发放]  → /me/vouchers/share/:claimId  (海报页)
-                       └─ [编辑]
-
-海报页:
- ┌──────────────────┐
- │  生成的抵用券海报  │  ← 可长按保存 / 右上"保存图片"
- │   (¥50 大字 + 品  │
- │   牌色 + 二维码 +  │
- │   说明 + 短链文字) │
- └──────────────────┘
- 短链: boomeroff.app/u/c/AB12CD
- [复制短链] [复制图片] [下载海报]
+1. CanonicalRequest = HTTPMethod + "\n" + CanonicalURI + "\n" + CanonicalQueryString
+                    + "\n" + CanonicalHeaders + "\n" + SignedHeaders + "\n" + HashedRequestPayload
+2. StringToSign = "TC3-HMAC-SHA256\n" + Timestamp + "\n"
+               + Date + "/sms/tc3_request\n" + sha256(CanonicalRequest)
+3. SigningKey = HMAC(HMAC(HMAC(HMAC("TC3"+SecretKey, Date), "sms"), "tc3_request"))
+4. Signature = HMAC-SHA256(SigningKey, StringToSign)
+5. Authorization: TC3-HMAC-SHA256 Credential=.../sms/tc3_request,
+                  SignedHeaders=content-type;host, Signature=...
 ```
 
-### 顾客侧（公开页 `/u/c/:short`）
-```text
-1. 打开链接 → 看到精美抵用券卡片
-2. 点 [立即领取] → 输姓名 + 手机号
-3. 点 [获取验证码] → 后端 send-sms 发 6 位码（60s 倒计时）
-4. 输验证码 → 点 [确认领取]
-5. 领取成功 → 显示核销二维码 + 券码
-```
+必需 header:`X-TC-Action: SendSms`、`X-TC-Version: 2021-01-11`、`X-TC-Region: ap-guangzhou`、`X-TC-Timestamp`、`Authorization`、`Content-Type: application/json; charset=utf-8`、`Host: sms.tencentcloudapi.com`
 
-## 技术方案
+## 执行顺序
 
-### 1. 数据库 migration
-- `voucher_claims` 增加：
-  - `short_code text unique`（6-8 位 base62，作为短链路径）
-  - 触发器：insert 时若空自动生成
-- 新增 `claim_otp` 表：
-  - `id, claim_id (fk), phone, code text, expires_at, attempts int, verified_at, created_at`
-  - RLS：只 service_role 可访问（edge function 用）
-  - 同手机号 60s 内不能重复发；每条 OTP 5 分钟过期；最多 5 次尝试
+1. 你先在腾讯云完成签名/模板审核(等待期 1-2 天),拿到 5 个值
+2. 我用 `add_secret` 工具弹窗让你录入
+3. 录入完成 → 我改写 `send-sms/index.ts` → 部署 → 走 OTP 实流程测试
 
-### 2. Edge functions
-- **`voucher-claim-send-otp`**（新）：入参 `{ short_code | share_token, phone, name }` → 校验 claim 仍 unclaimed → 写 claim_otp → 调 `send-sms`
-- **`voucher-claim-accept`**（改）：入参追加 `otp` → 校验 OTP 后才把 claim 改为 `claimed`、写入 name/phone
-- `voucher-claim-status` 支持 `short_code` 入参
+## 不在本次范围
 
-### 3. 前端
-- **新页面** `src/pages/VoucherSharePoster.tsx`（路由 `/me/vouchers/share/:claimId`）：
-  - 用 html-to-image（已有或新增 `html-to-image` 包）把海报 DOM → PNG，支持下载/复制
-  - 海报内容：品牌渐变背景、¥50 大字、规则、有效期、底部二维码 + 短链 + "扫码或长按识别"
-- **`VoucherDetailDialog.tsx`**：
-  - 整体重做：去掉灰底卡片，改为深色渐变券形卡（带"齿孔"凹口、金色描边）
-  - 按钮 "生成转发链接" → **"定向发放"**，点击调 `voucher-claim-create` 拿到 claim 后 `navigate(/me/vouchers/share/:claimId)`
-  - "领取与核销记录" 列表项也美化（状态徽章 + 复制短链）
-- **`PublicClaim.tsx`** 路由从 `/u/claim/:token` → `/u/c/:short`（保留旧路由 301 跳转）：
-  - 重做视觉：渐变背景、磁带券造型、动画
-  - 加入"获取验证码 → 输验证码 → 确认领取"两步
-  - 顶部加 [保存为图片] 按钮（同 html-to-image），方便顾客自己留图
-- **`src/lib/voucher.ts`**：
-  - `buildClaimShareUrl(short_code)` 改返回短链 `/u/c/:short`
-
-### 4. 短信模版（用已有 `send-sms`）
-- 复用现有 send-sms（阿里云/腾讯云），新增 `template: 'otp'`，模板变量 `{code}`
-- 用户需在 `/portal` 配 `SMS_OTP_TEMPLATE_CODE`；未配置时降级为"短信通道未配置，请联系管理员"
-
-### 5. 海报生成
-- 新增依赖：`html-to-image`（轻量、~25kb）
-- 设计稿：800x1200 海报，品牌主色渐变 + Ticket 图标 + 大金额 + 二维码白底 + 底部短链
-- 移动端长按图片即可触发系统"保存到相册"
-
-## 范围外（本轮不做）
-- 微信原生分享卡片 / JSSDK
-- 海报模板自定义（先一套统一样式）
-- 短链跳转的统计与防刷
-
-## 文件清单
-- 新增：`supabase/migrations/<ts>_voucher_otp_and_shortcode.sql`
-- 新增：`supabase/functions/voucher-claim-send-otp/index.ts`
-- 改：`supabase/functions/voucher-claim-accept/index.ts`（加 OTP 校验）
-- 改：`supabase/functions/voucher-claim-status/index.ts`（支持 short_code）
-- 新增：`src/pages/VoucherSharePoster.tsx`
-- 新增：`src/components/voucher/VoucherPoster.tsx`（可复用海报 DOM）
-- 改：`src/components/voucher/VoucherDetailDialog.tsx`（重做 + "定向发放"）
-- 改：`src/pages/public/PublicClaim.tsx`（重做 + OTP 流程）
-- 改：`src/lib/voucher.ts`（短链 helper）
-- 改：`src/App.tsx`（新路由 `/me/vouchers/share/:claimId`、`/u/c/:short`）
-- 改：`package.json`（加 html-to-image）
+- 国际短信(只支持 +86)
+- 短信批量群发、营销短信
+- `/portal` 测试发送按钮
+- 短信发送量统计/限流(腾讯云控制台自带)

@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     });
     if (e2) return json({ error: e2.message }, 400);
 
-    // 调 send-sms，把 OTP 拼到 activity_name（兼容现有 SMS 模板：{name}+{link}）
+    // 调 send-sms（OTP 模板：{1}=验证码）
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const smsResp = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
       method: 'POST',
@@ -62,13 +62,16 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         phone,
-        activity_name: `抵用券领取验证码 ${code}`,
-        claim_share_token: claim.short_code || claim.share_token,
+        template: 'otp',
+        params: { code },
       }),
     }).catch(() => null);
     const smsResult = smsResp ? await smsResp.json().catch(() => null) : null;
     if (!smsResp || !smsResp.ok) {
-      return json({ ok: false, error: smsResult?.error || '短信发送失败，请联系店员' }, 400);
+      const reason = smsResult?.error === 'sms_not_configured'
+        ? 'sms_unavailable'
+        : (smsResult?.error || '短信发送失败，请联系店员手动核销');
+      return json({ ok: false, error: reason, message: smsResult?.message }, 400);
     }
 
     return json({ ok: true });

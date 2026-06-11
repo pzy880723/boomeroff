@@ -1,6 +1,9 @@
 // 短信发送：阿里云/腾讯云（自动按已配置的 secret 选择）
-// 模板变量：{1} 活动名（最多20字），{2} 短链 token
-// 未配置任何短信凭证时返回错误，由调用方记录 sms_error
+// 两种调用方式：
+//   1) OTP 验证码：{ phone, template: 'otp', params: { code } }
+//      腾讯云模板示例：您的验证码为{1}，5分钟内有效，请勿泄露。
+//   2) 活动链接（legacy）：{ phone, activity_name, claim_share_token }
+//      腾讯云模板示例：{1}活动邀请，点击 {2} 领取。
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -11,93 +14,63 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
-    const { phone, activity_name, claim_share_token } = await req.json().catch(() => ({}));
-    if (!phone || !claim_share_token) return json({ error: 'missing params' }, 400);
+    const body = await req.json().catch(() => ({}));
+    const { phone, template, params, activity_name, claim_share_token } = body || {};
+    if (!phone) return json({ error: 'missing phone' }, 400);
+    if (!/^1[3-9]\d{9}$/.test(String(phone))) return json({ error: '手机号格式不正确' }, 400);
 
-    // 取站点域名（用于短链）
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
-    const { data: settings } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'public_site_url')
-      .maybeSingle();
-    const baseUrl = (settings?.value as any)?.url || 'https://boomeroff.lovable.app';
-    const link = `${baseUrl}/u/claim/${claim_share_token}`;
-
-    // 优先阿里云
-    const aliKey = Deno.env.get('ALIYUN_SMS_ACCESS_KEY_ID');
-    const aliSecret = Deno.env.get('ALIYUN_SMS_ACCESS_KEY_SECRET');
-    if (aliKey && aliSecret) {
-      const r = await sendAliyun(phone, activity_name, link, aliKey, aliSecret);
-      return json(r, r.ok ? 200 : 400);
+    // 构造模板参数数组（决定调用哪种模板）
+    let mode: 'otp' | 'link';
+    let templateParams: string[];
+    let link = '';
+    if (template === 'otp') {
+      const code = params?.code ? String(params.code) : '';
+      if (!/^\d{4,8}$/.test(code)) return json({ error: 'invalid otp code' }, 400);
+      mode = 'otp';
+      templateParams = [code];
+    } else {
+      if (!claim_share_token) return json({ error: 'missing claim_share_token' }, 400);
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      );
+      const { data: settings } = await supabase
+        .from('app_settings').select('value').eq('key', 'public_site_url').maybeSingle();
+      const baseUrl = (settings?.value as any)?.url || 'https://boomeroff.lovable.app';
+      link = `${baseUrl}/u/claim/${claim_share_token}`;
+      mode = 'link';
+      templateParams = [truncate(activity_name, 20), link];
     }
 
+    // 仅支持腾讯云（按用户决定）
     const tcId = Deno.env.get('TENCENT_SMS_SECRET_ID');
     const tcKey = Deno.env.get('TENCENT_SMS_SECRET_KEY');
-    if (tcId && tcKey) {
-      const r = await sendTencent(phone, activity_name, link, tcId, tcKey);
-      return json(r, r.ok ? 200 : 400);
+    if (!tcId || !tcKey) {
+      return json({ error: 'sms_not_configured', message: '短信服务未配置，请联系店员手动核销' }, 503);
     }
 
-    return json({ error: 'SMS provider not configured' }, 400);
+    const r = await sendTencent(phone, mode, templateParams, tcId, tcKey);
+    return json(r, r.ok ? 200 : 400);
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
 });
 
-async function sendAliyun(phone: string, activity: string, link: string, key: string, secret: string) {
-  const signName = Deno.env.get('ALIYUN_SMS_SIGN_NAME');
-  const templateCode = Deno.env.get('ALIYUN_SMS_TEMPLATE_CODE');
-  if (!signName || !templateCode) return { ok: false, error: 'Aliyun SMS SIGN_NAME/TEMPLATE_CODE missing' };
-
-  // Aliyun SMS API：RPC 风格签名（POP）
-  const params: Record<string, string> = {
-    AccessKeyId: key,
-    Action: 'SendSms',
-    Format: 'JSON',
-    PhoneNumbers: phone,
-    RegionId: 'cn-hangzhou',
-    SignName: signName,
-    SignatureMethod: 'HMAC-SHA1',
-    SignatureNonce: crypto.randomUUID(),
-    SignatureVersion: '1.0',
-    TemplateCode: templateCode,
-    TemplateParam: JSON.stringify({ name: truncate(activity, 20), link }),
-    Timestamp: new Date().toISOString().replace(/\.\d{3}/, ''),
-    Version: '2017-05-25',
-  };
-
-  const sorted = Object.keys(params).sort().map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join('&');
-  const stringToSign = `POST&${encodeURIComponent('/')}&${encodeURIComponent(sorted)}`;
-  const signKey = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret + '&'),
-    { name: 'HMAC', hash: 'SHA-1' },
-    false,
-    ['sign']
-  );
-  const sigBuf = await crypto.subtle.sign('HMAC', signKey, new TextEncoder().encode(stringToSign));
-  const signature = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
-
-  const formBody = new URLSearchParams({ ...params, Signature: signature }).toString();
-  const resp = await fetch('https://dysmsapi.aliyuncs.com/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: formBody,
-  });
-  const result = await resp.json();
-  if (result.Code === 'OK') return { ok: true };
-  return { ok: false, error: `Aliyun: ${result.Code} ${result.Message}` };
-}
-
-async function sendTencent(phone: string, activity: string, link: string, secretId: string, secretKey: string) {
+async function sendTencent(
+  phone: string,
+  mode: 'otp' | 'link',
+  templateParams: string[],
+  secretId: string,
+  secretKey: string,
+) {
   const sdkAppId = Deno.env.get('TENCENT_SMS_SDK_APP_ID');
   const signName = Deno.env.get('TENCENT_SMS_SIGN_NAME');
-  const templateId = Deno.env.get('TENCENT_SMS_TEMPLATE_ID');
-  if (!sdkAppId || !signName || !templateId) return { ok: false, error: 'Tencent SMS config missing' };
+  const templateId = mode === 'otp'
+    ? Deno.env.get('TENCENT_SMS_OTP_TEMPLATE_ID')
+    : Deno.env.get('TENCENT_SMS_TEMPLATE_ID');
+  if (!sdkAppId || !signName || !templateId) {
+    return { ok: false, error: `Tencent SMS config missing (${mode})` };
+  }
 
   const host = 'sms.tencentcloudapi.com';
   const service = 'sms';
@@ -112,23 +85,26 @@ async function sendTencent(phone: string, activity: string, link: string, secret
     SmsSdkAppId: sdkAppId,
     SignName: signName,
     TemplateId: templateId,
-    TemplateParamSet: [truncate(activity, 20), link],
+    TemplateParamSet: templateParams,
   });
 
   const hashed = await sha256Hex(payload);
-  const canonicalHeaders = `content-type:application/json; charset=utf-8\nhost:${host}\nx-tc-action:${action.toLowerCase()}\n`;
+  const canonicalHeaders =
+    `content-type:application/json; charset=utf-8\nhost:${host}\nx-tc-action:${action.toLowerCase()}\n`;
   const signedHeaders = 'content-type;host;x-tc-action';
   const canonicalRequest = `POST\n/\n\n${canonicalHeaders}\n${signedHeaders}\n${hashed}`;
   const credentialScope = `${date}/${service}/tc3_request`;
-  const stringToSign = `TC3-HMAC-SHA256\n${ts}\n${credentialScope}\n${await sha256Hex(canonicalRequest)}`;
+  const stringToSign =
+    `TC3-HMAC-SHA256\n${ts}\n${credentialScope}\n${await sha256Hex(canonicalRequest)}`;
 
   const kDate = await hmacSha256(new TextEncoder().encode('TC3' + secretKey), date);
-  const kService = await hmacSha256(kDate, service);
-  const kSigning = await hmacSha256(kService, 'tc3_request');
-  const sigBuf = await hmacSha256(kSigning, stringToSign);
+  const kService = await hmacSha256(new Uint8Array(kDate), service);
+  const kSigning = await hmacSha256(new Uint8Array(kService), 'tc3_request');
+  const sigBuf = await hmacSha256(new Uint8Array(kSigning), stringToSign);
   const signature = [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('');
 
-  const auth = `TC3-HMAC-SHA256 Credential=${secretId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const auth =
+    `TC3-HMAC-SHA256 Credential=${secretId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
   const resp = await fetch(`https://${host}`, {
     method: 'POST',
     headers: {
@@ -142,10 +118,13 @@ async function sendTencent(phone: string, activity: string, link: string, secret
     },
     body: payload,
   });
-  const r = await resp.json();
+  const r = await resp.json().catch(() => null);
   const status = r?.Response?.SendStatusSet?.[0];
   if (status?.Code === 'Ok') return { ok: true };
-  return { ok: false, error: `Tencent: ${status?.Code || r?.Response?.Error?.Code} ${status?.Message || r?.Response?.Error?.Message}` };
+  const code = status?.Code || r?.Response?.Error?.Code || 'UnknownError';
+  const message = status?.Message || r?.Response?.Error?.Message || JSON.stringify(r);
+  console.error('[tencent-sms] failed', { code, message });
+  return { ok: false, error: `Tencent: ${code} ${message}` };
 }
 
 async function sha256Hex(s: string) {
@@ -159,7 +138,6 @@ async function hmacSha256(key: ArrayBuffer | Uint8Array, msg: string): Promise<A
 function truncate(s: string | undefined, n: number) {
   return (s || '').slice(0, n);
 }
-
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
