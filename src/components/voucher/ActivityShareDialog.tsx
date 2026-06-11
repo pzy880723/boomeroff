@@ -30,6 +30,8 @@ interface Props {
 
 const W = 750;
 const H = 1334;
+const POSTER_VERSION = 'v2';
+
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -92,11 +94,12 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       setDisplayUrl(null);
       return;
     }
-    // 已有缓存 → 直接展示
-    if (activity.poster_url) {
+    // 已有缓存 + 版本匹配 → 直接展示
+    if (activity.poster_url && activity.poster_url.includes(`_${POSTER_VERSION}.png`)) {
       setDisplayUrl(activity.poster_url);
       return;
     }
+
     let cancelled = false;
     setGenerating(true);
     setDisplayUrl(null);
@@ -114,38 +117,63 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       if (!ctx) { setGenerating(false); return; }
 
       // —— 中古和风色板 ——
-      const C_PAPER_TOP = '#f9f3e3';
-      const C_PAPER_BOT = '#efe3c8';
+      const C_PAPER_TOP = '#f8f1df';
+      const C_PAPER_BOT = '#ecdfc1';
       const C_INK = '#1c1816';
       const C_INK_SOFT = '#5a4f44';
       const C_INK_MUTE = '#9a8b7a';
       const C_ACCENT = '#b3331d';
+      const C_ACCENT_DEEP = '#8e1f10';
       const C_LINE = '#bba78b';
       const C_CARD = '#fdf8ec';
 
       // 纸色底
       const bg = ctx.createLinearGradient(0, 0, 0, H);
       bg.addColorStop(0, C_PAPER_TOP);
+      bg.addColorStop(0.5, '#f3e8cd');
       bg.addColorStop(1, C_PAPER_BOT);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
+      // 纸纹噪点
+      ctx.save();
+      ctx.globalAlpha = 0.04;
+      ctx.fillStyle = C_INK;
+      for (let i = 0; i < 800; i++) {
+        const x = Math.random() * W, y = Math.random() * H;
+        ctx.fillRect(x, y, 1, 1);
+      }
+      ctx.restore();
+
       // 双线外框
-      const M = 40;
+      const M = 44;
       ctx.strokeStyle = C_LINE;
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.4;
       ctx.strokeRect(M, M, W - M * 2, H - M * 2);
       ctx.lineWidth = 0.6;
       ctx.strokeRect(M + 10, M + 10, W - (M + 10) * 2, H - (M + 10) * 2);
 
-      // —— 1. 顶部 logo 区 ——
-      const headerY = M + 50;
+      // 四角小装饰
+      const cornerSize = 22;
+      ctx.strokeStyle = C_ACCENT;
+      ctx.lineWidth = 2;
+      const drawCorner = (cx: number, cy: number, dx: number, dy: number) => {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy + dy * cornerSize); ctx.lineTo(cx, cy); ctx.lineTo(cx + dx * cornerSize, cy);
+        ctx.stroke();
+      };
+      drawCorner(M + 22, M + 22, 1, 1);
+      drawCorner(W - M - 22, M + 22, -1, 1);
+      drawCorner(M + 22, H - M - 22, 1, -1);
+      drawCorner(W - M - 22, H - M - 22, -1, -1);
+
+      // —— 1. 顶部 logo ——
+      const headerY = M + 56;
       const logoImg = await loadImage(brandLogo);
       if (logoImg) {
-        const logoH = 78;
+        const logoH = 76;
         const logoW = logoImg.naturalWidth * (logoH / logoImg.naturalHeight);
-        const lx = (W - logoW) / 2;
-        ctx.drawImage(logoImg, lx, headerY, logoW, logoH);
+        ctx.drawImage(logoImg, (W - logoW) / 2, headerY, logoW, logoH);
       }
 
       // 副标题
@@ -153,10 +181,9 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       ctx.font = '500 18px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      const subY = headerY + 92;
+      const subY = headerY + 96;
       const sub = '中　古　邀　请　函';
       ctx.fillText(sub, W / 2, subY);
-      // 副标题两侧细线
       ctx.strokeStyle = C_LINE;
       ctx.lineWidth = 0.8;
       const subW = ctx.measureText(sub).width;
@@ -167,16 +194,77 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       ctx.lineTo(W / 2 + subW / 2 + 60, subY + 9);
       ctx.stroke();
 
-      let cursorY = subY + 38;
+      let cursorY = subY + 50;
 
-      // —— 2. 封面 ——
+      // —— 2. 标题（前置）——
+      ctx.fillStyle = C_INK;
+      ctx.font = '700 56px "STSong", "Songti SC", "SimSun", "PingFang SC", serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
       const cardX = M + 36;
       const cardW = W - (M + 36) * 2;
+      const titleLines = wrapText(ctx, activity.name, cardW, 2);
+      for (const line of titleLines) {
+        ctx.fillText(line, W / 2, cursorY);
+        cursorY += 68;
+      }
+
+      // 红印章（标题右上方装饰）
+      const sealCx = W / 2 + ctx.measureText(titleLines[titleLines.length - 1] || '').width / 2 + 56;
+      const sealCy = cursorY - 56;
+      const sealR = 38;
+      if (sealCx + sealR < W - M - 30) {
+        ctx.save();
+        ctx.fillStyle = C_ACCENT_DEEP;
+        ctx.globalAlpha = 0.92;
+        ctx.beginPath();
+        ctx.arc(sealCx, sealCy, sealR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = '#fdf8ec';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sealCx, sealCy, sealR - 5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#fdf8ec';
+        ctx.font = '700 36px "STSong", "Songti SC", "SimSun", serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('邀', sealCx, sealCy + 2);
+        // 印章破损纹理
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = C_PAPER_TOP;
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = sealR * (0.4 + Math.random() * 0.6);
+          ctx.fillRect(sealCx + Math.cos(a) * r, sealCy + Math.sin(a) * r, 2 + Math.random() * 3, 1 + Math.random() * 2);
+        }
+        ctx.restore();
+      }
+
+      // 菱形装饰
+      cursorY += 6;
+      const diamondY = cursorY + 6;
+      ctx.fillStyle = C_ACCENT;
+      ctx.save();
+      ctx.translate(W / 2, diamondY);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-5, -5, 10, 10);
+      ctx.restore();
+      ctx.strokeStyle = C_LINE;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - 140, diamondY); ctx.lineTo(W / 2 - 18, diamondY);
+      ctx.moveTo(W / 2 + 18, diamondY); ctx.lineTo(W / 2 + 140, diamondY);
+      ctx.stroke();
+      cursorY += 36;
+
+      // —— 3. 封面（如有）——
       if (activity.cover_url) {
         const img = await loadImage(activity.cover_url);
         if (img && !cancelled) {
-          const coverH = 260;
-          ctx.fillStyle = 'rgba(28,24,22,0.15)';
+          const coverH = 240;
+          ctx.fillStyle = 'rgba(28,24,22,0.18)';
           ctx.fillRect(cardX + 4, cursorY + 6, cardW, coverH);
           ctx.save();
           ctx.beginPath();
@@ -190,59 +278,31 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
           ctx.strokeStyle = C_INK;
           ctx.lineWidth = 1;
           ctx.strokeRect(cardX, cursorY, cardW, coverH);
-          cursorY += coverH + 36;
+          cursorY += coverH + 32;
         }
       }
 
-      // —— 3. 标题 ——
-      ctx.fillStyle = C_INK;
-      ctx.font = '700 48px "STSong", "Songti SC", "SimSun", "PingFang SC", serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      const titleLines = wrapText(ctx, activity.name, cardW, 2);
-      for (const line of titleLines) {
-        ctx.fillText(line, W / 2, cursorY);
-        cursorY += 60;
-      }
-
-      // 菱形装饰
-      cursorY += 6;
-      const diamondY = cursorY + 6;
-      ctx.fillStyle = C_ACCENT;
-      ctx.save();
-      ctx.translate(W / 2, diamondY);
-      ctx.rotate(Math.PI / 4);
-      ctx.fillRect(-4, -4, 8, 8);
-      ctx.restore();
-      ctx.strokeStyle = C_LINE;
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(W / 2 - 120, diamondY); ctx.lineTo(W / 2 - 16, diamondY);
-      ctx.moveTo(W / 2 + 16, diamondY); ctx.lineTo(W / 2 + 120, diamondY);
-      ctx.stroke();
-      cursorY += 28;
-
-      // —— 4. 完整描述（最多 6 行）——
+      // —— 4. 描述 ——
       if (activity.description) {
         ctx.fillStyle = C_INK_SOFT;
-        ctx.font = '400 22px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-        ctx.textAlign = 'center';
-        const descLines = wrapText(ctx, activity.description, cardW - 20, 6);
+        ctx.font = '400 23px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+        ctx.textAlign = 'left';
+        const descLines = wrapText(ctx, activity.description, cardW - 40, 7);
         for (const line of descLines) {
-          ctx.fillText(line, W / 2, cursorY);
-          cursorY += 34;
+          ctx.fillText(line, cardX + 20, cursorY);
+          cursorY += 36;
         }
+        cursorY += 8;
       }
 
-      // —— 5. 时间 + 类型 元信息行 ——
-      cursorY += 18;
-      // 上方细分隔线
+      // —— 5. 元信息行 ——
+      cursorY += 14;
       ctx.strokeStyle = C_LINE;
       ctx.lineWidth = 0.6;
       ctx.beginPath();
-      ctx.moveTo(cardX + 40, cursorY); ctx.lineTo(W - cardX - 40, cursorY);
+      ctx.moveTo(cardX + 30, cursorY); ctx.lineTo(W - cardX - 30, cursorY);
       ctx.stroke();
-      cursorY += 22;
+      cursorY += 26;
 
       const fmt = (d?: string | null) => d ? format(new Date(d), 'yyyy.MM.dd') : null;
       const startTxt = fmt(activity.starts_at);
@@ -256,19 +316,56 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       ctx.font = '400 20px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(`活动时间　${timeText}`, W / 2, cursorY);
-      cursorY += 30;
+      cursorY += 32;
       ctx.fillText(`参与方式　${activity.requires_review ? '需 审 核' : '免 审 核'}`, W / 2, cursorY);
-      cursorY += 28;
+      cursorY += 30;
 
       ctx.beginPath();
-      ctx.moveTo(cardX + 40, cursorY); ctx.lineTo(W - cardX - 40, cursorY);
+      ctx.moveTo(cardX + 30, cursorY); ctx.lineTo(W - cardX - 30, cursorY);
       ctx.stroke();
+      cursorY += 28;
 
-      // —— 6. 二维码卡片 ——
-      const qrCardH = 280;
-      const qrCardY = H - M - 40 - qrCardH;
-      const qrCardX = M + 60;
-      const qrCardW = W - (M + 60) * 2;
+      // —— 6. 中间空隙的和风装饰条（青海波 + 中央 印 字）——
+      const qrCardH = 240;
+      const qrCardY = H - M - 56 - qrCardH;
+      const gapTop = cursorY;
+      const gapH = qrCardY - 28 - gapTop;
+      if (gapH > 60) {
+        const ornY = gapTop + gapH / 2;
+        // 左右青海波弧线
+        ctx.strokeStyle = C_LINE;
+        ctx.lineWidth = 1;
+        const drawWaves = (startX: number, endX: number, dir: number) => {
+          const r = 14;
+          for (let row = 0; row < 2; row++) {
+            const yy = ornY - 14 + row * 14;
+            let x = startX;
+            while ((dir > 0 ? x < endX : x > endX)) {
+              ctx.beginPath();
+              ctx.arc(x, yy, r, Math.PI, Math.PI * 2);
+              ctx.stroke();
+              x += dir * r * 2;
+            }
+          }
+        };
+        drawWaves(cardX + 20, W / 2 - 60, 1);
+        drawWaves(W - cardX - 20, W / 2 + 60, -1);
+
+        // 中央方印
+        const stampSize = 56;
+        ctx.fillStyle = C_ACCENT_DEEP;
+        ctx.fillRect(W / 2 - stampSize / 2, ornY - stampSize / 2, stampSize, stampSize);
+        ctx.fillStyle = '#fdf8ec';
+        ctx.font = '700 30px "STSong", "Songti SC", serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('印', W / 2, ornY + 1);
+        ctx.textBaseline = 'top';
+      }
+
+      // —— 7. 二维码卡片 ——
+      const qrCardX = M + 50;
+      const qrCardW = W - (M + 50) * 2;
 
       ctx.fillStyle = C_CARD;
       ctx.fillRect(qrCardX, qrCardY, qrCardW, qrCardH);
@@ -278,7 +375,7 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       ctx.lineWidth = 0.5;
       ctx.strokeRect(qrCardX + 6, qrCardY + 6, qrCardW - 12, qrCardH - 12);
 
-      const qrSize = 220;
+      const qrSize = 200;
       const qrDataUrl = await QRCode.toDataURL(url, {
         margin: 1,
         width: qrSize,
@@ -287,29 +384,28 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       });
       const qrImg = await loadImage(qrDataUrl);
       const qrY = qrCardY + (qrCardH - qrSize) / 2;
-      const qrX = qrCardX + 24;
+      const qrX = qrCardX + 20;
       if (qrImg) ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
-      // 右侧文字
-      const textX = qrX + qrSize + 30;
+      const textX = qrX + qrSize + 28;
       ctx.fillStyle = C_INK;
-      ctx.font = '700 28px "STSong", "Songti SC", "SimSun", serif';
+      ctx.font = '700 30px "STSong", "Songti SC", "SimSun", serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText('扫 码', textX, qrY + 28);
-      ctx.fillText('参 与', textX, qrY + 72);
+      ctx.fillText('扫 码', textX, qrY + 22);
+      ctx.fillText('参 与', textX, qrY + 68);
       ctx.fillStyle = C_ACCENT;
-      ctx.fillRect(textX, qrY + 122, 36, 2);
+      ctx.fillRect(textX, qrY + 118, 36, 2);
       ctx.fillStyle = C_INK_SOFT;
-      ctx.font = '400 16px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-      ctx.fillText('长按识别二维码', textX, qrY + 140);
-      ctx.fillText('或截图保存转发', textX, qrY + 164);
+      ctx.font = '400 15px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.fillText('长按识别二维码', textX, qrY + 136);
+      ctx.fillText('或截图保存转发', textX, qrY + 158);
 
-      // —— 7. 底部签名 ——
+      // —— 8. 底部签名 ——
       ctx.textAlign = 'center';
       ctx.fillStyle = C_INK_MUTE;
       ctx.font = '400 13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-      ctx.fillText('由　BOOMER · OFF　中　古　小　店　呈　上', W / 2, H - M - 28);
+      ctx.fillText('由　BOOMER · OFF　中　古　小　店　呈　上', W / 2, H - M - 30);
 
       if (cancelled) return;
 
@@ -319,7 +415,7 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       try {
         if (user) {
           const blob = await dataUrlToBlob(out);
-          const path = `${user.id}/${activity.id}.png`;
+          const path = `${user.id}/${activity.id}_${POSTER_VERSION}.png`;
           const { error: upErr } = await supabase.storage
             .from('activity-posters')
             .upload(path, blob, { upsert: true, contentType: 'image/png' });
