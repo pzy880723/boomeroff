@@ -1,4 +1,4 @@
-// 新建/编辑活动：名称、描述、选抵用券、是否审核、自定义字段、状态
+// 新建/编辑活动：名称、描述、选抵用券、自定义字段、状态
 import { useEffect, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
