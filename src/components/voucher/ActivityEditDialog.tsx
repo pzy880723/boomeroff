@@ -15,7 +15,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { Activity, ActivityField, VoucherTemplate } from '@/lib/voucher';
-import { cn } from '@/lib/utils';
+
 
 interface Props {
   open: boolean;
