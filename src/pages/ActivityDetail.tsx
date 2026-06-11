@@ -171,134 +171,72 @@ export default function ActivityDetail() {
 
         {/* 统计卡 */}
         <Card className="p-0 overflow-hidden">
-          {activity.requires_review ? (
-            <div className="grid grid-cols-3 divide-x">
-              <div className="px-2 py-3 text-center">
-                <p className="text-2xl font-semibold tabular-nums">{counts.total}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">已申请</p>
-              </div>
-              <div className="px-2 py-3 text-center">
-                <p className="text-2xl font-semibold tabular-nums">{counts.approved}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">已通过</p>
-              </div>
-              <div className="px-2 py-3 text-center">
-                <p className="text-2xl font-semibold tabular-nums">{counts.rejected}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">已拒绝</p>
-              </div>
+          <div className="grid grid-cols-2 divide-x">
+            <div className="px-2 py-3 text-center">
+              <p className="text-2xl font-semibold tabular-nums">{counts.total}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">已领取</p>
             </div>
-          ) : (
-            <div className="grid grid-cols-2 divide-x">
-              <div className="px-2 py-3 text-center">
-                <p className="text-2xl font-semibold tabular-nums">{counts.total}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">已领取</p>
-              </div>
-              <div className="px-2 py-3 text-center">
-                <p className="text-2xl font-semibold tabular-nums">{counts.redeemed}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">已核销</p>
-              </div>
+            <div className="px-2 py-3 text-center">
+              <p className="text-2xl font-semibold tabular-nums">{counts.redeemed}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">已核销</p>
             </div>
-          )}
+          </div>
         </Card>
 
-        {/* 列表 */}
-        {activity.requires_review ? (
-          <Tabs defaultValue="pending">
-            <TabsList className="grid grid-cols-3 w-full">
-              <TabsTrigger value="pending">待审 ({counts.pending})</TabsTrigger>
-              <TabsTrigger value="approved">通过 ({counts.approved})</TabsTrigger>
-              <TabsTrigger value="rejected">拒绝 ({counts.rejected})</TabsTrigger>
-            </TabsList>
-
-            {(['pending', 'approved', 'rejected'] as const).map((tab) => (
-              <TabsContent key={tab} value={tab} className="space-y-2 mt-2">
-                {filtered(tab).length === 0 ? (
-                  <Card className="p-6 text-center text-xs text-muted-foreground">暂无</Card>
-                ) : filtered(tab).map((app) => (
-                  <Card key={app.id} className="p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{app.applicant_name}</span>
-                      <span className="text-xs text-muted-foreground">{app.applicant_phone}</span>
-                      <Badge variant={APPLICATION_STATUS_VARIANT[app.status]} className="ml-auto text-[10px]">
-                        {APPLICATION_STATUS_LABEL[app.status]}
-                      </Badge>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">{format(new Date(app.created_at), 'yyyy-MM-dd HH:mm')}</p>
-                    {activity.form_fields.length > 0 && (
-                      <div className="text-xs space-y-1 border-t pt-2">
-                        {activity.form_fields.map((f) => {
-                          const v = app.form_data?.[f.key];
-                          if (v === null || v === undefined || v === '') return null;
-                          return (
-                            <div key={f.key} className="flex gap-2">
-                              <span className="text-muted-foreground shrink-0">{f.label}:</span>
-                              {f.type === 'image' && typeof v === 'string' ? (
-                                <a
-                                  href="#"
-                                  onClick={async (e) => {
-                                    e.preventDefault();
-                                    const { data } = await supabase.storage
-                                      .from('voucher-screenshots')
-                                      .createSignedUrl(String(v), 600);
-                                    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                                  }}
-                                  className="text-primary underline truncate"
-                                >查看截图</a>
-                              ) : f.type === 'url' && typeof v === 'string' ? (
-                                <a href={String(v)} target="_blank" rel="noreferrer" className="text-primary underline truncate">{String(v)}</a>
-                              ) : (
-                                <span className="break-all">{String(v)}</span>
-                              )}
-                            </div>
-                          );
-                        })}
+        {/* 领取列表 */}
+        <div className="space-y-2">
+          <p className="text-xs font-medium px-1 text-muted-foreground">领取列表（{apps.length}）</p>
+          {apps.length === 0 ? (
+            <Card className="p-6 text-center text-xs text-muted-foreground">还没有人领取</Card>
+          ) : apps.map((app) => (
+            <Card key={app.id} className="p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">{app.applicant_name}</span>
+                <span className="text-xs text-muted-foreground">{app.applicant_phone}</span>
+                <Badge variant={claimStatusVariant(app)} className="ml-auto text-[10px]">
+                  {claimStatusLabel(app)}
+                </Badge>
+              </div>
+              {activity.form_fields.length > 0 && (
+                <div className="text-xs space-y-1 border-t pt-2 mt-1">
+                  {activity.form_fields.map((f) => {
+                    const v = app.form_data?.[f.key];
+                    if (v === null || v === undefined || v === '') return null;
+                    return (
+                      <div key={f.key} className="flex gap-2">
+                        <span className="text-muted-foreground shrink-0">{f.label}:</span>
+                        {f.type === 'image' && typeof v === 'string' ? (
+                          <a
+                            href="#"
+                            onClick={async (e) => {
+                              e.preventDefault();
+                              const { data } = await supabase.storage
+                                .from('voucher-screenshots')
+                                .createSignedUrl(String(v), 600);
+                              if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                            }}
+                            className="text-primary underline truncate"
+                          >查看截图</a>
+                        ) : f.type === 'url' && typeof v === 'string' ? (
+                          <a href={String(v)} target="_blank" rel="noreferrer" className="text-primary underline truncate">{String(v)}</a>
+                        ) : (
+                          <span className="break-all">{String(v)}</span>
+                        )}
                       </div>
-                    )}
-                    {app.status === 'pending' && (
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        <Button size="sm" variant="outline" disabled={processing === app.id} onClick={() => review(app.id, 'reject')}>
-                          <XCircle className="w-3.5 h-3.5 mr-1" />拒绝
-                        </Button>
-                        <Button size="sm" disabled={processing === app.id} onClick={() => review(app.id, 'approve')}>
-                          {processing === app.id ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-1" />}
-                          通过
-                        </Button>
-                      </div>
-                    )}
-                    {app.status === 'approved' && app.sms_error && (
-                      <p className="text-[11px] text-destructive">短信失败：{app.sms_error}</p>
-                    )}
-                    {app.status === 'approved' && app.sms_sent_at && (
-                      <p className="text-[11px] text-muted-foreground">短信已发送 · {format(new Date(app.sms_sent_at), 'MM-dd HH:mm')}</p>
-                    )}
-                  </Card>
-                ))}
-              </TabsContent>
-            ))}
-          </Tabs>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-xs font-medium px-1 text-muted-foreground">领取列表（{apps.length}）</p>
-            {apps.length === 0 ? (
-              <Card className="p-6 text-center text-xs text-muted-foreground">还没有人领取</Card>
-            ) : apps.map((app) => (
-              <Card key={app.id} className="p-3 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{app.applicant_name}</span>
-                  <span className="text-xs text-muted-foreground">{app.applicant_phone}</span>
-                  <Badge variant={claimStatusVariant(app)} className="ml-auto text-[10px]">
-                    {claimStatusLabel(app)}
-                  </Badge>
+                    );
+                  })}
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  领取：{format(new Date(app.created_at), 'yyyy-MM-dd HH:mm')}
-                  {app.voucher_claim?.redeemed_at && (
-                    <> · 核销：{format(new Date(app.voucher_claim.redeemed_at), 'yyyy-MM-dd HH:mm')}</>
-                  )}
-                </p>
-              </Card>
-            ))}
-          </div>
-        )}
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                领取：{format(new Date(app.created_at), 'yyyy-MM-dd HH:mm')}
+                {app.voucher_claim?.redeemed_at && (
+                  <> · 核销：{format(new Date(app.voucher_claim.redeemed_at), 'yyyy-MM-dd HH:mm')}</>
+                )}
+              </p>
+            </Card>
+          ))}
+        </div>
+
 
         {/* 底部操作 */}
         <div className="pt-4 space-y-2">
