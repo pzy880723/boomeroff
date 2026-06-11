@@ -64,13 +64,13 @@ export default function PublicActivity() {
       toast.error((data as any)?.error || e?.message || '提交失败');
       return;
     }
-    if ((data as any)?.requires_review === false && (data as any)?.short_code) {
-      if ((data as any).already) toast.info('您已领取过该活动的抵用券');
-      navigate(`/u/c/${(data as any).short_code}`, { replace: true });
+    const d = data as any;
+    if (d?.short_code) {
+      if (d.already) toast.info('您已领取过该活动的抵用券');
+      navigate(`/u/c/${d.short_code}`, { replace: true });
       return;
     }
-    setDone(true);
-  };
+    toast.error('提交成功但未生成抵用券，请联系客服');
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
