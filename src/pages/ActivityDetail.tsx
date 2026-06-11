@@ -6,13 +6,11 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Loader2, CheckCircle2, XCircle, Share2, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Share2, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
-  type Activity, type ActivityApplication, APPLICATION_STATUS_LABEL,
-  APPLICATION_STATUS_VARIANT, CLAIM_STATUS_LABEL,
+  type Activity, type ActivityApplication, CLAIM_STATUS_LABEL,
 } from '@/lib/voucher';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
