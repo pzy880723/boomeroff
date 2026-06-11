@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Megaphone, Copy, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Megaphone, Copy, MoreVertical, Pencil, Trash2, CalendarRange, ChevronRight } from 'lucide-react';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { type Activity, buildActivityShareUrl } from '@/lib/voucher';
 import { AuthPage } from '@/components/auth/AuthPage';
@@ -68,67 +68,121 @@ export default function ActivitiesMine() {
     );
   }
 
+  const fmtRange = (s?: string | null, e?: string | null) => {
+    if (!s && !e) return '长期有效';
+    const fmt = (d: string) => format(new Date(d), 'MM-dd HH:mm');
+    if (s && e) return `${fmt(s)} → ${fmt(e)}`;
+    if (s) return `${fmt(s)} 起`;
+    return `截止 ${fmt(e!)}`;
+  };
+
   return (
     <>
       <PageHeader title="我的活动" back="/me" />
-      <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-3">
-        <Button onClick={() => { setEditId(null); setEditOpen(true); }} className="w-full h-12">
-          <Plus className="w-4 h-4 mr-1.5" /> 新建活动
-        </Button>
-
+      <div className="container mx-auto max-w-screen-md px-3 py-3 pb-24 space-y-3">
         {loading ? (
-          <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
         ) : list.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-muted-foreground">
-            <Megaphone className="w-10 h-10 mx-auto mb-2 opacity-50" />
-            还没创建过活动
-          </Card>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-3">
+              <Megaphone className="w-7 h-7 text-muted-foreground/60" />
+            </div>
+            <p className="text-sm text-muted-foreground">暂无活动</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">点击底部按钮创建你的第一个活动</p>
+          </div>
         ) : (
-          <div className="space-y-2">
-            {list.map((a) => (
-              <Card key={a.id} className="p-3 space-y-2">
-                <div className="flex items-start gap-2">
-                  <button onClick={() => navigate(`/me/activities/${a.id}`)} className="flex-1 text-left min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Megaphone className="w-4 h-4 text-primary shrink-0" />
-                      <span className="font-medium text-sm flex-1 truncate">{a.name}</span>
-                      <Badge variant={a.status === 'active' ? 'default' : 'outline'} className="text-[10px]">{STATUS_LABEL[a.status]}</Badge>
-                      <Badge variant="outline" className="text-[10px]">{a.requires_review ? '需审核' : '免审核'}</Badge>
-                    </div>
-                    {a.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{a.description}</p>}
-                    <p className="text-[11px] text-muted-foreground mt-1">{format(new Date(a.created_at), 'yyyy-MM-dd HH:mm')}</p>
-                  </button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => { setEditId(a.id); setEditOpen(true); }}>
-                        <Pencil className="w-3.5 h-3.5 mr-2" />编辑
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={() => setDeletingId(a.id)}>
-                        <Trash2 className="w-3.5 h-3.5 mr-2" />删除
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                <Button
-                  size="sm" variant="outline" className="w-full h-8"
-                  onClick={async () => {
-                    const url = buildActivityShareUrl(a.share_token);
-                    try { await navigator.clipboard.writeText(url); toast.success('活动链接已复制'); }
-                    catch { toast.success(url); }
-                  }}
+          <div className="space-y-2.5">
+            {list.map((a) => {
+              const statusTone =
+                a.status === 'active' ? 'bg-emerald-500'
+                : a.status === 'closed' ? 'bg-muted-foreground/40'
+                : 'bg-amber-500';
+              return (
+                <Card
+                  key={a.id}
+                  className="group overflow-hidden border-border/60 hover:border-primary/40 hover:shadow-md transition-all"
                 >
-                  <Copy className="w-3.5 h-3.5 mr-1" /> 复制活动链接
-                </Button>
-              </Card>
-            ))}
+                  <div className="flex">
+                    {a.cover_url ? (
+                      <button
+                        onClick={() => navigate(`/me/activities/${a.id}`)}
+                        className="relative w-20 shrink-0 bg-muted"
+                        aria-label={a.name}
+                      >
+                        <img src={a.cover_url} alt={a.name} className="absolute inset-0 w-full h-full object-cover" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/me/activities/${a.id}`)}
+                        className="w-20 shrink-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent flex items-center justify-center"
+                        aria-label={a.name}
+                      >
+                        <Megaphone className="w-7 h-7 text-primary/60" />
+                      </button>
+                    )}
+                    <div className="flex-1 min-w-0 p-3">
+                      <button onClick={() => navigate(`/me/activities/${a.id}`)} className="w-full text-left">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${statusTone}`} />
+                          <span className="text-[10px] text-muted-foreground">{STATUS_LABEL[a.status]}</span>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span className="text-[10px] text-muted-foreground">{a.requires_review ? '需审核' : '免审核'}</span>
+                        </div>
+                        <div className="font-medium text-sm mt-0.5 truncate">{a.name}</div>
+                        {a.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{a.description}</p>
+                        )}
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground/80 mt-1.5">
+                          <CalendarRange className="w-3 h-3" />
+                          <span className="truncate">{fmtRange(a.starts_at, a.ends_at)}</span>
+                        </div>
+                      </button>
+                    </div>
+                    <div className="flex flex-col items-center justify-between p-1.5 shrink-0">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={async () => {
+                            const url = buildActivityShareUrl(a.share_token);
+                            try { await navigator.clipboard.writeText(url); toast.success('活动链接已复制'); }
+                            catch { toast.success(url); }
+                          }}>
+                            <Copy className="w-3.5 h-3.5 mr-2" />复制链接
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setEditId(a.id); setEditOpen(true); }}>
+                            <Pencil className="w-3.5 h-3.5 mr-2" />编辑
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive" onClick={() => setDeletingId(a.id)}>
+                            <Trash2 className="w-3.5 h-3.5 mr-2" />删除
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/40 mr-1 mb-1" />
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* 底部新建按钮 */}
+      <div className="fixed bottom-0 inset-x-0 z-30 pointer-events-none">
+        <div className="container mx-auto max-w-screen-md px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 bg-gradient-to-t from-background via-background/95 to-transparent pointer-events-auto">
+          <Button
+            onClick={() => { setEditId(null); setEditOpen(true); }}
+            className="w-full h-12 shadow-lg shadow-primary/20"
+          >
+            <Plus className="w-4 h-4 mr-1.5" /> 新建活动
+          </Button>
+        </div>
+      </div>
+
 
       <ActivityEditDialog
         open={editOpen}
