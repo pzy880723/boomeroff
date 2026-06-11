@@ -83,7 +83,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       setName(''); setDescription(''); setVoucherId('');
       setFields(DEFAULT_FIELDS);
       setActive(true);
-      setRequiresReview(true);
+      
     }
   }, [open, activityId]);
 
