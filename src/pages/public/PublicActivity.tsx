@@ -31,7 +31,6 @@ export default function PublicActivity() {
   const [phone, setPhone] = useState('');
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
 
   useEffect(() => {
     if (!shareToken) return;
