@@ -111,7 +111,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       voucher_id: voucherId,
       form_fields: fields as any,
       status: active ? 'active' : 'draft',
-      requires_review: requiresReview,
+      requires_review: false,
     };
     let error;
     if (isEdit && activityId) {
