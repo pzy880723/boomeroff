@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
   type Activity, type ActivityApplication, APPLICATION_STATUS_LABEL,
-  APPLICATION_STATUS_VARIANT, buildActivityShareUrl, CLAIM_STATUS_LABEL,
+  APPLICATION_STATUS_VARIANT, CLAIM_STATUS_LABEL,
 } from '@/lib/voucher';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
