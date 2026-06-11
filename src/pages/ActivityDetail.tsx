@@ -31,7 +31,6 @@ export default function ActivityDetail() {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [apps, setApps] = useState<AppWithClaim[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
