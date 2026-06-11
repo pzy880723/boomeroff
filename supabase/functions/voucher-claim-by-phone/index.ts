@@ -43,17 +43,17 @@ Deno.serve(async (req) => {
 
     if (error) return json({ error: error.message }, 500);
     if (!claims || claims.length === 0) {
-      return json({ error: '未找到该手机号的优惠券。请确认申请已被通过，或手机号是否填写正确。' }, 404);
+      return json({ error: '不好意思，没有搜索到对应的优惠券，请检查您的手机号是否输入正确' }, 200);
     }
 
     // 过滤掉已过期的
     const now = Date.now();
     const usable = claims.find((c) => !c.expires_at || new Date(c.expires_at).getTime() > now);
     if (!usable) {
-      return json({ error: '您的优惠券已过期' }, 410);
+      return json({ error: '您的优惠券已过期' }, 200);
     }
     if (!usable.short_code) {
-      return json({ error: '优惠券数据异常，请联系商家' }, 500);
+      return json({ error: '优惠券数据异常，请联系商家' }, 200);
     }
 
     return json({ ok: true, short_code: usable.short_code });
