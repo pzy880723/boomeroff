@@ -194,7 +194,14 @@ export default function ActivitiesMine() {
         open={!!shareActivity}
         onOpenChange={(o) => !o && setShareActivity(null)}
         activity={shareActivity}
+        onPosterSaved={(url) => {
+          if (!shareActivity) return;
+          const id = shareActivity.id;
+          setList((prev) => prev.map((a) => a.id === id ? { ...a, poster_url: url } : a));
+          setShareActivity((a) => a ? { ...a, poster_url: url } : a);
+        }}
       />
+
 
       <AlertDialog open={!!deletingId} onOpenChange={(o) => !o && setDeletingId(null)}>
         <AlertDialogContent>

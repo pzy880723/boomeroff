@@ -93,7 +93,8 @@ export default function PublicActivity() {
         <Card className="p-6 text-center max-w-sm w-full space-y-2">
           <CheckCircle2 className="w-10 h-10 mx-auto text-green-600" />
           <p className="text-base font-medium">申请已提交</p>
-          <p className="text-xs text-muted-foreground">审核通过后将通过短信通知您领取抵用券</p>
+          <p className="text-xs text-muted-foreground">待审核通过后将通过短信通知您领取抵用券</p>
+
         </Card>
       </div>
     );

@@ -94,6 +94,7 @@ export interface Activity {
   ends_at: string | null;
   created_by: string | null;
   created_at: string;
+  poster_url?: string | null;
 }
 
 export interface ActivityApplication {
