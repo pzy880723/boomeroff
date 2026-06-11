@@ -66,8 +66,6 @@ export default function PublicClaimByPhone() {
       return;
     }
     setSubmitting(true);
-    // 立即放烟花
-    fireFirework();
     const { data, error } = await supabase.functions.invoke('voucher-claim-by-phone', {
       body: { phone },
     });
