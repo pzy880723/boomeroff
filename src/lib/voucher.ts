@@ -88,6 +88,7 @@ export interface Activity {
   share_token: string;
   form_fields: ActivityField[];
   status: 'draft' | 'active' | 'closed';
+  requires_review: boolean;
   max_applications: number | null;
   starts_at: string | null;
   ends_at: string | null;
