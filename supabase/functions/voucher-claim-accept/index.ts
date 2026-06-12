@@ -1,4 +1,4 @@
-// 公开：用户填姓名+手机+验证码 → 校验 OTP 后把 claim 改为 claimed
+// 公开：用户填姓名+手机+验证码 → 校验 OTP 后把 claim 改为 claimed，返回完整 claim 数据
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -25,14 +25,38 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    let q = admin.from('voucher_claims').select('id, status').limit(1);
+    let q = admin.from('voucher_claims').select('id, status, voucher_id').limit(1);
     if (short_code) q = q.eq('short_code', String(short_code).toUpperCase());
     else q = q.eq('share_token', share_token);
     const { data: claim, error: e1 } = await q.maybeSingle();
     if (e1 || !claim) return json({ error: '优惠券不存在' }, 404);
-    if (claim.status !== 'unclaimed') return json({ ok: true, already: true });
 
-    const { data: otpRow } = await admin.from('claim_otp')
+    const { data: voucher } = await admin
+      .from('vouchers')
+      .select('starts_at, ends_at')
+      .eq('id', claim.voucher_id)
+      .maybeSingle();
+    if (voucher?.starts_at && new Date(voucher.starts_at) > new Date()) {
+      return json({ error: '该券尚未到生效时间' }, 400);
+    }
+    if (voucher?.ends_at && new Date(voucher.ends_at) < new Date()) {
+      return json({ error: '该券已结束，无法领取' }, 400);
+    }
+
+    const fullSelect =
+      'id, code, short_code, share_token, status, recipient_name, recipient_phone, claimed_at, expires_at, redeemed_at';
+
+    if (claim.status !== 'unclaimed') {
+      const { data: full } = await admin
+        .from('voucher_claims')
+        .select(fullSelect)
+        .eq('id', claim.id)
+        .maybeSingle();
+      return json({ ok: true, already: true, claim: full });
+    }
+
+    const { data: otpRow } = await admin
+      .from('claim_otp')
       .select('*')
       .eq('claim_id', claim.id)
       .eq('phone', String(phone))
@@ -51,7 +75,7 @@ Deno.serve(async (req) => {
 
     await admin.from('claim_otp').update({ verified_at: new Date().toISOString() }).eq('id', otpRow.id);
 
-    const { error: e2 } = await admin
+    const { data: updated, error: e2 } = await admin
       .from('voucher_claims')
       .update({
         status: 'claimed',
@@ -59,9 +83,11 @@ Deno.serve(async (req) => {
         recipient_phone: String(phone),
         claimed_at: new Date().toISOString(),
       })
-      .eq('id', claim.id);
+      .eq('id', claim.id)
+      .select(fullSelect)
+      .single();
     if (e2) return json({ error: e2.message }, 400);
-    return json({ ok: true });
+    return json({ ok: true, claim: updated });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }

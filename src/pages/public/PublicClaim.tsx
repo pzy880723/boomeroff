@@ -10,11 +10,16 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Ticket, CheckCircle2, AlertTriangle, Send } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
 import { QrCanvas } from '@/components/voucher/QrCanvas';
 import {
   CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, buildClaimRedeemUrl, formatVoucherRule, formatValidityRange,
 } from '@/lib/voucher';
+
+function fmtDateTime(s: string) {
+  const d = new Date(s);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function PublicClaim() {
   const params = useParams();
@@ -32,6 +37,7 @@ export default function PublicClaim() {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
+  const [smsHint, setSmsHint] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [sending, setSending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -66,9 +72,16 @@ export default function PublicClaim() {
     });
     setSending(false);
     if (e || (data as any)?.error) {
-      toast.error((data as any)?.error || e?.message || '发送失败');
+      const err = (data as any)?.error || e?.message || '发送失败';
+      if (err === 'sms_unavailable') {
+        setSmsHint('短信暂不可用，请联系店员手动核销');
+        toast.error('短信暂不可用，请联系店员手动核销');
+      } else {
+        toast.error(err);
+      }
       return;
     }
+    setSmsHint(null);
     setOtpSent(true);
     setCooldown(60);
     toast.success('验证码已发送，请查收短信');
@@ -85,8 +98,14 @@ export default function PublicClaim() {
       toast.error((data as any)?.error || e?.message || '领取失败');
       return;
     }
+    const updated = (data as any)?.claim;
+    if (updated) {
+      // 直接合并最新字段（包括 code/expires_at），保留 voucher 子对象
+      setClaim((prev: any) => ({ ...prev, ...updated }));
+    } else {
+      await fetchStatus();
+    }
     toast.success('领取成功');
-    await fetchStatus();
   };
 
   if (loading) {
@@ -113,6 +132,9 @@ export default function PublicClaim() {
   const isClaimed = ['claimed', 'redeemed'].includes(claim.status);
   const expiredNow =
     !!claim.expires_at && new Date(claim.expires_at).getTime() <= Date.now();
+  const now = Date.now();
+  const tplNotStarted = !!v?.starts_at && new Date(v.starts_at).getTime() > now;
+  const tplEnded = !!v?.ends_at && new Date(v.ends_at).getTime() <= now;
 
   return (
     <div
@@ -172,7 +194,25 @@ export default function PublicClaim() {
           </div>
         </div>
 
-        {!isClaimed && claim.status === 'unclaimed' && (
+        {/* 模板未生效/已结束（且未领取时） */}
+        {!isClaimed && claim.status === 'unclaimed' && tplNotStarted && (
+          <Card className="p-5 text-center text-sm rounded-2xl space-y-1">
+            <p className="font-medium">该券尚未到生效时间</p>
+            <p className="text-xs text-muted-foreground">
+              请于 {fmtDateTime(v.starts_at)} 后再来领取
+            </p>
+          </Card>
+        )}
+        {!isClaimed && claim.status === 'unclaimed' && !tplNotStarted && tplEnded && (
+          <Card className="p-5 text-center text-sm rounded-2xl space-y-1">
+            <p className="font-medium text-destructive">该券已结束</p>
+            <p className="text-xs text-muted-foreground">
+              结束时间：{fmtDateTime(v.ends_at)}
+            </p>
+          </Card>
+        )}
+
+        {!isClaimed && claim.status === 'unclaimed' && !tplNotStarted && !tplEnded && (
           <Card className="p-4 space-y-3 rounded-2xl">
             <p className="text-sm font-medium">填写信息领取</p>
 
@@ -215,6 +255,9 @@ export default function PublicClaim() {
               {otpSent && (
                 <p className="text-[11px] text-muted-foreground">已发送至 {phone}，5 分钟内有效</p>
               )}
+              {smsHint && (
+                <p className="text-[11px] text-destructive">{smsHint}</p>
+              )}
             </div>
 
             <Button onClick={confirm} disabled={submitting || !otpSent} className="w-full h-11">
@@ -227,7 +270,7 @@ export default function PublicClaim() {
         )}
 
         {isClaimed && claim.code && !expiredNow && claim.status !== 'redeemed' && (
-          <Card className="p-4 space-y-3 text-center rounded-2xl">
+          <Card key={claim.code} className="p-4 space-y-3 text-center rounded-2xl">
             <p className="text-sm font-medium flex items-center justify-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-green-600" />
               到店出示此二维码核销
@@ -235,8 +278,8 @@ export default function PublicClaim() {
             <div className="flex justify-center bg-white rounded-lg p-3">
               <QrCanvas value={buildClaimRedeemUrl(claim.code)} size={200} />
             </div>
-            <p className="font-mono text-sm tracking-widest">{claim.code}</p>
-            <p className="text-xs text-muted-foreground">请截图保存，到店出示给店员扫码核销</p>
+            <p className="font-mono text-base tracking-widest font-semibold">{claim.code}</p>
+            <p className="text-xs text-muted-foreground">请截图保存，到店出示给店员扫码核销；如无法扫码可口报上方券码</p>
           </Card>
         )}
 

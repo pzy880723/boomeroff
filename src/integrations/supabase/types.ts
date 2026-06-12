@@ -1787,6 +1787,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           discount_amount: number
+          ends_at: string | null
           expires_at: string | null
           id: string
           min_spend: number | null
@@ -1797,6 +1798,7 @@ export type Database = {
           reject_reason: string | null
           share_token: string | null
           shop_id: string | null
+          starts_at: string | null
           status: string | null
           template_terms: string | null
           threshold_type: string
@@ -1816,6 +1818,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           discount_amount?: number
+          ends_at?: string | null
           expires_at?: string | null
           id?: string
           min_spend?: number | null
@@ -1826,6 +1829,7 @@ export type Database = {
           reject_reason?: string | null
           share_token?: string | null
           shop_id?: string | null
+          starts_at?: string | null
           status?: string | null
           template_terms?: string | null
           threshold_type?: string
@@ -1845,6 +1849,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           discount_amount?: number
+          ends_at?: string | null
           expires_at?: string | null
           id?: string
           min_spend?: number | null
@@ -1855,6 +1860,7 @@ export type Database = {
           reject_reason?: string | null
           share_token?: string | null
           shop_id?: string | null
+          starts_at?: string | null
           status?: string | null
           template_terms?: string | null
           threshold_type?: string

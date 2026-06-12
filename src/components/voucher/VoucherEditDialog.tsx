@@ -22,6 +22,11 @@ interface Props {
   onSaved?: (id: string) => void;
 }
 
+function toLocalInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved }: Props) {
   const editing = !!voucher;
   const [name, setName] = useState('');
@@ -31,6 +36,8 @@ export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved
   const [validDays, setValidDays] = useState<string>('30');
   const [terms, setTerms] = useState('');
   const [active, setActive] = useState(true);
+  const [startsAt, setStartsAt] = useState<string>('');
+  const [endsAt, setEndsAt] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -43,10 +50,14 @@ export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved
       setValidDays(String(voucher.valid_days ?? 30));
       setTerms(voucher.template_terms || '');
       setActive(voucher.active);
+      setStartsAt(voucher.starts_at ? toLocalInput(new Date(voucher.starts_at)) : '');
+      setEndsAt(voucher.ends_at ? toLocalInput(new Date(voucher.ends_at)) : '');
     } else {
       setName(''); setThresholdType('none');
       setDiscountAmount('10'); setMinSpend('50'); setValidDays('30');
       setTerms(''); setActive(true);
+      setStartsAt(toLocalInput(new Date()));
+      setEndsAt('');
     }
   }, [open, voucher]);
 
@@ -62,6 +73,22 @@ export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved
     const vd = Number(validDays);
     if (!Number.isInteger(vd) || vd <= 0) { toast.error('请填写有效期天数'); return; }
 
+    let startsIso: string | null = null;
+    let endsIso: string | null = null;
+    if (startsAt) {
+      const d = new Date(startsAt);
+      if (isNaN(d.getTime())) { toast.error('开始时间格式不正确'); return; }
+      startsIso = d.toISOString();
+    }
+    if (endsAt) {
+      const d = new Date(endsAt);
+      if (isNaN(d.getTime())) { toast.error('结束时间格式不正确'); return; }
+      endsIso = d.toISOString();
+    }
+    if (startsIso && endsIso && new Date(endsIso) <= new Date(startsIso)) {
+      toast.error('结束时间必须晚于开始时间'); return;
+    }
+
     setSaving(true);
     const payload = {
       name: name.trim(),
@@ -71,6 +98,8 @@ export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved
       valid_days: vd,
       template_terms: terms.trim() || null,
       active,
+      starts_at: startsIso,
+      ends_at: endsIso,
     } as any;
     let result;
     if (editing && voucher) {
@@ -87,7 +116,7 @@ export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm sm:max-w-md">
+      <DialogContent className="max-w-sm sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? '编辑优惠券' : '新建优惠券'}</DialogTitle>
         </DialogHeader>
@@ -133,8 +162,22 @@ export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved
             </div>
           )}
 
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">开始时间</Label>
+              <Input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">结束时间（可选）</Label>
+              <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground -mt-1">
+            开始时间到结束时间之间可被领取；到期时间取「领取后 N 天」与结束时间中较早者。
+          </p>
+
           <div className="space-y-1.5">
-            <Label className="text-xs">有效期（天，从领取日起算）</Label>
+            <Label className="text-xs">领取后有效期（天）</Label>
             <Input type="number" min={1} value={validDays} onChange={(e) => setValidDays(e.target.value)} />
           </div>
 

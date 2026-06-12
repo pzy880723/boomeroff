@@ -15,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   type VoucherTemplate, type VoucherClaim, formatVoucherRule, formatValidityRange,
-  buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT,
+  buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, getVoucherTemplateTimeInfo,
 } from '@/lib/voucher';
 
 interface Props {
@@ -139,6 +139,16 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
               <div className="mt-0.5 text-[11px] opacity-70">
                 有效期 {voucher.valid_days} 天 · 仅到店消费
               </div>
+              {(() => {
+                const ti = getVoucherTemplateTimeInfo(voucher);
+                return (
+                  <div className="mt-2 flex items-center gap-2 text-[11px]">
+                    <span className="px-1.5 py-0.5 rounded bg-white/15">{ti.label}</span>
+                    <span className="opacity-80">{ti.rangeText}</span>
+                    {ti.countdown && <span className="opacity-70">· {ti.countdown}</span>}
+                  </div>
+                );
+              })()}
               {voucher.template_terms && (
                 <p className="mt-3 pt-2 border-t border-white/10 text-[11px] opacity-75 line-clamp-2">
                   {voucher.template_terms}
@@ -147,24 +157,40 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <Button onClick={directRelease} disabled={creating || !voucher.active} className="h-11">
-              {creating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-              发放
-            </Button>
-            <Button variant="outline" onClick={onEdit} className="h-11">
-              <Pencil className="w-4 h-4 mr-1.5" />编辑
-            </Button>
-            <Button
-              variant="outline"
-              onClick={tryDelete}
-              disabled={deleting}
-              className="h-11 text-destructive hover:text-destructive border-destructive/40 hover:bg-destructive/5"
-            >
-              {deleting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1.5" />}
-              删除
-            </Button>
-          </div>
+          {(() => {
+            const ti = getVoucherTemplateTimeInfo(voucher);
+            const cannotRelease = !voucher.active || ti.status === 'ended' || ti.status === 'pending';
+            const releaseHint =
+              !voucher.active ? '已停用，无法发放'
+              : ti.status === 'pending' ? '尚未到生效时间'
+              : ti.status === 'ended' ? '已结束，无法发放'
+              : null;
+            return (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button onClick={directRelease} disabled={creating || cannotRelease} className="h-11">
+                    {creating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
+                    发放
+                  </Button>
+                  <Button variant="outline" onClick={onEdit} className="h-11">
+                    <Pencil className="w-4 h-4 mr-1.5" />编辑
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={tryDelete}
+                    disabled={deleting}
+                    className="h-11 text-destructive hover:text-destructive border-destructive/40 hover:bg-destructive/5"
+                  >
+                    {deleting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1.5" />}
+                    删除
+                  </Button>
+                </div>
+                {releaseHint && (
+                  <p className="text-[11px] text-amber-600">{releaseHint}</p>
+                )}
+              </>
+            );
+          })()}
 
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             提示：修改金额/门槛/有效期天数仅影响之后新发放的券，已发放的券保持原规则与到期时间。

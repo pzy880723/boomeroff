@@ -12,7 +12,7 @@ import { Loader2, Plus, ScanLine, Ticket, Megaphone } from 'lucide-react';
 import { VoucherEditDialog } from '@/components/voucher/VoucherEditDialog';
 import { VoucherDetailDialog } from '@/components/voucher/VoucherDetailDialog';
 import { QrScanner } from '@/components/voucher/QrScanner';
-import { type VoucherTemplate, formatVoucherRule } from '@/lib/voucher';
+import { type VoucherTemplate, formatVoucherRule, getVoucherTemplateTimeInfo } from '@/lib/voucher';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { toast } from 'sonner';
 
@@ -104,7 +104,9 @@ export default function VouchersMine() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {vouchers.map((v) => (
+            {vouchers.map((v) => {
+              const ti = getVoucherTemplateTimeInfo(v);
+              return (
               <button key={v.id} onClick={() => setDetail(v)} className="w-full text-left">
                 <Card className="p-3 flex items-center gap-3 hover:bg-accent/10 transition-colors">
                   <div className="w-12 h-12 rounded-lg bg-primary/10 flex flex-col items-center justify-center text-primary shrink-0">
@@ -112,17 +114,22 @@ export default function VouchersMine() {
                     <span className="text-base font-bold tabular-nums leading-none">{v.discount_amount}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-sm truncate">{v.name}</span>
+                      <Badge variant={ti.badgeVariant} className="text-[10px] px-1.5 py-0">{ti.label}</Badge>
                       {!v.active && <Badge variant="outline" className="text-[10px] px-1 py-0">停用</Badge>}
+                      {ti.countdown && (
+                        <span className="text-[10px] text-amber-600">· {ti.countdown}</span>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                      {formatVoucherRule(v)} · 有效期 {v.valid_days} 天
+                      {formatVoucherRule(v)} · {ti.rangeText} · 领后 {v.valid_days} 天
                     </p>
                   </div>
                 </Card>
               </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
