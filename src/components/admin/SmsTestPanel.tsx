@@ -34,12 +34,19 @@ export function SmsTestPanel() {
   const [cooldown, setCooldown] = useState(0);
   const [sendResult, setSendResult] = useState<SendResult | null>(null);
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
+  const [config, setConfig] = useState<SendResult['config'] | null>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
     return () => clearTimeout(t);
   }, [cooldown]);
+
+  useEffect(() => {
+    supabase.functions.invoke('sms-test', { body: { action: 'diagnose' } })
+      .then(({ data }) => setConfig((data as SendResult)?.config || null))
+      .catch(() => setConfig(null));
+  }, []);
 
   const handleSend = async () => {
     setSendResult(null);
@@ -57,8 +64,10 @@ export function SmsTestPanel() {
           detail: parsed?.detail || parsed,
           config: parsed?.config,
         });
+        if (parsed?.config) setConfig(parsed.config);
       } else {
         setSendResult(data as SendResult);
+        if ((data as SendResult)?.config) setConfig((data as SendResult).config || null);
         if ((data as SendResult)?.ok) setCooldown(60);
       }
     } catch (e: any) {
@@ -84,7 +93,7 @@ export function SmsTestPanel() {
     }
   };
 
-  const cfg = sendResult?.config;
+  const cfg = sendResult?.config || config;
 
   return (
     <div className="space-y-5">
