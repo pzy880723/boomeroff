@@ -1,4 +1,4 @@
-// 抵用券海报：DOM 形态，可被 html-to-image 截图，也可直接展示
+// 优惠券海报：DOM 形态，可被 html-to-image 截图，也可直接展示
 import { forwardRef } from 'react';
 import { QrCanvas } from './QrCanvas';
 import { type VoucherTemplate, formatVoucherRule } from '@/lib/voucher';

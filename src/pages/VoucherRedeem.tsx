@@ -88,7 +88,7 @@ export default function VoucherRedeem() {
 
   return (
     <>
-      <PageHeader title="核销抵用券" back="/me/vouchers" />
+      <PageHeader title="核销优惠券" back="/me/vouchers" />
       <div className="container max-w-screen-md mx-auto px-3 py-4 space-y-3">
         {loading ? (
           <div className="flex items-center justify-center py-10">
@@ -105,7 +105,7 @@ export default function VoucherRedeem() {
             <Card className="p-4 space-y-2">
               <div className="flex items-center gap-2">
                 <Ticket className="w-5 h-5 text-primary" />
-                <span className="font-medium">{claim.voucher?.name || '抵用券'}</span>
+                <span className="font-medium">{claim.voucher?.name || '优惠券'}</span>
                 <Badge variant={CLAIM_STATUS_VARIANT[claim.status]} className="ml-auto">
                   {CLAIM_STATUS_LABEL[claim.status] || claim.status}
                 </Badge>

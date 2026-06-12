@@ -1,4 +1,4 @@
-// 新建/编辑活动：名称、描述、选抵用券、自定义字段、状态
+// 新建/编辑活动：名称、描述、选优惠券、自定义字段、状态
 import { useEffect, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -100,7 +100,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
 
   const save = async () => {
     if (!name.trim()) { toast.error('请输入活动名称'); return; }
-    if (!voucherId) { toast.error('请选择关联的抵用券'); return; }
+    if (!voucherId) { toast.error('请选择关联的优惠券'); return; }
     for (const f of fields) {
       if (!f.label?.trim()) { toast.error('填写内容的标题不能为空'); return; }
     }
@@ -143,9 +143,9 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={300} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">关联抵用券</Label>
+            <Label className="text-xs">关联优惠券</Label>
             <Select value={voucherId} onValueChange={setVoucherId}>
-              <SelectTrigger><SelectValue placeholder="选择一张抵用券" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="选择一张优惠券" /></SelectTrigger>
               <SelectContent>
                 {vouchers.map((v) => (
                   <SelectItem key={v.id} value={v.id}>{v.name} · ¥{v.discount_amount}</SelectItem>

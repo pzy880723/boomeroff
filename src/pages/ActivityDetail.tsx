@@ -250,7 +250,7 @@ export default function ActivityDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>删除活动？</AlertDialogTitle>
             <AlertDialogDescription>
-              删除后该活动所有申请记录都将一并清除，已发放的抵用券仍然有效。此操作不可恢复。
+              删除后该活动所有申请记录都将一并清除，已发放的优惠券仍然有效。此操作不可恢复。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -66,11 +66,11 @@ export default function PublicActivity() {
     }
     const d = data as any;
     if (d?.short_code) {
-      if (d.already) toast.info('您已领取过该活动的抵用券');
+      if (d.already) toast.info('您已领取过该活动的优惠券');
       navigate(`/u/c/${d.short_code}`, { replace: true });
       return;
     }
-    toast.error('提交成功但未生成抵用券，请联系客服');
+    toast.error('提交成功但未生成优惠券，请联系客服');
   };
 
   if (loading) {

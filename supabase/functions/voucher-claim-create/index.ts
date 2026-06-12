@@ -1,4 +1,4 @@
-// 管理员"直接转发"模式：基于抵用券模板生成一条 claim，返回 share_token
+// 管理员"直接转发"模式：基于优惠券模板生成一条 claim，返回 share_token
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {

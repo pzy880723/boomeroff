@@ -41,7 +41,7 @@ export default function PublicClaim() {
       body: lookup,
     });
     if (e || (data as any)?.error) {
-      setError((data as any)?.error || e?.message || '抵用券不存在');
+      setError((data as any)?.error || e?.message || '优惠券不存在');
       setLoading(false);
       return;
     }
@@ -103,7 +103,7 @@ export default function PublicClaim() {
         style={{ background: 'linear-gradient(160deg,#1a0f06 0%,#2a1808 100%)' }}>
         <Card className="p-6 text-center max-w-sm w-full space-y-2">
           <AlertTriangle className="w-10 h-10 mx-auto text-destructive" />
-          <p className="text-sm">{error || '抵用券不存在'}</p>
+          <p className="text-sm">{error || '优惠券不存在'}</p>
         </Card>
       </div>
     );
@@ -133,7 +133,7 @@ export default function PublicClaim() {
               <span className="text-[10px] tracking-[0.25em] opacity-70">BOOMER-OFF</span>
             </div>
             <div className="mt-4 text-[13px] opacity-80">为你专属准备</div>
-            <h1 className="mt-0.5 text-lg font-semibold leading-tight tracking-wide">{v?.name || '抵用券'}</h1>
+            <h1 className="mt-0.5 text-lg font-semibold leading-tight tracking-wide">{v?.name || '优惠券'}</h1>
 
             <div className="mt-5 flex items-baseline gap-1">
               <span className="text-2xl font-bold" style={{ color: '#ffd28a' }}>¥</span>

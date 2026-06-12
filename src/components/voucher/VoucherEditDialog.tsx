@@ -1,4 +1,4 @@
-// 新建/编辑抵用券模板
+// 新建/编辑优惠券模板
 import { useEffect, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -89,7 +89,7 @@ export function VoucherEditDialog({ open, onOpenChange, userId, voucher, onSaved
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{editing ? '编辑抵用券' : '新建抵用券'}</DialogTitle>
+          <DialogTitle>{editing ? '编辑优惠券' : '新建优惠券'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">

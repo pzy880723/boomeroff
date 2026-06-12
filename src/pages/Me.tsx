@@ -159,7 +159,7 @@ export default function Me() {
         <Card className="overflow-hidden">
           <Link to="/me/vouchers" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors">
             <Ticket className="w-5 h-5 text-muted-foreground" />
-            <span className="flex-1 text-sm">抵用券</span>
+            <span className="flex-1 text-sm">优惠券</span>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </Link>
           <Link to="/me/activities" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">

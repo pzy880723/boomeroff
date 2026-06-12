@@ -1,4 +1,4 @@
-// 抵用券与活动相关常量与类型
+// 优惠券与活动相关常量与类型
 
 export const CLAIM_STATUS_LABEL: Record<string, string> = {
   unclaimed: '待领取',
@@ -34,7 +34,7 @@ export const APPLICATION_STATUS_VARIANT: Record<
   rejected: 'destructive',
 };
 
-// 抵用券模板
+// 优惠券模板
 export interface VoucherTemplate {
   id: string;
   name: string;
@@ -113,7 +113,7 @@ export interface ActivityApplication {
   created_at: string;
 }
 
-// 描述抵用券抵扣规则的中文
+// 描述优惠券抵扣规则的中文
 export function formatVoucherRule(v: Pick<VoucherTemplate, 'threshold_type' | 'discount_amount' | 'min_spend'>): string {
   if (v.threshold_type === 'min_spend') {
     return `满 ¥${v.min_spend ?? 0} 抵 ¥${v.discount_amount}`;

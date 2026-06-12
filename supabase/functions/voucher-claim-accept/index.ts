@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     if (short_code) q = q.eq('short_code', String(short_code).toUpperCase());
     else q = q.eq('share_token', share_token);
     const { data: claim, error: e1 } = await q.maybeSingle();
-    if (e1 || !claim) return json({ error: '抵用券不存在' }, 404);
+    if (e1 || !claim) return json({ error: '优惠券不存在' }, 404);
     if (claim.status !== 'unclaimed') return json({ ok: true, already: true });
 
     const { data: otpRow } = await admin.from('claim_otp')
