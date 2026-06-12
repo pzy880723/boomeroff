@@ -48,7 +48,7 @@ export default function VoucherRedeem() {
       setLoading(true);
       const { data, error: e } = await supabase
         .from('voucher_claims')
-        .select('id, code, status, recipient_name, recipient_phone, expires_at, redeemed_at, voucher:vouchers(name, threshold_type, discount_amount, min_spend, template_terms)')
+        .select('id, code, status, recipient_name, recipient_phone, claimed_at, expires_at, redeemed_at, voucher:vouchers(name, threshold_type, discount_amount, min_spend, template_terms)')
         .eq('code', code.toUpperCase())
         .maybeSingle();
       if (e || !data) { setError('券码不存在'); setLoading(false); return; }
