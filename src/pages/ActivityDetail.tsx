@@ -101,8 +101,7 @@ export default function ActivityDetail() {
     return 'default';
   };
 
-  const statusLabel = activity.status === 'active' ? '进行中' : activity.status === 'draft' ? '草稿' : '已关闭';
-  const statusDot = activity.status === 'active' ? 'bg-emerald-500' : activity.status === 'draft' ? 'bg-muted-foreground' : 'bg-destructive';
+  const timeInfo = getActivityTimeInfo(activity);
 
   const hasPoster = !!activity.poster_url;
 
