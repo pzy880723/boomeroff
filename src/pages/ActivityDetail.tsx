@@ -10,7 +10,7 @@ import { Loader2, Share2, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
-  type Activity, type ActivityApplication, CLAIM_STATUS_LABEL,
+  type Activity, type ActivityApplication, CLAIM_STATUS_LABEL, getActivityTimeInfo,
 } from '@/lib/voucher';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
@@ -101,8 +101,7 @@ export default function ActivityDetail() {
     return 'default';
   };
 
-  const statusLabel = activity.status === 'active' ? '进行中' : activity.status === 'draft' ? '草稿' : '已关闭';
-  const statusDot = activity.status === 'active' ? 'bg-emerald-500' : activity.status === 'draft' ? 'bg-muted-foreground' : 'bg-destructive';
+  const timeInfo = getActivityTimeInfo(activity);
 
   const hasPoster = !!activity.poster_url;
 
@@ -121,8 +120,12 @@ export default function ActivityDetail() {
         <Card className="p-4 space-y-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
-              <span className={`h-1.5 w-1.5 rounded-full ${statusDot} ${activity.status === 'active' ? 'animate-pulse' : ''}`} />
-              {statusLabel}
+              <Badge variant={timeInfo.badgeVariant} className="text-[10px] h-4 px-1.5">
+                {timeInfo.label}
+              </Badge>
+              {timeInfo.countdown && (
+                <span className="text-[10px] text-amber-500">{timeInfo.countdown}</span>
+              )}
             </span>
           </div>
 

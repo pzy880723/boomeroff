@@ -184,3 +184,51 @@ export function formatValidityRange(
   return { rangeText, remainingText, expired };
 }
 
+
+export type ActivityTimeStatus = 'not_started' | 'ongoing' | 'ended';
+
+export interface ActivityTimeInfo {
+  status: ActivityTimeStatus;
+  label: string;
+  badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline';
+  countdown?: string;
+}
+
+export function getActivityTimeInfo(a: Activity): ActivityTimeInfo {
+  const now = Date.now();
+  const starts = a.starts_at ? new Date(a.starts_at).getTime() : null;
+  const ends = a.ends_at ? new Date(a.ends_at).getTime() : null;
+
+  if (starts !== null && now < starts) {
+    const diff = starts - now;
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(hours / 24);
+    let countdown: string | undefined;
+    if (days >= 3) countdown = `距开始 ${days} 天`;
+    else if (days >= 1) countdown = `距开始 ${days} 天 ${hours % 24} 小时`;
+    else if (hours >= 1) countdown = `距开始 ${hours} 小时`;
+    else countdown = `距开始 ${Math.max(1, Math.ceil(diff / 60000))} 分钟`;
+    return { status: 'not_started', label: '未开始', badgeVariant: 'secondary', countdown };
+  }
+
+  if (ends !== null && now >= ends) {
+    return { status: 'ended', label: '已结束', badgeVariant: 'destructive' };
+  }
+
+  if (ends !== null && now < ends) {
+    const diff = ends - now;
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(hours / 24);
+    let countdown: string | undefined;
+    if (days >= 3) countdown = `剩 ${days} 天`;
+    else if (days >= 1) countdown = `剩 ${days} 天 ${hours % 24} 小时`;
+    else if (hours >= 1) countdown = `剩 ${hours} 小时`;
+    else countdown = `剩 ${Math.max(1, Math.ceil(diff / 60000))} 分钟`;
+    return { status: 'ongoing', label: '进行中', badgeVariant: 'default', countdown };
+  }
+
+  // 无明确时间范围时按 status fallback
+  if (a.status === 'draft') return { status: 'not_started', label: '草稿', badgeVariant: 'outline' };
+  if (a.status === 'closed') return { status: 'ended', label: '已关闭', badgeVariant: 'destructive' };
+  return { status: 'ongoing', label: '进行中', badgeVariant: 'default' };
+}

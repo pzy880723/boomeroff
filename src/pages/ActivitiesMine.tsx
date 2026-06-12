@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Plus, Megaphone, Share2, MoreVertical, Pencil, Trash2, CalendarRange, ChevronRight } from 'lucide-react';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
-import { type Activity } from '@/lib/voucher';
+import { type Activity, getActivityTimeInfo } from '@/lib/voucher';
 import { AuthPage } from '@/components/auth/AuthPage';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -23,7 +23,7 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-const STATUS_LABEL: Record<string, string> = { draft: '草稿', active: '进行中', closed: '已关闭' };
+
 
 export default function ActivitiesMine() {
   const { user, loading: authLoading } = useAuth();
@@ -95,10 +95,7 @@ export default function ActivitiesMine() {
         ) : (
           <div className="space-y-2.5">
             {list.map((a) => {
-              const statusTone =
-                a.status === 'active' ? 'bg-emerald-500'
-                : a.status === 'closed' ? 'bg-muted-foreground/40'
-                : 'bg-amber-500';
+              const timeInfo = getActivityTimeInfo(a);
               return (
                 <Card
                   key={a.id}
@@ -125,8 +122,12 @@ export default function ActivitiesMine() {
                     <div className="flex-1 min-w-0 p-3">
                       <button onClick={() => navigate(`/me/activities/${a.id}`)} className="w-full text-left">
                         <div className="flex items-center gap-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusTone}`} />
-                          <span className="text-[10px] text-muted-foreground">{STATUS_LABEL[a.status]}</span>
+                          <Badge variant={timeInfo.badgeVariant} className="text-[10px] h-4 px-1.5">
+                            {timeInfo.label}
+                          </Badge>
+                          {timeInfo.countdown && (
+                            <span className="text-[10px] text-amber-500">{timeInfo.countdown}</span>
+                          )}
                         </div>
                         <div className="font-medium text-sm mt-0.5 truncate">{a.name}</div>
                         {a.description && (
