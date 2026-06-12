@@ -178,33 +178,47 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
               <p className="text-xs text-muted-foreground text-center py-3">暂无</p>
             ) : (
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                {claims.map((c) => (
-                  <div key={c.id} className="text-xs flex items-center gap-2 border border-border/60 rounded-lg px-2.5 py-1.5">
-                    <span className="font-mono text-[11px]">{c.short_code || c.code}</span>
-                    <span className="text-muted-foreground flex-1 truncate">
-                      {c.recipient_name || (c.source === 'direct' ? '直接发放' : '活动')}
-                      {c.recipient_phone ? ` · ${c.recipient_phone}` : ''}
-                    </span>
-                    <Badge variant={CLAIM_STATUS_VARIANT[c.status]} className="shrink-0 text-[10px] px-1.5 py-0">
-                      {CLAIM_STATUS_LABEL[c.status]}
-                    </Badge>
-                    {c.status === 'unclaimed' && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(buildClaimShareUrl(c.short_code || c.share_token));
-                            toast.success('短链已复制');
-                          } catch { /* ignore */ }
-                        }}
-                        className="text-muted-foreground hover:text-foreground"
-                        title="复制短链"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {claims.map((c) => {
+                  const v = formatValidityRange(c, voucher.valid_days);
+                  return (
+                    <div key={c.id} className="border border-border/60 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                      <div className="text-xs flex items-center gap-2">
+                        <span className="font-mono text-[11px]">{c.short_code || c.code}</span>
+                        <span className="text-muted-foreground flex-1 truncate">
+                          {c.recipient_name || (c.source === 'direct' ? '直接发放' : '活动')}
+                          {c.recipient_phone ? ` · ${c.recipient_phone}` : ''}
+                        </span>
+                        <Badge variant={CLAIM_STATUS_VARIANT[c.status]} className="shrink-0 text-[10px] px-1.5 py-0">
+                          {CLAIM_STATUS_LABEL[c.status]}
+                        </Badge>
+                        {c.status === 'unclaimed' && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(buildClaimShareUrl(c.short_code || c.share_token));
+                                toast.success('短链已复制');
+                              } catch { /* ignore */ }
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                            title="复制短链"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                        <span>{v.rangeText}</span>
+                        {v.remainingText && (
+                          <span className={v.expired ? 'text-destructive' : 'text-foreground/70'}>
+                            · {v.remainingText}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+
             )}
           </div>
         </div>
