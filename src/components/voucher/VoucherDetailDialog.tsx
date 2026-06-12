@@ -100,6 +100,7 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
   if (!voucher) return null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0 gap-0">
         <DialogHeader className="px-4 pt-4 pb-2">
