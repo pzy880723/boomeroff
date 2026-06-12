@@ -10,7 +10,7 @@ import { Loader2, Share2, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
-  type Activity, type ActivityApplication, CLAIM_STATUS_LABEL,
+  type Activity, type ActivityApplication, CLAIM_STATUS_LABEL, getActivityTimeInfo,
 } from '@/lib/voucher';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
