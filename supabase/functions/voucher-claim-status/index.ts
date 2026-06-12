@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     );
     let q = admin
       .from('voucher_claims')
-      .select('id, code, share_token, short_code, status, source, recipient_name, recipient_phone, claimed_at, expires_at, redeemed_at, voucher:vouchers(id, name, threshold_type, discount_amount, min_spend, valid_days, template_terms)')
+      .select('id, code, share_token, short_code, status, source, recipient_name, recipient_phone, claimed_at, expires_at, redeemed_at, voucher:vouchers(id, name, threshold_type, discount_amount, min_spend, valid_days, template_terms, starts_at, ends_at)')
       .limit(1);
     if (short_code) q = q.eq('short_code', String(short_code).toUpperCase());
     else if (share_token) q = q.eq('share_token', share_token);
