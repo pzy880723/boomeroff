@@ -11,6 +11,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const DEFAULT_TENCENT_SMS_SIGN_NAME_B64 = '5a6d5pqu5LiK5rW35ZOB54mM566h55CG';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
@@ -139,14 +141,25 @@ function getTencentSignName() {
   const b64 = Deno.env.get('TENCENT_SMS_SIGN_NAME_B64')?.trim();
   const raw = Deno.env.get('TENCENT_SMS_SIGN_NAME')?.trim() || '';
   let value = raw;
-  let source: 'base64' | 'raw' = 'raw';
+  let source: 'base64' | 'raw' | 'safe_default' = 'raw';
+  let decodeError: string | null = null;
 
   if (b64) {
-    try {
-      value = new TextDecoder('utf-8', { fatal: true }).decode(base64ToBytes(b64));
+    const decoded = decodeSignBase64(b64);
+    if (decoded.ok) {
+      value = decoded.value;
       source = 'base64';
-    } catch (e) {
-      console.error('[tencent-sms] sign base64 decode failed', { error: String(e) });
+    } else {
+      decodeError = decoded.error;
+      console.error('[tencent-sms] sign base64 decode failed', { error: decoded.error });
+    }
+  }
+
+  if (!value || value.includes('�')) {
+    const decoded = decodeSignBase64(DEFAULT_TENCENT_SMS_SIGN_NAME_B64);
+    if (decoded.ok) {
+      value = decoded.value;
+      source = 'safe_default';
     }
   }
 
@@ -157,10 +170,29 @@ function getTencentSignName() {
       sign_source: source,
       sign_length: [...value].length,
       sign_contains_replacement: value.includes('�'),
+      sign_decode_error: decodeError,
       sign_codepoints: [...value].map((ch) => `U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`),
       sign_b64_configured: Boolean(b64),
     },
   };
+}
+
+function decodeSignBase64(input: string): { ok: true; value: string } | { ok: false; error: string } {
+  const unquoted = input.trim().replace(/^['"]|['"]$/g, '');
+  const normalized = unquoted.replace(/-/g, '+').replace(/_/g, '/');
+  const compact = normalized.replace(/[^A-Za-z0-9+/=]/g, '');
+  const candidates = [...new Set([unquoted, normalized, compact])].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      const value = new TextDecoder('utf-8', { fatal: true }).decode(base64ToBytes(candidate));
+      if (value && !value.includes('�')) return { ok: true, value };
+    } catch {
+      // Try the next normalization form.
+    }
+  }
+
+  return { ok: false, error: '编码签名不是有效的 Base64 内容' };
 }
 
 function base64ToBytes(input: string) {
