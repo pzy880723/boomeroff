@@ -113,6 +113,12 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const save = async () => {
     if (!name.trim()) { toast.error('请输入活动名称'); return; }
     if (!voucherId) { toast.error('请选择关联的优惠券'); return; }
+    if (!startsAt) { toast.error('请选择活动开始时间'); return; }
+    if (!endsAt) { toast.error('请选择活动结束时间'); return; }
+    const startsDate = new Date(startsAt);
+    const endsDate = new Date(endsAt);
+    if (isNaN(startsDate.getTime()) || isNaN(endsDate.getTime())) { toast.error('活动时间格式不正确'); return; }
+    if (endsDate <= startsDate) { toast.error('结束时间必须晚于开始时间'); return; }
     for (const f of fields) {
       if (!f.label?.trim()) { toast.error('填写内容的标题不能为空'); return; }
     }
@@ -124,6 +130,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       form_fields: fields as any,
       status: active ? 'active' : 'draft',
       requires_review: false,
+      starts_at: startsDate.toISOString(),
+      ends_at: endsDate.toISOString(),
     };
     let error;
     if (isEdit && activityId) {
