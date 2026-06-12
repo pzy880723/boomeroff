@@ -177,15 +177,36 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
 
 
 
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">开始时间</Label>
+              <Input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="h-9 text-xs" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">结束时间</Label>
+              <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className="h-9 text-xs" />
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-xs">添加填写内容</Label>
+              <Label className="text-xs">填写内容</Label>
               <Button size="sm" variant="outline" className="h-7" onClick={addField}>
                 <Plus className="w-3 h-3 mr-1" />添加
               </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground">姓名、手机号默认必填，无需自定义</p>
             <div className="space-y-2">
+              {/* 默认字段：姓名 / 电话 —— 固定展示，不可编辑/删除 */}
+              <div className="border rounded-lg p-2 bg-muted/30 flex items-center gap-2">
+                <span className="text-xs flex-1">姓名</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-background text-muted-foreground">默认</span>
+                <span className="text-[10px] text-primary">必填</span>
+              </div>
+              <div className="border rounded-lg p-2 bg-muted/30 flex items-center gap-2">
+                <span className="text-xs flex-1">电话</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-background text-muted-foreground">默认</span>
+                <span className="text-[10px] text-primary">必填</span>
+              </div>
               {fields.map((f, i) => (
                 <div key={i} className="border rounded-lg p-2 space-y-1.5">
                   <div className="flex gap-2 items-center">
