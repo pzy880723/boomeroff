@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Plus, Megaphone, Share2, MoreVertical, Pencil, Trash2, CalendarRange, ChevronRight } from 'lucide-react';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
-import { type Activity } from '@/lib/voucher';
+import { type Activity, getActivityTimeInfo } from '@/lib/voucher';
 import { AuthPage } from '@/components/auth/AuthPage';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
