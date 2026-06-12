@@ -29,7 +29,7 @@ export type PermissionKey =
   | 'correction.review'
   | 'history.read_all'
   | 'role.manage'
-  // 抵用券
+  // 优惠券
   | 'voucher.manage' | 'voucher.redeem';
 
 interface Ctx {

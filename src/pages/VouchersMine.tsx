@@ -1,4 +1,4 @@
-// 我的抵用券：管理模板 + 扫码核销
+// 我的优惠券：管理模板 + 扫码核销
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -48,10 +48,10 @@ export default function VouchersMine() {
   if (!can('voucher.manage') && !can('voucher.redeem')) {
     return (
       <>
-        <PageHeader title="抵用券" back="/me" />
+        <PageHeader title="优惠券" back="/me" />
         <div className="container max-w-screen-md mx-auto px-3 py-6">
           <Card className="p-6 text-center text-sm text-muted-foreground">
-            当前账号没有抵用券相关权限
+            当前账号没有优惠券相关权限
           </Card>
         </div>
       </>
@@ -75,12 +75,12 @@ export default function VouchersMine() {
 
   return (
     <>
-      <PageHeader title="我的抵用券" back="/me" />
+      <PageHeader title="我的优惠券" back="/me" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-3">
         <div className="grid grid-cols-2 gap-2">
           {can('voucher.manage') && (
             <Button onClick={() => { setEditTarget(null); setEditOpen(true); }} className="h-12">
-              <Plus className="w-4 h-4 mr-1.5" /> 新建抵用券
+              <Plus className="w-4 h-4 mr-1.5" /> 新建优惠券
             </Button>
           )}
           {can('voucher.redeem') && (
@@ -100,7 +100,7 @@ export default function VouchersMine() {
         ) : vouchers.length === 0 ? (
           <Card className="p-8 text-center text-sm text-muted-foreground">
             <Ticket className="w-10 h-10 mx-auto mb-2 opacity-50" />
-            还没创建过抵用券
+            还没创建过优惠券
           </Card>
         ) : (
           <div className="space-y-2">

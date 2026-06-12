@@ -124,7 +124,7 @@ export default function VoucherSharePoster() {
           {imgDataUrl ? (
             <img
               src={imgDataUrl}
-              alt="抵用券海报"
+              alt="优惠券海报"
               className="w-full block select-none"
               draggable={false}
               style={{ touchAction: 'manipulation' }}

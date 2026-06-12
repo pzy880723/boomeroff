@@ -1,4 +1,4 @@
-// 抵用券详情：洋气券面 + 定向发放 + 编辑 + 领取记录
+// 优惠券详情：洋气券面 + 定向发放 + 编辑 + 领取记录
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
