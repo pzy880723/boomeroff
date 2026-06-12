@@ -111,6 +111,8 @@ export default function PublicClaim() {
 
   const v = claim.voucher;
   const isClaimed = ['claimed', 'redeemed'].includes(claim.status);
+  const expiredNow =
+    !!claim.expires_at && new Date(claim.expires_at).getTime() <= Date.now();
 
   return (
     <div
