@@ -65,6 +65,38 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
     navigate(`/me/vouchers/share/${claim.id}`);
   };
 
+  const tryDelete = async () => {
+    if (!voucher) return;
+    const nowIso = new Date().toISOString();
+    const { count, error } = await supabase
+      .from('voucher_claims')
+      .select('id', { count: 'exact', head: true })
+      .eq('voucher_id', voucher.id)
+      .in('status', ['unclaimed', 'claimed'])
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+    if (error) { toast.error(error.message); return; }
+    if ((count ?? 0) > 0) {
+      toast.error(`还有 ${count} 张未到期且未核销的券，无法删除`);
+      return;
+    }
+    setConfirmDelete(true);
+  };
+
+  const doDelete = async () => {
+    if (!voucher) return;
+    setDeleting(true);
+    const { data, error } = await supabase.rpc('delete_voucher_safe', { _id: voucher.id });
+    setDeleting(false);
+    setConfirmDelete(false);
+    if (error || (data as any)?.error) {
+      toast.error(error?.message || (data as any)?.error || '删除失败');
+      return;
+    }
+    toast.success('已删除');
+    onOpenChange(false);
+    onDeleted?.();
+  };
+
   if (!voucher) return null;
 
   return (
