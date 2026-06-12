@@ -20,6 +20,7 @@ interface ClaimView {
   status: string;
   recipient_name: string | null;
   recipient_phone: string | null;
+  claimed_at: string | null;
   expires_at: string | null;
   redeemed_at: string | null;
   voucher: {
