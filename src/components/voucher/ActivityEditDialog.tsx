@@ -82,6 +82,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
           setDescription(a.description || '');
           setVoucherId(a.voucher_id);
           setFields((a.form_fields && a.form_fields.length ? a.form_fields : DEFAULT_FIELDS) as ActivityField[]);
+          setStartsAt(a.starts_at ? toLocalInput(new Date(a.starts_at)) : toLocalInput(new Date()));
+          setEndsAt(a.ends_at ? toLocalInput(new Date(a.ends_at)) : '');
           setActive(a.status !== 'closed');
           
         }
@@ -90,6 +92,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
     } else {
       setName(''); setDescription(''); setVoucherId('');
       setFields(DEFAULT_FIELDS);
+      setStartsAt(toLocalInput(new Date()));
+      setEndsAt('');
       setActive(true);
       
     }
