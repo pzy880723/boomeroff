@@ -226,7 +226,7 @@ export default function PublicClaim() {
           </Card>
         )}
 
-        {isClaimed && claim.code && (
+        {isClaimed && claim.code && !expiredNow && claim.status !== 'redeemed' && (
           <Card className="p-4 space-y-3 text-center rounded-2xl">
             <p className="text-sm font-medium flex items-center justify-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -240,8 +240,15 @@ export default function PublicClaim() {
           </Card>
         )}
 
-        {claim.status === 'expired' && (
-          <Card className="p-4 text-center text-sm text-destructive bg-destructive/5 rounded-2xl">该券已过期</Card>
+        {claim.status === 'redeemed' && (
+          <Card className="p-4 text-center text-sm bg-muted/30 rounded-2xl text-muted-foreground">
+            该券已核销，感谢光临
+          </Card>
+        )}
+        {(claim.status === 'expired' || (isClaimed && expiredNow)) && (
+          <Card className="p-4 text-center text-sm text-destructive bg-destructive/5 rounded-2xl">
+            该券已过期，无法核销
+          </Card>
         )}
         {claim.status === 'void' && (
           <Card className="p-4 text-center text-sm text-destructive bg-destructive/5 rounded-2xl">该券已作废</Card>
