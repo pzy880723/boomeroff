@@ -15,7 +15,7 @@ const THINKING_HINTS = [
   '嗯…这个问题有点意思',
   '脑袋瓜在嗡嗡转 🌀',
   '稍等，我去货架翻一下',
-  '调出小精灵知识库 📚',
+  '调出 BOOMER 的知识库 📚',
   '对一对今天的资料…',
   '让我捋一捋思路',
   '小爪子在打字了 🐾',
@@ -298,7 +298,7 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
                 handleSend();
               }
             }}
-            placeholder={pending.length > 0 ? '想问点啥？也可以直接发送…' : '跟小精灵聊聊吧…（Enter 发送）'}
+            placeholder={pending.length > 0 ? '想问点啥？也可以直接发送…' : '跟 BOOMER 聊聊吧…（Enter 发送）'}
             rows={1}
             className="min-h-[40px] max-h-32 resize-none border-0 bg-transparent text-[16px] text-[hsl(var(--primary-foreground))] placeholder:text-[hsl(var(--primary-foreground)/0.4)] focus-visible:ring-0 focus-visible:ring-offset-0 px-1"
           />
@@ -344,10 +344,10 @@ function EmptyState() {
       </div>
       <div className="mt-2 text-[hsl(var(--primary-foreground))] text-sm font-semibold flex items-center gap-1.5">
         <Sparkles className="w-3.5 h-3.5" />
-        你好呀～我是中古小精灵
+        你好呀～我是 BOOMER
       </div>
       <div className="mt-2 text-[12px] leading-relaxed text-[hsl(var(--primary-foreground)/0.65)] max-w-[280px]">
-        可以问我中古知识、今天和谁一起上班、想要打打气，也可以拍张照片让我帮你看看～
+        中古门店里的修行搭子。问排班、聊知识、想打气，或拍张照片让我帮你看看～
       </div>
     </div>
   );

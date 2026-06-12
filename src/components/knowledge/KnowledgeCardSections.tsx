@@ -194,7 +194,7 @@ function EnrichingPlaceholder({ hints, loadingText }: { hints?: Hints; loadingTe
       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
         <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse-glow shrink-0" />
         <span className="flex-1 truncate">
-          {loadingText || '小精灵正在翻它的中古笔记本…'}
+          {loadingText || 'BOOMER 正在翻它的中古笔记本…'}
         </span>
         <span className="tabular-nums opacity-70">{(elapsedMs / 1000).toFixed(1)}s</span>
       </div>

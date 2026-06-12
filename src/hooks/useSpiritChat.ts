@@ -196,7 +196,7 @@ export function useSpiritChat() {
       setStatus('idle');
     } catch (e: any) {
       if (e?.name === 'AbortError') { setStatus('idle'); return; }
-      const msg = e?.message || '小精灵开小差了';
+      const msg = e?.message || 'BOOMER 开小差了';
       setError(msg);
       setStatus('error');
       const id = lastAsstIdRef.current;

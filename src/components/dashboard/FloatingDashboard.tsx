@@ -158,7 +158,7 @@ export function FloatingDashboard() {
           onPointerCancel={onPointerUp}
           onMouseEnter={() => setHovering(true)}
           onMouseLeave={() => setHovering(false)}
-          aria-label="召唤中古小精灵"
+          aria-label="召唤 BOOMER"
           className={cn(
             'relative flex items-center justify-center rounded-full active:scale-95 transition-transform w-full h-full',
             dragging && 'opacity-95 scale-105',
