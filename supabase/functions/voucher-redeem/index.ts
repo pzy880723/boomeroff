@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
     );
     const { data: claim, error: e1 } = await admin
       .from('voucher_claims')
-      .select('id, status, expires_at, voucher:vouchers(name, discount_amount)')
+      .select('id, status, expires_at, voucher:vouchers(name, discount_amount, ends_at)')
       .eq('code', String(code).toUpperCase())
       .maybeSingle();
     if (e1 || !claim) return json({ error: '券码不存在' }, 404);
@@ -45,6 +45,10 @@ Deno.serve(async (req) => {
     if (claim.status === 'unclaimed') return json({ error: '客户尚未领取' }, 400);
     if (claim.expires_at && new Date(claim.expires_at) < new Date()) {
       return json({ error: '该券已过期' }, 400);
+    }
+    const tpl = (claim as any).voucher;
+    if (tpl?.ends_at && new Date(tpl.ends_at) < new Date()) {
+      return json({ error: '该券已结束，无法核销' }, 400);
     }
     const { error: e2 } = await admin
       .from('voucher_claims')

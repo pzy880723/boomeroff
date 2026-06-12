@@ -44,6 +44,8 @@ export interface VoucherTemplate {
   valid_days: number;
   template_terms: string | null;
   active: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -232,3 +234,60 @@ export function getActivityTimeInfo(a: Activity): ActivityTimeInfo {
   if (a.status === 'closed') return { status: 'ended', label: '已关闭', badgeVariant: 'destructive' };
   return { status: 'ongoing', label: '进行中', badgeVariant: 'default' };
 }
+
+export type VoucherTemplateStatus = 'pending' | 'active' | 'ended';
+
+export interface VoucherTemplateTimeInfo {
+  status: VoucherTemplateStatus;
+  label: string;
+  badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline';
+  rangeText: string;
+  countdown?: string;
+}
+
+export function getVoucherTemplateTimeInfo(
+  v: Pick<VoucherTemplate, 'starts_at' | 'ends_at' | 'active'>,
+): VoucherTemplateTimeInfo {
+  const fmt = (s: string) => {
+    const d = new Date(s);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  const now = Date.now();
+  const starts = v.starts_at ? new Date(v.starts_at).getTime() : null;
+  const ends = v.ends_at ? new Date(v.ends_at).getTime() : null;
+  const rangeText =
+    starts || ends
+      ? `${v.starts_at ? fmt(v.starts_at) : '不限'} ~ ${v.ends_at ? fmt(v.ends_at) : '不限'}`
+      : '长期有效';
+
+  const diffText = (ms: number, prefix: string) => {
+    const days = Math.floor(ms / 86400000);
+    const hours = Math.floor(ms / 3600000);
+    if (days >= 3) return `${prefix} ${days} 天`;
+    if (days >= 1) return `${prefix} ${days} 天 ${hours % 24} 小时`;
+    if (hours >= 1) return `${prefix} ${hours} 小时`;
+    return `${prefix} ${Math.max(1, Math.ceil(ms / 60000))} 分钟`;
+  };
+
+  if (starts !== null && now < starts) {
+    return {
+      status: 'pending',
+      label: '待生效',
+      badgeVariant: 'secondary',
+      rangeText,
+      countdown: diffText(starts - now, '距开始'),
+    };
+  }
+  if (ends !== null && now >= ends) {
+    return { status: 'ended', label: '已结束', badgeVariant: 'destructive', rangeText };
+  }
+  return {
+    status: 'active',
+    label: '已生效',
+    badgeVariant: 'default',
+    rangeText,
+    countdown: ends !== null ? diffText(ends - now, '剩') : undefined,
+  };
+}
+
