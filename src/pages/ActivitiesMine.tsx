@@ -122,8 +122,12 @@ export default function ActivitiesMine() {
                     <div className="flex-1 min-w-0 p-3">
                       <button onClick={() => navigate(`/me/activities/${a.id}`)} className="w-full text-left">
                         <div className="flex items-center gap-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusTone}`} />
-                          <span className="text-[10px] text-muted-foreground">{STATUS_LABEL[a.status]}</span>
+                          <Badge variant={timeInfo.badgeVariant} className="text-[10px] h-4 px-1.5">
+                            {timeInfo.label}
+                          </Badge>
+                          {timeInfo.countdown && (
+                            <span className="text-[10px] text-amber-500">{timeInfo.countdown}</span>
+                          )}
                         </div>
                         <div className="font-medium text-sm mt-0.5 truncate">{a.name}</div>
                         {a.description && (
