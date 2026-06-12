@@ -39,7 +39,7 @@ export function SpiritGreetingDialog({ open, onClose }: Props) {
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
           )}
         >
-          <DialogPrimitive.Title className="sr-only">中古小精灵的问候</DialogPrimitive.Title>
+          <DialogPrimitive.Title className="sr-only">BOOMER 的问候</DialogPrimitive.Title>
 
           {/* 大号小精灵 + 地面柔光 */}
           <div
@@ -58,7 +58,7 @@ export function SpiritGreetingDialog({ open, onClose }: Props) {
               }}
             />
             <div className="relative w-full h-full">
-              <SpiritMascot size={Math.min(340, Math.floor(window.innerWidth * 0.86))} state="hover" />
+              <SpiritMascot size={Math.min(340, Math.floor(window.innerWidth * 0.86))} state="wave" />
             </div>
           </div>
 
@@ -69,15 +69,15 @@ export function SpiritGreetingDialog({ open, onClose }: Props) {
           >
             <CloudBubble>
               <p className="text-[14px] leading-relaxed font-medium">
-                嗨～我是中古小精灵 🌱
+                嗨～我是 BOOMER 🦦
               </p>
               <p className="mt-1.5 text-[12.5px] leading-relaxed text-[hsl(var(--primary-foreground)/0.85)]">
-                我会一直在屏幕上陪着你～<br />
-                想聊聊天、问排班、让我帮你打打气，
-                <span className="font-semibold text-[hsl(var(--accent))]">点我就行啦！</span>
+                一只在中古门店打坐修行的小水獭。<br />
+                想聊天、问排班、让我帮你看一眼，
+                <span className="font-semibold text-[hsl(var(--accent))]">点我就好啦～</span>
               </p>
               <p className="mt-1.5 text-[11px] text-[hsl(var(--primary-foreground)/0.55)]">
-                （我还能被你拖到顺手的位置哦）
+                （也可以把我拖到顺手的位置）
               </p>
             </CloudBubble>
           </div>
