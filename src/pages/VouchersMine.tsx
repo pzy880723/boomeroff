@@ -145,7 +145,9 @@ export default function VouchersMine() {
           setDetail(null);
           setEditOpen(true);
         }}
+        onDeleted={() => { load(); }}
       />
+
 
       {scanOpen && <QrScanner onScanned={handleScan} onClose={() => setScanOpen(false)} />}
     </>
