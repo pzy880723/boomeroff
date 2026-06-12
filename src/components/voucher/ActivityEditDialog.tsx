@@ -37,6 +37,12 @@ const DEFAULT_FIELDS: ActivityField[] = [
   { key: 'screenshot', label: '主页截图', type: 'image', required: true },
 ];
 
+// 把 Date → datetime-local 输入框可识别的本地时间字符串 (yyyy-MM-ddTHH:mm)
+function toLocalInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onSaved }: Props) {
   const isEdit = !!activityId;
   const [name, setName] = useState('');
@@ -44,6 +50,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const [voucherId, setVoucherId] = useState('');
   const [vouchers, setVouchers] = useState<VoucherTemplate[]>([]);
   const [fields, setFields] = useState<ActivityField[]>(DEFAULT_FIELDS);
+  const [startsAt, setStartsAt] = useState('');
+  const [endsAt, setEndsAt] = useState('');
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
