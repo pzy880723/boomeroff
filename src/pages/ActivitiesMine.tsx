@@ -95,10 +95,7 @@ export default function ActivitiesMine() {
         ) : (
           <div className="space-y-2.5">
             {list.map((a) => {
-              const statusTone =
-                a.status === 'active' ? 'bg-emerald-500'
-                : a.status === 'closed' ? 'bg-muted-foreground/40'
-                : 'bg-amber-500';
+              const timeInfo = getActivityTimeInfo(a);
               return (
                 <Card
                   key={a.id}
