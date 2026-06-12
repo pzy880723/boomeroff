@@ -145,11 +145,19 @@ export default function PublicClaim() {
             <div className="mt-1 text-sm" style={{ color: '#ffe7bd' }}>
               {v ? formatVoucherRule(v) : ''}
             </div>
-            <div className="mt-0.5 text-[12px] opacity-70">
-              {claim.expires_at
-                ? `有效期至 ${format(new Date(claim.expires_at), 'yyyy-MM-dd')}`
-                : `有效期 ${v?.valid_days || 30} 天`}
-            </div>
+            {(() => {
+              const vi = formatValidityRange(claim, v?.valid_days);
+              return (
+                <div className="mt-0.5 text-[12px] leading-tight">
+                  <div className="opacity-80">{vi.rangeText}</div>
+                  {vi.remainingText && (
+                    <div className={vi.expired ? 'text-red-300 font-medium' : 'opacity-70'}>
+                      {vi.remainingText}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="mt-4 pt-3 border-t border-dashed border-white/20 flex items-center justify-between">
               <Badge variant={CLAIM_STATUS_VARIANT[claim.status]} className="bg-white/10 border-white/20 text-white">
