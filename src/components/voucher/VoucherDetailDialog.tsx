@@ -6,11 +6,15 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Copy, Send, Pencil } from 'lucide-react';
+import { Loader2, Copy, Send, Pencil, Trash2 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
-  type VoucherTemplate, type VoucherClaim, formatVoucherRule,
+  type VoucherTemplate, type VoucherClaim, formatVoucherRule, formatValidityRange,
   buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT,
 } from '@/lib/voucher';
 
