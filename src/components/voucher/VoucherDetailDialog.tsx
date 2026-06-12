@@ -6,11 +6,15 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Copy, Send, Pencil } from 'lucide-react';
+import { Loader2, Copy, Send, Pencil, Trash2 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
-  type VoucherTemplate, type VoucherClaim, formatVoucherRule,
+  type VoucherTemplate, type VoucherClaim, formatVoucherRule, formatValidityRange,
   buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT,
 } from '@/lib/voucher';
 
@@ -19,13 +23,16 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   voucher: VoucherTemplate | null;
   onEdit?: () => void;
+  onDeleted?: () => void;
 }
 
-export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Props) {
+export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDeleted }: Props) {
   const navigate = useNavigate();
   const [claims, setClaims] = useState<VoucherClaim[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!open || !voucher) return;
@@ -58,9 +65,42 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Pro
     navigate(`/me/vouchers/share/${claim.id}`);
   };
 
+  const tryDelete = async () => {
+    if (!voucher) return;
+    const nowIso = new Date().toISOString();
+    const { count, error } = await supabase
+      .from('voucher_claims')
+      .select('id', { count: 'exact', head: true })
+      .eq('voucher_id', voucher.id)
+      .in('status', ['unclaimed', 'claimed'])
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+    if (error) { toast.error(error.message); return; }
+    if ((count ?? 0) > 0) {
+      toast.error(`还有 ${count} 张未到期且未核销的券，无法删除`);
+      return;
+    }
+    setConfirmDelete(true);
+  };
+
+  const doDelete = async () => {
+    if (!voucher) return;
+    setDeleting(true);
+    const { data, error } = await supabase.rpc('delete_voucher_safe', { _id: voucher.id });
+    setDeleting(false);
+    setConfirmDelete(false);
+    if (error || (data as any)?.error) {
+      toast.error(error?.message || (data as any)?.error || '删除失败');
+      return;
+    }
+    toast.success('已删除');
+    onOpenChange(false);
+    onDeleted?.();
+  };
+
   if (!voucher) return null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0 gap-0">
         <DialogHeader className="px-4 pt-4 pb-2">
@@ -107,15 +147,29 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Pro
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Button onClick={directRelease} disabled={creating || !voucher.active} className="h-11">
               {creating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-              定向发放
+              发放
             </Button>
             <Button variant="outline" onClick={onEdit} className="h-11">
               <Pencil className="w-4 h-4 mr-1.5" />编辑
             </Button>
+            <Button
+              variant="outline"
+              onClick={tryDelete}
+              disabled={deleting}
+              className="h-11 text-destructive hover:text-destructive border-destructive/40 hover:bg-destructive/5"
+            >
+              {deleting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1.5" />}
+              删除
+            </Button>
           </div>
+
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            提示：修改金额/门槛/有效期天数仅影响之后新发放的券，已发放的券保持原规则与到期时间。
+          </p>
+
 
           <div>
             <div className="text-xs font-medium text-muted-foreground mb-1.5">领取与核销记录</div>
@@ -125,33 +179,47 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Pro
               <p className="text-xs text-muted-foreground text-center py-3">暂无</p>
             ) : (
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                {claims.map((c) => (
-                  <div key={c.id} className="text-xs flex items-center gap-2 border border-border/60 rounded-lg px-2.5 py-1.5">
-                    <span className="font-mono text-[11px]">{c.short_code || c.code}</span>
-                    <span className="text-muted-foreground flex-1 truncate">
-                      {c.recipient_name || (c.source === 'direct' ? '直接发放' : '活动')}
-                      {c.recipient_phone ? ` · ${c.recipient_phone}` : ''}
-                    </span>
-                    <Badge variant={CLAIM_STATUS_VARIANT[c.status]} className="shrink-0 text-[10px] px-1.5 py-0">
-                      {CLAIM_STATUS_LABEL[c.status]}
-                    </Badge>
-                    {c.status === 'unclaimed' && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(buildClaimShareUrl(c.short_code || c.share_token));
-                            toast.success('短链已复制');
-                          } catch { /* ignore */ }
-                        }}
-                        className="text-muted-foreground hover:text-foreground"
-                        title="复制短链"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {claims.map((c) => {
+                  const v = formatValidityRange(c, voucher.valid_days);
+                  return (
+                    <div key={c.id} className="border border-border/60 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                      <div className="text-xs flex items-center gap-2">
+                        <span className="font-mono text-[11px]">{c.short_code || c.code}</span>
+                        <span className="text-muted-foreground flex-1 truncate">
+                          {c.recipient_name || (c.source === 'direct' ? '直接发放' : '活动')}
+                          {c.recipient_phone ? ` · ${c.recipient_phone}` : ''}
+                        </span>
+                        <Badge variant={CLAIM_STATUS_VARIANT[c.status]} className="shrink-0 text-[10px] px-1.5 py-0">
+                          {CLAIM_STATUS_LABEL[c.status]}
+                        </Badge>
+                        {c.status === 'unclaimed' && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(buildClaimShareUrl(c.short_code || c.share_token));
+                                toast.success('短链已复制');
+                              } catch { /* ignore */ }
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                            title="复制短链"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                        <span>{v.rangeText}</span>
+                        {v.remainingText && (
+                          <span className={v.expired ? 'text-destructive' : 'text-foreground/70'}>
+                            · {v.remainingText}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+
             )}
           </div>
         </div>
@@ -161,5 +229,27 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Pro
         </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>确认删除该优惠券？</AlertDialogTitle>
+          <AlertDialogDescription>
+            删除后无法恢复，已核销/已过期的领取记录将一并清除。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => { e.preventDefault(); doDelete(); }}
+            disabled={deleting}
+            className="bg-destructive hover:bg-destructive/90"
+          >
+            {deleting && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}确认删除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

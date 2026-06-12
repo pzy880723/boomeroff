@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { QrCanvas } from '@/components/voucher/QrCanvas';
 import {
-  CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, buildClaimRedeemUrl, formatVoucherRule,
+  CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, buildClaimRedeemUrl, formatVoucherRule, formatValidityRange,
 } from '@/lib/voucher';
 
 export default function PublicClaim() {
@@ -111,6 +111,8 @@ export default function PublicClaim() {
 
   const v = claim.voucher;
   const isClaimed = ['claimed', 'redeemed'].includes(claim.status);
+  const expiredNow =
+    !!claim.expires_at && new Date(claim.expires_at).getTime() <= Date.now();
 
   return (
     <div
@@ -145,11 +147,19 @@ export default function PublicClaim() {
             <div className="mt-1 text-sm" style={{ color: '#ffe7bd' }}>
               {v ? formatVoucherRule(v) : ''}
             </div>
-            <div className="mt-0.5 text-[12px] opacity-70">
-              {claim.expires_at
-                ? `有效期至 ${format(new Date(claim.expires_at), 'yyyy-MM-dd')}`
-                : `有效期 ${v?.valid_days || 30} 天`}
-            </div>
+            {(() => {
+              const vi = formatValidityRange(claim, v?.valid_days);
+              return (
+                <div className="mt-0.5 text-[12px] leading-tight">
+                  <div className="opacity-80">{vi.rangeText}</div>
+                  {vi.remainingText && (
+                    <div className={vi.expired ? 'text-red-300 font-medium' : 'opacity-70'}>
+                      {vi.remainingText}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="mt-4 pt-3 border-t border-dashed border-white/20 flex items-center justify-between">
               <Badge variant={CLAIM_STATUS_VARIANT[claim.status]} className="bg-white/10 border-white/20 text-white">
@@ -216,7 +226,7 @@ export default function PublicClaim() {
           </Card>
         )}
 
-        {isClaimed && claim.code && (
+        {isClaimed && claim.code && !expiredNow && claim.status !== 'redeemed' && (
           <Card className="p-4 space-y-3 text-center rounded-2xl">
             <p className="text-sm font-medium flex items-center justify-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -230,8 +240,15 @@ export default function PublicClaim() {
           </Card>
         )}
 
-        {claim.status === 'expired' && (
-          <Card className="p-4 text-center text-sm text-destructive bg-destructive/5 rounded-2xl">该券已过期</Card>
+        {claim.status === 'redeemed' && (
+          <Card className="p-4 text-center text-sm bg-muted/30 rounded-2xl text-muted-foreground">
+            该券已核销，感谢光临
+          </Card>
+        )}
+        {(claim.status === 'expired' || (isClaimed && expiredNow)) && (
+          <Card className="p-4 text-center text-sm text-destructive bg-destructive/5 rounded-2xl">
+            该券已过期，无法核销
+          </Card>
         )}
         {claim.status === 'void' && (
           <Card className="p-4 text-center text-sm text-destructive bg-destructive/5 rounded-2xl">该券已作废</Card>

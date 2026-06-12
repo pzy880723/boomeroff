@@ -138,3 +138,49 @@ export function buildClaimRedeemUrl(code: string): string {
 
 export const VOUCHER_STATUS_LABEL = CLAIM_STATUS_LABEL;
 export const VOUCHER_STATUS_VARIANT = CLAIM_STATUS_VARIANT;
+
+// 有效期范围 + 剩余天数（基于 claim 的 claimed_at / expires_at）
+export interface ValidityInfo {
+  rangeText: string;
+  remainingText: string;
+  expired: boolean;
+}
+
+export function formatValidityRange(
+  claim: { claimed_at: string | null; expires_at: string | null; status: string },
+  fallbackDays?: number,
+): ValidityInfo {
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  if (!claim.expires_at) {
+    return {
+      rangeText: fallbackDays ? `领取后 ${fallbackDays} 天内有效` : '领取后生效',
+      remainingText: '',
+      expired: false,
+    };
+  }
+
+  const expires = new Date(claim.expires_at);
+  const start = claim.claimed_at ? new Date(claim.claimed_at) : null;
+  const rangeText = start ? `${fmt(start)} ~ ${fmt(expires)}` : `有效期至 ${fmt(expires)}`;
+
+  const now = Date.now();
+  const diffMs = expires.getTime() - now;
+  const expired = diffMs <= 0 || claim.status === 'expired';
+
+  let remainingText = '';
+  if (expired) {
+    const days = Math.floor((now - expires.getTime()) / 86400000);
+    remainingText = days <= 0 ? '已过期' : `已过期 ${days} 天`;
+  } else {
+    const days = Math.floor(diffMs / 86400000);
+    if (days >= 1) remainingText = `剩 ${days} 天`;
+    else {
+      const hours = Math.max(1, Math.ceil(diffMs / 3600000));
+      remainingText = `剩 ${hours} 小时`;
+    }
+  }
+  return { rangeText, remainingText, expired };
+}
+
