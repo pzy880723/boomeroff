@@ -185,6 +185,7 @@ export default function PublicActivity() {
             {submitting && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}提交申请
           </Button>
         </Card>
+        )}
       </div>
     </div>
   );
