@@ -23,7 +23,7 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-const STATUS_LABEL: Record<string, string> = { draft: '草稿', active: '进行中', closed: '已关闭' };
+
 
 export default function ActivitiesMine() {
   const { user, loading: authLoading } = useAuth();
