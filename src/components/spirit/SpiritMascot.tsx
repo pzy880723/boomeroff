@@ -1,9 +1,12 @@
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import mascot from '@/assets/spirit-mascot.png';
-import idleApng from '@/assets/spirit/idle-anim.png';
-import waveApng from '@/assets/spirit/wave-anim.png';
-// 注：放弃 WebM/VP9-alpha（iOS Safari 渲染会带黑底），统一使用透明 APNG。
+import idle from '@/assets/boomer/boomer-idle.png';
+import wave from '@/assets/boomer/boomer-wave.png';
+import think from '@/assets/boomer/boomer-think.png';
+import cheer from '@/assets/boomer/boomer-cheer.png';
+import scratch from '@/assets/boomer/boomer-scratch.png';
+import sleep from '@/assets/boomer/boomer-sleep.png';
+import bow from '@/assets/boomer/boomer-bow.png';
+import avatar from '@/assets/boomer/boomer-avatar.png';
 
 export type SpiritState =
   | 'idle'
@@ -11,7 +14,28 @@ export type SpiritState =
   | 'thinking'
   | 'alert'
   | 'hover'
-  | 'dragging';
+  | 'dragging'
+  | 'wave'
+  | 'cheer'
+  | 'scratch'
+  | 'sleep'
+  | 'bow'
+  | 'avatar';
+
+const STATE_IMAGE: Record<SpiritState, string> = {
+  idle,
+  talking: wave,
+  thinking: think,
+  alert: scratch,
+  hover: wave,
+  dragging: idle,
+  wave,
+  cheer,
+  scratch,
+  sleep,
+  bow,
+  avatar,
+};
 
 interface Props {
   size?: number;
@@ -23,7 +47,7 @@ interface Props {
   disableActions?: boolean;
 }
 
-/** 中古小精灵 — 透明视频肢体动效 */
+/** BOOMER · 禅意小水獭 — 中古门店里你的修行搭子 */
 export function SpiritMascot({
   size = 56,
   state = 'idle',
@@ -31,10 +55,10 @@ export function SpiritMascot({
   flat = false,
   disableActions = false,
 }: Props) {
-  const wantWave = !disableActions && (state === 'hover' || state === 'alert');
+  const src = STATE_IMAGE[state] || idle;
   const showThinking = state === 'thinking';
   const showAlertPing = state === 'alert';
-  const [apngFailed, setApngFailed] = useState(false);
+  const isCheer = state === 'cheer';
 
   return (
     <div
@@ -47,7 +71,7 @@ export function SpiritMascot({
         <div
           className={cn(
             'absolute inset-0 rounded-full transition-opacity duration-300 pointer-events-none',
-            state === 'hover' ? 'opacity-100' : 'opacity-70',
+            state === 'hover' || isCheer ? 'opacity-100' : 'opacity-70',
           )}
           style={{
             background:
@@ -57,38 +81,27 @@ export function SpiritMascot({
         />
       )}
 
-      {/* 主体：透明 APNG（兼容 iOS Safari），失败回退静态 PNG */}
+      {/* 主体 */}
       <div
         className={cn(
           'relative w-full h-full',
-          !disableActions && 'spirit-float-soft',
+          !disableActions && !isCheer && 'spirit-float-soft',
+          isCheer && 'animate-bounce',
         )}
         style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.25))' }}
       >
-        {apngFailed ? (
-          <img
-            src={mascot}
-            alt=""
-            width={size}
-            height={size}
-            loading="lazy"
-            className="w-full h-full object-contain select-none pointer-events-none"
-            draggable={false}
-          />
-        ) : (
-          <img
-            src={wantWave ? waveApng : idleApng}
-            alt=""
-            width={size}
-            height={size}
-            onError={() => setApngFailed(true)}
-            className="w-full h-full object-contain select-none pointer-events-none"
-            draggable={false}
-          />
-        )}
+        <img
+          src={src}
+          alt="BOOMER"
+          width={size}
+          height={size}
+          loading="lazy"
+          className="w-full h-full object-contain select-none pointer-events-none"
+          draggable={false}
+        />
       </div>
 
-      {/* thinking：头顶三个小点 */}
+      {/* thinking 三个小点 */}
       {showThinking && (
         <div
           className="absolute flex gap-1 items-end"
@@ -117,7 +130,7 @@ export function SpiritMascot({
               top: '10%',
               right: '6%',
               color: 'hsl(var(--accent))',
-              animationDuration: showAlertPing ? '1s' : '2.6s',
+              animationDuration: showAlertPing || isCheer ? '1s' : '2.6s',
             }}
           >✦</span>
           <span
@@ -127,7 +140,7 @@ export function SpiritMascot({
               left: '4%',
               color: 'hsl(var(--accent))',
               animationDelay: '0.8s',
-              animationDuration: showAlertPing ? '1s' : '2.6s',
+              animationDuration: showAlertPing || isCheer ? '1s' : '2.6s',
             }}
           >✦</span>
         </>
