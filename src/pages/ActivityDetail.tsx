@@ -137,6 +137,9 @@ export default function ActivityDetail() {
             <MetaRow label="活动时间">
               <span className="truncate">{timeRange}</span>
             </MetaRow>
+            <MetaRow label="收集字段">
+              <span className="truncate" title={collectFields}>{collectFields}</span>
+            </MetaRow>
             <MetaRow label="创建时间">
               <span className="truncate">{format(new Date(activity.created_at), 'yyyy-MM-dd HH:mm')}</span>
             </MetaRow>
