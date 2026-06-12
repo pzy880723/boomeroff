@@ -114,15 +114,29 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Button onClick={directRelease} disabled={creating || !voucher.active} className="h-11">
               {creating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-              定向发放
+              发放
             </Button>
             <Button variant="outline" onClick={onEdit} className="h-11">
               <Pencil className="w-4 h-4 mr-1.5" />编辑
             </Button>
+            <Button
+              variant="outline"
+              onClick={tryDelete}
+              disabled={deleting}
+              className="h-11 text-destructive hover:text-destructive border-destructive/40 hover:bg-destructive/5"
+            >
+              {deleting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1.5" />}
+              删除
+            </Button>
           </div>
+
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            提示：修改金额/门槛/有效期天数仅影响之后新发放的券，已发放的券保持原规则与到期时间。
+          </p>
+
 
           <div>
             <div className="text-xs font-medium text-muted-foreground mb-1.5">领取与核销记录</div>
