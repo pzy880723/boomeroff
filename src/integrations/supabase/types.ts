@@ -1883,6 +1883,7 @@ export type Database = {
       }
       claim_daily_task: { Args: { _task_key: string }; Returns: Json }
       claim_pending_exp: { Args: { _id: string }; Returns: Json }
+      delete_voucher_safe: { Args: { _id: string }; Returns: Json }
       gen_short_code: { Args: never; Returns: string }
       gen_voucher_code: { Args: never; Returns: string }
       get_user_role: {
