@@ -70,13 +70,14 @@ async function sendTencent(
   secretKey: string,
 ) {
   const sdkAppId = Deno.env.get('TENCENT_SMS_SDK_APP_ID');
-  const signName = Deno.env.get('TENCENT_SMS_SIGN_NAME');
+  const sign = getTencentSignName();
+  const signName = sign.value;
   const templateId =
     mode === 'otp' ? Deno.env.get('TENCENT_SMS_OTP_TEMPLATE_ID')
     : mode === 'notify' ? Deno.env.get('TENCENT_SMS_NOTIFY_TEMPLATE_ID')
     : Deno.env.get('TENCENT_SMS_TEMPLATE_ID');
   if (!sdkAppId || !signName || !templateId) {
-    return { ok: false, error: `Tencent SMS config missing (${mode})` };
+    return { ok: false, error: `Tencent SMS config missing (${mode})`, diagnostic: sign.diagnostic };
   }
 
   const host = 'sms.tencentcloudapi.com';
@@ -127,11 +128,46 @@ async function sendTencent(
   });
   const r = await resp.json().catch(() => null);
   const status = r?.Response?.SendStatusSet?.[0];
-  if (status?.Code === 'Ok') return { ok: true };
+  if (status?.Code === 'Ok') return { ok: true, diagnostic: sign.diagnostic };
   const code = status?.Code || r?.Response?.Error?.Code || 'UnknownError';
   const message = status?.Message || r?.Response?.Error?.Message || JSON.stringify(r);
-  console.error('[tencent-sms] failed', { code, message });
-  return { ok: false, error: `Tencent: ${code} ${message}` };
+  console.error('[tencent-sms] failed', { code, message, diagnostic: sign.diagnostic });
+  return { ok: false, error: `Tencent: ${code} ${message}`, diagnostic: sign.diagnostic };
+}
+
+function getTencentSignName() {
+  const b64 = Deno.env.get('TENCENT_SMS_SIGN_NAME_B64')?.trim();
+  const raw = Deno.env.get('TENCENT_SMS_SIGN_NAME')?.trim() || '';
+  let value = raw;
+  let source: 'base64' | 'raw' = 'raw';
+
+  if (b64) {
+    try {
+      value = new TextDecoder('utf-8', { fatal: true }).decode(base64ToBytes(b64));
+      source = 'base64';
+    } catch (e) {
+      console.error('[tencent-sms] sign base64 decode failed', { error: String(e) });
+    }
+  }
+
+  return {
+    value,
+    diagnostic: {
+      sign_name: value || null,
+      sign_source: source,
+      sign_length: [...value].length,
+      sign_contains_replacement: value.includes('�'),
+      sign_codepoints: [...value].map((ch) => `U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`),
+      sign_b64_configured: Boolean(b64),
+    },
+  };
+}
+
+function base64ToBytes(input: string) {
+  const bin = atob(input);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
 }
 
 async function sha256Hex(s: string) {
