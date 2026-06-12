@@ -19,6 +19,7 @@ type SendResult = {
     sign_source?: string;
     sign_length?: number;
     sign_contains_replacement?: boolean;
+    sign_decode_error?: string | null;
     sign_codepoints?: string[];
     sign_b64_configured?: boolean;
   };
@@ -106,12 +107,17 @@ export function SmsTestPanel() {
                 <Badge variant="outline">应用ID: {cfg.sdk_app_id || '未配置'}</Badge>
                 <Badge variant="outline">签名: {cfg.sign_name || '未配置'}</Badge>
                 <Badge variant="outline">模板: {cfg.template_id || '未配置'}</Badge>
-                <Badge variant="outline">来源: {cfg.sign_source === 'base64' ? '编码签名' : '普通签名'}</Badge>
+                <Badge variant="outline">来源: {cfg.sign_source === 'base64' ? '编码签名' : cfg.sign_source === 'safe_default' ? '安全内置签名' : '普通签名'}</Badge>
                 <Badge variant="outline">长度: {cfg.sign_length ?? '未知'}</Badge>
                 <Badge variant={cfg.sign_contains_replacement ? 'destructive' : 'outline'}>
                   损坏字符: {cfg.sign_contains_replacement ? '有' : '无'}
                 </Badge>
               </div>
+              {cfg.sign_decode_error && (
+                <div className="text-[10px] text-destructive break-all">
+                  编码签名读取异常，已改用安全内置签名: {cfg.sign_decode_error}
+                </div>
+              )}
               {cfg.sign_codepoints && cfg.sign_codepoints.length > 0 && (
                 <div className="text-[10px] text-muted-foreground break-all">
                   编码点: {cfg.sign_codepoints.join(' ')}
