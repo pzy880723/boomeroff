@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { QrCanvas } from '@/components/voucher/QrCanvas';
 import {
-  CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, buildClaimRedeemUrl, formatVoucherRule,
+  CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, buildClaimRedeemUrl, formatVoucherRule, formatValidityRange,
 } from '@/lib/voucher';
 
 export default function PublicClaim() {
