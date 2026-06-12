@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle2, AlertTriangle, ShieldX, Ticket } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, formatVoucherRule } from '@/lib/voucher';
+import { CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, formatVoucherRule, formatValidityRange } from '@/lib/voucher';
 
 interface ClaimView {
   id: string;
