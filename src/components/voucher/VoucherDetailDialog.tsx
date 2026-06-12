@@ -23,13 +23,16 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   voucher: VoucherTemplate | null;
   onEdit?: () => void;
+  onDeleted?: () => void;
 }
 
-export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit }: Props) {
+export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDeleted }: Props) {
   const navigate = useNavigate();
   const [claims, setClaims] = useState<VoucherClaim[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!open || !voucher) return;
