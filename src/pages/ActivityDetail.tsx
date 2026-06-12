@@ -83,9 +83,11 @@ export default function ActivityDetail() {
   };
 
 
+  const fmtDt = (s: string) => format(new Date(s), 'yyyy-MM-dd HH:mm');
   const timeRange = activity.starts_at || activity.ends_at
-    ? `${activity.starts_at ? format(new Date(activity.starts_at), 'yyyy-MM-dd') : '不限'} ~ ${activity.ends_at ? format(new Date(activity.ends_at), 'yyyy-MM-dd') : '不限'}`
+    ? `${activity.starts_at ? fmtDt(activity.starts_at) : '不限'} ~ ${activity.ends_at ? fmtDt(activity.ends_at) : '不限'}`
     : '长期有效';
+  const collectFields = ['姓名', '电话', ...(activity.form_fields || []).map((f) => f.label)].join(' / ');
 
   const claimStatusLabel = (app: AppWithClaim) => {
     const s = app.voucher_claim?.status;
@@ -134,6 +136,9 @@ export default function ActivityDetail() {
           <div className="border-t pt-3 space-y-2">
             <MetaRow label="活动时间">
               <span className="truncate">{timeRange}</span>
+            </MetaRow>
+            <MetaRow label="收集字段">
+              <span className="truncate" title={collectFields}>{collectFields}</span>
             </MetaRow>
             <MetaRow label="创建时间">
               <span className="truncate">{format(new Date(activity.created_at), 'yyyy-MM-dd HH:mm')}</span>

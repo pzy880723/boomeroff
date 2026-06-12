@@ -37,6 +37,12 @@ const DEFAULT_FIELDS: ActivityField[] = [
   { key: 'screenshot', label: '主页截图', type: 'image', required: true },
 ];
 
+// 把 Date → datetime-local 输入框可识别的本地时间字符串 (yyyy-MM-ddTHH:mm)
+function toLocalInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onSaved }: Props) {
   const isEdit = !!activityId;
   const [name, setName] = useState('');
@@ -44,6 +50,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const [voucherId, setVoucherId] = useState('');
   const [vouchers, setVouchers] = useState<VoucherTemplate[]>([]);
   const [fields, setFields] = useState<ActivityField[]>(DEFAULT_FIELDS);
+  const [startsAt, setStartsAt] = useState('');
+  const [endsAt, setEndsAt] = useState('');
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -74,6 +82,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
           setDescription(a.description || '');
           setVoucherId(a.voucher_id);
           setFields((a.form_fields && a.form_fields.length ? a.form_fields : DEFAULT_FIELDS) as ActivityField[]);
+          setStartsAt(a.starts_at ? toLocalInput(new Date(a.starts_at)) : toLocalInput(new Date()));
+          setEndsAt(a.ends_at ? toLocalInput(new Date(a.ends_at)) : '');
           setActive(a.status !== 'closed');
           
         }
@@ -82,6 +92,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
     } else {
       setName(''); setDescription(''); setVoucherId('');
       setFields(DEFAULT_FIELDS);
+      setStartsAt(toLocalInput(new Date()));
+      setEndsAt('');
       setActive(true);
       
     }
@@ -101,6 +113,12 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const save = async () => {
     if (!name.trim()) { toast.error('请输入活动名称'); return; }
     if (!voucherId) { toast.error('请选择关联的优惠券'); return; }
+    if (!startsAt) { toast.error('请选择活动开始时间'); return; }
+    if (!endsAt) { toast.error('请选择活动结束时间'); return; }
+    const startsDate = new Date(startsAt);
+    const endsDate = new Date(endsAt);
+    if (isNaN(startsDate.getTime()) || isNaN(endsDate.getTime())) { toast.error('活动时间格式不正确'); return; }
+    if (endsDate <= startsDate) { toast.error('结束时间必须晚于开始时间'); return; }
     for (const f of fields) {
       if (!f.label?.trim()) { toast.error('填写内容的标题不能为空'); return; }
     }
@@ -112,6 +130,8 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       form_fields: fields as any,
       status: active ? 'active' : 'draft',
       requires_review: false,
+      starts_at: startsDate.toISOString(),
+      ends_at: endsDate.toISOString(),
     };
     let error;
     if (isEdit && activityId) {
@@ -157,15 +177,36 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
 
 
 
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">开始时间</Label>
+              <Input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="h-9 text-xs" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">结束时间</Label>
+              <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className="h-9 text-xs" />
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-xs">添加填写内容</Label>
+              <Label className="text-xs">填写内容</Label>
               <Button size="sm" variant="outline" className="h-7" onClick={addField}>
                 <Plus className="w-3 h-3 mr-1" />添加
               </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground">姓名、手机号默认必填，无需自定义</p>
             <div className="space-y-2">
+              {/* 默认字段：姓名 / 电话 —— 固定展示，不可编辑/删除 */}
+              <div className="border rounded-lg p-2 bg-muted/30 flex items-center gap-2">
+                <span className="text-xs flex-1">姓名</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-background text-muted-foreground">默认</span>
+                <span className="text-[10px] text-primary">必填</span>
+              </div>
+              <div className="border rounded-lg p-2 bg-muted/30 flex items-center gap-2">
+                <span className="text-xs flex-1">电话</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-background text-muted-foreground">默认</span>
+                <span className="text-[10px] text-primary">必填</span>
+              </div>
               {fields.map((f, i) => (
                 <div key={i} className="border rounded-lg p-2 space-y-1.5">
                   <div className="flex gap-2 items-center">

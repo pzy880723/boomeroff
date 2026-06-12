@@ -89,6 +89,14 @@ export default function PublicActivity() {
 
   const v = activity.voucher;
   const fields: ActivityField[] = activity.form_fields || [];
+  const now = new Date();
+  const notStarted = activity.starts_at && new Date(activity.starts_at) > now;
+  const ended = activity.ends_at && new Date(activity.ends_at) < now;
+  const fmt = (s: string) => {
+    const d = new Date(s);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 to-background py-6 px-4">
@@ -99,6 +107,11 @@ export default function PublicActivity() {
             <h1 className="text-base font-bold">{activity.name}</h1>
           </div>
           {activity.description && <p className="text-xs text-muted-foreground">{activity.description}</p>}
+          {(activity.starts_at || activity.ends_at) && (
+            <p className="text-[11px] text-muted-foreground">
+              活动时间：{activity.starts_at ? fmt(activity.starts_at) : '不限'} ~ {activity.ends_at ? fmt(activity.ends_at) : '不限'}
+            </p>
+          )}
           {v && (
             <div className="bg-primary/10 rounded-lg p-3 text-center">
               <p className="text-xs text-muted-foreground">报名后可领</p>
@@ -107,6 +120,18 @@ export default function PublicActivity() {
             </div>
           )}
         </Card>
+
+        {notStarted ? (
+          <Card className="p-6 text-center text-sm space-y-1">
+            <p className="font-medium">活动尚未开始</p>
+            <p className="text-xs text-muted-foreground">开始时间：{fmt(activity.starts_at)}</p>
+          </Card>
+        ) : ended ? (
+          <Card className="p-6 text-center text-sm space-y-1">
+            <p className="font-medium text-destructive">活动已结束</p>
+            <p className="text-xs text-muted-foreground">结束时间：{fmt(activity.ends_at)}</p>
+          </Card>
+        ) : (
 
         <Card className="p-4 space-y-3">
           <p className="text-sm font-medium">填写申请</p>
@@ -160,6 +185,7 @@ export default function PublicActivity() {
             {submitting && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}提交申请
           </Button>
         </Card>
+        )}
       </div>
     </div>
   );

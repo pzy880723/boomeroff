@@ -27,11 +27,14 @@ Deno.serve(async (req) => {
 
     const { data: activity, error: aErr } = await admin
       .from('activities')
-      .select('id, status, form_fields, max_applications, ends_at, requires_review, voucher_id')
+      .select('id, status, form_fields, max_applications, starts_at, ends_at, requires_review, voucher_id')
       .eq('share_token', share_token)
       .maybeSingle();
     if (aErr || !activity) return json({ error: '活动不存在' }, 404);
     if (activity.status !== 'active') return json({ error: '活动已结束' }, 400);
+    if (activity.starts_at && new Date(activity.starts_at) > new Date()) {
+      return json({ error: '活动尚未开始' }, 400);
+    }
     if (activity.ends_at && new Date(activity.ends_at) < new Date()) {
       return json({ error: '活动已结束' }, 400);
     }
