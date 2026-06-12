@@ -12,7 +12,16 @@ type SendResult = {
   ok?: boolean;
   error?: string;
   detail?: any;
-  config?: { sdk_app_id: string | null; sign_name: string | null; template_id: string | null };
+  config?: {
+    sdk_app_id: string | null;
+    sign_name: string | null;
+    template_id: string | null;
+    sign_source?: string;
+    sign_length?: number;
+    sign_contains_replacement?: boolean;
+    sign_codepoints?: string[];
+    sign_b64_configured?: boolean;
+  };
 };
 type VerifyResult = { ok?: boolean; reason?: string; message?: string; error?: string };
 
@@ -40,7 +49,13 @@ export function SmsTestPanel() {
         body: { action: 'send', phone: phone.trim() },
       });
       if (error) {
-        setSendResult({ ok: false, error: error.message, detail: (error as any).context });
+        const parsed = await parseFunctionError(error);
+        setSendResult({
+          ok: false,
+          error: parsed?.error || error.message,
+          detail: parsed?.detail || parsed,
+          config: parsed?.config,
+        });
       } else {
         setSendResult(data as SendResult);
         if ((data as SendResult)?.ok) setCooldown(60);
@@ -86,12 +101,22 @@ export function SmsTestPanel() {
           <div className="flex items-start gap-2 text-xs">
             <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
             <div className="space-y-1">
-              <div className="text-muted-foreground">当前腾讯云配置(从环境变量读取):</div>
+              <div className="text-muted-foreground">当前腾讯云配置(后端实际使用):</div>
               <div className="flex flex-wrap gap-1.5">
-                <Badge variant="outline">SDKAppID: {cfg.sdk_app_id || '未配置'}</Badge>
+                <Badge variant="outline">应用ID: {cfg.sdk_app_id || '未配置'}</Badge>
                 <Badge variant="outline">签名: {cfg.sign_name || '未配置'}</Badge>
                 <Badge variant="outline">模板: {cfg.template_id || '未配置'}</Badge>
+                <Badge variant="outline">来源: {cfg.sign_source === 'base64' ? '编码签名' : '普通签名'}</Badge>
+                <Badge variant="outline">长度: {cfg.sign_length ?? '未知'}</Badge>
+                <Badge variant={cfg.sign_contains_replacement ? 'destructive' : 'outline'}>
+                  损坏字符: {cfg.sign_contains_replacement ? '有' : '无'}
+                </Badge>
               </div>
+              {cfg.sign_codepoints && cfg.sign_codepoints.length > 0 && (
+                <div className="text-[10px] text-muted-foreground break-all">
+                  编码点: {cfg.sign_codepoints.join(' ')}
+                </div>
+              )}
             </div>
           </div>
         </Card>
@@ -185,4 +210,20 @@ export function SmsTestPanel() {
       </Card>
     </div>
   );
+}
+
+async function parseFunctionError(error: any) {
+  const response = error?.context;
+  if (response && typeof response.clone === 'function') {
+    try {
+      return await response.clone().json();
+    } catch {
+      try {
+        return { error: error.message, detail: await response.clone().text() };
+      } catch {
+        return { error: error.message };
+      }
+    }
+  }
+  return { error: error?.message || String(error), detail: response };
 }
