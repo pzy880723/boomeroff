@@ -241,7 +241,7 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
       <KnowledgeCardSections
         card={pickKnowledgeCard(enriched)}
         loading={!!result.isEnriching}
-        loadingText="小精灵正在翻它的中古笔记本…"
+        loadingText="BOOMER 正在翻它的中古笔记本…"
         hints={{
           name: result.name,
           category: CATEGORY_LABELS[result.category],

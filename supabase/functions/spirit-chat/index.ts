@@ -427,7 +427,7 @@ Deno.serve(async (req) => {
               if (resp.status === 402) { emit({ error: 'AI 额度不足，请联系管理员充值' }); break; }
               const t = await resp.text().catch(() => '');
               console.error('[spirit-chat] gateway error', resp.status, t);
-              emit({ error: '小精灵走神了，稍后再试' });
+              emit({ error: 'BOOMER 走神了，稍后再试' });
               break;
             }
 
@@ -550,7 +550,7 @@ Deno.serve(async (req) => {
           emitRaw('data: [DONE]\n\n');
         } catch (e) {
           console.error('[spirit-chat] stream error', e);
-          try { emit({ error: e instanceof Error ? e.message : '小精灵开小差了' }); } catch {}
+          try { emit({ error: e instanceof Error ? e.message : 'BOOMER 开小差了' }); } catch {}
         } finally {
           try { controller.close(); } catch {}
         }
