@@ -40,6 +40,24 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { action, phone, code } = body || {};
 
+    if (action === 'diagnose') {
+      const sign = getTencentSignName();
+      return json({
+        ok: true,
+        config: {
+          sdk_app_id: Deno.env.get('TENCENT_SMS_SDK_APP_ID') || null,
+          sign_name: sign.value || null,
+          sign_source: sign.diagnostic.sign_source,
+          sign_length: sign.diagnostic.sign_length,
+          sign_contains_replacement: sign.diagnostic.sign_contains_replacement,
+          sign_decode_error: sign.diagnostic.sign_decode_error,
+          sign_codepoints: sign.diagnostic.sign_codepoints,
+          sign_b64_configured: sign.diagnostic.sign_b64_configured,
+          template_id: Deno.env.get('TENCENT_SMS_OTP_TEMPLATE_ID') || null,
+        },
+      });
+    }
+
     if (action === 'send') {
       if (!phone || !/^1[3-9]\d{9}$/.test(String(phone))) {
         return json({ error: '手机号格式不正确' }, 400);
