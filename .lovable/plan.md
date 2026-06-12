@@ -1,59 +1,62 @@
-## 一、优惠券模板加「有效时间范围」+ 三状态
+## 排查结论
 
-### 数据库
-- `vouchers` 表新增 `starts_at timestamptz`、`ends_at timestamptz`（都可空，兼容老数据）。
-- 触发器 `voucher_claims_set_expires` 升级：领取时 `expires_at = LEAST(claimed_at + valid_days, ends_at)`；若领取时 `now() > ends_at` 则直接置 `expired`。
-- `delete_voucher_safe` 不变（仍按 claim 是否到期判断）。
-- 在 voucher-redeem edge function 中，除了原本的 `expires_at` 校验外，额外拦截"模板已结束（`vouchers.ends_at < now()`）"。
+Do I know what the issue is? 是的。
 
-### 状态判断（前端 util）
-在 `src/lib/voucher.ts` 新增 `getVoucherTemplateTimeInfo(v)`：
-- `starts_at > now()` → **待生效**（outline/灰）
-- `ends_at < now()` → **已结束**（destructive/红）
-- 其余 → **已生效**（default/绿）
-- 同时返回剩余天数 / 距开始天数文案。
+当前失败不是手机号、模板 ID、SDKAppID 或签名算法问题；后端实际发给腾讯云的签名已经被读坏了：
 
-### UI
-- `VoucherEditDialog`：新增两个 `datetime-local` —— 「开始时间」默认 `now()`，「结束时间」可选；校验 ends > starts。保留原"有效期 N 天"（继续作为领取后的相对截止，与模板结束取较早者）。
-- `VouchersMine.tsx` 列表卡片右上角加状态 Badge + 倒计时文案。
-- `VoucherDetailDialog`：券面下方显示「生效时间：x ~ y」；待生效/已结束时禁用「发放」按钮并提示。
-- `PublicClaim.tsx`：未到 `starts_at` → 显示"该券尚未到生效时间，请在 yyyy-MM-dd HH:mm 后再来领取"；过 `ends_at` → 显示"该券已结束"，隐藏领取表单。
-- `VoucherRedeem.tsx`：模板已过期时显示"该券已结束，无法核销"。
+```text
+宝暮上海品���管理
+```
 
-## 二、修复 /u/c/xxx 领取成功后核销码不显示
+这个 `���` 是 Unicode 替换字符，说明运行时环境变量里的中文签名存在编码损坏。腾讯云收到的签名内容和控制台已审核签名不一致，所以返回：
 
-排查并修复 `PublicClaim.tsx`：
+```text
+FailedOperation.SignatureIncorrectOrUnapproved
+```
 
-1. `voucher-claim-accept` 返回成功后，目前调用 `fetchStatus()` 重新拉取。问题可能是 `voucher-claim-status` 走的 lookup（`short_code` 大写）和触发器写入的 `code` 字段有偏差，或 React state 没刷新 QR 区块的 key。
-2. 修复方案：
-   - accept 成功时直接用返回里携带的最新 claim 字段（让 accept function 同时返回 `{ok, claim: {code, short_code, status, claimed_at, expires_at}}`），不再依赖二次查询。
-   - 渲染 QR 区块加 `key={claim.code}` 强制重挂载；并在 QR 上方明显展示 8 位 `code`（券码）作为兜底，即便二维码出问题用户也能报口令。
-   - QrCanvas 当 `value` 为空时不调用 `QRCode.toCanvas`，避免画布留白；并在 console 输出失败原因便于排查。
-3. 校验 `voucher_claims_set_code` 触发器是否真实写入了 `code`（如未写入，QR 当然空）—— 通过 SQL 抽查现有 claimed 行验证；如确有 NULL，迁移里补一段 UPDATE 兜底。
+## 修复方案
 
-## 三、完善"直接发放"OTP 短信对接
+1. **改后端短信函数的签名读取逻辑**
+   - 保留现有 `TENCENT_SMS_SIGN_NAME`。
+   - 新增优先读取 `TENCENT_SMS_SIGN_NAME_B64`。
+   - 如果存在 Base64 版本，就在后端用 UTF-8 解码成中文签名再发给腾讯云。
+   - 这样绕开中文 secret 被平台/复制粘贴链路损坏的问题。
 
-当前 `voucher-claim-send-otp` 已调 `send-sms` 的 `otp` 模板（用 `TENCENT_SMS_OTP_TEMPLATE_ID`），但失败提示混乱。改进：
+2. **同步修复短信测试函数显示配置**
+   - `/portal → 短信测试` 显示后端“最终实际使用的签名”。
+   - 同时显示签名长度和 Unicode 编码点，方便确认不再出现 `���`。
 
-- send-otp 失败时把 `sms_unavailable` / `具体错误` 直接 toast 给客户，并在表单下显示「短信暂不可用？联系店员手动核销」。
-- 60s 倒计时按钮文案与 disabled 状态保持现状。
-- 不改 OTP 流程本身（用户确认这部分功能 OK）。
+3. **新增后端自检字段**
+   - 发送失败时返回：
+     - 使用的是普通签名还是 Base64 签名
+     - 签名长度
+     - 是否包含 `�`
+   - 不暴露密钥，只暴露腾讯短信签名本身和诊断信息。
 
-## 四、活动入口免验证码（已实现，仅核对）
+4. **设置新的运行时配置**
+   - 把正确签名 `宝暮上海品牌管理` 存成 Base64：
 
-`activity-apply` 已直接生成 `status='claimed'` 的 claim 并跳转 `/u/c/<short_code>`。`PublicClaim` 检测到 `status='claimed'` 时跳过填表，直接显示核销 QR，逻辑符合预期 —— 修完第二点后这条链路也会自动恢复。
+```text
+5a6d5pqu5LiK5rW35ZOB54mM566h55CG
+```
 
-## 涉及文件
+   - 新增 secret：`TENCENT_SMS_SIGN_NAME_B64`。
+   - 后端优先使用它。
 
-- 迁移：`vouchers` 加列 + 触发器升级（一条 migration）
-- `src/lib/voucher.ts`：`getVoucherTemplateTimeInfo`
-- `src/components/voucher/VoucherEditDialog.tsx`
-- `src/components/voucher/VoucherDetailDialog.tsx`
-- `src/pages/VouchersMine.tsx`
-- `src/pages/VoucherRedeem.tsx`
-- `src/pages/public/PublicClaim.tsx`
-- `src/components/voucher/QrCanvas.tsx`（空值兜底）
-- `supabase/functions/voucher-claim-accept/index.ts`（返回完整 claim）
-- `supabase/functions/voucher-redeem/index.ts`（模板 ends_at 拦截）
+5. **验证**
+   - 直接调用短信测试后端函数。
+   - 如果返回签名为 `宝暮上海品牌管理` 且不含 `�`，但腾讯云仍报同错，则唯一剩余原因就是腾讯云控制台内该签名未通过、签名内容不是这 8 个字、或签名属于另一个短信应用。
 
-确认后切到 build 模式即可开始改。
+## 需要改动的文件
+
+- `supabase/functions/send-sms/index.ts`
+- `supabase/functions/sms-test/index.ts`
+- `src/components/admin/SmsTestPanel.tsx`
+
+<presentation-actions>
+  <presentation-open-history>View History</presentation-open-history>
+</presentation-actions>
+
+<presentation-actions>
+<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
+</presentation-actions>
