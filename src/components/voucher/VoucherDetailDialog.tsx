@@ -228,5 +228,27 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
         </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>确认删除该优惠券？</AlertDialogTitle>
+          <AlertDialogDescription>
+            删除后无法恢复，已核销/已过期的领取记录将一并清除。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => { e.preventDefault(); doDelete(); }}
+            disabled={deleting}
+            className="bg-destructive hover:bg-destructive/90"
+          >
+            {deleting && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}确认删除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
