@@ -64,9 +64,16 @@ Deno.serve(async (req) => {
       });
       const smsResult = await smsResp.json().catch(() => null);
 
+      const sign = getTencentSignName();
+      const smsDiagnostic = smsResult?.diagnostic || {};
       const config = {
         sdk_app_id: Deno.env.get('TENCENT_SMS_SDK_APP_ID') || null,
-        sign_name: Deno.env.get('TENCENT_SMS_SIGN_NAME') || null,
+        sign_name: smsDiagnostic.sign_name ?? sign.value ?? null,
+        sign_source: smsDiagnostic.sign_source ?? sign.diagnostic.sign_source,
+        sign_length: smsDiagnostic.sign_length ?? sign.diagnostic.sign_length,
+        sign_contains_replacement: smsDiagnostic.sign_contains_replacement ?? sign.diagnostic.sign_contains_replacement,
+        sign_codepoints: smsDiagnostic.sign_codepoints ?? sign.diagnostic.sign_codepoints,
+        sign_b64_configured: smsDiagnostic.sign_b64_configured ?? sign.diagnostic.sign_b64_configured,
         template_id: Deno.env.get('TENCENT_SMS_OTP_TEMPLATE_ID') || null,
       };
 
@@ -114,3 +121,37 @@ Deno.serve(async (req) => {
     return json({ error: String(e) }, 500);
   }
 });
+
+function getTencentSignName() {
+  const b64 = Deno.env.get('TENCENT_SMS_SIGN_NAME_B64')?.trim();
+  const raw = Deno.env.get('TENCENT_SMS_SIGN_NAME')?.trim() || '';
+  let value = raw;
+  let source: 'base64' | 'raw' = 'raw';
+
+  if (b64) {
+    try {
+      value = new TextDecoder('utf-8', { fatal: true }).decode(base64ToBytes(b64));
+      source = 'base64';
+    } catch (e) {
+      console.error('[sms-test] sign base64 decode failed', { error: String(e) });
+    }
+  }
+
+  return {
+    value,
+    diagnostic: {
+      sign_source: source,
+      sign_length: [...value].length,
+      sign_contains_replacement: value.includes('�'),
+      sign_codepoints: [...value].map((ch) => `U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`),
+      sign_b64_configured: Boolean(b64),
+    },
+  };
+}
+
+function base64ToBytes(input: string) {
+  const bin = atob(input);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
