@@ -124,18 +124,20 @@ export function formatVoucherRule(v: Pick<VoucherTemplate, 'threshold_type' | 'd
 }
 
 // 公开领取短链（优先 short_code，回退 share_token）
+import { getPublicBaseUrl } from './publicBaseUrl';
+
 export function buildClaimShareUrl(token: string): string {
-  return `${window.location.origin}/u/c/${token}`;
+  return `${getPublicBaseUrl()}/u/c/${token}`;
 }
 
 // 活动公开申请链接
 export function buildActivityShareUrl(share_token: string): string {
-  return `${window.location.origin}/u/activity/${share_token}`;
+  return `${getPublicBaseUrl()}/u/activity/${share_token}`;
 }
 
 // 店员核销 URL（QR 内容）
 export function buildClaimRedeemUrl(code: string): string {
-  return `${window.location.origin}/me/vouchers/redeem/${code}`;
+  return `${getPublicBaseUrl()}/me/vouchers/redeem/${code}`;
 }
 
 export const VOUCHER_STATUS_LABEL = CLAIM_STATUS_LABEL;

@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import brandLogo from '@/assets/boomer-off-vintage-logo.png';
+
 
 interface Props {
   open: boolean;
@@ -30,7 +30,7 @@ interface Props {
 
 const W = 750;
 const H = 1334;
-const POSTER_VERSION = 'v2';
+const POSTER_VERSION = 'v3';
 
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
@@ -116,194 +116,143 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       const ctx = canvas.getContext('2d');
       if (!ctx) { setGenerating(false); return; }
 
-      // —— 中古和风色板 ——
-      const C_PAPER_TOP = '#f8f1df';
-      const C_PAPER_BOT = '#ecdfc1';
-      const C_INK = '#1c1816';
-      const C_INK_SOFT = '#5a4f44';
-      const C_INK_MUTE = '#9a8b7a';
-      const C_ACCENT = '#b3331d';
-      const C_ACCENT_DEEP = '#8e1f10';
-      const C_LINE = '#bba78b';
-      const C_CARD = '#fdf8ec';
+      // —— 优惠券同款暖棕渐变色板 ——
+      const C_BG_1 = '#1f1409';
+      const C_BG_2 = '#3b2410';
+      const C_BG_3 = '#6b3a18';
+      const C_BG_4 = '#b48142';
+      const C_GOLD = '#ffd28a';
+      const C_GOLD_DEEP = '#f5c66e';
+      const C_TEXT = '#fff5e1';
+      const C_TEXT_SOFT = '#ffe7bd';
+      const C_TEXT_MUTE = 'rgba(255, 245, 225, 0.65)';
 
-      // 纸色底
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, C_PAPER_TOP);
-      bg.addColorStop(0.5, '#f3e8cd');
-      bg.addColorStop(1, C_PAPER_BOT);
+      // 主背景
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, C_BG_1);
+      bg.addColorStop(0.38, C_BG_2);
+      bg.addColorStop(0.70, C_BG_3);
+      bg.addColorStop(1, C_BG_4);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // 纸纹噪点
-      ctx.save();
-      ctx.globalAlpha = 0.04;
-      ctx.fillStyle = C_INK;
-      for (let i = 0; i < 800; i++) {
-        const x = Math.random() * W, y = Math.random() * H;
-        ctx.fillRect(x, y, 1, 1);
-      }
-      ctx.restore();
-
-      // 双线外框
-      const M = 44;
-      ctx.strokeStyle = C_LINE;
-      ctx.lineWidth = 1.4;
-      ctx.strokeRect(M, M, W - M * 2, H - M * 2);
-      ctx.lineWidth = 0.6;
-      ctx.strokeRect(M + 10, M + 10, W - (M + 10) * 2, H - (M + 10) * 2);
-
-      // 四角小装饰
-      const cornerSize = 22;
-      ctx.strokeStyle = C_ACCENT;
-      ctx.lineWidth = 2;
-      const drawCorner = (cx: number, cy: number, dx: number, dy: number) => {
-        ctx.beginPath();
-        ctx.moveTo(cx, cy + dy * cornerSize); ctx.lineTo(cx, cy); ctx.lineTo(cx + dx * cornerSize, cy);
-        ctx.stroke();
-      };
-      drawCorner(M + 22, M + 22, 1, 1);
-      drawCorner(W - M - 22, M + 22, -1, 1);
-      drawCorner(M + 22, H - M - 22, 1, -1);
-      drawCorner(W - M - 22, H - M - 22, -1, -1);
-
-      // —— 1. 顶部 logo ——
-      const headerY = M + 56;
-      const logoImg = await loadImage(brandLogo);
-      if (logoImg) {
-        const logoH = 76;
-        const logoW = logoImg.naturalWidth * (logoH / logoImg.naturalHeight);
-        ctx.drawImage(logoImg, (W - logoW) / 2, headerY, logoW, logoH);
-      }
-
-      // 副标题
-      ctx.fillStyle = C_INK_SOFT;
-      ctx.font = '500 18px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      const subY = headerY + 96;
-      const sub = '中　古　邀　请　函';
-      ctx.fillText(sub, W / 2, subY);
-      ctx.strokeStyle = C_LINE;
-      ctx.lineWidth = 0.8;
-      const subW = ctx.measureText(sub).width;
-      ctx.beginPath();
-      ctx.moveTo(W / 2 - subW / 2 - 60, subY + 9);
-      ctx.lineTo(W / 2 - subW / 2 - 14, subY + 9);
-      ctx.moveTo(W / 2 + subW / 2 + 14, subY + 9);
-      ctx.lineTo(W / 2 + subW / 2 + 60, subY + 9);
-      ctx.stroke();
-
-      let cursorY = subY + 50;
-
-      // —— 2. 标题（前置）——
-      ctx.fillStyle = C_INK;
-      ctx.font = '700 56px "STSong", "Songti SC", "SimSun", "PingFang SC", serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      const cardX = M + 36;
-      const cardW = W - (M + 36) * 2;
-      const titleLines = wrapText(ctx, activity.name, cardW, 2);
-      for (const line of titleLines) {
-        ctx.fillText(line, W / 2, cursorY);
-        cursorY += 68;
-      }
-
-      // 红印章（标题右上方装饰）
-      const sealCx = W / 2 + ctx.measureText(titleLines[titleLines.length - 1] || '').width / 2 + 56;
-      const sealCy = cursorY - 56;
-      const sealR = 38;
-      if (sealCx + sealR < W - M - 30) {
+      // 两个柔光圆斑（与券面呼应）
+      const drawGlow = (cx: number, cy: number, r: number, color: string, alpha: number) => {
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.save();
-        ctx.fillStyle = C_ACCENT_DEEP;
-        ctx.globalAlpha = 0.92;
-        ctx.beginPath();
-        ctx.arc(sealCx, sealCy, sealR, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = '#fdf8ec';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(sealCx, sealCy, sealR - 5, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = '#fdf8ec';
-        ctx.font = '700 36px "STSong", "Songti SC", "SimSun", serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('邀', sealCx, sealCy + 2);
-        // 印章破损纹理
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = C_PAPER_TOP;
-        for (let i = 0; i < 12; i++) {
-          const a = Math.random() * Math.PI * 2;
-          const r = sealR * (0.4 + Math.random() * 0.6);
-          ctx.fillRect(sealCx + Math.cos(a) * r, sealCy + Math.sin(a) * r, 2 + Math.random() * 3, 1 + Math.random() * 2);
-        }
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
         ctx.restore();
+      };
+      drawGlow(W - 60, 60, 360, C_GOLD_DEEP, 0.35);
+      drawGlow(60, H - 80, 420, '#ffd28a', 0.22);
+
+      const M = 56;
+      let cursorY = M + 24;
+
+      // —— 顶部：品牌 + 限量邀请 ——
+      ctx.fillStyle = C_TEXT;
+      ctx.font = '700 22px -apple-system, "PingFang SC", "Helvetica Neue", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      // letter-spacing 0.3em 模拟
+      const brand = 'BOOMER-OFF';
+      const brandSpacing = 0.3 * 22;
+      let bx = M;
+      for (const ch of brand) {
+        ctx.fillText(ch, bx, cursorY + 6);
+        bx += ctx.measureText(ch).width + brandSpacing;
       }
+      ctx.textAlign = 'right';
+      ctx.font = '400 18px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillStyle = C_TEXT_MUTE;
+      ctx.fillText('限量邀请', W - M, cursorY + 10);
 
-      // 菱形装饰
-      cursorY += 6;
-      const diamondY = cursorY + 6;
-      ctx.fillStyle = C_ACCENT;
-      ctx.save();
-      ctx.translate(W / 2, diamondY);
-      ctx.rotate(Math.PI / 4);
-      ctx.fillRect(-5, -5, 10, 10);
-      ctx.restore();
-      ctx.strokeStyle = C_LINE;
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(W / 2 - 140, diamondY); ctx.lineTo(W / 2 - 18, diamondY);
-      ctx.moveTo(W / 2 + 18, diamondY); ctx.lineTo(W / 2 + 140, diamondY);
-      ctx.stroke();
-      cursorY += 36;
+      cursorY += 70;
 
-      // —— 3. 封面（如有）——
+      // —— 副标 ——
+      ctx.fillStyle = C_TEXT_SOFT;
+      ctx.font = '400 22px -apple-system, "PingFang SC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('为你专属准备', M, cursorY);
+      cursorY += 38;
+
+      // —— 大标题 ——
+      ctx.fillStyle = C_TEXT;
+      ctx.font = '700 56px -apple-system, "PingFang SC", "Helvetica Neue", sans-serif';
+      const titleLines = wrapText(ctx, activity.name, W - M * 2, 2);
+      for (const line of titleLines) {
+        ctx.fillText(line, M, cursorY);
+        cursorY += 70;
+      }
+      cursorY += 10;
+
+      // —— 中部封面（可选）——
       if (activity.cover_url) {
         const img = await loadImage(activity.cover_url);
         if (img && !cancelled) {
-          const coverH = 240;
-          ctx.fillStyle = 'rgba(28,24,22,0.18)';
-          ctx.fillRect(cardX + 4, cursorY + 6, cardW, coverH);
+          const coverH = 320;
+          const coverW = W - M * 2;
+          // 投影
+          ctx.save();
+          ctx.shadowColor = 'rgba(0,0,0,0.45)';
+          ctx.shadowBlur = 24;
+          ctx.shadowOffsetY = 10;
+          const radius = 24;
+          ctx.beginPath();
+          ctx.moveTo(M + radius, cursorY);
+          ctx.lineTo(M + coverW - radius, cursorY);
+          ctx.quadraticCurveTo(M + coverW, cursorY, M + coverW, cursorY + radius);
+          ctx.lineTo(M + coverW, cursorY + coverH - radius);
+          ctx.quadraticCurveTo(M + coverW, cursorY + coverH, M + coverW - radius, cursorY + coverH);
+          ctx.lineTo(M + radius, cursorY + coverH);
+          ctx.quadraticCurveTo(M, cursorY + coverH, M, cursorY + coverH - radius);
+          ctx.lineTo(M, cursorY + radius);
+          ctx.quadraticCurveTo(M, cursorY, M + radius, cursorY);
+          ctx.closePath();
+          ctx.fillStyle = '#000';
+          ctx.fill();
+          ctx.restore();
+          // 裁剪绘制
           ctx.save();
           ctx.beginPath();
-          ctx.rect(cardX, cursorY, cardW, coverH);
+          ctx.moveTo(M + radius, cursorY);
+          ctx.lineTo(M + coverW - radius, cursorY);
+          ctx.quadraticCurveTo(M + coverW, cursorY, M + coverW, cursorY + radius);
+          ctx.lineTo(M + coverW, cursorY + coverH - radius);
+          ctx.quadraticCurveTo(M + coverW, cursorY + coverH, M + coverW - radius, cursorY + coverH);
+          ctx.lineTo(M + radius, cursorY + coverH);
+          ctx.quadraticCurveTo(M, cursorY + coverH, M, cursorY + coverH - radius);
+          ctx.lineTo(M, cursorY + radius);
+          ctx.quadraticCurveTo(M, cursorY, M + radius, cursorY);
+          ctx.closePath();
           ctx.clip();
           const iw = img.naturalWidth, ih = img.naturalHeight;
-          const scale = Math.max(cardW / iw, coverH / ih);
+          const scale = Math.max(coverW / iw, coverH / ih);
           const dw = iw * scale, dh = ih * scale;
-          ctx.drawImage(img, cardX + (cardW - dw) / 2, cursorY + (coverH - dh) / 2, dw, dh);
+          ctx.drawImage(img, M + (coverW - dw) / 2, cursorY + (coverH - dh) / 2, dw, dh);
           ctx.restore();
-          ctx.strokeStyle = C_INK;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(cardX, cursorY, cardW, coverH);
           cursorY += coverH + 32;
         }
       }
 
-      // —— 4. 描述 ——
+      // —— 描述 ——
       if (activity.description) {
-        ctx.fillStyle = C_INK_SOFT;
-        ctx.font = '400 23px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+        ctx.fillStyle = C_TEXT_SOFT;
+        ctx.font = '400 22px -apple-system, "PingFang SC", sans-serif';
         ctx.textAlign = 'left';
-        const descLines = wrapText(ctx, activity.description, cardW - 40, 7);
+        const descLines = wrapText(ctx, activity.description, W - M * 2, 4);
         for (const line of descLines) {
-          ctx.fillText(line, cardX + 20, cursorY);
-          cursorY += 36;
+          ctx.fillText(line, M, cursorY);
+          cursorY += 34;
         }
-        cursorY += 8;
+        cursorY += 14;
       }
 
-      // —— 5. 元信息行 ——
-      cursorY += 14;
-      ctx.strokeStyle = C_LINE;
-      ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      ctx.moveTo(cardX + 30, cursorY); ctx.lineTo(W - cardX - 30, cursorY);
-      ctx.stroke();
-      cursorY += 26;
-
+      // —— 活动时间 ——
       const fmt = (d?: string | null) => d ? format(new Date(d), 'yyyy.MM.dd') : null;
       const startTxt = fmt(activity.starts_at);
       const endTxt = fmt(activity.ends_at);
@@ -311,102 +260,98 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       if (startTxt && endTxt) timeText = `${startTxt} — ${endTxt}`;
       else if (startTxt) timeText = `${startTxt} 起`;
       else if (endTxt) timeText = `截止 ${endTxt}`;
+      ctx.fillStyle = C_GOLD;
+      ctx.font = '500 22px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillText(`活动时间　${timeText}`, M, cursorY);
+      cursorY += 36;
 
-      ctx.fillStyle = C_INK_SOFT;
-      ctx.font = '400 20px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`活动时间　${timeText}`, W / 2, cursorY);
-      cursorY += 32;
-      ctx.fillText('扫码即可填表领券', W / 2, cursorY);
-      cursorY += 30;
+      // —— 虚线分隔 ——
+      const drawDashed = (y: number) => {
+        ctx.save();
+        ctx.strokeStyle = C_TEXT_SOFT;
+        ctx.globalAlpha = 0.45;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([8, 10]);
+        ctx.beginPath();
+        ctx.moveTo(M, y);
+        ctx.lineTo(W - M, y);
+        ctx.stroke();
+        ctx.restore();
+      };
 
+      // —— 底部 QR 卡片（白底圆角）——
+      const qrCardSize = 280;
+      const qrPad = 24;
+      const qrCardX = M;
+      const qrCardY = H - M - qrCardSize - 30;
 
-      ctx.beginPath();
-      ctx.moveTo(cardX + 30, cursorY); ctx.lineTo(W - cardX - 30, cursorY);
-      ctx.stroke();
-      cursorY += 28;
+      drawDashed(qrCardY - 32);
 
-      // —— 6. 中间空隙的和风装饰条（青海波 + 中央 印 字）——
-      const qrCardH = 240;
-      const qrCardY = H - M - 56 - qrCardH;
-      const gapTop = cursorY;
-      const gapH = qrCardY - 28 - gapTop;
-      if (gapH > 60) {
-        const ornY = gapTop + gapH / 2;
-        // 左右青海波弧线
-        ctx.strokeStyle = C_LINE;
-        ctx.lineWidth = 1;
-        const drawWaves = (startX: number, endX: number, dir: number) => {
-          const r = 14;
-          for (let row = 0; row < 2; row++) {
-            const yy = ornY - 14 + row * 14;
-            let x = startX;
-            while ((dir > 0 ? x < endX : x > endX)) {
-              ctx.beginPath();
-              ctx.arc(x, yy, r, Math.PI, Math.PI * 2);
-              ctx.stroke();
-              x += dir * r * 2;
-            }
-          }
-        };
-        drawWaves(cardX + 20, W / 2 - 60, 1);
-        drawWaves(W - cardX - 20, W / 2 + 60, -1);
+      const drawRoundRect = (x: number, y: number, w: number, h: number, r: number) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      };
 
-        // 中央方印
-        const stampSize = 56;
-        ctx.fillStyle = C_ACCENT_DEEP;
-        ctx.fillRect(W / 2 - stampSize / 2, ornY - stampSize / 2, stampSize, stampSize);
-        ctx.fillStyle = '#fdf8ec';
-        ctx.font = '700 30px "STSong", "Songti SC", serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('印', W / 2, ornY + 1);
-        ctx.textBaseline = 'top';
-      }
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetY = 8;
+      ctx.fillStyle = '#ffffff';
+      drawRoundRect(qrCardX, qrCardY, qrCardSize, qrCardSize, 24);
+      ctx.fill();
+      ctx.restore();
 
-      // —— 7. 二维码卡片 ——
-      const qrCardX = M + 50;
-      const qrCardW = W - (M + 50) * 2;
-
-      ctx.fillStyle = C_CARD;
-      ctx.fillRect(qrCardX, qrCardY, qrCardW, qrCardH);
-      ctx.strokeStyle = C_INK;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(qrCardX, qrCardY, qrCardW, qrCardH);
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(qrCardX + 6, qrCardY + 6, qrCardW - 12, qrCardH - 12);
-
-      const qrSize = 200;
+      const qrInner = qrCardSize - qrPad * 2;
       const qrDataUrl = await QRCode.toDataURL(url, {
-        margin: 1,
-        width: qrSize,
+        margin: 0,
+        width: qrInner,
         errorCorrectionLevel: 'H',
-        color: { dark: C_INK, light: '#00000000' },
+        color: { dark: '#0f172a', light: '#ffffff' },
       });
       const qrImg = await loadImage(qrDataUrl);
-      const qrY = qrCardY + (qrCardH - qrSize) / 2;
-      const qrX = qrCardX + 20;
-      if (qrImg) ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+      if (qrImg) ctx.drawImage(qrImg, qrCardX + qrPad, qrCardY + qrPad, qrInner, qrInner);
 
-      const textX = qrX + qrSize + 28;
-      ctx.fillStyle = C_INK;
-      ctx.font = '700 30px "STSong", "Songti SC", "SimSun", serif';
+      // —— 右侧文案 ——
+      const textX = qrCardX + qrCardSize + 28;
+      ctx.fillStyle = C_TEXT;
+      ctx.font = '700 36px -apple-system, "PingFang SC", sans-serif';
       ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('扫 码', textX, qrY + 22);
-      ctx.fillText('参 与', textX, qrY + 68);
-      ctx.fillStyle = C_ACCENT;
-      ctx.fillRect(textX, qrY + 118, 36, 2);
-      ctx.fillStyle = C_INK_SOFT;
-      ctx.font = '400 15px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-      ctx.fillText('长按识别二维码', textX, qrY + 136);
-      ctx.fillText('或截图保存转发', textX, qrY + 158);
+      ctx.fillText('扫码报名', textX, qrCardY + 24);
+      ctx.fillText('立即领券', textX, qrCardY + 78);
 
-      // —— 8. 底部签名 ——
+      ctx.fillStyle = C_GOLD;
+      ctx.fillRect(textX, qrCardY + 138, 56, 3);
+
+      ctx.fillStyle = C_TEXT_SOFT;
+      ctx.font = '400 20px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillText('长按识别二维码', textX, qrCardY + 158);
+      ctx.fillText('或截图转发到微信', textX, qrCardY + 188);
+
+      // 域名小字
+      const domain = (() => {
+        try { return new URL(url).host; } catch { return ''; }
+      })();
+      if (domain) {
+        ctx.fillStyle = C_TEXT_MUTE;
+        ctx.font = '400 14px ui-monospace, Menlo, monospace';
+        ctx.fillText(domain, textX, qrCardY + qrCardSize - 22);
+      }
+
+      // —— 底部品牌签名 ——
+      ctx.fillStyle = C_TEXT_MUTE;
+      ctx.font = '400 14px -apple-system, "PingFang SC", sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillStyle = C_INK_MUTE;
-      ctx.font = '400 13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-      ctx.fillText('由　BOOMER · OFF　中　古　小　店　呈　上', W / 2, H - M - 30);
+      ctx.fillText('BOOMER · OFF　·　中古限定礼遇', W / 2, H - M / 2 - 8);
+
 
       if (cancelled) return;
 
