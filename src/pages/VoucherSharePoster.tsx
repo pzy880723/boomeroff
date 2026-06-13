@@ -21,6 +21,7 @@ export default function VoucherSharePoster() {
   const [claim, setClaim] = useState<VoucherClaim | null>(null);
   const [voucher, setVoucher] = useState<VoucherTemplate | null>(null);
   const [imgDataUrl, setImgDataUrl] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
 
