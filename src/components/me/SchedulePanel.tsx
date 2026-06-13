@@ -38,7 +38,13 @@ export function SchedulePanel() {
 
       const { data: sp } = await supabase
         .from('staff_profiles' as any).select('shop_id').eq('user_id', user.id).maybeSingle();
-      const defaultSid: string | null = (sp as any)?.shop_id ?? null;
+      let defaultSid: string | null = (sp as any)?.shop_id ?? null;
+      // 兜底:没绑定门店(例如管理员)时,取第一个可用门店,保证休息日也能看到同店同事
+      if (!defaultSid) {
+        const { data: anyShop } = await supabase
+          .from('shops' as any).select('id').eq('active', true).order('sort_order').limit(1).maybeSingle();
+        defaultSid = (anyShop as any)?.id ?? null;
+      }
 
       const [{ data: myRows }, { data: sh }, { data: shops }] = await Promise.all([
         supabase.from('shift_schedules' as any)
