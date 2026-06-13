@@ -241,7 +241,7 @@ function TicketRow({ item, index, peersByCode }: {
       <div className={cn(
         'w-20 flex flex-col items-center justify-center border-r border-dashed relative shrink-0 py-2',
         stubBg,
-        stubBg === 'bg-primary' ? 'border-accent/30' : 'border-muted-foreground/30'
+        isTomorrow ? 'border-background/30' : 'border-muted-foreground/30'
       )}>
         {isHero ? (
           <>
