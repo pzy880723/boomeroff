@@ -1,31 +1,37 @@
-## 问题
+# 高亮"明天"那一条排班
 
-你截图里的"明天"卡片在 `/me` 页，但 `/me` 实际渲染的是 `src/components/me/SchedulePanel.tsx`（票根式 TicketRow 卡片），不是上次我改的 `MyScheduleList.tsx`（那个只在 `/my-schedule` 页用）。所以视觉上你看不到任何变化——改对了组件，但是没改你正在看的那个。
+## 目标
+在 Me 页"我的排班"30 天列表里，把日期 = 明天 的那张卡片做**深色背景 + 浅色文字**的强调样式，类似截图里的票券风格，让用户一眼能锁定明天的班次。其他日期保持现状。
 
-## 要改的文件
+## 改动范围
+仅一个文件：`src/components/me/MyScheduleList.tsx`
 
-只改 `src/components/me/SchedulePanel.tsx` 里的 `TicketRow`，针对 `index === 1`（明天）那一行做"深底浅字"的着重处理。其他天（今天、后天、展开后的 27 天）保持现状。
+不涉及：数据查询、其他页面、仪表盘 SchedulePanel。
 
-## 具体改动
+## 具体调整
 
-明天那一行（`index === 1`）：
+1. **判定"明天"**
+   - 用现有的 `addDaysISO(todayISO(), 1)` 算出明天日期字符串。
+   - 在 `days.map` 内部用 `d === tomorrow` 得到 `isTomorrow` 标志。
 
-1. **整张票卡背景变深**：外层容器从 `bg-background border-border` 改成 `bg-foreground border-foreground shadow-lg ring-1 ring-foreground/10`。
-2. **左侧票根**：保持现在的 `bg-primary` 不变（已经是深色），但右侧虚线分隔色改为 `border-background/30`，两端的小圆点底色改为 `bg-foreground` 以贴合深底。
-3. **右侧正文区文字反色**：
-   - 班次时间（`formatShiftTime`）从 `text-primary` → `text-background`
-   - 门店名 `shopName` 从 `text-primary` → `text-background/85`
-   - 同事分组行：`text-muted-foreground` → `text-background/70`，A/B/C 班标签色保留不变（仍用强调色，在深底上依然能看清），"· 名字"部分从 `text-primary/80` → `text-background/85`
-   - 同事区上方的虚线分隔线 `border-border/60` → `border-background/25`
-   - "休息" 徽章（理论上明天不会同时既休又显示，但保险起见）：`bg-secondary` → `bg-background/15`，文字 → `text-background`
+2. **卡片样式（仅当 `isTomorrow` 时）**
+   - 把 `<Card>` 背景换成深色（`bg-foreground` 或 `bg-zinc-900`），覆盖原来的 `bg-muted/30`。
+   - 加一个柔和阴影 + 1px 高亮描边，呼应截图里的票券质感。
 
-## 不变的部分
+3. **内部文字反色**
+   - 日期数字、星期：从默认 `text-foreground` / `text-muted-foreground` 换成 `text-background` / `text-background/70`。
+   - 班次副标题、"门店当日无排班"、同事行（A 班 / B 班 / 名字）等所有原本是 `text-muted-foreground` 的文字，在 `isTomorrow` 下统一换成 `text-background/70` 或 `/80`。
+   - A/B/C 班的彩色字保持彩色不变（深色背景下识别度更好）。
+   - "休息" 徽章在深色卡上换成 `bg-background/15 text-background`。
 
-- 今天（index 0）和后天（index 2）的票卡完全不动
-- 展开后的 27 天列表不动
-- `MyScheduleList.tsx`（`/my-schedule` 页）保留上次已做的"明天"深色样式
-- Dashboard 上的"明日"行不动
+4. **追加一个"明天"角标**
+   - 在日期列上方加一个小 pill：`明天`，深底浅字 → 卡片本身已经是深底，所以 pill 用浅色描边 / 浅底深字（参考用户截图的 BOOMER 配色）。
+   - 仅 `isTomorrow` 时渲染。
 
-## 验证
+## 不改动
+- 今日卡片样式保持当前默认（不抢"明天"的视觉重点）。
+- 同事分组、汇总卡、加载态、数据逻辑全部不动。
+- 仪表盘的"明日"行不动（用户只点了"我的排班"）。
 
-改完后在 `/me` 滚到"我的排班"卡，第二张票（明天）应该是黑底+浅字，与今天/后天形成明显对比。
+## 验收
+- `/me` → 我的排班，"明天"那张卡片明显比其他卡更深、文字浅，可一眼定位；其他日期视觉无变化。
