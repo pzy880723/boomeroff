@@ -5,9 +5,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Loader2, Copy, Download, ArrowLeft } from 'lucide-react';
+import { Loader2, Copy, Download, ArrowLeft, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { toPng } from 'html-to-image';
+import QRCode from 'qrcode';
 import { VoucherPoster } from '@/components/voucher/VoucherPoster';
 import {
   type VoucherTemplate, type VoucherClaim, buildClaimShareUrl,
