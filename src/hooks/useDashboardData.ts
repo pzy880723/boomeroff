@@ -268,6 +268,7 @@ export function useDashboardData(enabled: boolean): DashData {
       todayShift,
       nextShift: futureRow ? { date: futureRow.work_date, shift: sMap.get(futureRow.shift_code) || null } : null,
       weekShifts,
+      weekPeers,
       colleaguesToday,
       shopName,
       totalExp: exp?.total_exp || 0,
