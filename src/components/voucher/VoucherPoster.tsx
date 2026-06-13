@@ -74,8 +74,19 @@ export const VoucherPoster = forwardRef<HTMLDivElement, Props>(
           </div>
 
           <div className="mt-auto flex items-end gap-4">
-            <div className="bg-white rounded-xl p-2 shrink-0">
-              <QrCanvas value={shareUrl} size={120} />
+            <div className="bg-white rounded-xl p-2 shrink-0" style={{ width: 136, height: 136 }}>
+              {qrDataUrl ? (
+                <img
+                  src={qrDataUrl}
+                  alt=""
+                  width={120}
+                  height={120}
+                  style={{ width: 120, height: 120, display: 'block' }}
+                  draggable={false}
+                />
+              ) : (
+                <QrCanvas value={shareUrl} size={120} />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[12px] opacity-80">扫码 / 长按识别领取</div>
