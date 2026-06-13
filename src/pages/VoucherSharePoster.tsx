@@ -172,12 +172,20 @@ export default function VoucherSharePoster() {
           </Button>
         </Card>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <Button onClick={download} disabled={!imgDataUrl || exporting} className="h-11">
-            <Download className="w-4 h-4 mr-1.5" />下载海报
+            <Download className="w-4 h-4 mr-1.5" />下载
+          </Button>
+          <Button
+            variant="outline"
+            onClick={renderImg}
+            disabled={exporting || !qrDataUrl}
+            className="h-11"
+          >
+            <RefreshCw className={`w-4 h-4 mr-1.5 ${exporting ? 'animate-spin' : ''}`} />重新生成
           </Button>
           <Button variant="outline" onClick={() => navigate('/me/vouchers')} className="h-11">
-            <ArrowLeft className="w-4 h-4 mr-1.5" />返回列表
+            <ArrowLeft className="w-4 h-4 mr-1.5" />返回
           </Button>
         </div>
       </div>
