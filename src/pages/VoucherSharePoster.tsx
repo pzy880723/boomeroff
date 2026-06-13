@@ -5,9 +5,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Loader2, Copy, Download, ArrowLeft } from 'lucide-react';
+import { Loader2, Copy, Download, ArrowLeft, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { toPng } from 'html-to-image';
+import QRCode from 'qrcode';
 import { VoucherPoster } from '@/components/voucher/VoucherPoster';
 import {
   type VoucherTemplate, type VoucherClaim, buildClaimShareUrl,
@@ -20,6 +21,7 @@ export default function VoucherSharePoster() {
   const [claim, setClaim] = useState<VoucherClaim | null>(null);
   const [voucher, setVoucher] = useState<VoucherTemplate | null>(null);
   const [imgDataUrl, setImgDataUrl] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
 
@@ -47,17 +49,35 @@ export default function VoucherSharePoster() {
     return buildClaimShareUrl(claim.short_code || claim.share_token);
   }, [claim]);
 
+  // 先把二维码生成成 data URL，确保截图时已就绪（避免 canvas 异步绘制竞争）
+  useEffect(() => {
+    if (!shareUrl) { setQrDataUrl(null); return; }
+    let cancelled = false;
+    QRCode.toDataURL(shareUrl, {
+      width: 240,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#0f172a', light: '#ffffff' },
+    }).then((url) => {
+      if (!cancelled) setQrDataUrl(url);
+    }).catch((e) => {
+      console.error('[VoucherSharePoster] 二维码生成失败', e);
+      if (!cancelled) setQrDataUrl(null);
+    });
+    return () => { cancelled = true; };
+  }, [shareUrl]);
+
   const renderImg = useCallback(async () => {
     if (!posterRef.current) return;
     setExporting(true);
     try {
       const url = await toPng(posterRef.current, {
-        cacheBust: true,
         pixelRatio: 2,
         backgroundColor: '#1f1409',
       });
       setImgDataUrl(url);
     } catch (e) {
+      console.error('[VoucherSharePoster] 截图失败', e);
       toast.error('图片生成失败');
     } finally {
       setExporting(false);
@@ -65,11 +85,12 @@ export default function VoucherSharePoster() {
   }, []);
 
   useEffect(() => {
-    if (!loading && claim && voucher) {
-      const t = setTimeout(renderImg, 250);
+    if (!loading && claim && voucher && qrDataUrl) {
+      // 让 React commit 一帧后再截图
+      const t = setTimeout(renderImg, 80);
       return () => clearTimeout(t);
     }
-  }, [loading, claim, voucher, renderImg]);
+  }, [loading, claim, voucher, qrDataUrl, renderImg]);
 
   const copyLink = async () => {
     try {
@@ -117,6 +138,7 @@ export default function VoucherSharePoster() {
             voucher={voucher}
             shareUrl={shareUrl}
             shortCode={claim.short_code}
+            qrDataUrl={qrDataUrl}
           />
         </div>
 
@@ -150,12 +172,20 @@ export default function VoucherSharePoster() {
           </Button>
         </Card>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <Button onClick={download} disabled={!imgDataUrl || exporting} className="h-11">
-            <Download className="w-4 h-4 mr-1.5" />下载海报
+            <Download className="w-4 h-4 mr-1.5" />下载
+          </Button>
+          <Button
+            variant="outline"
+            onClick={renderImg}
+            disabled={exporting || !qrDataUrl}
+            className="h-11"
+          >
+            <RefreshCw className={`w-4 h-4 mr-1.5 ${exporting ? 'animate-spin' : ''}`} />重新生成
           </Button>
           <Button variant="outline" onClick={() => navigate('/me/vouchers')} className="h-11">
-            <ArrowLeft className="w-4 h-4 mr-1.5" />返回列表
+            <ArrowLeft className="w-4 h-4 mr-1.5" />返回
           </Button>
         </div>
       </div>
