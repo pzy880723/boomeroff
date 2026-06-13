@@ -20,6 +20,7 @@ const KIND_LABEL: Record<RowKind, string> = {
 export function SchedulePanel({ data, navigate }: Props) {
   const peers = data.colleaguesToday || [];
   const week = data.weekShifts || [];
+  const weekPeers = data.weekPeers || {};
   const day0 = week[0];
   const day1 = week[1];
   const day2 = week[2];
@@ -28,7 +29,7 @@ export function SchedulePanel({ data, navigate }: Props) {
   const selfOnDuty = !!data.todayShift;
   const shopBound = !!fallbackShop;
 
-  // 头部右侧文案：清楚区分「自己在岗 / 仅看同事 / 没人 / 未绑定门店」
+  // 头部右侧文案:清楚区分「自己在岗 / 仅看同事 / 没人 / 未绑定门店」
   let headerNote: string;
   if (!shopBound) {
     headerNote = '未绑定门店';
@@ -88,9 +89,9 @@ export function SchedulePanel({ data, navigate }: Props) {
 
         {/* 3-day rows */}
         <div className="p-3 space-y-1">
-          <DayRow kind="today" day={day0} fallbackShop={fallbackShop} />
-          <DayRow kind="tmrw" day={day1} fallbackShop={fallbackShop} />
-          <DayRow kind="next" day={day2} fallbackShop={fallbackShop} />
+          <DayRow kind="today" day={day0} fallbackShop={fallbackShop} peerGroups={day0 ? weekPeers[day0.date] : undefined} />
+          <DayRow kind="tmrw" day={day1} fallbackShop={fallbackShop} peerGroups={day1 ? weekPeers[day1.date] : undefined} />
+          <DayRow kind="next" day={day2} fallbackShop={fallbackShop} peerGroups={day2 ? weekPeers[day2.date] : undefined} />
         </div>
 
         {/* Ticket footer gold strip */}
