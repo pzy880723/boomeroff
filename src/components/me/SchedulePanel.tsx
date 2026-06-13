@@ -216,13 +216,13 @@ function TicketRow({ item, index, peersByCode }: {
 
   const isTomorrow = index === 1;
   const stubBg = isTomorrow
-    ? 'bg-foreground'
+    ? 'bg-gradient-primary'
     : !isWorking
       ? 'bg-secondary'
       : 'bg-accent-soft';
 
-  const stubFg = isTomorrow ? 'text-background' : 'text-primary';
-  const stubAccent = isTomorrow ? 'text-background/70' : 'text-muted-foreground';
+  const stubFg = isTomorrow ? 'text-primary-foreground' : 'text-primary';
+  const stubAccent = isTomorrow ? 'text-primary-foreground/70' : 'text-muted-foreground';
 
 
   const [, m, d] = date.split('-');
