@@ -68,6 +68,7 @@ export function useDashboardData(enabled: boolean): DashData {
       todayShift: null,
       nextShift: null,
       weekShifts: [],
+      weekPeers: {},
       colleaguesToday: [],
       shopName: null,
       totalExp: 0,
