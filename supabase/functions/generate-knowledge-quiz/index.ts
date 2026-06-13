@@ -74,48 +74,8 @@ function readPool(quizField: any): Question[] {
   return [];
 }
 
-async function callAiForQuiz(existingStems: string[]): Promise<Question[]> {
-  const dedupHint = existingStems.length > 0
-    ? `\n\n已经出过的题目（题干列表，新题必须避开这些角度，换不同的考点和切入面）：\n${existingStems.map((s, i) => `${i + 1}. ${s}`).join("\n")}`
-    : "";
-
-  const sys = "你是日本中古杂货店的资深店长，正在出题考察店员对一件商品/IP 的了解程度。题目要紧扣给定知识点，难度适中，干扰项要合理但明显错误。题目角度要丰富：年代、产地、品牌史、材质、辨真伪、保养、搭配、价格段、文化背景等都可以出。全部使用简体中文，禁止出现「主播」一词。只通过 make_quiz 工具回复 10 道题。";
-
-  const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
-      messages: [
-        { role: "system", content: sys + dedupHint },
-        { role: "user", content: "请基于以下知识点出 10 道选择题。" },
-      ],
-      tools: [TOOL],
-      tool_choice: { type: "function", function: { name: "make_quiz" } },
-    }),
-  });
-  if (!aiResp.ok) {
-    const t = await aiResp.text();
-    console.error("AI quiz error", aiResp.status, t);
-    const err = new Error(aiResp.status === 429 ? "AI 调用频率过高" : aiResp.status === 402 ? "AI 额度不足" : "AI 出题失败");
-    (err as any).status = aiResp.status === 429 ? 429 : aiResp.status === 402 ? 402 : 500;
-    throw err;
-  }
-  const data = await aiResp.json();
-  const call = data.choices?.[0]?.message?.tool_calls?.[0];
-  if (!call) {
-    const err = new Error("AI 未返回题目");
-    (err as any).status = 500;
-    throw err;
-  }
-  const args = JSON.parse(call.function.arguments || "{}");
-  return (args.questions || []) as Question[];
-}
-
 async function callAiWithKnowledge(knowledge: any, existingStems: string[]): Promise<Question[]> {
+
   const dedupHint = existingStems.length > 0
     ? `\n\n已经出过的题目（题干列表，新题必须避开这些角度，换不同的考点和切入面）：\n${existingStems.map((s, i) => `${i + 1}. ${s}`).join("\n")}`
     : "";
