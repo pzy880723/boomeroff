@@ -235,13 +235,20 @@ function TicketRow({ item, index, peersByCode }: {
     c === 'C' ? 'text-destructive' :
     'text-muted-foreground';
 
+  const isTomorrow = index === 1;
+
   return (
-    <div className="relative flex items-stretch min-h-20 bg-background rounded-lg border border-border overflow-hidden">
+    <div className={cn(
+      'relative flex items-stretch min-h-20 rounded-lg border overflow-hidden',
+      isTomorrow
+        ? 'bg-foreground border-foreground shadow-lg ring-1 ring-foreground/10'
+        : 'bg-background border-border'
+    )}>
       {/* stub */}
       <div className={cn(
         'w-20 flex flex-col items-center justify-center border-r border-dashed relative shrink-0 py-2',
         stubBg,
-        stubBg === 'bg-primary' ? 'border-accent/30' : 'border-muted-foreground/30'
+        isTomorrow ? 'border-background/30' : (stubBg === 'bg-primary' ? 'border-accent/30' : 'border-muted-foreground/30')
       )}>
         {isHero ? (
           <>
@@ -259,8 +266,14 @@ function TicketRow({ item, index, peersByCode }: {
             <span className={cn('text-xl font-bold leading-tight tabular-nums', stubFg)}>{dateText}</span>
           </>
         )}
-        <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-card rounded-full border border-border" />
-        <span className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-card rounded-full border border-border" />
+        <span className={cn(
+          'absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border',
+          isTomorrow ? 'bg-foreground border-foreground' : 'bg-card border-border'
+        )} />
+        <span className={cn(
+          'absolute -bottom-1.5 -right-1.5 w-3 h-3 rounded-full border',
+          isTomorrow ? 'bg-foreground border-foreground' : 'bg-card border-border'
+        )} />
       </div>
 
       {/* body */}
@@ -271,30 +284,45 @@ function TicketRow({ item, index, peersByCode }: {
             {isWorking ? (
               <>
                 <ShiftBadge code={shift!.code} />
-                <span className="text-primary text-sm font-bold tabular-nums tracking-tight whitespace-nowrap">
+                <span className={cn(
+                  'text-sm font-bold tabular-nums tracking-tight whitespace-nowrap',
+                  isTomorrow ? 'text-background' : 'text-primary'
+                )}>
                   {formatShiftTime(shift!.start_time, shift!.end_time)}
                 </span>
               </>
             ) : (
               <>
-                <span className="px-3 py-1 rounded bg-secondary text-secondary-foreground text-xs font-bold tracking-widest">
+                <span className={cn(
+                  'px-3 py-1 rounded text-xs font-bold tracking-widest',
+                  isTomorrow ? 'bg-background/15 text-background' : 'bg-secondary text-secondary-foreground'
+                )}>
                   休息
                 </span>
               </>
             )}
           </div>
-          <span className="text-primary text-xs font-medium truncate max-w-[45%] text-right shrink-0">
+          <span className={cn(
+            'text-xs font-medium truncate max-w-[45%] text-right shrink-0',
+            isTomorrow ? 'text-background/85' : 'text-primary'
+          )}>
             {shopName || (isWorking ? '—' : '')}
           </span>
         </div>
 
         {/* row 2: peers by shift */}
         {peersByCode.length > 0 && (
-          <div className="flex flex-col gap-0.5 pt-0.5 border-t border-dashed border-border/60">
+          <div className={cn(
+            'flex flex-col gap-0.5 pt-0.5 border-t border-dashed',
+            isTomorrow ? 'border-background/25' : 'border-border/60'
+          )}>
             {peersByCode.map((g) => (
-              <div key={g.code} className="text-[11px] text-muted-foreground leading-snug">
+              <div key={g.code} className={cn(
+                'text-[11px] leading-snug',
+                isTomorrow ? 'text-background/70' : 'text-muted-foreground'
+              )}>
                 <span className={cn('font-bold mr-1', codeColor(g.code))}>{g.code} 班</span>
-                <span className="text-primary/80">· {g.names.join('、')}</span>
+                <span className={isTomorrow ? 'text-background/85' : 'text-primary/80'}>· {g.names.join('、')}</span>
               </div>
             ))}
           </div>
