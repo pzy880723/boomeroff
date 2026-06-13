@@ -10,6 +10,8 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Loader2 } from "lucide-react";
 import { lazyWithRetry as lazy } from "@/lib/lazyWithRetry";
 import Scan from "./pages/Scan";
+import { useEffect } from "react";
+import { loadPublicBaseUrl } from "@/lib/publicBaseUrl";
 
 // 非首屏路由全部懒加载，减小首包体积
 const OfficialLibrary = lazy(() => import("./pages/OfficialLibrary"));
@@ -57,7 +59,9 @@ function RouteFallback() {
   );
 }
 
-const App = () => (
+const App = () => {
+  useEffect(() => { void loadPublicBaseUrl(); }, []);
+  return (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <PermissionsProvider>
@@ -121,6 +125,7 @@ const App = () => (
       </PermissionsProvider>
     </AuthProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
