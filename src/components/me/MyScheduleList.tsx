@@ -4,8 +4,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import {
-  todayISO, addDaysISO, weekdayLabel, shortDateLabel, formatShiftTime,
+  todayISO, addDaysISO, nextNDays, weekdayLabel, shortDateLabel, formatShiftTime,
 } from '@/lib/scheduleUtils';
+import { cn } from '@/lib/utils';
 
 interface Shift { code: string; name: string; start_time: string; end_time: string; color: string | null }
 interface Sched { work_date: string; shift_code: string; user_id: string; shop_id: string | null }
@@ -17,17 +18,17 @@ export function MyScheduleList() {
   const [allInRange, setAllInRange] = useState<Sched[]>([]);
   const [shifts, setShifts] = useState<Map<string, Shift>>(new Map());
   const [profiles, setProfiles] = useState<Map<string, string>>(new Map());
-  const [shopId, setShopId] = useState<string | null>(null);
 
   const start = todayISO();
   const end = addDaysISO(start, 29);
+  const days = useMemo(() => nextNDays(start, 30), [start]);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
       setLoading(true);
 
-      // 我的 shop
+      // 我的 shop:优先 staff_profiles,否则取第一个门店兜底
       const { data: sp } = await supabase
         .from('staff_profiles' as any)
         .select('shop_id')
@@ -36,10 +37,9 @@ export function MyScheduleList() {
       let sid: string | null = (sp as any)?.shop_id ?? null;
       if (!sid) {
         const { data: anyShop } = await supabase
-          .from('shops' as any).select('id').order('sort_order').limit(1).maybeSingle();
+          .from('shops' as any).select('id').eq('active', true).order('sort_order').limit(1).maybeSingle();
         sid = (anyShop as any)?.id ?? null;
       }
-      setShopId(sid);
 
       // 我的排班
       const { data: my } = await supabase
@@ -49,13 +49,17 @@ export function MyScheduleList() {
         .gte('work_date', start).lte('work_date', end)
         .order('work_date');
 
-      // 同店全部排班 (用于查同事)
+      // 同店+本人排班里出现的所有门店,30 天全部排班
+      const shopIds = Array.from(new Set([
+        ...(sid ? [sid] : []),
+        ...(((my as any[]) || []).map((r: any) => r.shop_id).filter(Boolean) as string[]),
+      ]));
       let allRows: any[] = [];
-      if (sid) {
+      if (shopIds.length) {
         const { data } = await supabase
           .from('shift_schedules' as any)
           .select('work_date, shift_code, user_id, shop_id')
-          .eq('shop_id', sid)
+          .in('shop_id', shopIds)
           .gte('work_date', start).lte('work_date', end);
         allRows = data || [];
       }
@@ -66,7 +70,7 @@ export function MyScheduleList() {
       const sMap = new Map<string, Shift>();
       (sh || []).forEach((s: any) => sMap.set(s.code, s));
 
-      // 同事 profiles：优先使用真实姓名（staff_profiles.real_name），否则回退到 display_name
+      // 同事姓名:优先 staff_profiles.real_name,否则 display_name
       const userIds = Array.from(new Set(allRows.map(r => r.user_id))).filter(Boolean);
       const pMap = new Map<string, string>();
       if (userIds.length) {
@@ -79,7 +83,6 @@ export function MyScheduleList() {
         (pr || []).forEach((p: any) => {
           pMap.set(p.user_id, realMap.get(p.user_id) || p.display_name || '店员');
         });
-        // 兜底：profiles 缺失但 staff_profiles 有
         realMap.forEach((name, uid) => { if (!pMap.has(uid)) pMap.set(uid, name); });
       }
 
@@ -92,6 +95,35 @@ export function MyScheduleList() {
   }, [user]);
 
   const summary = useMemo(() => ({ work: mine.length, off: 30 - mine.length }), [mine]);
+
+  // 每天 → 同店按班次分组的同事(排除自己;A→B→C→其它)
+  const peersByDate = useMemo(() => {
+    const map = new Map<string, { code: string; names: string[] }[]>();
+    const byDate = new Map<string, Map<string, Set<string>>>();
+    allInRange.forEach((r) => {
+      if (!r.user_id || r.user_id === user?.id) return;
+      const code = (r.shift_code || '').toUpperCase();
+      if (!byDate.has(r.work_date)) byDate.set(r.work_date, new Map());
+      const codeMap = byDate.get(r.work_date)!;
+      if (!codeMap.has(code)) codeMap.set(code, new Set());
+      const name = profiles.get(r.user_id) || '店员';
+      codeMap.get(code)!.add(name);
+    });
+    const codeOrder = (c: string) => (c === 'A' ? 0 : c === 'B' ? 1 : c === 'C' ? 2 : 3);
+    byDate.forEach((codeMap, date) => {
+      const groups = Array.from(codeMap.entries())
+        .sort((a, b) => codeOrder(a[0]) - codeOrder(b[0]) || a[0].localeCompare(b[0]))
+        .map(([code, names]) => ({ code, names: Array.from(names).sort() }));
+      map.set(date, groups);
+    });
+    return map;
+  }, [allInRange, profiles, user?.id]);
+
+  const codeColor = (c: string) =>
+    c === 'A' ? 'text-amber-600 dark:text-amber-400' :
+    c === 'B' ? 'text-sky-600 dark:text-sky-400' :
+    c === 'C' ? 'text-rose-600 dark:text-rose-400' :
+    'text-muted-foreground';
 
   if (loading) {
     return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
@@ -107,58 +139,51 @@ export function MyScheduleList() {
         </p>
       </Card>
 
-      {mine.length === 0 ? (
-        <Card className="p-6 text-center text-sm text-muted-foreground">近 30 天暂无排班</Card>
-      ) : (
-        <div className="space-y-2">
-          {mine.map((r) => {
-            const s = shifts.get(r.shift_code);
-            const colleagues = allInRange
-              .filter(x => x.work_date === r.work_date && x.user_id !== user?.id);
-            return (
-              <Card key={r.work_date} className="p-3">
-                <div className="flex items-start gap-3">
-                  <div className="shrink-0 w-14">
-                    <div className="text-base font-semibold tabular-nums">{shortDateLabel(r.work_date)}</div>
-                    <div className="text-xs text-muted-foreground">{weekdayLabel(r.work_date)}</div>
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {s ? (
-                        <>
-                          <span className="px-1.5 py-0.5 rounded text-[11px] text-white font-medium"
-                            style={{ background: s.color || '#f59e0b' }}>{r.shift_code}</span>
-                          <span className="text-sm font-medium tabular-nums">{formatShiftTime(s.start_time, s.end_time)}</span>
-                          <span className="text-xs text-muted-foreground truncate">{s.name}</span>
-                        </>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{r.shift_code}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <span className="text-[11px] text-muted-foreground shrink-0">同班同事</span>
-                      {colleagues.length === 0 ? (
-                        <span className="text-[11px] text-muted-foreground/70">仅我一人</span>
-                      ) : colleagues.map(c => {
-                        const cs = shifts.get(c.shift_code);
-                        return (
-                          <span key={c.user_id + c.shift_code}
-                            className="text-[11px] px-1.5 py-0.5 rounded bg-muted flex items-center gap-1"
-                            title={cs ? `${cs.name} ${formatShiftTime(cs.start_time, cs.end_time)}` : c.shift_code}>
-                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: cs?.color || '#f59e0b' }} />
-                            {profiles.get(c.user_id) || '店员'}
-                            <span className="text-muted-foreground/70">{c.shift_code}</span>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
+      <div className="space-y-2">
+        {days.map((d) => {
+          const myRow = mine.find(x => x.work_date === d);
+          const s = myRow ? shifts.get(myRow.shift_code) : null;
+          const groups = peersByDate.get(d) || [];
+          return (
+            <Card key={d} className={cn('p-3', !myRow && 'bg-muted/30')}>
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 w-14">
+                  <div className="text-base font-semibold tabular-nums">{shortDateLabel(d)}</div>
+                  <div className="text-xs text-muted-foreground">{weekdayLabel(d)}</div>
                 </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {myRow && s ? (
+                      <>
+                        <span className="px-1.5 py-0.5 rounded text-[11px] text-white font-medium"
+                          style={{ background: s.color || '#f59e0b' }}>{myRow.shift_code}</span>
+                        <span className="text-sm font-medium tabular-nums">{formatShiftTime(s.start_time, s.end_time)}</span>
+                        <span className="text-xs text-muted-foreground truncate">{s.name}</span>
+                      </>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-secondary text-secondary-foreground text-[11px] font-bold tracking-widest">
+                        休息
+                      </span>
+                    )}
+                  </div>
+                  {groups.length === 0 ? (
+                    <div className="text-[11px] text-muted-foreground/70">门店当日无排班</div>
+                  ) : (
+                    <div className="flex flex-col gap-0.5">
+                      {groups.map(g => (
+                        <div key={g.code} className="text-[11px] leading-snug">
+                          <span className={cn('font-bold mr-1', codeColor(g.code))}>{g.code} 班</span>
+                          <span className="text-muted-foreground">· {g.names.join('、')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }
