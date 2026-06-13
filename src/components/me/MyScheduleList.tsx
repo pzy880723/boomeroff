@@ -145,12 +145,30 @@ export function MyScheduleList() {
           const myRow = mine.find(x => x.work_date === d);
           const s = myRow ? shifts.get(myRow.shift_code) : null;
           const groups = peersByDate.get(d) || [];
+          const isTomorrow = d === tomorrow;
           return (
-            <Card key={d} className={cn('p-3', !myRow && 'bg-muted/30')}>
+            <Card
+              key={d}
+              className={cn(
+                'p-3 transition-colors',
+                isTomorrow
+                  ? 'bg-foreground text-background border-foreground shadow-lg ring-1 ring-foreground/10'
+                  : !myRow && 'bg-muted/30'
+              )}
+            >
               <div className="flex items-start gap-3">
                 <div className="shrink-0 w-14">
-                  <div className="text-base font-semibold tabular-nums">{shortDateLabel(d)}</div>
-                  <div className="text-xs text-muted-foreground">{weekdayLabel(d)}</div>
+                  {isTomorrow && (
+                    <span className="inline-block mb-1 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider bg-background text-foreground">
+                      明天
+                    </span>
+                  )}
+                  <div className={cn('text-base font-semibold tabular-nums', isTomorrow && 'text-background')}>
+                    {shortDateLabel(d)}
+                  </div>
+                  <div className={cn('text-xs', isTomorrow ? 'text-background/70' : 'text-muted-foreground')}>
+                    {weekdayLabel(d)}
+                  </div>
                 </div>
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -158,23 +176,34 @@ export function MyScheduleList() {
                       <>
                         <span className="px-1.5 py-0.5 rounded text-[11px] text-white font-medium"
                           style={{ background: s.color || '#f59e0b' }}>{myRow.shift_code}</span>
-                        <span className="text-sm font-medium tabular-nums">{formatShiftTime(s.start_time, s.end_time)}</span>
-                        <span className="text-xs text-muted-foreground truncate">{s.name}</span>
+                        <span className={cn('text-sm font-medium tabular-nums', isTomorrow && 'text-background')}>
+                          {formatShiftTime(s.start_time, s.end_time)}
+                        </span>
+                        <span className={cn('text-xs truncate', isTomorrow ? 'text-background/70' : 'text-muted-foreground')}>
+                          {s.name}
+                        </span>
                       </>
                     ) : (
-                      <span className="px-2 py-0.5 rounded bg-secondary text-secondary-foreground text-[11px] font-bold tracking-widest">
+                      <span className={cn(
+                        'px-2 py-0.5 rounded text-[11px] font-bold tracking-widest',
+                        isTomorrow ? 'bg-background/15 text-background' : 'bg-secondary text-secondary-foreground'
+                      )}>
                         休息
                       </span>
                     )}
                   </div>
                   {groups.length === 0 ? (
-                    <div className="text-[11px] text-muted-foreground/70">门店当日无排班</div>
+                    <div className={cn('text-[11px]', isTomorrow ? 'text-background/60' : 'text-muted-foreground/70')}>
+                      门店当日无排班
+                    </div>
                   ) : (
                     <div className="flex flex-col gap-0.5">
                       {groups.map(g => (
                         <div key={g.code} className="text-[11px] leading-snug">
                           <span className={cn('font-bold mr-1', codeColor(g.code))}>{g.code} 班</span>
-                          <span className="text-muted-foreground">· {g.names.join('、')}</span>
+                          <span className={cn(isTomorrow ? 'text-background/75' : 'text-muted-foreground')}>
+                            · {g.names.join('、')}
+                          </span>
                         </div>
                       ))}
                     </div>
