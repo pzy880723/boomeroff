@@ -49,17 +49,35 @@ export default function VoucherSharePoster() {
     return buildClaimShareUrl(claim.short_code || claim.share_token);
   }, [claim]);
 
+  // 先把二维码生成成 data URL，确保截图时已就绪（避免 canvas 异步绘制竞争）
+  useEffect(() => {
+    if (!shareUrl) { setQrDataUrl(null); return; }
+    let cancelled = false;
+    QRCode.toDataURL(shareUrl, {
+      width: 240,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#0f172a', light: '#ffffff' },
+    }).then((url) => {
+      if (!cancelled) setQrDataUrl(url);
+    }).catch((e) => {
+      console.error('[VoucherSharePoster] 二维码生成失败', e);
+      if (!cancelled) setQrDataUrl(null);
+    });
+    return () => { cancelled = true; };
+  }, [shareUrl]);
+
   const renderImg = useCallback(async () => {
     if (!posterRef.current) return;
     setExporting(true);
     try {
       const url = await toPng(posterRef.current, {
-        cacheBust: true,
         pixelRatio: 2,
         backgroundColor: '#1f1409',
       });
       setImgDataUrl(url);
     } catch (e) {
+      console.error('[VoucherSharePoster] 截图失败', e);
       toast.error('图片生成失败');
     } finally {
       setExporting(false);
@@ -67,11 +85,12 @@ export default function VoucherSharePoster() {
   }, []);
 
   useEffect(() => {
-    if (!loading && claim && voucher) {
-      const t = setTimeout(renderImg, 250);
+    if (!loading && claim && voucher && qrDataUrl) {
+      // 让 React commit 一帧后再截图
+      const t = setTimeout(renderImg, 80);
       return () => clearTimeout(t);
     }
-  }, [loading, claim, voucher, renderImg]);
+  }, [loading, claim, voucher, qrDataUrl, renderImg]);
 
   const copyLink = async () => {
     try {
