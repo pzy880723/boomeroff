@@ -214,16 +214,16 @@ function TicketRow({ item, index, peersByCode }: {
   const isWorking = !!row && !!shift;
   const isHero = index >= 0 && index <= 2;
 
-  const stubBg = !isWorking
-    ? 'bg-secondary'
-    : index === 0
-      ? 'bg-accent-soft'
-      : index === 1
-        ? 'bg-primary'
-        : 'bg-accent-soft';
+  const isTomorrow = index === 1;
+  const stubBg = isTomorrow
+    ? 'bg-foreground'
+    : !isWorking
+      ? 'bg-secondary'
+      : 'bg-accent-soft';
 
-  const stubFg = stubBg === 'bg-primary' ? 'text-primary-foreground' : 'text-primary';
-  const stubAccent = stubBg === 'bg-primary' ? 'text-accent' : 'text-muted-foreground';
+  const stubFg = isTomorrow ? 'text-background' : 'text-primary';
+  const stubAccent = isTomorrow ? 'text-background/70' : 'text-muted-foreground';
+
 
   const [, m, d] = date.split('-');
   const dateText = `${parseInt(m, 10)}/${parseInt(d, 10)}`;
