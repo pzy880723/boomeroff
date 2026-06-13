@@ -214,16 +214,16 @@ function TicketRow({ item, index, peersByCode }: {
   const isWorking = !!row && !!shift;
   const isHero = index >= 0 && index <= 2;
 
-  const stubBg = !isWorking
-    ? 'bg-secondary'
-    : index === 0
-      ? 'bg-accent-soft'
-      : index === 1
-        ? 'bg-primary'
-        : 'bg-accent-soft';
+  const isTomorrow = index === 1;
+  const stubBg = isTomorrow
+    ? 'bg-foreground'
+    : !isWorking
+      ? 'bg-secondary'
+      : 'bg-accent-soft';
 
-  const stubFg = stubBg === 'bg-primary' ? 'text-primary-foreground' : 'text-primary';
-  const stubAccent = stubBg === 'bg-primary' ? 'text-accent' : 'text-muted-foreground';
+  const stubFg = isTomorrow ? 'text-background' : 'text-primary';
+  const stubAccent = isTomorrow ? 'text-background/70' : 'text-muted-foreground';
+
 
   const [, m, d] = date.split('-');
   const dateText = `${parseInt(m, 10)}/${parseInt(d, 10)}`;
@@ -241,7 +241,7 @@ function TicketRow({ item, index, peersByCode }: {
       <div className={cn(
         'w-20 flex flex-col items-center justify-center border-r border-dashed relative shrink-0 py-2',
         stubBg,
-        stubBg === 'bg-primary' ? 'border-accent/30' : 'border-muted-foreground/30'
+        isTomorrow ? 'border-background/30' : 'border-muted-foreground/30'
       )}>
         {isHero ? (
           <>
