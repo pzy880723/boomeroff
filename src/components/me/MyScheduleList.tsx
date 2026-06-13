@@ -21,6 +21,7 @@ export function MyScheduleList() {
 
   const start = todayISO();
   const end = addDaysISO(start, 29);
+  const tomorrow = addDaysISO(start, 1);
   const days = useMemo(() => nextNDays(start, 30), [start]);
 
   useEffect(() => {
