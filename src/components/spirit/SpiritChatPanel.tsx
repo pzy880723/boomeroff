@@ -299,6 +299,20 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
 
       {/* 快捷指令 chips */}
       <div className="shrink-0 px-4 pt-2 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button
+          type="button"
+          onClick={() => setDisplayChips(pickChips(4))}
+          disabled={busy}
+          aria-label="换一批"
+          className={cn(
+            'shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors',
+            'bg-[hsl(var(--accent)/0.18)] border border-[hsl(var(--accent)/0.3)] text-[hsl(var(--primary-foreground)/0.85)]',
+            'hover:bg-[hsl(var(--accent)/0.3)] active:scale-95',
+            busy && 'opacity-50 cursor-not-allowed',
+          )}
+        >
+          <Shuffle className="w-3.5 h-3.5" />
+        </button>
         {displayChips.map((c) => (
           <button
             key={c.label}
@@ -316,6 +330,7 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
           </button>
         ))}
       </div>
+
 
       {/* 待发送图片预览 */}
       {pending.length > 0 && (
