@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import brandLogo from '@/assets/boomer-off-vintage-logo.png';
+
 
 interface Props {
   open: boolean;
