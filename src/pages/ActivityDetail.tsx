@@ -41,7 +41,7 @@ export default function ActivityDetail() {
       supabase.from('activities').select('*').eq('id', id).maybeSingle(),
       supabase
         .from('activity_applications')
-        .select('*, voucher_claim:voucher_claims(status, short_code, redeemed_at)')
+        .select('*, voucher_claim:voucher_claims!inner(status, short_code, redeemed_at)')
         .eq('activity_id', id)
         .order('created_at', { ascending: false }),
     ]);
@@ -155,7 +155,7 @@ export default function ActivityDetail() {
         </Card>
 
 
-        {/* 统计卡 */}
+        {/* 统计卡：与绑定优惠券一致 */}
         <Card className="p-0 overflow-hidden">
           <div className="grid grid-cols-2 divide-x">
             <div className="px-2 py-3 text-center">
@@ -166,6 +166,9 @@ export default function ActivityDetail() {
               <p className="text-2xl font-semibold tabular-nums">{counts.redeemed}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">已核销</p>
             </div>
+          </div>
+          <div className="px-3 pb-2 text-[10px] text-muted-foreground/80 text-center">
+            数值与绑定的优惠券实时一致
           </div>
         </Card>
 
