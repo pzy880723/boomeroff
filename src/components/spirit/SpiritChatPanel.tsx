@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useLayoutEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Sparkles, Camera, ImagePlus, X, Square } from 'lucide-react';
+import { Send, Sparkles, Camera, ImagePlus, X, Square, Shuffle } from 'lucide-react';
 import { useSpiritChat } from '@/hooks/useSpiritChat';
 import { SpiritMascot } from './SpiritMascot';
 import { Button } from '@/components/ui/button';
@@ -62,38 +62,130 @@ function ThinkingHint({ mode }: { mode: 'thinking' | 'uploading' }) {
   );
 }
 
-const QUICK_CHIPS = [
+type ChipCategory =
+  | 'shift'
+  | 'level'
+  | 'mood'
+  | 'trivia'
+  | 'helper'
+  | 'copywriting'
+  | 'today';
+
+interface Chip {
+  label: string;
+  prompt: string;
+  cat: ChipCategory;
+}
+
+const QUICK_CHIPS: Chip[] = [
   // 排班 / 同事
-  { label: '今日和谁一起上班？', prompt: '今天我和谁一起上班？几点到几点？' },
-  { label: '明天我上班吗？', prompt: '我明天上班吗？是什么班次？' },
-  { label: '这周谁休息？', prompt: '这一周店里谁休息？分别哪天？' },
-  { label: '下周排班看一眼', prompt: '帮我看看下周我的排班情况' },
+  { cat: 'shift', label: '今日和谁一起上班？', prompt: '今天我和谁一起上班？几点到几点？' },
+  { cat: 'shift', label: '明天我上班吗？', prompt: '我明天上班吗？是什么班次？' },
+  { cat: 'shift', label: '这周谁休息？', prompt: '这一周店里谁休息？分别哪天？' },
+  { cat: 'shift', label: '下周排班看一眼', prompt: '帮我看看下周我的排班情况' },
+  { cat: 'shift', label: '本月我休几天', prompt: '我这个月一共休几天？都是哪几天？' },
+  { cat: 'shift', label: '今天有几个人在店', prompt: '今天店里一共几个店员在班？' },
+  { cat: 'shift', label: '想调班怎么办', prompt: '我想跟同事调一下班，应该怎么操作比较合适？' },
   // 打卡 / 等级
-  { label: '我的等级和打卡', prompt: '我现在多少经验？连续打卡几天了？' },
-  { label: '离下一级还差多少？', prompt: '我距离下一级还差多少经验？要怎么涨得快？' },
-  { label: '这个月打卡几天了？', prompt: '我这个月一共打卡几天了？' },
+  { cat: 'level', label: '我的等级和打卡', prompt: '我现在多少经验？连续打卡几天了？' },
+  { cat: 'level', label: '离下一级还差多少？', prompt: '我距离下一级还差多少经验？要怎么涨得快？' },
+  { cat: 'level', label: '这个月打卡几天了？', prompt: '我这个月一共打卡几天了？' },
+  { cat: 'level', label: '我连击多少天了', prompt: '我现在连续打卡多少天？下一个连击奖励在哪天？' },
+  { cat: 'level', label: '怎么涨经验最快', prompt: '现在涨经验最划算的方式是什么？给我排个序' },
+  { cat: 'level', label: '我今天还能拿多少分', prompt: '今天我还有哪些任务能拿经验？分别多少分？' },
   // 情绪 / 打气
-  { label: '帮我打打气', prompt: '我有点累，给我一句温暖的话吧～' },
-  { label: '来句鼓励的话', prompt: '送我一句今天专属的鼓励吧' },
-  { label: '今天有点丧', prompt: '我今天心情不太好，安慰一下我' },
+  { cat: 'mood', label: '帮我打打气', prompt: '我有点累，给我一句温暖的话吧～' },
+  { cat: 'mood', label: '来句鼓励的话', prompt: '送我一句今天专属的鼓励吧' },
+  { cat: 'mood', label: '今天有点丧', prompt: '我今天心情不太好，安慰一下我' },
+  { cat: 'mood', label: '被顾客气到了', prompt: '刚被顾客气到了，帮我消消气说两句' },
+  { cat: 'mood', label: '想偷个懒', prompt: '今天好想偷懒，给我一个不内耗的理由' },
+  { cat: 'mood', label: '夸夸我', prompt: '夸夸我吧，要走心的那种' },
+  { cat: 'mood', label: '想辞职怎么办', prompt: '今天有点想辞职，跟我聊聊吧' },
   // 中古冷知识
-  { label: '今天学点啥', prompt: '今天可以学点啥中古冷知识？讲一个有趣的给我听' },
-  { label: '来个中古冷知识', prompt: '随便给我讲一个中古行业的冷知识' },
-  { label: '讲个奢侈品小八卦', prompt: '讲一个奢侈品牌的小八卦或趣闻' },
+  { cat: 'trivia', label: '今天学点啥', prompt: '今天可以学点啥中古冷知识？讲一个有趣的给我听' },
+  { cat: 'trivia', label: '来个中古冷知识', prompt: '随便给我讲一个中古行业的冷知识' },
+  { cat: 'trivia', label: '讲个奢侈品小八卦', prompt: '讲一个奢侈品牌的小八卦或趣闻' },
+  { cat: 'trivia', label: '怎么辨真假？', prompt: '中古包辨别真伪有哪些通用的小技巧？' },
+  { cat: 'trivia', label: '皮具怎么保养', prompt: '中古皮具日常保养要注意什么？给点干货' },
+  { cat: 'trivia', label: '老花年代怎么看', prompt: '怎么从五金、内里、走线判断 LV 老花的大致年代？' },
+  { cat: 'trivia', label: '银饰怎么清洗', prompt: '中古银饰发黑了要怎么清洗保养？' },
+  { cat: 'trivia', label: '日本中古文化', prompt: '日本中古文化为什么这么火？讲两句' },
   // 工作小帮手
-  { label: '顾客嫌贵怎么回？', prompt: '顾客说东西太贵了，我应该怎么回应比较好？' },
-  { label: '这件怎么搭着卖？', prompt: '一件中古单品怎么搭配着推荐给顾客更容易成交？' },
-  { label: '帮我想个朋友圈文案', prompt: '帮我写一条卖中古的朋友圈文案，要有感觉一点' },
-  { label: '今天主推什么风格？', prompt: '今天比较好卖的中古风格是什么？给点搭配建议' },
+  { cat: 'helper', label: '顾客嫌贵怎么回？', prompt: '顾客说东西太贵了，我应该怎么回应比较好？' },
+  { cat: 'helper', label: '这件怎么搭着卖？', prompt: '一件中古单品怎么搭配着推荐给顾客更容易成交？' },
+  { cat: 'helper', label: '被砍价了怎么办', prompt: '顾客一直砍价压价，我怎么守住价又不得罪人？' },
+  { cat: 'helper', label: '退换货怎么沟通', prompt: '顾客想退中古商品，我应该怎么沟通比较稳？' },
+  { cat: 'helper', label: '怎么拍出种草感', prompt: '中古商品怎么拍出种草感？给我几个角度和构图建议' },
+  { cat: 'helper', label: '陈列怎么改一改', prompt: '柜台陈列有点乱，给我几个能马上动手的改造建议' },
+  { cat: 'helper', label: '怎么搭话不尬', prompt: '顾客一进店我怎么搭话不尴尬、不像推销？' },
+  // 朋友圈 / 文案
+  { cat: 'copywriting', label: '帮我想个朋友圈文案', prompt: '帮我写一条卖中古的朋友圈文案，要有感觉一点' },
+  { cat: 'copywriting', label: '写个治愈系文案', prompt: '写一条治愈系风格的中古朋友圈文案给我' },
+  { cat: 'copywriting', label: '写个搞笑款文案', prompt: '写一条搞笑款的中古朋友圈文案，让人忍不住想点赞' },
+  { cat: 'copywriting', label: '节日营销文案', prompt: '帮我写一条贴近最近节日氛围的中古朋友圈文案' },
+  { cat: 'copywriting', label: '帮我起个商品标题', prompt: '帮我给一件中古商品起一个有点画面感的小红书标题' },
+  { cat: 'copywriting', label: '一句话推这件', prompt: '用一句话帮我推一件中古商品，要勾人' },
+  // 今日推荐
+  { cat: 'today', label: '今天主推什么风格？', prompt: '今天比较好卖的中古风格是什么？给点搭配建议' },
+  { cat: 'today', label: '今天主推哪个品类', prompt: '今天主推哪个品类比较容易出单？' },
+  { cat: 'today', label: '哪个价位最好卖', prompt: '现在哪个价位段的中古商品最走量？' },
+  { cat: 'today', label: '今天可以上什么新', prompt: '今天可以从仓库挑哪类货上架比较合适？' },
+  { cat: 'today', label: '本周可以推什么', prompt: '本周值得集中推一波的中古品类是什么？' },
 ];
 
-function pickChips(n = 4) {
-  const arr = [...QUICK_CHIPS];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+/** 按时段给分类加权,早上偏排班/打气;中午偏知识/文案;晚上偏复盘/鼓励 */
+function timeWeights(): Record<ChipCategory, number> {
+  const h = new Date().getHours();
+  if (h < 11) return { shift: 2.2, mood: 1.6, level: 1.4, today: 1.3, helper: 1, trivia: 0.8, copywriting: 0.8 };
+  if (h < 17) return { trivia: 1.8, copywriting: 1.6, helper: 1.5, today: 1.4, shift: 1, mood: 1, level: 1 };
+  return { mood: 2.0, level: 1.8, copywriting: 1.3, trivia: 1.2, helper: 1, today: 0.9, shift: 0.9 };
+}
+
+function weightedPickCategory(remaining: ChipCategory[], weights: Record<ChipCategory, number>): ChipCategory {
+  const total = remaining.reduce((s, c) => s + (weights[c] ?? 1), 0);
+  let r = Math.random() * total;
+  for (const c of remaining) {
+    r -= weights[c] ?? 1;
+    if (r <= 0) return c;
   }
-  return arr.slice(0, n);
+  return remaining[remaining.length - 1];
+}
+
+/** 抽 n 条,优先保证分类不重复;每个分类内部洗牌随机抽一条 */
+function pickChips(n = 4): Chip[] {
+  const weights = timeWeights();
+  const byCat = new Map<ChipCategory, Chip[]>();
+  for (const c of QUICK_CHIPS) {
+    const arr = byCat.get(c.cat) ?? [];
+    arr.push(c);
+    byCat.set(c.cat, arr);
+  }
+  // 洗牌每个分类的内部顺序
+  for (const arr of byCat.values()) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+  let cats = Array.from(byCat.keys());
+  const result: Chip[] = [];
+  while (result.length < n && cats.length > 0) {
+    const pick = weightedPickCategory(cats, weights);
+    const arr = byCat.get(pick)!;
+    const chip = arr.shift();
+    if (chip) result.push(chip);
+    cats = cats.filter((c) => (byCat.get(c)?.length ?? 0) > 0);
+  }
+  // 兜底:若分类不够,再随机补
+  if (result.length < n) {
+    const rest = QUICK_CHIPS.filter((c) => !result.includes(c));
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rest[i], rest[j]] = [rest[j], rest[i]];
+    }
+    result.push(...rest.slice(0, n - result.length));
+  }
+  return result;
 }
 
 const MAX_IMAGES = 4;
@@ -207,6 +299,20 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
 
       {/* 快捷指令 chips */}
       <div className="shrink-0 px-4 pt-2 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button
+          type="button"
+          onClick={() => setDisplayChips(pickChips(4))}
+          disabled={busy}
+          aria-label="换一批"
+          className={cn(
+            'shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors',
+            'bg-[hsl(var(--accent)/0.18)] border border-[hsl(var(--accent)/0.3)] text-[hsl(var(--primary-foreground)/0.85)]',
+            'hover:bg-[hsl(var(--accent)/0.3)] active:scale-95',
+            busy && 'opacity-50 cursor-not-allowed',
+          )}
+        >
+          <Shuffle className="w-3.5 h-3.5" />
+        </button>
         {displayChips.map((c) => (
           <button
             key={c.label}
@@ -224,6 +330,7 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
           </button>
         ))}
       </div>
+
 
       {/* 待发送图片预览 */}
       {pending.length > 0 && (

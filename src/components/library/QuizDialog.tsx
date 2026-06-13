@@ -121,7 +121,7 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished]);
 
-  const reset = () => { setStep(0); setAnswers([]); setPicked(null); };
+  const reset = () => { void load(false); };
 
   const cur = questions[step];
 
