@@ -138,6 +138,7 @@ export default function VoucherSharePoster() {
             voucher={voucher}
             shareUrl={shareUrl}
             shortCode={claim.short_code}
+            qrDataUrl={qrDataUrl}
           />
         </div>
 
