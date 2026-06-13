@@ -133,24 +133,33 @@ function DayRow({
   kind,
   day,
   fallbackShop,
+  peerGroups,
 }: {
   kind: RowKind;
   day: { date: string; shift: any; shopName: string | null } | undefined;
   fallbackShop: string | null;
+  peerGroups?: { code: string; names: string[] }[];
 }) {
   const shift = day?.shift ?? null;
   const isToday = kind === 'today';
   const isRest = !shift;
 
   const shopName = day?.shopName || fallbackShop || null;
+  const groups = peerGroups || [];
+
+  const codeColor = (c: string) =>
+    c === 'A' ? 'text-[hsl(var(--accent))]' :
+    c === 'B' ? 'text-[hsl(var(--accent))]' :
+    c === 'C' ? 'text-[hsl(var(--destructive))]' :
+    'text-[hsl(var(--primary-foreground)/0.5)]';
 
   return (
     <div className={cn(
-      'flex items-center gap-3 p-2 rounded-xl',
+      'flex items-start gap-3 p-2 rounded-xl',
       isToday && 'bg-[hsl(var(--primary-foreground)/0.04)]'
     )}>
       {/* Date column */}
-      <div className="flex flex-col items-center justify-center min-w-[42px] shrink-0">
+      <div className="flex flex-col items-center justify-center min-w-[42px] shrink-0 pt-1">
         <span className="text-[9px] font-bold tracking-tighter text-[hsl(var(--primary-foreground)/0.35)]">
           {day ? weekdayLabel(day.date) : ''}
         </span>
@@ -163,7 +172,7 @@ function DayRow({
       </div>
 
       {/* Divider */}
-      <div className="h-9 w-px bg-[hsl(var(--accent)/0.2)] shrink-0" />
+      <div className="self-stretch w-px bg-[hsl(var(--accent)/0.2)] shrink-0" />
 
       {/* Body */}
       <div className="flex-1 min-w-0">
@@ -182,7 +191,18 @@ function DayRow({
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-[hsl(var(--primary-foreground)/0.35)] mt-0.5">好好放松一天</p>
+            {groups.length === 0 ? (
+              <p className="text-[10px] text-[hsl(var(--primary-foreground)/0.35)] mt-0.5">好好放松一天</p>
+            ) : (
+              <div className="mt-1 space-y-0.5">
+                {groups.map(g => (
+                  <div key={g.code} className="text-[10px] leading-snug text-[hsl(var(--primary-foreground)/0.65)]">
+                    <span className={cn('font-bold mr-1', codeColor(g.code))}>{g.code} 班</span>
+                    <span className="text-[hsl(var(--primary-foreground)/0.5)]">· {g.names.join('、')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -200,6 +220,16 @@ function DayRow({
             )}>
               {formatShiftTime(shift.start_time, shift.end_time)}
             </p>
+            {groups.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {groups.map(g => (
+                  <div key={g.code} className="text-[10px] leading-snug text-[hsl(var(--primary-foreground)/0.65)]">
+                    <span className={cn('font-bold mr-1', codeColor(g.code))}>{g.code} 班</span>
+                    <span className="text-[hsl(var(--primary-foreground)/0.5)]">· {g.names.join('、')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
