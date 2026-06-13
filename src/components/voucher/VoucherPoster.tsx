@@ -7,10 +7,12 @@ interface Props {
   voucher: Pick<VoucherTemplate, 'name' | 'threshold_type' | 'discount_amount' | 'min_spend' | 'valid_days' | 'template_terms'>;
   shareUrl: string;
   shortCode?: string | null;
+  /** 预生成的二维码 data URL；提供时优先用 <img> 渲染，避免 canvas 异步绘制竞争。 */
+  qrDataUrl?: string | null;
 }
 
 export const VoucherPoster = forwardRef<HTMLDivElement, Props>(
-  ({ voucher, shareUrl, shortCode }, ref) => {
+  ({ voucher, shareUrl, shortCode, qrDataUrl }, ref) => {
     return (
       <div
         ref={ref}
