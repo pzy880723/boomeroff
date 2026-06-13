@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, Sparkles } from 'lucide-react';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -55,6 +55,35 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [polishing, setPolishing] = useState(false);
+
+  const polishDescription = async () => {
+    const draft = description.trim();
+    if (draft.length < 2) {
+      toast.error('请先随便写几句草稿');
+      return;
+    }
+    setPolishing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('polish-activity-description', {
+        body: { name: name.trim(), draft },
+      });
+      if (error) {
+        toast.error(error.message || 'AI 润色失败');
+        return;
+      }
+      const polished = (data as any)?.polished;
+      const errMsg = (data as any)?.error;
+      if (errMsg) { toast.error(errMsg); return; }
+      if (!polished) { toast.error('AI 没有返回内容'); return; }
+      setDescription(polished);
+      toast.success('AI 已润色，可继续微调');
+    } catch (e: any) {
+      toast.error(e?.message || 'AI 润色失败');
+    } finally {
+      setPolishing(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -159,8 +188,21 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
             <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} placeholder="如：小红书探店活动" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">活动描述（可选）</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={300} />
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">活动描述（可选）</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs gap-1"
+                onClick={polishDescription}
+                disabled={polishing || description.trim().length < 2}
+              >
+                {polishing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                {polishing ? '润色中' : 'AI 润色'}
+              </Button>
+            </div>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={300} placeholder="随便写两句，再点右上角「AI 润色」自动改写" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">关联优惠券</Label>
