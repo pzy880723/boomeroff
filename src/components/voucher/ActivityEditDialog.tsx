@@ -188,8 +188,21 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
             <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} placeholder="如：小红书探店活动" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">活动描述（可选）</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={300} />
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">活动描述（可选）</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs gap-1"
+                onClick={polishDescription}
+                disabled={polishing || description.trim().length < 2}
+              >
+                {polishing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                {polishing ? '润色中' : 'AI 润色'}
+              </Button>
+            </div>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={300} placeholder="随便写两句，再点右上角「AI 润色」自动改写" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">关联优惠券</Label>
