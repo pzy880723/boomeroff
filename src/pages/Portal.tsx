@@ -5,6 +5,7 @@ import { CreateUserDialog } from '@/components/admin/CreateUserDialog';
 import { OfficialKnowledgeManager } from '@/components/admin/OfficialKnowledgeManager';
 import { CommunityModeration } from '@/components/admin/CommunityModeration';
 import { AISettingsPanel } from '@/components/admin/AISettingsPanel';
+import { DeploymentSettingsPanel } from '@/components/admin/DeploymentSettingsPanel';
 import { CorrectionReviewPanel } from '@/components/admin/CorrectionReviewPanel';
 
 import { ShiftSettingsPanel } from '@/components/admin/ShiftSettingsPanel';
@@ -36,7 +37,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'notifications' | 'activity_review' | 'sms_test';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -77,6 +78,7 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     key: 'system', label: '系统', icon: Settings, items: [
       { key: 'ai', label: 'AI 模型', icon: Sparkles, perm: 'settings.ai' },
+      { key: 'deploy', label: '部署域名', icon: Settings, perm: 'settings.ai' },
       { key: 'sms_test', label: '短信测试', icon: MessageSquare, perm: 'settings.ai' },
     ],
   },
@@ -232,6 +234,8 @@ export default function Portal() {
             {effectiveTab === 'community' && can('community.moderate') && <CommunityModeration />}
             {effectiveTab === 'corrections' && can('correction.review') && <CorrectionReviewPanel />}
             {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}
+            {effectiveTab === 'deploy' && can('settings.ai') && <DeploymentSettingsPanel />}
+            
             
             {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
             {effectiveTab === 'activity_review' && can('voucher.manage') && <ActivityReviewPanel />}
