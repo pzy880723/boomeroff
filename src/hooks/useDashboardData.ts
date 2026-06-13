@@ -167,40 +167,69 @@ export function useDashboardData(enabled: boolean): DashData {
         .maybeSingle();
       shopId = (sp as any)?.shop_id ?? null;
     }
+    // 兜底:仍未拿到时取第一个门店,保证休息日也能看到同店同事
+    if (!shopId) {
+      const { data: anyShop } = await supabase
+        .from('shops' as any).select('id').eq('active', true).order('sort_order').limit(1).maybeSingle();
+      shopId = (anyShop as any)?.id ?? null;
+    }
+    const weekPeers: Record<string, { code: string; names: string[] }[]> = {};
     if (shopId) {
       const { data: shopRow } = await supabase
         .from('shops' as any).select('name').eq('id', shopId).maybeSingle();
       shopName = (shopRow as any)?.name ?? null;
 
+      const weekEnd = addDaysISO(today, 6);
       const { data: peerRows } = await supabase
         .from('shift_schedules' as any)
-        .select('user_id, shift_code')
-        .eq('work_date', today)
+        .select('user_id, shift_code, work_date')
         .eq('shop_id', shopId)
-        .neq('user_id', user.id);
-      const peers = ((peerRows as any[]) || []).filter(r => r.user_id);
-      const peerIds = Array.from(new Set(peers.map(r => r.user_id)));
+        .gte('work_date', today).lte('work_date', weekEnd);
+      const allPeers = ((peerRows as any[]) || []).filter(r => r.user_id);
+      const peerIds = Array.from(new Set(allPeers.map(r => r.user_id).filter(id => id !== user.id)));
+      const profMap = new Map<string, any>();
+      const realMap = new Map<string, string>();
       if (peerIds.length) {
         const [{ data: peerProfiles }, { data: peerStaff }] = await Promise.all([
           supabase.from('profiles').select('user_id, display_name, avatar_url').in('user_id', peerIds),
           supabase.from('staff_profiles' as any).select('user_id, real_name').in('user_id', peerIds),
         ]);
-        const realMap = new Map<string, string>();
         (peerStaff as any[] || []).forEach(s => { if (s.real_name) realMap.set(s.user_id, s.real_name); });
-        const profMap = new Map<string, any>();
         (peerProfiles as any[] || []).forEach(p => profMap.set(p.user_id, p));
-        colleaguesToday = peers.map(r => {
+      }
+      const nameOf = (uid: string) => realMap.get(uid) || profMap.get(uid)?.display_name || '店员';
+
+      // colleaguesToday: 今日同店除自己外
+      colleaguesToday = allPeers
+        .filter(r => r.work_date === today && r.user_id !== user.id)
+        .map(r => {
           const p = profMap.get(r.user_id);
           const shift = sMap.get(r.shift_code);
           return {
             user_id: r.user_id,
-            display_name: realMap.get(r.user_id) || p?.display_name || '店员',
+            display_name: nameOf(r.user_id),
             avatar_url: p?.avatar_url || null,
             shift_code: r.shift_code,
             shift_color: shift?.color ?? null,
           };
         });
-      }
+
+      // weekPeers: 未来 7 天每天按班次分组(包含自己以外的所有同店成员)
+      const byDate = new Map<string, Map<string, Set<string>>>();
+      allPeers.forEach(r => {
+        if (r.user_id === user.id) return;
+        const code = (r.shift_code || '').toUpperCase();
+        if (!byDate.has(r.work_date)) byDate.set(r.work_date, new Map());
+        const codeMap = byDate.get(r.work_date)!;
+        if (!codeMap.has(code)) codeMap.set(code, new Set());
+        codeMap.get(code)!.add(nameOf(r.user_id));
+      });
+      const codeOrder = (c: string) => (c === 'A' ? 0 : c === 'B' ? 1 : c === 'C' ? 2 : 3);
+      byDate.forEach((codeMap, date) => {
+        weekPeers[date] = Array.from(codeMap.entries())
+          .sort((a, b) => codeOrder(a[0]) - codeOrder(b[0]) || a[0].localeCompare(b[0]))
+          .map(([code, names]) => ({ code, names: Array.from(names).sort() }));
+      });
     }
 
     // Sparkline: count per day
