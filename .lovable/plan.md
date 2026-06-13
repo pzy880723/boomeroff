@@ -1,70 +1,69 @@
-# 让 BOOMER 不再"问来问去就那几句",测一测不再"考来考去就那几题"
+# 修复定向发放海报二维码生产环境消失的问题
 
-## 一、对话预设问题(BOOMER 抽屉里的快捷气泡)
+## 病因(为什么部署后二维码就没了)
 
-**现状**:`src/components/spirit/SpiritChatPanel.tsx` 里写死了 16 个 chip,每次随机挑 4 个。池子小+无时段/无分类配比,反复打开容易撞到同样几个。
+`src/pages/VoucherSharePoster.tsx` 实际显示给店员的"海报"**不是 DOM 海报本身**,而是一张用 `html-to-image.toPng()` 截图得到的 PNG (`imgDataUrl`)。流程是:
 
-**改造**:
-1. **扩充话题池到 ~50 条**,按分类组织:
-   - 排班/同事(今日/明日/本周/下周/调休/补班…)
-   - 打卡/等级/经验(连续天数/距升级/月度统计/连击奖励…)
-   - 情绪/打气/吐槽(累了/丧了/想被夸/想偷懒/被顾客气到…)
-   - 中古冷知识(品牌史/年代/版本辨真/材质保养…)
-   - 工作小帮手(嫌贵/砍价/搭配/退换/陈列/拍照角度…)
-   - 朋友圈/文案(种草款/治愈系/搞笑款/节日款…)
-   - 今日推荐(主推风格/品类/价格带…)
-2. **每次抽 4 条且不重复分类**:用"分组洗牌 + 每组取 1"的策略,保证 4 个气泡来自 4 个不同主题。
-3. **加时段倾向**:早上偏排班/打气,中午偏知识/文案,晚上偏复盘/鼓励(用 `new Date().getHours()` 给对应分类加权)。
-4. **每次打开抽屉/刷新都重抽**:现在已经是这样,继续保持;再加一个"换一批 🔄"小按钮让你手动洗牌。
+```text
+读 claim/voucher → 渲染隐藏的 <VoucherPoster>(里面有 <QrCanvas>)
+                ↓
+        setTimeout 250ms
+                ↓
+       toPng() 截图 → setImgDataUrl → 页面 <img src={imgDataUrl}>
+```
 
-## 二、测一测(QuizDialog)题目多样化
+`QrCanvas` 内部用 `QRCode.toCanvas(canvasEl, value, …)` **异步**把二维码画到 `<canvas>`。这个 promise 解决时间取决于:
+- `qrcode` 这个 chunk 在生产环境是按需懒加载的,首次进入海报页要去 CDN 下载/解析/执行
+- React 渲染、canvas getContext、二维码计算
 
-**现状**:`supabase/functions/generate-knowledge-quiz/index.ts` 每个知识点只缓存 1 套(5 道)题。`official_knowledge.content.quiz.questions` 或 `app_settings` 里的 quiz_cache 命中后,后续每次都返回**同一套题**。只有管理员能点"换一套题"force 重新生成。
+**开发环境**:本地热模块、qrcode 早已在内存 → 通常 30–80ms 内画完,250ms 兜底足够。
+**腾讯云生产环境**:首次进入 + 远端 CDN 拉 chunk + 真机 CPU 慢一点 → 经常 250ms 还没画完,这时 `toPng` 截到的是一张**空白 canvas**,导出的 PNG 上二维码那块就是一个白方块。链接还能复制、长链短链都没问题,所以"只能通过链接进去"。
 
-**改造**:把缓存从"1 套 5 题"升级成"题库池子",每次随机抽 5 道展示。
+二级原因:`toPng` 的 `cacheBust: true` 会强制重新拉取所有图片资源,生产环境网络慢一拍会再放大这个 race。
 
-具体做法:
-1. **缓存结构升级**:
-   - `official_knowledge.content.quiz` 从 `{ questions: [5 道] }` 改为 `{ pool: [N 道, 累积式] , generated_at }`(向后兼容:旧的 `questions` 字段自动迁移到 `pool`)。
-   - 同样规则应用到 `app_settings.quiz_cache:*` 的 favorite / knowledge。
-2. **首次出题**:让 AI 一次性出 **10 道**(把 `make_quiz` 工具 `minItems/maxItems` 改成 10),写入 pool。
-3. **后续每次进入**:
-   - 如果 pool ≥ 10 → 直接从 pool 里**随机抽 5 道**返回(无 AI 调用,依然快)。
-   - 如果 pool < 10 → 补齐:让 AI 再出 10 道,**追加**到 pool 末尾,然后随机抽 5 道返回。
-4. **"再考一次"按钮**:已存在的客户端 `reset()` 不重新请求,会重复同一批题 → 改为重新调用 `load(false)`,让后端再随机抽一组(很可能是不同 5 题)。
-5. **管理员"换一套题"**:保持 `force=true` 含义,改为**清空 pool + 重新生成 10 题**,而不是覆盖单套。
-6. **去重 & 质量**:补题时把已有题干作为"已出过的题"传给 AI 系统提示,要求"避免与现有题目重复,角度要不同"。
+## 修复方案
 
-### 数据迁移
+抛弃"靠 setTimeout 等 canvas 画完"的隐式时序,改成**先把二维码生成成 data URL,确认 ready 之后再触发截图**。整体思路对齐项目里已经稳定工作的 `ActivityShareDialog.tsx`(它就是用 `QRCode.toDataURL` + `<img>` 渲染的)。
 
-无需迁移脚本:边读边迁。读到旧结构 `{ questions: [...] }` 时,代码内当作 `pool` 用,写回时统一成新结构。
+### 改动 1:海报二维码改用 `<img src={dataUrl}>` 而不是 `<canvas>`
 
-## 技术细节
+- `src/components/voucher/VoucherPoster.tsx`
+  - props 增加 `qrDataUrl?: string`(可选,向后兼容)。
+  - 二维码槽位:有 `qrDataUrl` 就用 `<img src={qrDataUrl} width={120} height={120} alt="" />`;没有就显示占位"二维码生成中…",**不再**直接挂 `<QrCanvas>`。
+  - 这样 html-to-image 截图时面对的是一个已经就绪的 `<img>` 元素(data URL,同步可读),没有 canvas 异步时序问题。
 
-**前端文件**
-- `src/components/spirit/SpiritChatPanel.tsx`
-  - 把 `QUICK_CHIPS` 重写成 `QUICK_CHIPS_BY_CATEGORY: Record<Category, Chip[]>`,加 `pickChipsBalanced(n=4)` 做分组抽取 + 时段加权。
-  - chip 区右侧加一个小"🔄"按钮,onClick 触发 `setChips(pickChipsBalanced())`。
-  - 用 `useState` 持有当前 chips,首挂载时算一次。
-- `src/components/library/QuizDialog.tsx`
-  - `reset()` 改为 `await load(false)` 重新拉一组随机 5 题(不强制 force)。
-  - 不再使用本地 `reset` 重排同一批。
+- `src/components/voucher/QrCanvas.tsx`:暂时保留(其他地方还在用 / 也可以留作 fallback),不动。
 
-**后端文件**
-- `supabase/functions/generate-knowledge-quiz/index.ts`
-  - 工具 schema `make_quiz` 的 `questions.minItems/maxItems` → 10。
-  - 读取逻辑:`pool = content.quiz.pool ?? content.quiz.questions ?? []`。
-  - 返回逻辑:`if (!force && pool.length >= 5) return shuffle(pool).slice(0, 5)`。
-  - 不足时调用 AI 生成 10 道,传入"已出过的题干列表"做去重 hint,然后 `pool = force ? newQs : [...pool, ...newQs]`,写回 `content.quiz.pool`。
-  - 同一逻辑覆盖 `favorite` / `knowledge` 在 `app_settings` 的缓存。
+### 改动 2:海报页面先生成 qrDataUrl,再触发截图
 
-**不动的地方**
-- 题型(四选一)、UI 样式、通过线、积分发放、`onAttempt/onPassed` 回调、taskProgress 流程,全部保持不变。
-- BOOMER 形象/动画/抽屉布局不动,只动 chip 内容与抽法。
+- `src/pages/VoucherSharePoster.tsx`
+  - 增加 `const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)`。
+  - 拿到 `shareUrl` 后:
+    ```ts
+    const url = await QRCode.toDataURL(shareUrl, {
+      width: 240, margin: 1, errorCorrectionLevel: 'M',
+      color: { dark: '#0f172a', light: '#ffffff' },
+    });
+    setQrDataUrl(url);
+    ```
+  - `renderImg`(toPng)的 useEffect 依赖改成 `loading, claim, voucher, qrDataUrl` 全部 ready 才跑;`setTimeout` 缩到 50ms 仅仅做一帧让 React commit。
+  - 给 `<VoucherPoster>` 传 `qrDataUrl={qrDataUrl}`。
+  - `toPng` 调用去掉 `cacheBust: true`(纯 data URL 资源不需要 bust)。
+
+### 改动 3:加一次失败重试 + 简单的可见性兜底(防御性)
+
+- 如果 `toPng` 截图后**结果异常**(比如尺寸为 0、或抛错),展示一个"重新生成"按钮(已存在 Download/返回 按钮区域,加一个),点了重跑 `renderImg`,顺便重新 `QRCode.toDataURL`。
+- 同时把"分享短链"区域的"复制"按钮保留(已存在),即使万一未来还出问题,店员仍然能拿到链接发出去。
+
+## 不动的范围
+
+- 二维码内容 / `buildClaimShareUrl` / 短链生成 / 后端 edge function:全部不动 — 二维码的"值"本来就是稳定的,问题只出在前端渲染时序。
+- 海报视觉(颜色、字号、布局)不动。
+- `ActivityShareDialog` 不动(它已经用正确写法)。
 
 ## 验收
 
-- 连续打开 BOOMER 抽屉 5 次,4 个气泡的具体话题至少出现 3 种以上分类组合,不再每次都是"明天上班/朋友圈文案/今天主推"那一套。
-- 同一个知识点连续考 5 次,5 道题的题干集合每次都明显不同(只要 pool ≥ 10 就一定不会完全一样)。
-- 首次进入新知识点 → 触发一次 AI 生成 10 道(略慢一点,符合"出题中…"提示);之后每次进入都是秒开。
-- 管理员点"换一套题"→ pool 被清空并重新出 10 道。
+- 全新设备首次访问海报页面(模拟"刚部署完、CDN 冷启动"):看到的海报上二维码正常,可识别跳转到领取页。
+- 下载下来的 PNG 二维码清晰、可被微信/相机扫描。
+- 反复刷新海报页面 5+ 次,二维码 0 次缺失。
+- 网络限速到 Slow 3G 也能正常出二维码(只是出图慢一点,不会出现"空白二维码")。
