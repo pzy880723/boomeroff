@@ -34,6 +34,7 @@ export interface DashData {
   todayShift: DashShift | null;
   nextShift: { date: string; shift: DashShift | null } | null;
   weekShifts: { date: string; shift: DashShift | null; shopName: string | null }[]; // 7 days from today
+  weekPeers: Record<string, { code: string; names: string[] }[]>; // date -> peer groups by shift code
   colleaguesToday: DashColleague[];
   shopName: string | null;
   totalExp: number;
