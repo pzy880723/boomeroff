@@ -55,6 +55,35 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [polishing, setPolishing] = useState(false);
+
+  const polishDescription = async () => {
+    const draft = description.trim();
+    if (draft.length < 2) {
+      toast.error('请先随便写几句草稿');
+      return;
+    }
+    setPolishing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('polish-activity-description', {
+        body: { name: name.trim(), draft },
+      });
+      if (error) {
+        toast.error(error.message || 'AI 润色失败');
+        return;
+      }
+      const polished = (data as any)?.polished;
+      const errMsg = (data as any)?.error;
+      if (errMsg) { toast.error(errMsg); return; }
+      if (!polished) { toast.error('AI 没有返回内容'); return; }
+      setDescription(polished);
+      toast.success('AI 已润色，可继续微调');
+    } catch (e: any) {
+      toast.error(e?.message || 'AI 润色失败');
+    } finally {
+      setPolishing(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
