@@ -1887,6 +1887,10 @@ export type Database = {
         Args: { _amount: number; _user_id: string }
         Returns: number
       }
+      can_assign_role_code: {
+        Args: { _actor: string; _target_role_code: string }
+        Returns: boolean
+      }
       claim_daily_task: { Args: { _task_key: string }; Returns: Json }
       claim_pending_exp: { Args: { _id: string }; Returns: Json }
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
