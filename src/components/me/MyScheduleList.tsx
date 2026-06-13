@@ -149,21 +149,22 @@ export function MyScheduleList() {
           return (
             <Card
               key={d}
-              className={cn(
-                'p-3 transition-colors',
-                isTomorrow
-                  ? 'bg-foreground text-background border-foreground shadow-lg ring-1 ring-foreground/10'
-                  : !myRow && 'bg-muted/30'
-              )}
+              className={cn('p-3', !myRow && 'bg-muted/30')}
             >
               <div className="flex items-start gap-3">
-                <div className="shrink-0 w-14">
-                  {isTomorrow && (
-                    <span className="inline-block mb-1 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider bg-background text-foreground">
-                      明天
-                    </span>
+                <div
+                  className={cn(
+                    'shrink-0 w-14 flex flex-col items-center',
+                    isTomorrow && 'bg-foreground text-background rounded-lg py-2 px-1',
                   )}
-                  <div className={cn('text-base font-semibold tabular-nums', isTomorrow && 'text-background')}>
+                >
+                  {isTomorrow && (
+                    <div className="text-base font-bold leading-tight mb-1">明天</div>
+                  )}
+                  <div className={cn(
+                    'text-base font-semibold tabular-nums',
+                    isTomorrow && 'text-background text-sm',
+                  )}>
                     {shortDateLabel(d)}
                   </div>
                   <div className={cn('text-xs', isTomorrow ? 'text-background/70' : 'text-muted-foreground')}>
@@ -176,24 +177,21 @@ export function MyScheduleList() {
                       <>
                         <span className="px-1.5 py-0.5 rounded text-[11px] text-white font-medium"
                           style={{ background: s.color || '#f59e0b' }}>{myRow.shift_code}</span>
-                        <span className={cn('text-sm font-medium tabular-nums', isTomorrow && 'text-background')}>
+                        <span className="text-sm font-medium tabular-nums">
                           {formatShiftTime(s.start_time, s.end_time)}
                         </span>
-                        <span className={cn('text-xs truncate', isTomorrow ? 'text-background/70' : 'text-muted-foreground')}>
+                        <span className="text-xs truncate text-muted-foreground">
                           {s.name}
                         </span>
                       </>
                     ) : (
-                      <span className={cn(
-                        'px-2 py-0.5 rounded text-[11px] font-bold tracking-widest',
-                        isTomorrow ? 'bg-background/15 text-background' : 'bg-secondary text-secondary-foreground'
-                      )}>
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold tracking-widest bg-secondary text-secondary-foreground">
                         休息
                       </span>
                     )}
                   </div>
                   {groups.length === 0 ? (
-                    <div className={cn('text-[11px]', isTomorrow ? 'text-background/60' : 'text-muted-foreground/70')}>
+                    <div className="text-[11px] text-muted-foreground/70">
                       门店当日无排班
                     </div>
                   ) : (
@@ -201,7 +199,7 @@ export function MyScheduleList() {
                       {groups.map(g => (
                         <div key={g.code} className="text-[11px] leading-snug">
                           <span className={cn('font-bold mr-1', codeColor(g.code))}>{g.code} 班</span>
-                          <span className={cn(isTomorrow ? 'text-background/75' : 'text-muted-foreground')}>
+                          <span className="text-muted-foreground">
                             · {g.names.join('、')}
                           </span>
                         </div>
@@ -212,6 +210,7 @@ export function MyScheduleList() {
               </div>
             </Card>
           );
+
         })}
       </div>
     </div>
