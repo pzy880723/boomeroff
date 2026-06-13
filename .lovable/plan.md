@@ -1,53 +1,70 @@
-# 修复 BOOMER 形象：透明背景 + 真正不同的姿态
+# 让 BOOMER 不再"问来问去就那几句",测一测不再"考来考去就那几题"
 
-## 问题诊断
+## 一、对话预设问题(BOOMER 抽屉里的快捷气泡)
 
-你看到的"方块悬浮"和"姿势图没在用",根因是同一个:
+**现状**:`src/components/spirit/SpiritChatPanel.tsx` 里写死了 16 个 chip,每次随机挑 4 个。池子小+无时段/无分类配比,反复打开容易撞到同样几个。
 
-- `src/assets/boomer/boomer-*.png` 这 8 张图,全部都生成成了**带 BOOMER-OFF logo + 粉色方块背景**的完整海报(我已确认 `boomer-idle.png` 就是你截图里那张方块)。
-- 代码上 `SpiritMascot.tsx` 已经按 8 种 state 映射到 8 个不同文件了 —— 但因为 8 个文件**图像内容其实差不多**(都是同一只合十冥想的小水獭+logo+粉底),所以你看不出"挠头/欢呼/睡觉/鞠躬"的区别,也没法当悬浮 IP 用 —— 一抠到圆形浮窗里就只剩"粉方块"。
+**改造**:
+1. **扩充话题池到 ~50 条**,按分类组织:
+   - 排班/同事(今日/明日/本周/下周/调休/补班…)
+   - 打卡/等级/经验(连续天数/距升级/月度统计/连击奖励…)
+   - 情绪/打气/吐槽(累了/丧了/想被夸/想偷懒/被顾客气到…)
+   - 中古冷知识(品牌史/年代/版本辨真/材质保养…)
+   - 工作小帮手(嫌贵/砍价/搭配/退换/陈列/拍照角度…)
+   - 朋友圈/文案(种草款/治愈系/搞笑款/节日款…)
+   - 今日推荐(主推风格/品类/价格带…)
+2. **每次抽 4 条且不重复分类**:用"分组洗牌 + 每组取 1"的策略,保证 4 个气泡来自 4 个不同主题。
+3. **加时段倾向**:早上偏排班/打气,中午偏知识/文案,晚上偏复盘/鼓励(用 `new Date().getHours()` 给对应分类加权)。
+4. **每次打开抽屉/刷新都重抽**:现在已经是这样,继续保持;再加一个"换一批 🔄"小按钮让你手动洗牌。
 
-也就是说:组件没问题,**素材本身错了**。
+## 二、测一测(QuizDialog)题目多样化
 
-## 修复方案
+**现状**:`supabase/functions/generate-knowledge-quiz/index.ts` 每个知识点只缓存 1 套(5 道)题。`official_knowledge.content.quiz.questions` 或 `app_settings` 里的 quiz_cache 命中后,后续每次都返回**同一套题**。只有管理员能点"换一套题"force 重新生成。
 
-### 1. 重新生成 8 张姿态图(透明背景)
+**改造**:把缓存从"1 套 5 题"升级成"题库池子",每次随机抽 5 道展示。
 
-以现有 `src/assets/boomer/boomer-idle.png` 为视觉锚点(锁定身体比例、毛色、眼睛、脸颊),用 `imagegen--edit_image` + `transparent_background: true` 重画 8 张,**每张只有水獭本体,没有 logo / 文字 / 粉色背景 / 方框**,导出为透明 PNG,覆盖原 8 个文件:
+具体做法:
+1. **缓存结构升级**:
+   - `official_knowledge.content.quiz` 从 `{ questions: [5 道] }` 改为 `{ pool: [N 道, 累积式] , generated_at }`(向后兼容:旧的 `questions` 字段自动迁移到 `pool`)。
+   - 同样规则应用到 `app_settings.quiz_cache:*` 的 favorite / knowledge。
+2. **首次出题**:让 AI 一次性出 **10 道**(把 `make_quiz` 工具 `minItems/maxItems` 改成 10),写入 pool。
+3. **后续每次进入**:
+   - 如果 pool ≥ 10 → 直接从 pool 里**随机抽 5 道**返回(无 AI 调用,依然快)。
+   - 如果 pool < 10 → 补齐:让 AI 再出 10 道,**追加**到 pool 末尾,然后随机抽 5 道返回。
+4. **"再考一次"按钮**:已存在的客户端 `reset()` 不重新请求,会重复同一批题 → 改为重新调用 `load(false)`,让后端再随机抽一组(很可能是不同 5 题)。
+5. **管理员"换一套题"**:保持 `force=true` 含义,改为**清空 pool + 重新生成 10 题**,而不是覆盖单套。
+6. **去重 & 质量**:补题时把已有题干作为"已出过的题"传给 AI 系统提示,要求"避免与现有题目重复,角度要不同"。
 
-| 文件 | 姿态 | 关键差异 |
-| --- | --- | --- |
-| `boomer-idle.png` | 闭眼合十,盘坐冥想 | 当前姿态,但去掉 logo/背景 |
-| `boomer-wave.png` | 睁眼,一只爪子举起挥手 | 招呼 |
-| `boomer-think.png` | 一爪托腮,微微歪头,眼睛半睁 | 思考 |
-| `boomer-bow.png` | 深鞠躬,双爪合十前伸 | 致谢 |
-| `boomer-scratch.png` | 一爪挠头,表情困惑 | 找不到/出错 |
-| `boomer-cheer.png` | 双爪举高,张嘴笑,小星星点缀 | 欢呼/打卡成功 |
-| `boomer-sleep.png` | 侧躺/趴睡,闭眼,Z 泡泡 | 空状态/打盹 |
-| `boomer-avatar.png` | 正脸大头照,微笑 | 聊天小头像 |
+### 数据迁移
 
-锁定描述(每张共享):*same warm brown otter, white belly, black bean eyes, pink cheeks, soft fluffy texture, simple cute illustration, isolated subject only, no text, no logo, no background, no frame, transparent PNG.*
+无需迁移脚本:边读边迁。读到旧结构 `{ questions: [...] }` 时,代码内当作 `pool` 用,写回时统一成新结构。
 
-### 2. 微调悬浮窗呈现
+## 技术细节
 
-`FloatingDashboard.tsx` 的浮窗胶囊目前是 `rounded-full` 的圆按钮加 `SpiritMascot`。素材抠干净后:
-- 去掉 `SpiritMascot` 内部那层 `radial-gradient` 圆形光晕(`flat` 模式),让水獭直接漂在按钮上,而不是"方块里的方块"。
-- 浮窗按钮自身保留毛玻璃圆形底,只是不再叠两层背景。
-- `SpiritGreetingDialog`(首次打招呼那个大图)继续显示透明大水獭 + 简单的 BOOMER 标题(标题用 CSS 文字,不再依赖素材里的 logo)。
+**前端文件**
+- `src/components/spirit/SpiritChatPanel.tsx`
+  - 把 `QUICK_CHIPS` 重写成 `QUICK_CHIPS_BY_CATEGORY: Record<Category, Chip[]>`,加 `pickChipsBalanced(n=4)` 做分组抽取 + 时段加权。
+  - chip 区右侧加一个小"🔄"按钮,onClick 触发 `setChips(pickChipsBalanced())`。
+  - 用 `useState` 持有当前 chips,首挂载时算一次。
+- `src/components/library/QuizDialog.tsx`
+  - `reset()` 改为 `await load(false)` 重新拉一组随机 5 题(不强制 force)。
+  - 不再使用本地 `reset` 重排同一批。
 
-### 3. 不动的部分
+**后端文件**
+- `supabase/functions/generate-knowledge-quiz/index.ts`
+  - 工具 schema `make_quiz` 的 `questions.minItems/maxItems` → 10。
+  - 读取逻辑:`pool = content.quiz.pool ?? content.quiz.questions ?? []`。
+  - 返回逻辑:`if (!force && pool.length >= 5) return shuffle(pool).slice(0, 5)`。
+  - 不足时调用 AI 生成 10 道,传入"已出过的题干列表"做去重 hint,然后 `pool = force ? newQs : [...pool, ...newQs]`,写回 `content.quiz.pool`。
+  - 同一逻辑覆盖 `favorite` / `knowledge` 在 `app_settings` 的缓存。
 
-- `SpiritMascot.tsx` 状态→图片映射逻辑、动画(浮动/弹跳/思考三连点/闪光星)保持原样。
-- `spirit-chat` edge function、人设系统提示、聊天 UI 都不动。
-- 老的 `mem://design/boomer-canonical` 备忘录会同步更新到"8 张姿态已经是透明 PNG,严禁带 logo/背景"。
+**不动的地方**
+- 题型(四选一)、UI 样式、通过线、积分发放、`onAttempt/onPassed` 回调、taskProgress 流程,全部保持不变。
+- BOOMER 形象/动画/抽屉布局不动,只动 chip 内容与抽法。
 
-## 执行顺序
+## 验收
 
-1. 用 edit_image 以 `boomer-idle.png` 为参考逐张重画 8 张姿态,`transparent_background: true`,覆盖到 `src/assets/boomer/`。
-2. 调整 `SpiritMascot`(去掉默认那层粉色光晕,或减淡)+ `FloatingDashboard`(确认胶囊不再像方块套方块)。
-3. 更新 `mem://design/boomer-canonical`:8 姿态 = 透明 PNG,带 logo/粉底的版本作废。
-4. 视觉验收:截图浮窗 + 抽屉首屏,确认水獭"浮"在界面上,不再是粉色方块。
-
-## 你需要确认的一件事
-
-姿态清单上面那张表 OK 吗?或者你想加/换某些姿态(比如"翻笔记本""举价签""比心")?定了我就开干。
+- 连续打开 BOOMER 抽屉 5 次,4 个气泡的具体话题至少出现 3 种以上分类组合,不再每次都是"明天上班/朋友圈文案/今天主推"那一套。
+- 同一个知识点连续考 5 次,5 道题的题干集合每次都明显不同(只要 pool ≥ 10 就一定不会完全一样)。
+- 首次进入新知识点 → 触发一次 AI 生成 10 道(略慢一点,符合"出题中…"提示);之后每次进入都是秒开。
+- 管理员点"换一套题"→ pool 被清空并重新出 10 道。
