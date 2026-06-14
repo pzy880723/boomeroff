@@ -105,26 +105,7 @@ export default function MarketingVideo() {
           current={urls.length === 0 ? 0 : !analysis ? 1 : !script ? 2 : !jobId ? 2 : 3}
         />
         {/* 素材 */}
-        <Card className="p-3 space-y-2">
-          <p className="text-sm font-medium">素材（最多 10 张）</p>
-          <div className="grid grid-cols-4 gap-2">
-            {urls.map((u, i) => (
-              <div key={i} className="relative aspect-square">
-                <img src={u} alt="" className="w-full h-full object-cover rounded-md border" />
-                <span className="absolute top-0.5 left-0.5 bg-background/80 text-[10px] px-1 rounded">#{i}</span>
-                <button onClick={() => { setUrls(urls.filter((_, j) => j !== i)); setAnalysis(null); setScript(null); }} className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-background border flex items-center justify-center">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-            {urls.length < 10 && (
-              <label className="aspect-square border-2 border-dashed rounded-md flex items-center justify-center cursor-pointer hover:bg-accent/10">
-                <Upload className="w-4 h-4 text-muted-foreground" />
-                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => onPick(e.target.files)} />
-              </label>
-            )}
-          </div>
-        </Card>
+        <UploadGrid urls={urls} onChange={onUrlsChange} max={10} preset="thumb" title="素材" />
 
         {/* 设置 */}
         <Card className="p-4 space-y-3">
@@ -136,26 +117,18 @@ export default function MarketingVideo() {
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">时长</p>
-              <div className="flex gap-1.5">
-                {DURATIONS.map((d) => (
-                  <Badge key={d} variant={duration === d ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setDuration(d)}>{d}s</Badge>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">画幅</p>
-              <div className="flex gap-1.5">
-                {ASPECTS.map((a) => (
-                  <Badge key={a} variant={aspect === a ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setAspect(a)}>{a}</Badge>
-                ))}
-              </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">时长</p>
+            <div className="flex gap-1.5">
+              {DURATIONS.map((d) => (
+                <Badge key={d} variant={duration === d ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setDuration(d)}>{d}s</Badge>
+              ))}
             </div>
           </div>
+          <AspectPicker value={aspect} onChange={(v) => setAspect(v as typeof ASPECTS[number])} />
           <Input placeholder="想突出什么（可选）" value={highlight} onChange={(e) => setHighlight(e.target.value)} maxLength={80} />
         </Card>
+
 
         {/* Step 1: 素材分析 */}
         {!script && (
