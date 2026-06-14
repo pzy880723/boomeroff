@@ -109,6 +109,11 @@ const App = () => {
               <Route path="/me/vouchers/share/:claimId" element={<VoucherSharePoster />} />
               <Route path="/me/activities" element={<ActivitiesMine />} />
               <Route path="/me/activities/:id" element={<ActivityDetail />} />
+              <Route path="/me/marketing" element={<MyMarketing />} />
+              <Route path="/me/marketing/photo" element={<MarketingPhoto />} />
+              <Route path="/me/marketing/copy" element={<MarketingCopy />} />
+              <Route path="/me/marketing/video" element={<MarketingVideo />} />
+              <Route path="/me/marketing/library" element={<MarketingLibrary />} />
 
               {/* 游客版（免登录） */}
               <Route path="/q" element={<PublicClaimByPhone />} />
