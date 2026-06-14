@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Upload, Download, RotateCw, FileText, Video } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMarketingImages } from './uploadMarketingImages';
+import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
