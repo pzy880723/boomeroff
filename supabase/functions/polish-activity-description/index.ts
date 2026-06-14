@@ -38,8 +38,8 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    if (draft.length > 300) {
-      return new Response(JSON.stringify({ error: '草稿不要超过 300 字' }), {
+    if (draft.length > 500) {
+      return new Response(JSON.stringify({ error: '草稿不要超过 500 字' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
 - …
 
 撰写规则：
-1. 仅使用简体中文，总长度 120-360 字（含换行）。
+1. 仅使用简体中文，总长度 120-500 字（含换行）。
 2. 称呼顾客统一使用"您"。禁止 emoji、markdown 标记（# * **）、禁止把要点合并成段。
 3. 禁止使用通稿夸张词：诚邀、莅临、惊喜钜献、不容错过、敬请期待、钜惠、火爆开启 等。语气要正式但不端着。
 4. 不得凭空编造草稿未提及的具体金额、赠品、折扣、时间、地址、人数等数字与事实。
