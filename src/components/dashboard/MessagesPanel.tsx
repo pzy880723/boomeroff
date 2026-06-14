@@ -15,7 +15,7 @@ interface Props {
 
 export function MessagesPanel({ items, unread, onRead, onReadAll, learning, navigate }: Props) {
   const lessons = [
-    learning.sop && { key: 'sop', icon: BookOpen, label: '今日 SOP', title: learning.sop.title, body: learning.sop.body, path: '/me/sop' },
+    learning.sop && { key: 'sop', icon: BookOpen, label: '今日手册', title: learning.sop.title, body: learning.sop.body, path: '/me/sop' },
     learning.qa && { key: 'qa', icon: MessagesSquare, label: '顾客 Q&A', title: learning.qa.title, body: learning.qa.body, path: '/me/qa' },
     learning.daily && {
       key: 'daily', icon: Sparkles, label: '中古小知识',
