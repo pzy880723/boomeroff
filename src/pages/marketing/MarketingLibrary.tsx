@@ -22,7 +22,7 @@ export default function MarketingLibrary() {
 
   return (
     <>
-      <PageHeader title="素材库" showBack />
+      <PageHeader title="素材库" back="/me/marketing" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-3">
         {loading && <div className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></div>}
         {!loading && items.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">还没有产出</p>}

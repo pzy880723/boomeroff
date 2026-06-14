@@ -58,7 +58,7 @@ export default function MarketingCopy() {
 
   return (
     <>
-      <PageHeader title="AI 文案" showBack />
+      <PageHeader title="AI 文案" back="/me/marketing" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
         <Card className="p-3 space-y-2">
           <p className="text-sm font-medium">素材（最多 9 张）</p>

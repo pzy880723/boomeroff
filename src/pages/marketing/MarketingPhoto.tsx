@@ -56,7 +56,7 @@ export default function MarketingPhoto() {
 
   return (
     <>
-      <PageHeader title="图片优化" showBack />
+      <PageHeader title="图片优化" back="/me/marketing" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
         <Card className="p-3">
           <p className="text-xs text-muted-foreground mb-3">只做修复，不加滤镜：让随手拍的照片回到"正常质感"。</p>

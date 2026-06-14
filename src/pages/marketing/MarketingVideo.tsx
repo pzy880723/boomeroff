@@ -99,7 +99,7 @@ export default function MarketingVideo() {
 
   return (
     <>
-      <PageHeader title="AI 视频" showBack />
+      <PageHeader title="AI 视频" back="/me/marketing" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
         {/* 素材 */}
         <Card className="p-3 space-y-2">
