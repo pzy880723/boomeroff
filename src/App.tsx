@@ -34,9 +34,17 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const VouchersMine = lazy(() => import("./pages/VouchersMine"));
 const VoucherRedeem = lazy(() => import("./pages/VoucherRedeem"));
 const VoucherSharePoster = lazy(() => import("./pages/VoucherSharePoster"));
-const PublicClaim = lazy(() => import("./pages/public/PublicClaim"));
-const PublicClaimByPhone = lazy(() => import("./pages/public/PublicClaimByPhone"));
-const PublicActivity = lazy(() => import("./pages/public/PublicActivity"));
+// 公开（免登录）路由 —— 急加载,避免微信 X5 webview 拉二级 chunk 失败导致白屏/报错
+import PublicClaim from "./pages/public/PublicClaim";
+import PublicClaimByPhone from "./pages/public/PublicClaimByPhone";
+import PublicActivity from "./pages/public/PublicActivity";
+import { PublicLayout } from "./components/layout/PublicLayout";
+import PublicScan from "./pages/public/PublicScan";
+import PublicResult from "./pages/public/PublicResult";
+import PublicCommunity from "./pages/public/PublicCommunity";
+import PublicAbout from "./pages/public/PublicAbout";
+import { PublicErrorBoundary } from "./components/system/PublicErrorBoundary";
+
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
 const MyMarketing = lazy(() => import("./pages/MyMarketing"));
@@ -44,15 +52,6 @@ const MarketingPhoto = lazy(() => import("./pages/marketing/MarketingPhoto"));
 const MarketingCopy = lazy(() => import("./pages/marketing/MarketingCopy"));
 const MarketingVideo = lazy(() => import("./pages/marketing/MarketingVideo"));
 const MarketingLibrary = lazy(() => import("./pages/marketing/MarketingLibrary"));
-
-// 游客版（免登录）
-const PublicLayout = lazy(() =>
-  import("./components/layout/PublicLayout").then((m) => ({ default: m.PublicLayout }))
-);
-const PublicScan = lazy(() => import("./pages/public/PublicScan"));
-const PublicResult = lazy(() => import("./pages/public/PublicResult"));
-const PublicCommunity = lazy(() => import("./pages/public/PublicCommunity"));
-const PublicAbout = lazy(() => import("./pages/public/PublicAbout"));
 
 const queryClient = new QueryClient();
 
@@ -115,12 +114,27 @@ const App = () => {
               <Route path="/me/marketing/video" element={<MarketingVideo />} />
               <Route path="/me/marketing/library" element={<MarketingLibrary />} />
 
-              {/* 游客版（免登录） */}
-              <Route path="/q" element={<PublicClaimByPhone />} />
-              <Route path="/u/c/:short" element={<PublicClaim />} />
-              <Route path="/u/claim/:shareToken" element={<PublicClaim />} />
-              <Route path="/u/activity/:shareToken" element={<PublicActivity />} />
-              <Route path="/u" element={<PublicLayout />}>
+              {/* 游客版（免登录）—— 用静默 ErrorBoundary,顾客永远不会看到错误卡片 */}
+              <Route
+                path="/q"
+                element={<PublicErrorBoundary><PublicClaimByPhone /></PublicErrorBoundary>}
+              />
+              <Route
+                path="/u/c/:short"
+                element={<PublicErrorBoundary><PublicClaim /></PublicErrorBoundary>}
+              />
+              <Route
+                path="/u/claim/:shareToken"
+                element={<PublicErrorBoundary><PublicClaim /></PublicErrorBoundary>}
+              />
+              <Route
+                path="/u/activity/:shareToken"
+                element={<PublicErrorBoundary><PublicActivity /></PublicErrorBoundary>}
+              />
+              <Route
+                path="/u"
+                element={<PublicErrorBoundary><PublicLayout /></PublicErrorBoundary>}
+              >
                 <Route index element={<PublicScan />} />
                 <Route path="result" element={<PublicResult />} />
                 <Route path="community" element={<PublicCommunity />} />

@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertTriangle, Upload, X, ZoomIn } from 'lucide-react';
+import { Loader2, Upload, X, ZoomIn } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ActivityField } from '@/lib/voucher';
@@ -116,11 +116,10 @@ export default function PublicActivity() {
   }
   if (error || !activity) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={bgStyle}>
-        <div className="bg-[#fdf6e8] rounded-3xl p-6 text-center max-w-sm w-full space-y-2 shadow-2xl">
-          <AlertTriangle className="w-10 h-10 mx-auto text-[#8e1f10]" />
-          <p className="text-sm text-[#3b2410]">{error || '活动不存在'}</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center p-6" style={bgStyle}>
+        <p className="text-[13px] text-[#ffe7bd]/80 text-center">
+          活动暂时无法打开,请稍后再试
+        </p>
       </div>
     );
   }
