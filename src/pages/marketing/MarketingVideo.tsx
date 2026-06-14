@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Upload, X, AlertTriangle, CheckCircle2, Camera, Copy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMarketingImages } from './uploadMarketingImages';
+import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 
 const VIDEO_TYPES = [
@@ -99,8 +100,12 @@ export default function MarketingVideo() {
 
   return (
     <>
-      <PageHeader title="AI 视频" back="/me/marketing" />
+      <PageHeader title="AI 视频" back="/me/marketing" subtitle="营销中心 / 做视频" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
+        <StepBar
+          steps={['上传素材', '检查充足度', '确认脚本', '渲染']}
+          current={urls.length === 0 ? 0 : !analysis ? 1 : !script ? 2 : !jobId ? 2 : 3}
+        />
         {/* 素材 */}
         <Card className="p-3 space-y-2">
           <p className="text-sm font-medium">素材（最多 10 张）</p>

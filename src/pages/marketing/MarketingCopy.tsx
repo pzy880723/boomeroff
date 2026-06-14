@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Upload, Copy, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMarketingImages } from './uploadMarketingImages';
+import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 
 type Platform = 'xhs' | 'douyin' | 'shipinhao' | 'pyq';
@@ -58,8 +59,12 @@ export default function MarketingCopy() {
 
   return (
     <>
-      <PageHeader title="AI 文案" back="/me/marketing" />
+      <PageHeader title="AI 文案" back="/me/marketing" subtitle="营销中心 / 写文案" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
+        <StepBar
+          steps={['选图', '平台/口吻', '生成', '复制发布']}
+          current={urls.length === 0 ? 0 : cands.length === 0 ? 1 : 3}
+        />
         <Card className="p-3 space-y-2">
           <p className="text-sm font-medium">素材（最多 9 张）</p>
           <div className="grid grid-cols-4 gap-2">
