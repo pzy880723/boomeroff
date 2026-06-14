@@ -334,6 +334,25 @@ ${isExplore ? '七' : '六'}、最终解释权
               </div>
             ))}
 
+            <div className="flex items-start gap-2 pt-1">
+              <Checkbox
+                id="agree-protocol"
+                checked={agreed}
+                onCheckedChange={(v) => setAgreed(v === true)}
+                className="mt-0.5 border-[#8e1f10] data-[state=checked]:bg-[#8e1f10] data-[state=checked]:text-white"
+              />
+              <label htmlFor="agree-protocol" className="text-[12px] leading-relaxed text-[#3b2410] cursor-pointer select-none">
+                我已阅读并同意
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); setAgreementOpen(true); }}
+                  className="text-[#8e1f10] underline underline-offset-2 mx-0.5"
+                >
+                  《活动参与确认协议》
+                </button>
+              </label>
+            </div>
+
             <button
               onClick={submit}
               disabled={submitting}
@@ -344,8 +363,31 @@ ${isExplore ? '七' : '六'}、最终解释权
               确认报名
             </button>
             <p className="text-[11px] text-center text-[#6b3a18]/60">
-              提交即视为同意将信息用于本次活动核验
+              勾选并提交即视为同意上述协议，您的信息仅用于本次活动核验
             </p>
+          </div>
+        )}
+
+        <Dialog open={agreementOpen} onOpenChange={setAgreementOpen}>
+          <DialogContent className="max-w-md max-h-[85vh] bg-[#fdf6e8] border-[#e8d5b3]">
+            <DialogHeader>
+              <DialogTitle className="text-[#3b2410]">活动参与确认协议</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto pr-1">
+              <pre className="whitespace-pre-wrap text-[13px] leading-relaxed text-[#3b2410] font-sans">{agreementText}</pre>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => { setAgreed(true); setAgreementOpen(false); }}
+                className="bg-[#8e1f10] hover:bg-[#8e1f10]/90 text-white"
+              >
+                我已阅读并同意
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* placeholder-end */}
+        <div className="hidden">
           </div>
         )}
 
