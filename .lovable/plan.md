@@ -1,102 +1,82 @@
-# 营销中心 v2:Banner 入口 + 返回键 + UI 升级
+## 用户反馈拆解
 
-## 1. Me 页:Banner 主入口(在个人信息卡下方)
+1. **AI 文案上传慢** — 现在 `compressForUpload` 默认压到 1600px / 0.82,对配图来说太大;而且 `uploadMarketingImages` 是 `for...of` 串行上传,3 张图就要等 3 倍时间。
+2. **没有上传进度反馈** — 当前只在出错时 toast,中途用户只能干等。
+3. **AI 视频画幅** — 现在是 `9:16 / 1:1 / 16:9` 三个文字 Badge,要换成竖/方/横三个**图形比例缩略图**按钮。
+4. **AI 视频上传同样慢** — 同问题。
+5. **先看 UI 设计稿再开发** — 不要直接动代码,先出图,确认后再写。
 
-把原来藏在「设置列表」里的「营销中心 · 一键出片」一行,升级为独立 Banner Card,插入位置在 `Profile Card` 与 `CheckInCard` 之间(也就是个人信息正下方),原列表里的那一行同时移除,避免重复。
+---
 
-视觉规格:
-- 高度比普通 Card 稍高(p-5),圆角 `rounded-2xl`
-- 背景渐变:`bg-gradient-to-br from-primary/15 via-primary/5 to-accent/10`,带极淡的网格底纹
-- 左侧大图标圆胶囊:`Clapperboard`,渐变填充
-- 标题:**营销中心**,副标题:**一键出图 · 一键出文 · 一键出片**
-- 右下角 3 个小 Pill:📷 修图 · ✍️ 文案 · 🎬 视频
-- 右上 `BOOMER` 小标(`Sparkles` 图标 + "AI 助手"小字)
-- 点击整卡跳转 `/me/marketing`,带轻微 hover/active 缩放(`active:scale-[0.99]`)
+## 第一步:出 UI 设计稿(本轮交付)
 
-## 2. 返回键:把 4 个页面的导航闭环补齐
+进 build 模式后,**第一件事不是写代码**,而是调用 `design--create_directions` 出 3 套渲染后的 HTML 预览,聚焦两个组件:
 
-- `MyMarketing.tsx` 顶部 PageHeader 增加 `back="/me"` —— 这是用户反馈"没有返回键"的根本原因。
-- 子页面已经有 `back="/me/marketing"`,本次不动。
-- 同时给整个营销系列加一个**统一面包屑色带**(可选)用 PageHeader 的 `subtitle` 表达当前位置,例如「图片优化」副标题写「营销中心 / 修图」。
+**A. 多图上传卡片(文案 + 视频共用样式)**
+   - 4 列网格,每张缩略图带:进度环 / 完成对勾 / 失败 ! / × 删除。
+   - 顶部一条总进度细条 `上传中 2/5`。
+   - "+" 添加格子,虚线边框,显示剩余可加张数。
 
-## 3. MyMarketing 主页 UI 升级
+**B. 视频画幅选择器**
+   - 三个图形按钮代替文字 Badge:
+     - 竖版:窄长方形竖立(9:16),下面小字 `9:16 竖版`。
+     - 方形:正方形(1:1),下面 `1:1 方形`。
+     - 横版:扁长方形(16:9),下面 `16:9 横版`。
+   - 选中态:实心填充 + primary 边框 + 微缩放。
+   - 未选中:线框 + muted 色。
 
-当前问题:就是「一个统计卡 + 三个普通行 Card + 素材库」,信息密度低、缺乏层次。
+3 个方向走不同密度/质感(极简线框 / 实色填充 + 阴影 / 玻璃态半透明),其它视觉风格沿用项目 design token,不引入新色。
 
-重做版面:
+出图后 `ask_questions(type: 'prototype')` 给你选,你选完我再落地代码。**这一步不动任何文件**。
 
-```text
-[ 顶部 Hero ]
-  渐变背景 + BOOMER 小水獭剪影 + 今日产出徽章 + 近 30 天数值
-  「今天发了吗?」一句鼓励文案,基于 counts 是否为 0 切换
+---
 
-[ 三大工具:卡片网格 ]
-  ┌────────────┬────────────┐
-  │ 修图        │ 写文案      │
-  │ (大图标 + 步骤数 1)        │
-  ├────────────┴────────────┤
-  │ AI 视频(横向占满,占两列)  │
-  │ 步骤数 2 · "脚本先确认再渲染"│
-  └─────────────────────────┘
-  - 卡片用 magic-card 风格:hover 时 spotlight 跟随光标
-  - 每张卡片有「最近 1 张产出缩略图」(若有),没有就显示渐变占位
-  - 右上角小数字 Badge = 30 天产出条数
+## 第二步:用户选完 → 落地实现(下一轮)
 
-[ 工作流提示带 ]
-  一行三步指引:① 拍图/上传 → ② 修图/写文 → ③ 选平台发布
-  弱化为提示色,不抢主视觉
+### 2.1 上传提速
 
-[ 底部:素材库 + 品牌信息预设说明 ]
-  素材库改成更明显的横长卡片(带最近 3 张缩略图叠加)
-  品牌预设那句小字保留
+`src/lib/uploadImage.ts` 增加可选参数,提供两套预设:
+- `compressForUpload(file)` — 维持原默认(给图片优化用,要细节)。
+- `compressForUpload(file, { preset: 'thumb' })` — `maxWidth=900`、`quality=0.72`、目标 80–150KB。配图给 AI 看图写文/分析素材足够了。
+
+`src/pages/marketing/uploadMarketingImages.ts` 改造:
+- 新签名:`uploadMarketingImages(userId, files, { preset?, onProgress? })`
+- 内部用 `Promise.all` 并发上传(浏览器自己会限到 6),不再 `for...of`。
+- 每张图在 `开始压缩 → 压缩完成 → 上传完成` 三个节点回调 `onProgress({ index, status, doneCount, total })`。
+
+不动 storage bucket、不动 RLS、不动 edge function。
+
+### 2.2 上传 UI 反馈
+
+`MarketingCopy.tsx` / `MarketingVideo.tsx` 都加 `uploading: Array<{ id, status: 'compressing'|'uploading'|'done'|'error', preview?: string }>` 状态:
+- 用户选完文件,立刻用 `URL.createObjectURL` 显示本地预览(零等待感)。
+- 每张缩略图角标实时切换"压缩中 → 上传中 → ✓"。
+- 顶部小进度条 `上传中 X/N`,全部完成自动消失。
+- 失败的可单张重试。
+
+`MarketingCopy` 调用时传 `preset: 'thumb'`(配图只给 AI 看);`MarketingVideo` 同样用 `thumb` —— 素材分析也只需要语义识别,不需要 1600px。
+
+### 2.3 视频画幅图形按钮
+
+`MarketingVideo.tsx` 把 `ASPECTS.map((a) => <Badge>)` 这段(行 150–157)换成自定义 `<AspectButton>` 组件:
 ```
+[ ▭ ]  [ □ ]  [ ▬ ]
+9:16   1:1   16:9
+竖版   方形   横版
+```
+用纯 CSS div 画矩形,按比例宽高,选中态加 `ring-2 ring-primary` + `bg-primary/10`。不引入新依赖。
 
-样式锚点:
-- 主色用 `hsl(var(--primary))` 渐变,符合现有 BOOMER 暖调
-- 间距 `gap-3`,卡片 `rounded-2xl`,边框 `border-border/50`
-- 微动效:卡片进入 `motion-safe:animate-fade-in`(已在 tailwind 里有的工具类)或 Tailwind 内置 `transition-all duration-200`
+---
 
-## 4. 子页面 UI 升级(轻量,只改观感不改逻辑)
+## 不做
 
-### 4.1 MarketingPhoto(图片优化)
-- 上方加一个**进度条**:`① 上传图 → ② 选修复项 → ③ 出图`,跟随状态高亮
-- 原图/修复后对比从「左右两张方图」升级为 **Before/After 滑动对比**(纯 CSS,拖动分割线即可)
-- 修复开关用更清晰的 `Switch` 替代 `Checkbox`,并加小图标
-- 失败时不只 toast,在结果区放占位卡片 + 重试按钮
+- 不改 edge function、不改 prompt、不改模型。
+- 不上 zip 批量下载、不做 WebWorker 压缩(浏览器单图 <300ms,够了)。
+- 不动 `MarketingPhoto.tsx`(它要的是高清原图,不能砍画质)。
 
-### 4.2 MarketingCopy(AI 文案)
-- 顶部步骤条:`① 选图 → ② 平台/口吻 → ③ 生成 → ④ 复制发布`
-- 平台用 4 个图标 Toggle Group(小红书 / 抖音 / 视频号 / 朋友圈),口吻用 Chip 风
-- 生成结果三张卡片改成 **可滑动卡片堆叠**,每张卡有「复制标题 / 复制正文 / 复制全部」按钮
-- 加「带去做视频」联动按钮(已经有 nav state,只是 UI 没暴露)
+---
 
-### 4.3 MarketingVideo(AI 视频)
-- 顶部明显的 4 步进度条:`① 上传素材 → ② 检查充足度 → ③ 确认脚本 → ④ 渲染`
-- 素材充足度检测结果用 **Alert + 缺失镜头清单**(红色 = 不够,黄色 = 建议补,绿色 = 充足)
-- 脚本卡片每条镜头加缩略图 + 时长滑条 + 可编辑台词
-- 渲染中给出 job 状态实时显示(已经 enqueue 了,只需查询)
+## 交付节奏
 
-### 4.4 MarketingLibrary(素材库)
-- Tab 切换:全部 / 图片 / 文案 / 视频
-- 用 `card-grid` 网格,每条带缩略图 + 创建时间 + 已发布平台徽章
-- 长按/点 More 可删除
-
-## 5. 技术细节
-
-- 不新增依赖。Before/After 对比、Step Bar、Pill Tabs 全部用 Tailwind 手写。
-- 不动 edge function、不动 RLS、不动数据库。
-- 不动现有的 routes 配置,只编辑 5 个文件:
-  - `src/pages/Me.tsx`(移除列表项 + 插入 Banner)
-  - `src/pages/MyMarketing.tsx`(Hero + 网格 + 返回键)
-  - `src/pages/marketing/MarketingPhoto.tsx`
-  - `src/pages/marketing/MarketingCopy.tsx`
-  - `src/pages/marketing/MarketingVideo.tsx`
-  - `src/pages/marketing/MarketingLibrary.tsx`
-- 颜色全部走 `hsl(var(--...))` 语义 token,不写裸色。
-
-## 6. 验收
-
-- /me 页:个人信息卡正下方出现彩色 Banner,设置列表里不再有「营销中心」这一行
-- 点 Banner → /me/marketing,左上有 ← 返回箭头,回到 /me
-- 4 个子页面顶部都有 ← 返回箭头,且每页都能看见清晰的步骤指引
-- 整体观感统一(渐变 + BOOMER 调性 + 圆角 + 微动效),不再像「占位 demo」
+- **本轮(plan 通过 → build):** 只调 `design--create_directions` + `ask_questions`,等你选样。
+- **下一轮(你选完):** 实现 2.1 / 2.2 / 2.3,共改 4 个文件:`src/lib/uploadImage.ts`、`src/pages/marketing/uploadMarketingImages.ts`、`MarketingCopy.tsx`、`MarketingVideo.tsx`。
