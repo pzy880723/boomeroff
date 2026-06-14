@@ -386,10 +386,7 @@ ${isExplore ? '七' : '六'}、最终解释权
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        {/* placeholder-end */}
-        <div className="hidden">
-          </div>
-        )}
+
 
         <p className="text-center text-[11px] text-[#fff5e1]/55 pt-2">
           由 BOOMER · OFF 中古小店呈上
