@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut,
-  ChevronRight, Edit2, CalendarCheck, BookOpen, MessagesSquare, MapPin, Briefcase, Ticket, Megaphone,
+  ChevronRight, Edit2, CalendarCheck, BookOpen, MessagesSquare, MapPin, Briefcase, Ticket, Megaphone, Clapperboard,
 } from 'lucide-react';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 import { Link } from 'react-router-dom';
@@ -165,6 +165,11 @@ export default function Me() {
           <Link to="/me/activities" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
             <Megaphone className="w-5 h-5 text-muted-foreground" />
             <span className="flex-1 text-sm">我的活动</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </Link>
+          <Link to="/me/marketing" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
+            <Clapperboard className="w-5 h-5 text-muted-foreground" />
+            <span className="flex-1 text-sm">营销中心 · 一键出片</span>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </Link>
           <Link to="/me/sop" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">

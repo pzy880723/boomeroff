@@ -39,6 +39,11 @@ const PublicClaimByPhone = lazy(() => import("./pages/public/PublicClaimByPhone"
 const PublicActivity = lazy(() => import("./pages/public/PublicActivity"));
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
+const MyMarketing = lazy(() => import("./pages/MyMarketing"));
+const MarketingPhoto = lazy(() => import("./pages/marketing/MarketingPhoto"));
+const MarketingCopy = lazy(() => import("./pages/marketing/MarketingCopy"));
+const MarketingVideo = lazy(() => import("./pages/marketing/MarketingVideo"));
+const MarketingLibrary = lazy(() => import("./pages/marketing/MarketingLibrary"));
 
 // 游客版（免登录）
 const PublicLayout = lazy(() =>
@@ -104,6 +109,11 @@ const App = () => {
               <Route path="/me/vouchers/share/:claimId" element={<VoucherSharePoster />} />
               <Route path="/me/activities" element={<ActivitiesMine />} />
               <Route path="/me/activities/:id" element={<ActivityDetail />} />
+              <Route path="/me/marketing" element={<MyMarketing />} />
+              <Route path="/me/marketing/photo" element={<MarketingPhoto />} />
+              <Route path="/me/marketing/copy" element={<MarketingCopy />} />
+              <Route path="/me/marketing/video" element={<MarketingVideo />} />
+              <Route path="/me/marketing/library" element={<MarketingLibrary />} />
 
               {/* 游客版（免登录） */}
               <Route path="/q" element={<PublicClaimByPhone />} />
