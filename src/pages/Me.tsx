@@ -169,7 +169,7 @@ export default function Me() {
           </Link>
           <Link to="/me/sop" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
             <BookOpen className="w-5 h-5 text-muted-foreground" />
-            <span className="flex-1 text-sm">门店 SOP</span>
+            <span className="flex-1 text-sm">门店手册</span>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </Link>
           <Link to="/me/qa" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
