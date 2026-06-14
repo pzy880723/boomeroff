@@ -202,7 +202,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
                 {polishing ? '润色中' : 'AI 润色'}
               </Button>
             </div>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={300} placeholder="随便写两句，再点右上角「AI 润色」自动改写" />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={500} placeholder="随便写两句，再点右上角「AI 润色」自动改写" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">关联优惠券</Label>
