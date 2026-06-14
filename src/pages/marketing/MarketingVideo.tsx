@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Upload, X, AlertTriangle, CheckCircle2, Camera, Copy } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, Camera, Copy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { uploadMarketingImages } from './uploadMarketingImages';
+import { UploadGrid } from './UploadGrid';
+import { AspectPicker } from './AspectPicker';
 import { StepBar } from './StepBar';
 import { toast } from 'sonner';
+
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -23,7 +24,6 @@ const DURATIONS = [15, 20, 30] as const;
 const ASPECTS = ['9:16', '1:1', '16:9'] as const;
 
 export default function MarketingVideo() {
-  const { user } = useAuth();
   const loc = useLocation();
   const [urls, setUrls] = useState<string[]>((loc.state as any)?.image_urls || []);
   const [vtype, setVtype] = useState<VType>('store_tour');
@@ -38,15 +38,13 @@ export default function MarketingVideo() {
   const [rendering, setRendering] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
 
-  const onPick = async (files: FileList | null) => {
-    if (!files || !user) return;
-    const arr = Array.from(files).slice(0, 10 - urls.length);
-    try {
-      const newUrls = await uploadMarketingImages(user.id, arr);
-      setUrls([...urls, ...newUrls]);
-      setAnalysis(null); setScript(null);
-    } catch (e: any) { toast.error(e?.message || '上传失败'); }
+  // 上传交给 UploadGrid 内部托管;urls 变化时清空分析/脚本缓存
+  const onUrlsChange = (next: string[]) => {
+    setUrls(next);
+    setAnalysis(null);
+    setScript(null);
   };
+
 
   const analyze = async () => {
     if (!urls.length) return toast.error('请先上传素材');
@@ -107,26 +105,7 @@ export default function MarketingVideo() {
           current={urls.length === 0 ? 0 : !analysis ? 1 : !script ? 2 : !jobId ? 2 : 3}
         />
         {/* 素材 */}
-        <Card className="p-3 space-y-2">
-          <p className="text-sm font-medium">素材（最多 10 张）</p>
-          <div className="grid grid-cols-4 gap-2">
-            {urls.map((u, i) => (
-              <div key={i} className="relative aspect-square">
-                <img src={u} alt="" className="w-full h-full object-cover rounded-md border" />
-                <span className="absolute top-0.5 left-0.5 bg-background/80 text-[10px] px-1 rounded">#{i}</span>
-                <button onClick={() => { setUrls(urls.filter((_, j) => j !== i)); setAnalysis(null); setScript(null); }} className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-background border flex items-center justify-center">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-            {urls.length < 10 && (
-              <label className="aspect-square border-2 border-dashed rounded-md flex items-center justify-center cursor-pointer hover:bg-accent/10">
-                <Upload className="w-4 h-4 text-muted-foreground" />
-                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => onPick(e.target.files)} />
-              </label>
-            )}
-          </div>
-        </Card>
+        <UploadGrid urls={urls} onChange={onUrlsChange} max={10} preset="thumb" title="素材" />
 
         {/* 设置 */}
         <Card className="p-4 space-y-3">
@@ -138,26 +117,18 @@ export default function MarketingVideo() {
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">时长</p>
-              <div className="flex gap-1.5">
-                {DURATIONS.map((d) => (
-                  <Badge key={d} variant={duration === d ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setDuration(d)}>{d}s</Badge>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">画幅</p>
-              <div className="flex gap-1.5">
-                {ASPECTS.map((a) => (
-                  <Badge key={a} variant={aspect === a ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setAspect(a)}>{a}</Badge>
-                ))}
-              </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">时长</p>
+            <div className="flex gap-1.5">
+              {DURATIONS.map((d) => (
+                <Badge key={d} variant={duration === d ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setDuration(d)}>{d}s</Badge>
+              ))}
             </div>
           </div>
+          <AspectPicker value={aspect} onChange={(v) => setAspect(v as typeof ASPECTS[number])} />
           <Input placeholder="想突出什么（可选）" value={highlight} onChange={(e) => setHighlight(e.target.value)} maxLength={80} />
         </Card>
+
 
         {/* Step 1: 素材分析 */}
         {!script && (
