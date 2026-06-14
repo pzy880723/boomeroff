@@ -6,11 +6,12 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Upload, Copy, X } from 'lucide-react';
+import { Loader2, Copy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { uploadMarketingImages } from './uploadMarketingImages';
+import { UploadGrid } from './UploadGrid';
 import { StepBar } from './StepBar';
 import { toast } from 'sonner';
+
 
 type Platform = 'xhs' | 'douyin' | 'shipinhao' | 'pyq';
 type Tone = '种草' | '探店' | '藏家分享' | '上新';
@@ -31,15 +32,6 @@ export default function MarketingCopy() {
   const [highlight, setHighlight] = useState('');
   const [busy, setBusy] = useState(false);
   const [cands, setCands] = useState<any[]>([]);
-
-  const onPick = async (files: FileList | null) => {
-    if (!files || !user) return;
-    const arr = Array.from(files).slice(0, 9 - urls.length);
-    try {
-      const newUrls = await uploadMarketingImages(user.id, arr);
-      setUrls([...urls, ...newUrls]);
-    } catch (e: any) { toast.error(e?.message || '上传失败'); }
-  };
 
   const gen = async () => {
     if (!urls.length) return toast.error('至少上传一张图');
@@ -65,25 +57,8 @@ export default function MarketingCopy() {
           steps={['选图', '平台/口吻', '生成', '复制发布']}
           current={urls.length === 0 ? 0 : cands.length === 0 ? 1 : 3}
         />
-        <Card className="p-3 space-y-2">
-          <p className="text-sm font-medium">素材（最多 9 张）</p>
-          <div className="grid grid-cols-4 gap-2">
-            {urls.map((u, i) => (
-              <div key={i} className="relative aspect-square">
-                <img src={u} alt="" className="w-full h-full object-cover rounded-md border" />
-                <button onClick={() => setUrls(urls.filter((_, j) => j !== i))} className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-background border flex items-center justify-center">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-            {urls.length < 9 && (
-              <label className="aspect-square border-2 border-dashed rounded-md flex items-center justify-center cursor-pointer hover:bg-accent/10">
-                <Upload className="w-4 h-4 text-muted-foreground" />
-                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => onPick(e.target.files)} />
-              </label>
-            )}
-          </div>
-        </Card>
+        <UploadGrid urls={urls} onChange={setUrls} max={9} preset="thumb" title="素材" />
+
 
         <Card className="p-4 space-y-3">
           <div>
