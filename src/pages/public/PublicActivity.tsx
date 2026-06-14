@@ -1,9 +1,12 @@
 // 公开：活动报名页（免登录）—— 与海报同款暖棕主题
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Loader2, AlertTriangle, Upload, X, ZoomIn } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -53,6 +56,8 @@ export default function PublicActivity() {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
+  const [agreementOpen, setAgreementOpen] = useState(false);
 
   useEffect(() => {
     if (!shareToken) return;
@@ -72,6 +77,7 @@ export default function PublicActivity() {
   const submit = async () => {
     if (!name.trim()) { toast.error('请输入姓名'); return; }
     if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
+    if (!agreed) { toast.error('请先勾选并同意《活动参与确认协议》'); return; }
     setSubmitting(true);
     const { data, error: e } = await supabase.functions.invoke('activity-apply', {
       body: {
@@ -129,6 +135,48 @@ export default function PublicActivity() {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
+
+  const agreementText = useMemo(() => {
+    const desc: string = activity.description || '';
+    const isExplore = /小红书|探店|笔记|种草|发布|文案|xhs/i.test(desc);
+    const timeRange = `${activity.starts_at ? fmt(activity.starts_at) : '不限'} 至 ${activity.ends_at ? fmt(activity.ends_at) : '不限'}`;
+    const voucherLine = v ? `${formatVoucherRule(v)}，有效期 ${v.valid_days} 天，仅限到店核销，不可转让、兑现或找零。` : '本活动关联优惠券，具体规则以活动页展示为准。';
+    const exploreBlock = isExplore ? `
+
+四、内容发布义务（探店/笔记类专项）
+1. 您应在领取优惠券后 7 个自然日内，在小红书发布一条不少于 100 字、含 3 张及以上到店实拍图的真实探店笔记；笔记应 @ 门店账号或带门店定位、指定话题（活动描述另有约定的，以活动描述为准）。
+2. 笔记内容必须基于您本人真实到店体验，不得抄袭、搬运他人内容，不得使用 AI 一键生成、虚假摆拍或夸大宣传，不得包含违法、违规、低俗或侵权信息。
+3. 笔记发布后 30 个自然日内，不得删除、设为私密、隐藏或对内容作大幅修改。如因平台限流、审核未通过等原因导致笔记不可见，您应在 3 个自然日内重新发布并通知门店。
+4. 门店有权要求您提供笔记链接以核验。未按本条约定发布、删除/隐藏笔记或内容明显与到店事实不符的，门店有权停用您尚未使用的优惠券；已核销的，您应按所享优惠的等额金额向门店补足相应价款。` : '';
+
+    return `《活动参与确认协议》
+
+本协议由 BOOMER-OFF 中古门店（以下简称"门店"）与本次活动报名人（以下简称"您"）就「${activity.name}」活动（以下简称"本活动"）的参与事宜共同确认。您勾选"我已阅读并同意"并提交报名信息，即视为您已充分阅读、理解并同意本协议全部条款，本协议自此对双方生效。
+
+一、活动信息
+1. 活动名称：${activity.name}
+2. 活动时间：${timeRange}
+3. 活动权益：${voucherLine}
+4. 活动具体内容、参与方式与权益细则，以本活动页面所展示的"活动描述"为准；本协议与活动描述不一致的，以更有利于规范活动秩序的一方为准。
+
+二、报名信息真实性
+您承诺所填写的姓名、手机号及上传的截图、链接等全部信息均真实、准确、合法、有效，且为您本人信息。如因信息虚假、伪造、盗用他人信息导致无法核销或产生纠纷的，门店有权拒绝提供活动权益，并保留进一步追究的权利。
+
+三、优惠券使用规则
+1. 同一自然人、同一手机号在本活动中仅可领取一次。
+2. 优惠券仅限在门店到店消费时核销，不可转让、不可兑现、不可找零、不与其他优惠叠加（活动另有说明的除外）。
+3. 优惠券超过有效期或活动结束时间的，自动失效。${exploreBlock}
+
+${isExplore ? '五' : '四'}、个人信息处理
+门店仅在本活动核验、优惠券发放与必要联系范围内处理您的个人信息，不会将其用于其他商业用途。相关信息的保存期限不超过本活动结束后 90 日，到期后将被删除或匿名化处理。依据《中华人民共和国个人信息保护法》，您有权要求门店查询、更正、删除您的个人信息。
+
+${isExplore ? '六' : '五'}、违约与争议处理
+您违反本协议任一条款的，门店有权立即取消您的报名资格、停用相关优惠券，并不退还已享受的活动权益。因本活动产生争议的，双方应本着诚信原则友好协商解决；协商不成的，依法向门店所在地有管辖权的人民法院提起诉讼。
+
+${isExplore ? '七' : '六'}、最终解释权
+在不违反法律强制性规定的前提下，本活动及本协议的最终解释权归 BOOMER-OFF 中古门店所有。`;
+  }, [activity, v]);
+
 
   return (
     <div className="min-h-screen relative" style={bgStyle}>
@@ -286,6 +334,25 @@ export default function PublicActivity() {
               </div>
             ))}
 
+            <div className="flex items-start gap-2 pt-1">
+              <Checkbox
+                id="agree-protocol"
+                checked={agreed}
+                onCheckedChange={(v) => setAgreed(v === true)}
+                className="mt-0.5 border-[#8e1f10] data-[state=checked]:bg-[#8e1f10] data-[state=checked]:text-white"
+              />
+              <label htmlFor="agree-protocol" className="text-[12px] leading-relaxed text-[#3b2410] cursor-pointer select-none">
+                我已阅读并同意
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); setAgreementOpen(true); }}
+                  className="text-[#8e1f10] underline underline-offset-2 mx-0.5"
+                >
+                  《活动参与确认协议》
+                </button>
+              </label>
+            </div>
+
             <button
               onClick={submit}
               disabled={submitting}
@@ -296,10 +363,30 @@ export default function PublicActivity() {
               确认报名
             </button>
             <p className="text-[11px] text-center text-[#6b3a18]/60">
-              提交即视为同意将信息用于本次活动核验
+              勾选并提交即视为同意上述协议，您的信息仅用于本次活动核验
             </p>
           </div>
         )}
+
+        <Dialog open={agreementOpen} onOpenChange={setAgreementOpen}>
+          <DialogContent className="max-w-md max-h-[85vh] bg-[#fdf6e8] border-[#e8d5b3]">
+            <DialogHeader>
+              <DialogTitle className="text-[#3b2410]">活动参与确认协议</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto pr-1">
+              <pre className="whitespace-pre-wrap text-[13px] leading-relaxed text-[#3b2410] font-sans">{agreementText}</pre>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => { setAgreed(true); setAgreementOpen(false); }}
+                className="bg-[#8e1f10] hover:bg-[#8e1f10]/90 text-white"
+              >
+                我已阅读并同意
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
 
         <p className="text-center text-[11px] text-[#fff5e1]/55 pt-2">
           由 BOOMER · OFF 中古小店呈上
