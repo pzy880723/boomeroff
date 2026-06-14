@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Upload, X, AlertTriangle, CheckCircle2, Camera, Copy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMarketingImages } from './uploadMarketingImages';
+import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 
 const VIDEO_TYPES = [
