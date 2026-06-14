@@ -170,7 +170,7 @@ export default function ActivityDetail() {
                   setShareOpen(true);
                 }}
               >
-                <Loader2 className="w-4 h-4 mr-1.5" /> 重新生成海报
+                <RefreshCw className="w-4 h-4 mr-1.5" /> 重新生成海报
               </Button>
             </div>
           ) : (
