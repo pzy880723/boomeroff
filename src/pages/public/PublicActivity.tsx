@@ -56,6 +56,8 @@ export default function PublicActivity() {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
+  const [agreementOpen, setAgreementOpen] = useState(false);
 
   useEffect(() => {
     if (!shareToken) return;
