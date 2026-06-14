@@ -23,7 +23,14 @@ export function QrScanner({ onScanned, onClose }: Props) {
       try {
         await scanner.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 260, height: 260 } },
+          {
+            fps: 10,
+            qrbox: (vw: number, vh: number) => {
+              const s = Math.floor(Math.min(vw, vh) * 0.75);
+              return { width: s, height: s };
+            },
+            aspectRatio: 1,
+          },
           (decoded) => {
             if (handledRef.current) return;
             handledRef.current = true;
@@ -49,6 +56,15 @@ export function QrScanner({ onScanned, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col">
+      {/* 强制内部 video 充满方形容器，去掉 html5-qrcode 默认的高亮边框 */}
+      <style>{`
+        #${containerId} video {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: cover !important;
+        }
+        #${containerId} > div:not(#qr-shaded-region) { border: none !important; }
+      `}</style>
       <div className="flex items-center justify-between p-3 text-white">
         <span className="text-sm">将二维码对准方框</span>
         <Button variant="ghost" size="icon" onClick={onClose} className="text-white">
@@ -56,7 +72,13 @@ export function QrScanner({ onScanned, onClose }: Props) {
         </Button>
       </div>
       <div className="flex-1 flex items-center justify-center px-4">
-        <div id={containerId} className="w-full max-w-md aspect-square bg-black rounded-xl overflow-hidden" />
+        <div className="relative bg-black rounded-xl overflow-hidden"
+          style={{ width: 'min(86vw, 360px)', height: 'min(86vw, 360px)' }}
+        >
+          <div id={containerId} className="w-full h-full" />
+          {/* 视觉对位框 */}
+          <div className="pointer-events-none absolute inset-[8%] rounded-xl ring-2 ring-white/80" />
+        </div>
       </div>
       <div className="p-4 text-center text-sm text-white/70 min-h-[3rem]">
         {starting && (
