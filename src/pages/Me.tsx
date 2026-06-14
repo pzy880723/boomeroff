@@ -127,8 +127,37 @@ export default function Me() {
           </div>
         </Card>
 
+        {/* Marketing Banner (主入口) */}
+        <Link to="/me/marketing" className="block">
+          <Card className="relative overflow-hidden p-5 rounded-2xl border-border/50 hover:bg-accent/5 transition-all active:scale-[0.99]">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-primary/8 to-accent/15 pointer-events-none" />
+            <div className="absolute -right-4 -bottom-4 opacity-25 pointer-events-none select-none">
+              <Clapperboard className="w-24 h-24 text-primary" strokeWidth={1.2} />
+            </div>
+            <div className="relative flex items-start gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary/60 text-primary-foreground flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+                <Clapperboard className="w-7 h-7" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-medium tracking-wide">BOOMER · AI 助手</span>
+                </div>
+                <h3 className="text-base font-semibold leading-tight">营销中心</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">一键出图 · 一键出文 · 一键出片</p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/70 border border-border/60">📷 修图</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/70 border border-border/60">✍️ 文案</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/70 border border-border/60">🎬 视频</span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+            </div>
+          </Card>
+        </Link>
+
         {/* Daily check-in */}
         <CheckInCard userId={user.id} onChanged={() => setExpRefreshKey(k => k + 1)} />
+
 
         {/* Level */}
         <LevelCard totalExp={totalExp} />
