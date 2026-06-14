@@ -77,6 +77,7 @@ export default function PublicActivity() {
   const submit = async () => {
     if (!name.trim()) { toast.error('请输入姓名'); return; }
     if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
+    if (!agreed) { toast.error('请先勾选并同意《活动参与确认协议》'); return; }
     setSubmitting(true);
     const { data, error: e } = await supabase.functions.invoke('activity-apply', {
       body: {
