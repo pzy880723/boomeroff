@@ -58,7 +58,7 @@ const MENU_GROUPS: MenuGroup[] = [
   },
   {
     key: 'kb', label: '知识库', icon: Library, items: [
-      { key: 'sop', label: '门店 SOP', icon: BookOpen, perm: 'shop.kb.write' },
+      { key: 'sop', label: '门店手册', icon: BookOpen, perm: 'shop.kb.write' },
       { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare, perm: 'shop.kb.write' },
       { key: 'official', label: '官方知识', icon: BadgeCheck, perm: 'knowledge.official.write' },
     ],
