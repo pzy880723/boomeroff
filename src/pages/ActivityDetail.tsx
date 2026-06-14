@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Share2, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Share2, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
@@ -148,10 +148,37 @@ export default function ActivityDetail() {
             </MetaRow>
           </div>
 
-          <Button onClick={() => setShareOpen(true)} className="w-full h-10 mt-1">
-            <Share2 className="w-4 h-4 mr-1.5" />
-            {hasPoster ? '打开转发海报' : '生成分享海报'}
-          </Button>
+          {hasPoster ? (
+            <div className="flex gap-2 mt-1">
+              <Button onClick={() => setShareOpen(true)} className="flex-1 h-10">
+                <Share2 className="w-4 h-4 mr-1.5" /> 打开转发海报
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 h-10"
+                onClick={async () => {
+                  if (!activity) return;
+                  const { error } = await supabase
+                    .from('activities')
+                    .update({ poster_url: null })
+                    .eq('id', activity.id);
+                  if (error) {
+                    toast.error('清除海报缓存失败：' + error.message);
+                    return;
+                  }
+                  setActivity((a) => (a ? { ...a, poster_url: null } : a));
+                  setShareOpen(true);
+                }}
+              >
+                <RefreshCw className="w-4 h-4 mr-1.5" /> 重新生成海报
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={() => setShareOpen(true)} className="w-full h-10 mt-1">
+              <Share2 className="w-4 h-4 mr-1.5" />
+              生成分享海报
+            </Button>
+          )}
         </Card>
 
 
