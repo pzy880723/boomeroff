@@ -1,25 +1,104 @@
-## 改动(只动 `src/pages/MyQa.tsx`)
 
-1. **标题加粗**:卡片里 `text-sm font-medium` → `text-sm font-semibold`,详情 `SheetTitle` 已是粗体,保持。
-2. **管理员入口**:用 `usePermissions().can('shop.kb.write')` 判断是否管理员。是管理员时:
-   - 页面右上角(标题区)/搜索框旁出现 **魔法棒按钮**(`Sparkles` 图标 + 文案"AI 新增"),点击打开 **新建 QA 对话框**。
-   - 每张 QA 卡片右上角出现 **编辑** + **删除** 两个小图标按钮(`Pencil` / `Trash2`);点击编辑打开编辑对话框,点击删除弹 confirm 后调 `supabase.from('shop_kb_entries').delete()`。
-3. **AI 新增 / 编辑对话框**(同一个 `Dialog`,复用):
-   - 字段:分类下拉(从现有 `cats` 选,允许留空)、标题、AI 补充提示(可选)、正文(textarea)、标签(逗号分隔)。
-   - **AI 生成正文按钮**:复用现有 edge function `generate-shop-kb`,传 `{ type:'qa', topic:title, hint, categories:cats }`,返回 `{ draft:{ title, body, category_name, tags } }`:
-     - 若返回 `category_name` 在现有分类里(忽略大小写) → 自动选中
-     - 否则用 `shop_kb_categories.insert({type:'qa',name,sort_order})` 新建,然后选中
-   - 保存:新建走 insert,编辑走 update;成功后刷新列表 + 关闭对话框。
-4. **权限失败时**保持现有只读 UI,不显示魔法棒和编辑/删除。
+## 目标
 
-## 不动
+把"门店 SOP"升级成"**门店手册**"——BOOMER·OFF 的品牌运营核心思想 + OKR 自驱手册,并按提供内容重写模块结构。
 
-- 数据库结构、RLS、`generate-shop-kb` edge function、Portal 的 KbManager
-- 其他页面(MyKb / MySop)的展示
+## 一、命名 & 路由
+
+保留 `/me/sop` 路由(不改 URL,避免链接失效),但所有 UI 文案改为 **"门店手册"**:
+- `src/pages/Me.tsx` 入口标签 → 门店手册
+- `src/pages/MySop.tsx` title → 门店手册
+- `src/pages/Portal.tsx` 后台 Tab → 门店手册
+- `src/components/dashboard/MessagesPanel.tsx` "今日 SOP" → 今日手册
+
+> DB 中 `type='sop'` 标识保持不变(数据迁移成本太高,只是个内部 key)。
+
+## 二、数据模型(沿用现有 shop_kb_categories / shop_kb_entries)
+
+按内容拆成 **5 个分类**,顺序固定:
+
+| sort | 分类 | 说明 |
+| --- | --- | --- |
+| 1 | 品牌欢迎 | 欢迎语 + 主理人心态 |
+| 2 | 核心模式与 OKR | 终极目标 O + KR1 陈列 / KR2 体感 / KR3 互动 |
+| 3 | 五大核心区域 | 玩具动漫、数码音像、首饰、家居 DIY、翻筐乐 |
+| 4 | 日常巡视流程 | 开店 / 营业中 / 闭店 三段 checklist |
+| 5 | 执行原则与心态 | 三条总纲 |
+
+每条 entry 用 Markdown 子集 body:`# / ## / **bold** / - 列表 / | 表格 |`。tags 用于关键词搜索。
+
+通过 `supabase--insert` 工具批量 upsert(先按 type='sop' 清空再插入,避免和旧的零散 SOP 混在一起;或加 `source='boomer-manual'` 标记 — 推荐前者,旧的 sop 内容用户也没几条)。
+
+## 三、前端重写 `src/pages/MySop.tsx`(不再复用 MyKb)
+
+参考刚做的 `MyQa.tsx` 的"列表 + 详情 Sheet + 管理员 AI 新增/编辑/删除"模式,但布局更贴合"手册":
+
+### 1. 顶部 Hero
+
+```text
+┌────────────────────────────────────┐
+│  门店手册                          │
+│  虽古但新 · 信任可见               │
+│  国内首家标准化中古连锁品牌        │
+└────────────────────────────────────┘
+```
+(slogan 取自手册抬头,排版风格用主色渐变 + 小字副标题)
+
+### 2. OKR 概览卡(置顶,固定渲染)
+
+读取"核心模式与 OKR"分类下的 entries,做成 3 张并排小卡:
+- 🎯 O:沉浸式情绪体验空间
+- 📊 KR1 陈列 / KR2 体感 / KR3 互动
+
+点击 KR 卡 → 直接打开对应详情 Sheet。
+
+### 3. 分类 Tab + 卡片列表
+
+- 顶部分类 pill(全部 / 品牌欢迎 / OKR / 区域 / 巡视 / 原则)
+- 搜索框(标题 + body + tags)
+- 列表用 Card,**标题加粗**(`font-semibold`),展示分类徽章 + 2 行摘要 + tags
+
+### 4. 详情 Sheet(底部抽屉,复用 MyQa 模式)
+
+`renderBody()` 支持:
+- `**bold**` → `<strong>`
+- 行首 `- ` → `<ul><li>`
+- 行首 `## ` → `<h3>`
+- 行首 `| ... |` 连续行 → `<table>`(简易 Markdown 表格,用于 KR 执行标准表)
+- 其它 → `<p>`
+
+底部 tags chips。管理员显示编辑/删除按钮。
+
+### 5. 管理员 AI 新增/编辑(魔法棒)
+
+完全复用 `MyQa.tsx` 已有逻辑:
+- `usePermissions().can('shop.kb.write')` 判断权限
+- 顶部 `Wand2` 按钮 → 弹 Dialog(分类 / 标题 / AI 提示 / body / tags)
+- AI 调 `generate-shop-kb` edge function,传 `{ type:'sop', topic, hint, categories }`
+- 每张卡 Pencil/Trash2;详情 Sheet 内也提供编辑/删除
+- 保存后刷新列表
+
+## 四、内容种子(用 supabase--insert)
+
+- 删除现有 `shop_kb_categories where type='sop'` + `shop_kb_entries where type='sop'`(用户当前 SOP 数据极少,新建更干净)。
+- 插入上面 5 个分类。
+- 插入 ~15 条 entries,正文严格按用户提供的手册 Markdown 切分;KR 部分保留 `| 维度 | 执行标准 |` 表格语法(由 renderBody 渲染)。
+
+## 五、不动的部分
+
+- DB 表结构、RLS、edge function、其它页面(MyKb 个人知识 / MyQa)。
+- `type='sop'` enum 值;后台 Portal 的 KbManager 自动跟着改 title。
 
 ## 技术细节
 
-- `usePermissions` 已存在,直接 import:`import { usePermissions } from '@/hooks/usePermissions'`。
-- 卡片右上角操作按钮放在 `ChevronRight` 之前,用 `<span onClick={stopPropagation}>` 包住避免触发父 button 打开详情;父级从 `<button>` 改成 `<div role="button" onClick>` 让内部嵌套 button 合法。
-- 对话框逻辑直接抄 `KbManager` 的 entry dialog(已经验证可用),只是嵌进 MyQa 内部,不引入新文件。
-- 操作完成 toast 用 `sonner`。
+- `MySop.tsx` 不再 `return <MyKb …/>`,改为独立组件(约 250 行),结构与 `MyQa.tsx` 对齐方便维护。
+- Markdown 表格解析:遇到连续以 `|` 开头的行视为一段,首行 header,第二行若全是 `---` 跳过,其余为 body row,渲染成 Tailwind 简洁表格(`text-xs` / `border-border/40`)。
+- 路由保持 `/me/sop`(避免 dashboard / 今日学习 deep link 404);所有可见文案改为"门店手册"。
+- 数据迁移用 `supabase--insert`(纯 DML),不需要 migration。
+
+## 验收
+
+- 进 `/me/sop` 看到新标题"门店手册" + slogan + OKR 概览卡。
+- 5 大分类 + 搜索 + 详情 Sheet 正常,KR 表格能渲染。
+- 管理员账号能看到魔法棒 + 每条编辑/删除按钮,AI 生成新条目可保存。
+- 普通店员账号只读,看不到管理按钮。

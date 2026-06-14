@@ -58,7 +58,7 @@ const MENU_GROUPS: MenuGroup[] = [
   },
   {
     key: 'kb', label: '知识库', icon: Library, items: [
-      { key: 'sop', label: '门店 SOP', icon: BookOpen, perm: 'shop.kb.write' },
+      { key: 'sop', label: '门店手册', icon: BookOpen, perm: 'shop.kb.write' },
       { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare, perm: 'shop.kb.write' },
       { key: 'official', label: '官方知识', icon: BadgeCheck, perm: 'knowledge.official.write' },
     ],
@@ -228,7 +228,7 @@ export default function Portal() {
             {effectiveTab === 'shops' && can('shop.write') && <ShopManager />}
             {effectiveTab === 'schedule' && can('schedule.write') && <ScheduleManager />}
             {effectiveTab === 'shifts' && can('shift.write') && <ShiftSettingsPanel />}
-            {effectiveTab === 'sop' && can('shop.kb.write') && <KbManager type="sop" title="门店 SOP" />}
+            {effectiveTab === 'sop' && can('shop.kb.write') && <KbManager type="sop" title="门店手册" />}
             {effectiveTab === 'qa' && can('shop.kb.write') && <KbManager type="qa" title="顾客 Q&A" />}
             {effectiveTab === 'official' && can('knowledge.official.write') && <OfficialKnowledgeManager />}
             {effectiveTab === 'community' && can('community.moderate') && <CommunityModeration />}
