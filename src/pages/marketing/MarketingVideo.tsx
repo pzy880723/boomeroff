@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Upload, X, AlertTriangle, CheckCircle2, Camera, Copy } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, Camera, Copy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { uploadMarketingImages } from './uploadMarketingImages';
+import { UploadGrid } from './UploadGrid';
+import { AspectPicker } from './AspectPicker';
 import { StepBar } from './StepBar';
 import { toast } from 'sonner';
+
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -23,7 +24,6 @@ const DURATIONS = [15, 20, 30] as const;
 const ASPECTS = ['9:16', '1:1', '16:9'] as const;
 
 export default function MarketingVideo() {
-  const { user } = useAuth();
   const loc = useLocation();
   const [urls, setUrls] = useState<string[]>((loc.state as any)?.image_urls || []);
   const [vtype, setVtype] = useState<VType>('store_tour');
@@ -38,15 +38,13 @@ export default function MarketingVideo() {
   const [rendering, setRendering] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
 
-  const onPick = async (files: FileList | null) => {
-    if (!files || !user) return;
-    const arr = Array.from(files).slice(0, 10 - urls.length);
-    try {
-      const newUrls = await uploadMarketingImages(user.id, arr);
-      setUrls([...urls, ...newUrls]);
-      setAnalysis(null); setScript(null);
-    } catch (e: any) { toast.error(e?.message || '上传失败'); }
+  // 上传交给 UploadGrid 内部托管;urls 变化时清空分析/脚本缓存
+  const onUrlsChange = (next: string[]) => {
+    setUrls(next);
+    setAnalysis(null);
+    setScript(null);
   };
+
 
   const analyze = async () => {
     if (!urls.length) return toast.error('请先上传素材');
