@@ -30,7 +30,7 @@ interface Props {
 
 const W = 750;
 const H = 1334;
-const POSTER_VERSION = 'v3';
+const POSTER_VERSION = 'v4';
 
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
@@ -180,79 +180,26 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
       ctx.fillText('为你专属准备', M, cursorY);
       cursorY += 38;
 
-      // —— 大标题 ——
+      // —— 大标题（自适应字号：>2 行就降到 44px）——
       ctx.fillStyle = C_TEXT;
-      ctx.font = '700 56px -apple-system, "PingFang SC", "Helvetica Neue", sans-serif';
-      const titleLines = wrapText(ctx, activity.name, W - M * 2, 2);
+      const tryTitleFont = (size: number) => {
+        ctx.font = `700 ${size}px -apple-system, "PingFang SC", "Helvetica Neue", sans-serif`;
+        return wrapText(ctx, activity.name, W - M * 2, 3);
+      };
+      let titleSize = 56;
+      let titleLines = tryTitleFont(titleSize);
+      if (titleLines.length > 2) {
+        titleSize = 44;
+        titleLines = tryTitleFont(titleSize);
+      }
+      const titleLineH = Math.round(titleSize * 1.25);
       for (const line of titleLines) {
         ctx.fillText(line, M, cursorY);
-        cursorY += 70;
+        cursorY += titleLineH;
       }
-      cursorY += 10;
+      cursorY += 8;
 
-      // —— 中部封面（可选）——
-      if (activity.cover_url) {
-        const img = await loadImage(activity.cover_url);
-        if (img && !cancelled) {
-          const coverH = 320;
-          const coverW = W - M * 2;
-          // 投影
-          ctx.save();
-          ctx.shadowColor = 'rgba(0,0,0,0.45)';
-          ctx.shadowBlur = 24;
-          ctx.shadowOffsetY = 10;
-          const radius = 24;
-          ctx.beginPath();
-          ctx.moveTo(M + radius, cursorY);
-          ctx.lineTo(M + coverW - radius, cursorY);
-          ctx.quadraticCurveTo(M + coverW, cursorY, M + coverW, cursorY + radius);
-          ctx.lineTo(M + coverW, cursorY + coverH - radius);
-          ctx.quadraticCurveTo(M + coverW, cursorY + coverH, M + coverW - radius, cursorY + coverH);
-          ctx.lineTo(M + radius, cursorY + coverH);
-          ctx.quadraticCurveTo(M, cursorY + coverH, M, cursorY + coverH - radius);
-          ctx.lineTo(M, cursorY + radius);
-          ctx.quadraticCurveTo(M, cursorY, M + radius, cursorY);
-          ctx.closePath();
-          ctx.fillStyle = '#000';
-          ctx.fill();
-          ctx.restore();
-          // 裁剪绘制
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(M + radius, cursorY);
-          ctx.lineTo(M + coverW - radius, cursorY);
-          ctx.quadraticCurveTo(M + coverW, cursorY, M + coverW, cursorY + radius);
-          ctx.lineTo(M + coverW, cursorY + coverH - radius);
-          ctx.quadraticCurveTo(M + coverW, cursorY + coverH, M + coverW - radius, cursorY + coverH);
-          ctx.lineTo(M + radius, cursorY + coverH);
-          ctx.quadraticCurveTo(M, cursorY + coverH, M, cursorY + coverH - radius);
-          ctx.lineTo(M, cursorY + radius);
-          ctx.quadraticCurveTo(M, cursorY, M + radius, cursorY);
-          ctx.closePath();
-          ctx.clip();
-          const iw = img.naturalWidth, ih = img.naturalHeight;
-          const scale = Math.max(coverW / iw, coverH / ih);
-          const dw = iw * scale, dh = ih * scale;
-          ctx.drawImage(img, M + (coverW - dw) / 2, cursorY + (coverH - dh) / 2, dw, dh);
-          ctx.restore();
-          cursorY += coverH + 32;
-        }
-      }
-
-      // —— 描述 ——
-      if (activity.description) {
-        ctx.fillStyle = C_TEXT_SOFT;
-        ctx.font = '400 22px -apple-system, "PingFang SC", sans-serif';
-        ctx.textAlign = 'left';
-        const descLines = wrapText(ctx, activity.description, W - M * 2, 4);
-        for (const line of descLines) {
-          ctx.fillText(line, M, cursorY);
-          cursorY += 34;
-        }
-        cursorY += 14;
-      }
-
-      // —— 活动时间 ——
+      // —— 活动时间（紧贴标题，金色一行）——
       const fmt = (d?: string | null) => d ? format(new Date(d), 'yyyy.MM.dd') : null;
       const startTxt = fmt(activity.starts_at);
       const endTxt = fmt(activity.ends_at);
@@ -278,13 +225,135 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
         ctx.stroke();
         ctx.restore();
       };
+      drawDashed(cursorY);
+      cursorY += 28;
 
-      // —— 底部 QR 卡片（白底圆角）——
+      // —— 底部 QR 卡片位置（先确定，反推正文上限）——
       const qrCardSize = 280;
       const qrPad = 24;
       const qrCardX = M;
       const qrCardY = H - M - qrCardSize - 30;
+      const contentMaxY = qrCardY - 40;
 
+      // —— 中部封面（可选，缩小到 240）——
+      if (activity.cover_url) {
+        const img = await loadImage(activity.cover_url);
+        if (img && !cancelled) {
+          const coverH = 240;
+          const coverW = W - M * 2;
+          const radius = 24;
+          ctx.save();
+          ctx.shadowColor = 'rgba(0,0,0,0.45)';
+          ctx.shadowBlur = 24;
+          ctx.shadowOffsetY = 10;
+          ctx.beginPath();
+          ctx.moveTo(M + radius, cursorY);
+          ctx.lineTo(M + coverW - radius, cursorY);
+          ctx.quadraticCurveTo(M + coverW, cursorY, M + coverW, cursorY + radius);
+          ctx.lineTo(M + coverW, cursorY + coverH - radius);
+          ctx.quadraticCurveTo(M + coverW, cursorY + coverH, M + coverW - radius, cursorY + coverH);
+          ctx.lineTo(M + radius, cursorY + coverH);
+          ctx.quadraticCurveTo(M, cursorY + coverH, M, cursorY + coverH - radius);
+          ctx.lineTo(M, cursorY + radius);
+          ctx.quadraticCurveTo(M, cursorY, M + radius, cursorY);
+          ctx.closePath();
+          ctx.fillStyle = '#000';
+          ctx.fill();
+          ctx.restore();
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(M + radius, cursorY);
+          ctx.lineTo(M + coverW - radius, cursorY);
+          ctx.quadraticCurveTo(M + coverW, cursorY, M + coverW, cursorY + radius);
+          ctx.lineTo(M + coverW, cursorY + coverH - radius);
+          ctx.quadraticCurveTo(M + coverW, cursorY + coverH, M + coverW - radius, cursorY + coverH);
+          ctx.lineTo(M + radius, cursorY + coverH);
+          ctx.quadraticCurveTo(M, cursorY + coverH, M, cursorY + coverH - radius);
+          ctx.lineTo(M, cursorY + radius);
+          ctx.quadraticCurveTo(M, cursorY, M + radius, cursorY);
+          ctx.closePath();
+          ctx.clip();
+          const iw = img.naturalWidth, ih = img.naturalHeight;
+          const scale = Math.max(coverW / iw, coverH / ih);
+          const dw = iw * scale, dh = ih * scale;
+          ctx.drawImage(img, M + (coverW - dw) / 2, cursorY + (coverH - dh) / 2, dw, dh);
+          ctx.restore();
+          cursorY += coverH + 24;
+        }
+      }
+
+      // —— 解析正文为段落 ——
+      type Section = { title: string | null; body: string };
+      const parseSections = (desc: string): Section[] => {
+        const text = desc.replace(/\r\n/g, '\n').trim();
+        const re = /【([^】]+)】/g;
+        const sections: Section[] = [];
+        let match: RegExpExecArray | null;
+        let lastIdx = 0;
+        let lastTitle: string | null = null;
+        const flush = (endIdx: number) => {
+          const body = text.slice(lastIdx, endIdx).trim();
+          if (lastTitle || body) sections.push({ title: lastTitle, body });
+        };
+        while ((match = re.exec(text)) !== null) {
+          if (match.index > 0 || lastTitle !== null) flush(match.index);
+          lastTitle = match[1];
+          lastIdx = match.index + match[0].length;
+        }
+        flush(text.length);
+        if (!sections.length) sections.push({ title: null, body: text });
+        return sections;
+      };
+
+      // —— 段落渲染（自适应高度，超出截断）——
+      if (activity.description) {
+        const sections = parseSections(activity.description);
+        const bodyLineH = 32;
+        const titleLineH2 = 36;
+        const sectionGap = 18;
+        let overflow = false;
+        outer: for (let si = 0; si < sections.length; si++) {
+          const s = sections[si];
+          if (s.title) {
+            if (cursorY + titleLineH2 > contentMaxY) { overflow = true; break; }
+            ctx.fillStyle = C_GOLD;
+            ctx.font = '700 24px -apple-system, "PingFang SC", sans-serif';
+            ctx.fillText(`【${s.title}】`, M, cursorY);
+            cursorY += titleLineH2;
+          }
+          if (s.body) {
+            ctx.fillStyle = C_TEXT_SOFT;
+            ctx.font = '400 22px -apple-system, "PingFang SC", sans-serif';
+            const lines = wrapText(ctx, s.body, W - M * 2, 999);
+            for (let li = 0; li < lines.length; li++) {
+              if (cursorY + bodyLineH > contentMaxY) {
+                // 截断：把上一行末尾改为 …
+                const prevY = cursorY - bodyLineH;
+                if (prevY >= 0) {
+                  ctx.fillStyle = C_BG_2;
+                  // 用背景渐变近似覆盖最后一行右侧 1/3
+                  // 简化：直接在上一行末尾画 …
+                  ctx.fillStyle = C_TEXT_SOFT;
+                  // 重新绘制截断行
+                }
+                // 在当前 cursorY 直接画 … 提示更多
+                ctx.fillStyle = C_TEXT_MUTE;
+                ctx.font = '400 20px -apple-system, "PingFang SC", sans-serif';
+                ctx.fillText('……（更多内容请扫码查看）', M, cursorY);
+                cursorY += bodyLineH;
+                overflow = true;
+                break outer;
+              }
+              ctx.fillText(lines[li], M, cursorY);
+              cursorY += bodyLineH;
+            }
+          }
+          if (si < sections.length - 1) cursorY += sectionGap;
+        }
+        void overflow;
+      }
+
+      // —— 底部 QR 卡片（白底圆角）——
       drawDashed(qrCardY - 32);
 
       const drawRoundRect = (x: number, y: number, w: number, h: number, r: number) => {
@@ -300,6 +369,7 @@ export function ActivityShareDialog({ open, onOpenChange, activity, onPosterSave
         ctx.quadraticCurveTo(x, y, x + r, y);
         ctx.closePath();
       };
+
 
       ctx.save();
       ctx.shadowColor = 'rgba(0,0,0,0.4)';
