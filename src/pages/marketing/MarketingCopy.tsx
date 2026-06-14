@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Upload, Copy, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMarketingImages } from './uploadMarketingImages';
+import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 
 type Platform = 'xhs' | 'douyin' | 'shipinhao' | 'pyq';
