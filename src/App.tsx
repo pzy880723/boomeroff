@@ -39,6 +39,11 @@ const PublicClaimByPhone = lazy(() => import("./pages/public/PublicClaimByPhone"
 const PublicActivity = lazy(() => import("./pages/public/PublicActivity"));
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
+const MyMarketing = lazy(() => import("./pages/MyMarketing"));
+const MarketingPhoto = lazy(() => import("./pages/marketing/MarketingPhoto"));
+const MarketingCopy = lazy(() => import("./pages/marketing/MarketingCopy"));
+const MarketingVideo = lazy(() => import("./pages/marketing/MarketingVideo"));
+const MarketingLibrary = lazy(() => import("./pages/marketing/MarketingLibrary"));
 
 // 游客版（免登录）
 const PublicLayout = lazy(() =>
