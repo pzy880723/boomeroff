@@ -66,19 +66,10 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
         if (stage === 'done' && url) successUrls.push(url);
       },
     });
-    // 把成功的合并进父级 urls,失败的留在 items 让用户看到红色失败块
+    // 把成功的合并进父级 urls;失败的留在 items 让用户看到红色失败块
     if (successUrls.length) onChange([...urls, ...successUrls]);
-    // 移除已成功的(它们已经在 urls 里展示了)
-    setItems(prev => {
-      const doneIds = new Set(
-        newItems.filter(it => successUrls.includes(it.url || '__none__') || prev.find(p => p.id === it.id)?.stage === 'done').map(it => it.id),
-      );
-      // 实际上更简单:把所有 stage==='done' 的清掉
-      return prev.filter(it => it.stage !== 'done').map(it => {
-        // revoke 预览 URL 节省内存(失败的也清,显示纯红色失败块即可)
-        return it;
-      });
-    });
+    setItems(prev => prev.filter(it => it.stage !== 'done'));
+
   };
 
   const removeUrl = (i: number) => onChange(urls.filter((_, j) => j !== i));
