@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,8 +21,8 @@ const PLATFORMS: { v: Platform; label: string }[] = [
 const TONES: Tone[] = ['种草', '探店', '藏家分享', '上新'];
 
 export default function MarketingCopy() {
-  const { user } = useAuth();
   const loc = useLocation();
+
   const initial: string[] = (loc.state as any)?.image_urls || [];
   const [urls, setUrls] = useState<string[]>(initial);
   const [platform, setPlatform] = useState<Platform>('xhs');
