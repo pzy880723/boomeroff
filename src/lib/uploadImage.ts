@@ -1,18 +1,36 @@
-// 上传前客户端压缩：避免把 5MB 原图扔到 storage。
-// 接受 File/Blob，返回压缩后的 Blob（image/jpeg）。
-// 默认 1600px 宽 + 0.82 质量，约 200~400KB。
+// 上传前客户端压缩。
+// 默认 1600px / 0.82(高清场景,例如修图);可传 preset 'thumb' 用于配图(给 AI 看图,不需要清晰度)。
+
+export type CompressOptions = { maxWidth?: number; quality?: number; preset?: 'thumb' | 'hd' };
+
+const PRESETS = {
+  hd: { maxWidth: 1600, quality: 0.82, minSize: 300 * 1024 },
+  thumb: { maxWidth: 900, quality: 0.72, minSize: 120 * 1024 },
+} as const;
 
 export async function compressForUpload(
   input: File | Blob,
-  maxWidth = 1600,
-  quality = 0.82,
+  optsOrMaxWidth: CompressOptions | number = {},
+  legacyQuality?: number,
 ): Promise<Blob> {
-  // 非图片直接原样返回
+  // 解析参数:兼容老签名 compressForUpload(file, 1600, 0.82)
+  let maxWidth: number;
+  let quality: number;
+  let minSize: number;
+  if (typeof optsOrMaxWidth === 'number') {
+    maxWidth = optsOrMaxWidth;
+    quality = legacyQuality ?? 0.82;
+    minSize = 300 * 1024;
+  } else {
+    const preset = PRESETS[optsOrMaxWidth.preset ?? 'hd'];
+    maxWidth = optsOrMaxWidth.maxWidth ?? preset.maxWidth;
+    quality = optsOrMaxWidth.quality ?? preset.quality;
+    minSize = preset.minSize;
+  }
+
   if (input.type && !input.type.startsWith('image/')) return input;
-  // gif 不压（保留动画）
   if (input.type === 'image/gif') return input;
-  // 已经很小就别折腾
-  if (input.size <= 300 * 1024) return input;
+  if (input.size <= minSize) return input;
 
   try {
     const url = URL.createObjectURL(input);
@@ -36,7 +54,6 @@ export async function compressForUpload(
       canvas.toBlob(b => res(b), 'image/jpeg', quality),
     );
     if (!blob) return input;
-    // 压完反而更大就用原图
     return blob.size < input.size ? blob : input;
   } catch (e) {
     console.warn('[compressForUpload] failed, fallback to original:', e);
@@ -44,5 +61,4 @@ export async function compressForUpload(
   }
 }
 
-// 统一的上传选项：长缓存（7 天），让重复访问走浏览器缓存
 export const UPLOAD_CACHE_OPTS = { cacheControl: '604800', upsert: false as const };
