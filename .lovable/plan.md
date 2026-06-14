@@ -1,82 +1,44 @@
-## 用户反馈拆解
+# 修复活动海报扫码进不去报名页
 
-1. **AI 文案上传慢** — 现在 `compressForUpload` 默认压到 1600px / 0.82,对配图来说太大;而且 `uploadMarketingImages` 是 `for...of` 串行上传,3 张图就要等 3 倍时间。
-2. **没有上传进度反馈** — 当前只在出错时 toast,中途用户只能干等。
-3. **AI 视频画幅** — 现在是 `9:16 / 1:1 / 16:9` 三个文字 Badge,要换成竖/方/横三个**图形比例缩略图**按钮。
-4. **AI 视频上传同样慢** — 同问题。
-5. **先看 UI 设计稿再开发** — 不要直接动代码,先出图,确认后再写。
+## 目标
+顾客长按 / 扫码活动海报 → 必须直接进到报名表单,**永远不能再出现**"页面出错了 / 刷新重试 / 返回首页 / 在浏览器中打开"这类提示。以后我不再需要自己测能不能进。
 
----
+## 根因
+- `/u/activity/:shareToken` 路由用 `lazyWithRetry` 懒加载。微信 X5 webview 冷启动拉公开 URL 时,chunk 经常失败,且抛出的错误信息不一定匹配 `chunkLoadRecovery` 里的关键字白名单。
+- 一旦不匹配,根级 `ErrorBoundary` 就显示那张红色错误卡片(就是截图里那个)。
+- 即便匹配,目前的兜底文案"返回首页"按钮会跳 `/scan`,顾客在公开域名上根本没首页可去——本身就是不该出现的 UI。
 
-## 第一步:出 UI 设计稿(本轮交付)
+## 改动
 
-进 build 模式后,**第一件事不是写代码**,而是调用 `design--create_directions` 出 3 套渲染后的 HTML 预览,聚焦两个组件:
+### 1. 公开路由全部改成"急加载",不再走懒加载分包
+`src/App.tsx`:把这几个公开页直接 `import`,而不是 `lazy(...)`:
+- `PublicActivity`
+- `PublicClaim`
+- `PublicClaimByPhone`
+- `PublicLayout` + `PublicScan` / `PublicResult` / `PublicCommunity` / `PublicAbout`
 
-**A. 多图上传卡片(文案 + 视频共用样式)**
-   - 4 列网格,每张缩略图带:进度环 / 完成对勾 / 失败 ! / × 删除。
-   - 顶部一条总进度细条 `上传中 2/5`。
-   - "+" 添加格子,虚线边框,显示剩余可加张数。
+代价:首包多几十 KB;收益:微信 X5 一次性就能拿到全部 JS,不会再因为二级 chunk 拉不到而崩。这是最根本的解法。
 
-**B. 视频画幅选择器**
-   - 三个图形按钮代替文字 Badge:
-     - 竖版:窄长方形竖立(9:16),下面小字 `9:16 竖版`。
-     - 方形:正方形(1:1),下面 `1:1 方形`。
-     - 横版:扁长方形(16:9),下面 `16:9 横版`。
-   - 选中态:实心填充 + primary 边框 + 微缩放。
-   - 未选中:线框 + muted 色。
+### 2. 给 `/u/*` 公开路径套一个"静默"ErrorBoundary
+新增 `src/components/system/PublicErrorBoundary.tsx`:
+- 捕获任何错误时,**不显示红色错误卡片**。
+- 第一次错误:按 build key 写一次 `sessionStorage` 标记,自动 `location.reload()`,屏幕上只显示淡米色背景 + 小 loading 圆圈,文案"正在打开活动…"。
+- 如果同一个 build 下已经 reload 过一次还出错(极少数情况),显示极简的纯文案兜底:"网络繁忙,请稍后重试",不带任何按钮 / 不提"用系统浏览器"——这条用户已经说不要再让顾客看到任何提示了。
 
-3 个方向走不同密度/质感(极简线框 / 实色填充 + 阴影 / 玻璃态半透明),其它视觉风格沿用项目 design token,不引入新色。
+在 `App.tsx` 里只对 `/u/...` 路由用这个 ErrorBoundary 包裹;管理端继续用原来的根级 ErrorBoundary(那张红卡片对内部用户是有用的)。
 
-出图后 `ask_questions(type: 'prototype')` 给你选,你选完我再落地代码。**这一步不动任何文件**。
+### 3. `PublicActivity` 加防御
+`src/pages/public/PublicActivity.tsx`:
+- `activity-public` edge function 返回错时:不再显示三角形错误卡片,而是直接显示同款暖棕背景 + 一行小字"活动暂时无法打开,请稍后重试",不带任何按钮 / 不提返回首页。
+- `useMemo(agreementText)` 等地方对 `activity` 字段做空值兜底,避免渲染期抛错把整个页面打挂。
 
----
+### 4. (无关代码改动)
+- 不动 `ErrorBoundary.tsx` 现有文案,管理端继续用。
+- 不动 edge function、不动数据库、不动海报二维码生成逻辑(二维码本身的 URL 是对的)。
+- 不动其他营销中心改造工作。
 
-## 第二步:用户选完 → 落地实现(下一轮)
-
-### 2.1 上传提速
-
-`src/lib/uploadImage.ts` 增加可选参数,提供两套预设:
-- `compressForUpload(file)` — 维持原默认(给图片优化用,要细节)。
-- `compressForUpload(file, { preset: 'thumb' })` — `maxWidth=900`、`quality=0.72`、目标 80–150KB。配图给 AI 看图写文/分析素材足够了。
-
-`src/pages/marketing/uploadMarketingImages.ts` 改造:
-- 新签名:`uploadMarketingImages(userId, files, { preset?, onProgress? })`
-- 内部用 `Promise.all` 并发上传(浏览器自己会限到 6),不再 `for...of`。
-- 每张图在 `开始压缩 → 压缩完成 → 上传完成` 三个节点回调 `onProgress({ index, status, doneCount, total })`。
-
-不动 storage bucket、不动 RLS、不动 edge function。
-
-### 2.2 上传 UI 反馈
-
-`MarketingCopy.tsx` / `MarketingVideo.tsx` 都加 `uploading: Array<{ id, status: 'compressing'|'uploading'|'done'|'error', preview?: string }>` 状态:
-- 用户选完文件,立刻用 `URL.createObjectURL` 显示本地预览(零等待感)。
-- 每张缩略图角标实时切换"压缩中 → 上传中 → ✓"。
-- 顶部小进度条 `上传中 X/N`,全部完成自动消失。
-- 失败的可单张重试。
-
-`MarketingCopy` 调用时传 `preset: 'thumb'`(配图只给 AI 看);`MarketingVideo` 同样用 `thumb` —— 素材分析也只需要语义识别,不需要 1600px。
-
-### 2.3 视频画幅图形按钮
-
-`MarketingVideo.tsx` 把 `ASPECTS.map((a) => <Badge>)` 这段(行 150–157)换成自定义 `<AspectButton>` 组件:
-```
-[ ▭ ]  [ □ ]  [ ▬ ]
-9:16   1:1   16:9
-竖版   方形   横版
-```
-用纯 CSS div 画矩形,按比例宽高,选中态加 `ring-2 ring-primary` + `bg-primary/10`。不引入新依赖。
-
----
-
-## 不做
-
-- 不改 edge function、不改 prompt、不改模型。
-- 不上 zip 批量下载、不做 WebWorker 压缩(浏览器单图 <300ms,够了)。
-- 不动 `MarketingPhoto.tsx`(它要的是高清原图,不能砍画质)。
-
----
-
-## 交付节奏
-
-- **本轮(plan 通过 → build):** 只调 `design--create_directions` + `ask_questions`,等你选样。
-- **下一轮(你选完):** 实现 2.1 / 2.2 / 2.3,共改 4 个文件:`src/lib/uploadImage.ts`、`src/pages/marketing/uploadMarketingImages.ts`、`MarketingCopy.tsx`、`MarketingVideo.tsx`。
+## 验收口径
+我自己扫海报二维码(微信扫一扫 + 微信里长按识别两种),应该:
+- 直接进表单页;
+- 即使第一次失败,屏幕上只会闪一下淡色 loading 然后自动进表单;
+- **任何情况下都不会出现红色错误卡片、"刷新重试"、"返回首页"、"在系统浏览器中打开"这三句话**。
