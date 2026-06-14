@@ -642,6 +642,78 @@ export type Database = {
         }
         Relationships: []
       }
+      marketing_assets: {
+        Row: {
+          created_at: string
+          id: string
+          input_image_urls: string[]
+          kind: string
+          meta: Json
+          output_text: string | null
+          output_url: string | null
+          published_at: string | null
+          published_platforms: string[]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          input_image_urls?: string[]
+          kind: string
+          meta?: Json
+          output_text?: string | null
+          output_url?: string | null
+          published_at?: string | null
+          published_platforms?: string[]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          input_image_urls?: string[]
+          kind?: string
+          meta?: Json
+          output_text?: string | null
+          output_url?: string | null
+          published_at?: string | null
+          published_platforms?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      marketing_video_jobs: {
+        Row: {
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          output_url: string | null
+          script: Json
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          output_url?: string | null
+          script: Json
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          output_url?: string | null
+          script?: Json
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notification_reads: {
         Row: {
           id: string
