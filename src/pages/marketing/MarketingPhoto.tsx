@@ -57,10 +57,11 @@ export default function MarketingPhoto() {
 
   return (
     <>
-      <PageHeader title="图片优化" back="/me/marketing" />
+      <PageHeader title="图片优化" back="/me/marketing" subtitle="营销中心 / 修图" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
+        <StepBar steps={['上传图', '选修复项', '出图']} current={!origUrl ? 0 : !outputUrl ? 1 : 2} />
         <Card className="p-3">
-          <p className="text-xs text-muted-foreground mb-3">只做修复，不加滤镜：让随手拍的照片回到"正常质感"。</p>
+          <p className="text-xs text-muted-foreground mb-3">只做修复,不加滤镜:让随手拍的照片回到"正常质感"。</p>
           {!origUrl ? (
             <label className="block">
               <div className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer hover:bg-accent/10">
