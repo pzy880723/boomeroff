@@ -35,7 +35,7 @@ export function StepBar({ steps, current }: StepBarProps) {
             </div>
             <span
               className={[
-                'text-[11px] tracking-wide whitespace-nowrap',
+                'text-[10px] tracking-wide whitespace-nowrap',
                 active ? 'text-foreground font-medium' : 'text-muted-foreground',
               ].join(' ')}
             >
