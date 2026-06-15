@@ -16,6 +16,8 @@ import { RolePermissionManager } from '@/components/admin/RolePermissionManager'
 import { NotificationManager } from '@/components/admin/NotificationManager';
 import { ActivityReviewPanel } from '@/components/admin/ActivityReviewPanel';
 import { SmsTestPanel } from '@/components/admin/SmsTestPanel';
+import { MarketingPresetsPanel } from '@/components/admin/MarketingPresetsPanel';
+
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -37,7 +39,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test' | 'marketing_presets';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -78,11 +80,13 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     key: 'system', label: '系统', icon: Settings, items: [
       { key: 'ai', label: 'AI 模型', icon: Sparkles, perm: 'settings.ai' },
+      { key: 'marketing_presets', label: '营销预设', icon: Megaphone, perm: 'settings.ai' },
       { key: 'deploy', label: '部署域名', icon: Settings, perm: 'settings.ai' },
       { key: 'sms_test', label: '短信测试', icon: MessageSquare, perm: 'settings.ai' },
     ],
   },
 ];
+
 
 export default function Portal() {
   const { role } = useAuth();
@@ -234,6 +238,8 @@ export default function Portal() {
             {effectiveTab === 'community' && can('community.moderate') && <CommunityModeration />}
             {effectiveTab === 'corrections' && can('correction.review') && <CorrectionReviewPanel />}
             {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}
+            {effectiveTab === 'marketing_presets' && can('settings.ai') && <MarketingPresetsPanel />}
+
             {effectiveTab === 'deploy' && can('settings.ai') && <DeploymentSettingsPanel />}
             
             

@@ -6,17 +6,17 @@ interface StepBarProps {
 }
 
 /**
- * 年鉴版步骤指引条:01/02 serif 序号 · 古铜金细线串联 · 三态(完成/当前/未来)。
+ * 年鉴版步骤指引条:01/02 serif 序号 · 古铜金细线串联 · 居中陈列。
  */
 export function StepBar({ steps, current }: StepBarProps) {
   return (
-    <div className="flex items-center gap-1.5 px-0.5">
+    <div className="flex items-center justify-center gap-2 px-0.5 flex-wrap">
       {steps.map((label, i) => {
         const done = i < current;
         const active = i === current;
         const num = String(i + 1).padStart(2, '0');
         return (
-          <div key={i} className="flex items-center gap-1.5 flex-1 min-w-0">
+          <div key={i} className="flex items-center gap-2 shrink-0">
             <div
               className={[
                 'flex items-center justify-center w-7 h-7 rounded-full shrink-0 transition-all',
@@ -35,14 +35,14 @@ export function StepBar({ steps, current }: StepBarProps) {
             </div>
             <span
               className={[
-                'text-[11px] truncate tracking-wide',
+                'text-[11px] tracking-wide whitespace-nowrap',
                 active ? 'text-foreground font-medium' : 'text-muted-foreground',
               ].join(' ')}
             >
               {label}
             </span>
             {i < steps.length - 1 && (
-              <div className={`h-px flex-1 ${done ? 'bg-accent/60' : 'bg-border'}`} />
+              <div className={`h-px w-6 ${done ? 'bg-accent/60' : 'bg-border'}`} />
             )}
           </div>
         );

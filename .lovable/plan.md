@@ -1,84 +1,165 @@
-## 目标
 
-按选中的"年鉴版·古铜烫金"方向,在不动现有配色 token 的前提下,把营销中心的 4 个页面整体重新设计,统一视觉语言、收紧信息层级、让交互逻辑更清晰。
+# 营销中心 v3 调整方案
 
-## 视觉语言(贯穿 4 页)
+## 1. 视觉小调整（前端 only）
 
-- 字体:大标题 Cormorant Garamond serif(经 index.html 加载),正文继续用现有 Inter / 系统中文字体。
-- 章节小标签:`text-[10px] uppercase tracking-[0.1em] text-accent`,前缀一个 4px 古铜金圆点。
-- 卡片:`bg-card rounded-[0.875rem] shadow-sm border border-accent/10`,按下态边框变 `border-accent`。
-- 数据分隔:细 `border-t border-border` 一条横线;指标用 label/value 上下两行,数字加粗。
-- 步骤条:把现有 StepBar 升级为"古铜金细线串联 + 序号(01/02/03)"——完成态 = 深咖填充白字,当前态 = 白底古铜金描边,未来态 = 白底浅描边;细线在完成段为 `accent/60`。
-- 底部 4px 高古铜金 `accent/20` 装饰条贴底。
-- 不引入纸纹外链(felt.png),改用 CSS `radial-gradient` 极淡噪点,避免外网依赖。
+**StepBar 居中**（`src/pages/marketing/StepBar.tsx`）
+- 当前 `flex-1` 让进度条占满整行，视觉上贴边。改为内容紧凑居中：外层 `justify-center`，去掉 step item 上的 `flex-1`，连接线改成定宽（如 `w-8`），让整条步骤条像一段印章居中浮在页面顶部。
 
-## 页面级改动
+**去掉模块右上角的数字角标**（`src/pages/MyMarketing.tsx`）
+- 图片/文案 `ToolTile`：删除 `count > 0` 的 badge。
+- AI 视频 row：删除 `counts.video` badge。
+- 数据统计仍然保留在 Hero 区（"图片 X / 文案 X / 视频 X"），只是不再在每张卡的右上角重复。
 
-### 1. `src/pages/MyMarketing.tsx`(营销中心首页)
+## 2. 素材库（`src/pages/marketing/MarketingLibrary.tsx`）
 
-- Hero 卡:白底 + serif 大标题"今天已经产出 N 条",下方一条细线分隔 + 横排 图片/文案/视频 指标 + 右下角 BOOMER `boomer-idle.png`(保持现有资产)。去掉原大色块渐变。
-- 工具入口:
-  - 第一行 2 列网格:图片优化、AI 文案——白卡 + 古铜金线性图标 + 角标计数。
-  - 第二行整行:AI 视频——左侧 12×12 深咖图标块、右侧标题 + "15-30 SEC" small caps 标签 + 流程提示。
-- 工作流提示带:3 个序号圆(01 拍图 / 02 产出 / 03 发布),古铜金细线串联,中间态高亮深咖。
-- 素材库入口:白卡 + 堆叠缩略图(保留现有 recent 数据查询逻辑)。
-- 底部说明:小写 caps 中文 + 古铜金强调句。
+支持「选择 + 编辑 + 删除」：
 
-### 2. `src/pages/marketing/StepBar.tsx`
+- 顶部加一个「管理」按钮，进入多选模式：每张卡左侧出现勾选框，底部出现操作条（已选 N · 删除 · 取消）。
+- 单条点击进入详情抽屉（Dialog）：
+  - **文案**：把 `output_text` 当作 JSON `JSON.parse`，按候选展示标题 / 正文 / 话题 / 首评；每段一个「复制」按钮；正文可就地编辑、保存（写回 `marketing_assets.output_text`）。
+  - **图片**：大图 + 复制原图链接 + 下载。
+  - **视频**：状态徽章 + 脚本逐镜展示（只读，因为已入队）。
+- 删除：`delete from marketing_assets where id in (...) and user_id = auth.uid()`（RLS 已限定本人）。
 
-升级共享步骤条组件——序号改为 `01/02/03` serif、细线改为 `bg-accent/60`(完成)/ `bg-border`(未来)、当前态加 `ring-1 ring-accent/40`。所有 3 个子页面共用,保证视觉统一。
+**关键 fix：文案列表卡片不再展示原始 JSON**
+- 现在卡片把 `it.output_text.slice(0,120)` 直接渲染，所以会看到 `[{"title":"…`。改为：解析后取第一个候选的 `title || body` 显示纯文本预览；解析失败 fallback 到去掉花括号的 raw。
 
-### 3. `src/pages/marketing/MarketingPhoto.tsx`(图片优化)
+## 3. 视频：文生视频 + 图片辅助（不是图片拼接）
 
-- 顶部 small caps 章节"Step · 修图工坊"。
-- 上传区:虚线框升级为古铜金 `border-accent/40 border-dashed`、内嵌 serif "上传一张图片" + 小字 hint。
-- 原图/修复后并列:加 `border-accent/10` 描边 + 顶部 small caps 标签"BEFORE / AFTER"(此处可以保留中文"原图 / 修复后",仅作为 11px small caps)。
-- 修复开关卡:每行 checkbox + serif 小标题 + 11px 灰色描述,行间细分隔线。
-- 主 CTA:深咖底古铜金描边,按下时阴影收紧。
+把"图片拼接式短视频"改成"AI 文生视频，图片只作为视觉参考 / 锚点"。
 
-### 4. `src/pages/marketing/MarketingCopy.tsx`(AI 文案)
+**前端 `MarketingVideo.tsx`**
+- 步骤改为：`脚本立意 → 参考图（可选）→ 确认分镜 → 生成视频`。
+- 顶部多一个**主要输入框**："这条视频想讲什么 / 主题 / 一句话"。
+- 图片上传保留，但写明"可选 · 用于风格 / 商品 / 店面参考，不是必须"。
+- 移除"素材充足度诊断"硬门槛：变成软提示——如果选了"产品展示 / 新品上架"且没有参考图，只是黄色提示，不阻塞。
+- 分镜确认：每个 scene 不再强绑定 `image_index`，改成可选「参考图：第 N 张 / 无」。
+- "确认渲染" 时调用同一个 `render-marketing-video`，把 `script.mode = 'text2video'`、`reference_image_urls = urls` 一起塞进去。
 
-- 平台/口吻区:把 Badge 换成"细描边胶囊",选中态 = 深咖底白字 + 古铜金 1px 阴影。
-- 输入字段:`bg-transparent border-b` 编辑式下划线输入(更编辑器/年鉴感),`border-accent/30` focus 时变 `border-accent`。
-- 候选卡:白卡 + 顶部 small caps "候选 01/02/03" + serif 标题 + 正文 + hashtag 古铜金。
-- 复制按钮:右上角小图标按钮,不抢眼。
+**Edge function 改造**
+- `generate-marketing-video-script`：prompt 改成"基于主题 + 可选参考图生成 6–8 个文生视频镜头描述（每镜一段 video prompt + 字幕 + 时长 + 推荐参考图 index 或 null）"。输出 schema 加 `video_prompt` 字段，`image_index` 改为可空。
+- `render-marketing-video`：保持现状（仍是入队），落库 meta 加 `mode: 'text2video'`，为后续接入视频模型预留。当前 worker 不变。
 
-### 5. `src/pages/marketing/MarketingVideo.tsx`(AI 视频)
+## 4. 文案风格扩展
 
-- 设置卡同 Copy:细描边胶囊 + 下划线输入。
-- AspectPicker:重画为 3 个画幅缩略框,选中态古铜金描边 + 内填深咖 5%。
-- 充足度结果卡:边框颜色保留语义(绿/黄/红),但弱化背景,改为 `border-2` + 顶部 small caps 标签 "素材诊断"。required 项用 ✓/✗ 古铜金/深红。
-- 脚本 SceneRow:左侧缩略图圆角 + 右侧 serif "镜头 01"标题、文本下划线 input、底部小号 chip 切换图片。
-- 主 CTA "确认脚本"沿用深咖按钮风格。
+`MarketingCopy.tsx` 的 `TONES` 当前只有 4 个。扩展为分组、共 ~12 个：
 
-### 6. `src/pages/marketing/MarketingLibrary.tsx`(素材库)
+```
+情绪类：种草 · 治愈 · 怀旧 · 偶遇
+故事类：探店 · 翻筐日记 · 主理人手记 · 顾客来信
+专业类：藏家分享 · 年代考据 · 工艺解读
+推新类：上新 · 限定到店
+```
 
-- 顶部 small caps 月份分组(本月 / 上月 / 更早)。
-- 列表卡:左侧 64×64 缩略图、右侧 serif 类型 + 11px 时间 + 截断正文;hover 古铜金边框。
+- UI：按分组横向 chip，分组之间用一根 `border-accent/15` 细线。
+- Edge function `generate-marketing-copy`：扩 `Tone` 联合类型 + 对应 `TONE_BRIEF` 文本（每种 1 句给 AI 的写法约束），保留旧 4 个不变以兼容老数据。
+- 数据库：`tone` 只是字符串存在 `meta.tone`，不需要 migration。
 
-## 技术细节
+## 5. 预设管理入口（重点）
 
-- 不改任何业务逻辑、edge function、数据表、上传链路。**只动 JSX 结构 + className + 少量 svg 图标**。
-- 不引入新 npm 包。Cormorant Garamond 通过在 `index.html` 加 `<link rel="stylesheet">` 一行(非阻塞)+ `tailwind.config.ts` 给 `fontFamily.serif` 增加 `'Cormorant Garamond'` 别名 `font-serif-display`,仅营销中心使用。
-- 旧 `UploadGrid` / `AspectPicker` 仅样式贴合新方向,保留 API。
-- 全中文。BOOMER 品牌名 + 极少量 small caps 装饰英文(Step / Before / After / 15-30 SEC)允许出现,符合视觉但不承担信息;若你要纯中文我可以全替换。
+把"品牌信息 / 视频镜位规则 / 文案 tone 描述 / 平台描述"这些目前**硬编码在 edge function** 的预设，搬到数据库 + 后台 UI。
 
-## 变更文件
+**数据模型**
 
-- `src/index.html`(加字体 link)
-- `tailwind.config.ts`(加 `font-serif-display`)
-- `src/pages/MyMarketing.tsx`
-- `src/pages/marketing/StepBar.tsx`
-- `src/pages/marketing/MarketingPhoto.tsx`
-- `src/pages/marketing/MarketingCopy.tsx`
-- `src/pages/marketing/MarketingVideo.tsx`
-- `src/pages/marketing/MarketingLibrary.tsx`
-- `src/pages/marketing/AspectPicker.tsx`
-- `src/pages/marketing/UploadGrid.tsx`(仅样式)
+新建表 `marketing_presets`（key/value 单行配置，admin only）：
 
-## 不做的事
+```sql
+create table public.marketing_presets (
+  id uuid primary key default gen_random_uuid(),
+  key text unique not null,        -- 'brand_system_prompt' | 'tone_brief' | 'platform_brief' | 'video_type_rules'
+  value jsonb not null,
+  updated_at timestamptz default now(),
+  updated_by uuid references auth.users(id)
+);
+grant select on public.marketing_presets to authenticated;
+grant all on public.marketing_presets to service_role;
+alter table public.marketing_presets enable row level security;
 
-- 不动配色 token / index.css
-- 不动数据查询、edge functions、表结构
-- 不动底部 5 Tab 导航 / 其他页面
-- 不替换 BOOMER mascot 图,沿用 `boomer-idle.png`
+create policy "all auth can read presets" on public.marketing_presets
+  for select to authenticated using (true);
+create policy "admin write presets" on public.marketing_presets
+  for all to authenticated
+  using (has_role(auth.uid(), 'admin'))
+  with check (has_role(auth.uid(), 'admin'));
+```
+
+种子数据：把当前 `brand-context.ts` 里的 4 段内容 upsert 进去。
+
+**Edge function 改造**
+
+`_shared/brand-context.ts` 新增 `loadPresets(admin)`：
+- 从 `marketing_presets` 读全部 4 个 key；
+- 任意一个缺失 fallback 到代码里的常量（保持向后兼容）。
+- `generate-marketing-copy` / `generate-marketing-video-script` / `analyze-marketing-assets` 全部改为先 `await loadPresets()` 再拼 prompt。
+
+**后台 UI**
+
+`src/pages/Portal.tsx` 新增 tab「营销预设」→ 新组件 `src/components/admin/MarketingPresetsPanel.tsx`：
+- 一张表格 + 4 张可折叠卡片，对应 4 个 key。
+- `brand_system_prompt`：大 textarea，可直接改品牌话术。
+- `platform_brief` / `tone_brief`：键值列表，可增删改每个平台/口吻的描述。
+- `video_type_rules`：每个视频类型可改 label / required slots / recommended / scriptHint。
+- 保存：`upsert into marketing_presets`，立即生效（下一次生成自动读到新版）。
+- 右上有"恢复默认"按钮（用代码常量回写）。
+
+## 技术细节区
+
+**文案 JSON 解析（库列表卡片）**
+```ts
+function previewOf(asset): string {
+  if (asset.kind !== 'copy' || !asset.output_text) return '';
+  try {
+    const arr = JSON.parse(asset.output_text);
+    const first = Array.isArray(arr) ? arr[0] : arr;
+    return (first?.title || first?.body || '').replace(/\n+/g, ' ').slice(0, 80);
+  } catch { return asset.output_text.replace(/[\[\]{}"`]/g, '').slice(0, 80); }
+}
+```
+
+**StepBar 居中改写**
+```tsx
+<div className="flex items-center justify-center gap-2 px-0.5">
+  {steps.map(...)
+    <div className="flex items-center gap-2 shrink-0">
+      <Circle/> <Label/>
+      {i < last && <div className="h-px w-8 bg-..." />}
+    </div>
+  )}
+</div>
+```
+
+**视频脚本 schema 新版（核心字段）**
+```ts
+{ hook: { video_prompt, text, duration_s, image_index?: number|null, motion },
+  scenes: [...same],
+  outro: {...same},
+  mode: 'text2video',
+  reference_image_urls: string[] }
+```
+
+## 受影响文件
+
+前端：
+- `src/pages/MyMarketing.tsx`（去角标）
+- `src/pages/marketing/StepBar.tsx`（居中）
+- `src/pages/marketing/MarketingLibrary.tsx`（选择/编辑/删除/解析 JSON）
+- `src/pages/marketing/MarketingCopy.tsx`（扩展 tone 分组）
+- `src/pages/marketing/MarketingVideo.tsx`（文生视频流程）
+- `src/pages/Portal.tsx`（新 tab）
+- 新建 `src/components/admin/MarketingPresetsPanel.tsx`
+- 新建 `src/components/marketing/AssetDetailDialog.tsx`
+
+后端：
+- 新建表 `marketing_presets` + RLS + 种子
+- 改 `supabase/functions/_shared/brand-context.ts`（加 `loadPresets`）
+- 改 `generate-marketing-copy/index.ts`（扩 tone + 读 preset）
+- 改 `generate-marketing-video-script/index.ts`（text2video schema + 读 preset）
+- 改 `analyze-marketing-assets/index.ts`（读 preset；改为软提示，不阻塞）
+- `render-marketing-video/index.ts` 只多记录 mode 字段
+
+不变：业务表 `marketing_assets` / `marketing_video_jobs` schema 保持不变。
+
+---
+
+确认这个方案吗？确认后我会一次性按以上顺序实现完。

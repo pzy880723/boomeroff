@@ -47,8 +47,17 @@ Deno.serve(async (req) => {
       kind: "video",
       input_image_urls: Array.isArray(script.image_urls) ? script.image_urls : [],
       output_url: null,
-      meta: { job_id: job.id, video_type: script.video_type, duration: script.total_duration_s, aspect: script.aspect, status: "queued" },
+      meta: {
+        job_id: job.id,
+        video_type: script.video_type,
+        duration: script.total_duration_s,
+        aspect: script.aspect,
+        mode: script.mode || "text2video",
+        topic: script.topic || "",
+        status: "queued",
+      },
     });
+
 
     return json({ success: true, job_id: job.id, status: "queued" });
   } catch (e) {
