@@ -10,7 +10,7 @@ interface StepBarProps {
  */
 export function StepBar({ steps, current }: StepBarProps) {
   return (
-    <div className="flex items-center justify-center gap-2 px-0.5 flex-wrap">
+    <div className="flex items-center justify-center gap-1.5 px-0.5 flex-nowrap overflow-hidden">
       {steps.map((label, i) => {
         const done = i < current;
         const active = i === current;
