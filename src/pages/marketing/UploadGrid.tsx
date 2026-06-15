@@ -92,20 +92,22 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
   };
 
   return (
-    <div className="bg-card rounded-2xl shadow-sm overflow-hidden border border-border">
+    <div className="bg-card rounded-[0.875rem] shadow-sm overflow-hidden border border-accent/15">
       {/* 顶部进度条:有任务时显示 */}
-      <div className={`h-1 w-full bg-muted ${inflight === 0 ? 'opacity-0' : ''} transition-opacity`}>
+      <div className={`h-[3px] w-full bg-muted ${inflight === 0 ? 'opacity-0' : ''} transition-opacity`}>
         <div
-          className="h-full bg-primary transition-all duration-300"
+          className="h-full bg-accent transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>
 
       <div className="p-4">
         <div className="flex justify-between items-center mb-3">
-          <h3 className="text-sm font-semibold text-foreground">
-            {title} <span className="text-muted-foreground font-normal">（最多 {max} 张）</span>
-          </h3>
+          <div className="flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full bg-accent" />
+            <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{title}</span>
+            <span className="text-[10px] text-muted-foreground">最多 {max} 张</span>
+          </div>
           {inflight > 0 && (
             <span className="text-[11px] text-muted-foreground font-medium">
               上传中 {doneCount}/{totalActive}

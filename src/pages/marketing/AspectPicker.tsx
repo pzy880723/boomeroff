@@ -1,4 +1,4 @@
-// 视频画幅图形按钮组(竖版/方形/横版)
+// 视频画幅图形按钮组(竖版/方形/横版) · 年鉴版
 type Aspect = '9:16' | '1:1' | '16:9';
 
 const ITEMS: { v: Aspect; label: string; w: string; h: string }[] = [
@@ -9,39 +9,36 @@ const ITEMS: { v: Aspect; label: string; w: string; h: string }[] = [
 
 export function AspectPicker({ value, onChange }: { value: Aspect; onChange: (v: Aspect) => void }) {
   return (
-    <div>
-      <p className="text-xs text-muted-foreground mb-2">画幅</p>
-      <div className="grid grid-cols-3 gap-2.5">
-        {ITEMS.map((it) => {
-          const active = value === it.v;
-          return (
-            <button
-              key={it.v}
-              type="button"
-              onClick={() => onChange(it.v)}
+    <div className="grid grid-cols-3 gap-2.5">
+      {ITEMS.map((it) => {
+        const active = value === it.v;
+        return (
+          <button
+            key={it.v}
+            type="button"
+            onClick={() => onChange(it.v)}
+            className={[
+              'flex flex-col items-center gap-2 py-3 rounded-xl border transition-all active:scale-[0.97]',
+              active
+                ? 'bg-primary/[0.04] border-accent text-foreground shadow-sm'
+                : 'bg-card border-border text-muted-foreground hover:border-accent/50',
+            ].join(' ')}
+            aria-pressed={active}
+          >
+            <span
               className={[
-                'flex flex-col items-center gap-2 py-3 rounded-xl border-2 transition-all active:scale-[0.97]',
-                active
-                  ? 'bg-primary border-primary text-primary-foreground shadow-sm'
-                  : 'bg-muted/40 border-border text-muted-foreground hover:bg-muted',
+                'block border-2 rounded-[3px]',
+                it.w,
+                it.h,
+                active ? 'border-accent' : 'border-muted-foreground/50',
               ].join(' ')}
-              aria-pressed={active}
-            >
-              <span
-                className={[
-                  'block border-2 rounded-[3px]',
-                  it.w,
-                  it.h,
-                  active ? 'border-primary-foreground' : 'border-muted-foreground/50',
-                ].join(' ')}
-              />
-              <span className="text-[11px] font-semibold whitespace-nowrap">
-                {it.label} {it.v}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+            />
+            <span className="text-[11px] font-medium whitespace-nowrap tracking-wide">
+              {it.label} · {it.v}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

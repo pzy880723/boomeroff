@@ -2,10 +2,8 @@ import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Loader2, Copy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { UploadGrid } from './UploadGrid';
@@ -52,53 +50,110 @@ export default function MarketingCopy() {
   return (
     <>
       <PageHeader title="AI 文案" back="/me/marketing" subtitle="营销中心 / 写文案" />
-      <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4">
+      <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
         <StepBar
-          steps={['选图', '平台/口吻', '生成', '复制发布']}
+          steps={['选图', '平台 / 口吻', '生成', '复制']}
           current={urls.length === 0 ? 0 : cands.length === 0 ? 1 : 3}
         />
+
         <UploadGrid urls={urls} onChange={setUrls} max={9} preset="thumb" title="素材" />
 
-
-        <Card className="p-4 space-y-3">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">平台</p>
-            <div className="flex flex-wrap gap-1.5">
-              {PLATFORMS.map((p) => (
-                <Badge key={p.v} variant={platform === p.v ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setPlatform(p.v)}>{p.label}</Badge>
-              ))}
-            </div>
+        <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-5">
+          <SectionLabel num="01">平台</SectionLabel>
+          <div className="-mt-2 flex flex-wrap gap-1.5">
+            {PLATFORMS.map((p) => (
+              <Chip key={p.v} active={platform === p.v} onClick={() => setPlatform(p.v)}>{p.label}</Chip>
+            ))}
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">口吻</p>
-            <div className="flex flex-wrap gap-1.5">
-              {TONES.map((t) => (
-                <Badge key={t} variant={tone === t ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setTone(t)}>{t}</Badge>
-              ))}
-            </div>
-          </div>
-          <Input placeholder="商品名（可选）" value={name} onChange={(e) => setName(e.target.value)} />
-          <Input placeholder="价格（可选）" value={price} onChange={(e) => setPrice(e.target.value)} />
-          <Input placeholder="想突出的点（可选）" value={highlight} onChange={(e) => setHighlight(e.target.value)} />
-        </Card>
 
-        <Button onClick={gen} disabled={busy || !urls.length} className="w-full">
+          <SectionLabel num="02">口吻</SectionLabel>
+          <div className="-mt-2 flex flex-wrap gap-1.5">
+            {TONES.map((t) => (
+              <Chip key={t} active={tone === t} onClick={() => setTone(t)}>{t}</Chip>
+            ))}
+          </div>
+
+          <div className="pt-1 space-y-3">
+            <UnderlineField label="商品名" value={name} onChange={setName} placeholder="可选" />
+            <UnderlineField label="价格" value={price} onChange={setPrice} placeholder="可选" />
+            <UnderlineField label="想突出的点" value={highlight} onChange={setHighlight} placeholder="可选" />
+          </div>
+        </section>
+
+        <Button onClick={gen} disabled={busy || !urls.length} className="w-full h-11 font-medium">
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           生成 3 条候选
         </Button>
 
         {cands.map((c, i) => (
-          <Card key={i} className="p-4 space-y-2">
-            {c.title && <p className="font-semibold text-sm">{c.title}</p>}
-            <p className="text-sm whitespace-pre-wrap">{c.body}</p>
-            {c.hashtags?.length > 0 && <p className="text-xs text-primary">{c.hashtags.join(' ')}</p>}
-            {c.first_comment && <p className="text-xs text-muted-foreground">首评：{c.first_comment}</p>}
-            <Button size="sm" variant="outline" onClick={() => copy([c.title, c.body, c.hashtags?.join(' ')].filter(Boolean).join('\n\n'))}>
-              <Copy className="w-3.5 h-3.5" />复制
-            </Button>
-          </Card>
+          <section key={i} className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-2.5 animate-card-enter">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-display text-[11px] text-accent tracking-[0.18em]">{String(i + 1).padStart(2, '0')}</span>
+                <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">候选</span>
+              </div>
+              <button
+                onClick={() => copy([c.title, c.body, c.hashtags?.join(' ')].filter(Boolean).join('\n\n'))}
+                className="text-muted-foreground hover:text-accent transition-colors"
+                aria-label="复制"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            </div>
+            {c.title && <p className="font-display text-[17px] leading-snug text-foreground">{c.title}</p>}
+            <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">{c.body}</p>
+            {c.hashtags?.length > 0 && <p className="text-[11px] text-accent font-medium">{c.hashtags.join(' ')}</p>}
+            {c.first_comment && (
+              <p className="text-[11px] text-muted-foreground border-t border-border pt-2 mt-2">
+                <span className="text-accent font-semibold mr-1">首评</span>{c.first_comment}
+              </p>
+            )}
+          </section>
         ))}
       </div>
     </>
+  );
+}
+
+function SectionLabel({ children, num }: { children: React.ReactNode; num?: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      {num && <span className="font-display text-[11px] text-accent tracking-[0.18em]">{num}</span>}
+      <span className="w-1 h-1 rounded-full bg-accent" />
+      <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{children}</span>
+    </div>
+  );
+}
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'px-3 h-7 rounded-full text-[12px] transition-all border',
+        active
+          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+          : 'bg-transparent text-foreground border-border hover:border-accent/50',
+      ].join(' ')}
+    >
+      {children}
+    </button>
+  );
+}
+
+function UnderlineField({
+  label, value, onChange, placeholder,
+}: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1">{label}</p>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="bg-transparent border-0 border-b border-border rounded-none focus-visible:ring-0 focus-visible:border-accent px-0 text-sm h-9"
+      />
+    </div>
   );
 }
