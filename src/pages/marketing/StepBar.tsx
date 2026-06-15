@@ -10,16 +10,16 @@ interface StepBarProps {
  */
 export function StepBar({ steps, current }: StepBarProps) {
   return (
-    <div className="flex items-center justify-center gap-2 px-0.5 flex-wrap">
+    <div className="flex items-center justify-center gap-1.5 px-0.5 flex-nowrap overflow-hidden">
       {steps.map((label, i) => {
         const done = i < current;
         const active = i === current;
         const num = String(i + 1).padStart(2, '0');
         return (
-          <div key={i} className="flex items-center gap-2 shrink-0">
+          <div key={i} className="flex items-center gap-1 shrink-0">
             <div
               className={[
-                'flex items-center justify-center w-7 h-7 rounded-full shrink-0 transition-all',
+                'flex items-center justify-center w-6 h-6 rounded-full shrink-0 transition-all',
                 done
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : active
@@ -35,14 +35,14 @@ export function StepBar({ steps, current }: StepBarProps) {
             </div>
             <span
               className={[
-                'text-[11px] tracking-wide whitespace-nowrap',
+                'text-[10px] tracking-wide whitespace-nowrap',
                 active ? 'text-foreground font-medium' : 'text-muted-foreground',
               ].join(' ')}
             >
               {label}
             </span>
             {i < steps.length - 1 && (
-              <div className={`h-px w-6 ${done ? 'bg-accent/60' : 'bg-border'}`} />
+              <div className={`h-px w-3 ${done ? 'bg-accent/60' : 'bg-border'}`} />
             )}
           </div>
         );
