@@ -82,7 +82,6 @@ export default function MyMarketing() {
               icon={Sparkles}
               title="图片优化"
               desc="只修瑕疵 · 不加滤镜"
-              count={counts.photo}
             />
             <ToolTile
               to="/me/marketing/copy"
@@ -90,7 +89,6 @@ export default function MyMarketing() {
               icon={FileText}
               title="AI 文案"
               desc="看图写文 · 平台口吻"
-              count={counts.copy}
             />
           </div>
           <Link to="/me/marketing/video" className="block">
@@ -102,19 +100,17 @@ export default function MyMarketing() {
                 <div className="flex items-center gap-2">
                   <span className="font-display text-[10px] text-accent tracking-[0.18em]">03</span>
                   <h3 className="text-[15px] font-semibold leading-none">AI 视频</h3>
-                  {counts.video > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{counts.video}</span>
-                  )}
                   <span className="ml-auto text-[10px] tracking-[0.18em] text-accent font-semibold">15-30 秒</span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-muted-foreground mt-1">
-                  分析素材是否足够 → 确认脚本 → 渲染
+                  文字立意 · 参考图辅助 · AI 出片
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:translate-x-0.5 transition-transform" />
             </div>
           </Link>
         </section>
+
 
         {/* ===== 工作流提示带 ===== */}
         <section className="px-1">
@@ -202,8 +198,8 @@ function Metric({ label, value }: { label: string; value: number }) {
 }
 
 function ToolTile({
-  to, num, icon: Icon, title, desc, count,
-}: { to: string; num: string; icon: any; title: string; desc: string; count: number }) {
+  to, num, icon: Icon, title, desc,
+}: { to: string; num: string; icon: any; title: string; desc: string }) {
   return (
     <Link to={to} className="block">
       <div className="group h-full bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex flex-col justify-between min-h-[132px] transition-all hover:border-accent/40 active:scale-[0.985]">
@@ -211,9 +207,6 @@ function ToolTile({
           <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
             <Icon className="w-5 h-5" strokeWidth={1.5} />
           </div>
-          {count > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{count}</span>
-          )}
         </div>
         <div className="mt-4">
           <div className="flex items-baseline gap-1.5 mb-0.5">
@@ -226,6 +219,7 @@ function ToolTile({
     </Link>
   );
 }
+
 
 function FlowDot({ num, label, active = false }: { num: string; label: string; active?: boolean }) {
   return (
