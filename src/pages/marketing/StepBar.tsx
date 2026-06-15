@@ -16,7 +16,7 @@ export function StepBar({ steps, current }: StepBarProps) {
         const active = i === current;
         const num = String(i + 1).padStart(2, '0');
         return (
-          <div key={i} className="flex items-center gap-2 shrink-0">
+          <div key={i} className="flex items-center gap-1 shrink-0">
             <div
               className={[
                 'flex items-center justify-center w-7 h-7 rounded-full shrink-0 transition-all',
