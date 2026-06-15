@@ -42,7 +42,7 @@ export function StepBar({ steps, current }: StepBarProps) {
               {label}
             </span>
             {i < steps.length - 1 && (
-              <div className={`h-px w-6 ${done ? 'bg-accent/60' : 'bg-border'}`} />
+              <div className={`h-px w-3 ${done ? 'bg-accent/60' : 'bg-border'}`} />
             )}
           </div>
         );
