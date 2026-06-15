@@ -1,6 +1,6 @@
 // 看图写文：1–9 张图 → 选平台 + 口吻 → 3 条候选(标题+正文+话题+首评)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { BRAND_SYSTEM_PROMPT } from "../_shared/brand-context.ts";
+import { loadMarketingPresets } from "../_shared/brand-context.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,23 +8,6 @@ const corsHeaders = {
 };
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-type Platform = "xhs" | "douyin" | "shipinhao" | "pyq";
-type Tone = "种草" | "探店" | "藏家分享" | "上新";
-
-const PLATFORM_BRIEF: Record<Platform, string> = {
-  xhs: "小红书：标题 ≤20 字带钩子和 emoji，正文 150–220 字、分 3–4 短段，结尾留一句行动召唤；3–6 个 # 话题标签。",
-  douyin: "抖音：标题 ≤20 字、口语化制造悬念；正文 80–140 字偏口播稿，分句短、便于读字幕；2–5 个 # 话题。",
-  shipinhao: "视频号：标题 ≤22 字稳一点，正文 100–180 字克制有质感，2–4 个 # 话题。",
-  pyq: "朋友圈：不要标题，只输出 1–3 段短文，几乎不用 emoji，像随手记，结尾不喊话；不要 # 话题。",
-};
-
-const TONE_BRIEF: Record<Tone, string> = {
-  种草: "用第一人称'我'，描述偶遇/被打中的感觉，不写商品介绍。",
-  探店: "用第一人称'我'，写从进店到翻筐的过程感，强调店里东西多/有意思。",
-  藏家分享: "半专业口吻，先点物件名/品牌/年代/工艺（仅限提供的事实），再讲为什么动心。",
-  上新: "第三人称店铺口吻，告诉粉丝新到了什么类型的一件好物，不夸张。",
-};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -40,19 +23,21 @@ Deno.serve(async (req) => {
     const { data: u } = await userClient.auth.getUser();
     if (!u.user) return json({ error: "未授权" }, 401);
 
+    const presets = await loadMarketingPresets();
+
     const body = await req.json().catch(() => ({}));
     const imageUrls: string[] = Array.isArray(body.image_urls) ? body.image_urls.slice(0, 9) : [];
-    const platform: Platform = ["xhs", "douyin", "shipinhao", "pyq"].includes(body.platform) ? body.platform : "xhs";
-    const tone: Tone = ["种草", "探店", "藏家分享", "上新"].includes(body.tone) ? body.tone : "种草";
+    const platformKey: string = Object.keys(presets.platforms).includes(body.platform) ? body.platform : "xhs";
+    const toneKey: string = Object.keys(presets.tones).includes(body.tone) ? body.tone : "种草";
     const productName = (body.product_name || "").toString().trim().slice(0, 40);
     const price = (body.price || "").toString().trim().slice(0, 20);
     const highlight = (body.highlight || "").toString().trim().slice(0, 80);
     if (!imageUrls.length) return json({ error: "至少上传一张图" }, 400);
 
-    const sys = `${BRAND_SYSTEM_PROMPT}
+    const sys = `${presets.brand}
 
-平台：${PLATFORM_BRIEF[platform]}
-口吻：${TONE_BRIEF[tone]}
+平台：${presets.platforms[platformKey]}
+口吻：${presets.tones[toneKey]}
 
 输出格式：严格 JSON 数组，3 个对象，每个对象字段：
 {
@@ -100,7 +85,6 @@ Deno.serve(async (req) => {
     if (!Array.isArray(candidates) || !candidates.length) {
       return json({ error: "AI 返回格式异常" }, 500);
     }
-    // 清洗禁用词
     const sanitize = (s: string) =>
       (s || "")
         .replace(/主播/g, "店员")
@@ -114,14 +98,13 @@ Deno.serve(async (req) => {
       first_comment: sanitize(c?.first_comment || ""),
     }));
 
-    // 落库
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const { data: row } = await admin.from("marketing_assets").insert({
       user_id: u.user.id,
       kind: "copy",
       input_image_urls: imageUrls,
       output_text: JSON.stringify(candidates),
-      meta: { platform, tone, product_name: productName, price, highlight },
+      meta: { platform: platformKey, tone: toneKey, product_name: productName, price, highlight },
     }).select().single();
 
     return json({ success: true, candidates, asset_id: row?.id });
