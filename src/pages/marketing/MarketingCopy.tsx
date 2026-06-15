@@ -12,11 +12,17 @@ import { toast } from 'sonner';
 
 
 type Platform = 'xhs' | 'douyin' | 'shipinhao' | 'pyq';
-type Tone = '种草' | '探店' | '藏家分享' | '上新';
 const PLATFORMS: { v: Platform; label: string }[] = [
   { v: 'xhs', label: '小红书' }, { v: 'douyin', label: '抖音' }, { v: 'shipinhao', label: '视频号' }, { v: 'pyq', label: '朋友圈' },
 ];
-const TONES: Tone[] = ['种草', '探店', '藏家分享', '上新'];
+
+// 文案口吻 — 分组陈列,每组之间一根古铜金细线
+const TONE_GROUPS: { group: string; tones: string[] }[] = [
+  { group: '情绪', tones: ['种草', '治愈', '怀旧', '偶遇'] },
+  { group: '故事', tones: ['探店', '翻筐日记', '主理人手记', '顾客来信'] },
+  { group: '专业', tones: ['藏家分享', '年代考据', '工艺解读'] },
+  { group: '推新', tones: ['上新', '限定到店'] },
+];
 
 export default function MarketingCopy() {
   const loc = useLocation();
@@ -24,7 +30,7 @@ export default function MarketingCopy() {
   const initial: string[] = (loc.state as any)?.image_urls || [];
   const [urls, setUrls] = useState<string[]>(initial);
   const [platform, setPlatform] = useState<Platform>('xhs');
-  const [tone, setTone] = useState<Tone>('种草');
+  const [tone, setTone] = useState<string>('种草');
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [highlight, setHighlight] = useState('');
@@ -67,9 +73,20 @@ export default function MarketingCopy() {
           </div>
 
           <SectionLabel num="02">口吻</SectionLabel>
-          <div className="-mt-2 flex flex-wrap gap-1.5">
-            {TONES.map((t) => (
-              <Chip key={t} active={tone === t} onClick={() => setTone(t)}>{t}</Chip>
+          <div className="-mt-2 space-y-3">
+            {TONE_GROUPS.map((g, gi) => (
+              <div key={g.group} className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{g.group}</span>
+                  <span className="flex-1 h-px bg-accent/15" />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {g.tones.map((t) => (
+                    <Chip key={t} active={tone === t} onClick={() => setTone(t)}>{t}</Chip>
+                  ))}
+                </div>
+                {gi < TONE_GROUPS.length - 1 && null}
+              </div>
             ))}
           </div>
 
