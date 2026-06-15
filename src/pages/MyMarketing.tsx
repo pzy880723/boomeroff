@@ -2,12 +2,9 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import {
   Sparkles, FileText, Video, Library, ChevronRight, Loader2,
-  Camera, Send, Wand2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
@@ -49,152 +46,208 @@ export default function MyMarketing() {
   return (
     <>
       <PageHeader title="营销中心" back="/me" subtitle="一键出图 · 一键出文 · 一键出片" />
-      <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-4 pb-10">
+      <div className="container mx-auto max-w-screen-md px-4 py-4 pb-12 space-y-5 relative">
 
-        {/* ===== Hero ===== */}
-        <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-gradient-to-br from-primary/15 via-primary/5 to-accent/15 p-5">
-          <div className="absolute -right-2 -bottom-2 opacity-30 pointer-events-none select-none">
-            <img src={boomerIdle} alt="" className="w-28 h-28 object-contain" draggable={false} />
-          </div>
-          <div className="relative space-y-2">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-              <span className="text-[11px] tracking-wide text-primary/90 font-medium">BOOMER · AI 营销助手</span>
+        {/* ===== Hero · 年鉴封面 ===== */}
+        <section className="relative bg-card rounded-[0.875rem] border border-accent/15 shadow-sm overflow-hidden animate-card-enter">
+          <div className="p-5 flex justify-between items-end gap-3">
+            <div className="relative z-10 flex-1 min-w-0">
+              <SectionLabel>BOOMER · AI 营销助手</SectionLabel>
+              <h2 className="font-display text-[26px] leading-[1.15] mt-2 text-foreground">
+                {today > 0 ? `今天已经产出 ${today} 条` : '今天还没发，先做一条？'}
+              </h2>
+              <div className="mt-4 border-t border-border pt-3 flex items-end gap-5">
+                <Metric label="图片" value={counts.photo} />
+                <Metric label="文案" value={counts.copy} />
+                <Metric label="视频" value={counts.video} />
+                <span className="ml-auto font-display italic text-[11px] text-accent">近 30 日</span>
+              </div>
             </div>
-            <h2 className="text-xl font-semibold">
-              {today > 0 ? `今天已经产出 ${today} 条 ✨` : '今天还没发,先做一条?'}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              近 30 天 · 图片 <b className="text-foreground">{counts.photo}</b> · 文案 <b className="text-foreground">{counts.copy}</b> · 视频 <b className="text-foreground">{counts.video}</b>
-            </p>
+            <img
+              src={boomerIdle}
+              alt=""
+              className="w-24 h-24 object-contain shrink-0 -mr-1 -mb-1 select-none"
+              draggable={false}
+            />
           </div>
-        </div>
+        </section>
 
         {/* ===== 三大工具 ===== */}
-        <div className="grid grid-cols-2 gap-3">
-          <ToolCard
-            to="/me/marketing/photo"
-            icon={Sparkles}
-            title="图片优化"
-            desc="只修瑕疵,不加滤镜"
-            count={counts.photo}
-            accent="from-amber-500/15 to-amber-500/0 text-amber-600 dark:text-amber-400"
-          />
-          <ToolCard
-            to="/me/marketing/copy"
-            icon={FileText}
-            title="AI 文案"
-            desc="看图写文,平台口吻"
-            count={counts.copy}
-            accent="from-sky-500/15 to-sky-500/0 text-sky-600 dark:text-sky-400"
-          />
-          <Link to="/me/marketing/video" className="col-span-2">
-            <Card className="relative overflow-hidden p-4 rounded-2xl hover:bg-accent/5 transition-all active:scale-[0.99] border-border/60">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/12 via-primary/5 to-transparent pointer-events-none" />
-              <div className="relative flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
-                  <Video className="w-7 h-7" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-semibold">AI 视频</h3>
-                    {counts.video > 0 && <Badge variant="secondary" className="text-[10px]">{counts.video}</Badge>}
-                    <Badge variant="outline" className="text-[10px]">15–30 秒</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">先分析素材是否足够 → 再确认脚本 → 最后渲染,不浪费算力</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+        <section className="space-y-3">
+          <SectionLabel className="px-1">创作工坊</SectionLabel>
+          <div className="grid grid-cols-2 gap-3">
+            <ToolTile
+              to="/me/marketing/photo"
+              num="01"
+              icon={Sparkles}
+              title="图片优化"
+              desc="只修瑕疵 · 不加滤镜"
+              count={counts.photo}
+            />
+            <ToolTile
+              to="/me/marketing/copy"
+              num="02"
+              icon={FileText}
+              title="AI 文案"
+              desc="看图写文 · 平台口吻"
+              count={counts.copy}
+            />
+          </div>
+          <Link to="/me/marketing/video" className="block">
+            <div className="group bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex items-center gap-4 transition-all hover:border-accent/40 active:scale-[0.995]">
+              <div className="w-12 h-12 rounded-xl bg-primary/95 text-primary-foreground flex items-center justify-center shrink-0 shadow-sm">
+                <Video className="w-6 h-6" strokeWidth={1.5} />
               </div>
-            </Card>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-[10px] text-accent tracking-[0.18em]">03</span>
+                  <h3 className="text-[15px] font-semibold leading-none">AI 视频</h3>
+                  {counts.video > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{counts.video}</span>
+                  )}
+                  <span className="ml-auto text-[10px] tracking-[0.18em] text-accent font-semibold">15-30 秒</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground mt-1">
+                  分析素材是否足够 → 确认脚本 → 渲染
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:translate-x-0.5 transition-transform" />
+            </div>
           </Link>
-        </div>
+        </section>
 
         {/* ===== 工作流提示带 ===== */}
-        <Card className="p-3 rounded-2xl bg-muted/40 border-dashed">
-          <div className="flex items-center justify-between gap-2">
-            <FlowStep icon={Camera} label="拍图/上传" />
-            <FlowArrow />
-            <FlowStep icon={Wand2} label="修图/写文/做片" />
-            <FlowArrow />
-            <FlowStep icon={Send} label="复制到平台发布" />
+        <section className="px-1">
+          <div className="flex items-center justify-between relative">
+            <div className="absolute h-px left-5 right-5 top-4 bg-accent/25 -translate-y-1/2" />
+            <FlowDot num="01" label="拍图 / 上传" />
+            <FlowDot num="02" label="AI 产出" active />
+            <FlowDot num="03" label="复制发布" />
           </div>
-        </Card>
+        </section>
 
         {/* ===== 素材库 ===== */}
-        <Link to="/me/marketing/library">
-          <Card className="p-4 rounded-2xl flex items-center gap-3 hover:bg-accent/10 transition-colors active:scale-[0.99]">
-            <div className="flex -space-x-2">
-              {loading ? (
-                <div className="w-9 h-9 rounded-lg bg-muted animate-pulse" />
-              ) : recents.length === 0 ? (
-                <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
-                  <Library className="w-4 h-4 text-muted-foreground" />
-                </div>
-              ) : (
-                recents.map((r, i) => (
-                  <div key={r.id} className="w-9 h-9 rounded-lg border-2 border-background bg-muted overflow-hidden flex items-center justify-center" style={{ zIndex: 3 - i }}>
-                    {r.output_url && r.kind === 'photo' ? (
-                      <img src={r.output_url} alt="" className="w-full h-full object-cover" />
-                    ) : r.kind === 'copy' ? (
-                      <FileText className="w-4 h-4 text-muted-foreground" />
-                    ) : (
-                      <Video className="w-4 h-4 text-muted-foreground" />
-                    )}
+        <section>
+          <Link to="/me/marketing/library" className="block">
+            <div className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex items-center gap-4 transition-all hover:border-accent/40 active:scale-[0.995]">
+              <div className="flex -space-x-2.5 shrink-0">
+                {loading ? (
+                  <div className="w-10 h-10 rounded-lg bg-muted animate-pulse" />
+                ) : recents.length === 0 ? (
+                  <div className="w-10 h-10 rounded-lg bg-muted border border-card flex items-center justify-center">
+                    <Library className="w-4 h-4 text-muted-foreground" />
                   </div>
-                ))
-              )}
+                ) : (
+                  recents.map((r, i) => (
+                    <div
+                      key={r.id}
+                      className="w-10 h-10 rounded-lg border-2 border-card bg-muted overflow-hidden flex items-center justify-center shadow-sm"
+                      style={{ zIndex: 3 - i }}
+                    >
+                      {r.output_url && r.kind === 'photo' ? (
+                        <img src={r.output_url} alt="" className="w-full h-full object-cover" />
+                      ) : r.kind === 'copy' ? (
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                      ) : (
+                        <Video className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-[10px] text-accent tracking-[0.18em]">归档</span>
+                  <h3 className="text-[15px] font-semibold leading-none">素材库</h3>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">历史产出 · 一键复制 · 下载视频</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">素材库</p>
-              <p className="text-[11px] text-muted-foreground">看历史产出 · 一键复制 · 下载视频</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          </Card>
-        </Link>
+          </Link>
+        </section>
 
-        <p className="text-[11px] text-muted-foreground text-center pt-1">
-          品牌信息 · 商品类目 · 门店定位 已经预设给 AI,不用每次再说一遍。
+        {/* ===== 底部说明 ===== */}
+        <p className="text-[10px] text-center text-muted-foreground tracking-wide leading-relaxed pt-2">
+          品牌信息 · 商品类目 · 门店定位
+          <br />
+          <span className="text-accent font-semibold">已经预设给 AI，不用每次再说一遍</span>
         </p>
+
+        {/* 底部细古铜金线 */}
+        <div className="absolute left-0 right-0 bottom-0 h-[3px] bg-accent/20 pointer-events-none" />
       </div>
     </>
   );
 }
 
-function ToolCard({
-  to, icon: Icon, title, desc, count, accent,
-}: { to: string; icon: any; title: string; desc: string; count: number; accent: string }) {
+function SectionLabel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <Link to={to}>
-      <Card className="relative h-full overflow-hidden p-4 rounded-2xl hover:bg-accent/5 transition-all active:scale-[0.98] border-border/60">
-        <div className={`absolute inset-0 bg-gradient-to-br ${accent} pointer-events-none opacity-90`} />
-        <div className="relative space-y-3">
-          <div className="flex items-start justify-between">
-            <div className="w-11 h-11 rounded-xl bg-background/70 backdrop-blur flex items-center justify-center">
-              <Icon className="w-5 h-5" />
-            </div>
-            {count > 0 && <Badge variant="secondary" className="text-[10px]">{count}</Badge>}
-          </div>
-          <div>
-            <h3 className="text-base font-semibold leading-tight">{title}</h3>
-            <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{desc}</p>
-          </div>
-        </div>
-      </Card>
-    </Link>
-  );
-}
-
-function FlowStep({ icon: Icon, label }: { icon: any; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
-      <div className="w-7 h-7 rounded-full bg-background border flex items-center justify-center">
-        <Icon className="w-3.5 h-3.5 text-muted-foreground" />
-      </div>
-      <span className="text-[10px] text-muted-foreground truncate">{label}</span>
+    <div className={`flex items-center gap-1.5 ${className}`}>
+      <span className="w-1 h-1 rounded-full bg-accent" />
+      <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">
+        {children}
+      </span>
     </div>
   );
 }
 
-function FlowArrow() {
-  return <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />;
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex flex-col leading-tight">
+      <span className="text-[10px] text-muted-foreground tracking-wide">{label}</span>
+      <span className="font-display text-base text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function ToolTile({
+  to, num, icon: Icon, title, desc, count,
+}: { to: string; num: string; icon: any; title: string; desc: string; count: number }) {
+  return (
+    <Link to={to} className="block">
+      <div className="group h-full bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex flex-col justify-between min-h-[132px] transition-all hover:border-accent/40 active:scale-[0.985]">
+        <div className="flex items-start justify-between">
+          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
+            <Icon className="w-5 h-5" strokeWidth={1.5} />
+          </div>
+          {count > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{count}</span>
+          )}
+        </div>
+        <div className="mt-4">
+          <div className="flex items-baseline gap-1.5 mb-0.5">
+            <span className="font-display text-[10px] text-accent tracking-[0.18em]">{num}</span>
+          </div>
+          <h3 className="text-[15px] font-semibold leading-tight">{title}</h3>
+          <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{desc}</p>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function FlowDot({ num, label, active = false }: { num: string; label: string; active?: boolean }) {
+  return (
+    <div className="relative flex flex-col items-center gap-1.5 z-10 w-16">
+      <div
+        className={[
+          'w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-all',
+          active
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-card border border-accent/30 text-accent',
+        ].join(' ')}
+      >
+        <span className="font-display text-[11px] leading-none">{num}</span>
+      </div>
+      <span
+        className={[
+          'text-[10px] tracking-wide',
+          active ? 'text-foreground font-medium' : 'text-muted-foreground',
+        ].join(' ')}
+      >
+        {label}
+      </span>
+    </div>
+  );
 }

@@ -6,7 +6,7 @@ interface StepBarProps {
 }
 
 /**
- * 紧凑型步骤指引条:已完成/当前/未来三态。100% 简体中文,无英文。
+ * 年鉴版步骤指引条:01/02 serif 序号 · 古铜金细线串联 · 三态(完成/当前/未来)。
  */
 export function StepBar({ steps, current }: StepBarProps) {
   return (
@@ -14,28 +14,35 @@ export function StepBar({ steps, current }: StepBarProps) {
       {steps.map((label, i) => {
         const done = i < current;
         const active = i === current;
+        const num = String(i + 1).padStart(2, '0');
         return (
           <div key={i} className="flex items-center gap-1.5 flex-1 min-w-0">
             <div
-              className={`flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-medium shrink-0 transition-colors ${
+              className={[
+                'flex items-center justify-center w-7 h-7 rounded-full shrink-0 transition-all',
                 done
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
                   : active
-                  ? 'bg-primary/15 text-primary ring-2 ring-primary/40'
-                  : 'bg-muted text-muted-foreground'
-              }`}
+                  ? 'bg-card text-accent ring-1 ring-accent/50 shadow-sm'
+                  : 'bg-card text-muted-foreground/60 ring-1 ring-border',
+              ].join(' ')}
             >
-              {done ? <Check className="w-3.5 h-3.5" /> : i + 1}
+              {done ? (
+                <Check className="w-3.5 h-3.5" strokeWidth={2.2} />
+              ) : (
+                <span className="font-display text-[11px] leading-none">{num}</span>
+              )}
             </div>
             <span
-              className={`text-[11px] truncate ${
-                active ? 'text-foreground font-medium' : 'text-muted-foreground'
-              }`}
+              className={[
+                'text-[11px] truncate tracking-wide',
+                active ? 'text-foreground font-medium' : 'text-muted-foreground',
+              ].join(' ')}
             >
               {label}
             </span>
             {i < steps.length - 1 && (
-              <div className={`h-px flex-1 ${done ? 'bg-primary/60' : 'bg-border'}`} />
+              <div className={`h-px flex-1 ${done ? 'bg-accent/60' : 'bg-border'}`} />
             )}
           </div>
         );
