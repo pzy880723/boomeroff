@@ -19,7 +19,7 @@ export function StepBar({ steps, current }: StepBarProps) {
           <div key={i} className="flex items-center gap-1 shrink-0">
             <div
               className={[
-                'flex items-center justify-center w-7 h-7 rounded-full shrink-0 transition-all',
+                'flex items-center justify-center w-6 h-6 rounded-full shrink-0 transition-all',
                 done
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : active
