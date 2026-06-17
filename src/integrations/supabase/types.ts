@@ -711,30 +711,42 @@ export type Database = {
           error: string | null
           finished_at: string | null
           id: string
+          last_polled_at: string | null
           output_url: string | null
+          provider: string | null
+          provider_task_id: string | null
           script: Json
           status: string
           user_id: string
+          video_url: string | null
         }
         Insert: {
           created_at?: string
           error?: string | null
           finished_at?: string | null
           id?: string
+          last_polled_at?: string | null
           output_url?: string | null
+          provider?: string | null
+          provider_task_id?: string | null
           script: Json
           status?: string
           user_id: string
+          video_url?: string | null
         }
         Update: {
           created_at?: string
           error?: string | null
           finished_at?: string | null
           id?: string
+          last_polled_at?: string | null
           output_url?: string | null
+          provider?: string | null
+          provider_task_id?: string | null
           script?: Json
           status?: string
           user_id?: string
+          video_url?: string | null
         }
         Relationships: []
       }
