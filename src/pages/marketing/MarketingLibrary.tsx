@@ -32,6 +32,40 @@ export default function MarketingLibrary() {
   };
   useEffect(() => { load(); }, [user]);
 
+  // 轮询未完成的视频任务
+  useEffect(() => {
+    const pending = items.filter(
+      (it) => it.kind === 'video' && it.meta?.job_id && !['succeeded', 'failed'].includes(it.meta?.status),
+    );
+    if (!pending.length) return;
+    let cancelled = false;
+    const tick = async () => {
+      for (const it of pending) {
+        if (cancelled) return;
+        try {
+          const { data } = await supabase.functions.invoke('poll-marketing-video', {
+            body: { job_id: it.meta.job_id },
+          });
+          const next = data as any;
+          if (next?.status && next.status !== it.meta?.status) {
+            setItems((prev) => prev.map((x) => x.id === it.id ? {
+              ...x,
+              output_url: next.video_url || x.output_url,
+              meta: { ...(x.meta || {}), status: next.status, error: next.error || undefined },
+            } : x));
+          }
+        } catch (_e) { /* ignore */ }
+      }
+    };
+    tick();
+    const t = setInterval(tick, 10000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [items]);
+
+  const statusLabel = (s?: string) => ({
+    queued: '排队中', running: '渲染中', succeeded: '已完成', failed: '失败',
+  } as Record<string, string>)[s || ''] || s || '排队中';
+
   const groups = useMemo(() => {
     const map = new Map<string, any[]>();
     const now = new Date();
@@ -159,7 +193,10 @@ export default function MarketingLibrary() {
                       <p className="text-[11px] text-muted-foreground mt-0.5">平台 · {it.meta.platform}</p>
                     )}
                     {it.kind === 'video' && it.meta?.status && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">状态 · {it.meta.status}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        状态 · {statusLabel(it.meta.status)}
+                        {it.meta?.error ? ` · ${String(it.meta.error).slice(0, 30)}` : ''}
+                      </p>
                     )}
                   </div>
                 </div>
