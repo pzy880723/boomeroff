@@ -73,26 +73,23 @@ Deno.serve(async (req) => {
     const { data: presets } = await admin.from("marketing_presets").select("value").eq("key", "video_model").maybeSingle();
     const model = (presets?.value as any)?.id || DEFAULT_MODEL;
 
-    const prompt = buildPrompt(script, body.style);
+    const basePrompt = buildPrompt(script, body.style);
     const ratio = normalizeRatio(script.aspect);
     const duration = clampDuration(script.total_duration_s);
     const imageUrls: string[] = Array.isArray(script.image_urls) ? script.image_urls : [];
     const firstImage = imageUrls[0];
 
-    const content: any[] = [{ type: "text", text: prompt }];
+    // Seedance 规范:参数以 --xxx 形式追加到文本 prompt 末尾
+    const promptWithParams = `${basePrompt} --rs 720p --rt ${ratio} --dur ${duration} --wm false`;
+
+    const content: any[] = [{ type: "text", text: promptWithParams }];
     if (firstImage) {
       content.push({ type: "image_url", image_url: { url: firstImage }, role: "first_frame" });
     }
 
-    const arkBody = {
-      model,
-      content,
-      resolution: "720p",
-      ratio,
-      duration,
-      watermark: false,
-      generate_audio: true,
-    };
+    const arkBody = { model, content };
+
+    console.log("[render] ark request", JSON.stringify({ model, prompt: promptWithParams, hasImage: !!firstImage }));
 
     const arkRes = await fetch(ARK_ENDPOINT, {
       method: "POST",
