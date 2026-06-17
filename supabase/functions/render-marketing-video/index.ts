@@ -73,23 +73,30 @@ Deno.serve(async (req) => {
     const { data: presets } = await admin.from("marketing_presets").select("value").eq("key", "video_model").maybeSingle();
     const model = (presets?.value as any)?.id || DEFAULT_MODEL;
 
-    const basePrompt = buildPrompt(script, body.style);
+    const prompt = buildPrompt(script, body.style);
     const ratio = normalizeRatio(script.aspect);
     const duration = clampDuration(script.total_duration_s);
     const imageUrls: string[] = Array.isArray(script.image_urls) ? script.image_urls : [];
     const firstImage = imageUrls[0];
 
-    // Seedance 规范:参数以 --xxx 形式追加到文本 prompt 末尾
-    const promptWithParams = `${basePrompt} --rs 720p --rt ${ratio} --dur ${duration} --wm false`;
-
-    const content: any[] = [{ type: "text", text: promptWithParams }];
+    const content: any[] = [{ type: "text", text: prompt }];
     if (firstImage) {
       content.push({ type: "image_url", image_url: { url: firstImage }, role: "first_frame" });
     }
 
-    const arkBody = { model, content };
+    const arkBody: Record<string, unknown> = {
+      model,
+      content,
+      resolution: "720p",
+      ratio,
+      duration,
+      watermark: false,
+    };
+    if (/seedance-(1-5|2)/i.test(model)) {
+      arkBody.generate_audio = true;
+    }
 
-    console.log("[render] ark request", JSON.stringify({ model, prompt: promptWithParams, hasImage: !!firstImage }));
+    console.log("[render] ark request", JSON.stringify({ model, ratio, duration, hasImage: !!firstImage, promptLen: prompt.length }));
 
     const arkRes = await fetch(ARK_ENDPOINT, {
       method: "POST",
@@ -102,7 +109,7 @@ Deno.serve(async (req) => {
     const arkJson = await arkRes.json().catch(() => ({}));
     if (!arkRes.ok || !arkJson?.id) {
       const msg = arkJson?.error?.message || arkJson?.message || `Seedance 创建任务失败(${arkRes.status})`;
-      console.error("[render] ark error", arkRes.status, arkJson);
+      console.error("[render] ark error", arkRes.status, JSON.stringify(arkJson));
       return json({ error: msg, raw: arkJson }, 502);
     }
 
