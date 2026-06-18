@@ -36,7 +36,12 @@ Deno.serve(async (req) => {
     const presets = await loadMarketingPresets();
     const rule = (presets.videoRules as any)[videoTypeKey] || presets.videoRules.store_tour;
 
+    const shopId: string | null = typeof ctx.shop_id === "string" && ctx.shop_id ? ctx.shop_id : (typeof body.shop_id === "string" ? body.shop_id : null);
+    const shopCtx = await loadShopContext(shopId);
+    const shopBlock = formatShopContext(shopCtx);
+
     const sys = `${presets.brand}
+${shopBlock ? `\n${shopBlock}\n` : ""}
 
 你是 BOOMER·OFF 中古店「视频策划助理」,正在和店员对话,帮 ta 把这条短视频的拍摄要点聊清楚。
 
