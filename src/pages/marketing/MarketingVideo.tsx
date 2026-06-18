@@ -1,16 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowRight, FolderOpen } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { UploadGrid } from './UploadGrid';
 import { AspectPicker } from './AspectPicker';
 import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 import { VideoBriefChat, type BriefMsg } from '@/components/marketing/VideoBriefChat';
+import { ShopPicker } from '@/components/marketing/ShopPicker';
+import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePickerDialog';
+import { recallShop } from '@/hooks/useShops';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -35,6 +38,7 @@ const ASPECTS = ['9:16', '1:1', '16:9'] as const;
 
 export default function MarketingVideo() {
   const loc = useLocation();
+  const [shopId, setShopId] = useState<string | null>((loc.state as any)?.shop_id || recallShop());
   const [urls, setUrls] = useState<string[]>((loc.state as any)?.image_urls || []);
   const [vtype, setVtype] = useState<VType>('store_tour');
   const [style, setStyle] = useState<SType>('steady');
@@ -42,11 +46,14 @@ export default function MarketingVideo() {
   const [aspect, setAspect] = useState<typeof ASPECTS[number]>('9:16');
   const [highlight, setHighlight] = useState('');
   const [brief, setBrief] = useState<BriefMsg[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const [generating, setGenerating] = useState(false);
   const [script, setScript] = useState<any>(null);
   const [rendering, setRendering] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+
+  useEffect(() => { setScript(null); setJobId(null); }, [shopId]);
 
   const userTurns = brief.filter((m) => m.role === 'user').length;
 
@@ -57,11 +64,13 @@ export default function MarketingVideo() {
   const topic = brief.find((m) => m.role === 'user')?.content.slice(0, 200) || '';
 
   const genScript = async () => {
+    if (!shopId) return toast.error('请先选择店铺');
     if (userTurns < 1) return toast.error('先和 AI 聊一句你想拍什么');
     setGenerating(true); setScript(null);
     try {
       const { data, error } = await supabase.functions.invoke('generate-marketing-video-script', {
         body: {
+          shop_id: shopId,
           image_urls: urls,
           video_type: vtype,
           duration,
@@ -81,10 +90,11 @@ export default function MarketingVideo() {
 
   const confirmRender = async () => {
     if (!script) return;
+    if (!shopId) return toast.error('请先选择店铺');
     setRendering(true);
     try {
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
-        body: { script: { ...script, video_type: vtype }, style },
+        body: { script: { ...script, video_type: vtype }, style, shop_id: shopId },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
