@@ -69,29 +69,34 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-[60vh] flex items-center justify-center p-6 bg-background">
-          <div className="max-w-sm w-full rounded-2xl border border-border/60 bg-card p-6 shadow-soft text-center space-y-4">
-            <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-destructive" />
+        <div className="min-h-[70vh] flex items-center justify-center p-6 bg-gradient-to-b from-amber-50/40 via-background to-background">
+          <div className="max-w-sm w-full rounded-3xl border border-border/60 bg-card/90 backdrop-blur p-6 shadow-soft text-center space-y-5">
+            <div className="relative mx-auto w-36 h-36 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-amber-100/60 blur-2xl" />
+              <img
+                src={boomerScratch}
+                alt="BOOMER 挠头"
+                className="relative w-32 h-32 object-contain animate-[float_3s_ease-in-out_infinite] drop-shadow-md"
+              />
             </div>
-            <div className="space-y-1">
-              <h2 className="text-lg font-display font-semibold">页面出错了</h2>
-              <p className="text-sm text-muted-foreground">
-                当前环境可能不支持某些浏览器特性，请刷新或换用系统浏览器打开。
+            <div className="space-y-1.5">
+              <h2 className="text-lg font-display font-semibold">BOOMER 也懵了…</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                页面好像卡住了，要不咱们刷一下，或者回家重新出发？
               </p>
             </div>
-            <details className="text-xs text-muted-foreground text-left bg-muted/40 rounded-lg p-2 max-h-32 overflow-auto">
-              <summary className="cursor-pointer">错误详情</summary>
-              <pre className="whitespace-pre-wrap break-all mt-1">
+            <details className="text-xs text-muted-foreground text-left bg-muted/40 rounded-xl px-3 py-2 max-h-32 overflow-auto">
+              <summary className="cursor-pointer select-none">悄悄看看错误详情</summary>
+              <pre className="whitespace-pre-wrap break-all mt-2 leading-relaxed">
                 {this.state.error.message || String(this.state.error)}
               </pre>
             </details>
             <div className="flex gap-2">
-              <Button onClick={this.handleReload} className="flex-1 gap-2">
+              <Button onClick={this.handleReload} className="flex-1 gap-2 rounded-full">
                 <RefreshCcw className="w-4 h-4" />
                 刷新重试
               </Button>
-              <Button onClick={this.handleGoHome} variant="outline" className="flex-1">
+              <Button onClick={this.handleGoHome} variant="outline" className="flex-1 rounded-full">
                 返回首页
               </Button>
             </div>
