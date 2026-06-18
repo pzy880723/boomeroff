@@ -213,18 +213,15 @@ export default function MarketingVideo() {
             </div>
 
             <SceneRow title="钩子" num="00" scene={script.hook} urls={urls}
-              onText={(v) => updateScene('hook', 'text', v)}
-              onPrompt={(v) => updateScene('hook', 'video_prompt', v)}
+              onField={(f, v) => updateScene('hook', f, v)}
               onImg={(v) => updateScene('hook', 'image_index', v)} />
             {script.scenes.map((sc: any, i: number) => (
               <SceneRow key={i} title="镜头" num={String(i + 1).padStart(2, '0')} scene={sc} urls={urls}
-                onText={(v) => updateMid(i, 'text', v)}
-                onPrompt={(v) => updateMid(i, 'video_prompt', v)}
+                onField={(f, v) => updateMid(i, f, v)}
                 onImg={(v) => updateMid(i, 'image_index', v)} />
             ))}
             <SceneRow title="收尾" num="99" scene={script.outro} urls={urls}
-              onText={(v) => updateScene('outro', 'text', v)}
-              onPrompt={(v) => updateScene('outro', 'video_prompt', v)}
+              onField={(f, v) => updateScene('outro', f, v)}
               onImg={(v) => updateScene('outro', 'image_index', v)} />
 
             <div className="text-[11px] text-muted-foreground border-t border-border pt-3 flex items-center gap-3 flex-wrap">
@@ -297,44 +294,84 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 }
 
 function SceneRow({
-  title, num, scene, urls, onText, onPrompt, onImg,
+  title, num, scene, urls, onField, onImg,
 }: {
   title: string; num: string; scene: any; urls: string[];
-  onText: (v: string) => void;
-  onPrompt: (v: string) => void;
+  onField: (field: 'scene' | 'action' | 'dialogue' | 'subtitle' | 'motion', v: string) => void;
   onImg: (v: number | null) => void;
 }) {
   const refImg = scene.image_index !== null && scene.image_index !== undefined && urls[scene.image_index];
+  // 兼容旧字段
+  const sceneText = scene.scene ?? scene.video_prompt ?? '';
+  const subtitle = scene.subtitle ?? scene.text ?? '';
   return (
     <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
-      <div className="flex items-center gap-2">
-        <span className="font-display text-[11px] text-accent tracking-[0.18em]">{num}</span>
-        <span className="text-[11px] font-semibold text-foreground">{title}</span>
-        <span className="text-[10px] text-muted-foreground">{scene.duration_s}s · {scene.motion}</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-display text-[11px] text-accent tracking-[0.18em]">{num}</span>
+          <span className="text-[11px] font-semibold text-foreground">{title}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span>{scene.duration_s}s</span>
+          <span className="opacity-50">·</span>
+          <Input
+            value={scene.motion || ''}
+            onChange={(e) => onField('motion', e.target.value)}
+            placeholder="运镜"
+            maxLength={16}
+            className="h-6 w-20 text-[10px] px-1.5 bg-transparent"
+          />
+        </div>
       </div>
       <div className="flex gap-3">
         {refImg ? (
-          <img src={refImg} alt="" className="w-16 h-16 object-cover rounded border border-accent/15" />
+          <img src={refImg} alt="" className="w-16 h-16 object-cover rounded border border-accent/15 flex-shrink-0" />
         ) : (
-          <div className="w-16 h-16 rounded border border-dashed border-border bg-card flex items-center justify-center text-[9px] text-muted-foreground text-center px-1 leading-tight">无参考图</div>
+          <div className="w-16 h-16 rounded border border-dashed border-border bg-card flex items-center justify-center text-[9px] text-muted-foreground text-center px-1 leading-tight flex-shrink-0">无参考图</div>
         )}
         <div className="flex-1 space-y-2 min-w-0">
-          <Input
-            value={scene.text || ''}
-            onChange={(e) => onText(e.target.value)}
-            placeholder="字幕"
-            maxLength={28}
-            className="bg-transparent border-0 border-b border-border rounded-none focus-visible:ring-0 focus-visible:border-accent px-0 h-8 text-sm"
-          />
-          <Textarea
-            value={scene.video_prompt || ''}
-            onChange={(e) => onPrompt(e.target.value)}
-            placeholder="video prompt (EN)"
-            rows={2}
-            className="text-[11px] leading-snug resize-none bg-card"
-          />
+          <FieldBlock label="场景">
+            <Textarea
+              value={sceneText}
+              onChange={(e) => onField('scene', e.target.value)}
+              placeholder="地点 / 光线 / 道具 / 景别 / 构图"
+              rows={2}
+              maxLength={200}
+              className="text-[11px] leading-snug resize-none bg-card"
+            />
+          </FieldBlock>
+          <FieldBlock label="动作">
+            <Textarea
+              value={scene.action || ''}
+              onChange={(e) => onField('action', e.target.value)}
+              placeholder="人物动作 / 镜头运动"
+              rows={2}
+              maxLength={120}
+              className="text-[11px] leading-snug resize-none bg-card"
+            />
+          </FieldBlock>
+          <FieldBlock label="台词">
+            <Textarea
+              value={scene.dialogue || ''}
+              onChange={(e) => onField('dialogue', e.target.value)}
+              placeholder="人物说的话 / 画外音(可空)"
+              rows={1}
+              maxLength={60}
+              className="text-[11px] leading-snug resize-none bg-card"
+            />
+          </FieldBlock>
+          <FieldBlock label="字幕">
+            <Input
+              value={subtitle}
+              onChange={(e) => onField('subtitle', e.target.value)}
+              placeholder="≤14 字"
+              maxLength={14}
+              className="bg-card h-8 text-sm"
+            />
+          </FieldBlock>
           {urls.length > 0 && (
-            <div className="flex gap-1 flex-wrap">
+            <div className="flex gap-1 flex-wrap pt-1">
+              <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground self-center mr-1">参考图</span>
               <button
                 onClick={() => onImg(null)}
                 className={[
@@ -362,6 +399,15 @@ function SceneRow({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[9px] uppercase tracking-[0.18em] text-accent/80 font-semibold">{label}</div>
+      {children}
     </div>
   );
 }

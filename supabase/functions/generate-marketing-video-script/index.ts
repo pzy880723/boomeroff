@@ -45,23 +45,27 @@ Deno.serve(async (req) => {
 
     const sys = `${presets.brand}
 ${shopBlock ? `\n${shopBlock}\n` : ""}
-你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】。
+你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】(全中文)。
 
-重要：这是文生视频(text-to-video)，不是图片拼接。
-- 每一镜要输出一段**英文 video_prompt**（描述画面、镜头运动、光线、节奏），用于交给视频生成模型直接生视频。
-- 同时输出一段**中文字幕(text)**，用于叠加在画面上。
-- 参考图(image_index)是**可选**的：如果店员上传了相关参考图，就用它来约束画面风格/商品/场景；没合适的就填 null。
+重要：这是文生视频(text-to-video)。每一镜要给出**完整的中文描述**，让视频模型直接照拍。
+每一镜必须输出以下 4 段(全部中文)：
+- scene  场景描述：地点、环境、光线、色调、道具、画面构图、镜头景别(特写/中景/全景)。
+- action 人物动作 / 镜头运动：人物在做什么 + 镜头怎么动(推/拉/摇/移/俯/仰/手持/定格)。如无人物只描写镜头。
+- dialogue 台词 / 口播：人物说的话或画外音。没有就填空字符串 ""。
+- subtitle 屏幕字幕：叠加在画面上的字幕，≤14 字，可与台词不同(更短)。
 
-整体风格基调:${VIDEO_STYLE_LABELS[styleKey]} — ${VIDEO_STYLE_EN[styleKey]}
-每一条 video_prompt 都要自然融入这套基调(光线/色调/运镜/节奏)。
+参考图(image_index)是**可选**的：上传了相关参考图就用它约束画面/商品/场景；否则填 null。
+
+整体风格基调:${VIDEO_STYLE_LABELS[styleKey]}(${VIDEO_STYLE_EN[styleKey]})
+每一镜的 scene / action 都要自然体现这套基调(光线/色调/运镜节奏)。
 
 视频类型节奏指引：${rule.scriptHint}
 
 硬性约束：
 - 总时长 ≈ ${duration} 秒。
 - 画幅 ${aspect}。
-- 字幕一律简体中文，每行不超过 14 字。
-- video_prompt 一律英文，每段不超过 60 个英文单词，必须包含主体/动作/镜头运动/光线四要素,并体现整体风格。
+- 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
+- subtitle ≤ 14 字。scene 30–80 字，action 15–50 字，dialogue ≤ 30 字(可为空)。
 - 镜头条数 4–6 条；每条 2–5 秒。
 - 不写"主播""直播间""保真""保证升值"等违禁词。`;
 
@@ -84,12 +88,12 @@ ${refList}
 
 输出严格 JSON：
 {
-  "hook":  { "text": "<中文字幕,≤14字>", "video_prompt": "<English prompt>", "image_index": 0, "duration_s": 2, "motion": "<slow push-in|pan|zoom|hold>" },
+  "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "<中文台词,可为空字符串>", "subtitle": "<≤14字中文字幕>", "image_index": 0, "duration_s": 2, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
   "scenes": [
-    { "text": "<中文字幕>", "video_prompt": "<English prompt>", "image_index": null, "duration_s": 3, "motion": "<...>" }
+    { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
   ],
-  "outro": { "text": "<收尾字幕,可含 BOOMER·OFF>", "video_prompt": "<English prompt>", "image_index": null, "duration_s": 2, "motion": "hold" },
-  "bgm":   "<lo-fi|city night|warm folk>",
+  "outro": { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "<收尾字幕,可含 BOOMER·OFF>", "image_index": null, "duration_s": 2, "motion": "定格" },
+  "bgm":   "<lo-fi|城市夜色|暖民谣>",
   "total_duration_s": ${duration},
   "aspect": "${aspect}",
   "mode": "text2video"
@@ -131,9 +135,9 @@ ${refList}
       return json({ error: "AI 返回格式异常" }, 500);
     }
 
-    const sanitize = (s: string) =>
-      (s || "").replace(/主播/g, "店员").replace(/直播间/g, "店里")
-        .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "").trim().slice(0, 28);
+    const clean = (s: any, max: number) =>
+      (s || "").toString().replace(/主播/g, "店员").replace(/直播间/g, "店里")
+        .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "").trim().slice(0, max);
     const clampIdx = (n: any): number | null => {
       if (n === null || n === undefined || n === "null") return null;
       const v = parseInt(n);
@@ -141,11 +145,13 @@ ${refList}
       return Math.min(Math.max(v, 0), imageUrls.length - 1);
     };
     const sanitizeScene = (sc: any) => ({
-      text: sanitize(sc?.text),
-      video_prompt: (sc?.video_prompt || "").toString().trim().slice(0, 400),
+      scene: clean(sc?.scene, 200),
+      action: clean(sc?.action, 120),
+      dialogue: clean(sc?.dialogue, 60),
+      subtitle: clean(sc?.subtitle ?? sc?.text, 14),
       image_index: clampIdx(sc?.image_index),
       duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), 6),
-      motion: (sc?.motion || "push-in").toString().slice(0, 32),
+      motion: (sc?.motion || "推镜").toString().slice(0, 16),
     });
 
     script.hook = sanitizeScene(script.hook);

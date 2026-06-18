@@ -17,29 +17,34 @@ const DEFAULT_MODEL = "doubao-seedance-1-5-pro-251215";
 function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string): string {
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const lines: string[] = [];
-  lines.push(`Strictly follow this storyboard. Do NOT add, remove, or reorder shots.`);
-  lines.push(`Overall style: ${styleEn}. Brand: BOOMER·OFF vintage second-hand shop, dense shelves, warm interior.`);
-  if (shopBlock) lines.push(`Shop context (Chinese, use to inform mood and on-screen Chinese subtitles):\n${shopBlock}`);
-  lines.push(`Aspect ratio ${script.aspect || '9:16'}, total duration ~${script.total_duration_s || 15}s.`);
+  lines.push(`严格按以下分镜拍摄，不要增加、删减或调换镜头顺序。`);
+  lines.push(`整体风格：${styleEn}。品牌：BOOMER·OFF 中古二手杂货店，货架密集，室内暖色调。`);
+  if (shopBlock) lines.push(`店铺背景(中文,用于影响氛围与字幕):\n${shopBlock}`);
+  lines.push(`画幅 ${script.aspect || '9:16'}，总时长约 ${script.total_duration_s || 15} 秒。`);
 
   const pushShot = (label: string, sc: any) => {
     if (!sc) return;
     const dur = sc.duration_s || 2;
-    const motion = sc.motion || 'hold';
-    const vp = (sc.video_prompt || '').toString().trim();
-    const txt = (sc.text || '').toString().trim();
-    if (!vp && !txt) return;
-    const parts = [`${label} (${dur}s, ${motion}):`];
-    if (vp) parts.push(vp);
-    if (txt) parts.push(`Chinese subtitle overlay: "${txt}".`);
+    const motion = sc.motion || '定格';
+    // 兼容旧字段
+    const scene = (sc.scene || sc.video_prompt || '').toString().trim();
+    const action = (sc.action || '').toString().trim();
+    const dialogue = (sc.dialogue || '').toString().trim();
+    const subtitle = (sc.subtitle || sc.text || '').toString().trim();
+    if (!scene && !action && !subtitle && !dialogue) return;
+    const parts = [`【${label}】(${dur}秒, 运镜:${motion})`];
+    if (scene) parts.push(`场景：${scene}`);
+    if (action) parts.push(`动作/镜头：${action}`);
+    if (dialogue) parts.push(`台词(同步口型/画外音)："${dialogue}"`);
+    if (subtitle) parts.push(`屏幕字幕(中文叠加)："${subtitle}"`);
     lines.push(parts.join(' '));
   };
 
-  pushShot('Opening', script.hook);
+  pushShot('开场', script.hook);
   if (Array.isArray(script.scenes)) {
-    script.scenes.forEach((sc: any, i: number) => pushShot(`Scene ${i + 1}`, sc));
+    script.scenes.forEach((sc: any, i: number) => pushShot(`镜头${i + 1}`, sc));
   }
-  pushShot('Ending', script.outro);
+  pushShot('收尾', script.outro);
 
   const out = lines.join('\n');
   return out.length > 1800 ? out.slice(0, 1800) : out;
