@@ -63,7 +63,14 @@ export default function MarketingPhoto() {
     <>
       <PageHeader title="图片优化" back="/me/marketing" subtitle="营销中心 / 修图工坊" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
-        <StepBar steps={['上传图', '选修复项', '出图']} current={!origUrl ? 0 : !outputUrl ? 1 : 2} />
+        <StepBar steps={['选店铺', '上传图', '选修复项', '出图']} current={!shopId ? 0 : !origUrl ? 1 : !outputUrl ? 2 : 3} />
+
+        <ShopPicker value={shopId} onChange={setShopId} />
+
+        {!shopId && (
+          <p className="text-center text-[12px] text-muted-foreground py-6">请先选择店铺，再开始优化图片。</p>
+        )}
+
 
         {/* 工坊卡 */}
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-4">
