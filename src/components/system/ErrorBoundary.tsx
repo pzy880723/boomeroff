@@ -76,7 +76,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <img
                 src={boomerScratch}
                 alt="BOOMER 挠头"
-                className="relative w-32 h-32 object-contain animate-[float_3s_ease-in-out_infinite] drop-shadow-md"
+                className="relative w-32 h-32 object-contain spirit-float drop-shadow-md"
               />
             </div>
             <div className="space-y-1.5">
