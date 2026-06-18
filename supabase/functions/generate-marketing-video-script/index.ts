@@ -135,9 +135,9 @@ ${refList}
       return json({ error: "AI 返回格式异常" }, 500);
     }
 
-    const sanitize = (s: string) =>
-      (s || "").replace(/主播/g, "店员").replace(/直播间/g, "店里")
-        .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "").trim().slice(0, 28);
+    const clean = (s: any, max: number) =>
+      (s || "").toString().replace(/主播/g, "店员").replace(/直播间/g, "店里")
+        .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "").trim().slice(0, max);
     const clampIdx = (n: any): number | null => {
       if (n === null || n === undefined || n === "null") return null;
       const v = parseInt(n);
@@ -145,11 +145,13 @@ ${refList}
       return Math.min(Math.max(v, 0), imageUrls.length - 1);
     };
     const sanitizeScene = (sc: any) => ({
-      text: sanitize(sc?.text),
-      video_prompt: (sc?.video_prompt || "").toString().trim().slice(0, 400),
+      scene: clean(sc?.scene, 200),
+      action: clean(sc?.action, 120),
+      dialogue: clean(sc?.dialogue, 60),
+      subtitle: clean(sc?.subtitle ?? sc?.text, 14),
       image_index: clampIdx(sc?.image_index),
       duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), 6),
-      motion: (sc?.motion || "push-in").toString().slice(0, 32),
+      motion: (sc?.motion || "推镜").toString().slice(0, 16),
     });
 
     script.hook = sanitizeScene(script.hook);
