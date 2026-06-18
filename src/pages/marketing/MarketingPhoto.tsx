@@ -10,12 +10,15 @@ import { uploadMarketingImages } from './uploadMarketingImages';
 import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { ShopPicker } from '@/components/marketing/ShopPicker';
+import { recallShop } from '@/hooks/useShops';
 
 interface Toggles { exposure: boolean; geometry: boolean; denoise: boolean; declutter: boolean; bg_clean: boolean; }
 
 export default function MarketingPhoto() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const [shopId, setShopId] = useState<string | null>(recallShop());
   const [origUrl, setOrigUrl] = useState<string | null>(null);
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,6 +26,7 @@ export default function MarketingPhoto() {
   const [toggles, setToggles] = useState<Toggles>({ exposure: true, geometry: true, denoise: true, declutter: true, bg_clean: false });
 
   const onPick = async (f: File | undefined) => {
+    if (!shopId) { toast.error('请先选择店铺'); return; }
     if (!f || !user) return;
     setOutputUrl(null);
     try {
@@ -33,9 +37,10 @@ export default function MarketingPhoto() {
 
   const run = async () => {
     if (!origUrl) return;
+    if (!shopId) { toast.error('请先选择店铺'); return; }
     setBusy(true); setOutputUrl(null);
     try {
-      const { data, error } = await supabase.functions.invoke('beautify-image', { body: { image_url: origUrl, toggles, custom } });
+      const { data, error } = await supabase.functions.invoke('beautify-image', { body: { image_url: origUrl, toggles, custom, shop_id: shopId } });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       setOutputUrl((data as any).output_url);
