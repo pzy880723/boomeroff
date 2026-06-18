@@ -1,6 +1,7 @@
 // 提交视频渲染任务到火山方舟 Seedance API,并把 task_id 落到 marketing_video_jobs。
 // 前端通过 poll-marketing-video 轮询任务状态。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,25 +13,35 @@ const json = (b: unknown, s = 200) =>
 const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
 const DEFAULT_MODEL = "doubao-seedance-1-5-pro-251215";
 
-function buildPrompt(script: any, style?: string): string {
-  const parts: string[] = [];
-  if (script.topic) parts.push(`主题:${script.topic}`);
-  if (style) parts.push(`风格:${style}`);
-  if (script.hook?.visual) parts.push(`开场:${script.hook.visual}`);
+function buildPrompt(script: any, styleKey: VideoStyleKey): string {
+  const styleEn = VIDEO_STYLE_EN[styleKey];
+  const lines: string[] = [];
+  lines.push(`Strictly follow this storyboard. Do NOT add, remove, or reorder shots.`);
+  lines.push(`Overall style: ${styleEn}. Brand: BOOMER·OFF vintage second-hand shop, dense shelves, warm interior.`);
+  lines.push(`Aspect ratio ${script.aspect || '9:16'}, total duration ~${script.total_duration_s || 15}s.`);
+
+  const pushShot = (label: string, sc: any) => {
+    if (!sc) return;
+    const dur = sc.duration_s || 2;
+    const motion = sc.motion || 'hold';
+    const vp = (sc.video_prompt || '').toString().trim();
+    const txt = (sc.text || '').toString().trim();
+    if (!vp && !txt) return;
+    const parts = [`${label} (${dur}s, ${motion}):`];
+    if (vp) parts.push(vp);
+    if (txt) parts.push(`Chinese subtitle overlay: "${txt}".`);
+    lines.push(parts.join(' '));
+  };
+
+  pushShot('Opening', script.hook);
   if (Array.isArray(script.scenes)) {
-    script.scenes.forEach((s: any, i: number) => {
-      if (s?.visual) parts.push(`镜头${i + 1}:${s.visual}`);
-    });
+    script.scenes.forEach((sc: any, i: number) => pushShot(`Scene ${i + 1}`, sc));
   }
-  if (script.outro?.visual) parts.push(`结尾:${script.outro.visual}`);
-  // 旁白(文案)作为画面外解说参考
-  const narration = [
-    script.hook?.line,
-    ...(Array.isArray(script.scenes) ? script.scenes.map((s: any) => s?.line).filter(Boolean) : []),
-    script.outro?.line,
-  ].filter(Boolean).join(" ");
-  if (narration) parts.push(`旁白:"${narration}"`);
-  return parts.join("。").slice(0, 480);
+  pushShot('Ending', script.outro);
+
+  const out = lines.join('\n');
+  // Seedance 限制 prompt 长度,保留充足空间
+  return out.length > 1800 ? out.slice(0, 1800) : out;
 }
 
 function clampDuration(d: any): number {
@@ -67,13 +78,14 @@ Deno.serve(async (req) => {
       return json({ error: "脚本格式不完整" }, 400);
     }
 
+    const styleKey = normalizeStyle(body.style || script.style);
+
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
-    // 读取 admin 可覆盖的 model
     const { data: presets } = await admin.from("marketing_presets").select("value").eq("key", "video_model").maybeSingle();
     const model = (presets?.value as any)?.id || DEFAULT_MODEL;
 
-    const prompt = buildPrompt(script, body.style);
+    const prompt = buildPrompt(script, styleKey);
     const ratio = normalizeRatio(script.aspect);
     const duration = clampDuration(script.total_duration_s);
     const imageUrls: string[] = Array.isArray(script.image_urls) ? script.image_urls : [];
@@ -96,14 +108,11 @@ Deno.serve(async (req) => {
       arkBody.generate_audio = true;
     }
 
-    console.log("[render] ark request", JSON.stringify({ model, ratio, duration, hasImage: !!firstImage, promptLen: prompt.length }));
+    console.log("[render] ark request", JSON.stringify({ model, ratio, duration, style: styleKey, hasImage: !!firstImage, promptLen: prompt.length }));
 
     const arkRes = await fetch(ARK_ENDPOINT, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${ARK_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Authorization": `Bearer ${ARK_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify(arkBody),
     });
     const arkJson = await arkRes.json().catch(() => ({}));
@@ -140,7 +149,8 @@ Deno.serve(async (req) => {
         aspect: ratio,
         mode: firstImage ? "image2video" : "text2video",
         topic: script.topic || "",
-        style: body.style || null,
+        style: styleKey,
+        style_label: VIDEO_STYLE_LABELS[styleKey],
         model,
         status: "queued",
       },
