@@ -6,11 +6,19 @@ const CHUNK_ERROR_PATTERNS = [
   'error loading dynamically imported module',
   'Loading chunk',
   'ChunkLoadError',
+  // 旧 chunk 引用了已被新构建移除/重命名的模块 → lazy() 拿到 undefined
+  "Cannot read properties of undefined (reading 'default')",
+  'Cannot read property \'default\' of undefined',
+  'undefined is not an object (evaluating',
 ];
 
 export function isChunkLoadError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? '');
-  return CHUNK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
+  const stack = error instanceof Error ? (error.stack ?? '') : '';
+  if (CHUNK_ERROR_PATTERNS.some((p) => message.includes(p))) return true;
+  // 兜底:错误栈在 Lazy 内 + 是 default 解析失败,基本可断定为旧 chunk
+  if (stack.includes('Lazy') && message.includes('default')) return true;
+  return false;
 }
 
 function getCurrentBuildKey() {
