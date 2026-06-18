@@ -3,6 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_LABELS, VIDEO_STYLE_EN } from "../_shared/video-styles.ts";
 import { loadMarketingPresets, type VideoType } from "../_shared/brand-context.ts";
+import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
