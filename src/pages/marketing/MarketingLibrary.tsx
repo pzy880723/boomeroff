@@ -118,11 +118,37 @@ export default function MarketingLibrary() {
   return (
     <>
       <PageHeader title="素材库" back="/me/marketing" subtitle="营销中心 / 历史产出" />
-      <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
+      <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-4 pb-12">
+        {/* 店铺筛选 */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <Store className="w-3.5 h-3.5 text-accent" />
+            <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">店铺</span>
+          </div>
+          <ShopFilterChips
+            value={shopFilter}
+            onChange={(v) => { setShopFilter(v); if (typeof v === 'string' && v !== 'unassigned') rememberShop(v); else rememberShop(null); }}
+          />
+        </div>
+
+        {/* Tab：素材 / 店铺描述（仅在选了具体店铺时显示 Tab 切换） */}
+        {typeof shopFilter === 'string' && shopFilter !== 'unassigned' && (
+          <div className="flex gap-2 border-b border-border">
+            <TabBtn active={tab === 'assets'} onClick={() => setTab('assets')}>素材</TabBtn>
+            <TabBtn active={tab === 'profile'} onClick={() => setTab('profile')}>店铺描述</TabBtn>
+          </div>
+        )}
+
+        {/* 店铺描述面板 */}
+        {tab === 'profile' && typeof shopFilter === 'string' && shopFilter !== 'unassigned' && (
+          <ShopProfilePanel shopId={shopFilter} shopName={shopName(shopFilter)} />
+        )}
+
+        {tab === 'assets' && (<>
         {/* 顶部操作条 */}
-        {!loading && items.length > 0 && (
+        {!loading && filtered.length > 0 && (
           <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] text-muted-foreground">共 {items.length} 条</span>
+            <span className="text-[11px] text-muted-foreground">共 {filtered.length} 条</span>
             {manageMode ? (
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-accent font-semibold">已选 {selected.size}</span>
@@ -144,8 +170,10 @@ export default function MarketingLibrary() {
             <Loader2 className="w-5 h-5 animate-spin mx-auto text-accent" />
           </div>
         )}
-        {!loading && items.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground py-12">还没有产出</p>
+        {!loading && filtered.length === 0 && (
+          <p className="text-center text-sm text-muted-foreground py-12">
+            {shopFilter ? '当前店铺暂无素材' : '还没有产出'}
+          </p>
         )}
 
         {groups.map(([key, list]) => (
@@ -158,6 +186,11 @@ export default function MarketingLibrary() {
             </div>
             {list.map((it) => {
               const checked = selected.has(it.id);
+              const thumbUrl = it.kind === 'photo'
+                ? it.output_url
+                : it.kind === 'video'
+                  ? (it.meta?.cover_url || it.output_url)
+                  : (it.input_image_urls?.[0]);
               return (
                 <div
                   key={it.id}
@@ -178,9 +211,13 @@ export default function MarketingLibrary() {
                       {checked && <Check className="w-3 h-3" strokeWidth={3} />}
                     </div>
                   )}
-                  <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border">
-                    {it.output_url && it.kind === 'photo' ? (
-                      <img src={it.output_url} alt="" className="w-full h-full object-cover" />
+                  <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border relative">
+                    {thumbUrl ? (
+                      it.kind === 'video' && it.output_url ? (
+                        <video src={it.output_url} className="w-full h-full object-cover" muted preload="metadata" playsInline />
+                      ) : (
+                        <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                      )
                     ) : it.kind === 'copy' ? (
                       <FileText className="w-6 h-6 text-muted-foreground" />
                     ) : it.kind === 'video' ? (
@@ -188,14 +225,20 @@ export default function MarketingLibrary() {
                     ) : (
                       <ImageIcon className="w-6 h-6 text-muted-foreground" />
                     )}
+                    {it.kind === 'video' && (
+                      <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white text-[8px] px-1 rounded">VIDEO</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-display text-[10px] text-accent tracking-[0.18em]">
                         {it.kind === 'photo' ? '图片' : it.kind === 'copy' ? '文案' : '视频'}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
                         {new Date(it.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                        <Building2 className="w-2.5 h-2.5" />{shopName(it.shop_id)}
                       </span>
                     </div>
                     {it.kind === 'copy' && (
@@ -218,7 +261,9 @@ export default function MarketingLibrary() {
             })}
           </section>
         ))}
+        </>)}
       </div>
+
 
       <AssetDetailDialog
         asset={detail}
