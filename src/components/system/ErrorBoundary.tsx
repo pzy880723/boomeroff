@@ -1,7 +1,8 @@
 import { Component, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, Loader2, RefreshCcw } from 'lucide-react';
+import { Loader2, RefreshCcw } from 'lucide-react';
 import { isChunkLoadError, scheduleChunkReload } from '@/lib/chunkLoadRecovery';
+import boomerScratch from '@/assets/boomer/boomer-scratch.png';
 
 interface Props {
   children: ReactNode;
