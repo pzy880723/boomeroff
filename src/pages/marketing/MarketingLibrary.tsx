@@ -13,6 +13,7 @@ import { useShops, recallShop, rememberShop } from '@/hooks/useShops';
 
 export default function MarketingLibrary() {
   const { user } = useAuth();
+  const { shops } = useShops();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [manageMode, setManageMode] = useState(false);
@@ -20,6 +21,10 @@ export default function MarketingLibrary() {
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [detail, setDetail] = useState<any | null>(null);
+  const [shopFilter, setShopFilter] = useState<string | null | 'unassigned'>(() => recallShop() as any);
+  const [tab, setTab] = useState<'assets' | 'profile'>('assets');
+
+  const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
 
   const load = async () => {
     if (!user) return;
@@ -29,7 +34,7 @@ export default function MarketingLibrary() {
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(60);
+      .limit(120);
     setItems((data as any[]) || []);
     setLoading(false);
   };
