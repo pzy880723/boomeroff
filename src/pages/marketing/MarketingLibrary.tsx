@@ -74,11 +74,17 @@ export default function MarketingLibrary() {
     queued: '排队中', running: '渲染中', succeeded: '已完成', failed: '失败',
   } as Record<string, string>)[s || ''] || s || '排队中';
 
+  const filtered = useMemo(() => {
+    if (shopFilter === null) return items;
+    if (shopFilter === 'unassigned') return items.filter((it) => !it.shop_id);
+    return items.filter((it) => it.shop_id === shopFilter);
+  }, [items, shopFilter]);
+
   const groups = useMemo(() => {
     const map = new Map<string, any[]>();
     const now = new Date();
     const thisYM = `${now.getFullYear()}-${now.getMonth()}`;
-    items.forEach((it) => {
+    filtered.forEach((it) => {
       const d = new Date(it.created_at);
       const ym = `${d.getFullYear()}-${d.getMonth()}`;
       const key = ym === thisYM
@@ -88,7 +94,7 @@ export default function MarketingLibrary() {
       map.get(key)!.push(it);
     });
     return Array.from(map.entries());
-  }, [items]);
+  }, [filtered]);
 
   const toggleSel = (id: string) => {
     const next = new Set(selected);
