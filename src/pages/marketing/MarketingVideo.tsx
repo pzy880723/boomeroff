@@ -255,7 +255,16 @@ export default function MarketingVideo() {
             )}
           </section>
         )}
+        </>)}
       </div>
+
+      <LibraryImagePickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        shopId={shopId}
+        max={6 - urls.length}
+        onConfirm={(picked) => { setUrls([...urls, ...picked].slice(0, 6)); setScript(null); }}
+      />
     </>
   );
 }
