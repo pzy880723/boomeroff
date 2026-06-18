@@ -653,6 +653,7 @@ export type Database = {
           output_url: string | null
           published_at: string | null
           published_platforms: string[]
+          shop_id: string | null
           user_id: string
         }
         Insert: {
@@ -665,6 +666,7 @@ export type Database = {
           output_url?: string | null
           published_at?: string | null
           published_platforms?: string[]
+          shop_id?: string | null
           user_id: string
         }
         Update: {
@@ -677,9 +679,18 @@ export type Database = {
           output_url?: string | null
           published_at?: string | null
           published_platforms?: string[]
+          shop_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "marketing_assets_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       marketing_presets: {
         Row: {
@@ -716,6 +727,7 @@ export type Database = {
           provider: string | null
           provider_task_id: string | null
           script: Json
+          shop_id: string | null
           status: string
           user_id: string
           video_url: string | null
@@ -730,6 +742,7 @@ export type Database = {
           provider?: string | null
           provider_task_id?: string | null
           script: Json
+          shop_id?: string | null
           status?: string
           user_id: string
           video_url?: string | null
@@ -744,11 +757,20 @@ export type Database = {
           provider?: string | null
           provider_task_id?: string | null
           script?: Json
+          shop_id?: string | null
           status?: string
           user_id?: string
           video_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "marketing_video_jobs_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_reads: {
         Row: {
@@ -1255,6 +1277,59 @@ export type Database = {
             foreignKeyName: "shop_kb_entries_shop_id_fkey"
             columns: ["shop_id"]
             isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shop_marketing_profiles: {
+        Row: {
+          brand_keywords: string[]
+          cover_image_url: string | null
+          created_at: string
+          default_hashtags: string[]
+          description: string | null
+          selling_points: Json
+          shop_id: string
+          tagline: string | null
+          target_audience: string | null
+          tone: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          brand_keywords?: string[]
+          cover_image_url?: string | null
+          created_at?: string
+          default_hashtags?: string[]
+          description?: string | null
+          selling_points?: Json
+          shop_id: string
+          tagline?: string | null
+          target_audience?: string | null
+          tone?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          brand_keywords?: string[]
+          cover_image_url?: string | null
+          created_at?: string
+          default_hashtags?: string[]
+          description?: string | null
+          selling_points?: Json
+          shop_id?: string
+          tagline?: string | null
+          target_audience?: string | null
+          tone?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shop_marketing_profiles_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: true
             referencedRelation: "shops"
             referencedColumns: ["id"]
           },

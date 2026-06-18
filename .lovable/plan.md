@@ -1,93 +1,109 @@
-## 诊断:为什么视频跟脚本完全没关系
+# 方案:素材库按店铺维度组织 + 视频生成接入店铺与素材库
 
-`supabase/functions/render-marketing-video/index.ts` 里的 `buildPrompt`(15–34 行)读的是 `script.hook.visual` / `scene.visual` / `script.hook.line` —— 这些字段**根本不存在**。
+## 一、数据层
 
-实际脚本(由 `generate-marketing-video-script` 生成)用的是:
-- `hook.video_prompt`(英文画面) + `hook.text`(中文字幕)
-- `scenes[i].video_prompt` + `scenes[i].text`
-- `outro.video_prompt` + `outro.text`
+### 1. 给 `marketing_assets` 加店铺归属
+- 新增列 `shop_id uuid REFERENCES public.shops(id) ON DELETE SET NULL`(可空,兼容历史数据)
+- 索引 `(shop_id, kind, created_at DESC)`,方便按店铺分组列表
+- RLS 不变(仍按 `auth.uid()` 私有);策略不需要改
 
-所以发给 Seedance 的 prompt 实际上只有「主题:xxx。风格:xxx。」其余全空,模型只能完全自由发挥 → 跟脚本无关。
+### 2. 给 `marketing_video_jobs` 加 `shop_id`
+- 同上,可空,索引 `(shop_id, created_at DESC)`
+- 用于"按店铺看渲染历史"
 
-## 改造方案
+### 3. 新增「店铺描述」表 `shop_marketing_profiles`
+专门承载营销视角的店铺画像(和现有 `shops` 基础信息、`shop_kb_entries` SOP 区分开)。
 
-### 1. 修 prompt 拼装(`render-marketing-video/index.ts`)
-- 把 `visual` → `video_prompt`、`line` → `text` 字段名修正。
-- 新 prompt 结构(按 Seedance 偏好的英文为主、中文字幕只作参考):
-  ```
-  Style: <style_en>. Aspect ratio: 9:16. Total duration: 15s.
-  Opening (2s, push-in): <hook.video_prompt>
-  Scene 1 (3s, pan): <scenes[0].video_prompt>
-  Scene 2 (3s, hold): <scenes[1].video_prompt>
-  ...
-  Ending (2s, hold): <outro.video_prompt>
-  Overall narration cues (Chinese subtitles, do not render text in video unless needed): "钩子 / 镜头1 / 镜头2 / 收尾"
-  Tone: <style_en>, cinematic, brand BOOMER·OFF vintage shop.
-  ```
-- 字符上限保留 ~480。把 `style` 同步翻译成英文形容词丢进 prompt(`lively/energetic/calm/elegant/playful/cinematic-steady`)。
-- 同时在 prompt 顶部明确「严格按以下分镜顺序与时长执行,不要添加/删减镜头」。
+字段:
+- `shop_id uuid PK REFERENCES shops(id) ON DELETE CASCADE`
+- `tagline text` — 一句话定位
+- `description text` — 店铺详细介绍(选品风格、客群、地段氛围)
+- `selling_points jsonb` — 卖点数组
+- `tone text` — 偏好口吻(治愈/活泼/稳重…)
+- `target_audience text` — 目标人群
+- `brand_keywords text[]` — 品牌关键词
+- `cover_image_url text` — 店铺封面图
+- `default_hashtags text[]` — 默认话题标签
+- `updated_by uuid`, `created_at`, `updated_at`
 
-### 2. 新增视频风格选项(`MarketingVideo.tsx` + `_shared/brand-context.ts` presets)
-新增前端 Chip 组:
-| key | 中文 | 英文映射(送给 Seedance) |
-| --- | --- | --- |
-| lively | 活泼 | lively, snappy cuts, bright color, upbeat |
-| energetic | 激动 | energetic, fast push-ins, high contrast, dynamic motion |
-| steady | 稳重 | calm steady cam, soft warm light, slow pace |
-| elegant | 优雅 | elegant, minimal, slow cinematic dolly, muted palette |
-| nostalgic | 怀旧 | nostalgic, film grain, warm tungsten, gentle drift |
-| playful | 俏皮 | playful, whimsical micro-motion, pastel palette |
+授权:
+- 读:所有 authenticated(店员要选店时能看)
+- 写/删:有 `shop.write` 权限的人(沿用现有权限体系)
+- 必带 GRANT + RLS + 触发器 `updated_at`
 
-- 在「02 视频类型」下面加「05 视频风格」chip 组,默认 `steady`。
-- `style` 一路透传:写到 `script.style`,提交渲染时 `body.style = script.style`(已经在传,但下面要让脚本生成器也吃)。
-- `generate-marketing-video-script` 的 system prompt 加一段「整体风格基调:<style_label> — <english cues>」,让生成出来的 `video_prompt` 本身就贴合风格。
+## 二、素材库 UI(`MarketingLibrary.tsx`)
 
-### 3. 新增「自然语言对话沟通 → 一键生成结构化脚本」(前置环节)
+### 1. 顶部加「店铺切换器」
+- 横向 Chips:全部 / 各店铺(从 `shops` 拉取 active)
+- 选中后所有列表(图片/文案/视频)按 `shop_id` 过滤
+- 记住上次选择(localStorage `marketing_last_shop`),后续新建素材默认带上
 
-按 `chat-agent-ui-contract`:**一对话 + 无持久化**(每次开新视频任务就是一次新沟通,不需要历史)。我会以单次会话方式直接构建,不再追问。
+### 2. 新增 Tab「店铺描述」
+当选定具体某一店铺时显示,展示并允许编辑该店的 `shop_marketing_profiles`:
+- 封面图 + 一句话定位
+- 店铺详细介绍、卖点、口吻、目标人群、关键词、默认话题
+- 「保存」按钮(权限校验)
+- 没有 profile 的店铺显示「去完善店铺描述」空态
 
-#### 流程改造(`MarketingVideo.tsx`)
+### 3. 列表卡片改造:左缩略图布局
+现在是网格式,改成左缩略图 + 右文字的横向列表:
 
-把页面 Step 改为 4 步:
+```text
+┌──────┬─────────────────────────────────────┐
+│      │ 标题(name / 文案首句 / 视频脚本主题)│
+│ 80×80│ 平台徽章 / 视频状态 / kind 标签     │
+│ 缩略 │ 店铺名 · 时间                       │
+└──────┴─────────────────────────────────────┘
 ```
-01 立意聊 → 02 参考图(可选) → 03 确认分镜 → 04 渲染
-```
 
-「立意聊」区:
-- 上半部分:风格 / 类型 / 时长 / 画幅 Chip(保留现有)。
-- 下半部分:用 AI Elements `Conversation` + `Message` + `PromptInput` 做一个**轻量沟通框**(高度受限,放页面里,不弹窗):
-  - 第一条 assistant 自动消息:「想拍什么?随便聊聊店面氛围、想突出的商品、想要的感觉。我会一步步帮你把分镜定下来。」
-  - 用户和 AI 多轮对话,纯文本流式。
-  - 顶部右边一个按钮「生成分镜脚本」,任何时候都可点;点击会把整个对话历史和 chips 一起送给脚本生成器。
+缩略图取值:
+- `kind='photo'`:`output_url`
+- `kind='video'`:`meta.cover_url` → 取不到则 `<video preload="metadata" #t=0.5>` 自动截首帧
+- `kind='copy'`:平台彩色图标方块(小红书/抖音/视频号/朋友圈)+ 取首张 `input_image_urls[0]` 当背景(若有)
 
-#### 新 edge function `marketing-video-brief-chat`
-- 流式聊天 endpoint,使用 AI SDK 的 `streamText` + `toUIMessageStreamResponse`(Lovable AI Gateway,模型 `google/gemini-3-flash-preview`)。
-- system prompt:「你是 BOOMER·OFF 中古店视频策划助理。任务是和店员对话,弄清楚:1) 主要拍什么(商品/区域/事件) 2) 想给观众什么感觉 3) 有没有特别想入镜的画面 4) 是否有禁忌(不想露的东西)。每次回复要简短(<60 字),主动追问 1 个问题。当信息够时,主动提示『可以生成分镜了』。不要输出脚本本身,脚本由后续步骤生成。」
-- 输入 `messages: UIMessage[]` + chips 上下文(类型/时长/画幅/风格)。
+点击仍打开 `AssetDetailDialog`。
 
-#### `generate-marketing-video-script` 升级
-- 接受新字段 `brief_transcript: string`(把对话拼成一段文本) 与 `style`。
-- system prompt 多一段:「以下是店员和策划助理刚刚的沟通记录,请基于它生成分镜。整体风格基调:<style 英文 cues>。」
-- 现有 `topic/highlight` 字段保留作为兜底,允许为空(因为信息现在主要来自对话)。
+## 三、新建素材必须先选店铺
 
-#### 前端组件拆分
-- 新组件 `src/components/marketing/VideoBriefChat.tsx`:封装 AI Elements `Conversation/Message/PromptInput`(若未安装则 `bun x ai-elements@latest add conversation message prompt-input shimmer` —— 实现阶段执行)。本地 `useState<UIMessage[]>` 保存,**不入库**。
-- `MarketingVideo.tsx` 改写:
-  - 顶部 chips(类型/时长/画幅/**风格**)。
-  - 中部 `<VideoBriefChat />` + 右上「生成分镜」按钮。
-  - 已有的「参考图(可选)」「分镜确认」「渲染入队 + 跳素材库」逻辑保持。
+### 1. `MarketingPhoto.tsx` / `MarketingCopy.tsx` / `MarketingVideo.tsx`
+顶部加一行强制「店铺选择器」(Select):
+- 默认值 = 上次选择 / URL `?shop=xxx` / 当前用户 `staff_profiles.shop_id`
+- 未选店铺时,后续步骤(拍图/写文案/生成视频)按钮禁用 + 提示「请先选择店铺」
+- 入库时把 `shop_id` 一并写入 `marketing_assets` / `marketing_video_jobs`
 
-### 4. 渲染调用同步带上 style
-- `confirmRender` 已经在 body 里没传 style,需要新增 `body.style = script.style`。
-- 渲染端 `buildPrompt(script, body.style || script.style)`。
+### 2. 边缘函数
+- `generate-marketing-copy`、`render-marketing-video`、`generate-marketing-video-script`、`marketing-video-brief-chat` 接收新参数 `shop_id`
+- 在生成前 server 端拉 `shop_marketing_profiles` + `shops.name/address`,拼到 system prompt:
 
-### 5. 不做的事
-- 不持久化对话(用户没要求,符合 chat-agent-ui-contract 的"无持久化"路径)。
-- 不改 polling、不动 Seedance 任务字段、不改 `marketing_assets` schema。
-- 不重做"派生文案"功能,保持上一轮提案不变(若已实现继续保留)。
+  ```
+  店铺信息:{name} · {address}
+  定位:{tagline}
+  介绍:{description}
+  卖点:{selling_points}
+  目标人群:{target_audience}
+  口吻:{tone}
+  关键词:{brand_keywords}
+  ```
+- 没有 profile 时退化为只用店铺名/地址
 
-## 验收
-1. 在 `/me/marketing/video` 能先和 AI 聊几句再点「生成分镜」。
-2. 分镜里的英文 `video_prompt` 明显呼应聊天里的细节。
-3. 渲染出来的视频画面、节奏、色彩跟所选风格一致(活泼/稳重等区分明显)。
-4. Edge function 日志里 `[render] ark request` 的 `promptLen` 应 > 200,不再只剩主题。
+## 四、视频生成「导入素材库」
+
+`MarketingVideo.tsx` 的参考图步骤新增按钮「从素材库导入」:
+- 打开 `LibraryImagePickerDialog`(新组件),查询当前 `shop_id` 下 `kind='photo'` 的素材
+- 支持多选(尊重当前画幅上限),点击「导入」后把 `output_url` 追加到 `imageUrls` 数组
+- 已有「直接上传」流程保留
+
+## 五、技术细节(给开发看)
+
+- 类型:迁移完成后 `src/integrations/supabase/types.ts` 自动重建,前端用新字段
+- 历史数据:`shop_id` 留空 = "未分类",素材库给一个独立 chip「未分类」
+- 不动业务逻辑:RLS/权限/AI 编排/渲染轮询保持现状,仅增量加 `shop_id`
+- 不做:跨用户共享素材(仍是私有,按用户隔离),也不做店铺级别共享池
+
+## 六、不做(明确划界)
+
+- 不引入新画幅/新模型/新平台
+- 不改 BOOMER 聊天、识别相关流程
+- 不做店铺间素材迁移/批量改归属(后续可加)
+
+完成后可在素材库按店铺浏览全部图/文/视频,每条素材左侧带缩略图;生成视频前必须先选店,AI 会基于该店描述与已有素材生成更贴合的脚本与画面。
