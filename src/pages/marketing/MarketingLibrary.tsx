@@ -292,3 +292,16 @@ export default function MarketingLibrary() {
     </>
   );
 }
+
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'px-4 h-9 text-[12px] -mb-px border-b-2 transition-colors',
+        active ? 'border-accent text-accent font-semibold' : 'border-transparent text-muted-foreground hover:text-foreground',
+      ].join(' ')}
+    >{children}</button>
+  );
+}
