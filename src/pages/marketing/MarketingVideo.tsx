@@ -1,16 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowRight, FolderOpen } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { UploadGrid } from './UploadGrid';
 import { AspectPicker } from './AspectPicker';
 import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 import { VideoBriefChat, type BriefMsg } from '@/components/marketing/VideoBriefChat';
+import { ShopPicker } from '@/components/marketing/ShopPicker';
+import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePickerDialog';
+import { recallShop } from '@/hooks/useShops';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -35,6 +38,7 @@ const ASPECTS = ['9:16', '1:1', '16:9'] as const;
 
 export default function MarketingVideo() {
   const loc = useLocation();
+  const [shopId, setShopId] = useState<string | null>((loc.state as any)?.shop_id || recallShop());
   const [urls, setUrls] = useState<string[]>((loc.state as any)?.image_urls || []);
   const [vtype, setVtype] = useState<VType>('store_tour');
   const [style, setStyle] = useState<SType>('steady');
@@ -42,11 +46,14 @@ export default function MarketingVideo() {
   const [aspect, setAspect] = useState<typeof ASPECTS[number]>('9:16');
   const [highlight, setHighlight] = useState('');
   const [brief, setBrief] = useState<BriefMsg[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const [generating, setGenerating] = useState(false);
   const [script, setScript] = useState<any>(null);
   const [rendering, setRendering] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+
+  useEffect(() => { setScript(null); setJobId(null); }, [shopId]);
 
   const userTurns = brief.filter((m) => m.role === 'user').length;
 
@@ -57,11 +64,13 @@ export default function MarketingVideo() {
   const topic = brief.find((m) => m.role === 'user')?.content.slice(0, 200) || '';
 
   const genScript = async () => {
+    if (!shopId) return toast.error('请先选择店铺');
     if (userTurns < 1) return toast.error('先和 AI 聊一句你想拍什么');
     setGenerating(true); setScript(null);
     try {
       const { data, error } = await supabase.functions.invoke('generate-marketing-video-script', {
         body: {
+          shop_id: shopId,
           image_urls: urls,
           video_type: vtype,
           duration,
@@ -81,10 +90,11 @@ export default function MarketingVideo() {
 
   const confirmRender = async () => {
     if (!script) return;
+    if (!shopId) return toast.error('请先选择店铺');
     setRendering(true);
     try {
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
-        body: { script: { ...script, video_type: vtype }, style },
+        body: { script: { ...script, video_type: vtype }, style, shop_id: shopId },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -108,10 +118,15 @@ export default function MarketingVideo() {
       <PageHeader title="AI 视频" back="/me/marketing" subtitle="营销中心 / 文生视频" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
         <StepBar
-          steps={['立意沟通', '参考图', '确认分镜', '渲染']}
-          current={userTurns < 1 ? 0 : !script ? 1 : !jobId ? 2 : 3}
+          steps={['选店铺', '立意沟通', '确认分镜', '渲染']}
+          current={!shopId ? 0 : userTurns < 1 ? 0 : !script ? 1 : !jobId ? 2 : 3}
         />
 
+        <ShopPicker value={shopId} onChange={setShopId} />
+
+        {!shopId ? (
+          <p className="text-center text-[12px] text-muted-foreground py-8">请先选择店铺，再开始创作。</p>
+        ) : (<>
         {/* 视频参数 */}
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-5">
           <SectionLabel num="01">视频类型</SectionLabel>
@@ -173,8 +188,14 @@ export default function MarketingVideo() {
 
         {/* 参考图(可选) */}
         <div className="space-y-1">
-          <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={6} preset="thumb" title="参考图(可选)" />
-          <p className="text-[10px] text-muted-foreground px-1">不上传也能生成。上传后 AI 会尽量贴合你的商品/店面风格。</p>
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">参考图(可选)</span>
+            <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => setPickerOpen(true)}>
+              <FolderOpen className="w-3.5 h-3.5" />从素材库导入
+            </Button>
+          </div>
+          <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={6} preset="thumb" title="" />
+          <p className="text-[10px] text-muted-foreground px-1">不上传也能生成。上传或从素材库导入后 AI 会尽量贴合你的商品/店面风格。</p>
         </div>
 
         {/* 分镜确认 */}
@@ -234,7 +255,16 @@ export default function MarketingVideo() {
             )}
           </section>
         )}
+        </>)}
       </div>
+
+      <LibraryImagePickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        shopId={shopId}
+        max={6 - urls.length}
+        onConfirm={(picked) => { setUrls([...urls, ...picked].slice(0, 6)); setScript(null); }}
+      />
     </>
   );
 }

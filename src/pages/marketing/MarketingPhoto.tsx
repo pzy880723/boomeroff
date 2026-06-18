@@ -10,12 +10,15 @@ import { uploadMarketingImages } from './uploadMarketingImages';
 import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { ShopPicker } from '@/components/marketing/ShopPicker';
+import { recallShop } from '@/hooks/useShops';
 
 interface Toggles { exposure: boolean; geometry: boolean; denoise: boolean; declutter: boolean; bg_clean: boolean; }
 
 export default function MarketingPhoto() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const [shopId, setShopId] = useState<string | null>(recallShop());
   const [origUrl, setOrigUrl] = useState<string | null>(null);
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,6 +26,7 @@ export default function MarketingPhoto() {
   const [toggles, setToggles] = useState<Toggles>({ exposure: true, geometry: true, denoise: true, declutter: true, bg_clean: false });
 
   const onPick = async (f: File | undefined) => {
+    if (!shopId) { toast.error('请先选择店铺'); return; }
     if (!f || !user) return;
     setOutputUrl(null);
     try {
@@ -33,9 +37,10 @@ export default function MarketingPhoto() {
 
   const run = async () => {
     if (!origUrl) return;
+    if (!shopId) { toast.error('请先选择店铺'); return; }
     setBusy(true); setOutputUrl(null);
     try {
-      const { data, error } = await supabase.functions.invoke('beautify-image', { body: { image_url: origUrl, toggles, custom } });
+      const { data, error } = await supabase.functions.invoke('beautify-image', { body: { image_url: origUrl, toggles, custom, shop_id: shopId } });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       setOutputUrl((data as any).output_url);
@@ -58,7 +63,14 @@ export default function MarketingPhoto() {
     <>
       <PageHeader title="图片优化" back="/me/marketing" subtitle="营销中心 / 修图工坊" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
-        <StepBar steps={['上传图', '选修复项', '出图']} current={!origUrl ? 0 : !outputUrl ? 1 : 2} />
+        <StepBar steps={['选店铺', '上传图', '选修复项', '出图']} current={!shopId ? 0 : !origUrl ? 1 : !outputUrl ? 2 : 3} />
+
+        <ShopPicker value={shopId} onChange={setShopId} />
+
+        {!shopId && (
+          <p className="text-center text-[12px] text-muted-foreground py-6">请先选择店铺，再开始优化图片。</p>
+        )}
+
 
         {/* 工坊卡 */}
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-4">

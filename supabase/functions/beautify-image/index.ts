@@ -138,9 +138,11 @@ Deno.serve(async (req) => {
     const { data: pub } = admin.storage.from("product-images").getPublicUrl(path);
 
     // 落到 marketing_assets
+    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     const { data: row } = await admin.from("marketing_assets").insert({
       user_id: u.user.id,
       kind: "photo",
+      shop_id: shopId,
       input_image_urls: [imageUrl],
       output_url: pub.publicUrl,
       meta: { toggles, custom: custom || null },

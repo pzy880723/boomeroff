@@ -3,6 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadMarketingPresets, type VideoType } from "../_shared/brand-context.ts";
 import { normalizeStyle, VIDEO_STYLE_LABELS, VIDEO_STYLE_EN } from "../_shared/video-styles.ts";
+import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,11 +37,14 @@ Deno.serve(async (req) => {
     const highlight = (body.highlight || "").toString().trim().slice(0, 80);
     const styleKey = normalizeStyle(body.style);
     const briefTranscript = (body.brief_transcript || "").toString().trim().slice(0, 2000);
+    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    const shopCtx = await loadShopContext(shopId);
+    const shopBlock = formatShopContext(shopCtx);
 
     const rule = presets.videoRules[videoType];
 
     const sys = `${presets.brand}
-
+${shopBlock ? `\n${shopBlock}\n` : ""}
 你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】。
 
 重要：这是文生视频(text-to-video)，不是图片拼接。

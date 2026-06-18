@@ -2,6 +2,7 @@
 // 前端通过 poll-marketing-video 轮询任务状态。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
+import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,11 +14,12 @@ const json = (b: unknown, s = 200) =>
 const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
 const DEFAULT_MODEL = "doubao-seedance-1-5-pro-251215";
 
-function buildPrompt(script: any, styleKey: VideoStyleKey): string {
+function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string): string {
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const lines: string[] = [];
   lines.push(`Strictly follow this storyboard. Do NOT add, remove, or reorder shots.`);
   lines.push(`Overall style: ${styleEn}. Brand: BOOMER·OFF vintage second-hand shop, dense shelves, warm interior.`);
+  if (shopBlock) lines.push(`Shop context (Chinese, use to inform mood and on-screen Chinese subtitles):\n${shopBlock}`);
   lines.push(`Aspect ratio ${script.aspect || '9:16'}, total duration ~${script.total_duration_s || 15}s.`);
 
   const pushShot = (label: string, sc: any) => {
@@ -40,7 +42,6 @@ function buildPrompt(script: any, styleKey: VideoStyleKey): string {
   pushShot('Ending', script.outro);
 
   const out = lines.join('\n');
-  // Seedance 限制 prompt 长度,保留充足空间
   return out.length > 1800 ? out.slice(0, 1800) : out;
 }
 
@@ -79,13 +80,16 @@ Deno.serve(async (req) => {
     }
 
     const styleKey = normalizeStyle(body.style || script.style);
+    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    const shopCtx = await loadShopContext(shopId);
+    const shopBlock = formatShopContext(shopCtx);
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
     const { data: presets } = await admin.from("marketing_presets").select("value").eq("key", "video_model").maybeSingle();
     const model = (presets?.value as any)?.id || DEFAULT_MODEL;
 
-    const prompt = buildPrompt(script, styleKey);
+    const prompt = buildPrompt(script, styleKey, shopBlock);
     const ratio = normalizeRatio(script.aspect);
     const duration = clampDuration(script.total_duration_s);
     const imageUrls: string[] = Array.isArray(script.image_urls) ? script.image_urls : [];
@@ -128,6 +132,7 @@ Deno.serve(async (req) => {
       user_id: u.user.id,
       script,
       status: "queued",
+      shop_id: shopId,
       provider: "volcengine_seedance",
       provider_task_id: taskId,
     }).select().single();
@@ -139,6 +144,7 @@ Deno.serve(async (req) => {
     await admin.from("marketing_assets").insert({
       user_id: u.user.id,
       kind: "video",
+      shop_id: shopId,
       input_image_urls: imageUrls,
       output_url: null,
       meta: {

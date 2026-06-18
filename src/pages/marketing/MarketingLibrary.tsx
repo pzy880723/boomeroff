@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil } from 'lucide-react';
+import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { AssetDetailDialog, copyPreview } from '@/components/marketing/AssetDetailDialog';
+import { ShopFilterChips } from '@/components/marketing/ShopPicker';
+import { ShopProfilePanel } from '@/components/marketing/ShopProfilePanel';
+import { useShops, recallShop, rememberShop } from '@/hooks/useShops';
 
 export default function MarketingLibrary() {
   const { user } = useAuth();
+  const { shops } = useShops();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [manageMode, setManageMode] = useState(false);
@@ -17,6 +21,10 @@ export default function MarketingLibrary() {
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [detail, setDetail] = useState<any | null>(null);
+  const [shopFilter, setShopFilter] = useState<string | null | 'unassigned'>(() => recallShop() as any);
+  const [tab, setTab] = useState<'assets' | 'profile'>('assets');
+
+  const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
 
   const load = async () => {
     if (!user) return;
@@ -26,7 +34,7 @@ export default function MarketingLibrary() {
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(60);
+      .limit(120);
     setItems((data as any[]) || []);
     setLoading(false);
   };
@@ -66,11 +74,17 @@ export default function MarketingLibrary() {
     queued: '排队中', running: '渲染中', succeeded: '已完成', failed: '失败',
   } as Record<string, string>)[s || ''] || s || '排队中';
 
+  const filtered = useMemo(() => {
+    if (shopFilter === null) return items;
+    if (shopFilter === 'unassigned') return items.filter((it) => !it.shop_id);
+    return items.filter((it) => it.shop_id === shopFilter);
+  }, [items, shopFilter]);
+
   const groups = useMemo(() => {
     const map = new Map<string, any[]>();
     const now = new Date();
     const thisYM = `${now.getFullYear()}-${now.getMonth()}`;
-    items.forEach((it) => {
+    filtered.forEach((it) => {
       const d = new Date(it.created_at);
       const ym = `${d.getFullYear()}-${d.getMonth()}`;
       const key = ym === thisYM
@@ -80,7 +94,7 @@ export default function MarketingLibrary() {
       map.get(key)!.push(it);
     });
     return Array.from(map.entries());
-  }, [items]);
+  }, [filtered]);
 
   const toggleSel = (id: string) => {
     const next = new Set(selected);
@@ -104,11 +118,37 @@ export default function MarketingLibrary() {
   return (
     <>
       <PageHeader title="素材库" back="/me/marketing" subtitle="营销中心 / 历史产出" />
-      <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
+      <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-4 pb-12">
+        {/* 店铺筛选 */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <Store className="w-3.5 h-3.5 text-accent" />
+            <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">店铺</span>
+          </div>
+          <ShopFilterChips
+            value={shopFilter}
+            onChange={(v) => { setShopFilter(v); if (typeof v === 'string' && v !== 'unassigned') rememberShop(v); else rememberShop(null); }}
+          />
+        </div>
+
+        {/* Tab：素材 / 店铺描述（仅在选了具体店铺时显示 Tab 切换） */}
+        {typeof shopFilter === 'string' && shopFilter !== 'unassigned' && (
+          <div className="flex gap-2 border-b border-border">
+            <TabBtn active={tab === 'assets'} onClick={() => setTab('assets')}>素材</TabBtn>
+            <TabBtn active={tab === 'profile'} onClick={() => setTab('profile')}>店铺描述</TabBtn>
+          </div>
+        )}
+
+        {/* 店铺描述面板 */}
+        {tab === 'profile' && typeof shopFilter === 'string' && shopFilter !== 'unassigned' && (
+          <ShopProfilePanel shopId={shopFilter} shopName={shopName(shopFilter)} />
+        )}
+
+        {tab === 'assets' && (<>
         {/* 顶部操作条 */}
-        {!loading && items.length > 0 && (
+        {!loading && filtered.length > 0 && (
           <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] text-muted-foreground">共 {items.length} 条</span>
+            <span className="text-[11px] text-muted-foreground">共 {filtered.length} 条</span>
             {manageMode ? (
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-accent font-semibold">已选 {selected.size}</span>
@@ -130,8 +170,10 @@ export default function MarketingLibrary() {
             <Loader2 className="w-5 h-5 animate-spin mx-auto text-accent" />
           </div>
         )}
-        {!loading && items.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground py-12">还没有产出</p>
+        {!loading && filtered.length === 0 && (
+          <p className="text-center text-sm text-muted-foreground py-12">
+            {shopFilter ? '当前店铺暂无素材' : '还没有产出'}
+          </p>
         )}
 
         {groups.map(([key, list]) => (
@@ -144,6 +186,11 @@ export default function MarketingLibrary() {
             </div>
             {list.map((it) => {
               const checked = selected.has(it.id);
+              const thumbUrl = it.kind === 'photo'
+                ? it.output_url
+                : it.kind === 'video'
+                  ? (it.meta?.cover_url || it.output_url)
+                  : (it.input_image_urls?.[0]);
               return (
                 <div
                   key={it.id}
@@ -164,9 +211,13 @@ export default function MarketingLibrary() {
                       {checked && <Check className="w-3 h-3" strokeWidth={3} />}
                     </div>
                   )}
-                  <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border">
-                    {it.output_url && it.kind === 'photo' ? (
-                      <img src={it.output_url} alt="" className="w-full h-full object-cover" />
+                  <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border relative">
+                    {thumbUrl ? (
+                      it.kind === 'video' && it.output_url ? (
+                        <video src={it.output_url} className="w-full h-full object-cover" muted preload="metadata" playsInline />
+                      ) : (
+                        <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                      )
                     ) : it.kind === 'copy' ? (
                       <FileText className="w-6 h-6 text-muted-foreground" />
                     ) : it.kind === 'video' ? (
@@ -174,14 +225,20 @@ export default function MarketingLibrary() {
                     ) : (
                       <ImageIcon className="w-6 h-6 text-muted-foreground" />
                     )}
+                    {it.kind === 'video' && (
+                      <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white text-[8px] px-1 rounded">VIDEO</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-display text-[10px] text-accent tracking-[0.18em]">
                         {it.kind === 'photo' ? '图片' : it.kind === 'copy' ? '文案' : '视频'}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
                         {new Date(it.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                        <Building2 className="w-2.5 h-2.5" />{shopName(it.shop_id)}
                       </span>
                     </div>
                     {it.kind === 'copy' && (
@@ -204,7 +261,9 @@ export default function MarketingLibrary() {
             })}
           </section>
         ))}
+        </>)}
       </div>
+
 
       <AssetDetailDialog
         asset={detail}
@@ -231,5 +290,18 @@ export default function MarketingLibrary() {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'px-4 h-9 text-[12px] -mb-px border-b-2 transition-colors',
+        active ? 'border-accent text-accent font-semibold' : 'border-transparent text-muted-foreground hover:text-foreground',
+      ].join(' ')}
+    >{children}</button>
   );
 }

@@ -1,6 +1,7 @@
 // 看图写文：1–9 张图 → 选平台 + 口吻 → 3 条候选(标题+正文+话题+首评)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadMarketingPresets } from "../_shared/brand-context.ts";
+import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,10 +33,14 @@ Deno.serve(async (req) => {
     const productName = (body.product_name || "").toString().trim().slice(0, 40);
     const price = (body.price || "").toString().trim().slice(0, 20);
     const highlight = (body.highlight || "").toString().trim().slice(0, 80);
+    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     if (!imageUrls.length) return json({ error: "至少上传一张图" }, 400);
 
-    const sys = `${presets.brand}
+    const shopCtx = await loadShopContext(shopId);
+    const shopBlock = formatShopContext(shopCtx);
 
+    const sys = `${presets.brand}
+${shopBlock ? `\n${shopBlock}\n` : ""}
 平台：${presets.platforms[platformKey]}
 口吻：${presets.tones[toneKey]}
 
@@ -102,9 +107,10 @@ Deno.serve(async (req) => {
     const { data: row } = await admin.from("marketing_assets").insert({
       user_id: u.user.id,
       kind: "copy",
+      shop_id: shopId,
       input_image_urls: imageUrls,
       output_text: JSON.stringify(candidates),
-      meta: { platform: platformKey, tone: toneKey, product_name: productName, price, highlight },
+      meta: { platform: platformKey, tone: toneKey, product_name: productName, price, highlight, from_video_id: body.from_video_id || null },
     }).select().single();
 
     return json({ success: true, candidates, asset_id: row?.id });

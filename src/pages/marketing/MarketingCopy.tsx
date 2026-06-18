@@ -9,6 +9,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { UploadGrid } from './UploadGrid';
 import { StepBar } from './StepBar';
 import { toast } from 'sonner';
+import { ShopPicker } from '@/components/marketing/ShopPicker';
+import { recallShop } from '@/hooks/useShops';
 
 
 type Platform = 'xhs' | 'douyin' | 'shipinhao' | 'pyq';
@@ -28,6 +30,7 @@ export default function MarketingCopy() {
   const loc = useLocation();
 
   const initial: string[] = (loc.state as any)?.image_urls || [];
+  const [shopId, setShopId] = useState<string | null>((loc.state as any)?.shop_id || recallShop());
   const [urls, setUrls] = useState<string[]>(initial);
   const [platform, setPlatform] = useState<Platform>('xhs');
   const [tone, setTone] = useState<string>('种草');
@@ -38,11 +41,12 @@ export default function MarketingCopy() {
   const [cands, setCands] = useState<any[]>([]);
 
   const gen = async () => {
+    if (!shopId) return toast.error('请先选择店铺');
     if (!urls.length) return toast.error('至少上传一张图');
     setBusy(true); setCands([]);
     try {
       const { data, error } = await supabase.functions.invoke('generate-marketing-copy', {
-        body: { image_urls: urls, platform, tone, product_name: name, price, highlight },
+        body: { image_urls: urls, platform, tone, product_name: name, price, highlight, shop_id: shopId },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -58,11 +62,13 @@ export default function MarketingCopy() {
       <PageHeader title="AI 文案" back="/me/marketing" subtitle="营销中心 / 写文案" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
         <StepBar
-          steps={['选图', '平台 / 口吻', '生成', '复制']}
-          current={urls.length === 0 ? 0 : cands.length === 0 ? 1 : 3}
+          steps={['选店铺', '选图', '平台 / 口吻', '生成']}
+          current={!shopId ? 0 : urls.length === 0 ? 1 : cands.length === 0 ? 2 : 3}
         />
 
-        <UploadGrid urls={urls} onChange={setUrls} max={9} preset="thumb" title="素材" />
+        <ShopPicker value={shopId} onChange={setShopId} />
+
+        {shopId && <UploadGrid urls={urls} onChange={setUrls} max={9} preset="thumb" title="素材" />}
 
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-5">
           <SectionLabel num="01">平台</SectionLabel>
