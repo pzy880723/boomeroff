@@ -400,6 +400,25 @@ ${isExplore ? '七' : '六'}、最终解释权
           </DialogContent>
         </Dialog>
 
+        <Dialog open={descOpen} onOpenChange={setDescOpen}>
+          <DialogContent className="max-w-md max-h-[85vh] bg-[#fdf6e8] border-[#e8d5b3]">
+            <DialogHeader>
+              <DialogTitle className="text-[#3b2410]">活动详情</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto pr-1">
+              <pre className="whitespace-pre-wrap text-[13px] leading-relaxed text-[#3b2410] font-sans">{activity.description}</pre>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => setDescOpen(false)}
+                className="bg-[#8e1f10] hover:bg-[#8e1f10]/90 text-white"
+              >
+                我知道了
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
 
         <p className="text-center text-[11px] text-[#fff5e1]/55 pt-2">
           由 BOOMER · OFF 中古小店呈上
