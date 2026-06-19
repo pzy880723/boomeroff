@@ -5,7 +5,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Save, Store } from 'lucide-react';
+import { Loader2, Save, Store, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Profile {
@@ -27,6 +27,8 @@ export function ShopProfilePanel({ shopId, shopName }: { shopId: string; shopNam
   const [p, setP] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [nlText, setNlText] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -92,6 +94,61 @@ export function ShopProfilePanel({ shopId, shopName }: { shopId: string; shopNam
         {!writable && <span className="ml-auto text-[10px] text-muted-foreground">只读</span>}
       </div>
       <p className="text-[11px] text-muted-foreground">这些信息会作为 AI 生成图/文/视频时的「店铺画像」上下文。</p>
+
+      {writable && (
+        <div className="rounded-lg border border-accent/30 bg-accent/[0.04] p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-accent" />
+            <span className="text-[11px] font-semibold text-accent">AI 自动填写</span>
+            <span className="text-[10px] text-muted-foreground">用自然语言描述，AI 帮你拆成下面这些字段</span>
+          </div>
+          <Textarea
+            rows={3}
+            value={nlText}
+            onChange={(e) => setNlText(e.target.value)}
+            maxLength={2000}
+            placeholder="例：我们是开在东京中野的中古玩具店，主打 80-90 年代日系玩具、老海报和铁皮罐，店里灯光偏暖，客人多是 25-35 岁的女生……"
+            className="text-[12px] leading-relaxed bg-card"
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={aiBusy || !nlText.trim()}
+            onClick={async () => {
+              const hasContent = !!(p.tagline || p.description || (Array.isArray(p.selling_points) && p.selling_points.length));
+              if (hasContent && !confirm('当前已有店铺描述，AI 生成会覆盖现有内容（你仍可手动微调后再保存）。确定继续？')) return;
+              setAiBusy(true);
+              try {
+                const { data, error } = await supabase.functions.invoke('generate-shop-profile', {
+                  body: { text: nlText, shop_id: shopId },
+                });
+                if (error) throw error;
+                if ((data as any)?.error) throw new Error((data as any).error);
+                const g = (data as any).profile || {};
+                setP({
+                  ...p,
+                  tagline: g.tagline ?? p.tagline,
+                  description: g.description ?? p.description,
+                  selling_points: g.selling_points ?? p.selling_points,
+                  tone: g.tone ?? p.tone,
+                  target_audience: g.target_audience ?? p.target_audience,
+                  brand_keywords: g.brand_keywords ?? p.brand_keywords,
+                  default_hashtags: g.default_hashtags ?? p.default_hashtags,
+                });
+                toast.success('已填入，可手动微调后再保存');
+              } catch (e: any) {
+                toast.error(e?.message || '生成失败');
+              } finally {
+                setAiBusy(false);
+              }
+            }}
+            className="w-full h-9"
+          >
+            {aiBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            AI 一键生成
+          </Button>
+        </div>
+      )}
 
       <Field label="一句话定位">
         <Input disabled={!writable} value={p.tagline || ''} maxLength={60}

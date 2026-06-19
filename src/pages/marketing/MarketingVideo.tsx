@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { VideoBriefChat, type BriefMsg } from '@/components/marketing/VideoBriefChat';
 import { ShopPicker } from '@/components/marketing/ShopPicker';
 import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePickerDialog';
-import { recallShop } from '@/hooks/useShops';
+import { useEffectiveShop } from '@/hooks/useShops';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -38,7 +38,7 @@ const ASPECTS = ['9:16', '1:1', '16:9'] as const;
 
 export default function MarketingVideo() {
   const loc = useLocation();
-  const [shopId, setShopId] = useState<string | null>((loc.state as any)?.shop_id || recallShop());
+  const { shopId, setShopId, isAdmin } = useEffectiveShop();
   const [urls, setUrls] = useState<string[]>((loc.state as any)?.image_urls || []);
   const [vtype, setVtype] = useState<VType>('store_tour');
   const [style, setStyle] = useState<SType>('steady');
@@ -122,7 +122,7 @@ export default function MarketingVideo() {
           current={!shopId ? 0 : userTurns < 1 ? 0 : !script ? 1 : !jobId ? 2 : 3}
         />
 
-        <ShopPicker value={shopId} onChange={setShopId} />
+        <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
 
         {!shopId ? (
           <p className="text-center text-[12px] text-muted-foreground py-8">请先选择店铺，再开始创作。</p>
