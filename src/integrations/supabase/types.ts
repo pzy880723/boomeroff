@@ -87,6 +87,10 @@ export type Database = {
           created_at: string
           form_data: Json
           id: string
+          publish_confirm_note: string | null
+          publish_confirmed: boolean
+          publish_confirmed_at: string | null
+          publish_confirmed_by: string | null
           reject_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
@@ -103,6 +107,10 @@ export type Database = {
           created_at?: string
           form_data?: Json
           id?: string
+          publish_confirm_note?: string | null
+          publish_confirmed?: boolean
+          publish_confirmed_at?: string | null
+          publish_confirmed_by?: string | null
           reject_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -119,6 +127,10 @@ export type Database = {
           created_at?: string
           form_data?: Json
           id?: string
+          publish_confirm_note?: string | null
+          publish_confirmed?: boolean
+          publish_confirmed_at?: string | null
+          publish_confirmed_by?: string | null
           reject_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
