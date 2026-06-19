@@ -44,8 +44,18 @@ Deno.serve(async (req) => {
 
     const rule = presets.videoRules[videoType];
 
+    const characterBlock = character
+      ? `
+本片固定主角(每个出现人物的镜头都使用 TA,禁止换人/换发型/换服装):
+- 名称：${character.name}
+- 定位：${character.role_label || '主角'}
+- 视觉标志：${character.visual_signature || '(以参考身份板为准)'}
+- 核心情绪：${character.core_emotion || '自然'}
+请在 scene / action 描述里自然地反复出现 TA。`
+      : "";
+
     const sys = `${presets.brand}
-${shopBlock ? `\n${shopBlock}\n` : ""}
+${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}
 你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】(全中文)。
 
 重要：这是文生视频(text-to-video)。每一镜要给出**完整的中文描述**，让视频模型直接照拍。
@@ -55,7 +65,9 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}
 - dialogue 台词 / 口播：人物说的话或画外音。没有就填空字符串 ""。
 - subtitle 屏幕字幕：叠加在画面上的字幕，≤14 字，可与台词不同(更短)。
 
-参考图(image_index)是**可选**的：上传了相关参考图就用它约束画面/商品/场景；否则填 null。
+参考图(image_index)：当上传了参考图时，这是一个**素材池**(共 ${imageUrls.length} 张)。
+为每一镜从池子里挑**最贴合那一镜内容**的那张，输出对应 index(0 起)。
+不要所有镜头都用同一张；找不到合适的就填 null。
 
 整体风格基调:${VIDEO_STYLE_LABELS[styleKey]}(${VIDEO_STYLE_EN[styleKey]})
 每一镜的 scene / action 都要自然体现这套基调(光线/色调/运镜节奏)。
