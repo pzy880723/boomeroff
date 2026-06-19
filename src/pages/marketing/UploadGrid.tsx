@@ -8,6 +8,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages, type UploadStage } from './uploadMarketingImages';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { fileSha256 } from '@/lib/fileSha256';
+import { supabase } from '@/integrations/supabase/client';
 
 type Item = {
   id: string;
