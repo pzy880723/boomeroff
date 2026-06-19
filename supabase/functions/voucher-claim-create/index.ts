@@ -46,12 +46,14 @@ Deno.serve(async (req) => {
     if (vErr || !voucher) return json({ error: 'voucher not found' }, 404);
     if (!voucher.active) return json({ error: 'voucher inactive' }, 400);
 
+    const nowIso = new Date().toISOString();
     const { data: claim, error: cErr } = await admin
       .from('voucher_claims')
       .insert({
         voucher_id,
         source: 'direct',
-        status: 'unclaimed',
+        status: 'claimed',
+        claimed_at: nowIso,
         created_by: uid,
         recipient_name: body?.recipient_name || null,
         recipient_phone: body?.recipient_phone || null,
