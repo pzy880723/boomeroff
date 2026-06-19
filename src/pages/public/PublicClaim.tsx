@@ -1,15 +1,11 @@
 // 公开领取页：短链 /u/c/:short （兼容旧 /u/claim/:shareToken）
-// 流程：查看券 → 填姓名+手机 → 获取短信验证码 → 输验证码 → 领取成功 → 显示核销二维码
+// 简化后：一进来即生效的「待核销」券，直接展示核销二维码
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Ticket, CheckCircle2, AlertTriangle, Send } from 'lucide-react';
+import { Loader2, Ticket, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 import { QrCanvas } from '@/components/voucher/QrCanvas';
 import {
   CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, buildClaimRedeemUrl, formatVoucherRule, formatValidityRange,
@@ -33,80 +29,22 @@ export default function PublicClaim() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [claim, setClaim] = useState<any | null>(null);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [smsHint, setSmsHint] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState(0);
-  const [sending, setSending] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  const fetchStatus = async () => {
-    const { data, error: e } = await supabase.functions.invoke('voucher-claim-status', {
-      body: lookup,
-    });
-    if (e || (data as any)?.error) {
-      setError((data as any)?.error || e?.message || '优惠券不存在');
-      setLoading(false);
-      return;
-    }
-    setClaim((data as any).claim);
-    setLoading(false);
-  };
-
-  useEffect(() => { if (short || legacyToken) fetchStatus(); /* eslint-disable-line */ }, [short, legacyToken]);
 
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [cooldown]);
-
-  const sendOtp = async () => {
-    if (!name.trim()) { toast.error('请输入姓名'); return; }
-    if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
-    setSending(true);
-    const { data, error: e } = await supabase.functions.invoke('voucher-claim-send-otp', {
-      body: { ...lookup, name: name.trim(), phone },
-    });
-    setSending(false);
-    if (e || (data as any)?.error) {
-      const err = (data as any)?.error || e?.message || '发送失败';
-      if (err === 'sms_unavailable') {
-        setSmsHint('短信暂不可用，请联系店员手动核销');
-        toast.error('短信暂不可用，请联系店员手动核销');
-      } else {
-        toast.error(err);
+    if (!short && !legacyToken) return;
+    (async () => {
+      const { data, error: e } = await supabase.functions.invoke('voucher-claim-status', {
+        body: lookup,
+      });
+      if (e || (data as any)?.error) {
+        setError((data as any)?.error || e?.message || '优惠券不存在');
+        setLoading(false);
+        return;
       }
-      return;
-    }
-    setSmsHint(null);
-    setOtpSent(true);
-    setCooldown(60);
-    toast.success('验证码已发送，请查收短信');
-  };
-
-  const confirm = async () => {
-    if (!/^\d{6}$/.test(otp)) { toast.error('请输入 6 位验证码'); return; }
-    setSubmitting(true);
-    const { data, error: e } = await supabase.functions.invoke('voucher-claim-accept', {
-      body: { ...lookup, name: name.trim(), phone, otp },
-    });
-    setSubmitting(false);
-    if (e || (data as any)?.error) {
-      toast.error((data as any)?.error || e?.message || '领取失败');
-      return;
-    }
-    const updated = (data as any)?.claim;
-    if (updated) {
-      // 直接合并最新字段（包括 code/expires_at），保留 voucher 子对象
-      setClaim((prev: any) => ({ ...prev, ...updated }));
-    } else {
-      await fetchStatus();
-    }
-    toast.success('领取成功');
-  };
+      setClaim((data as any).claim);
+      setLoading(false);
+    })();
+  }, [short, legacyToken, lookup]);
 
   if (loading) {
     return (
@@ -129,12 +67,10 @@ export default function PublicClaim() {
   }
 
   const v = claim.voucher;
-  const isClaimed = ['claimed', 'redeemed'].includes(claim.status);
   const expiredNow =
     !!claim.expires_at && new Date(claim.expires_at).getTime() <= Date.now();
-  const now = Date.now();
-  const tplNotStarted = !!v?.starts_at && new Date(v.starts_at).getTime() > now;
-  const tplEnded = !!v?.ends_at && new Date(v.ends_at).getTime() <= now;
+  const tplEnded = !!v?.ends_at && new Date(v.ends_at).getTime() <= Date.now();
+  const showQr = claim.status === 'claimed' && !expiredNow && !tplEnded;
 
   return (
     <div
@@ -194,82 +130,7 @@ export default function PublicClaim() {
           </div>
         </div>
 
-        {/* 模板未生效/已结束（且未领取时） */}
-        {!isClaimed && claim.status === 'unclaimed' && tplNotStarted && (
-          <Card className="p-5 text-center text-sm rounded-2xl space-y-1">
-            <p className="font-medium">该券尚未到生效时间</p>
-            <p className="text-xs text-muted-foreground">
-              请于 {fmtDateTime(v.starts_at)} 后再来领取
-            </p>
-          </Card>
-        )}
-        {!isClaimed && claim.status === 'unclaimed' && !tplNotStarted && tplEnded && (
-          <Card className="p-5 text-center text-sm rounded-2xl space-y-1">
-            <p className="font-medium text-destructive">该券已结束</p>
-            <p className="text-xs text-muted-foreground">
-              结束时间：{fmtDateTime(v.ends_at)}
-            </p>
-          </Card>
-        )}
-
-        {!isClaimed && claim.status === 'unclaimed' && !tplNotStarted && !tplEnded && (
-          <Card className="p-4 space-y-3 rounded-2xl">
-            <p className="text-sm font-medium">填写信息领取</p>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">姓名</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={20} placeholder="请输入姓名" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">手机号</Label>
-              <Input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                inputMode="numeric"
-                maxLength={11}
-                placeholder="11 位手机号"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">短信验证码</Label>
-              <div className="flex gap-2">
-                <Input
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="6 位验证码"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={sendOtp}
-                  disabled={sending || cooldown > 0}
-                  className="shrink-0 whitespace-nowrap"
-                >
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : cooldown > 0 ? `${cooldown}s` : (<><Send className="w-3.5 h-3.5 mr-1" />获取验证码</>)}
-                </Button>
-              </div>
-              {otpSent && (
-                <p className="text-[11px] text-muted-foreground">已发送至 {phone}，5 分钟内有效</p>
-              )}
-              {smsHint && (
-                <p className="text-[11px] text-destructive">{smsHint}</p>
-              )}
-            </div>
-
-            <Button onClick={confirm} disabled={submitting || !otpSent} className="w-full h-11">
-              {submitting && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}确认领取
-            </Button>
-            <p className="text-[11px] text-muted-foreground text-center">
-              领取需短信验证码确认，请确保手机号本人使用
-            </p>
-          </Card>
-        )}
-
-        {isClaimed && claim.code && !expiredNow && claim.status !== 'redeemed' && (
+        {showQr && claim.code && (
           <Card key={claim.code} className="p-4 space-y-3 text-center rounded-2xl">
             <p className="text-sm font-medium flex items-center justify-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -288,9 +149,15 @@ export default function PublicClaim() {
             该券已核销，感谢光临
           </Card>
         )}
-        {(claim.status === 'expired' || (isClaimed && expiredNow)) && (
+        {(claim.status === 'expired' || (claim.status === 'claimed' && expiredNow)) && (
           <Card className="p-4 text-center text-sm text-destructive bg-destructive/5 rounded-2xl">
             该券已过期，无法核销
+          </Card>
+        )}
+        {claim.status === 'claimed' && !expiredNow && tplEnded && v?.ends_at && (
+          <Card className="p-4 text-center text-sm text-destructive bg-destructive/5 rounded-2xl space-y-1">
+            <p className="font-medium">该券已结束</p>
+            <p className="text-xs text-muted-foreground">结束时间：{fmtDateTime(v.ends_at)}</p>
           </Card>
         )}
         {claim.status === 'void' && (
