@@ -28,11 +28,12 @@ export function UploadAssetDialog({
   const [bodyText, setBodyText] = useState('');
   // video
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  // photo
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  // photo (multi)
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [progress, setProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
 
   const reset = () => {
-    setTitle(''); setBodyText(''); setVideoFile(null); setPhotoFile(null);
+    setTitle(''); setBodyText(''); setVideoFile(null); setPhotoFiles([]); setProgress({ done: 0, total: 0 });
   };
 
   const insertAsset = async (row: any) => {
