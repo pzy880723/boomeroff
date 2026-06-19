@@ -177,6 +177,7 @@ ${refList}
     script.topic = topic;
     script.style = styleKey;
     script.style_label = VIDEO_STYLE_LABELS[styleKey];
+    if (character) script.character = character;
 
     return json({ success: true, script, video_type: videoType, video_type_label: rule.label });
   } catch (e) {
