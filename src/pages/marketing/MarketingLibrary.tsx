@@ -273,8 +273,31 @@ export default function MarketingLibrary() {
           <ShopProfilePanel shopId={shopId} shopName={shopName(shopId)} />
         )}
 
+        {/* 角色库 */}
+        {tab === 'character' && shopId && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <p className="text-[11px] text-muted-foreground">本店共 {characters.length} 个角色</p>
+              <Button size="sm" variant="outline" onClick={() => setCreateCharOpen(true)} className="h-8">
+                <Plus className="w-3.5 h-3.5" />新建角色
+              </Button>
+            </div>
+            {characters.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-12">
+                还没有角色。新建一个,生成视频时用 TA 锁定主角。
+              </p>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
+                {characters.map((c) => (
+                  <CharacterCard key={c.id} character={c} onClick={() => setCharacterDetail(c)} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* 素材列表 */}
-        {tab !== 'profile' && shopId && (<>
+        {tab !== 'profile' && tab !== 'character' && shopId && (<>
           {/* 上传按钮 + 管理 */}
           <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
             <div className="flex gap-1.5">
