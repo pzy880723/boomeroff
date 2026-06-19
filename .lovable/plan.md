@@ -1,32 +1,45 @@
 ## 目标
 
-在「文案/视频」页用 `UploadGrid` 上传**参考图**时，每张图自动落进**素材库**（`marketing_assets`），同时按图片内容去重——已经在我自己素材库里的同一张照片不会重复入库，也不会重新上传一份到存储。
+把 `/me/marketing` 素材库从当前的"一行一条 + 小缩略图"列表，改为"一行多张大图"的图库（gallery）样式，更接近相册浏览体验。
 
-## 行为定义
+## 改动范围
 
-- 触发位置：仅 `src/pages/marketing/UploadGrid.tsx`（被参考图区域使用：MarketingVideo / MarketingCopy）。`UploadAssetDialog`（用户主动"上传到素材库"）和 `MarketingPhoto` 的主图上传不在本次范围内。
-- 去重维度：**当前用户自己** 的 `marketing_assets`，按图片字节的 SHA-256（即"完全相同的文件"算重复）。同物不同角度不去重。
-- 去重时机：
-  1. 选完文件后，先在前端算每张图的 sha256。
-  2. 查 `marketing_assets` 里 `created_by = me AND meta->>'sha256' = hash` 是否已存在。
-  3. **已存在** → 跳过压缩+上传，直接把已存在的 `output_url` 当作"上传成功"回灌给参考图列表，不再 insert 一条新素材。
-  4. **不存在** → 走原有 `uploadMarketingImages` 流程，成功后 insert 一条 `marketing_assets`（`kind='photo'`、`output_url=url`、`input_image_urls=[url]`、`meta={ source: 'reference_upload', sha256, filename }`）。
-- 同一次选择内的重复（用户一次选了两张完全相同的图）也按 sha256 合并，只保留一份。
-- 失败重试（`retryOne`）走同样的去重路径。
-- 完成后用 toast 简短反馈：`已加入素材库 X 张 · 去重 Y 张`（Y=0 时不显示后半段；全 0 时不弹）。UI 形态、缩略图、删除按钮都不变。
+仅改 `src/pages/marketing/MarketingLibrary.tsx` 的列表渲染部分，其它逻辑（店铺切换、Tab、上传、管理/删除、视频拼接轮询、月份分组、点击进入详情）全部保持不变。
+
+## 浏览方式调整
+
+- **图片 Tab / 视频 Tab / 全部 Tab 中的图片和视频**：网格展示
+  - 手机：每行 3 张；≥sm：每行 4 张；≥md：每行 5 张
+  - 每个格子为正方形（`aspect-square`），缩略图 `object-cover` 填充
+  - 视频格子右下角保留 `VIDEO` 角标，叠加一个半透明播放小图标
+  - 不再显示文字标题/平台/时间等元信息，改为悬停或长按时显示（移动端直接保持简洁，点击进详情查看完整信息）
+- **文案 Tab**：仍保留卡片列表样式（文字为主，网格不合适），但缩略尺寸调小、密度更紧
+- **全部 Tab**：图片/视频走网格；文案以独立小节列表形式排在网格之后（按月分组内部先图后文）
+- **月份分组标题**保留（"本月 / 2026 · 05 月"），分组下直接是网格
+
+## 管理模式
+
+- 选中态：格子四周高亮 `ring-2 ring-primary`，左上角圆形 ✓ 角标覆盖在缩略图上
+- 点击格子：管理模式切换选中；普通模式打开 `AssetDetailDialog`
+- 顶部"已选 N / 取消 / 删除"工具条不变
+
+## 空态 / loading / 上传按钮 / 店铺选择
+
+完全不动。
 
 ## 技术细节
 
-- 新增 `src/lib/fileSha256.ts`：用 `crypto.subtle.digest('SHA-256', await file.arrayBuffer())`，返回 64 位 hex。预览环境是 HTTPS，SubtleCrypto 可用；不可用时降级为 `${file.size}-${file.lastModified}-${file.name}`，仍能拦住"同一文件二次选择"。
-- 改 `src/pages/marketing/UploadGrid.tsx`：
-  - `onPick` 里先 `Promise.all` 算所有 hash，按 hash 在 `items` 内部排重；
-  - 用一次 `supabase.from('marketing_assets').select('id, output_url, meta').eq('created_by', user.id).in('meta->>sha256', hashes)` 拿到已存在的映射（PostgREST 写法用 `.filter('meta->>sha256','in',\`(\${...})\`)`）；
-  - 对命中已存在的：直接 `onProgress({stage:'done', url: existingUrl})`，不走 `uploadMarketingImages`，也不再 insert；
-  - 对未命中的：原流程走完拿到 `url` 后，`insert` 一条 marketing_assets（带 sha256/filename/source）；插入失败不阻塞，参考图列表仍然能用。
-- `retryOne` 复用同一份"算 hash → 查重 → 上传或复用"逻辑，抽到本文件内的小函数 `processOne(file)`。
-- 不动数据库结构（meta 是 jsonb，足够放 sha256）。不动 RLS。不动 `UploadAssetDialog` / `MarketingPhoto`。
+- 新增一个内部小组件 `MediaTile`（仅在本文件内），负责单个图片/视频格子的渲染（缩略图、视频角标、选中态）
+- 在月份分组里把 `list` 拆成 `mediaList = photo+video` 和 `copyList = copy`：
+  - `mediaList.length > 0` 时渲染 `<div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">`
+  - `copyList.length > 0` 时沿用现在的卡片列表（保留 copy 预览文本）
+- 视频缩略：优先用 `meta.cover_url`，否则用 `<video preload="metadata" muted playsInline>`，与现有逻辑一致
+- 视频状态文字（"生成中 1/3"、"拼接中 45%"、"失败"）改为叠加在缩略图底部的一条半透明黑底文字，避免破坏网格
 
-## 影响文件
+## 验证
 
-- 新建：`src/lib/fileSha256.ts`
-- 修改：`src/pages/marketing/UploadGrid.tsx`
+- 手机视口 390px 下 photo Tab 一行 3 张、间距均匀
+- 切到 video Tab 能看到 VIDEO 角标和进度文字
+- 切到 copy Tab 仍是文字卡片
+- 管理模式可多选并删除
+- 点击格子能打开 `AssetDetailDialog`

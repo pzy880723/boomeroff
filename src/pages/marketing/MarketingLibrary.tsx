@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock } from 'lucide-react';
+import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock, Play } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -301,88 +301,126 @@ export default function MarketingLibrary() {
             <p className="text-center text-sm text-muted-foreground py-12">当前店铺暂无素材，点上方按钮上传</p>
           )}
 
-          {groups.map(([key, list]) => (
-            <section key={key} className="space-y-2">
-              <div className="flex items-center gap-2 px-1">
-                <span className="w-1 h-1 rounded-full bg-accent" />
-                <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{key}</span>
-                <span className="text-[10px] text-muted-foreground ml-1">{list.length} 条</span>
-                <span className="flex-1 h-px bg-border ml-2" />
-              </div>
-              {list.map((it) => {
-                const checked = selected.has(it.id);
-                const thumbUrl = it.kind === 'photo'
-                  ? it.output_url
-                  : it.kind === 'video'
-                    ? (it.meta?.cover_url || it.output_url)
-                    : (it.input_image_urls?.[0]);
-                return (
-                  <div
-                    key={it.id}
-                    onClick={() => { if (manageMode) toggleSel(it.id); else setDetail(it); }}
-                    className={[
-                      'bg-card rounded-[0.875rem] border shadow-sm p-3 flex gap-3 transition-colors cursor-pointer',
-                      manageMode && checked ? 'border-accent/60 bg-accent/5' : 'border-accent/15 hover:border-accent/40',
-                    ].join(' ')}
-                  >
-                    {manageMode && (
-                      <div className={[
-                        'w-5 h-5 rounded-full border flex items-center justify-center shrink-0 self-center transition-all',
-                        checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-card',
-                      ].join(' ')}>
-                        {checked && <Check className="w-3 h-3" strokeWidth={3} />}
-                      </div>
-                    )}
-                    <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border relative">
-                      {thumbUrl ? (
-                        it.kind === 'video' && it.output_url ? (
-                          <video src={it.output_url} className="w-full h-full object-cover" muted preload="metadata" playsInline />
-                        ) : (
-                          <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
-                        )
-                      ) : it.kind === 'copy' ? (
-                        <FileText className="w-6 h-6 text-muted-foreground" />
-                      ) : it.kind === 'video' ? (
-                        <Video className="w-6 h-6 text-muted-foreground" />
-                      ) : (
-                        <ImageIcon className="w-6 h-6 text-muted-foreground" />
+          {groups.map(([key, list]) => {
+            const mediaList = list.filter((it) => it.kind === 'photo' || it.kind === 'video');
+            const copyList = list.filter((it) => it.kind === 'copy');
+            return (
+              <section key={key} className="space-y-2">
+                <div className="flex items-center gap-2 px-1">
+                  <span className="w-1 h-1 rounded-full bg-accent" />
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{key}</span>
+                  <span className="text-[10px] text-muted-foreground ml-1">{list.length} 条</span>
+                  <span className="flex-1 h-px bg-border ml-2" />
+                </div>
+
+                {mediaList.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
+                    {mediaList.map((it) => {
+                      const checked = selected.has(it.id);
+                      const thumbUrl = it.kind === 'photo'
+                        ? it.output_url
+                        : (it.meta?.cover_url || it.output_url);
+                      const showStatus = it.kind === 'video' && it.meta?.status && it.meta.status !== 'succeeded';
+                      return (
+                        <button
+                          type="button"
+                          key={it.id}
+                          onClick={() => { if (manageMode) toggleSel(it.id); else setDetail(it); }}
+                          className={[
+                            'relative aspect-square rounded-md overflow-hidden bg-muted border transition-all',
+                            manageMode && checked ? 'ring-2 ring-primary border-primary' : 'border-border hover:border-accent/50',
+                          ].join(' ')}
+                        >
+                          {thumbUrl ? (
+                            it.kind === 'video' && !it.meta?.cover_url && it.output_url ? (
+                              <video src={it.output_url} className="w-full h-full object-cover" muted preload="metadata" playsInline />
+                            ) : (
+                              <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                            )
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              {it.kind === 'video'
+                                ? <Video className="w-6 h-6 text-muted-foreground" />
+                                : <ImageIcon className="w-6 h-6 text-muted-foreground" />}
+                            </div>
+                          )}
+
+                          {it.kind === 'video' && (
+                            <>
+                              <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <span className="w-7 h-7 rounded-full bg-black/45 backdrop-blur flex items-center justify-center">
+                                  <Play className="w-3.5 h-3.5 text-white fill-white" />
+                                </span>
+                              </span>
+                              <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] px-1 rounded leading-tight">VIDEO</span>
+                            </>
+                          )}
+
+                          {showStatus && (
+                            <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1.5 py-0.5 text-center truncate">
+                              {statusLabel(it)}
+                            </span>
+                          )}
+
+                          {manageMode && (
+                            <span className={[
+                              'absolute top-1 left-1 w-5 h-5 rounded-full border flex items-center justify-center transition-all',
+                              checked ? 'bg-primary border-primary text-primary-foreground' : 'bg-black/40 border-white/70 text-transparent',
+                            ].join(' ')}>
+                              <Check className="w-3 h-3" strokeWidth={3} />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {copyList.length > 0 && copyList.map((it) => {
+                  const checked = selected.has(it.id);
+                  return (
+                    <div
+                      key={it.id}
+                      onClick={() => { if (manageMode) toggleSel(it.id); else setDetail(it); }}
+                      className={[
+                        'bg-card rounded-[0.875rem] border shadow-sm p-3 flex gap-3 transition-colors cursor-pointer',
+                        manageMode && checked ? 'border-accent/60 bg-accent/5' : 'border-accent/15 hover:border-accent/40',
+                      ].join(' ')}
+                    >
+                      {manageMode && (
+                        <div className={[
+                          'w-5 h-5 rounded-full border flex items-center justify-center shrink-0 self-center transition-all',
+                          checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-card',
+                        ].join(' ')}>
+                          {checked && <Check className="w-3 h-3" strokeWidth={3} />}
+                        </div>
                       )}
-                      {it.kind === 'video' && (
-                        <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white text-[8px] px-1 rounded">VIDEO</span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-display text-[10px] text-accent tracking-[0.18em]">
-                          {it.kind === 'photo' ? '图片' : it.kind === 'copy' ? '文案' : '视频'}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {new Date(it.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                          <Building2 className="w-2.5 h-2.5" />{shopName(it.shop_id)}
-                        </span>
+                      <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border">
+                        <FileText className="w-5 h-5 text-muted-foreground" />
                       </div>
-                      {it.kind === 'copy' && (
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-display text-[10px] text-accent tracking-[0.18em]">文案</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {new Date(it.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <Building2 className="w-2.5 h-2.5" />{shopName(it.shop_id)}
+                          </span>
+                        </div>
                         <p className="text-[12px] mt-1 line-clamp-2 text-foreground/85 leading-relaxed">
                           {copyPreview(it) || '（无内容）'}
                         </p>
-                      )}
-                      {it.meta?.platform && (
-                        <p className="text-[11px] text-muted-foreground mt-0.5">平台 · {it.meta.platform}</p>
-                      )}
-                      {it.kind === 'video' && it.meta?.status && (
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          状态 · {statusLabel(it)}
-                          {it.meta?.error ? ` · ${String(it.meta.error).slice(0, 30)}` : ''}
-                        </p>
-                      )}
+                        {it.meta?.platform && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">平台 · {it.meta.platform}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </section>
-          ))}
+                  );
+                })}
+              </section>
+            );
+          })}
         </>)}
       </div>
 
