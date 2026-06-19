@@ -58,6 +58,7 @@ export default function PublicActivity() {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [agreementOpen, setAgreementOpen] = useState(false);
+  const [descOpen, setDescOpen] = useState(false);
 
   useEffect(() => {
     if (!shareToken) return;
@@ -150,7 +151,7 @@ ${isExplore ? '五' : '四'}、个人信息处理
 门店仅在本活动核验、优惠券发放与必要联系范围内处理您的个人信息，不会将其用于其他商业用途。相关信息的保存期限不超过本活动结束后 90 日，到期后将被删除或匿名化处理。依据《中华人民共和国个人信息保护法》，您有权要求门店查询、更正、删除您的个人信息。
 
 ${isExplore ? '六' : '五'}、违约与争议处理
-您违反本协议任一条款的，门店有权立即取消您的报名资格、停用相关优惠券，并不退还已享受的活动权益。因本活动产生争议的，双方应本着诚信原则友好协商解决；协商不成的，依法向门店所在地有管辖权的人民法院提起诉讼。
+您违反本协议任一条款的，门店有权立即取消您的报名资格、停用相关优惠券，并退还活动所享受的优惠活动权益。因本活动产生争议的，双方应本着诚信原则友好协商解决；协商不成的，依法向门店所在地有管辖权的人民法院提起诉讼。
 
 ${isExplore ? '七' : '六'}、最终解释权
 在不违反法律强制性规定的前提下，本活动及本协议的最终解释权归 BOOMER-OFF 中古门店所有。`;
@@ -199,9 +200,18 @@ ${isExplore ? '七' : '六'}、最终解释权
           <div className="text-[13px] opacity-80">为你专属准备</div>
           <h1 className="text-2xl font-semibold leading-tight">{activity.name}</h1>
           {activity.description && (
-            <p className="text-[13px] leading-relaxed text-[#ffe7bd] whitespace-pre-wrap line-clamp-3">
-              {activity.description}
-            </p>
+            <>
+              <p className="text-[13px] leading-relaxed text-[#ffe7bd] whitespace-pre-wrap line-clamp-3">
+                {activity.description}
+              </p>
+              <button
+                type="button"
+                onClick={() => setDescOpen(true)}
+                className="text-[12px] text-[#ffd28a] underline underline-offset-2"
+              >
+                查看完整活动详情
+              </button>
+            </>
           )}
           {(activity.starts_at || activity.ends_at) && (
             <p className="text-[11px] text-[#ffd28a]/90">
@@ -385,6 +395,25 @@ ${isExplore ? '七' : '六'}、最终解释权
                 className="bg-[#8e1f10] hover:bg-[#8e1f10]/90 text-white"
               >
                 我已阅读并同意
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={descOpen} onOpenChange={setDescOpen}>
+          <DialogContent className="max-w-md max-h-[85vh] bg-[#fdf6e8] border-[#e8d5b3]">
+            <DialogHeader>
+              <DialogTitle className="text-[#3b2410]">活动详情</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto pr-1">
+              <pre className="whitespace-pre-wrap text-[13px] leading-relaxed text-[#3b2410] font-sans">{activity.description}</pre>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => setDescOpen(false)}
+                className="bg-[#8e1f10] hover:bg-[#8e1f10]/90 text-white"
+              >
+                我知道了
               </Button>
             </DialogFooter>
           </DialogContent>

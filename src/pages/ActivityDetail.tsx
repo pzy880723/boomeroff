@@ -6,7 +6,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Share2, Pencil, Trash2, RefreshCw } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
@@ -14,6 +15,7 @@ import {
 } from '@/lib/voucher';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
+import { PublishConfirmDialog } from '@/components/voucher/PublishConfirmDialog';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -21,6 +23,9 @@ import {
 } from '@/components/ui/alert-dialog';
 
 type AppWithClaim = ActivityApplication & {
+  publish_confirmed?: boolean | null;
+  publish_confirmed_at?: string | null;
+  publish_confirm_note?: string | null;
   voucher_claim?: { status: string; short_code: string | null; redeemed_at: string | null } | null;
 };
 
@@ -34,9 +39,11 @@ export default function ActivityDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [confirmApp, setConfirmApp] = useState<AppWithClaim | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const [{ data: a }, { data: ap }] = await Promise.all([
       supabase.from('activities').select('*').eq('id', id).maybeSingle(),
       supabase
@@ -47,10 +54,21 @@ export default function ActivityDetail() {
     ]);
     setActivity((a as any) || null);
     setApps((ap || []) as unknown as AppWithClaim[]);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // 实时同步：申请表 + 优惠券领取表
+  useEffect(() => {
+    if (!id) return;
+    const channel = supabase
+      .channel(`activity-detail-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_applications', filter: `activity_id=eq.${id}` }, () => load(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voucher_claims' }, () => load(true))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id, load]);
 
 
 
@@ -201,57 +219,113 @@ export default function ActivityDetail() {
 
         {/* 领取列表 */}
         <div className="space-y-2">
-          <p className="text-xs font-medium px-1 text-muted-foreground">领取列表（{apps.length}）</p>
-          {apps.length === 0 ? (
-            <Card className="p-6 text-center text-xs text-muted-foreground">还没有人领取</Card>
-          ) : apps.map((app) => (
-            <Card key={app.id} className="p-3 space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">{app.applicant_name}</span>
-                <span className="text-xs text-muted-foreground">{app.applicant_phone}</span>
-                <Badge variant={claimStatusVariant(app)} className="ml-auto text-[10px]">
-                  {claimStatusLabel(app)}
-                </Badge>
-              </div>
-              {activity.form_fields.length > 0 && (
-                <div className="text-xs space-y-1 border-t pt-2 mt-1">
-                  {activity.form_fields.map((f) => {
-                    const v = app.form_data?.[f.key];
-                    if (v === null || v === undefined || v === '') return null;
-                    return (
-                      <div key={f.key} className="flex gap-2">
-                        <span className="text-muted-foreground shrink-0">{f.label}:</span>
-                        {f.type === 'image' && typeof v === 'string' ? (
-                          <a
-                            href="#"
-                            onClick={async (e) => {
-                              e.preventDefault();
-                              const { data } = await supabase.storage
-                                .from('voucher-screenshots')
-                                .createSignedUrl(String(v), 600);
-                              if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                            }}
-                            className="text-primary underline truncate"
-                          >查看截图</a>
-                        ) : f.type === 'url' && typeof v === 'string' ? (
-                          <a href={String(v)} target="_blank" rel="noreferrer" className="text-primary underline truncate">{String(v)}</a>
-                        ) : (
-                          <span className="break-all">{String(v)}</span>
-                        )}
-                      </div>
-                    );
-                  })}
+          <div className="flex items-center gap-2 px-1">
+            <p className="text-xs font-medium text-muted-foreground shrink-0">
+              领取列表（{apps.length}）
+            </p>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 ml-auto"
+              onClick={() => load()}
+              title="刷新"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜索姓名 / 电话 / 账号名称"
+              className="pl-8 h-9 text-xs"
+            />
+          </div>
+          {(() => {
+            const kw = search.trim().toLowerCase();
+            const filtered = !kw ? apps : apps.filter((a) => {
+              if (a.applicant_name?.toLowerCase().includes(kw)) return true;
+              if (a.applicant_phone?.toLowerCase().includes(kw)) return true;
+              const fd = a.form_data || {};
+              return Object.values(fd).some((v) =>
+                typeof v === 'string' && v.toLowerCase().includes(kw)
+              );
+            });
+            if (filtered.length === 0) {
+              return <Card className="p-6 text-center text-xs text-muted-foreground">
+                {apps.length === 0 ? '还没有人领取' : '没有匹配的记录'}
+              </Card>;
+            }
+            return filtered.map((app) => (
+              <Card key={app.id} className="p-3 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-sm">{app.applicant_name}</span>
+                  <span className="text-xs text-muted-foreground">{app.applicant_phone}</span>
+                  {app.publish_confirmed ? (
+                    <Badge className="text-[10px] bg-emerald-600 hover:bg-emerald-600">
+                      <CheckCircle2 className="w-3 h-3 mr-0.5" />已发布
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                      <CircleDashed className="w-3 h-3 mr-0.5" />待确认
+                    </Badge>
+                  )}
+                  <Badge variant={claimStatusVariant(app)} className="ml-auto text-[10px]">
+                    {claimStatusLabel(app)}
+                  </Badge>
                 </div>
-              )}
-              <p className="text-[11px] text-muted-foreground">
-                领取：{format(new Date(app.created_at), 'yyyy-MM-dd HH:mm')}
-                {app.voucher_claim?.redeemed_at && (
-                  <> · 核销：{format(new Date(app.voucher_claim.redeemed_at), 'yyyy-MM-dd HH:mm')}</>
+                {activity.form_fields.length > 0 && (
+                  <div className="text-xs space-y-1 border-t pt-2 mt-1">
+                    {activity.form_fields.map((f) => {
+                      const v = app.form_data?.[f.key];
+                      if (v === null || v === undefined || v === '') return null;
+                      return (
+                        <div key={f.key} className="flex gap-2">
+                          <span className="text-muted-foreground shrink-0">{f.label}:</span>
+                          {f.type === 'image' && typeof v === 'string' ? (
+                            <a
+                              href="#"
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                const { data } = await supabase.storage
+                                  .from('voucher-screenshots')
+                                  .createSignedUrl(String(v), 600);
+                                if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                              }}
+                              className="text-primary underline truncate"
+                            >查看截图</a>
+                          ) : f.type === 'url' && typeof v === 'string' ? (
+                            <a href={String(v)} target="_blank" rel="noreferrer" className="text-primary underline truncate">{String(v)}</a>
+                          ) : (
+                            <span className="break-all">{String(v)}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
-              </p>
-            </Card>
-          ))}
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <p className="text-[11px] text-muted-foreground">
+                    领取：{format(new Date(app.created_at), 'yyyy-MM-dd HH:mm')}
+                    {app.voucher_claim?.redeemed_at && (
+                      <> · 核销：{format(new Date(app.voucher_claim.redeemed_at), 'yyyy-MM-dd HH:mm')}</>
+                    )}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant={app.publish_confirmed ? 'secondary' : 'outline'}
+                    className="h-7 text-[11px] px-2 shrink-0"
+                    onClick={() => setConfirmApp(app)}
+                  >
+                    发布确认
+                  </Button>
+                </div>
+              </Card>
+            ));
+          })()}
         </div>
+
 
 
         {/* 底部操作 */}
@@ -281,6 +355,16 @@ export default function ActivityDetail() {
         activity={activity}
         onPosterSaved={(url) => setActivity((a) => a ? { ...a, poster_url: url } : a)}
       />
+
+      <PublishConfirmDialog
+        open={!!confirmApp}
+        onOpenChange={(v) => { if (!v) setConfirmApp(null); }}
+        app={confirmApp}
+        fields={activity.form_fields || []}
+        onSaved={() => load(true)}
+      />
+
+
 
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
