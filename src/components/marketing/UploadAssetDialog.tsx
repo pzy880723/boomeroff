@@ -51,15 +51,26 @@ export function UploadAssetDialog({
     setBusy(true);
     try {
       if (kind === 'photo') {
-        if (!photoFile) { toast.error('请选择图片'); setBusy(false); return; }
-        const [url] = await uploadMarketingImages(user.id, [photoFile], { preset: 'hd' });
-        if (!url) throw new Error('图片上传失败');
-        const row = await insertAsset({
-          kind: 'photo', output_url: url, input_image_urls: [url],
-          meta: { source: 'manual_upload' },
-        });
-        onUploaded(row);
-        toast.success('已加入素材库');
+        if (photoFiles.length === 0) { toast.error('请选择图片'); setBusy(false); return; }
+        setProgress({ done: 0, total: photoFiles.length });
+        const uploaded: any[] = [];
+        // upload sequentially in small batches to keep mobile memory stable
+        for (let i = 0; i < photoFiles.length; i += 3) {
+          const batch = photoFiles.slice(i, i + 3);
+          const urls = await uploadMarketingImages(user.id, batch, { preset: 'hd' });
+          for (let j = 0; j < urls.length; j++) {
+            const url = urls[j];
+            if (!url) continue;
+            const row = await insertAsset({
+              kind: 'photo', output_url: url, input_image_urls: [url],
+              meta: { source: 'manual_upload', filename: batch[j]?.name },
+            });
+            uploaded.push(row);
+            onUploaded(row);
+            setProgress((p) => ({ ...p, done: p.done + 1 }));
+          }
+        }
+        toast.success(`已上传 ${uploaded.length} 张图片到素材库`);
       } else if (kind === 'copy') {
         const t = title.trim(); const b = bodyText.trim();
         if (!b) { toast.error('请填写文案正文'); setBusy(false); return; }
