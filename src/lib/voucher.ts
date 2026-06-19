@@ -57,7 +57,7 @@ export interface VoucherClaim {
   share_token: string;
   short_code: string | null;
   source: 'direct' | 'activity';
-  status: 'unclaimed' | 'claimed' | 'redeemed' | 'expired' | 'void';
+  status: 'claimed' | 'redeemed' | 'expired' | 'void';
   recipient_name: string | null;
   recipient_phone: string | null;
   recipient_extra: Record<string, unknown>;
