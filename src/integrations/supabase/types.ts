@@ -724,9 +724,13 @@ export type Database = {
           id: string
           last_polled_at: string | null
           output_url: string | null
+          parent_job_id: string | null
           provider: string | null
           provider_task_id: string | null
           script: Json
+          segment_index: number | null
+          segment_total: number | null
+          segment_url: string | null
           shop_id: string | null
           status: string
           user_id: string
@@ -739,9 +743,13 @@ export type Database = {
           id?: string
           last_polled_at?: string | null
           output_url?: string | null
+          parent_job_id?: string | null
           provider?: string | null
           provider_task_id?: string | null
           script: Json
+          segment_index?: number | null
+          segment_total?: number | null
+          segment_url?: string | null
           shop_id?: string | null
           status?: string
           user_id: string
@@ -754,15 +762,26 @@ export type Database = {
           id?: string
           last_polled_at?: string | null
           output_url?: string | null
+          parent_job_id?: string | null
           provider?: string | null
           provider_task_id?: string | null
           script?: Json
+          segment_index?: number | null
+          segment_total?: number | null
+          segment_url?: string | null
           shop_id?: string | null
           status?: string
           user_id?: string
           video_url?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "marketing_video_jobs_parent_job_id_fkey"
+            columns: ["parent_job_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_video_jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "marketing_video_jobs_shop_id_fkey"
             columns: ["shop_id"]
