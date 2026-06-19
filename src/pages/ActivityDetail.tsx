@@ -23,6 +23,9 @@ import {
 } from '@/components/ui/alert-dialog';
 
 type AppWithClaim = ActivityApplication & {
+  publish_confirmed?: boolean | null;
+  publish_confirmed_at?: string | null;
+  publish_confirm_note?: string | null;
   voucher_claim?: { status: string; short_code: string | null; redeemed_at: string | null } | null;
 };
 
@@ -36,9 +39,11 @@ export default function ActivityDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [confirmApp, setConfirmApp] = useState<AppWithClaim | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const [{ data: a }, { data: ap }] = await Promise.all([
       supabase.from('activities').select('*').eq('id', id).maybeSingle(),
       supabase
@@ -49,10 +54,21 @@ export default function ActivityDetail() {
     ]);
     setActivity((a as any) || null);
     setApps((ap || []) as unknown as AppWithClaim[]);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // 实时同步：申请表 + 优惠券领取表
+  useEffect(() => {
+    if (!id) return;
+    const channel = supabase
+      .channel(`activity-detail-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_applications', filter: `activity_id=eq.${id}` }, () => load(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voucher_claims' }, () => load(true))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id, load]);
 
 
 
