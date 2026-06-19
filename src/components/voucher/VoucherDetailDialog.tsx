@@ -29,6 +29,8 @@ interface Props {
 
 export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDeleted }: Props) {
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
   const [claims, setClaims] = useState<VoucherClaim[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
