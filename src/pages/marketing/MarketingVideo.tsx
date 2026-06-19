@@ -70,6 +70,11 @@ export default function MarketingVideo() {
     if (userTurns < 1) return toast.error('先和 AI 聊一句你想拍什么');
     setGenerating(true); setScript(null);
     try {
+      const charPayload = character ? {
+        id: character.id, name: character.name, role_label: character.role_label,
+        visual_signature: character.visual_signature, core_emotion: character.core_emotion,
+        cover_url: character.cover_url,
+      } : null;
       const { data, error } = await supabase.functions.invoke('generate-marketing-video-script', {
         body: {
           shop_id: shopId,
@@ -81,6 +86,7 @@ export default function MarketingVideo() {
           highlight,
           style,
           brief_transcript: briefTranscript,
+          character: charPayload,
         },
       });
       if (error) throw error;
@@ -95,8 +101,25 @@ export default function MarketingVideo() {
     if (!shopId) return toast.error('请先选择店铺');
     setRendering(true);
     try {
+      let finalScript = script;
+      // 多段视频且未选角色 → 自动生成兜底角色身份板,保证跨段人物一致
+      if (duration > 12 && !character && !script.character) {
+        toast.message('为保证角色不变脸,正在生成兜底主角…', { duration: 4000 });
+        const anc = await supabase.functions.invoke('ensure-auto-anchor-character', {
+          body: { shop_id: shopId, video_type: vtype, style, brief_summary: briefTranscript.slice(0, 600) },
+        });
+        if (anc.error) throw anc.error;
+        const anchorChar = (anc.data as any)?.character;
+        if (anchorChar) {
+          finalScript = { ...script, character: {
+            id: anchorChar.id, name: anchorChar.name, role_label: anchorChar.role_label,
+            visual_signature: anchorChar.visual_signature, core_emotion: anchorChar.core_emotion,
+            cover_url: anchorChar.cover_url,
+          } };
+        }
+      }
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
-        body: { script: { ...script, video_type: vtype }, style, shop_id: shopId },
+        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
