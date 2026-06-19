@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { VideoBriefChat, type BriefMsg } from '@/components/marketing/VideoBriefChat';
 import { ShopPicker } from '@/components/marketing/ShopPicker';
 import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePickerDialog';
+import { CharacterPicker, type Character } from '@/components/marketing/CharacterPicker';
 import { useEffectiveShop } from '@/hooks/useShops';
 
 const VIDEO_TYPES = [
