@@ -373,7 +373,7 @@ export default function MarketingLibrary() {
                       )}
                       {it.kind === 'video' && it.meta?.status && (
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          状态 · {statusLabel(it.meta.status)}
+                          状态 · {statusLabel(it)}
                           {it.meta?.error ? ` · ${String(it.meta.error).slice(0, 30)}` : ''}
                         </p>
                       )}
