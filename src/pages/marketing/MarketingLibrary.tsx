@@ -12,6 +12,9 @@ import { ShopProfilePanel } from '@/components/marketing/ShopProfilePanel';
 import { UploadAssetDialog } from '@/components/marketing/UploadAssetDialog';
 import { useEffectiveShop } from '@/hooks/useShops';
 import { stitchSegmentUrls } from '@/lib/stitchVideos';
+import { CharacterCard } from '@/components/marketing/CharacterCard';
+import { CharacterDialog } from '@/components/marketing/CharacterDialog';
+import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
 
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
