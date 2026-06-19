@@ -48,7 +48,7 @@ export default function ActivityDetail() {
       supabase.from('activities').select('*').eq('id', id).maybeSingle(),
       supabase
         .from('activity_applications')
-        .select('*, voucher_claim:voucher_claims!inner(status, short_code, redeemed_at)')
+        .select('*, voucher_claim:voucher_claims!activity_applications_voucher_claim_id_fkey(status, short_code, redeemed_at)')
         .eq('activity_id', id)
         .order('created_at', { ascending: false }),
     ]);
