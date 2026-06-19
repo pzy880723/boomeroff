@@ -13,7 +13,7 @@ import { UploadAssetDialog } from '@/components/marketing/UploadAssetDialog';
 import { useEffectiveShop } from '@/hooks/useShops';
 import { stitchSegmentUrls } from '@/lib/stitchVideos';
 
-type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'profile';
+type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
 export default function MarketingLibrary() {
   const { user } = useAuth();
