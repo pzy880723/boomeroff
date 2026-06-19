@@ -59,6 +59,7 @@
     "html5-qrcode": "^2.3.8",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
+    "mediabunny": "^1.49.0",
     "next-themes": "^0.3.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
