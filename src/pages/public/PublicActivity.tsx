@@ -107,28 +107,7 @@ export default function PublicActivity() {
       'linear-gradient(135deg, #1f1409 0%, #3b2410 38%, #6b3a18 70%, #b48142 100%)',
   } as const;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={bgStyle}>
-        <Loader2 className="w-6 h-6 animate-spin text-amber-200" />
-      </div>
-    );
-  }
-  if (error || !activity) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={bgStyle}>
-        <p className="text-[13px] text-[#ffe7bd]/80 text-center">
-          活动暂时无法打开,请稍后再试
-        </p>
-      </div>
-    );
-  }
-
-  const v = activity.voucher;
-  const fields: ActivityField[] = activity.form_fields || [];
-  const now = new Date();
-  const notStarted = activity.starts_at && new Date(activity.starts_at) > now;
-  const ended = activity.ends_at && new Date(activity.ends_at) < now;
+  const v = activity?.voucher;
   const fmt = (s: string) => {
     const d = new Date(s);
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -136,6 +115,7 @@ export default function PublicActivity() {
   };
 
   const agreementText = useMemo(() => {
+    if (!activity) return '';
     const desc: string = activity.description || '';
     const isExplore = /小红书|探店|笔记|种草|发布|文案|xhs/i.test(desc);
     const timeRange = `${activity.starts_at ? fmt(activity.starts_at) : '不限'} 至 ${activity.ends_at ? fmt(activity.ends_at) : '不限'}`;
@@ -175,6 +155,30 @@ ${isExplore ? '六' : '五'}、违约与争议处理
 ${isExplore ? '七' : '六'}、最终解释权
 在不违反法律强制性规定的前提下，本活动及本协议的最终解释权归 BOOMER-OFF 中古门店所有。`;
   }, [activity, v]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={bgStyle}>
+        <Loader2 className="w-6 h-6 animate-spin text-amber-200" />
+      </div>
+    );
+  }
+  if (error || !activity) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6" style={bgStyle}>
+        <p className="text-[13px] text-[#ffe7bd]/80 text-center">
+          活动暂时无法打开,请稍后再试
+        </p>
+      </div>
+    );
+  }
+
+  const fields: ActivityField[] = activity.form_fields || [];
+  const now = new Date();
+  const notStarted = activity.starts_at && new Date(activity.starts_at) > now;
+  const ended = activity.ends_at && new Date(activity.ends_at) < now;
+
+
 
 
   return (
