@@ -1,5 +1,5 @@
 // 活动详情：信息卡 + 统计 + 申请/领取列表 + 底部操作（修改/删除）
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
