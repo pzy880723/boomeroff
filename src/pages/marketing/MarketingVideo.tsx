@@ -48,13 +48,14 @@ export default function MarketingVideo() {
   const [highlight, setHighlight] = useState('');
   const [brief, setBrief] = useState<BriefMsg[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [character, setCharacter] = useState<Character | null>(null);
 
   const [generating, setGenerating] = useState(false);
   const [script, setScript] = useState<any>(null);
   const [rendering, setRendering] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
 
-  useEffect(() => { setScript(null); setJobId(null); }, [shopId]);
+  useEffect(() => { setScript(null); setJobId(null); setCharacter(null); }, [shopId]);
 
   const userTurns = brief.filter((m) => m.role === 'user').length;
 
