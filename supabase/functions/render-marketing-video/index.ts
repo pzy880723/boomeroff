@@ -330,6 +330,8 @@ Deno.serve(async (req) => {
         segment_total: segmentTotal,
         segment_done: 0,
         stage: "generating",
+        character_id: character?.id || null,
+        character_name: character?.name || null,
       },
     });
 
