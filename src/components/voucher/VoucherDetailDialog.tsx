@@ -158,7 +158,7 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
               : null;
             return (
               <>
-                <div className="grid grid-cols-3 gap-2">
+                <div className={isAdmin ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-2'}>
                   <Button onClick={directRelease} disabled={creating || cannotRelease} className="h-11">
                     {creating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
                     发放
