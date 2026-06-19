@@ -58,6 +58,7 @@ export default function PublicActivity() {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [agreementOpen, setAgreementOpen] = useState(false);
+  const [descOpen, setDescOpen] = useState(false);
 
   useEffect(() => {
     if (!shareToken) return;
