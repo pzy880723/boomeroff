@@ -51,6 +51,19 @@ export default function MarketingLibrary() {
   };
   useEffect(() => { load(); }, [user]);
 
+  // 加载角色（按当前店铺）
+  useEffect(() => {
+    if (!shopId) { setCharacters([]); return; }
+    (async () => {
+      const { data } = await supabase
+        .from('marketing_characters' as any)
+        .select('*')
+        .eq('shop_id', shopId)
+        .order('created_at', { ascending: false });
+      setCharacters((data as any[]) || []);
+    })();
+  }, [shopId]);
+
   // 客户端拼接锁:每个 asset 只触发一次
   const stitchingRef = useRef<Set<string>>(new Set());
 
