@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock } from 'lucide-react';
@@ -11,6 +11,7 @@ import { ShopFilterChips } from '@/components/marketing/ShopPicker';
 import { ShopProfilePanel } from '@/components/marketing/ShopProfilePanel';
 import { UploadAssetDialog } from '@/components/marketing/UploadAssetDialog';
 import { useEffectiveShop } from '@/hooks/useShops';
+import { stitchSegmentUrls } from '@/lib/stitchVideos';
 
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'profile';
 
