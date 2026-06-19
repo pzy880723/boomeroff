@@ -11,14 +11,14 @@ import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ShopPicker } from '@/components/marketing/ShopPicker';
-import { recallShop } from '@/hooks/useShops';
+import { useEffectiveShop } from '@/hooks/useShops';
 
 interface Toggles { exposure: boolean; geometry: boolean; denoise: boolean; declutter: boolean; bg_clean: boolean; }
 
 export default function MarketingPhoto() {
   const { user } = useAuth();
   const nav = useNavigate();
-  const [shopId, setShopId] = useState<string | null>(recallShop());
+  const { shopId, setShopId, isAdmin } = useEffectiveShop();
   const [origUrl, setOrigUrl] = useState<string | null>(null);
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,7 +65,7 @@ export default function MarketingPhoto() {
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
         <StepBar steps={['选店铺', '上传图', '选修复项', '出图']} current={!shopId ? 0 : !origUrl ? 1 : !outputUrl ? 2 : 3} />
 
-        <ShopPicker value={shopId} onChange={setShopId} />
+        <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
 
         {!shopId && (
           <p className="text-center text-[12px] text-muted-foreground py-6">请先选择店铺，再开始优化图片。</p>

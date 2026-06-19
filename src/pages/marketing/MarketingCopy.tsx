@@ -10,7 +10,7 @@ import { UploadGrid } from './UploadGrid';
 import { StepBar } from './StepBar';
 import { toast } from 'sonner';
 import { ShopPicker } from '@/components/marketing/ShopPicker';
-import { recallShop } from '@/hooks/useShops';
+import { useEffectiveShop } from '@/hooks/useShops';
 
 
 type Platform = 'xhs' | 'douyin' | 'shipinhao' | 'pyq';
@@ -30,7 +30,7 @@ export default function MarketingCopy() {
   const loc = useLocation();
 
   const initial: string[] = (loc.state as any)?.image_urls || [];
-  const [shopId, setShopId] = useState<string | null>((loc.state as any)?.shop_id || recallShop());
+  const { shopId, setShopId, isAdmin } = useEffectiveShop();
   const [urls, setUrls] = useState<string[]>(initial);
   const [platform, setPlatform] = useState<Platform>('xhs');
   const [tone, setTone] = useState<string>('种草');
@@ -66,7 +66,7 @@ export default function MarketingCopy() {
           current={!shopId ? 0 : urls.length === 0 ? 1 : cands.length === 0 ? 2 : 3}
         />
 
-        <ShopPicker value={shopId} onChange={setShopId} />
+        <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
 
         {shopId && <UploadGrid urls={urls} onChange={setUrls} max={9} preset="thumb" title="素材" />}
 
