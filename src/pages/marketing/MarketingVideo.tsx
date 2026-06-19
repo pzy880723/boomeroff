@@ -298,8 +298,8 @@ export default function MarketingVideo() {
         open={pickerOpen}
         onOpenChange={setPickerOpen}
         shopId={shopId}
-        max={6 - urls.length}
-        onConfirm={(picked) => { setUrls([...urls, ...picked].slice(0, 6)); setScript(null); }}
+        max={20 - urls.length}
+        onConfirm={(picked) => { setUrls([...urls, ...picked].slice(0, 20)); setScript(null); }}
       />
     </>
   );
