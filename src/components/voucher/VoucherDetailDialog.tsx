@@ -211,7 +211,7 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
                         <Badge variant={CLAIM_STATUS_VARIANT[c.status]} className="shrink-0 text-[10px] px-1.5 py-0">
                           {CLAIM_STATUS_LABEL[c.status]}
                         </Badge>
-                        {c.status === 'unclaimed' && (
+                        {c.status === 'claimed' && !c.redeemed_at && (
                           <button
                             onClick={async () => {
                               try {
