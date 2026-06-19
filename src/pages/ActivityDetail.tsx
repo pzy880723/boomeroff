@@ -356,6 +356,16 @@ export default function ActivityDetail() {
         onPosterSaved={(url) => setActivity((a) => a ? { ...a, poster_url: url } : a)}
       />
 
+      <PublishConfirmDialog
+        open={!!confirmApp}
+        onOpenChange={(v) => { if (!v) setConfirmApp(null); }}
+        app={confirmApp}
+        fields={activity.form_fields || []}
+        onSaved={() => load(true)}
+      />
+
+
+
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
