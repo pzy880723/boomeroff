@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     const presets = await loadMarketingPresets();
 
     const body = await req.json().catch(() => ({}));
-    const imageUrls: string[] = Array.isArray(body.image_urls) ? body.image_urls.slice(0, 10) : [];
+    const imageUrls: string[] = Array.isArray(body.image_urls) ? body.image_urls.slice(0, 20) : [];
     const videoType: VideoType = (Object.keys(presets.videoRules) as VideoType[]).includes(body.video_type)
       ? body.video_type : "store_tour";
     const duration: number = [15, 20, 30].includes(Number(body.duration)) ? Number(body.duration) : 15;
@@ -40,6 +40,7 @@ Deno.serve(async (req) => {
     const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
+    const character = (body.character && typeof body.character === "object") ? body.character : null;
 
     const rule = presets.videoRules[videoType];
 
