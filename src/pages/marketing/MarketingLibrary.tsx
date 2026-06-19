@@ -30,6 +30,9 @@ export default function MarketingLibrary() {
   const [detail, setDetail] = useState<any | null>(null);
   const [tab, setTab] = useState<KindTab>('all');
   const [uploadKind, setUploadKind] = useState<'photo' | 'copy' | 'video' | null>(null);
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [characterDetail, setCharacterDetail] = useState<any | null>(null);
+  const [createCharOpen, setCreateCharOpen] = useState(false);
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
   const currentShop = shops.find((s) => s.id === shopId);
