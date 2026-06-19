@@ -202,6 +202,7 @@ export default function MarketingLibrary() {
     { v: 'photo', label: '图片' },
     { v: 'copy', label: '文案' },
     { v: 'video', label: '视频' },
+    { v: 'character', label: '角色' },
     { v: 'profile', label: '店铺描述' },
   ];
 
