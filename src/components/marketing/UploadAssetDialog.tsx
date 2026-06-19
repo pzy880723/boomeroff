@@ -28,11 +28,12 @@ export function UploadAssetDialog({
   const [bodyText, setBodyText] = useState('');
   // video
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  // photo
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  // photo (multi)
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [progress, setProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
 
   const reset = () => {
-    setTitle(''); setBodyText(''); setVideoFile(null); setPhotoFile(null);
+    setTitle(''); setBodyText(''); setVideoFile(null); setPhotoFiles([]); setProgress({ done: 0, total: 0 });
   };
 
   const insertAsset = async (row: any) => {
@@ -50,15 +51,26 @@ export function UploadAssetDialog({
     setBusy(true);
     try {
       if (kind === 'photo') {
-        if (!photoFile) { toast.error('请选择图片'); setBusy(false); return; }
-        const [url] = await uploadMarketingImages(user.id, [photoFile], { preset: 'hd' });
-        if (!url) throw new Error('图片上传失败');
-        const row = await insertAsset({
-          kind: 'photo', output_url: url, input_image_urls: [url],
-          meta: { source: 'manual_upload' },
-        });
-        onUploaded(row);
-        toast.success('已加入素材库');
+        if (photoFiles.length === 0) { toast.error('请选择图片'); setBusy(false); return; }
+        setProgress({ done: 0, total: photoFiles.length });
+        const uploaded: any[] = [];
+        // upload sequentially in small batches to keep mobile memory stable
+        for (let i = 0; i < photoFiles.length; i += 3) {
+          const batch = photoFiles.slice(i, i + 3);
+          const urls = await uploadMarketingImages(user.id, batch, { preset: 'hd' });
+          for (let j = 0; j < urls.length; j++) {
+            const url = urls[j];
+            if (!url) continue;
+            const row = await insertAsset({
+              kind: 'photo', output_url: url, input_image_urls: [url],
+              meta: { source: 'manual_upload', filename: batch[j]?.name },
+            });
+            uploaded.push(row);
+            onUploaded(row);
+            setProgress((p) => ({ ...p, done: p.done + 1 }));
+          }
+        }
+        toast.success(`已上传 ${uploaded.length} 张图片到素材库`);
       } else if (kind === 'copy') {
         const t = title.trim(); const b = bodyText.trim();
         if (!b) { toast.error('请填写文案正文'); setBusy(false); return; }
@@ -110,17 +122,39 @@ export function UploadAssetDialog({
         {kind === 'photo' && (
           <div className="space-y-3">
             <label className="block border-2 border-dashed border-accent/35 rounded-xl p-6 text-center cursor-pointer hover:bg-accent/[0.04]">
-              {photoFile ? (
-                <p className="text-sm">{photoFile.name}</p>
+              {photoFiles.length > 0 ? (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">已选 {photoFiles.length} 张</p>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {photoFiles.slice(0, 3).map((f) => f.name).join('、')}{photoFiles.length > 3 ? ` 等${photoFiles.length}张` : ''}
+                  </p>
+                  <p className="text-[11px] text-accent">点击可重新选择</p>
+                </div>
               ) : (
                 <>
                   <Upload className="w-5 h-5 mx-auto mb-2 text-accent" />
-                  <p className="text-sm">点击选择图片</p>
-                  <p className="text-[11px] text-muted-foreground mt-1">JPG / PNG / HEIC</p>
+                  <p className="text-sm">点击选择图片（可多选）</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">JPG / PNG / HEIC · 支持手机相册批量选择</p>
                 </>
               )}
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  setPhotoFiles(files);
+                  // allow re-selecting the same files later
+                  e.currentTarget.value = '';
+                }}
+              />
             </label>
+            {busy && progress.total > 0 && (
+              <p className="text-[11px] text-muted-foreground text-center">
+                上传中 {progress.done}/{progress.total}…
+              </p>
+            )}
           </div>
         )}
 
