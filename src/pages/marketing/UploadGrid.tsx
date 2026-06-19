@@ -43,55 +43,138 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
   const updateItem = (id: string, patch: Partial<Item>) =>
     setItems(prev => prev.map(it => (it.id === id ? { ...it, ...patch } : it)));
 
+  // 单文件：算 hash → 查我自己的素材库 → 命中则复用 URL，否则压缩上传 + 入库。
+  // 返回 { url, reused } 或抛错。
+  const processOne = async (
+    file: File,
+    onStage: (s: UploadStage, url?: string, error?: string) => void,
+  ): Promise<{ url: string; reused: boolean }> => {
+    if (!user) throw new Error('未登录');
+    onStage('compressing');
+    const hash = await fileSha256(file);
+
+    // 查重：当前用户自己的素材库
+    try {
+      const { data: hit } = await supabase
+        .from('marketing_assets' as any)
+        .select('id, output_url, meta')
+        .eq('created_by', user.id)
+        .eq('meta->>sha256', hash)
+        .not('output_url', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      const hitUrl = (hit as any)?.output_url as string | undefined;
+      if (hitUrl) {
+        onStage('done', hitUrl);
+        return { url: hitUrl, reused: true };
+      }
+    } catch {
+      // 查询失败不阻塞上传
+    }
+
+    // 没命中：走原流程
+    let finalUrl: string | undefined;
+    let finalErr: string | undefined;
+    await uploadMarketingImages(user.id, [file], {
+      preset,
+      onProgress: ({ stage, url, error }) => {
+        onStage(stage, url, error);
+        if (stage === 'done' && url) finalUrl = url;
+        if (stage === 'error') finalErr = error;
+      },
+    });
+    if (!finalUrl) throw new Error(finalErr || '上传失败');
+
+    // 入库（失败不阻塞参考图使用）
+    try {
+      await supabase.from('marketing_assets' as any).insert({
+        created_by: user.id,
+        kind: 'photo',
+        output_url: finalUrl,
+        input_image_urls: [finalUrl],
+        meta: { source: 'reference_upload', sha256: hash, filename: file.name },
+      });
+    } catch {
+      // ignore
+    }
+    return { url: finalUrl, reused: false };
+  };
+
   const onPick = async (files: FileList | null) => {
     if (!files || !user) return;
-    const arr = Array.from(files).slice(0, remaining);
-    if (!arr.length) {
+    const picked = Array.from(files).slice(0, remaining);
+    if (!picked.length) {
       toast.error(`最多 ${max} 张`);
       return;
     }
-    const newItems: Item[] = arr.map(f => ({
+
+    // 同一批内按 hash 排重
+    const hashes = await Promise.all(picked.map((f) => fileSha256(f).catch(() => `r-${Math.random()}`)));
+    const seen = new Set<string>();
+    const arr: File[] = [];
+    const localDupCount = picked.length - new Set(hashes).size;
+    picked.forEach((f, i) => {
+      const h = hashes[i];
+      if (seen.has(h)) return;
+      seen.add(h);
+      arr.push(f);
+    });
+
+    const newItems: Item[] = arr.map((f) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       file: f,
       preview: URL.createObjectURL(f),
       stage: 'queued',
     }));
-    setItems(prev => [...prev, ...newItems]);
+    setItems((prev) => [...prev, ...newItems]);
 
     const successUrls: string[] = [];
-    await uploadMarketingImages(user.id, arr, {
-      preset,
-      onProgress: ({ index, stage, url, error }) => {
-        const it = newItems[index];
-        if (!it) return;
-        updateItem(it.id, { stage, url, error });
-        if (stage === 'done' && url) successUrls.push(url);
-      },
-    });
-    // 把成功的合并进父级 urls;失败的留在 items 让用户看到红色失败块
-    if (successUrls.length) onChange([...urls, ...successUrls]);
-    setItems(prev => prev.filter(it => it.stage !== 'done'));
+    let reusedCount = 0;
+    await Promise.all(
+      newItems.map(async (it) => {
+        try {
+          const { url, reused } = await processOne(it.file, (stage, url, error) =>
+            updateItem(it.id, { stage, url, error }),
+          );
+          successUrls.push(url);
+          if (reused) reusedCount += 1;
+        } catch (e: any) {
+          updateItem(it.id, { stage: 'error', error: e?.message || '失败' });
+        }
+      }),
+    );
 
+    if (successUrls.length) onChange([...urls, ...successUrls]);
+    setItems((prev) => prev.filter((it) => it.stage !== 'done'));
+
+    const newlyAdded = successUrls.length - reusedCount;
+    const dedupTotal = reusedCount + localDupCount;
+    if (newlyAdded > 0 || dedupTotal > 0) {
+      const parts: string[] = [];
+      if (newlyAdded > 0) parts.push(`已加入素材库 ${newlyAdded} 张`);
+      if (dedupTotal > 0) parts.push(`去重 ${dedupTotal} 张`);
+      toast.success(parts.join(' · '));
+    }
   };
 
   const removeUrl = (i: number) => onChange(urls.filter((_, j) => j !== i));
-  const removeItem = (id: string) => setItems(prev => prev.filter(it => it.id !== id));
+  const removeItem = (id: string) => setItems((prev) => prev.filter((it) => it.id !== id));
   const retryOne = async (id: string) => {
     if (!user) return;
-    const it = items.find(x => x.id === id);
+    const it = items.find((x) => x.id === id);
     if (!it) return;
     updateItem(id, { stage: 'queued', error: undefined });
-    await uploadMarketingImages(user.id, [it.file], {
-      preset,
-      onProgress: ({ stage, url, error }) => {
-        updateItem(id, { stage, url, error });
-        if (stage === 'done' && url) {
-          onChange([...urls, url]);
-          setTimeout(() => removeItem(id), 50);
-        }
-      },
-    });
+    try {
+      const { url } = await processOne(it.file, (stage, url, error) =>
+        updateItem(id, { stage, url, error }),
+      );
+      onChange([...urls, url]);
+      setTimeout(() => removeItem(id), 50);
+    } catch (e: any) {
+      updateItem(id, { stage: 'error', error: e?.message || '失败' });
+    }
   };
+
 
   return (
     <div className="bg-card rounded-[0.875rem] shadow-sm overflow-hidden border border-accent/15">
