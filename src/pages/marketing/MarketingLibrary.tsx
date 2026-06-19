@@ -12,8 +12,11 @@ import { ShopProfilePanel } from '@/components/marketing/ShopProfilePanel';
 import { UploadAssetDialog } from '@/components/marketing/UploadAssetDialog';
 import { useEffectiveShop } from '@/hooks/useShops';
 import { stitchSegmentUrls } from '@/lib/stitchVideos';
+import { CharacterCard } from '@/components/marketing/CharacterCard';
+import { CharacterDialog } from '@/components/marketing/CharacterDialog';
+import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
 
-type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'profile';
+type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
 export default function MarketingLibrary() {
   const { user } = useAuth();
@@ -27,6 +30,9 @@ export default function MarketingLibrary() {
   const [detail, setDetail] = useState<any | null>(null);
   const [tab, setTab] = useState<KindTab>('all');
   const [uploadKind, setUploadKind] = useState<'photo' | 'copy' | 'video' | null>(null);
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [characterDetail, setCharacterDetail] = useState<any | null>(null);
+  const [createCharOpen, setCreateCharOpen] = useState(false);
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
   const currentShop = shops.find((s) => s.id === shopId);
@@ -44,6 +50,19 @@ export default function MarketingLibrary() {
     setLoading(false);
   };
   useEffect(() => { load(); }, [user]);
+
+  // 加载角色（按当前店铺）
+  useEffect(() => {
+    if (!shopId) { setCharacters([]); return; }
+    (async () => {
+      const { data } = await supabase
+        .from('marketing_characters' as any)
+        .select('*')
+        .eq('shop_id', shopId)
+        .order('created_at', { ascending: false });
+      setCharacters((data as any[]) || []);
+    })();
+  }, [shopId]);
 
   // 客户端拼接锁:每个 asset 只触发一次
   const stitchingRef = useRef<Set<string>>(new Set());
@@ -202,6 +221,7 @@ export default function MarketingLibrary() {
     { v: 'photo', label: '图片' },
     { v: 'copy', label: '文案' },
     { v: 'video', label: '视频' },
+    { v: 'character', label: '角色' },
     { v: 'profile', label: '店铺描述' },
   ];
 
@@ -253,8 +273,31 @@ export default function MarketingLibrary() {
           <ShopProfilePanel shopId={shopId} shopName={shopName(shopId)} />
         )}
 
+        {/* 角色库 */}
+        {tab === 'character' && shopId && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <p className="text-[11px] text-muted-foreground">本店共 {characters.length} 个角色</p>
+              <Button size="sm" variant="outline" onClick={() => setCreateCharOpen(true)} className="h-8">
+                <Plus className="w-3.5 h-3.5" />新建角色
+              </Button>
+            </div>
+            {characters.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-12">
+                还没有角色。新建一个,生成视频时用 TA 锁定主角。
+              </p>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
+                {characters.map((c) => (
+                  <CharacterCard key={c.id} character={c} onClick={() => setCharacterDetail(c)} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* 素材列表 */}
-        {tab !== 'profile' && shopId && (<>
+        {tab !== 'profile' && tab !== 'character' && shopId && (<>
           {/* 上传按钮 + 管理 */}
           <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
             <div className="flex gap-1.5">
@@ -443,6 +486,20 @@ export default function MarketingLibrary() {
           onUploaded={(row) => setItems((prev) => [row, ...prev])}
         />
       )}
+
+      <CharacterCreateDialog
+        open={createCharOpen}
+        onOpenChange={setCreateCharOpen}
+        shopId={shopId}
+        onCreated={(c) => setCharacters((prev) => [c, ...prev])}
+      />
+      <CharacterDialog
+        character={characterDetail}
+        open={!!characterDetail}
+        onOpenChange={(o) => !o && setCharacterDetail(null)}
+        onUpdated={(c) => { setCharacters((prev) => prev.map((x) => x.id === c.id ? c : x)); setCharacterDetail(c); }}
+        onDeleted={(id) => { setCharacters((prev) => prev.filter((x) => x.id !== id)); setCharacterDetail(null); }}
+      />
 
       <AlertDialog open={confirmDel} onOpenChange={setConfirmDel}>
         <AlertDialogContent>

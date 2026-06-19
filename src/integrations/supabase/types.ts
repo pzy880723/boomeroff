@@ -692,6 +692,68 @@ export type Database = {
           },
         ]
       }
+      marketing_characters: {
+        Row: {
+          auto_anchor: boolean
+          core_emotion: string | null
+          cover_url: string
+          created_at: string
+          created_by: string
+          id: string
+          meta: Json
+          name: string
+          prompt: string | null
+          ref_image_urls: Json
+          role_label: string | null
+          shop_id: string
+          source: string
+          updated_at: string
+          visual_signature: string | null
+        }
+        Insert: {
+          auto_anchor?: boolean
+          core_emotion?: string | null
+          cover_url: string
+          created_at?: string
+          created_by: string
+          id?: string
+          meta?: Json
+          name: string
+          prompt?: string | null
+          ref_image_urls?: Json
+          role_label?: string | null
+          shop_id: string
+          source?: string
+          updated_at?: string
+          visual_signature?: string | null
+        }
+        Update: {
+          auto_anchor?: boolean
+          core_emotion?: string | null
+          cover_url?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          meta?: Json
+          name?: string
+          prompt?: string | null
+          ref_image_urls?: Json
+          role_label?: string | null
+          shop_id?: string
+          source?: string
+          updated_at?: string
+          visual_signature?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_characters_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketing_presets: {
         Row: {
           id: string

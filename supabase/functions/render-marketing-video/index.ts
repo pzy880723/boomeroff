@@ -16,10 +16,13 @@ const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generati
 const DEFAULT_MODEL = "doubao-seedance-1-5-pro-251215";
 const MAX_SEG_DUR = 10; // 单段渲染上限(秒),给 Seedance 留余量
 
-function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string, segLabel?: string): string {
+function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string, segLabel?: string, character?: any): string {
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const lines: string[] = [];
   lines.push(`严格按以下分镜拍摄,不要增加、删减或调换镜头顺序。`);
+  if (character?.name) {
+    lines.push(`【主角锁定】每段必须出现同一主角:${character.name}(${character.role_label || '主角'})。外观锁:${character.visual_signature || '以首帧参考身份板为准'}。面部、发型、服装、体型、年龄、气质严格一致,严禁换人或换装。`);
+  }
   if (segLabel) lines.push(`这是【${segLabel}】,后续会与其他段无缝拼接,请保持画面、光线、调色与人物连贯。`);
   lines.push(`整体风格:${styleEn}。品牌:BOOMER·OFF 中古二手杂货店,货架密集,室内暖色调。`);
   if (shopBlock) lines.push(`店铺背景(中文,用于影响氛围与字幕):\n${shopBlock}`);
@@ -198,11 +201,14 @@ Deno.serve(async (req) => {
     const ratio = normalizeRatio(script.aspect);
     const totalDur = Number(script.total_duration_s) || 0;
     const imageUrls: string[] = Array.isArray(script.image_urls) ? script.image_urls : [];
-    const firstImage = imageUrls[0];
+    const character = (script.character && typeof script.character === "object") ? script.character : null;
+    // 优先顺序：用户镜头参考图 > 角色身份板封面（保持人物一致性）
+    const characterCover: string | undefined = character?.cover_url;
+    const firstImage = imageUrls[0] || characterCover;
 
     // ============ 单段路径 ============
     if (totalDur <= MAX_SEG_DUR + 2) {
-      const prompt = buildPrompt(script, styleKey, shopBlock);
+      const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
       const r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, firstImage });
       if (!r.ok) {
@@ -240,6 +246,8 @@ Deno.serve(async (req) => {
           model,
           status: "queued",
           segment_total: 1,
+          character_id: character?.id || null,
+          character_name: character?.name || null,
         },
       });
       return json({ success: true, job_id: job.id, task_id: r.id, status: "queued", segment_total: 1 });
@@ -272,10 +280,12 @@ Deno.serve(async (req) => {
     for (let i = 0; i < subScripts.length; i++) {
       const sub = subScripts[i];
       const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
-      const prompt = buildPrompt(sub, styleKey, shopBlock, label);
+      const prompt = buildPrompt(sub, styleKey, shopBlock, label, character);
       const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
-      // 仅第一段允许首帧引导,其余段不带首帧避免风格跳跃
-      const useFirst = i === 0 ? firstImage : undefined;
+      // 跨段一致性策略：
+      //   有角色身份板 → 每段都用角色封面做 first_frame（最大化主角锁定）
+      //   无角色 → 仅第 1 段用用户参考图 first_frame
+      const useFirst = characterCover || (i === 0 ? firstImage : undefined);
       const r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, firstImage: useFirst });
       if (!r.ok) {
         console.error("[render multi] seg", i, "ark error", r.error);
@@ -320,6 +330,8 @@ Deno.serve(async (req) => {
         segment_total: segmentTotal,
         segment_done: 0,
         stage: "generating",
+        character_id: character?.id || null,
+        character_name: character?.name || null,
       },
     });
 
