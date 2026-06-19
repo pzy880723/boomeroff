@@ -487,6 +487,20 @@ export default function MarketingLibrary() {
         />
       )}
 
+      <CharacterCreateDialog
+        open={createCharOpen}
+        onOpenChange={setCreateCharOpen}
+        shopId={shopId}
+        onCreated={(c) => setCharacters((prev) => [c, ...prev])}
+      />
+      <CharacterDialog
+        character={characterDetail}
+        open={!!characterDetail}
+        onOpenChange={(o) => !o && setCharacterDetail(null)}
+        onUpdated={(c) => { setCharacters((prev) => prev.map((x) => x.id === c.id ? c : x)); setCharacterDetail(c); }}
+        onDeleted={(id) => { setCharacters((prev) => prev.filter((x) => x.id !== id)); setCharacterDetail(null); }}
+      />
+
       <AlertDialog open={confirmDel} onOpenChange={setConfirmDel}>
         <AlertDialogContent>
           <AlertDialogHeader>
