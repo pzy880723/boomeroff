@@ -1,109 +1,53 @@
-# 方案:素材库按店铺维度组织 + 视频生成接入店铺与素材库
+# 方案：店铺关联 + AI 店铺描述 + 素材按店铺管理
 
-## 一、数据层
+## 1. 营销中心默认店铺（自动关联 / 记忆）
 
-### 1. 给 `marketing_assets` 加店铺归属
-- 新增列 `shop_id uuid REFERENCES public.shops(id) ON DELETE SET NULL`(可空,兼容历史数据)
-- 索引 `(shop_id, kind, created_at DESC)`,方便按店铺分组列表
-- RLS 不变(仍按 `auth.uid()` 私有);策略不需要改
+修改 `useShops` 与各营销页（MarketingLibrary / MarketingPhoto / MarketingCopy / MarketingVideo）的店铺选择逻辑：
 
-### 2. 给 `marketing_video_jobs` 加 `shop_id`
-- 同上,可空,索引 `(shop_id, created_at DESC)`
-- 用于"按店铺看渲染历史"
+- 新增 `useDefaultShop()`：
+  - 读 `staff_profiles.shop_id`（当前账号所在店铺）作为「默认店铺」
+  - 读 `usePermissions().can('shop.write')` 或角色判断是否管理员
+  - 优先级：`localStorage(marketing_last_shop)` → `staff_profiles.shop_id` → 第一个 shop
+- 非管理员：店铺锁定为 `staff_profiles.shop_id`，UI 只显示店铺名（不显示切换器），无 `ShopPicker`
+- 管理员：显示 `ShopPicker` 可切换；切换后 `rememberShop()` 写入 localStorage，下次进入直接用记住的值
+- 进入营销页时无需再"先选店铺"，直接进入对应店铺的视图
 
-### 3. 新增「店铺描述」表 `shop_marketing_profiles`
-专门承载营销视角的店铺画像(和现有 `shops` 基础信息、`shop_kb_entries` SOP 区分开)。
+## 2. AI 自动生成店铺描述
 
-字段:
-- `shop_id uuid PK REFERENCES shops(id) ON DELETE CASCADE`
-- `tagline text` — 一句话定位
-- `description text` — 店铺详细介绍(选品风格、客群、地段氛围)
-- `selling_points jsonb` — 卖点数组
-- `tone text` — 偏好口吻(治愈/活泼/稳重…)
-- `target_audience text` — 目标人群
-- `brand_keywords text[]` — 品牌关键词
-- `cover_image_url text` — 店铺封面图
-- `default_hashtags text[]` — 默认话题标签
-- `updated_by uuid`, `created_at`, `updated_at`
+在 `ShopProfilePanel` 顶部新增「✨ AI 自动生成」按钮：
 
-授权:
-- 读:所有 authenticated(店员要选店时能看)
-- 写/删:有 `shop.write` 权限的人(沿用现有权限体系)
-- 必带 GRANT + RLS + 触发器 `updated_at`
+- 用户在 textarea 输入一段自然语言（如"我们是一家位于东京中野的中古玩具店，主打80-90年代日系玩具…"）
+- 点击生成 → 调用新 edge function `generate-shop-profile`
+  - 输入：自然语言文本 + 店铺名/地址
+  - 用 Lovable AI（google/gemini-2.5-flash）生成结构化 JSON：tagline / description / selling_points[] / tone / target_audience / brand_keywords[] / default_hashtags[]
+  - 返回后**填充到表单**（不直接落库），用户可手动微调后点「保存」
+- 已有内容时生成会提示"将覆盖当前内容，是否继续"
 
-## 二、素材库 UI(`MarketingLibrary.tsx`)
+## 3. 素材库手动上传 + 按店铺分类
 
-### 1. 顶部加「店铺切换器」
-- 横向 Chips:全部 / 各店铺(从 `shops` 拉取 active)
-- 选中后所有列表(图片/文案/视频)按 `shop_id` 过滤
-- 记住上次选择(localStorage `marketing_last_shop`),后续新建素材默认带上
+`MarketingLibrary` 页面：
 
-### 2. 新增 Tab「店铺描述」
-当选定具体某一店铺时显示,展示并允许编辑该店的 `shop_marketing_profiles`:
-- 封面图 + 一句话定位
-- 店铺详细介绍、卖点、口吻、目标人群、关键词、默认话题
-- 「保存」按钮(权限校验)
-- 没有 profile 的店铺显示「去完善店铺描述」空态
+- 顶部：当前店铺显示（管理员可切换，员工锁定为本店）
+- 三个 Tab：图片 / 文案 / 视频
+- 每个 Tab 顶部新增「+ 上传」按钮：
+  - **图片**：选本地图片 → 压缩 → 上传到 `product-images` bucket → 插入 `marketing_assets`(kind='photo', shop_id=当前)
+  - **文案**：弹窗输入标题+正文 → 插入 `marketing_assets`(kind='copy', shop_id=当前)
+  - **视频**：选本地视频 → 上传到 `marketing-videos` bucket → 插入 `marketing_assets`(kind='video', shop_id=当前)
+- 列表项左侧已有缩略图（图片显示首图，视频显示首帧/封面，文案显示文本图标）—— 保持不变
 
-### 3. 列表卡片改造:左缩略图布局
-现在是网格式,改成左缩略图 + 右文字的横向列表:
+## 4. 技术细节
 
-```text
-┌──────┬─────────────────────────────────────┐
-│      │ 标题(name / 文案首句 / 视频脚本主题)│
-│ 80×80│ 平台徽章 / 视频状态 / kind 标签     │
-│ 缩略 │ 店铺名 · 时间                       │
-└──────┴─────────────────────────────────────┘
-```
+新文件：
+- `supabase/functions/generate-shop-profile/index.ts` — Lovable AI 调用，输出结构化 JSON
+- `src/hooks/useDefaultShop.ts` — 默认店铺解析（包含 staff_profiles.shop_id + admin 判定）
+- `src/components/marketing/UploadCopyDialog.tsx` — 上传文案
+- `src/components/marketing/UploadVideoDialog.tsx` — 上传视频
+- 复用 `uploadMarketingImages.ts` 做图片上传
 
-缩略图取值:
-- `kind='photo'`:`output_url`
-- `kind='video'`:`meta.cover_url` → 取不到则 `<video preload="metadata" #t=0.5>` 自动截首帧
-- `kind='copy'`:平台彩色图标方块(小红书/抖音/视频号/朋友圈)+ 取首张 `input_image_urls[0]` 当背景(若有)
+修改：
+- `src/hooks/useShops.ts` — 暴露 `useDefaultShop`
+- `src/pages/marketing/MarketingLibrary.tsx` — 添加上传按钮 + 默认店铺逻辑 + 员工锁定 UI
+- `src/pages/marketing/MarketingPhoto.tsx` / `MarketingCopy.tsx` / `MarketingVideo.tsx` — 同样改默认店铺逻辑（不再强制 ShopPicker，员工锁定）
+- `src/components/marketing/ShopProfilePanel.tsx` — 新增"AI 自动生成"按钮 + 自然语言输入区
 
-点击仍打开 `AssetDetailDialog`。
-
-## 三、新建素材必须先选店铺
-
-### 1. `MarketingPhoto.tsx` / `MarketingCopy.tsx` / `MarketingVideo.tsx`
-顶部加一行强制「店铺选择器」(Select):
-- 默认值 = 上次选择 / URL `?shop=xxx` / 当前用户 `staff_profiles.shop_id`
-- 未选店铺时,后续步骤(拍图/写文案/生成视频)按钮禁用 + 提示「请先选择店铺」
-- 入库时把 `shop_id` 一并写入 `marketing_assets` / `marketing_video_jobs`
-
-### 2. 边缘函数
-- `generate-marketing-copy`、`render-marketing-video`、`generate-marketing-video-script`、`marketing-video-brief-chat` 接收新参数 `shop_id`
-- 在生成前 server 端拉 `shop_marketing_profiles` + `shops.name/address`,拼到 system prompt:
-
-  ```
-  店铺信息:{name} · {address}
-  定位:{tagline}
-  介绍:{description}
-  卖点:{selling_points}
-  目标人群:{target_audience}
-  口吻:{tone}
-  关键词:{brand_keywords}
-  ```
-- 没有 profile 时退化为只用店铺名/地址
-
-## 四、视频生成「导入素材库」
-
-`MarketingVideo.tsx` 的参考图步骤新增按钮「从素材库导入」:
-- 打开 `LibraryImagePickerDialog`(新组件),查询当前 `shop_id` 下 `kind='photo'` 的素材
-- 支持多选(尊重当前画幅上限),点击「导入」后把 `output_url` 追加到 `imageUrls` 数组
-- 已有「直接上传」流程保留
-
-## 五、技术细节(给开发看)
-
-- 类型:迁移完成后 `src/integrations/supabase/types.ts` 自动重建,前端用新字段
-- 历史数据:`shop_id` 留空 = "未分类",素材库给一个独立 chip「未分类」
-- 不动业务逻辑:RLS/权限/AI 编排/渲染轮询保持现状,仅增量加 `shop_id`
-- 不做:跨用户共享素材(仍是私有,按用户隔离),也不做店铺级别共享池
-
-## 六、不做(明确划界)
-
-- 不引入新画幅/新模型/新平台
-- 不改 BOOMER 聊天、识别相关流程
-- 不做店铺间素材迁移/批量改归属(后续可加)
-
-完成后可在素材库按店铺浏览全部图/文/视频,每条素材左侧带缩略图;生成视频前必须先选店,AI 会基于该店描述与已有素材生成更贴合的脚本与画面。
+无数据库 schema 变更（沿用现有 `marketing_assets.shop_id`、`staff_profiles.shop_id`、`shop_marketing_profiles`）。
