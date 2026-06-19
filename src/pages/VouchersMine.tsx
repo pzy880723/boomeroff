@@ -33,6 +33,7 @@ export default function VouchersMine() {
     const { data } = await supabase
       .from('vouchers')
       .select('*')
+      .is('deleted_at', null)
       .not('name', 'is', null)
       .order('created_at', { ascending: false });
     setVouchers((data || []) as unknown as VoucherTemplate[]);
