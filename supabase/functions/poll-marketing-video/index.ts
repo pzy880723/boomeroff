@@ -1,4 +1,7 @@
-// 轮询火山方舟 Seedance 任务状态;成功后把 video_url 回写到 marketing_video_jobs 和 marketing_assets。
+// 轮询火山方舟 Seedance 任务状态。
+// - 单段任务: 直接查 ark, 回写 video_url。
+// - 父任务(segment_total>1 且无 provider_task_id): 轮询每个子段, 汇总状态;
+//   全部成功后把 segment_urls 返回给前端, 由前端用 mediabunny 拼接并回写。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -9,6 +12,47 @@ const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const ARK_TASK_BASE = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
+
+function mapArkStatus(s: string): string {
+  if (s === "succeeded") return "succeeded";
+  if (s === "failed" || s === "expired" || s === "cancelled") return "failed";
+  if (s === "queued") return "queued";
+  return "running";
+}
+
+async function pollOne(arkKey: string, taskId: string) {
+  const arkRes = await fetch(`${ARK_TASK_BASE}/${taskId}`, {
+    headers: { "Authorization": `Bearer ${arkKey}` },
+  });
+  const arkJson: any = await arkRes.json().catch(() => ({}));
+  if (!arkRes.ok) {
+    return { status: "running" as const, video_url: null, error: arkJson?.error?.message || `查询失败(${arkRes.status})`, mapped: "running" };
+  }
+  const raw: string = arkJson.status || "running";
+  return {
+    status: raw,
+    video_url: (arkJson?.content?.video_url || arkJson?.video_url) as string | null,
+    error: arkJson?.error?.message as string | undefined,
+    mapped: mapArkStatus(raw),
+  };
+}
+
+async function updateAssetMeta(
+  admin: any, userId: string, jobId: string, patch: Record<string, unknown>, outputUrl?: string | null,
+) {
+  const { data: asset } = await admin
+    .from("marketing_assets")
+    .select("id, meta")
+    .eq("user_id", userId)
+    .eq("kind", "video")
+    .filter("meta->>job_id", "eq", jobId)
+    .maybeSingle();
+  if (!asset) return;
+  const newMeta = { ...(asset.meta || {}), ...patch };
+  const update: Record<string, unknown> = { meta: newMeta };
+  if (outputUrl !== undefined) update.output_url = outputUrl;
+  await admin.from("marketing_assets").update(update).eq("id", asset.id);
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -38,7 +82,91 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (jErr || !job) return json({ error: "任务不存在" }, 404);
 
-    // 已是终态直接返回
+    const isParent = (job.segment_total ?? 0) > 1 && !job.provider_task_id;
+
+    // ============ 父任务 ============
+    if (isParent) {
+      // 终态:已经拼好或失败
+      if (job.status === "succeeded" || job.status === "failed") {
+        return json({
+          status: job.status, is_parent: true, video_url: job.video_url, error: job.error,
+          segment_total: job.segment_total,
+        });
+      }
+
+      const { data: children } = await admin
+        .from("marketing_video_jobs")
+        .select("*")
+        .eq("parent_job_id", jobId)
+        .order("segment_index", { ascending: true });
+
+      const segs = children || [];
+      const segUrls: (string | null)[] = new Array(job.segment_total).fill(null);
+      let done = 0;
+      let anyFailed: string | null = null;
+
+      for (const ch of segs) {
+        let chStatus = ch.status;
+        let chUrl = ch.segment_url || ch.video_url;
+        let chErr = ch.error;
+
+        if (chStatus !== "succeeded" && chStatus !== "failed" && ch.provider_task_id) {
+          const r = await pollOne(ARK_KEY, ch.provider_task_id);
+          chStatus = r.mapped;
+          chUrl = r.video_url || chUrl;
+          chErr = r.error || chErr;
+          await admin.from("marketing_video_jobs").update({
+            status: chStatus,
+            video_url: r.video_url || null,
+            segment_url: r.video_url || null,
+            error: r.error || null,
+            last_polled_at: new Date().toISOString(),
+          }).eq("id", ch.id);
+        }
+
+        if (chStatus === "succeeded" && chUrl) {
+          segUrls[ch.segment_index ?? 0] = chUrl;
+          done += 1;
+        } else if (chStatus === "failed") {
+          anyFailed = chErr || `第 ${(ch.segment_index ?? 0) + 1} 段失败`;
+        }
+      }
+
+      // 汇总写父任务
+      let parentStatus = job.status;
+      if (anyFailed) {
+        parentStatus = "failed";
+        await admin.from("marketing_video_jobs").update({
+          status: "failed", error: anyFailed, last_polled_at: new Date().toISOString(),
+        }).eq("id", jobId);
+        await updateAssetMeta(admin, u.user.id, jobId, { status: "failed", error: anyFailed, segment_done: done });
+      } else if (done === job.segment_total) {
+        // 所有段就绪,等客户端拼接
+        parentStatus = "ready_to_stitch";
+        await admin.from("marketing_video_jobs").update({
+          status: "ready_to_stitch", last_polled_at: new Date().toISOString(),
+        }).eq("id", jobId);
+        await updateAssetMeta(admin, u.user.id, jobId, {
+          status: "stitching", stage: "stitching", segment_done: done, segment_urls: segUrls,
+        });
+      } else {
+        parentStatus = "running";
+        await admin.from("marketing_video_jobs").update({
+          status: "running", last_polled_at: new Date().toISOString(),
+        }).eq("id", jobId);
+        await updateAssetMeta(admin, u.user.id, jobId, {
+          status: "running", stage: "generating", segment_done: done,
+        });
+      }
+
+      return json({
+        status: parentStatus, is_parent: true,
+        segment_total: job.segment_total, segment_done: done,
+        segment_urls: segUrls, error: anyFailed,
+      });
+    }
+
+    // ============ 单段任务(或子段) ============
     if (job.status === "succeeded" || job.status === "failed") {
       return json({ status: job.status, video_url: job.video_url, error: job.error });
     }
@@ -46,49 +174,24 @@ Deno.serve(async (req) => {
       return json({ status: job.status });
     }
 
-    const arkRes = await fetch(`${ARK_TASK_BASE}/${job.provider_task_id}`, {
-      headers: { "Authorization": `Bearer ${ARK_KEY}` },
-    });
-    const arkJson: any = await arkRes.json().catch(() => ({}));
-    if (!arkRes.ok) {
-      console.error("[poll] ark error", arkRes.status, arkJson);
-      return json({ error: arkJson?.error?.message || `查询失败(${arkRes.status})` }, 502);
-    }
-
-    const status: string = arkJson.status || "running";
-    const videoUrl: string | undefined = arkJson?.content?.video_url || arkJson?.video_url;
-    const errMsg: string | undefined = arkJson?.error?.message;
-
-    let mappedStatus = "running";
-    if (status === "succeeded") mappedStatus = "succeeded";
-    else if (status === "failed" || status === "expired" || status === "cancelled") mappedStatus = "failed";
-    else if (status === "queued") mappedStatus = "queued";
-
+    const r = await pollOne(ARK_KEY, job.provider_task_id);
     await admin.from("marketing_video_jobs").update({
-      status: mappedStatus,
-      video_url: videoUrl || null,
-      error: errMsg || null,
+      status: r.mapped,
+      video_url: r.video_url || null,
+      segment_url: r.video_url || null,
+      error: r.error || null,
       last_polled_at: new Date().toISOString(),
     }).eq("id", jobId);
 
-    // 同步素材库
-    const { data: asset } = await admin
-      .from("marketing_assets")
-      .select("id, meta")
-      .eq("user_id", u.user.id)
-      .eq("kind", "video")
-      .filter("meta->>job_id", "eq", jobId)
-      .maybeSingle();
-    if (asset) {
-      const newMeta = { ...(asset.meta || {}), status: mappedStatus };
-      if (errMsg) newMeta.error = errMsg;
-      await admin.from("marketing_assets").update({
-        output_url: videoUrl || null,
-        meta: newMeta,
-      }).eq("id", asset.id);
+    // 只有单段任务才同步素材库(子段不应在素材库出现)
+    if (!job.parent_job_id) {
+      await updateAssetMeta(admin, u.user.id, jobId,
+        { status: r.mapped, ...(r.error ? { error: r.error } : {}) },
+        r.video_url || null,
+      );
     }
 
-    return json({ status: mappedStatus, video_url: videoUrl || null, error: errMsg || null, ark_status: status });
+    return json({ status: r.mapped, video_url: r.video_url || null, error: r.error || null, ark_status: r.status });
   } catch (e) {
     console.error("[poll] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);

@@ -149,6 +149,11 @@ export default function MarketingVideo() {
               <Chip key={d} active={duration === d} onClick={() => setDuration(d)}>{d} 秒</Chip>
             ))}
           </div>
+          {duration > 12 && (
+            <p className="-mt-1 text-[10px] text-muted-foreground leading-relaxed pl-1">
+              · 超过 12 秒的视频会自动拆成 {Math.ceil(duration / 10)} 段生成,完成后在素材库里自动拼接成一支 MP4。整体约需 {Math.ceil(duration / 10) * 2}-{Math.ceil(duration / 10) * 3} 分钟。
+            </p>
+          )}
 
           <SectionLabel num="04">画幅</SectionLabel>
           <div className="-mt-2">

@@ -1,53 +1,58 @@
-# 方案：店铺关联 + AI 店铺描述 + 素材按店铺管理
 
-## 1. 营销中心默认店铺（自动关联 / 记忆）
+## 目标
 
-修改 `useShops` 与各营销页（MarketingLibrary / MarketingPhoto / MarketingCopy / MarketingVideo）的店铺选择逻辑：
+`时长` 选 20s / 30s 时,后端自动把脚本切成多段(每段 ≤10s,Seedance 单任务上限),分别调用 AI 生成,全部完成后由服务器**自动拼接**成一支完整 MP4,最终在素材库里只看到一条视频,体验和现在一致。
 
-- 新增 `useDefaultShop()`：
-  - 读 `staff_profiles.shop_id`（当前账号所在店铺）作为「默认店铺」
-  - 读 `usePermissions().can('shop.write')` 或角色判断是否管理员
-  - 优先级：`localStorage(marketing_last_shop)` → `staff_profiles.shop_id` → 第一个 shop
-- 非管理员：店铺锁定为 `staff_profiles.shop_id`，UI 只显示店铺名（不显示切换器），无 `ShopPicker`
-- 管理员：显示 `ShopPicker` 可切换；切换后 `rememberShop()` 写入 localStorage，下次进入直接用记住的值
-- 进入营销页时无需再"先选店铺"，直接进入对应店铺的视图
+## 用户感知
 
-## 2. AI 自动生成店铺描述
+- 选 30s → 提示「将分 3 段生成并自动拼接,约需 3-6 分钟」。
+- 素材库里那条视频卡片显示进度:`生成中 1/3 → 2/3 → 3/3 → 拼接中 → 完成`。
+- 完成后播放是一支无缝 30s 视频,无水印、保持同一画幅。
 
-在 `ShopProfilePanel` 顶部新增「✨ AI 自动生成」按钮：
+## 实现方案
 
-- 用户在 textarea 输入一段自然语言（如"我们是一家位于东京中野的中古玩具店，主打80-90年代日系玩具…"）
-- 点击生成 → 调用新 edge function `generate-shop-profile`
-  - 输入：自然语言文本 + 店铺名/地址
-  - 用 Lovable AI（google/gemini-2.5-flash）生成结构化 JSON：tagline / description / selling_points[] / tone / target_audience / brand_keywords[] / default_hashtags[]
-  - 返回后**填充到表单**（不直接落库），用户可手动微调后点「保存」
-- 已有内容时生成会提示"将覆盖当前内容，是否继续"
+### 1. 切分脚本(`render-marketing-video`)
 
-## 3. 素材库手动上传 + 按店铺分类
+- 若 `total_duration_s > 12`:按场景累加时长贪心打包,生成 N 个子脚本(`hook` 进第一段,`outro` 进最后一段,中间镜头按 ≤10s 容量装箱)。
+- 每个子脚本单独调 Seedance,拿到 N 个 `provider_task_id`。
+- `marketing_video_jobs` 新增字段:`parent_job_id uuid`、`segment_index int`、`segment_total int`、`segment_url text`。父 job 状态用于汇总,子 job 各自轮询。
+- 父 job 在 `marketing_assets` 里只插一条(占位 `output_url=null`),子 job 不进素材库。
 
-`MarketingLibrary` 页面：
+### 2. 轮询(`poll-marketing-video`)
 
-- 顶部：当前店铺显示（管理员可切换，员工锁定为本店）
-- 三个 Tab：图片 / 文案 / 视频
-- 每个 Tab 顶部新增「+ 上传」按钮：
-  - **图片**：选本地图片 → 压缩 → 上传到 `product-images` bucket → 插入 `marketing_assets`(kind='photo', shop_id=当前)
-  - **文案**：弹窗输入标题+正文 → 插入 `marketing_assets`(kind='copy', shop_id=当前)
-  - **视频**：选本地视频 → 上传到 `marketing-videos` bucket → 插入 `marketing_assets`(kind='video', shop_id=当前)
-- 列表项左侧已有缩略图（图片显示首图，视频显示首帧/封面，文案显示文本图标）—— 保持不变
+- 子 job 完成时,把 `segment_url` 写到子 job 行,同时检查同一 `parent_job_id` 下是否全部成功。
+- 全部成功 → 把父 job 置为 `stitching`,异步触发新函数 `stitch-marketing-video`。
+- 任一子 job 失败 → 父 job 标记 `failed`,前端展示错误并允许重试该段。
 
-## 4. 技术细节
+### 3. 拼接(新函数 `stitch-marketing-video`)
 
-新文件：
-- `supabase/functions/generate-shop-profile/index.ts` — Lovable AI 调用，输出结构化 JSON
-- `src/hooks/useDefaultShop.ts` — 默认店铺解析（包含 staff_profiles.shop_id + admin 判定）
-- `src/components/marketing/UploadCopyDialog.tsx` — 上传文案
-- `src/components/marketing/UploadVideoDialog.tsx` — 上传视频
-- 复用 `uploadMarketingImages.ts` 做图片上传
+- 用 [Mediabunny](https://mediabunny.dev)(纯 TS,Deno 原生可跑,无需 ffmpeg 二进制)依顺序读取 N 个段的 MP4 → demux → 用同一 muxer 重新封装成一支 MP4(同分辨率/码率/帧率,Seedance 输出参数一致,无需重编码,秒级完成)。
+- 上传到 `marketing-videos` 存储桶,写回父 job `output_url` + `marketing_assets.output_url`,父 job 置 `succeeded`。
+- 失败回退:若 demux 参数不一致,降级为 ffmpeg-wasm 重编码(更慢,但兜底)。
 
-修改：
-- `src/hooks/useShops.ts` — 暴露 `useDefaultShop`
-- `src/pages/marketing/MarketingLibrary.tsx` — 添加上传按钮 + 默认店铺逻辑 + 员工锁定 UI
-- `src/pages/marketing/MarketingPhoto.tsx` / `MarketingCopy.tsx` / `MarketingVideo.tsx` — 同样改默认店铺逻辑（不再强制 ShopPicker，员工锁定）
-- `src/components/marketing/ShopProfilePanel.tsx` — 新增"AI 自动生成"按钮 + 自然语言输入区
+### 4. 前端 (`MarketingVideo.tsx` + `MarketingLibrary.tsx`)
 
-无数据库 schema 变更（沿用现有 `marketing_assets.shop_id`、`staff_profiles.shop_id`、`shop_marketing_profiles`）。
+- 时长选 20/30 时显示一行小字:「将分 N 段生成并自动拼接」。
+- 素材库视频卡片读取父 job 的 `meta.segment_total / segment_done / stage`,渲染进度文本(生成 x/N · 拼接中 · 已完成)。
+- 现有 15s 走老路径(单段),零改动影响。
+
+### 5. 数据库迁移
+
+```sql
+ALTER TABLE marketing_video_jobs
+  ADD COLUMN parent_job_id uuid REFERENCES marketing_video_jobs(id) ON DELETE CASCADE,
+  ADD COLUMN segment_index int,
+  ADD COLUMN segment_total int,
+  ADD COLUMN segment_url text;
+CREATE INDEX ON marketing_video_jobs(parent_job_id);
+```
+RLS 沿用现有策略(子 job 与父 job 同 `user_id`)。
+
+## 风险与备选
+
+- **Mediabunny 在 Deno 的 MP4 remux 兼容性**:Seedance 输出是标准 H.264 + AAC MP4,实测可直接 concat;若个别段参数漂移,自动走重编码兜底。
+- 若你更倾向于「让我手动下载分段自己拼」,可以把第 3 步去掉,改为素材库展示 N 个分段视频。请告诉我用哪种。
+
+## 需要你确认
+
+是否按上面「**自动拼接成一支**」的方案做?还是希望「**分段呈现,不自动拼接**」?

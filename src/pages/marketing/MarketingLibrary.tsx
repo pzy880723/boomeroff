@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock } from 'lucide-react';
@@ -11,6 +11,7 @@ import { ShopFilterChips } from '@/components/marketing/ShopPicker';
 import { ShopProfilePanel } from '@/components/marketing/ShopProfilePanel';
 import { UploadAssetDialog } from '@/components/marketing/UploadAssetDialog';
 import { useEffectiveShop } from '@/hooks/useShops';
+import { stitchSegmentUrls } from '@/lib/stitchVideos';
 
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'profile';
 
@@ -44,6 +45,52 @@ export default function MarketingLibrary() {
   };
   useEffect(() => { load(); }, [user]);
 
+  // 客户端拼接锁:每个 asset 只触发一次
+  const stitchingRef = useRef<Set<string>>(new Set());
+
+  const runStitch = async (asset: any, segmentUrls: string[]) => {
+    if (!user) return;
+    if (stitchingRef.current.has(asset.id)) return;
+    stitchingRef.current.add(asset.id);
+    const parentJobId: string = asset.meta?.job_id;
+    try {
+      setItems((prev) => prev.map((x) => x.id === asset.id ? {
+        ...x, meta: { ...(x.meta || {}), status: 'stitching', stage: 'stitching', stitch_progress: 0 },
+      } : x));
+      const blob = await stitchSegmentUrls(segmentUrls, (info) => {
+        const pct = Math.round(((info.segment - 1) / Math.max(1, info.total)) * 100);
+        setItems((prev) => prev.map((x) => x.id === asset.id ? {
+          ...x, meta: { ...(x.meta || {}), stitch_progress: pct, stitch_stage: info.stage },
+        } : x));
+      });
+      const path = `${user.id}/${parentJobId}.mp4`;
+      const up = await supabase.storage.from('marketing-videos').upload(path, blob, {
+        contentType: 'video/mp4', upsert: true,
+      });
+      if (up.error) throw up.error;
+      const signed = await supabase.storage.from('marketing-videos').createSignedUrl(path, 60 * 60 * 24 * 365);
+      const url = signed.data?.signedUrl;
+      if (!url) throw new Error('生成播放链接失败');
+      const newMeta = { ...(asset.meta || {}), status: 'succeeded', stage: 'done', storage_path: path };
+      delete newMeta.stitch_progress; delete newMeta.stitch_stage;
+      await supabase.from('marketing_assets' as any).update({ output_url: url, meta: newMeta }).eq('id', asset.id);
+      await supabase.from('marketing_video_jobs' as any).update({ status: 'succeeded', video_url: url }).eq('id', parentJobId);
+      setItems((prev) => prev.map((x) => x.id === asset.id ? { ...x, output_url: url, meta: newMeta } : x));
+      toast.success('视频拼接完成');
+    } catch (e: any) {
+      console.error('[stitch]', e);
+      const err = e?.message || '拼接失败';
+      setItems((prev) => prev.map((x) => x.id === asset.id ? {
+        ...x, meta: { ...(x.meta || {}), status: 'failed', error: err },
+      } : x));
+      await supabase.from('marketing_assets' as any).update({
+        meta: { ...(asset.meta || {}), status: 'failed', error: err },
+      }).eq('id', asset.id);
+      toast.error(`拼接失败:${err}`);
+      stitchingRef.current.delete(asset.id); // 允许重试
+    }
+  };
+
   // 轮询未完成视频任务
   useEffect(() => {
     const pending = items.filter(
@@ -57,10 +104,30 @@ export default function MarketingLibrary() {
         try {
           const { data } = await supabase.functions.invoke('poll-marketing-video', { body: { job_id: it.meta.job_id } });
           const next = data as any;
-          if (next?.status && next.status !== it.meta?.status) {
+          if (!next) continue;
+          // 多段任务全部完成:触发客户端拼接
+          if (next.is_parent && next.status === 'ready_to_stitch' && Array.isArray(next.segment_urls)) {
+            const urls = next.segment_urls.filter(Boolean);
+            if (urls.length === next.segment_total) {
+              runStitch(it, urls);
+              continue;
+            }
+          }
+          if (next.status && next.status !== it.meta?.status) {
             setItems((prev) => prev.map((x) => x.id === it.id ? {
               ...x, output_url: next.video_url || x.output_url,
-              meta: { ...(x.meta || {}), status: next.status, error: next.error || undefined },
+              meta: {
+                ...(x.meta || {}),
+                status: next.status,
+                segment_total: next.segment_total ?? x.meta?.segment_total,
+                segment_done: next.segment_done ?? x.meta?.segment_done,
+                error: next.error || undefined,
+              },
+            } : x));
+          } else if (next.is_parent && typeof next.segment_done === 'number') {
+            // 进度更新但状态未变
+            setItems((prev) => prev.map((x) => x.id === it.id ? {
+              ...x, meta: { ...(x.meta || {}), segment_done: next.segment_done, segment_total: next.segment_total },
             } : x));
           }
         } catch {}
@@ -71,9 +138,22 @@ export default function MarketingLibrary() {
     return () => { cancelled = true; clearInterval(t); };
   }, [items]);
 
-  const statusLabel = (s?: string) => ({
-    queued: '排队中', running: '渲染中', succeeded: '已完成', failed: '失败',
-  } as Record<string, string>)[s || ''] || s || '排队中';
+  const statusLabel = (it: any) => {
+    const s = it.meta?.status;
+    const total = it.meta?.segment_total || 0;
+    const done = it.meta?.segment_done || 0;
+    if (s === 'stitching') {
+      const pct = it.meta?.stitch_progress;
+      return `拼接中${pct ? ` · ${pct}%` : '…'}`;
+    }
+    if (s === 'succeeded') return '已完成';
+    if (s === 'failed') return '失败';
+    if (total > 1) {
+      if (done < total) return `生成中 ${done}/${total}`;
+      return '准备拼接…';
+    }
+    return ({ queued: '排队中', running: '渲染中' } as Record<string, string>)[s || ''] || s || '排队中';
+  };
 
   const filtered = useMemo(() => {
     let list = items;
@@ -293,7 +373,7 @@ export default function MarketingLibrary() {
                       )}
                       {it.kind === 'video' && it.meta?.status && (
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          状态 · {statusLabel(it.meta.status)}
+                          状态 · {statusLabel(it)}
                           {it.meta?.error ? ` · ${String(it.meta.error).slice(0, 30)}` : ''}
                         </p>
                       )}
