@@ -17,6 +17,7 @@ import {
   type VoucherTemplate, type VoucherClaim, formatVoucherRule, formatValidityRange,
   buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, getVoucherTemplateTimeInfo,
 } from '@/lib/voucher';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Props {
   open: boolean;
