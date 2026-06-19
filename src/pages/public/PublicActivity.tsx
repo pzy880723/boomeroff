@@ -200,9 +200,18 @@ ${isExplore ? '七' : '六'}、最终解释权
           <div className="text-[13px] opacity-80">为你专属准备</div>
           <h1 className="text-2xl font-semibold leading-tight">{activity.name}</h1>
           {activity.description && (
-            <p className="text-[13px] leading-relaxed text-[#ffe7bd] whitespace-pre-wrap line-clamp-3">
-              {activity.description}
-            </p>
+            <>
+              <p className="text-[13px] leading-relaxed text-[#ffe7bd] whitespace-pre-wrap line-clamp-3">
+                {activity.description}
+              </p>
+              <button
+                type="button"
+                onClick={() => setDescOpen(true)}
+                className="text-[12px] text-[#ffd28a] underline underline-offset-2"
+              >
+                查看完整活动详情
+              </button>
+            </>
           )}
           {(activity.starts_at || activity.ends_at) && (
             <p className="text-[11px] text-[#ffd28a]/90">
