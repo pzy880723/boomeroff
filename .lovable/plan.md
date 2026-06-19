@@ -1,58 +1,32 @@
-
 ## 目标
 
-`时长` 选 20s / 30s 时,后端自动把脚本切成多段(每段 ≤10s,Seedance 单任务上限),分别调用 AI 生成,全部完成后由服务器**自动拼接**成一支完整 MP4,最终在素材库里只看到一条视频,体验和现在一致。
+在「文案/视频」页用 `UploadGrid` 上传**参考图**时，每张图自动落进**素材库**（`marketing_assets`），同时按图片内容去重——已经在我自己素材库里的同一张照片不会重复入库，也不会重新上传一份到存储。
 
-## 用户感知
+## 行为定义
 
-- 选 30s → 提示「将分 3 段生成并自动拼接,约需 3-6 分钟」。
-- 素材库里那条视频卡片显示进度:`生成中 1/3 → 2/3 → 3/3 → 拼接中 → 完成`。
-- 完成后播放是一支无缝 30s 视频,无水印、保持同一画幅。
+- 触发位置：仅 `src/pages/marketing/UploadGrid.tsx`（被参考图区域使用：MarketingVideo / MarketingCopy）。`UploadAssetDialog`（用户主动"上传到素材库"）和 `MarketingPhoto` 的主图上传不在本次范围内。
+- 去重维度：**当前用户自己** 的 `marketing_assets`，按图片字节的 SHA-256（即"完全相同的文件"算重复）。同物不同角度不去重。
+- 去重时机：
+  1. 选完文件后，先在前端算每张图的 sha256。
+  2. 查 `marketing_assets` 里 `created_by = me AND meta->>'sha256' = hash` 是否已存在。
+  3. **已存在** → 跳过压缩+上传，直接把已存在的 `output_url` 当作"上传成功"回灌给参考图列表，不再 insert 一条新素材。
+  4. **不存在** → 走原有 `uploadMarketingImages` 流程，成功后 insert 一条 `marketing_assets`（`kind='photo'`、`output_url=url`、`input_image_urls=[url]`、`meta={ source: 'reference_upload', sha256, filename }`）。
+- 同一次选择内的重复（用户一次选了两张完全相同的图）也按 sha256 合并，只保留一份。
+- 失败重试（`retryOne`）走同样的去重路径。
+- 完成后用 toast 简短反馈：`已加入素材库 X 张 · 去重 Y 张`（Y=0 时不显示后半段；全 0 时不弹）。UI 形态、缩略图、删除按钮都不变。
 
-## 实现方案
+## 技术细节
 
-### 1. 切分脚本(`render-marketing-video`)
+- 新增 `src/lib/fileSha256.ts`：用 `crypto.subtle.digest('SHA-256', await file.arrayBuffer())`，返回 64 位 hex。预览环境是 HTTPS，SubtleCrypto 可用；不可用时降级为 `${file.size}-${file.lastModified}-${file.name}`，仍能拦住"同一文件二次选择"。
+- 改 `src/pages/marketing/UploadGrid.tsx`：
+  - `onPick` 里先 `Promise.all` 算所有 hash，按 hash 在 `items` 内部排重；
+  - 用一次 `supabase.from('marketing_assets').select('id, output_url, meta').eq('created_by', user.id).in('meta->>sha256', hashes)` 拿到已存在的映射（PostgREST 写法用 `.filter('meta->>sha256','in',\`(\${...})\`)`）；
+  - 对命中已存在的：直接 `onProgress({stage:'done', url: existingUrl})`，不走 `uploadMarketingImages`，也不再 insert；
+  - 对未命中的：原流程走完拿到 `url` 后，`insert` 一条 marketing_assets（带 sha256/filename/source）；插入失败不阻塞，参考图列表仍然能用。
+- `retryOne` 复用同一份"算 hash → 查重 → 上传或复用"逻辑，抽到本文件内的小函数 `processOne(file)`。
+- 不动数据库结构（meta 是 jsonb，足够放 sha256）。不动 RLS。不动 `UploadAssetDialog` / `MarketingPhoto`。
 
-- 若 `total_duration_s > 12`:按场景累加时长贪心打包,生成 N 个子脚本(`hook` 进第一段,`outro` 进最后一段,中间镜头按 ≤10s 容量装箱)。
-- 每个子脚本单独调 Seedance,拿到 N 个 `provider_task_id`。
-- `marketing_video_jobs` 新增字段:`parent_job_id uuid`、`segment_index int`、`segment_total int`、`segment_url text`。父 job 状态用于汇总,子 job 各自轮询。
-- 父 job 在 `marketing_assets` 里只插一条(占位 `output_url=null`),子 job 不进素材库。
+## 影响文件
 
-### 2. 轮询(`poll-marketing-video`)
-
-- 子 job 完成时,把 `segment_url` 写到子 job 行,同时检查同一 `parent_job_id` 下是否全部成功。
-- 全部成功 → 把父 job 置为 `stitching`,异步触发新函数 `stitch-marketing-video`。
-- 任一子 job 失败 → 父 job 标记 `failed`,前端展示错误并允许重试该段。
-
-### 3. 拼接(新函数 `stitch-marketing-video`)
-
-- 用 [Mediabunny](https://mediabunny.dev)(纯 TS,Deno 原生可跑,无需 ffmpeg 二进制)依顺序读取 N 个段的 MP4 → demux → 用同一 muxer 重新封装成一支 MP4(同分辨率/码率/帧率,Seedance 输出参数一致,无需重编码,秒级完成)。
-- 上传到 `marketing-videos` 存储桶,写回父 job `output_url` + `marketing_assets.output_url`,父 job 置 `succeeded`。
-- 失败回退:若 demux 参数不一致,降级为 ffmpeg-wasm 重编码(更慢,但兜底)。
-
-### 4. 前端 (`MarketingVideo.tsx` + `MarketingLibrary.tsx`)
-
-- 时长选 20/30 时显示一行小字:「将分 N 段生成并自动拼接」。
-- 素材库视频卡片读取父 job 的 `meta.segment_total / segment_done / stage`,渲染进度文本(生成 x/N · 拼接中 · 已完成)。
-- 现有 15s 走老路径(单段),零改动影响。
-
-### 5. 数据库迁移
-
-```sql
-ALTER TABLE marketing_video_jobs
-  ADD COLUMN parent_job_id uuid REFERENCES marketing_video_jobs(id) ON DELETE CASCADE,
-  ADD COLUMN segment_index int,
-  ADD COLUMN segment_total int,
-  ADD COLUMN segment_url text;
-CREATE INDEX ON marketing_video_jobs(parent_job_id);
-```
-RLS 沿用现有策略(子 job 与父 job 同 `user_id`)。
-
-## 风险与备选
-
-- **Mediabunny 在 Deno 的 MP4 remux 兼容性**:Seedance 输出是标准 H.264 + AAC MP4,实测可直接 concat;若个别段参数漂移,自动走重编码兜底。
-- 若你更倾向于「让我手动下载分段自己拼」,可以把第 3 步去掉,改为素材库展示 N 个分段视频。请告诉我用哪种。
-
-## 需要你确认
-
-是否按上面「**自动拼接成一支**」的方案做?还是希望「**分段呈现,不自动拼接**」?
+- 新建：`src/lib/fileSha256.ts`
+- 修改：`src/pages/marketing/UploadGrid.tsx`
