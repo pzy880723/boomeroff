@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Check } from 'lucide-react';
 
 export function LibraryImagePickerDialog({
-  open, onOpenChange, shopId, max = 6, onConfirm,
+  open, onOpenChange, shopId, max = 20, onConfirm,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
