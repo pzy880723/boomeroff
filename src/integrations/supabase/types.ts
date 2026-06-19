@@ -2062,6 +2062,7 @@ export type Database = {
           code: string | null
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           discount_amount: number
           ends_at: string | null
           expires_at: string | null
@@ -2093,6 +2094,7 @@ export type Database = {
           code?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           discount_amount?: number
           ends_at?: string | null
           expires_at?: string | null
@@ -2124,6 +2126,7 @@ export type Database = {
           code?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           discount_amount?: number
           ends_at?: string | null
           expires_at?: string | null

@@ -92,6 +92,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
         .from('vouchers')
         .select('*')
         .eq('active', true)
+        .is('deleted_at', null)
         .not('name', 'is', null)
         .order('created_at', { ascending: false });
       setVouchers((data || []) as unknown as VoucherTemplate[]);

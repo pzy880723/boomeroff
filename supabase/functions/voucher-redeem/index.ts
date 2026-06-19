@@ -42,7 +42,6 @@ Deno.serve(async (req) => {
     if (e1 || !claim) return json({ error: '券码不存在' }, 404);
     if (claim.status === 'redeemed') return json({ error: '该券已核销' }, 400);
     if (claim.status === 'void') return json({ error: '该券已作废' }, 400);
-    if (claim.status === 'unclaimed') return json({ error: '客户尚未领取' }, 400);
     if (claim.expires_at && new Date(claim.expires_at) < new Date()) {
       return json({ error: '该券已过期' }, 400);
     }

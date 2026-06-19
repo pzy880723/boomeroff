@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
       .from('voucher_claims')
       .select('id, short_code, status, expires_at, claimed_at, redeemed_at, created_at')
       .eq('recipient_phone', phone)
-      .in('status', ['unclaimed', 'claimed'])
+      .in('status', ['claimed'])
       .order('created_at', { ascending: false })
       .limit(5);
 

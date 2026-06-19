@@ -17,6 +17,7 @@ import {
   type VoucherTemplate, type VoucherClaim, formatVoucherRule, formatValidityRange,
   buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, getVoucherTemplateTimeInfo,
 } from '@/lib/voucher';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Props {
   open: boolean;
@@ -28,6 +29,8 @@ interface Props {
 
 export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDeleted }: Props) {
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
   const [claims, setClaims] = useState<VoucherClaim[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -67,18 +70,6 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
 
   const tryDelete = async () => {
     if (!voucher) return;
-    const nowIso = new Date().toISOString();
-    const { count, error } = await supabase
-      .from('voucher_claims')
-      .select('id', { count: 'exact', head: true })
-      .eq('voucher_id', voucher.id)
-      .in('status', ['unclaimed', 'claimed'])
-      .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
-    if (error) { toast.error(error.message); return; }
-    if ((count ?? 0) > 0) {
-      toast.error(`还有 ${count} 张未到期且未核销的券，无法删除`);
-      return;
-    }
     setConfirmDelete(true);
   };
 
@@ -167,7 +158,7 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
               : null;
             return (
               <>
-                <div className="grid grid-cols-3 gap-2">
+                <div className={isAdmin ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-2'}>
                   <Button onClick={directRelease} disabled={creating || cannotRelease} className="h-11">
                     {creating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
                     发放
@@ -175,15 +166,17 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
                   <Button variant="outline" onClick={onEdit} className="h-11">
                     <Pencil className="w-4 h-4 mr-1.5" />编辑
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={tryDelete}
-                    disabled={deleting}
-                    className="h-11 text-destructive hover:text-destructive border-destructive/40 hover:bg-destructive/5"
-                  >
-                    {deleting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1.5" />}
-                    删除
-                  </Button>
+                  {isAdmin && (
+                    <Button
+                      variant="outline"
+                      onClick={tryDelete}
+                      disabled={deleting}
+                      className="h-11 text-destructive hover:text-destructive border-destructive/40 hover:bg-destructive/5"
+                    >
+                      {deleting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1.5" />}
+                      删除
+                    </Button>
+                  )}
                 </div>
                 {releaseHint && (
                   <p className="text-[11px] text-amber-600">{releaseHint}</p>
@@ -218,7 +211,7 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
                         <Badge variant={CLAIM_STATUS_VARIANT[c.status]} className="shrink-0 text-[10px] px-1.5 py-0">
                           {CLAIM_STATUS_LABEL[c.status]}
                         </Badge>
-                        {c.status === 'unclaimed' && (
+                        {c.status === 'claimed' && !c.redeemed_at && (
                           <button
                             onClick={async () => {
                               try {
