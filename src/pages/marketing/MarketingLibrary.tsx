@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2 } from 'lucide-react';
+import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -9,11 +9,14 @@ import { toast } from 'sonner';
 import { AssetDetailDialog, copyPreview } from '@/components/marketing/AssetDetailDialog';
 import { ShopFilterChips } from '@/components/marketing/ShopPicker';
 import { ShopProfilePanel } from '@/components/marketing/ShopProfilePanel';
-import { useShops, recallShop, rememberShop } from '@/hooks/useShops';
+import { UploadAssetDialog } from '@/components/marketing/UploadAssetDialog';
+import { useEffectiveShop } from '@/hooks/useShops';
+
+type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'profile';
 
 export default function MarketingLibrary() {
   const { user } = useAuth();
-  const { shops } = useShops();
+  const { shopId, setShopId, shops, isAdmin, loading: shopLoading } = useEffectiveShop();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [manageMode, setManageMode] = useState(false);
@@ -21,10 +24,11 @@ export default function MarketingLibrary() {
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [detail, setDetail] = useState<any | null>(null);
-  const [shopFilter, setShopFilter] = useState<string | null | 'unassigned'>(() => recallShop() as any);
-  const [tab, setTab] = useState<'assets' | 'profile'>('assets');
+  const [tab, setTab] = useState<KindTab>('all');
+  const [uploadKind, setUploadKind] = useState<'photo' | 'copy' | 'video' | null>(null);
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
+  const currentShop = shops.find((s) => s.id === shopId);
 
   const load = async () => {
     if (!user) return;
@@ -34,13 +38,13 @@ export default function MarketingLibrary() {
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(120);
+      .limit(200);
     setItems((data as any[]) || []);
     setLoading(false);
   };
   useEffect(() => { load(); }, [user]);
 
-  // 轮询未完成的视频任务
+  // 轮询未完成视频任务
   useEffect(() => {
     const pending = items.filter(
       (it) => it.kind === 'video' && it.meta?.job_id && !['succeeded', 'failed'].includes(it.meta?.status),
@@ -51,18 +55,15 @@ export default function MarketingLibrary() {
       for (const it of pending) {
         if (cancelled) return;
         try {
-          const { data } = await supabase.functions.invoke('poll-marketing-video', {
-            body: { job_id: it.meta.job_id },
-          });
+          const { data } = await supabase.functions.invoke('poll-marketing-video', { body: { job_id: it.meta.job_id } });
           const next = data as any;
           if (next?.status && next.status !== it.meta?.status) {
             setItems((prev) => prev.map((x) => x.id === it.id ? {
-              ...x,
-              output_url: next.video_url || x.output_url,
+              ...x, output_url: next.video_url || x.output_url,
               meta: { ...(x.meta || {}), status: next.status, error: next.error || undefined },
             } : x));
           }
-        } catch (_e) { /* ignore */ }
+        } catch {}
       }
     };
     tick();
@@ -75,10 +76,13 @@ export default function MarketingLibrary() {
   } as Record<string, string>)[s || ''] || s || '排队中';
 
   const filtered = useMemo(() => {
-    if (shopFilter === null) return items;
-    if (shopFilter === 'unassigned') return items.filter((it) => !it.shop_id);
-    return items.filter((it) => it.shop_id === shopFilter);
-  }, [items, shopFilter]);
+    let list = items;
+    if (shopId) list = list.filter((it) => it.shop_id === shopId);
+    if (tab === 'photo') list = list.filter((it) => it.kind === 'photo');
+    else if (tab === 'copy') list = list.filter((it) => it.kind === 'copy');
+    else if (tab === 'video') list = list.filter((it) => it.kind === 'video');
+    return list;
+  }, [items, shopId, tab]);
 
   const groups = useMemo(() => {
     const map = new Map<string, any[]>();
@@ -87,9 +91,7 @@ export default function MarketingLibrary() {
     filtered.forEach((it) => {
       const d = new Date(it.created_at);
       const ym = `${d.getFullYear()}-${d.getMonth()}`;
-      const key = ym === thisYM
-        ? '本月'
-        : `${d.getFullYear()} · ${String(d.getMonth() + 1).padStart(2, '0')} 月`;
+      const key = ym === thisYM ? '本月' : `${d.getFullYear()} · ${String(d.getMonth() + 1).padStart(2, '0')} 月`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(it);
     });
@@ -115,155 +117,194 @@ export default function MarketingLibrary() {
     toast.success(`已删除 ${ids.length} 条`);
   };
 
+  const TABS: { v: KindTab; label: string }[] = [
+    { v: 'all', label: '全部' },
+    { v: 'photo', label: '图片' },
+    { v: 'copy', label: '文案' },
+    { v: 'video', label: '视频' },
+    { v: 'profile', label: '店铺描述' },
+  ];
+
   return (
     <>
-      <PageHeader title="素材库" back="/me/marketing" subtitle="营销中心 / 历史产出" />
+      <PageHeader title="素材库" back="/me/marketing" subtitle="营销中心 / 按店铺管理" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-4 pb-12">
-        {/* 店铺筛选 */}
-        <div className="space-y-2">
+        {/* 店铺：管理员可切，店员锁定 */}
+        <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-3 space-y-2">
           <div className="flex items-center gap-2 px-1">
             <Store className="w-3.5 h-3.5 text-accent" />
-            <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">店铺</span>
-          </div>
-          <ShopFilterChips
-            value={shopFilter}
-            onChange={(v) => { setShopFilter(v); if (typeof v === 'string' && v !== 'unassigned') rememberShop(v); else rememberShop(null); }}
-          />
-        </div>
-
-        {/* Tab：素材 / 店铺描述（仅在选了具体店铺时显示 Tab 切换） */}
-        {typeof shopFilter === 'string' && shopFilter !== 'unassigned' && (
-          <div className="flex gap-2 border-b border-border">
-            <TabBtn active={tab === 'assets'} onClick={() => setTab('assets')}>素材</TabBtn>
-            <TabBtn active={tab === 'profile'} onClick={() => setTab('profile')}>店铺描述</TabBtn>
-          </div>
-        )}
-
-        {/* 店铺描述面板 */}
-        {tab === 'profile' && typeof shopFilter === 'string' && shopFilter !== 'unassigned' && (
-          <ShopProfilePanel shopId={shopFilter} shopName={shopName(shopFilter)} />
-        )}
-
-        {tab === 'assets' && (<>
-        {/* 顶部操作条 */}
-        {!loading && filtered.length > 0 && (
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] text-muted-foreground">共 {filtered.length} 条</span>
-            {manageMode ? (
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-accent font-semibold">已选 {selected.size}</span>
-                <Button size="sm" variant="outline" onClick={exitManage}>取消</Button>
-                <Button size="sm" variant="destructive" onClick={() => setConfirmDel(true)} disabled={!selected.size}>
-                  <Trash2 className="w-3.5 h-3.5" />删除
-                </Button>
-              </div>
-            ) : (
-              <Button size="sm" variant="ghost" onClick={() => setManageMode(true)}>
-                <Pencil className="w-3.5 h-3.5" />管理
-              </Button>
+            <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">当前店铺</span>
+            {!isAdmin && (
+              <span className="ml-auto text-[10px] text-muted-foreground flex items-center gap-1">
+                <Lock className="w-2.5 h-2.5" />已锁定本店
+              </span>
             )}
           </div>
-        )}
+          {isAdmin ? (
+            <ShopFilterChips
+              value={shopId}
+              onChange={(v) => setShopId(typeof v === 'string' ? v : null)}
+              includeAll={false}
+              includeUnassigned={false}
+            />
+          ) : (
+            <div className="px-1 text-sm">
+              {shopLoading ? '加载中…' : currentShop ? (
+                <>
+                  <span className="font-medium">{currentShop.name}</span>
+                  {currentShop.address && <span className="text-muted-foreground ml-2 text-[12px]">· {currentShop.address}</span>}
+                </>
+              ) : '未绑定门店，请联系管理员'}
+            </div>
+          )}
+        </section>
 
-        {loading && (
-          <div className="text-center py-12">
-            <Loader2 className="w-5 h-5 animate-spin mx-auto text-accent" />
+        {/* Tab 切换 */}
+        {shopId && (
+          <div className="flex gap-1 border-b border-border overflow-x-auto scrollbar-none">
+            {TABS.map((t) => (
+              <TabBtn key={t.v} active={tab === t.v} onClick={() => setTab(t.v)}>{t.label}</TabBtn>
+            ))}
           </div>
         )}
-        {!loading && filtered.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground py-12">
-            {shopFilter ? '当前店铺暂无素材' : '还没有产出'}
-          </p>
+
+        {/* 店铺描述 */}
+        {tab === 'profile' && shopId && (
+          <ShopProfilePanel shopId={shopId} shopName={shopName(shopId)} />
         )}
 
-        {groups.map(([key, list]) => (
-          <section key={key} className="space-y-2">
-            <div className="flex items-center gap-2 px-1">
-              <span className="w-1 h-1 rounded-full bg-accent" />
-              <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{key}</span>
-              <span className="text-[10px] text-muted-foreground ml-1">{list.length} 条</span>
-              <span className="flex-1 h-px bg-border ml-2" />
+        {/* 素材列表 */}
+        {tab !== 'profile' && shopId && (<>
+          {/* 上传按钮 + 管理 */}
+          <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
+            <div className="flex gap-1.5">
+              {(tab === 'all' || tab === 'photo') && (
+                <Button size="sm" variant="outline" onClick={() => setUploadKind('photo')} className="h-8">
+                  <Plus className="w-3.5 h-3.5" />图片
+                </Button>
+              )}
+              {(tab === 'all' || tab === 'copy') && (
+                <Button size="sm" variant="outline" onClick={() => setUploadKind('copy')} className="h-8">
+                  <Plus className="w-3.5 h-3.5" />文案
+                </Button>
+              )}
+              {(tab === 'all' || tab === 'video') && (
+                <Button size="sm" variant="outline" onClick={() => setUploadKind('video')} className="h-8">
+                  <Plus className="w-3.5 h-3.5" />视频
+                </Button>
+              )}
             </div>
-            {list.map((it) => {
-              const checked = selected.has(it.id);
-              const thumbUrl = it.kind === 'photo'
-                ? it.output_url
-                : it.kind === 'video'
-                  ? (it.meta?.cover_url || it.output_url)
-                  : (it.input_image_urls?.[0]);
-              return (
-                <div
-                  key={it.id}
-                  onClick={() => {
-                    if (manageMode) toggleSel(it.id);
-                    else setDetail(it);
-                  }}
-                  className={[
-                    'bg-card rounded-[0.875rem] border shadow-sm p-3 flex gap-3 transition-colors cursor-pointer',
-                    manageMode && checked ? 'border-accent/60 bg-accent/5' : 'border-accent/15 hover:border-accent/40',
-                  ].join(' ')}
-                >
-                  {manageMode && (
-                    <div className={[
-                      'w-5 h-5 rounded-full border flex items-center justify-center shrink-0 self-center transition-all',
-                      checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-card',
-                    ].join(' ')}>
-                      {checked && <Check className="w-3 h-3" strokeWidth={3} />}
-                    </div>
-                  )}
-                  <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border relative">
-                    {thumbUrl ? (
-                      it.kind === 'video' && it.output_url ? (
-                        <video src={it.output_url} className="w-full h-full object-cover" muted preload="metadata" playsInline />
-                      ) : (
-                        <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
-                      )
-                    ) : it.kind === 'copy' ? (
-                      <FileText className="w-6 h-6 text-muted-foreground" />
-                    ) : it.kind === 'video' ? (
-                      <Video className="w-6 h-6 text-muted-foreground" />
-                    ) : (
-                      <ImageIcon className="w-6 h-6 text-muted-foreground" />
-                    )}
-                    {it.kind === 'video' && (
-                      <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white text-[8px] px-1 rounded">VIDEO</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-display text-[10px] text-accent tracking-[0.18em]">
-                        {it.kind === 'photo' ? '图片' : it.kind === 'copy' ? '文案' : '视频'}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(it.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                        <Building2 className="w-2.5 h-2.5" />{shopName(it.shop_id)}
-                      </span>
-                    </div>
-                    {it.kind === 'copy' && (
-                      <p className="text-[12px] mt-1 line-clamp-2 text-foreground/85 leading-relaxed">
-                        {copyPreview(it) || '（无内容）'}
-                      </p>
-                    )}
-                    {it.meta?.platform && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">平台 · {it.meta.platform}</p>
-                    )}
-                    {it.kind === 'video' && it.meta?.status && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        状态 · {statusLabel(it.meta.status)}
-                        {it.meta?.error ? ` · ${String(it.meta.error).slice(0, 30)}` : ''}
-                      </p>
-                    )}
-                  </div>
+            {!loading && filtered.length > 0 && (
+              manageMode ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-accent font-semibold">已选 {selected.size}</span>
+                  <Button size="sm" variant="outline" onClick={exitManage}>取消</Button>
+                  <Button size="sm" variant="destructive" onClick={() => setConfirmDel(true)} disabled={!selected.size}>
+                    <Trash2 className="w-3.5 h-3.5" />删除
+                  </Button>
                 </div>
-              );
-            })}
-          </section>
-        ))}
+              ) : (
+                <Button size="sm" variant="ghost" onClick={() => setManageMode(true)}>
+                  <Pencil className="w-3.5 h-3.5" />管理
+                </Button>
+              )
+            )}
+          </div>
+          {!loading && filtered.length > 0 && (
+            <p className="text-[11px] text-muted-foreground px-1">共 {filtered.length} 条</p>
+          )}
+
+          {loading && (
+            <div className="text-center py-12"><Loader2 className="w-5 h-5 animate-spin mx-auto text-accent" /></div>
+          )}
+          {!loading && filtered.length === 0 && (
+            <p className="text-center text-sm text-muted-foreground py-12">当前店铺暂无素材，点上方按钮上传</p>
+          )}
+
+          {groups.map(([key, list]) => (
+            <section key={key} className="space-y-2">
+              <div className="flex items-center gap-2 px-1">
+                <span className="w-1 h-1 rounded-full bg-accent" />
+                <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">{key}</span>
+                <span className="text-[10px] text-muted-foreground ml-1">{list.length} 条</span>
+                <span className="flex-1 h-px bg-border ml-2" />
+              </div>
+              {list.map((it) => {
+                const checked = selected.has(it.id);
+                const thumbUrl = it.kind === 'photo'
+                  ? it.output_url
+                  : it.kind === 'video'
+                    ? (it.meta?.cover_url || it.output_url)
+                    : (it.input_image_urls?.[0]);
+                return (
+                  <div
+                    key={it.id}
+                    onClick={() => { if (manageMode) toggleSel(it.id); else setDetail(it); }}
+                    className={[
+                      'bg-card rounded-[0.875rem] border shadow-sm p-3 flex gap-3 transition-colors cursor-pointer',
+                      manageMode && checked ? 'border-accent/60 bg-accent/5' : 'border-accent/15 hover:border-accent/40',
+                    ].join(' ')}
+                  >
+                    {manageMode && (
+                      <div className={[
+                        'w-5 h-5 rounded-full border flex items-center justify-center shrink-0 self-center transition-all',
+                        checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-card',
+                      ].join(' ')}>
+                        {checked && <Check className="w-3 h-3" strokeWidth={3} />}
+                      </div>
+                    )}
+                    <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border relative">
+                      {thumbUrl ? (
+                        it.kind === 'video' && it.output_url ? (
+                          <video src={it.output_url} className="w-full h-full object-cover" muted preload="metadata" playsInline />
+                        ) : (
+                          <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                        )
+                      ) : it.kind === 'copy' ? (
+                        <FileText className="w-6 h-6 text-muted-foreground" />
+                      ) : it.kind === 'video' ? (
+                        <Video className="w-6 h-6 text-muted-foreground" />
+                      ) : (
+                        <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                      )}
+                      {it.kind === 'video' && (
+                        <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white text-[8px] px-1 rounded">VIDEO</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-display text-[10px] text-accent tracking-[0.18em]">
+                          {it.kind === 'photo' ? '图片' : it.kind === 'copy' ? '文案' : '视频'}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(it.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                          <Building2 className="w-2.5 h-2.5" />{shopName(it.shop_id)}
+                        </span>
+                      </div>
+                      {it.kind === 'copy' && (
+                        <p className="text-[12px] mt-1 line-clamp-2 text-foreground/85 leading-relaxed">
+                          {copyPreview(it) || '（无内容）'}
+                        </p>
+                      )}
+                      {it.meta?.platform && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5">平台 · {it.meta.platform}</p>
+                      )}
+                      {it.kind === 'video' && it.meta?.status && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          状态 · {statusLabel(it.meta.status)}
+                          {it.meta?.error ? ` · ${String(it.meta.error).slice(0, 30)}` : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
+          ))}
         </>)}
       </div>
-
 
       <AssetDetailDialog
         asset={detail}
@@ -274,6 +315,16 @@ export default function MarketingLibrary() {
           setDetail(next);
         }}
       />
+
+      {uploadKind && shopId && (
+        <UploadAssetDialog
+          open={!!uploadKind}
+          onOpenChange={(o) => { if (!o) setUploadKind(null); }}
+          kind={uploadKind}
+          shopId={shopId}
+          onUploaded={(row) => setItems((prev) => [row, ...prev])}
+        />
+      )}
 
       <AlertDialog open={confirmDel} onOpenChange={setConfirmDel}>
         <AlertDialogContent>
@@ -299,7 +350,7 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
       type="button"
       onClick={onClick}
       className={[
-        'px-4 h-9 text-[12px] -mb-px border-b-2 transition-colors',
+        'px-4 h-9 text-[12px] -mb-px border-b-2 transition-colors whitespace-nowrap shrink-0',
         active ? 'border-accent text-accent font-semibold' : 'border-transparent text-muted-foreground hover:text-foreground',
       ].join(' ')}
     >{children}</button>
