@@ -1,12 +1,13 @@
 // 活动详情：信息卡 + 统计 + 申请/领取列表 + 底部操作（修改/删除）
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Share2, Pencil, Trash2, RefreshCw } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
@@ -14,6 +15,7 @@ import {
 } from '@/lib/voucher';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
+import { PublishConfirmDialog } from '@/components/voucher/PublishConfirmDialog';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
