@@ -122,17 +122,39 @@ export function UploadAssetDialog({
         {kind === 'photo' && (
           <div className="space-y-3">
             <label className="block border-2 border-dashed border-accent/35 rounded-xl p-6 text-center cursor-pointer hover:bg-accent/[0.04]">
-              {photoFile ? (
-                <p className="text-sm">{photoFile.name}</p>
+              {photoFiles.length > 0 ? (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">已选 {photoFiles.length} 张</p>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {photoFiles.slice(0, 3).map((f) => f.name).join('、')}{photoFiles.length > 3 ? ` 等${photoFiles.length}张` : ''}
+                  </p>
+                  <p className="text-[11px] text-accent">点击可重新选择</p>
+                </div>
               ) : (
                 <>
                   <Upload className="w-5 h-5 mx-auto mb-2 text-accent" />
-                  <p className="text-sm">点击选择图片</p>
-                  <p className="text-[11px] text-muted-foreground mt-1">JPG / PNG / HEIC</p>
+                  <p className="text-sm">点击选择图片（可多选）</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">JPG / PNG / HEIC · 支持手机相册批量选择</p>
                 </>
               )}
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  setPhotoFiles(files);
+                  // allow re-selecting the same files later
+                  e.currentTarget.value = '';
+                }}
+              />
             </label>
+            {busy && progress.total > 0 && (
+              <p className="text-[11px] text-muted-foreground text-center">
+                上传中 {progress.done}/{progress.total}…
+              </p>
+            )}
           </div>
         )}
 
