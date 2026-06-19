@@ -1,8 +1,7 @@
 // 优惠券与活动相关常量与类型
 
 export const CLAIM_STATUS_LABEL: Record<string, string> = {
-  unclaimed: '待领取',
-  claimed: '已领取',
+  claimed: '待核销',
   redeemed: '已核销',
   expired: '已过期',
   void: '已作废',
@@ -12,7 +11,6 @@ export const CLAIM_STATUS_VARIANT: Record<
   string,
   'default' | 'secondary' | 'destructive' | 'outline'
 > = {
-  unclaimed: 'outline',
   claimed: 'default',
   redeemed: 'secondary',
   expired: 'outline',
