@@ -276,7 +276,20 @@ ${isExplore ? '七' : '六'}、最终解释权
           </div>
         )}
 
-        {notStarted ? (
+        {feedbackCode ? (
+          <ActivityFeedbackView
+            shareToken={shareToken}
+            shortCode={feedbackCode}
+            voucher={v || null}
+            onSwitchToForm={() => {
+              setFeedbackCode(null);
+              if (searchParams.get('claim')) {
+                searchParams.delete('claim');
+                setSearchParams(searchParams, { replace: true });
+              }
+            }}
+          />
+        ) : notStarted ? (
           <div className="bg-[#fdf6e8] rounded-2xl p-6 text-center text-sm text-[#3b2410] space-y-1">
             <p className="font-medium">活动尚未开始</p>
             <p className="text-xs text-muted-foreground">开始时间：{fmt(activity.starts_at)}</p>
