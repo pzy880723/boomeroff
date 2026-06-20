@@ -102,6 +102,11 @@ export function PublishConfirmDialog({
   };
 
   const save = async (confirmed: boolean) => {
+    const url = publishUrl.trim();
+    if (url && !/^https?:\/\//i.test(url)) {
+      toast.error('发布链接需以 http(s):// 开头');
+      return;
+    }
     setSaving(true);
     const { error } = await supabase
       .from('activity_applications')
@@ -111,6 +116,7 @@ export function PublishConfirmDialog({
         publish_confirmed_by: confirmed ? user?.id ?? null : null,
         publish_confirm_note: note.trim() || null,
         publish_screenshots: publishImgs.map((x) => x.path),
+        publish_url: url || null,
       })
       .eq('id', app.id);
     setSaving(false);
