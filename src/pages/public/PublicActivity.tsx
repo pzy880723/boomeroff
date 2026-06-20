@@ -481,6 +481,39 @@ ${isExplore ? '七' : '六'}、最终解释权
           </DialogContent>
         </Dialog>
 
+        <Dialog open={lookupOpen} onOpenChange={setLookupOpen}>
+          <DialogContent className="max-w-sm bg-[#fdf6e8] border-[#e8d5b3]">
+            <DialogHeader>
+              <DialogTitle className="text-[#3b2410]">我已领取过</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="text-[12px] text-[#6b3a18]/80">
+                输入报名时填写的手机号，找回你的优惠券并提交发布反馈。
+              </p>
+              <Input
+                value={lookupPhone}
+                onChange={(e) => setLookupPhone(e.target.value)}
+                inputMode="numeric"
+                maxLength={11}
+                placeholder="手机号"
+                className="bg-white border-[#e8d5b3] rounded-xl h-11"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={lookup}
+                disabled={looking}
+                className="bg-[#8e1f10] hover:bg-[#8e1f10]/90 text-white"
+              >
+                {looking && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                查询
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+
+
 
         <p className="text-center text-[11px] text-[#fff5e1]/55 pt-2">
           由 BOOMER · OFF 中古小店呈上
