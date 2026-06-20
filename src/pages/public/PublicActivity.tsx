@@ -48,6 +48,7 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 export default function PublicActivity() {
   const { shareToken = '' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +61,12 @@ export default function PublicActivity() {
   const [agreed, setAgreed] = useState(false);
   const [agreementOpen, setAgreementOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
+
+  // 反馈模式：已领过券，再次进入此页
+  const [feedbackCode, setFeedbackCode] = useState<string | null>(null);
+  const [lookupOpen, setLookupOpen] = useState(false);
+  const [lookupPhone, setLookupPhone] = useState('');
+  const [looking, setLooking] = useState(false);
 
   useEffect(() => {
     if (!shareToken) return;
