@@ -91,6 +91,7 @@ export type Database = {
           publish_confirmed: boolean
           publish_confirmed_at: string | null
           publish_confirmed_by: string | null
+          publish_screenshots: string[]
           reject_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
@@ -111,6 +112,7 @@ export type Database = {
           publish_confirmed?: boolean
           publish_confirmed_at?: string | null
           publish_confirmed_by?: string | null
+          publish_screenshots?: string[]
           reject_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -131,6 +133,7 @@ export type Database = {
           publish_confirmed?: boolean
           publish_confirmed_at?: string | null
           publish_confirmed_by?: string | null
+          publish_screenshots?: string[]
           reject_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null

@@ -111,6 +111,11 @@ export interface ActivityApplication {
   sms_sent_at: string | null;
   sms_error: string | null;
   created_at: string;
+  publish_confirmed?: boolean | null;
+  publish_confirmed_at?: string | null;
+  publish_confirmed_by?: string | null;
+  publish_confirm_note?: string | null;
+  publish_screenshots?: string[] | null;
 }
 
 // 描述优惠券抵扣规则的中文

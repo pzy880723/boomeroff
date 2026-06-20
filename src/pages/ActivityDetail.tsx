@@ -16,6 +16,7 @@ import {
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
 import { PublishConfirmDialog } from '@/components/voucher/PublishConfirmDialog';
+import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -23,9 +24,6 @@ import {
 } from '@/components/ui/alert-dialog';
 
 type AppWithClaim = ActivityApplication & {
-  publish_confirmed?: boolean | null;
-  publish_confirmed_at?: string | null;
-  publish_confirm_note?: string | null;
   voucher_claim?: { status: string; short_code: string | null; redeemed_at: string | null } | null;
 };
 
@@ -41,6 +39,14 @@ export default function ActivityDetail() {
   const [shareOpen, setShareOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [confirmApp, setConfirmApp] = useState<AppWithClaim | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+
+  const openImage = async (path: string) => {
+    const { data } = await supabase.storage
+      .from('voucher-screenshots')
+      .createSignedUrl(path, 600);
+    if (data?.signedUrl) setLightbox({ images: [data.signedUrl], index: 0 });
+  };
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -284,17 +290,11 @@ export default function ActivityDetail() {
                         <div key={f.key} className="flex gap-2">
                           <span className="text-muted-foreground shrink-0">{f.label}:</span>
                           {f.type === 'image' && typeof v === 'string' ? (
-                            <a
-                              href="#"
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                const { data } = await supabase.storage
-                                  .from('voucher-screenshots')
-                                  .createSignedUrl(String(v), 600);
-                                if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                              }}
+                            <button
+                              type="button"
+                              onClick={() => openImage(String(v))}
                               className="text-primary underline truncate"
-                            >查看截图</a>
+                            >查看截图</button>
                           ) : f.type === 'url' && typeof v === 'string' ? (
                             <a href={String(v)} target="_blank" rel="noreferrer" className="text-primary underline truncate">{String(v)}</a>
                           ) : (
@@ -318,7 +318,7 @@ export default function ActivityDetail() {
                     className="h-7 text-[11px] px-2 shrink-0"
                     onClick={() => setConfirmApp(app)}
                   >
-                    发布确认
+                    {app.publish_confirmed ? '查看发布' : '发布确认'}
                   </Button>
                 </div>
               </Card>
@@ -363,6 +363,15 @@ export default function ActivityDetail() {
         fields={activity.form_fields || []}
         onSaved={() => load(true)}
       />
+
+      <ImageLightbox
+        open={!!lightbox}
+        onClose={() => setLightbox(null)}
+        images={lightbox?.images || []}
+        initialIndex={lightbox?.index || 0}
+      />
+
+
 
 
 
