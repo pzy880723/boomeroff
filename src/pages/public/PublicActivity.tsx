@@ -1,6 +1,6 @@
 // 公开：活动报名页（免登录）—— 与海报同款暖棕主题
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ActivityField } from '@/lib/voucher';
 import { formatVoucherRule } from '@/lib/voucher';
+import { ActivityFeedbackView } from '@/components/public/ActivityFeedbackView';
 
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
