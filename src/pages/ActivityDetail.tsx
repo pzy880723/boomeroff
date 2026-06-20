@@ -290,17 +290,11 @@ export default function ActivityDetail() {
                         <div key={f.key} className="flex gap-2">
                           <span className="text-muted-foreground shrink-0">{f.label}:</span>
                           {f.type === 'image' && typeof v === 'string' ? (
-                            <a
-                              href="#"
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                const { data } = await supabase.storage
-                                  .from('voucher-screenshots')
-                                  .createSignedUrl(String(v), 600);
-                                if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                              }}
+                            <button
+                              type="button"
+                              onClick={() => openImage(String(v))}
                               className="text-primary underline truncate"
-                            >查看截图</a>
+                            >查看截图</button>
                           ) : f.type === 'url' && typeof v === 'string' ? (
                             <a href={String(v)} target="_blank" rel="noreferrer" className="text-primary underline truncate">{String(v)}</a>
                           ) : (
