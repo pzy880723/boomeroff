@@ -1,37 +1,59 @@
 ## 目标
-1. 领取列表里的"主页截图"等图片字段 → 点击可弹窗放大查看（不再只是新标签页打开签名链接）。
-2. 发布确认弹窗 → 支持上传"发布截图"（可多张），保存到记录中。
-3. 已确认发布后，列表中那个 `发布确认` 按钮文案改为 `查看发布`。
+让"已领过券的探店博主"再次扫海报二维码时，进入 **反馈页** 而非报名页：
+1. 顶部卡片：重新打开自己的优惠券（再截图一次） + 显示券状态。
+2. 中部：上传"发布截图"（多张）+ 填写"发布链接"（小红书/抖音笔记 URL）+ 备注。
+3. 已提交过的反馈可见，可补充/修改后再次提交。
+4. 给"换了浏览器、没记录"的用户一个"我已领取过？"入口 → 输手机号回查。
 
 ## 实施
 
 ### 1. 数据库
-新增 `activity_applications.publish_screenshots text[]`（存 `voucher-screenshots` bucket 的 path 数组）。沿用现有私有 bucket，读取时用 createSignedUrl。
+```
+ALTER TABLE public.activity_applications
+  ADD COLUMN IF NOT EXISTS publish_url text;
+```
+（`publish_screenshots` / `publish_confirm_note` 已有，复用。）
 
-### 2. 新组件 `src/components/voucher/ImageLightbox.tsx`
-轻量 Dialog，全屏暗背景 + 居中大图 + 关闭按钮，支持单张/多张左右切换。供下面两处复用。
+### 2. 新建 edge function `activity-feedback`
+verify_jwt = false。统一一个入口，根据 `action` 分支，全部用 service role：
+- `action: 'get'` — body: `{ share_token, short_code }`  
+  校验 short_code 属于该 activity → 返回 `{ application: {publish_screenshots, publish_url, publish_confirm_note, publish_confirmed}, claim: {short_code, status, expires_at, redeemed_at}, voucher: {name, rule, valid_days} }`。
+- `action: 'lookup_by_phone'` — body: `{ share_token, phone }`  
+  按 activity + phone 查 application → 返回 `short_code` 或 `{ found:false }`。
+- `action: 'upload'` — body: `{ share_token, short_code, filename, data_url }`  
+  校验后用 service role 上传到 `voucher-screenshots/publish/{app_id}/{uuid}.{ext}`，返回 `{ path, signed_url }`。
+- `action: 'submit'` — body: `{ share_token, short_code, publish_screenshots: string[], publish_url?: string, note?: string }`  
+  校验后 update `activity_applications`：写入 3 字段（不改 `publish_confirmed`——管理员仍要复核）。
 
-### 3. `PublishConfirmDialog.tsx`
-- "主页截图" 缩略图点击 → 打开 ImageLightbox，而不是 `<a target=_blank>`。
-- 在备注上方加 "发布截图" 区块：
-  - 已有的缩略图（点击放大、点 × 移除）。
-  - "+ 上传发布截图" 按钮：选择文件 → 上传到 `voucher-screenshots/publish/{appId}/{uuid}.{ext}` → 追加进本地数组。
-  - 保存（点 "已确认发布" / "更新备注"）时一并写入 `publish_screenshots`。
-- 撤销确认时不删图（保留历史，避免误删）。
+### 3. 前端 `src/pages/public/PublicActivity.tsx`
+- 进入页面时检查：
+  1. `localStorage[activity_claim:{shareToken}]` 是否存了 `short_code`；
+  2. URL 中是否带 `?claim=XXXX`（兼容跨设备分享）。
+  - 命中 → 调 `activity-feedback get` → 切到反馈视图。
+- 表单页右上角加 "我已领取过？" 链接 → 弹窗输手机号 → `lookup_by_phone` → 写入 localStorage 并切到反馈视图。
+- `submit()` 现有流程在 `navigate('/u/c/...')` 之前增加：`localStorage.setItem('activity_claim:'+shareToken, short_code)`。
 
-### 4. `ActivityDetail.tsx`
-- 领取列表中渲染 image 字段的部分：把 "查看截图" 链接换成缩略图（小方块），点击调用 ImageLightbox 打开。
-- 按钮逻辑：
-  ```
-  app.publish_confirmed
-    ? <Button variant="secondary">查看发布</Button>   // 仍打开同一个 PublishConfirmDialog
-    : <Button variant="outline">发布确认</Button>
-  ```
-- AppWithClaim 类型加 `publish_screenshots?: string[] | null`。
+### 4. 新组件 `src/components/public/ActivityFeedbackView.tsx`
+```
+┌──────────────────────────┐
+│ 你的优惠券 [已领取/已核销] │
+│ ¥xx · 满xx · 有效至 xxxx │
+│ [打开优惠券查看二维码] →  │   navigate(/u/c/short_code)
+├──────────────────────────┤
+│ 发布反馈                 │
+│ 上传发布截图（多张）      │
+│ 发布链接 (小红书/抖音 url)│
+│ 备注 (可选)              │
+│ [提交反馈]               │
+├──────────────────────────┤
+│ 已提交内容（可再次修改）   │
+└──────────────────────────┘
+```
+- 图片复用 `ImageLightbox`（已存在）。
+- 上传走 `activity-feedback upload`（base64），不依赖匿名 storage 策略。
+- 提交后 toast + 刷新数据。
 
-### 5. 类型同步
-迁移完成后 `src/integrations/supabase/types.ts` 自动更新；`ActivityApplication` 类型在 `src/lib/voucher.ts` 中增加 `publish_screenshots?: string[] | null`。
-
-## 不动的部分
-- 不修改 storage bucket 配置 / RLS（沿用现有 voucher-screenshots 上传策略）。
-- 不修改优惠券、活动其它逻辑。
+### 5. 不动
+- 不改 voucher / claim 业务、海报二维码（仍指向同一 `/a/:shareToken`）。
+- 不改管理员 `PublishConfirmDialog`，它会看到博主自助上传的截图与链接。
+- 不改 storage bucket 公开性。

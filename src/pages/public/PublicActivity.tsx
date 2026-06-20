@@ -1,6 +1,6 @@
 // 公开：活动报名页（免登录）—— 与海报同款暖棕主题
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ActivityField } from '@/lib/voucher';
 import { formatVoucherRule } from '@/lib/voucher';
+import { ActivityFeedbackView } from '@/components/public/ActivityFeedbackView';
 
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -47,6 +48,7 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 export default function PublicActivity() {
   const { shareToken = '' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +61,12 @@ export default function PublicActivity() {
   const [agreed, setAgreed] = useState(false);
   const [agreementOpen, setAgreementOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
+
+  // 反馈模式：已领过券，再次进入此页
+  const [feedbackCode, setFeedbackCode] = useState<string | null>(null);
+  const [lookupOpen, setLookupOpen] = useState(false);
+  const [lookupPhone, setLookupPhone] = useState('');
+  const [looking, setLooking] = useState(false);
 
   useEffect(() => {
     if (!shareToken) return;
@@ -74,6 +82,37 @@ export default function PublicActivity() {
       setLoading(false);
     })();
   }, [shareToken]);
+
+  // 检测是否已领取过（本地缓存 / URL ?claim=）
+  useEffect(() => {
+    if (!shareToken) return;
+    const fromUrl = searchParams.get('claim');
+    const fromLs = localStorage.getItem(`activity_claim:${shareToken}`);
+    const code = (fromUrl || fromLs || '').trim().toUpperCase();
+    if (code) {
+      setFeedbackCode(code);
+      if (fromUrl && !fromLs) localStorage.setItem(`activity_claim:${shareToken}`, code);
+    }
+  }, [shareToken, searchParams]);
+
+  const lookup = async () => {
+    if (!/^1[3-9]\d{9}$/.test(lookupPhone)) { toast.error('请输入正确的手机号'); return; }
+    setLooking(true);
+    const { data, error: e } = await supabase.functions.invoke('activity-feedback', {
+      body: { action: 'lookup_by_phone', share_token: shareToken, phone: lookupPhone },
+    });
+    setLooking(false);
+    if (e || (data as any)?.error) {
+      toast.error((data as any)?.error || e?.message || '查询失败');
+      return;
+    }
+    const d = data as any;
+    if (!d?.found) { toast.error('未查询到您的领取记录'); return; }
+    localStorage.setItem(`activity_claim:${shareToken}`, d.short_code);
+    setFeedbackCode(d.short_code);
+    setLookupOpen(false);
+    setLookupPhone('');
+  };
 
   const submit = async () => {
     if (!name.trim()) { toast.error('请输入姓名'); return; }
@@ -96,11 +135,13 @@ export default function PublicActivity() {
     const d = data as any;
     if (d?.short_code) {
       if (d.already) toast.info('您已领取过该活动的优惠券');
+      localStorage.setItem(`activity_claim:${shareToken}`, d.short_code);
       navigate(`/u/c/${d.short_code}`, { replace: true });
       return;
     }
     toast.error('报名成功但未生成优惠券，请联系客服');
   };
+
 
   // 主题色（与海报/券同款暖棕系）
   const bgStyle = {
@@ -235,7 +276,20 @@ ${isExplore ? '七' : '六'}、最终解释权
           </div>
         )}
 
-        {notStarted ? (
+        {feedbackCode ? (
+          <ActivityFeedbackView
+            shareToken={shareToken}
+            shortCode={feedbackCode}
+            voucher={v || null}
+            onSwitchToForm={() => {
+              setFeedbackCode(null);
+              if (searchParams.get('claim')) {
+                searchParams.delete('claim');
+                setSearchParams(searchParams, { replace: true });
+              }
+            }}
+          />
+        ) : notStarted ? (
           <div className="bg-[#fdf6e8] rounded-2xl p-6 text-center text-sm text-[#3b2410] space-y-1">
             <p className="font-medium">活动尚未开始</p>
             <p className="text-xs text-muted-foreground">开始时间：{fmt(activity.starts_at)}</p>
@@ -378,8 +432,16 @@ ${isExplore ? '七' : '六'}、最终解释权
             <p className="text-[11px] text-center text-[#6b3a18]/60">
               勾选并提交即视为同意上述协议，您的信息仅用于本次活动核验
             </p>
+            <button
+              type="button"
+              onClick={() => setLookupOpen(true)}
+              className="block mx-auto text-[12px] text-[#8e1f10] underline underline-offset-2"
+            >
+              我已领取过？提交发布反馈 / 重看优惠券
+            </button>
           </div>
         )}
+
 
         <Dialog open={agreementOpen} onOpenChange={setAgreementOpen}>
           <DialogContent className="max-w-md max-h-[85vh] bg-[#fdf6e8] border-[#e8d5b3]">
@@ -418,6 +480,39 @@ ${isExplore ? '七' : '六'}、最终解释权
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={lookupOpen} onOpenChange={setLookupOpen}>
+          <DialogContent className="max-w-sm bg-[#fdf6e8] border-[#e8d5b3]">
+            <DialogHeader>
+              <DialogTitle className="text-[#3b2410]">我已领取过</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="text-[12px] text-[#6b3a18]/80">
+                输入报名时填写的手机号，找回你的优惠券并提交发布反馈。
+              </p>
+              <Input
+                value={lookupPhone}
+                onChange={(e) => setLookupPhone(e.target.value)}
+                inputMode="numeric"
+                maxLength={11}
+                placeholder="手机号"
+                className="bg-white border-[#e8d5b3] rounded-xl h-11"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={lookup}
+                disabled={looking}
+                className="bg-[#8e1f10] hover:bg-[#8e1f10]/90 text-white"
+              >
+                {looking && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                查询
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+
 
 
         <p className="text-center text-[11px] text-[#fff5e1]/55 pt-2">
