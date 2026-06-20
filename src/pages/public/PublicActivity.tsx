@@ -83,6 +83,37 @@ export default function PublicActivity() {
     })();
   }, [shareToken]);
 
+  // 检测是否已领取过（本地缓存 / URL ?claim=）
+  useEffect(() => {
+    if (!shareToken) return;
+    const fromUrl = searchParams.get('claim');
+    const fromLs = localStorage.getItem(`activity_claim:${shareToken}`);
+    const code = (fromUrl || fromLs || '').trim().toUpperCase();
+    if (code) {
+      setFeedbackCode(code);
+      if (fromUrl && !fromLs) localStorage.setItem(`activity_claim:${shareToken}`, code);
+    }
+  }, [shareToken, searchParams]);
+
+  const lookup = async () => {
+    if (!/^1[3-9]\d{9}$/.test(lookupPhone)) { toast.error('请输入正确的手机号'); return; }
+    setLooking(true);
+    const { data, error: e } = await supabase.functions.invoke('activity-feedback', {
+      body: { action: 'lookup_by_phone', share_token: shareToken, phone: lookupPhone },
+    });
+    setLooking(false);
+    if (e || (data as any)?.error) {
+      toast.error((data as any)?.error || e?.message || '查询失败');
+      return;
+    }
+    const d = data as any;
+    if (!d?.found) { toast.error('未查询到您的领取记录'); return; }
+    localStorage.setItem(`activity_claim:${shareToken}`, d.short_code);
+    setFeedbackCode(d.short_code);
+    setLookupOpen(false);
+    setLookupPhone('');
+  };
+
   const submit = async () => {
     if (!name.trim()) { toast.error('请输入姓名'); return; }
     if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
@@ -104,11 +135,13 @@ export default function PublicActivity() {
     const d = data as any;
     if (d?.short_code) {
       if (d.already) toast.info('您已领取过该活动的优惠券');
+      localStorage.setItem(`activity_claim:${shareToken}`, d.short_code);
       navigate(`/u/c/${d.short_code}`, { replace: true });
       return;
     }
     toast.error('报名成功但未生成优惠券，请联系客服');
   };
+
 
   // 主题色（与海报/券同款暖棕系）
   const bgStyle = {
