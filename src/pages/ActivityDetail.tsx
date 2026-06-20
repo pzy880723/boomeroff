@@ -16,6 +16,7 @@ import {
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
 import { PublishConfirmDialog } from '@/components/voucher/PublishConfirmDialog';
+import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -23,9 +24,6 @@ import {
 } from '@/components/ui/alert-dialog';
 
 type AppWithClaim = ActivityApplication & {
-  publish_confirmed?: boolean | null;
-  publish_confirmed_at?: string | null;
-  publish_confirm_note?: string | null;
   voucher_claim?: { status: string; short_code: string | null; redeemed_at: string | null } | null;
 };
 
