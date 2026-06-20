@@ -39,6 +39,14 @@ export default function ActivityDetail() {
   const [shareOpen, setShareOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [confirmApp, setConfirmApp] = useState<AppWithClaim | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+
+  const openImage = async (path: string) => {
+    const { data } = await supabase.storage
+      .from('voucher-screenshots')
+      .createSignedUrl(path, 600);
+    if (data?.signedUrl) setLightbox({ images: [data.signedUrl], index: 0 });
+  };
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
