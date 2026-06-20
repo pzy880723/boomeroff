@@ -364,6 +364,15 @@ export default function ActivityDetail() {
         onSaved={() => load(true)}
       />
 
+      <ImageLightbox
+        open={!!lightbox}
+        onClose={() => setLightbox(null)}
+        images={lightbox?.images || []}
+        initialIndex={lightbox?.index || 0}
+      />
+
+
+
 
 
 
