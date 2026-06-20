@@ -312,14 +312,28 @@ export default function ActivityDetail() {
                       <> · 核销：{format(new Date(app.voucher_claim.redeemed_at), 'yyyy-MM-dd HH:mm')}</>
                     )}
                   </p>
-                  <Button
-                    size="sm"
-                    variant={app.publish_confirmed ? 'secondary' : 'outline'}
-                    className="h-7 text-[11px] px-2 shrink-0"
-                    onClick={() => setConfirmApp(app)}
-                  >
-                    {app.publish_confirmed ? '查看发布' : '发布确认'}
-                  </Button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {app.publish_url && (
+                      <a
+                        href={app.publish_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-[11px] text-primary underline inline-flex items-center gap-0.5 max-w-[8rem] truncate"
+                        title={app.publish_url}
+                      >
+                        🔗 发布链接
+                      </a>
+                    )}
+                    <Button
+                      size="sm"
+                      variant={app.publish_confirmed ? 'secondary' : 'outline'}
+                      className="h-7 text-[11px] px-2"
+                      onClick={() => setConfirmApp(app)}
+                    >
+                      {app.publish_confirmed ? '查看发布' : '发布确认'}
+                    </Button>
+                  </div>
                 </div>
               </Card>
             ));
