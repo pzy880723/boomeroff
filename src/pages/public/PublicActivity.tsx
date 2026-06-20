@@ -432,8 +432,16 @@ ${isExplore ? '七' : '六'}、最终解释权
             <p className="text-[11px] text-center text-[#6b3a18]/60">
               勾选并提交即视为同意上述协议，您的信息仅用于本次活动核验
             </p>
+            <button
+              type="button"
+              onClick={() => setLookupOpen(true)}
+              className="block mx-auto text-[12px] text-[#8e1f10] underline underline-offset-2"
+            >
+              我已领取过？提交发布反馈 / 重看优惠券
+            </button>
           </div>
         )}
+
 
         <Dialog open={agreementOpen} onOpenChange={setAgreementOpen}>
           <DialogContent className="max-w-md max-h-[85vh] bg-[#fdf6e8] border-[#e8d5b3]">
