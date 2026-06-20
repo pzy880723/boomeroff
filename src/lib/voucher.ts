@@ -116,6 +116,7 @@ export interface ActivityApplication {
   publish_confirmed_by?: string | null;
   publish_confirm_note?: string | null;
   publish_screenshots?: string[] | null;
+  publish_url?: string | null;
 }
 
 // 描述优惠券抵扣规则的中文
