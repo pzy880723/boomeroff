@@ -26,6 +26,7 @@ export function PublishConfirmDialog({
 }) {
   const { user } = useAuth();
   const [note, setNote] = useState('');
+  const [publishUrl, setPublishUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   // 主页截图（表单字段）：path -> signedUrl
@@ -38,6 +39,7 @@ export function PublishConfirmDialog({
   useEffect(() => {
     if (!app) return;
     setNote(app.publish_confirm_note || '');
+    setPublishUrl(app.publish_url || '');
 
     (async () => {
       // 主页截图
