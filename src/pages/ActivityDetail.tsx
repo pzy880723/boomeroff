@@ -318,7 +318,7 @@ export default function ActivityDetail() {
                     className="h-7 text-[11px] px-2 shrink-0"
                     onClick={() => setConfirmApp(app)}
                   >
-                    发布确认
+                    {app.publish_confirmed ? '查看发布' : '发布确认'}
                   </Button>
                 </div>
               </Card>
