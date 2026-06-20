@@ -247,6 +247,31 @@ export function PublishConfirmDialog({
             </div>
 
             <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-muted-foreground">发布链接</label>
+                {publishUrl && /^https?:\/\//i.test(publishUrl) && (
+                  <a
+                    href={publishUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-primary underline inline-flex items-center gap-0.5"
+                  >
+                    打开 <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+              <Input
+                value={publishUrl}
+                onChange={(e) => setPublishUrl(e.target.value)}
+                placeholder="https://... 用户提交后会显示在这里"
+                inputMode="url"
+                maxLength={500}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+
               <label className="text-xs text-muted-foreground">备注（可选）</label>
               <Textarea
                 value={note}
