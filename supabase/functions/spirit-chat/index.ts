@@ -53,6 +53,8 @@ const TOOL_LABEL: Record<string, string> = {
   search_knowledge: '翻官方中古知识库 📚',
   search_shop_kb: '翻门店笔记 / 顾客问答 📒',
   search_my_history: '在你识别过的商品里搜 🔍',
+  web_search: '联网搜一下 🌐',
+  generate_diagram: '给你画张示意图 🎨',
 };
 
 // ── 工具定义 ──
