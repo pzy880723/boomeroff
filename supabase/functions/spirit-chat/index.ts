@@ -458,14 +458,13 @@ Deno.serve(async (req) => {
           };
           const finalPrompt = `${STYLE_PREFIX[style] || STYLE_PREFIX.illustration}${prompt}`;
           try {
-            const r = await fetch('https://ai.gateway.lovable.dev/v1/images/generations', {
+            const r = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
               method: 'POST',
               headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 model: 'google/gemini-2.5-flash-image',
-                prompt: finalPrompt,
-                size: aspect === '16:9' ? '1280x720' : aspect === '4:3' ? '1024x768' : aspect === '3:4' ? '768x1024' : '1024x1024',
-                n: 1,
+                messages: [{ role: 'user', content: finalPrompt }],
+                modalities: ['image', 'text'],
               }),
             });
             if (!r.ok) {
@@ -474,24 +473,25 @@ Deno.serve(async (req) => {
               return { error: `生成失败 ${r.status}` };
             }
             const j = await r.json();
-            const b64 = j?.data?.[0]?.b64_json || j?.data?.[0]?.b64;
-            const directUrl = j?.data?.[0]?.url;
-            let publicUrl: string | null = null;
-            if (b64) {
-              const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-              const path = `spirit-chat-generated/${uid}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
-              const { error: upErr } = await admin.storage.from('product-images').upload(path, bin, {
-                contentType: 'image/png', upsert: false,
-              });
-              if (upErr) {
-                console.error('[spirit-chat] upload error', upErr);
-                return { error: '图片上传失败' };
-              }
-              publicUrl = admin.storage.from('product-images').getPublicUrl(path).data.publicUrl;
-            } else if (directUrl) {
-              publicUrl = directUrl;
+            const imgUrl: string | undefined = j?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+            if (!imgUrl || !imgUrl.startsWith('data:image')) {
+              console.error('[spirit-chat] no image in response', JSON.stringify(j).slice(0, 300));
+              return { error: '图片返回为空' };
             }
-            if (!publicUrl) return { error: '图片返回为空' };
+            const m = imgUrl.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+            if (!m) return { error: '图片格式异常' };
+            const mime = m[1];
+            const ext = mime.split('/')[1].replace('+xml', '').replace('jpeg', 'jpg');
+            const bin = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+            const path = `spirit-chat-generated/${uid}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+            const { error: upErr } = await admin.storage.from('product-images').upload(path, bin, {
+              contentType: mime, upsert: false,
+            });
+            if (upErr) {
+              console.error('[spirit-chat] upload error', upErr);
+              return { error: '图片上传失败' };
+            }
+            const publicUrl = admin.storage.from('product-images').getPublicUrl(path).data.publicUrl;
             return { url: publicUrl, prompt: finalPrompt, style, aspect };
           } catch (e) {
             return { error: e instanceof Error ? e.message : 'image gen failed' };
