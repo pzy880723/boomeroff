@@ -1,7 +1,7 @@
 // 公开领取页：短链 /u/c/:short （兼容旧 /u/claim/:shareToken）
 // 简化后：一进来即生效的「待核销」券，直接展示核销二维码
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Ticket, CheckCircle2, AlertTriangle } from 'lucide-react';
@@ -19,6 +19,7 @@ function fmtDateTime(s: string) {
 
 export default function PublicClaim() {
   const params = useParams();
+  const location = useLocation();
   const short = (params.short || '').toUpperCase();
   const legacyToken = params.shareToken || '';
   const lookup = useMemo(
@@ -26,25 +27,49 @@ export default function PublicClaim() {
     [short, legacyToken],
   );
 
-  const [loading, setLoading] = useState(true);
+  // 优先使用 router state / sessionStorage 里预置的 claim，避免再等一次 RPC
+  const seededClaim = useMemo(() => {
+    const fromState = (location.state as any)?.claim;
+    if (fromState) return fromState;
+    if (short) {
+      try {
+        const cached = sessionStorage.getItem(`claim:${short}`);
+        if (cached) return JSON.parse(cached);
+      } catch { /* ignore */ }
+    }
+    return null;
+  }, [location.state, short]);
+
+  const [loading, setLoading] = useState(!seededClaim);
   const [error, setError] = useState<string | null>(null);
-  const [claim, setClaim] = useState<any | null>(null);
+  const [claim, setClaim] = useState<any | null>(seededClaim);
 
   useEffect(() => {
     if (!short && !legacyToken) return;
+    let cancelled = false;
     (async () => {
       const { data, error: e } = await supabase.functions.invoke('voucher-claim-status', {
         body: lookup,
       });
+      if (cancelled) return;
       if (e || (data as any)?.error) {
-        setError((data as any)?.error || e?.message || '优惠券不存在');
+        // 有预置数据时，刷新失败不阻塞展示
+        if (!seededClaim) {
+          setError((data as any)?.error || e?.message || '优惠券不存在');
+        }
         setLoading(false);
         return;
       }
-      setClaim((data as any).claim);
+      const fresh = (data as any).claim;
+      setClaim(fresh);
+      if (short && fresh) {
+        try { sessionStorage.setItem(`claim:${short}`, JSON.stringify(fresh)); } catch { /* ignore */ }
+      }
       setLoading(false);
     })();
-  }, [short, legacyToken, lookup]);
+    return () => { cancelled = true; };
+  }, [short, legacyToken, lookup, seededClaim]);
+
 
   if (loading) {
     return (
