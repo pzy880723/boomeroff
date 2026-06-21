@@ -254,10 +254,14 @@ export default function AiImage() {
                     key={a}
                     onClick={() => setAspect(a)}
                     className={[
-                      'px-2 h-7 rounded-md text-[11px] border transition-colors',
-                      aspect === a ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground hover:border-accent/50',
+                      'flex flex-col items-center justify-center gap-0.5 px-1.5 h-11 min-w-[40px] rounded-md border transition-colors',
+                      aspect === a ? 'bg-primary/10 border-primary text-primary' : 'bg-card border-border text-muted-foreground hover:border-accent/50',
                     ].join(' ')}
-                  >{a}</button>
+                    aria-label={`比例 ${a}`}
+                  >
+                    <AspectIcon ratio={a} active={aspect === a} />
+                    <span className="text-[10px] leading-none">{a}</span>
+                  </button>
                 ))}
               </div>
             </div>
