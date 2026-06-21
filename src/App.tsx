@@ -48,7 +48,7 @@ import { PublicErrorBoundary } from "./components/system/PublicErrorBoundary";
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
 const MyMarketing = lazy(() => import("./pages/MyMarketing"));
-const MarketingPhoto = lazy(() => import("./pages/marketing/MarketingPhoto"));
+const AiImage = lazy(() => import("./pages/marketing/AiImage"));
 const MarketingCopy = lazy(() => import("./pages/marketing/MarketingCopy"));
 const MarketingVideo = lazy(() => import("./pages/marketing/MarketingVideo"));
 const MarketingLibrary = lazy(() => import("./pages/marketing/MarketingLibrary"));
@@ -109,7 +109,7 @@ const App = () => {
               <Route path="/me/activities" element={<ActivitiesMine />} />
               <Route path="/me/activities/:id" element={<ActivityDetail />} />
               <Route path="/me/marketing" element={<MyMarketing />} />
-              <Route path="/me/marketing/photo" element={<MarketingPhoto />} />
+              <Route path="/me/marketing/photo" element={<AiImage />} />
               <Route path="/me/marketing/copy" element={<MarketingCopy />} />
               <Route path="/me/marketing/video" element={<MarketingVideo />} />
               <Route path="/me/marketing/library" element={<MarketingLibrary />} />
