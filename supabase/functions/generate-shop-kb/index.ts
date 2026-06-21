@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY 未配置");
 
-    const { type = "sop", topic = "", hint = "", categories = [] } = await req.json();
+    const { type = "sop", topic = "", hint = "", categories = [], shop_id = null } = await req.json();
     if (!topic.trim()) throw new Error("缺少主题");
 
     const catList = (categories as { id: string; name: string }[])
