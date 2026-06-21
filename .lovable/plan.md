@@ -1,46 +1,105 @@
-## 一、重新调整「AI 视频」页面的步骤顺序
+# AI 图片 · 对话式重做
 
-按你说的逻辑改成：**参考图 → 主角 → 立意沟通 → 生成脚本**。把视频参数（类型/风格/时长/画幅/想突出的点）放到最顶部一个紧凑的「拍摄设置」卡片里，下面再按新顺序排：
+把营销中心"图片优化"完全替换为"AI 图片"。整个页面只有**一个对话框**,所有能力(文生图/图生图/多图融合/模板)都在这一个对话里完成。
 
+## 一、页面结构
+
+路由仍是 `/me/marketing/photo`,页面标题改 **AI 图片**。
+
+```text
+┌──────────────────────────────────┐
+│ PageHeader  AI 图片               │
+│ ShopPicker                        │
+├──────────────────────────────────┤
+│                                   │
+│        对话消息流                  │
+│  ┌──────────────────────────┐    │
+│  │ 你: 给这个杯子换个木桌背景 │    │
+│  │     @img1                 │    │
+│  └──────────────────────────┘    │
+│  ┌──────────────────────────┐    │
+│  │ BOOMER: [出图缩略图]      │    │
+│  │ [下载][写文案][做视频][分享]│   │
+│  └──────────────────────────┘    │
+│                                   │
+├──────────────────────────────────┤
+│ [模板▾]                           │  ← 模板入口在输入栏上方
+├──────────────────────────────────┤
+│ 📎 [img1][img2] +                 │  ← 已附图缩略图条(可×删除)
+│ ┌────────────────────────────┐   │
+│ │ @ 提它图,描述你想要的画面…   │ ↑ │
+│ └────────────────────────────┘   │
+│ 比例: 1:1 3:4 9:16 16:9           │
+└──────────────────────────────────┘
 ```
-[拍摄设置] 类型 · 风格 · 时长 · 画幅 · 想突出的点
-   ↓
-01 参考图（可选，最多 20 张，可上传 / 从素材库导入）
-   ↓
-02 主角（可选，CharacterPicker）
-   ↓
-03 立意沟通（VideoBriefChat，右上「生成分镜」按钮）
-   ↓
-04 分镜脚本（生成后出现，可逐镜编辑 → 确认脚本，开始渲染）
+
+- **附图条**:点 📎 上传 或 从图库选,可同时挂 0-4 张。
+- **@ 提及**:输入 `@` 弹出已挂的图缩略图选择器,插入 token `@img1`。没 @ 任何图但附图条里有图 = 默认全部参与。
+- **比例 chips**:1:1 / 3:4 / 9:16 / 16:9,默认 1:1。
+- **模板按钮**:下拉一个分类网格(商品海报 / 活动海报 / 朋友圈封面,每类 3-4 个)。
+  - 选一个模板 = 往**输入框自动填一段 prompt 草稿 + 弹一个迷你字段表单**(商品名/价格/卖点等),用户改完点发送即可。不是另一个页面,只是"帮你写好那句话"的快捷方式。
+
+## 二、对话语义
+
+每条用户消息 = 一次 AI 出图请求。AI 回一张图(或失败提示)。
+- **没附图** → 纯文生图。
+- **附 1 张图** → 图生图。
+- **附 2-4 张图** → 多图融合。
+- **@imgN** 只是个提示词标记,后端会把 `@img1` 替换成"参考图1",并把对应图传给模型。
+- 历史消息**只在本页内存**留存(刷新即失,与"灵兽对话"一致,避免改库),想保留就点"下载"或"分享到中古圈"。
+- 出图结果同时落 `marketing_assets`(沿用现有表,`kind='photo'`,meta 里记 prompt / refs / aspect / template_id),自动进图库。
+
+## 三、模型与后端
+
+新建 `supabase/functions/ai-image-chat/index.ts`:
+
+```ts
+POST /ai-image-chat
+{
+  shop_id: string,
+  prompt: string,                  // 用户那句话(模板模式由前端拼好)
+  aspect: '1:1'|'3:4'|'9:16'|'16:9',
+  refs: string[],                  // 已附图 url(顺序 = @img1,@img2…)
+  template_id?: string,
+  meta?: { style?: string }
+}
+→ { ok: true, output_url, asset_id }
 ```
 
-StepBar 同步改为：`选店铺 → 参考图 / 主角 → 立意沟通 → 确认分镜 → 渲染`（或精简成 4 步），current 计算逻辑同步更新。
+- 固定模型 `google/gemini-3.1-flash-image-preview`(Nano Banana 2),走 `/v1/chat/completions` + `modalities:["image","text"]`,沿用 `beautify-image` 那套鉴权/落库/限额代码。
+- 限额:每用户每天 50 张。
+- 模板 prompt 模板集中在 Edge Function 一个常量 `TEMPLATES`,前端只传 `template_id + fields`,后端拼最终 prompt(改文案不用动前端)。
 
-只调整 `src/pages/marketing/MarketingVideo.tsx` 里 JSX 的顺序和 SectionLabel 编号，不动业务逻辑，也不动 Edge Function。
+## 四、模板首期清单(占位,可后续微调)
 
-## 二、修复"超过 15 秒视频卡住 / Edge Function 返回非 2xx"
+| 分类 | 模板 |
+|---|---|
+| 商品海报 | 中古胶片质感单品 / 日杂自然光单品 / 极简白底带价签 |
+| 活动海报 | 周末特卖 / 新到货上新 / 清仓最后三天 |
+| 朋友圈封面 | 一周精选 9 宫格风 / 单品大字报 / 店内氛围 |
 
-截图里点「确认脚本，开始渲染」时报错。查阅当前代码后定位到两条最可能的卡点：
+每个模板的字段表单 ≤3 个,字段都可空。
 
-**1. `confirmRender`（前端）会在 duration > 12 且没有主角时，先**同步**调用 `ensure-auto-anchor-character` 生成一张角色身份板图（Gemini Nano Banana，单次往返 30–60s），再去调 `render-marketing-video`。**
+## 五、文件改动清单
 
-- 这一步任何失败（AI 限流、超时、storage 上传）都会直接抛错，UI 就显示"Edge Function returned non-2xx"。
-- 修复：把它改成"尽力而为"——`try/catch` 包住，失败时只 toast 提示，不中断后面的 render 调用；并显示更明确的中文错误信息（不要直接吐 `error.message`）。
+- **新建** `supabase/functions/ai-image-chat/index.ts`
+- **新建** `src/pages/marketing/AiImage.tsx`(对话主页面,替换 `MarketingPhoto.tsx`)
+- **新建** `src/components/marketing/ai-image/`
+  - `ChatMessage.tsx`(用户气泡 + AI 出图气泡,带四个动作按钮)
+  - `AttachmentBar.tsx`(附图缩略图条 + 上传/从图库)
+  - `MentionInput.tsx`(`@` 弹图选择)
+  - `AspectChips.tsx`
+  - `TemplateMenu.tsx` + `TemplateFieldDialog.tsx`
+  - `templates.ts`(模板元数据,prompt 模板放后端)
+- **编辑** `src/App.tsx`:`/me/marketing/photo` 路由指向新 `AiImage`(URL 不变)。
+- **编辑** `src/pages/MyMarketing.tsx`:卡片文案 "图片优化"→"AI 图片",描述改"和 AI 对话出图/改图/做海报"。
+- **保留不动** `MarketingPhoto.tsx` + `beautify-image` Edge Function(留作回滚,下一轮清理)。
 
-**2. `render-marketing-video`（后端）在多段路径里**串行**提交 Ark 任务**，30s = 3 段，每段创建任务都要等火山方舟返回 task id。**
+## 六、明确不做(留后续)
 
-- 串行 3 次 + 之前的角色生成，很容易超过 Edge Function 的执行预算，让客户端那侧拿到 5xx。
-- 修复：把 3 段子任务的 `submitArkTask` 改成 `Promise.all` 并行提交（Ark 创建任务接口本身只是入队，互不依赖）。父任务在所有子任务都成功后再统一插 `marketing_video_jobs` / `marketing_assets`；任何一段失败就把父任务标记 failed 并返回该段的真实错误信息。
+- 多轮上下文真传给模型(本期每条消息独立请求,不带历史 — 出图模型不需要)
+- 4 选 1
+- 涂抹局部重绘
+- 持久化对话历史到数据库
 
-**3. 把后端真实错误带回前端**
-
-- `render-marketing-video` 现在返回 `{ error: r.error, raw: r.raw }`，但 `supabase.functions.invoke` 在非 2xx 时会把 body 吞掉只留通用错误。改用 `return json({...}, 200)` + `{ ok: false }` 字段的约定，前端读 `data.ok` 判定，避免"Edge Function returned non-2xx"这种没信息的提示。
-- 前端 `confirmRender` 的 catch 里也要展示真实 message（目前已是 `e?.message`，但 invoke 失败时 message 就是那串英文）。
-
-### 改动文件
-
-- `src/pages/marketing/MarketingVideo.tsx` — UI 顺序 + StepBar + `confirmRender` 容错与错误展示
-- `supabase/functions/render-marketing-video/index.ts` — 多段并行提交 + 200+ok 错误返回约定
-- 不动数据库 schema、不动其他 edge function
-
-完成后我会：用 30s × 9:16 走一次完整流程，确认前端能进入"已入队"状态；如果失败，前端能显示"第 X 段创建失败：xxx"这类中文真实信息。
+同意就动工。要不要我现在就把"模板首期清单"里每个模板的 prompt 草稿一并敲定,还是先把对话框搭起来,模板 prompt 之后再调?
