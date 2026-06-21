@@ -109,7 +109,7 @@ ${kbBlock}
       first_comment: sanitize(c?.first_comment || ""),
     }));
 
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    const admin = admin0;
     const { data: row } = await admin.from("marketing_assets").insert({
       user_id: u.user.id,
       kind: "copy",
@@ -119,7 +119,7 @@ ${kbBlock}
       meta: { platform: platformKey, tone: toneKey, product_name: productName, price, highlight, from_video_id: body.from_video_id || null },
     }).select().single();
 
-    return json({ success: true, candidates, asset_id: row?.id });
+    return json({ success: true, candidates, asset_id: row?.id, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[copy] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
