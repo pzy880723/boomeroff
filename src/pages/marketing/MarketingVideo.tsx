@@ -208,10 +208,31 @@ export default function MarketingVideo() {
           </div>
         </section>
 
+        {/* 参考图(可选) */}
+        <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <SectionLabel num="05">参考图(可选,最多 20 张)</SectionLabel>
+            <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => setPickerOpen(true)}>
+              <FolderOpen className="w-3.5 h-3.5" />从素材库导入
+            </Button>
+          </div>
+          <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" />
+          <p className="text-[10px] text-muted-foreground">不上传也能生成。AI 会按场景从这些图里挑最贴合的一张。</p>
+        </section>
+
+        {/* 主角(可选) */}
+        <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
+          <SectionLabel num="06">主角(可选)</SectionLabel>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            选一个固定主角,所有镜头都用 TA,跨段不变脸。{duration > 12 && '多段视频如果不选,系统会自动先生成一张兜底角色身份板。'}
+          </p>
+          <CharacterPicker shopId={shopId} value={character} onChange={(c) => { setCharacter(c); setScript(null); }} />
+        </section>
+
         {/* 立意沟通 */}
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <SectionLabel num="05">立意沟通</SectionLabel>
+            <SectionLabel num="07">立意沟通</SectionLabel>
             <Button size="sm" onClick={genScript} disabled={generating || userTurns < 1} className="h-7 text-[11px]">
               {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
               生成分镜
@@ -226,27 +247,6 @@ export default function MarketingVideo() {
             onChange={(m) => { setBrief(m); setScript(null); }}
           />
         </section>
-
-        {/* 主角(可选) */}
-        <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
-          <SectionLabel num="06">主角(可选)</SectionLabel>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            选一个固定主角,所有镜头都用 TA,跨段不变脸。{duration > 12 && '多段视频如果不选,系统会自动先生成一张兜底角色身份板。'}
-          </p>
-          <CharacterPicker shopId={shopId} value={character} onChange={(c) => { setCharacter(c); setScript(null); }} />
-        </section>
-
-        {/* 参考图(可选) */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">参考图(可选,最多 20 张)</span>
-            <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => setPickerOpen(true)}>
-              <FolderOpen className="w-3.5 h-3.5" />从素材库导入
-            </Button>
-          </div>
-          <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" />
-          <p className="text-[10px] text-muted-foreground px-1">不上传也能生成。AI 会按场景从这些图里挑最贴合的一张。</p>
-        </div>
 
         {/* 分镜确认 */}
         {script && (
