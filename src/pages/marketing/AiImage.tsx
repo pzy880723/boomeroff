@@ -85,9 +85,54 @@ export default function AiImage() {
 
   const insertMention = (idx: number) => {
     const tag = `@img${idx + 1}`;
-    setInput((s) => (s ? `${s.trimEnd()} ${tag} ` : `${tag} `));
-    textareaRef.current?.focus();
+    const ta = textareaRef.current;
+    if (ta && typeof ta.selectionStart === 'number') {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd ?? start;
+      // 若光标紧跟一个未完成的 '@',替换它;否则插入
+      const before = input.slice(0, start);
+      const after = input.slice(end);
+      const atIdx = before.lastIndexOf('@');
+      const replaceFromAt = atIdx >= 0 && /^@\w*$/.test(before.slice(atIdx));
+      const left = replaceFromAt ? before.slice(0, atIdx) : before;
+      const insert = `${left && !left.endsWith(' ') ? ' ' : ''}${tag} `;
+      const next = left + insert + after;
+      setInput(next);
+      const caret = (left + insert).length;
+      requestAnimationFrame(() => {
+        ta.focus();
+        ta.setSelectionRange(caret, caret);
+      });
+    } else {
+      setInput((s) => (s ? `${s.trimEnd()} ${tag} ` : `${tag} `));
+      textareaRef.current?.focus();
+    }
+    setMentionOpen(false);
   };
+
+  // ===== @ 提及解析 =====
+  const mentionedIdxs = (() => {
+    const seen = new Set<number>();
+    const out: number[] = [];
+    const re = /@img(\d+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(input)) !== null) {
+      const i = parseInt(m[1], 10) - 1;
+      if (i >= 0 && i < refs.length && !seen.has(i)) {
+        seen.add(i);
+        out.push(i);
+      }
+    }
+    return out;
+  })();
+
+  const removeMention = (idx: number) => {
+    const tag = `@img${idx + 1}`;
+    setInput((s) => s.replace(new RegExp(`\\s*${tag}\\s?`, 'g'), ' ').replace(/\s{2,}/g, ' ').trimStart());
+  };
+
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
 
   // ===== 模板 =====
   const onPickTemplate = (t: AiImageTemplate) => {
