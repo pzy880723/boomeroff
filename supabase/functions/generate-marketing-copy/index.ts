@@ -40,11 +40,16 @@ Deno.serve(async (req) => {
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
 
+    const admin0 = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    const kbQuery = [productName, highlight, toneKey].filter(Boolean).join(' ');
+    const kbHits = kbQuery ? await kbSearch(admin0, { query: kbQuery, scope: 'copy', shopId, k: 6 }) : [];
+    const kbBlock = formatKbBlock(kbHits);
+
     const sys = `${presets.brand}
 ${shopBlock ? `\n${shopBlock}\n` : ""}
 平台：${presets.platforms[platformKey]}
 口吻：${presets.tones[toneKey]}
-
+${kbBlock}
 输出格式：严格 JSON 数组，3 个对象，每个对象字段：
 {
   "title": "标题（朋友圈留空字符串）",
