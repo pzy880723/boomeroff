@@ -75,7 +75,10 @@ export default function PublicClaim() {
     return (
       <div className="min-h-screen flex items-center justify-center"
         style={{ background: 'linear-gradient(160deg,#1a0f06 0%,#2a1808 100%)' }}>
-        <Loader2 className="w-6 h-6 animate-spin text-amber-200" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-6 h-6 animate-spin text-amber-200" />
+          <p className="text-[12px] text-amber-100/80">正在加载您的优惠券…</p>
+        </div>
       </div>
     );
   }
