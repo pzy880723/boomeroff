@@ -479,7 +479,7 @@ ${isExplore ? '七' : '六'}、最终解释权
               style={{ background: 'linear-gradient(135deg, #b3331d 0%, #8e1f10 100%)' }}
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              确认报名
+              {submitting ? '正在报名中…' : '确认报名'}
             </button>
             <p className="text-[11px] text-center text-[#6b3a18]/60">
               勾选并提交即视为同意上述协议，您的信息仅用于本次活动核验
