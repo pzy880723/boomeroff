@@ -23,6 +23,39 @@ async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+// 客户端把图压到最长边 1280px、JPEG q=0.82，避免 5MB base64 阻塞弱网上传
+async function compressImageToDataUrl(file: File, maxEdge = 1280, quality = 0.82): Promise<string> {
+  try {
+    if (!file.type.startsWith('image/')) return await fileToDataUrl(file);
+    const bitmap = await createImageBitmap(file).catch(() => null);
+    let w: number, h: number;
+    let source: CanvasImageSource;
+    if (bitmap) {
+      w = bitmap.width; h = bitmap.height; source = bitmap;
+    } else {
+      const url = URL.createObjectURL(file);
+      const img = await new Promise<HTMLImageElement>((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = rej;
+        i.src = url;
+      });
+      w = img.naturalWidth; h = img.naturalHeight; source = img;
+    }
+    const scale = Math.min(1, maxEdge / Math.max(w, h));
+    const tw = Math.round(w * scale); const th = Math.round(h * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = tw; canvas.height = th;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return await fileToDataUrl(file);
+    ctx.drawImage(source, 0, 0, tw, th);
+    return canvas.toDataURL('image/jpeg', quality);
+  } catch {
+    return await fileToDataUrl(file);
+  }
+}
+
+
 function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
   return (
     <div
@@ -83,6 +116,8 @@ export default function PublicActivity() {
     })();
   }, [shareToken]);
 
+  const [submitPhase, setSubmitPhase] = useState<'idle' | 'uploading' | 'submitting' | 'done'>('idle');
+
   // 检测是否已领取过（本地缓存 / URL ?claim=）
   useEffect(() => {
     if (!shareToken) return;
@@ -119,6 +154,10 @@ export default function PublicActivity() {
     if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
     if (!agreed) { toast.error('请先勾选并同意《活动参与确认协议》'); return; }
     setSubmitting(true);
+    const hasImage = Object.values(formData).some((v) => typeof v === 'string' && v.startsWith('data:'));
+    setSubmitPhase(hasImage ? 'uploading' : 'submitting');
+    // 切换到 submitting 文案的时机：弱网下 upload 已经在 invoke 内进行，这里短暂延后切到 "正在生成优惠券…"
+    const phaseTimer = window.setTimeout(() => setSubmitPhase('submitting'), hasImage ? 1200 : 0);
     const { data, error: e } = await supabase.functions.invoke('activity-apply', {
       body: {
         share_token: shareToken,
@@ -127,8 +166,10 @@ export default function PublicActivity() {
         form_data: formData,
       },
     });
-    setSubmitting(false);
+    window.clearTimeout(phaseTimer);
     if (e || (data as any)?.error) {
+      setSubmitting(false);
+      setSubmitPhase('idle');
       toast.error((data as any)?.error || e?.message || '报名失败');
       return;
     }
@@ -136,11 +177,22 @@ export default function PublicActivity() {
     if (d?.short_code) {
       if (d.already) toast.info('您已领取过该活动的优惠券');
       localStorage.setItem(`activity_claim:${shareToken}`, d.short_code);
-      navigate(`/u/c/${d.short_code}`, { replace: true });
+      if (d.claim) {
+        try { sessionStorage.setItem(`claim:${d.short_code}`, JSON.stringify(d.claim)); } catch {}
+      }
+      setSubmitPhase('done');
+      // 极短的"成功"过渡，给用户看一眼"报名成功"再跳
+      window.setTimeout(() => {
+        navigate(`/u/c/${d.short_code}`, { replace: true, state: { claim: d.claim } });
+      }, 250);
       return;
     }
+    setSubmitting(false);
+    setSubmitPhase('idle');
     toast.error('报名成功但未生成优惠券，请联系客服');
   };
+
+
 
 
   // 主题色（与海报/券同款暖棕系）
@@ -353,7 +405,7 @@ ${isExplore ? '七' : '六'}、最终解释权
                             onChange={async (e) => {
                               const file = e.target.files?.[0]; if (!file) return;
                               if (file.size > 5 * 1024 * 1024) { toast.error('图片不能超过 5MB'); return; }
-                              const dataUrl = await fileToDataUrl(file);
+                              const dataUrl = await compressImageToDataUrl(file);
                               setFormData((d) => ({ ...d, [f.key]: dataUrl }));
                             }}
                           />
@@ -376,7 +428,7 @@ ${isExplore ? '七' : '六'}、最终解释权
                         onChange={async (e) => {
                           const file = e.target.files?.[0]; if (!file) return;
                           if (file.size > 5 * 1024 * 1024) { toast.error('图片不能超过 5MB'); return; }
-                          const dataUrl = await fileToDataUrl(file);
+                          const dataUrl = await compressImageToDataUrl(file);
                           setFormData((d) => ({ ...d, [f.key]: dataUrl }));
                         }}
                       />
@@ -427,7 +479,7 @@ ${isExplore ? '七' : '六'}、最终解释权
               style={{ background: 'linear-gradient(135deg, #b3331d 0%, #8e1f10 100%)' }}
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              确认报名
+              {submitting ? '正在报名中…' : '确认报名'}
             </button>
             <p className="text-[11px] text-center text-[#6b3a18]/60">
               勾选并提交即视为同意上述协议，您的信息仅用于本次活动核验
@@ -521,6 +573,26 @@ ${isExplore ? '七' : '六'}、最终解释权
       </div>
 
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+
+      {submitting && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6" style={bgStyle}>
+          <div className="w-full max-w-xs rounded-2xl bg-[#fdf6e8] p-6 text-center text-[#3b2410] shadow-2xl space-y-3">
+            <div className="flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-[#8e1f10]" />
+            </div>
+            <p className="text-base font-semibold">
+              {submitPhase === 'done' ? '报名成功！' : '正在报名中，请稍等…'}
+            </p>
+            <p className="text-[12px] text-[#6b3a18]/80 leading-relaxed">
+              {submitPhase === 'uploading' && '正在上传报名资料…'}
+              {submitPhase === 'submitting' && '正在为您生成优惠券…'}
+              {submitPhase === 'done' && '正在打开您的优惠券…'}
+              {submitPhase === 'idle' && '即将开始…'}
+            </p>
+            <p className="text-[11px] text-[#6b3a18]/60">请勿关闭或刷新本页面</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

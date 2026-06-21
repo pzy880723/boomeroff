@@ -88,11 +88,14 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
     if (existing?.voucher_claim_id && (existing as any).voucher_claim?.short_code) {
+      const shortCode = (existing as any).voucher_claim.short_code;
+      const fullClaim = await fetchFullClaim(admin, shortCode);
       return json({
         ok: true,
         requires_review: false,
         already: true,
-        short_code: (existing as any).voucher_claim.short_code,
+        short_code: shortCode,
+        claim: fullClaim,
       });
     }
 
@@ -126,16 +129,29 @@ Deno.serve(async (req) => {
       .single();
     if (cErr) return json({ error: cErr.message }, 400);
 
-    await admin
-      .from('activity_applications')
-      .update({ voucher_claim_id: claim.id })
-      .eq('id', app.id);
+    // 关联回 application（不阻塞返回）和拉取完整 claim 并行
+    const [fullClaim] = await Promise.all([
+      fetchFullClaim(admin, claim.short_code),
+      admin.from('activity_applications').update({ voucher_claim_id: claim.id }).eq('id', app.id),
+    ]);
 
-    return json({ ok: true, requires_review: false, short_code: claim.short_code });
+    return json({ ok: true, requires_review: false, short_code: claim.short_code, claim: fullClaim });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
 });
+
+async function fetchFullClaim(admin: ReturnType<typeof createClient>, shortCode: string) {
+  const { data } = await admin
+    .from('voucher_claims')
+    .select('id, code, share_token, short_code, status, source, recipient_name, recipient_phone, claimed_at, expires_at, redeemed_at, voucher:vouchers(id, name, threshold_type, discount_amount, min_spend, valid_days, template_terms, starts_at, ends_at)')
+    .eq('short_code', shortCode)
+    .maybeSingle();
+  if (data && data.status === 'claimed' && data.expires_at && new Date(data.expires_at) < new Date()) {
+    (data as any).status = 'expired';
+  }
+  return data;
+}
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
