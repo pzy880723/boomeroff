@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
       },
     }).select().single();
 
-    return json({ ok: true, output_url: pub.publicUrl, asset_id: row?.id });
+    return json({ ok: true, output_url: pub.publicUrl, asset_id: row?.id, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[ai-image-chat] error", e);
     return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, 200);
