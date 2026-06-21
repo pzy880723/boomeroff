@@ -264,6 +264,14 @@ Deno.serve(async (req) => {
 - 今天:${today}(周${'日一二三四五六'[new Date(today + 'T00:00:00+08:00').getDay()]}) | 明天:${tomorrow}
 - 用户 ID(内部):${uid}`;
 
+    // ── 3.5) 品牌知识库 RAG：用最近几条 user 消息拼检索 query ──
+    const recentUserMsgs = incoming.filter((m) => m.role === 'user').slice(-3).map((m) => extractText(m.content)).filter(Boolean).join(' ');
+    const kbHits = recentUserMsgs
+      ? await kbSearch(admin, { query: recentUserMsgs, scope: 'chat', shopId: staffRes.data?.shop_id ?? null, k: 6 })
+      : [];
+    const kbBlock = formatKbBlock(kbHits);
+    const finalSystemPrompt = systemPrompt + kbBlock;
+
     // ── 4) 工具实现 ──
     async function execTool(name: string, args: any): Promise<any> {
       try {
