@@ -32,7 +32,7 @@ import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, Menu,
   CalendarDays, Clock, BookOpen, MessagesSquare, Store, ShieldCheck,
-  UserCog, Building2, Library, Megaphone, Settings, Ticket,
+  UserCog, Building2, Library, Megaphone, Settings, Ticket, Database,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
