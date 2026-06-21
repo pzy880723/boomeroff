@@ -237,6 +237,7 @@ export default function Portal() {
             {effectiveTab === 'sop' && can('shop.kb.write') && <KbManager type="sop" title="门店手册" />}
             {effectiveTab === 'qa' && can('shop.kb.write') && <KbManager type="qa" title="顾客 Q&A" />}
             {effectiveTab === 'official' && can('knowledge.official.write') && <OfficialKnowledgeManager />}
+            {effectiveTab === 'brand_kb' && can('knowledge.official.write') && <BrandKbManager />}
             {effectiveTab === 'community' && can('community.moderate') && <CommunityModeration />}
             {effectiveTab === 'corrections' && can('correction.review') && <CorrectionReviewPanel />}
             {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}
