@@ -125,6 +125,13 @@ async function buildDoc(admin: any, source_type: string, source_id: string): Pro
     return [{ title: `运营OKR：${data.title}`, content, shop_id: data.shop_id, metadata: { tags: data.tags, scope: data.scope }, scopes: all }];
   }
 
+  if (source_type === 'accepted_output') {
+    // 由 kb-accept 直接写入 kb_documents（无 embedding），这里仅补嵌入
+    const { data } = await admin.from('kb_documents').select('*').eq('source_type', 'accepted_output').eq('source_id', source_id);
+    if (!data || data.length === 0) return null;
+    return (data as any[]).map((d) => ({ title: d.title, content: d.content, shop_id: d.shop_id, metadata: d.metadata || {}, scopes: d.scopes || all }));
+  }
+
   return null;
 }
 
