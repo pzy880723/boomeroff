@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadMarketingPresets } from "../_shared/brand-context.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
+import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
