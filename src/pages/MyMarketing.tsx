@@ -80,8 +80,8 @@ export default function MyMarketing() {
               to="/me/marketing/photo"
               num="01"
               icon={Sparkles}
-              title="图片优化"
-              desc="只修瑕疵 · 不加滤镜"
+              title="AI 图片"
+              desc="对话出图 · 改图 · 海报"
             />
             <ToolTile
               to="/me/marketing/copy"
