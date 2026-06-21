@@ -94,7 +94,7 @@ ${catList}
     if (!args) throw new Error("AI 未返回内容");
     const draft = JSON.parse(args);
 
-    return new Response(JSON.stringify({ ok: true, draft }), {
+    return new Response(JSON.stringify({ ok: true, draft, __kb_sources: kbSourcesMeta(kbHits) }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
