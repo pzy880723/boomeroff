@@ -32,9 +32,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (aErr || !activity) return json({ error: '活动不存在' }, 404);
     if (activity.status !== 'active') return json({ error: '活动已结束' }, 400);
-    if (activity.starts_at && new Date(activity.starts_at) > new Date()) {
-      return json({ error: '活动尚未开始' }, 400);
-    }
+    // 允许提前报名：starts_at 在未来仍可报名
     if (activity.ends_at && new Date(activity.ends_at) < new Date()) {
       return json({ error: '活动已结束' }, 400);
     }
