@@ -55,8 +55,13 @@ Deno.serve(async (req) => {
 请在 scene / action 描述里自然地反复出现 TA。`
       : "";
 
+    const adminKb = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+    const kbQuery = [topic, highlight, rule.label, styleKey].filter(Boolean).join(' ');
+    const kbHits = kbQuery ? await kbSearch(adminKb, { query: kbQuery, scope: 'video', shopId, k: 6 }) : [];
+    const kbBlock = formatKbBlock(kbHits);
+
     const sys = `${presets.brand}
-${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}
+${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}
 你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】(全中文)。
 
 重要：这是文生视频(text-to-video)。每一镜要给出**完整的中文描述**，让视频模型直接照拍。
