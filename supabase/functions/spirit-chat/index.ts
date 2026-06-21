@@ -538,7 +538,7 @@ Deno.serve(async (req) => {
 
     let toolCallCount = 0;
     let assembledFinal = ''; // 最终回答（用于落库）
-    const maxToolSteps = 5;
+    const maxToolSteps = 6;
 
     const stream = new ReadableStream({
       async start(controller) {
