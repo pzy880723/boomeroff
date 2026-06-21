@@ -17,6 +17,7 @@ import { NotificationManager } from '@/components/admin/NotificationManager';
 import { ActivityReviewPanel } from '@/components/admin/ActivityReviewPanel';
 import { SmsTestPanel } from '@/components/admin/SmsTestPanel';
 import { MarketingPresetsPanel } from '@/components/admin/MarketingPresetsPanel';
+import { BrandKbManager } from '@/components/admin/BrandKbManager';
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,7 @@ import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, Menu,
   CalendarDays, Clock, BookOpen, MessagesSquare, Store, ShieldCheck,
-  UserCog, Building2, Library, Megaphone, Settings, Ticket,
+  UserCog, Building2, Library, Megaphone, Settings, Ticket, Database,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
@@ -39,7 +40,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test' | 'marketing_presets';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'brand_kb' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test' | 'marketing_presets';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -63,6 +64,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { key: 'sop', label: '门店手册', icon: BookOpen, perm: 'shop.kb.write' },
       { key: 'qa', label: '顾客 Q&A', icon: MessagesSquare, perm: 'shop.kb.write' },
       { key: 'official', label: '官方知识', icon: BadgeCheck, perm: 'knowledge.official.write' },
+      { key: 'brand_kb', label: '品牌大模型库', icon: Database, perm: 'knowledge.official.write' },
     ],
   },
   {
@@ -235,6 +237,7 @@ export default function Portal() {
             {effectiveTab === 'sop' && can('shop.kb.write') && <KbManager type="sop" title="门店手册" />}
             {effectiveTab === 'qa' && can('shop.kb.write') && <KbManager type="qa" title="顾客 Q&A" />}
             {effectiveTab === 'official' && can('knowledge.official.write') && <OfficialKnowledgeManager />}
+            {effectiveTab === 'brand_kb' && can('knowledge.official.write') && <BrandKbManager />}
             {effectiveTab === 'community' && can('community.moderate') && <CommunityModeration />}
             {effectiveTab === 'corrections' && can('correction.review') && <CorrectionReviewPanel />}
             {effectiveTab === 'ai' && can('settings.ai') && <AISettingsPanel />}

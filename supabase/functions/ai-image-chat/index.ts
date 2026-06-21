@@ -2,6 +2,7 @@
 // 一个端点搞定:文生图 / 图生图(1张) / 多图融合(2-4张) / 模板模式
 // 模型固定 google/gemini-3.1-flash-image-preview (Nano Banana 2)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,7 +134,9 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "今日 AI 图片次数已达 50 张,明天再来吧" }, 200);
     }
 
-    const finalPrompt = buildPrompt({ userPrompt, aspect, refsCount: refs.length, templateId, templateFields });
+    const kbHits = await kbSearch(admin, { query: userPrompt || templateId || '品牌图', scope: 'image', shopId: (body as any)?.shop_id || null, k: 4 });
+    const kbBlock = formatKbBlock(kbHits, '【品牌视觉/审美参考】');
+    const finalPrompt = buildPrompt({ userPrompt, aspect, refsCount: refs.length, templateId, templateFields }) + kbBlock;
 
     // 拼 multipart content
     const content: any[] = [{ type: "text", text: finalPrompt }];
@@ -200,7 +203,7 @@ Deno.serve(async (req) => {
       },
     }).select().single();
 
-    return json({ ok: true, output_url: pub.publicUrl, asset_id: row?.id });
+    return json({ ok: true, output_url: pub.publicUrl, asset_id: row?.id, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[ai-image-chat] error", e);
     return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, 200);

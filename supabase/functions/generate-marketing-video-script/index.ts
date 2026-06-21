@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadMarketingPresets, type VideoType } from "../_shared/brand-context.ts";
 import { normalizeStyle, VIDEO_STYLE_LABELS, VIDEO_STYLE_EN } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
+import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,8 +55,13 @@ Deno.serve(async (req) => {
 请在 scene / action 描述里自然地反复出现 TA。`
       : "";
 
+    const adminKb = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+    const kbQuery = [topic, highlight, rule.label, styleKey].filter(Boolean).join(' ');
+    const kbHits = kbQuery ? await kbSearch(adminKb, { query: kbQuery, scope: 'video', shopId, k: 6 }) : [];
+    const kbBlock = formatKbBlock(kbHits);
+
     const sys = `${presets.brand}
-${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}
+${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}
 你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】(全中文)。
 
 重要：这是文生视频(text-to-video)。每一镜要给出**完整的中文描述**，让视频模型直接照拍。
@@ -179,7 +185,7 @@ ${refList}
     script.style_label = VIDEO_STYLE_LABELS[styleKey];
     if (character) script.character = character;
 
-    return json({ success: true, script, video_type: videoType, video_type_label: rule.label });
+    return json({ success: true, script, video_type: videoType, video_type_label: rule.label, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[script] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);

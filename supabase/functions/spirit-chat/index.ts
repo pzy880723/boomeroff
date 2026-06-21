@@ -12,6 +12,7 @@
 // - 落库 + 用量写入用 EdgeRuntime.waitUntil，[DONE] 提前返回
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { kbSearch, formatKbBlock, kbSourcesMeta } from '../_shared/kb.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -263,6 +264,14 @@ Deno.serve(async (req) => {
 - 今天:${today}(周${'日一二三四五六'[new Date(today + 'T00:00:00+08:00').getDay()]}) | 明天:${tomorrow}
 - 用户 ID(内部):${uid}`;
 
+    // ── 3.5) 品牌知识库 RAG：用最近几条 user 消息拼检索 query ──
+    const recentUserMsgs = incoming.filter((m) => m.role === 'user').slice(-3).map((m) => extractText(m.content)).filter(Boolean).join(' ');
+    const kbHits = recentUserMsgs
+      ? await kbSearch(admin, { query: recentUserMsgs, scope: 'chat', shopId: staffRes.data?.shop_id ?? null, k: 6 })
+      : [];
+    const kbBlock = formatKbBlock(kbHits);
+    const finalSystemPrompt = systemPrompt + kbBlock;
+
     // ── 4) 工具实现 ──
     async function execTool(name: string, args: any): Promise<any> {
       try {
@@ -388,7 +397,7 @@ Deno.serve(async (req) => {
       });
 
     const modelMessages: any[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: finalSystemPrompt },
       ...chatHistory,
     ];
 
@@ -410,6 +419,7 @@ Deno.serve(async (req) => {
         const emitRaw = (line: string) => controller.enqueue(encoder.encode(line));
 
         try {
+          if (kbHits.length > 0) emit({ __kb_sources: kbSourcesMeta(kbHits) });
           for (let step = 0; step < maxToolSteps; step++) {
             const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
               method: 'POST',

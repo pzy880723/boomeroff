@@ -1,51 +1,116 @@
-## 改动只在 `src/pages/marketing/AiImage.tsx`(不动后端,不动其他页面)
+## 目标
 
-### 1. 比例按钮加图示
-当前 4 个比例按钮只显示文字 `1:1 / 3:4 / 9:16 / 16:9`,看不出形状。
+把系统里散落的"知识"统一成 **一份品牌专属 RAG 检索库**，所有 AI 入口（生图 / 文案 / 视频 / **浮标 BOOMER 对话**）默认都先检索这份库再回答；并且让它**自己长大**——新增/修改/被采纳的内容会自动回流。
 
-改为"小矩形示意 + 文字"双行结构,矩形按真实比例缩放绘制:
+最终效果：BOOMER 不只是一个聊天助手，而是 **BOOMER·OFF 品牌的专属大模型**——越用越懂品牌、越懂门店、越懂运营。
 
-- `1:1` → 12×12 方块
-- `3:4` → 9×12 竖矩形
-- `9:16` → 7×12 细高矩形
-- `16:9` → 16×9 横矩形
+## 知识来源（全部接入）
 
-实现:用一个内置的 `<AspectIcon ratio={a} />` 子组件,以 `div` + Tailwind 固定宽高画一个圆角描边方块,选中时填充 `primary`。按钮整体改为上图下字、宽度自适应(约 38–44px 宽,高 7→9 略升)。
+| 来源 | 表 | 进库 |
+|---|---|---|
+| 官方知识 | `official_knowledge` | 标题+正文+卖点 |
+| 个人词条 | `product_knowledge` | 标题+卡片 |
+| 识别历史（资料完整 + admin 标记沉淀） | `products` | 名称+描述+卖点 |
+| 店铺画像 | `shops` + `shop_marketing_profiles` | 定位/卖点/口吻/人群 |
+| 门店 SOP / 顾客 QA | `shop_kb_entries` | 标题+正文 |
+| 品牌系统提示 / 平台 / 口吻 / 镜位 | `marketing_presets` | 每条 preset 一文档 |
+| 营销素材 | `marketing_assets` | 文件名+caption+tags（vision 自动补描述） |
+| 人物设定 | `marketing_characters` | 名字+人设+风格 |
+| 中古圈精选帖 | `community_posts.is_featured` | 文案+话题 |
+| **运营 OKR / 月度主题** | **新增 `operation_okrs`** | 周期+目标+关键动作 |
+| 手动自由词条 | `source_type='manual'` | 管理员任意写 |
+| **被采纳的 AI 输出（含 BOOMER 对话精选）** | `source_type='accepted_output'` | 点"加入知识库"回流 |
 
-### 2. 输入框打 `@` 弹出已上传图,选中插入 mini 缩略图
+## 数据模型
 
-#### 触发
-- 监听 `onChange`:当光标前最后一个字符是 `@`(且前一个字符是空格或行首)时,在输入框正上方弹一个浮层面板(用 `Popover`/绝对定位 div,锚定到 textarea)。
-- 浮层内容:横向滚动一行,展示当前 `refs` 全部缩略图(48×48,带 `@1/@2…` 角标);若 `refs` 为空,显示一行提示 "先点 📎 或 🖼 加参考图"。
+### `kb_documents`
+```text
+id uuid pk
+source_type text   -- official/product_kb/product/shop_profile/shop_sop/shop_qa
+                   -- preset/asset/character/community/okr/manual/accepted_output
+source_id   text
+shop_id     uuid?
+scopes      text[] -- {'image','copy','video','chat'} 默认全开（chat = BOOMER 浮标）
+title       text
+content     text   -- chunk 后正文
+metadata    jsonb  -- {tags, weight, original_url, content_hash, ...}
+embedding   vector(3072)
+embed_model text
+updated_at  timestamptz
+```
+HNSW (`vector_cosine_ops`) + RLS：管理员全权，店员按 shop_id 读。
 
-#### 选中行为
-- 点中第 i 张:
-  - 把光标处的 `@` 替换为 `@imgN `(末尾带空格)。
-  - 关闭浮层。
-  - 焦点回到 textarea。
+### `kb_ingest_queue`
+`id, source_type, source_id, op (upsert/delete), enqueued_at, processed_at, error`
 
-#### 输入框上方的"mini 缩略图链"(展示已经被 @ 提到的图)
-当前 `refs` 区已经是缩略图条,作用是"管理参考图"。现在新增一行紧贴 textarea 上方的"提到链":
+### `operation_okrs`
+`id, period_start, period_end, scope (brand/shop), shop_id?, title, objective, key_results jsonb, key_actions, tags[]`
 
-- 解析 `input` 字符串里所有 `@imgN`(去重保序),映射到 `refs[N-1]`。
-- 渲染为一排 32×32 圆角缩略图 + 角标 `@N`,点击缩略图把光标定位到该 token 之后,点 ✕ 同时移除字符串里所有 `@imgN`。
-- 若解析结果为空就整行不渲染,不占高度。
+### RPC `match_kb(query vector, k int, scope text, shop uuid)`
+按 `scope = ANY(scopes)` 过滤 + shop_id 偏好加权，返回 top-k。
 
-视觉上区分两个区域:
-- 原 "附图条"(48×48,可移除):**池子**,挂着哪些图可以用。
-- 新 "提到链"(32×32,贴在 textarea 上):**已经被 @ 提到**的图,所见即所得。
+## Edge Functions
 
-#### Esc / 失焦
-- Esc 或浮层外点击关闭弹层;不阻塞普通输入。
-- 中文输入法合成期间 (`isComposing`) 不触发弹层,避免误判。
+### 新增
+- `kb-embed` — 调 `google/gemini-embedding-001` (3072d) 批量出向量。
+- `kb-ingest` — 消费队列：拉源 → chunk（≈800 字、重叠 100、标题重复在头）→ content_hash 变化才 re-embed → upsert。支持 `?backfill=all` 一次性回填。
+- `kb-search` — `{query, scope, shop_id, k}` → embed → `match_kb`。相似度 < 0.55 全部丢弃。
+- `kb-analyze-asset` — 给 `marketing_assets` 跑视觉模型补 caption / tags。
+- `kb-accept` — "★ 加入知识库" 按钮入口，写 `accepted_output` + 入队。
 
-### 3. 不改的部分
-- 模板、店铺选择、发送逻辑、Edge Function、消息渲染、空状态、AI 气泡的下载/写文案/做视频按钮 —— 全部保持。
-- 上传/库选图入口 (📎 / 🖼) 不变。
-- 文案提示行 "最多挂 4 张参考图…" 不变。
+### 改造（注入检索结果 + 返回 `__kb_sources` 元数据）
+- `generate-marketing-copy` (scope=copy)
+- AI 生图 edge fn (scope=image)
+- 视频脚本 / 镜位 (scope=video)
+- `generate-shop-kb` (scope=copy + shop_id)
+- **`spirit-chat`（BOOMER 浮标）(scope=chat)** ← 本次新增重点
+  - 流式 SSE 前先同步 `kb-search`（k=6），把命中片段塞进 system prompt 顶部：
+    `【BOOMER 知识库参考】\n---\n{title}\n{content}\n---\n...`
+  - 在 SSE 首个 event 里把 `__kb_sources` 推给前端用于展示徽章。
+  - 仍不持久化对话本体，但 "加入知识库" 仍可把任意一条助手回复回流。
 
-### 验证
-手机视口下:
-- 4 个比例按钮一眼看出形状差异,选中态视觉清晰。
-- 输入框打 `@` 立刻在输入框上方弹出已上传图列表;选中后 textarea 出现 `@img1`,同时上方出现对应 32×32 缩略图。
-- 删掉 `@img1` 文本,缩略图自动消失;移除参考图,对应的 mini 缩略图也消失。
+## 自动成长
+
+`AFTER INSERT/UPDATE/DELETE` 触发器入 `kb_ingest_queue`：
+`official_knowledge / product_knowledge / products(资料完整时) / shops / shop_marketing_profiles / shop_kb_entries / marketing_presets / marketing_assets / marketing_characters / community_posts(featured) / operation_okrs`
+
+`pg_cron` 每分钟跑 `kb-ingest`。识别校正循环已写 `official_knowledge` → 自动覆盖。
+
+## 前端
+
+### `/portal` → 新 "知识库" Tab（管理员）
+- 列表 / 筛选（source_type / scope / shop / 是否含 chat scope）
+- 手动 CRUD `manual` 词条
+- 每条调权：scopes 复选（含 `chat`）+ weight 滑块
+- "重建全部 / 重建某类" 入队按钮
+- 队列状态 + 失败重试
+- 子页 "运营 OKR" CRUD
+
+### 生成页 & BOOMER 浮标
+- 顶部小徽章 `🧠 已参考 N 条品牌知识` → 展开列表（标题 / source_type / 相似度）。
+- 任一输出 / BOOMER 回复右下：`★ 加入知识库` → `kb-accept`，选 scopes（默认全勾）。
+
+## 实施顺序
+
+1. Migration：`kb_documents` / `kb_ingest_queue` / `operation_okrs` + RLS + GRANT + HNSW + `match_kb` + 触发器。
+2. Edge：`kb-embed` → `kb-ingest`(+backfill) → `kb-search` → `kb-analyze-asset` → `kb-accept`。
+3. 跑一次 backfill 把现有数据全部入库。
+4. 改造 5 个 edge fn（含 `spirit-chat`）注入检索 + 返回 `__kb_sources`。
+5. `/portal` 知识库 Tab + 运营 OKR Tab。
+6. 生成页 & **BOOMER 抽屉对话气泡** 加 "参考来源" 徽章 + "加入知识库" 按钮。
+7. `pg_cron` 每分钟跑 `kb-ingest`。
+
+## 技术细节
+
+- 模型：`google/gemini-embedding-001`，3072d，走 `LOVABLE_API_KEY`。
+- Chunk：≈800 字符 / 重叠 100；中文按 `。！？\n` 优先切；title 始终重复在 chunk 头。
+- 检索：k=6，min similarity 0.55；BOOMER chat 场景再加最近 3 条 user message 拼成检索 query，避免上下文丢失。
+- 成本：content_hash 不变跳过 re-embed。
+- 隐私：店员侧 `kb-search` 强制注入 `shop_id`；私有识别历史不入库（仅 admin 沉淀的进库）。
+- 失败：`kb_ingest_queue.error` 红标 + 手动重试。
+
+## 不在本次范围
+
+- 多模态以图搜图（保留扩展位 `gemini-embedding-2`）。
+- 跨店员私有历史共享。
+- 微调专属基座模型（先做 RAG，等量足了再评估）。

@@ -615,6 +615,101 @@ export type Database = {
         }
         Relationships: []
       }
+      kb_documents: {
+        Row: {
+          content: string
+          content_hash: string | null
+          created_at: string
+          embed_model: string | null
+          embedding: string | null
+          id: string
+          metadata: Json
+          scopes: string[]
+          shop_id: string | null
+          source_id: string | null
+          source_type: string
+          title: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          content: string
+          content_hash?: string | null
+          created_at?: string
+          embed_model?: string | null
+          embedding?: string | null
+          id?: string
+          metadata?: Json
+          scopes?: string[]
+          shop_id?: string | null
+          source_id?: string | null
+          source_type: string
+          title: string
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          content?: string
+          content_hash?: string | null
+          created_at?: string
+          embed_model?: string | null
+          embedding?: string | null
+          id?: string
+          metadata?: Json
+          scopes?: string[]
+          shop_id?: string | null
+          source_id?: string | null
+          source_type?: string
+          title?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kb_documents_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kb_ingest_queue: {
+        Row: {
+          attempts: number
+          enqueued_at: string
+          error: string | null
+          id: string
+          op: string
+          payload: Json | null
+          processed_at: string | null
+          source_id: string
+          source_type: string
+        }
+        Insert: {
+          attempts?: number
+          enqueued_at?: string
+          error?: string | null
+          id?: string
+          op?: string
+          payload?: Json | null
+          processed_at?: string | null
+          source_id: string
+          source_type: string
+        }
+        Update: {
+          attempts?: number
+          enqueued_at?: string
+          error?: string | null
+          id?: string
+          op?: string
+          payload?: Json | null
+          processed_at?: string | null
+          source_id?: string
+          source_type?: string
+        }
+        Relationships: []
+      }
       knowledge_test_results: {
         Row: {
           created_at: string
@@ -1013,6 +1108,62 @@ export type Database = {
           view_count?: number
         }
         Relationships: []
+      }
+      operation_okrs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          key_actions: string | null
+          key_results: Json
+          objective: string
+          period_end: string
+          period_start: string
+          scope: string
+          shop_id: string | null
+          tags: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_actions?: string | null
+          key_results?: Json
+          objective: string
+          period_end: string
+          period_start: string
+          scope?: string
+          shop_id?: string | null
+          tags?: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_actions?: string | null
+          key_results?: Json
+          objective?: string
+          period_end?: string
+          period_start?: string
+          scope?: string
+          shop_id?: string | null
+          tags?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operation_okrs_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       price_records: {
         Row: {
@@ -2193,6 +2344,29 @@ export type Database = {
         Returns: boolean
       }
       increment_official_view: { Args: { _id: string }; Returns: undefined }
+      kb_enqueue: {
+        Args: { _op?: string; _source_id: string; _source_type: string }
+        Returns: undefined
+      }
+      match_kb: {
+        Args: {
+          match_count?: number
+          min_similarity?: number
+          query_embedding: string
+          scope_filter?: string
+          shop_filter?: string
+        }
+        Returns: {
+          content: string
+          id: string
+          metadata: Json
+          shop_id: string
+          similarity: number
+          source_id: string
+          source_type: string
+          title: string
+        }[]
+      }
       perform_check_in: { Args: never; Returns: Json }
       user_has_permission: {
         Args: { _perm: string; _user_id: string }

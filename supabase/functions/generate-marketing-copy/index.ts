@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadMarketingPresets } from "../_shared/brand-context.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
+import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,11 +40,16 @@ Deno.serve(async (req) => {
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
 
+    const admin0 = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    const kbQuery = [productName, highlight, toneKey].filter(Boolean).join(' ');
+    const kbHits = kbQuery ? await kbSearch(admin0, { query: kbQuery, scope: 'copy', shopId, k: 6 }) : [];
+    const kbBlock = formatKbBlock(kbHits);
+
     const sys = `${presets.brand}
 ${shopBlock ? `\n${shopBlock}\n` : ""}
 平台：${presets.platforms[platformKey]}
 口吻：${presets.tones[toneKey]}
-
+${kbBlock}
 输出格式：严格 JSON 数组，3 个对象，每个对象字段：
 {
   "title": "标题（朋友圈留空字符串）",
@@ -103,7 +109,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}
       first_comment: sanitize(c?.first_comment || ""),
     }));
 
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    const admin = admin0;
     const { data: row } = await admin.from("marketing_assets").insert({
       user_id: u.user.id,
       kind: "copy",
@@ -113,7 +119,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}
       meta: { platform: platformKey, tone: toneKey, product_name: productName, price, highlight, from_video_id: body.from_video_id || null },
     }).select().single();
 
-    return json({ success: true, candidates, asset_id: row?.id });
+    return json({ success: true, candidates, asset_id: row?.id, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[copy] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);

@@ -1,3 +1,6 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -10,7 +13,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY 未配置");
 
-    const { type = "sop", topic = "", hint = "", categories = [] } = await req.json();
+    const { type = "sop", topic = "", hint = "", categories = [], shop_id = null } = await req.json();
     if (!topic.trim()) throw new Error("缺少主题");
 
     const catList = (categories as { id: string; name: string }[])
@@ -34,7 +37,10 @@ Deno.serve(async (req) => {
 **示范话术** → 一段可直接读出来的话术，自然口语化
 **升级处理** → 1-2 条何时上报店长`;
 
-    const system = type === "qa" ? sysQa : sysSop;
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+    const kbHits = await kbSearch(admin, { query: `${topic} ${hint}`.trim(), scope: 'copy', shopId: shop_id, k: 5 });
+    const kbBlock = formatKbBlock(kbHits);
+    const system = (type === "qa" ? sysQa : sysSop) + kbBlock;
 
     const userPrompt = `请为以下主题生成一条${type === "qa" ? "客户问答" : "门店 SOP"}词条：
 
@@ -88,7 +94,7 @@ ${catList}
     if (!args) throw new Error("AI 未返回内容");
     const draft = JSON.parse(args);
 
-    return new Response(JSON.stringify({ ok: true, draft }), {
+    return new Response(JSON.stringify({ ok: true, draft, __kb_sources: kbSourcesMeta(kbHits) }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
