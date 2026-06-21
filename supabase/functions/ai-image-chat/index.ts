@@ -134,7 +134,9 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "今日 AI 图片次数已达 50 张,明天再来吧" }, 200);
     }
 
-    const finalPrompt = buildPrompt({ userPrompt, aspect, refsCount: refs.length, templateId, templateFields });
+    const kbHits = await kbSearch(admin, { query: userPrompt || templateId || '品牌图', scope: 'image', shopId: (body as any)?.shop_id || null, k: 4 });
+    const kbBlock = formatKbBlock(kbHits, '【品牌视觉/审美参考】');
+    const finalPrompt = buildPrompt({ userPrompt, aspect, refsCount: refs.length, templateId, templateFields }) + kbBlock;
 
     // 拼 multipart content
     const content: any[] = [{ type: "text", text: finalPrompt }];
