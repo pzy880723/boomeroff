@@ -419,6 +419,7 @@ Deno.serve(async (req) => {
         const emitRaw = (line: string) => controller.enqueue(encoder.encode(line));
 
         try {
+          if (kbHits.length > 0) emit({ __kb_sources: kbSourcesMeta(kbHits) });
           for (let step = 0; step < maxToolSteps; step++) {
             const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
               method: 'POST',
