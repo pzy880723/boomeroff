@@ -185,7 +185,7 @@ ${refList}
     script.style_label = VIDEO_STYLE_LABELS[styleKey];
     if (character) script.character = character;
 
-    return json({ success: true, script, video_type: videoType, video_type_label: rule.label });
+    return json({ success: true, script, video_type: videoType, video_type_label: rule.label, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[script] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
