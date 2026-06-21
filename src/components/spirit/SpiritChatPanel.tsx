@@ -500,8 +500,19 @@ function MessageBubble({
       <SpiritMascot size={36} flat />
       <div className="max-w-[85%] text-[hsl(var(--primary-foreground)/0.95)] text-[13px] leading-relaxed">
         {content ? (
-          <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0">
-            <ReactMarkdown>{content}</ReactMarkdown>
+          <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_img]:my-2 [&_img]:rounded-xl [&_img]:border [&_img]:border-[hsl(var(--accent)/0.25)] [&_img]:max-h-72 [&_img]:object-cover [&_a]:text-[hsl(var(--accent))] [&_a]:underline">
+            <ReactMarkdown
+              components={{
+                img: ({ node, ...props }) => (
+                  <a href={props.src as string} target="_blank" rel="noreferrer">
+                    <img {...props} loading="lazy" alt={props.alt || '示意图'} />
+                  </a>
+                ),
+                a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+              }}
+            >
+              {content}
+            </ReactMarkdown>
             {streaming && <span className="inline-block w-1.5 h-3 bg-[hsl(var(--accent))] align-middle ml-0.5 animate-pulse" />}
           </div>
         ) : (

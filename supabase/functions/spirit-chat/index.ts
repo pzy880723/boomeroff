@@ -53,6 +53,8 @@ const TOOL_LABEL: Record<string, string> = {
   search_knowledge: '翻官方中古知识库 📚',
   search_shop_kb: '翻门店笔记 / 顾客问答 📒',
   search_my_history: '在你识别过的商品里搜 🔍',
+  web_search: '联网搜一下 🌐',
+  generate_diagram: '给你画张示意图 🎨',
 };
 
 // ── 工具定义 ──
@@ -117,6 +119,45 @@ const TOOLS = [
           limit: { type: 'number', description: '默认 5，最多 10' },
         },
         required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: '当内部知识库和工具都查不到、或问题涉及外部世界 / 时事 / 品牌新闻 / 公开行情时，调用这个工具联网搜索。返回 3-5 条带标题、摘要、来源链接、配图的网页结果。请把得到的图片用 Markdown 图片语法 ![](url) 插入回答中，并在末尾列出来源。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '搜索关键词，简体中文或英文均可' },
+          limit: { type: 'number', description: '返回条数，默认 4，最多 6' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_diagram',
+      description: '当用户希望你把某个总结、概念、对比、流程"画成一张图"或"做成示意图/卡片/海报/插画"时，调用此工具生成一张图片，并把返回的图片 URL 用 Markdown 语法 ![示意图](url) 嵌入回答里。**只在能显著提升理解时调用，普通回答不要画图。**',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: '画面描述（中文/英文），尽量具体，包含主体、风格、要点文字' },
+          style: {
+            type: 'string',
+            enum: ['illustration', 'infographic', 'flowchart', 'poster'],
+            description: 'illustration=暖萌插画(默认), infographic=信息图, flowchart=流程图, poster=海报',
+          },
+          aspect: {
+            type: 'string',
+            enum: ['1:1', '4:3', '3:4', '16:9'],
+            description: '画面比例，默认 1:1',
+          },
+        },
+        required: ['prompt'],
       },
     },
   },
@@ -249,13 +290,15 @@ Deno.serve(async (req) => {
 - 偶尔可以用第一人称小动作描述,例如"BOOMER 蹲下来想了想…"、"我合个十帮你看看",但不要每句都加。
 
 【你的能力 & 工具】
-- 你可以调用工具来查最新数据:query_schedule(排班)、query_my_stats(等级/打卡/待领经验)、search_knowledge(中古知识库)、search_shop_kb(门店SOP/顾客问答)、search_my_history(我识别过的商品)。
+- 你可以调用工具来查最新数据:query_schedule(排班)、query_my_stats(等级/打卡/待领经验)、search_knowledge(中古知识库)、search_shop_kb(门店SOP/顾客问答)、search_my_history(我识别过的商品)、web_search(联网搜索外部信息+图片)、generate_diagram(把总结画成示意图/海报/插画)。
 - **凡是涉及具体日期、排班、人员安排、商品保养知识、店铺规章的问题,必须先调用工具拿到真实数据,再回答**。绝不凭印象编造。
 - 工具返回为空时,请直接说"这条 BOOMER 也查不到呢",不要瞎编。
+- **多模态输出**:当 web_search 返回了图片 URL,请用 Markdown `![描述](图片URL)` 嵌入到答案中,做到图文并茂;搜索来源也用 Markdown 链接列在末尾。
+- **画示意图**:用户说"画一张"/"做成图"/"示意图"/"卡片"/"海报",或你判断一张图能让说明清楚很多倍时,调用 generate_diagram,并把返回的 url 用 `![示意图](url)` 嵌入。普通对话不要画图。
 
 【铁律】
 - 全程简体中文,**绝不使用「主播」一词**,统一称呼对方「你」或「店员」。
-- 回答控制在 50–200 字,多用短句、偶尔表情(🦦🌱✨ 等)点缀。
+- 回答控制在 50–300 字(含图说),多用短句、偶尔表情(🦦🌱✨ 等)点缀。
 - 涉及人名只用工具返回的真实姓名,不要瞎编。
 - 回答里出现日期时,请写出具体日期(如"5 月 19 日"或"明天 5/19"),不要只说"今天/明天"让人猜。
 
@@ -371,6 +414,90 @@ Deno.serve(async (req) => {
           return { rows: data || [] };
         }
 
+        if (name === 'web_search') {
+          const q = String(args?.query || '').slice(0, 100);
+          const lim = Math.min(Math.max(Number(args?.limit) || 4, 1), 6);
+          if (q.length < 2) return { rows: [] };
+          const FIRECRAWL = Deno.env.get('FIRECRAWL_API_KEY');
+          if (!FIRECRAWL) return { rows: [], error: '联网搜索未配置' };
+          try {
+            const r = await fetch('https://api.firecrawl.dev/v2/search', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${FIRECRAWL}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query: q, limit: lim }),
+            });
+            if (!r.ok) {
+              const t = await r.text().catch(() => '');
+              console.error('[spirit-chat] firecrawl error', r.status, t.slice(0, 200));
+              return { rows: [], error: `搜索失败 ${r.status}` };
+            }
+            const j = await r.json();
+            const items = (j?.data?.web || j?.data || []) as any[];
+            const rows = items.slice(0, lim).map((it: any) => ({
+              title: it.title || it.url,
+              url: it.url,
+              snippet: String(it.description || it.snippet || '').slice(0, 220),
+              image: it.image || it.thumbnail || it?.metadata?.ogImage || null,
+            }));
+            return { rows };
+          } catch (e) {
+            return { rows: [], error: e instanceof Error ? e.message : 'fetch failed' };
+          }
+        }
+
+        if (name === 'generate_diagram') {
+          const prompt = String(args?.prompt || '').slice(0, 600);
+          const style = String(args?.style || 'illustration');
+          const aspect = String(args?.aspect || '1:1');
+          if (prompt.length < 4) return { error: '描述太短' };
+          const STYLE_PREFIX: Record<string, string> = {
+            illustration: '温暖治愈的扁平插画,柔和配色,中文文字清晰可读,简洁不拥挤,主体居中,留白舒适,',
+            infographic: '现代信息图风格,清晰的图标+短标题+数据,栏目化布局,品牌色为暖橙+米白+墨绿,中文字标准,',
+            flowchart: '简洁流程图风格,圆角矩形+箭头连接,层级分明,纯色背景,中文节点文字清晰,',
+            poster: '中古杂货风格海报,排版精致,主标题大字,辅助小字,日系治愈氛围,',
+          };
+          const finalPrompt = `${STYLE_PREFIX[style] || STYLE_PREFIX.illustration}${prompt}`;
+          try {
+            const r = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'google/gemini-2.5-flash-image',
+                messages: [{ role: 'user', content: finalPrompt }],
+                modalities: ['image', 'text'],
+              }),
+            });
+            if (!r.ok) {
+              const t = await r.text().catch(() => '');
+              console.error('[spirit-chat] image gen error', r.status, t.slice(0, 300));
+              return { error: `生成失败 ${r.status}` };
+            }
+            const j = await r.json();
+            const imgUrl: string | undefined = j?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+            if (!imgUrl || !imgUrl.startsWith('data:image')) {
+              console.error('[spirit-chat] no image in response', JSON.stringify(j).slice(0, 300));
+              return { error: '图片返回为空' };
+            }
+            const m = imgUrl.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+            if (!m) return { error: '图片格式异常' };
+            const mime = m[1];
+            const ext = mime.split('/')[1].replace('+xml', '').replace('jpeg', 'jpg');
+            const bin = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+            const path = `spirit-chat-generated/${uid}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+            const { error: upErr } = await admin.storage.from('product-images').upload(path, bin, {
+              contentType: mime, upsert: false,
+            });
+            if (upErr) {
+              console.error('[spirit-chat] upload error', upErr);
+              return { error: '图片上传失败' };
+            }
+            const publicUrl = admin.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+            return { url: publicUrl, prompt: finalPrompt, style, aspect };
+          } catch (e) {
+            return { error: e instanceof Error ? e.message : 'image gen failed' };
+          }
+        }
+
         return { error: 'unknown tool' };
       } catch (e) {
         return { error: e instanceof Error ? e.message : 'tool failed' };
@@ -411,7 +538,7 @@ Deno.serve(async (req) => {
 
     let toolCallCount = 0;
     let assembledFinal = ''; // 最终回答（用于落库）
-    const maxToolSteps = 5;
+    const maxToolSteps = 6;
 
     const stream = new ReadableStream({
       async start(controller) {

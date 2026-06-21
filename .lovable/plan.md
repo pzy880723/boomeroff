@@ -1,116 +1,76 @@
-## 目标
+# BOOMER 多模态升级方案
 
-把系统里散落的"知识"统一成 **一份品牌专属 RAG 检索库**，所有 AI 入口（生图 / 文案 / 视频 / **浮标 BOOMER 对话**）默认都先检索这份库再回答；并且让它**自己长大**——新增/修改/被采纳的内容会自动回流。
+让浮窗里的 BOOMER 在对话中能够：① 遇到不会的问题自动联网搜索 ② 在回复里插入相关图片 ③ 把总结直接生成一张示意图发给你。
 
-最终效果：BOOMER 不只是一个聊天助手，而是 **BOOMER·OFF 品牌的专属大模型**——越用越懂品牌、越懂门店、越懂运营。
+## 一、能力清单
 
-## 知识来源（全部接入）
+1. **联网搜索（已部分具备，需打通到 spirit-chat）**
+   - 复用 `web-search-grounding` 里已接入的 Gemini `google_search` 工具
+   - 在 `spirit-chat` edge function 中开启 `tools: [{ google_search: {} }]`,模型不确定时自动触发
+   - 搜索来源（标题 + URL）通过 SSE 推回前端,在气泡下方显示"参考来源 N 条"折叠列表
 
-| 来源 | 表 | 进库 |
-|---|---|---|
-| 官方知识 | `official_knowledge` | 标题+正文+卖点 |
-| 个人词条 | `product_knowledge` | 标题+卡片 |
-| 识别历史（资料完整 + admin 标记沉淀） | `products` | 名称+描述+卖点 |
-| 店铺画像 | `shops` + `shop_marketing_profiles` | 定位/卖点/口吻/人群 |
-| 门店 SOP / 顾客 QA | `shop_kb_entries` | 标题+正文 |
-| 品牌系统提示 / 平台 / 口吻 / 镜位 | `marketing_presets` | 每条 preset 一文档 |
-| 营销素材 | `marketing_assets` | 文件名+caption+tags（vision 自动补描述） |
-| 人物设定 | `marketing_characters` | 名字+人设+风格 |
-| 中古圈精选帖 | `community_posts.is_featured` | 文案+话题 |
-| **运营 OKR / 月度主题** | **新增 `operation_okrs`** | 周期+目标+关键动作 |
-| 手动自由词条 | `source_type='manual'` | 管理员任意写 |
-| **被采纳的 AI 输出（含 BOOMER 对话精选）** | `source_type='accepted_output'` | 点"加入知识库"回流 |
+2. **图片插入（图文并茂）**
+   - 模型输出 Markdown,前端用 `react-markdown` 渲染 `![alt](url)`
+   - 图片来源两路:
+     - 联网搜索结果里的图片(Gemini grounding 返回的 image refs / 网页 og:image)
+     - 知识库 `kb_documents` 关联的 `marketing_assets` 图片 URL(KB 检索时一并带回)
+   - 系统提示词新增:"必要时用 Markdown 图片语法插入相关配图,优先用[内部知识参考]里附带的图片 URL,其次用联网搜索结果中的图片"
 
-## 数据模型
+3. **示意图生成(按需文生图)**
+   - 给模型注册一个 `generate_diagram` 工具:
+     - 参数:`prompt`(中文描述)、`style`(`illustration` | `infographic` | `flowchart`)、`aspect_ratio`
+     - 执行端:edge function 调用 Lovable AI `google/gemini-3.1-flash-image-preview` 生成图,上传到 `chat-images` storage bucket,返回公开 URL
+   - 模型在总结时若判断"用图更清楚"会自动调用,把返回的 URL 以 `![示意图](url)` 嵌入回复
+   - 也支持用户显式说"画个示意图"/"做成图给我"触发
 
-### `kb_documents`
-```text
-id uuid pk
-source_type text   -- official/product_kb/product/shop_profile/shop_sop/shop_qa
-                   -- preset/asset/character/community/okr/manual/accepted_output
-source_id   text
-shop_id     uuid?
-scopes      text[] -- {'image','copy','video','chat'} 默认全开（chat = BOOMER 浮标）
-title       text
-content     text   -- chunk 后正文
-metadata    jsonb  -- {tags, weight, original_url, content_hash, ...}
-embedding   vector(3072)
-embed_model text
-updated_at  timestamptz
-```
-HNSW (`vector_cosine_ops`) + RLS：管理员全权，店员按 shop_id 读。
+4. **(可选)用户上图 → BOOMER 看图回答**
+   - 浮窗输入框新增 📎 上传按钮,图片转 base64 作为 `image_url` part 传给模型(spirit-chat 已用 Gemini,天然支持 vision)
+   - 本轮先做"BOOMER 发图给你",看图能力如需要可一并打开,请确认
 
-### `kb_ingest_queue`
-`id, source_type, source_id, op (upsert/delete), enqueued_at, processed_at, error`
+## 二、技术改动
 
-### `operation_okrs`
-`id, period_start, period_end, scope (brand/shop), shop_id?, title, objective, key_results jsonb, key_actions, tags[]`
+### Edge Function: `supabase/functions/spirit-chat/index.ts`
+- 在 `tools` 数组里加入:
+  - `google_search`(grounding,内置)
+  - `generate_diagram`(自定义,带 `execute` 调用图像生成 API + storage 上传)
+- SSE 事件类型扩展:
+  - `__kb_sources`(已存在)
+  - `__web_sources`:`[{title, url, snippet}]`
+  - `__tool_call`:`{name, status}` 用于前端显示"BOOMER 正在搜索…/正在画图…"状态条
+- 系统提示追加多模态输出规范(Markdown 图片、引用来源、何时画示意图)
 
-### RPC `match_kb(query vector, k int, scope text, shop uuid)`
-按 `scope = ANY(scopes)` 过滤 + shop_id 偏好加权，返回 top-k。
+### Storage
+- 新增 bucket `chat-images`(public read),用于存放 BOOMER 生成的示意图
+- RLS:仅 service_role 可写,所有人可读
 
-## Edge Functions
+### 前端: `src/components/spirit/SpiritChatDrawer.tsx`(或对应组件)
+- 消息渲染换为 `ReactMarkdown` + `remark-gfm`,允许 `img` 标签;给图片加圆角 + 点击放大
+- 气泡下方加两个折叠区:
+  - 🔗 参考来源 (`__web_sources`)
+  - 📚 品牌知识库 (`__kb_sources`,已存在)
+- 工具调用中显示 inline loading:"🔍 联网搜索中…" / "🎨 生成示意图中…"
+- "★ 加入知识库"按钮对带图回复同样可用(图片 URL 一并存进 `accepted_output`)
 
-### 新增
-- `kb-embed` — 调 `google/gemini-embedding-001` (3072d) 批量出向量。
-- `kb-ingest` — 消费队列：拉源 → chunk（≈800 字、重叠 100、标题重复在头）→ content_hash 变化才 re-embed → upsert。支持 `?backfill=all` 一次性回填。
-- `kb-search` — `{query, scope, shop_id, k}` → embed → `match_kb`。相似度 < 0.55 全部丢弃。
-- `kb-analyze-asset` — 给 `marketing_assets` 跑视觉模型补 caption / tags。
-- `kb-accept` — "★ 加入知识库" 按钮入口，写 `accepted_output` + 入队。
+### Portal 开关(管理员)
+- `app_settings.spirit_chat_features`:
+  - `web_search_enabled`(默认 on)
+  - `diagram_generation_enabled`(默认 on)
+  - `max_images_per_reply`(默认 2,防止滥用)
 
-### 改造（注入检索结果 + 返回 `__kb_sources` 元数据）
-- `generate-marketing-copy` (scope=copy)
-- AI 生图 edge fn (scope=image)
-- 视频脚本 / 镜位 (scope=video)
-- `generate-shop-kb` (scope=copy + shop_id)
-- **`spirit-chat`（BOOMER 浮标）(scope=chat)** ← 本次新增重点
-  - 流式 SSE 前先同步 `kb-search`（k=6），把命中片段塞进 system prompt 顶部：
-    `【BOOMER 知识库参考】\n---\n{title}\n{content}\n---\n...`
-  - 在 SSE 首个 event 里把 `__kb_sources` 推给前端用于展示徽章。
-  - 仍不持久化对话本体，但 "加入知识库" 仍可把任意一条助手回复回流。
+## 三、成本与体验保护
 
-## 自动成长
+- 联网搜索:仅在模型自己判断需要时触发,不每次都搜
+- 生成示意图:单次约 1-2 credits,系统提示约束"仅在能显著提升理解时才画,不要为每条回复都画"
+- 前端图片懒加载 + 最大宽度,移动端体验优先
+- 失败降级:搜索失败 → 纯文本回答 + 提示"暂时联网失败";画图失败 → 文字描述 + 提示"示意图生成失败"
 
-`AFTER INSERT/UPDATE/DELETE` 触发器入 `kb_ingest_queue`：
-`official_knowledge / product_knowledge / products(资料完整时) / shops / shop_marketing_profiles / shop_kb_entries / marketing_presets / marketing_assets / marketing_characters / community_posts(featured) / operation_okrs`
+## 四、不在本次范围
 
-`pg_cron` 每分钟跑 `kb-ingest`。识别校正循环已写 `official_knowledge` → 自动覆盖。
+- 视频生成回复(后续)
+- 用户上传图片让 BOOMER 看图(等你确认是否一起做)
+- 把生成的示意图自动回灌到知识库(可在"★ 加入知识库"按钮里手动触发,已支持)
 
-## 前端
+## 五、需要你确认
 
-### `/portal` → 新 "知识库" Tab（管理员）
-- 列表 / 筛选（source_type / scope / shop / 是否含 chat scope）
-- 手动 CRUD `manual` 词条
-- 每条调权：scopes 复选（含 `chat`）+ weight 滑块
-- "重建全部 / 重建某类" 入队按钮
-- 队列状态 + 失败重试
-- 子页 "运营 OKR" CRUD
-
-### 生成页 & BOOMER 浮标
-- 顶部小徽章 `🧠 已参考 N 条品牌知识` → 展开列表（标题 / source_type / 相似度）。
-- 任一输出 / BOOMER 回复右下：`★ 加入知识库` → `kb-accept`，选 scopes（默认全勾）。
-
-## 实施顺序
-
-1. Migration：`kb_documents` / `kb_ingest_queue` / `operation_okrs` + RLS + GRANT + HNSW + `match_kb` + 触发器。
-2. Edge：`kb-embed` → `kb-ingest`(+backfill) → `kb-search` → `kb-analyze-asset` → `kb-accept`。
-3. 跑一次 backfill 把现有数据全部入库。
-4. 改造 5 个 edge fn（含 `spirit-chat`）注入检索 + 返回 `__kb_sources`。
-5. `/portal` 知识库 Tab + 运营 OKR Tab。
-6. 生成页 & **BOOMER 抽屉对话气泡** 加 "参考来源" 徽章 + "加入知识库" 按钮。
-7. `pg_cron` 每分钟跑 `kb-ingest`。
-
-## 技术细节
-
-- 模型：`google/gemini-embedding-001`，3072d，走 `LOVABLE_API_KEY`。
-- Chunk：≈800 字符 / 重叠 100；中文按 `。！？\n` 优先切；title 始终重复在 chunk 头。
-- 检索：k=6，min similarity 0.55；BOOMER chat 场景再加最近 3 条 user message 拼成检索 query，避免上下文丢失。
-- 成本：content_hash 不变跳过 re-embed。
-- 隐私：店员侧 `kb-search` 强制注入 `shop_id`；私有识别历史不入库（仅 admin 沉淀的进库）。
-- 失败：`kb_ingest_queue.error` 红标 + 手动重试。
-
-## 不在本次范围
-
-- 多模态以图搜图（保留扩展位 `gemini-embedding-2`）。
-- 跨店员私有历史共享。
-- 微调专属基座模型（先做 RAG，等量足了再评估）。
+1. 用户在浮窗里**上传图片**给 BOOMER 看 —— 本轮一起做,还是先只做 BOOMER 发图?
+2. 生成示意图默认风格倾向:**插画风(暖萌、贴近 BOOMER 品牌)** 还是 **信息图/流程图(严谨)**?还是让模型按内容自动选?
