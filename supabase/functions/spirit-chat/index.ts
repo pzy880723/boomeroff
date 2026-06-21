@@ -414,6 +414,90 @@ Deno.serve(async (req) => {
           return { rows: data || [] };
         }
 
+        if (name === 'web_search') {
+          const q = String(args?.query || '').slice(0, 100);
+          const lim = Math.min(Math.max(Number(args?.limit) || 4, 1), 6);
+          if (q.length < 2) return { rows: [] };
+          const FIRECRAWL = Deno.env.get('FIRECRAWL_API_KEY');
+          if (!FIRECRAWL) return { rows: [], error: '联网搜索未配置' };
+          try {
+            const r = await fetch('https://api.firecrawl.dev/v2/search', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${FIRECRAWL}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query: q, limit: lim }),
+            });
+            if (!r.ok) {
+              const t = await r.text().catch(() => '');
+              console.error('[spirit-chat] firecrawl error', r.status, t.slice(0, 200));
+              return { rows: [], error: `搜索失败 ${r.status}` };
+            }
+            const j = await r.json();
+            const items = (j?.data?.web || j?.data || []) as any[];
+            const rows = items.slice(0, lim).map((it: any) => ({
+              title: it.title || it.url,
+              url: it.url,
+              snippet: String(it.description || it.snippet || '').slice(0, 220),
+              image: it.image || it.thumbnail || it?.metadata?.ogImage || null,
+            }));
+            return { rows };
+          } catch (e) {
+            return { rows: [], error: e instanceof Error ? e.message : 'fetch failed' };
+          }
+        }
+
+        if (name === 'generate_diagram') {
+          const prompt = String(args?.prompt || '').slice(0, 600);
+          const style = String(args?.style || 'illustration');
+          const aspect = String(args?.aspect || '1:1');
+          if (prompt.length < 4) return { error: '描述太短' };
+          const STYLE_PREFIX: Record<string, string> = {
+            illustration: '温暖治愈的扁平插画,柔和配色,中文文字清晰可读,简洁不拥挤,主体居中,留白舒适,',
+            infographic: '现代信息图风格,清晰的图标+短标题+数据,栏目化布局,品牌色为暖橙+米白+墨绿,中文字标准,',
+            flowchart: '简洁流程图风格,圆角矩形+箭头连接,层级分明,纯色背景,中文节点文字清晰,',
+            poster: '中古杂货风格海报,排版精致,主标题大字,辅助小字,日系治愈氛围,',
+          };
+          const finalPrompt = `${STYLE_PREFIX[style] || STYLE_PREFIX.illustration}${prompt}`;
+          try {
+            const r = await fetch('https://ai.gateway.lovable.dev/v1/images/generations', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'google/gemini-2.5-flash-image',
+                prompt: finalPrompt,
+                size: aspect === '16:9' ? '1280x720' : aspect === '4:3' ? '1024x768' : aspect === '3:4' ? '768x1024' : '1024x1024',
+                n: 1,
+              }),
+            });
+            if (!r.ok) {
+              const t = await r.text().catch(() => '');
+              console.error('[spirit-chat] image gen error', r.status, t.slice(0, 300));
+              return { error: `生成失败 ${r.status}` };
+            }
+            const j = await r.json();
+            const b64 = j?.data?.[0]?.b64_json || j?.data?.[0]?.b64;
+            const directUrl = j?.data?.[0]?.url;
+            let publicUrl: string | null = null;
+            if (b64) {
+              const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+              const path = `spirit-chat-generated/${uid}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+              const { error: upErr } = await admin.storage.from('product-images').upload(path, bin, {
+                contentType: 'image/png', upsert: false,
+              });
+              if (upErr) {
+                console.error('[spirit-chat] upload error', upErr);
+                return { error: '图片上传失败' };
+              }
+              publicUrl = admin.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+            } else if (directUrl) {
+              publicUrl = directUrl;
+            }
+            if (!publicUrl) return { error: '图片返回为空' };
+            return { url: publicUrl, prompt: finalPrompt, style, aspect };
+          } catch (e) {
+            return { error: e instanceof Error ? e.message : 'image gen failed' };
+          }
+        }
+
         return { error: 'unknown tool' };
       } catch (e) {
         return { error: e instanceof Error ? e.message : 'tool failed' };
