@@ -85,9 +85,54 @@ export default function AiImage() {
 
   const insertMention = (idx: number) => {
     const tag = `@img${idx + 1}`;
-    setInput((s) => (s ? `${s.trimEnd()} ${tag} ` : `${tag} `));
-    textareaRef.current?.focus();
+    const ta = textareaRef.current;
+    if (ta && typeof ta.selectionStart === 'number') {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd ?? start;
+      // 若光标紧跟一个未完成的 '@',替换它;否则插入
+      const before = input.slice(0, start);
+      const after = input.slice(end);
+      const atIdx = before.lastIndexOf('@');
+      const replaceFromAt = atIdx >= 0 && /^@\w*$/.test(before.slice(atIdx));
+      const left = replaceFromAt ? before.slice(0, atIdx) : before;
+      const insert = `${left && !left.endsWith(' ') ? ' ' : ''}${tag} `;
+      const next = left + insert + after;
+      setInput(next);
+      const caret = (left + insert).length;
+      requestAnimationFrame(() => {
+        ta.focus();
+        ta.setSelectionRange(caret, caret);
+      });
+    } else {
+      setInput((s) => (s ? `${s.trimEnd()} ${tag} ` : `${tag} `));
+      textareaRef.current?.focus();
+    }
+    setMentionOpen(false);
   };
+
+  // ===== @ 提及解析 =====
+  const mentionedIdxs = (() => {
+    const seen = new Set<number>();
+    const out: number[] = [];
+    const re = /@img(\d+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(input)) !== null) {
+      const i = parseInt(m[1], 10) - 1;
+      if (i >= 0 && i < refs.length && !seen.has(i)) {
+        seen.add(i);
+        out.push(i);
+      }
+    }
+    return out;
+  })();
+
+  const removeMention = (idx: number) => {
+    const tag = `@img${idx + 1}`;
+    setInput((s) => s.replace(new RegExp(`\\s*${tag}\\s?`, 'g'), ' ').replace(/\s{2,}/g, ' ').trimStart());
+  };
+
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
 
   // ===== 模板 =====
   const onPickTemplate = (t: AiImageTemplate) => {
@@ -209,10 +254,14 @@ export default function AiImage() {
                     key={a}
                     onClick={() => setAspect(a)}
                     className={[
-                      'px-2 h-7 rounded-md text-[11px] border transition-colors',
-                      aspect === a ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground hover:border-accent/50',
+                      'flex flex-col items-center justify-center gap-0.5 px-1.5 h-11 min-w-[40px] rounded-md border transition-colors',
+                      aspect === a ? 'bg-primary/10 border-primary text-primary' : 'bg-card border-border text-muted-foreground hover:border-accent/50',
                     ].join(' ')}
-                  >{a}</button>
+                    aria-label={`比例 ${a}`}
+                  >
+                    <AspectIcon ratio={a} active={aspect === a} />
+                    <span className="text-[10px] leading-none">{a}</span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -241,6 +290,24 @@ export default function AiImage() {
               </div>
             )}
 
+            {/* @ 提及链:已被 @ 的图缩略图 */}
+            {mentionedIdxs.length > 0 && (
+              <div className="flex gap-1.5 items-center flex-wrap pt-0.5">
+                <span className="text-[10px] text-muted-foreground">已@:</span>
+                {mentionedIdxs.map((i) => (
+                  <div key={i} className="relative">
+                    <img src={refs[i]} alt="" className="w-8 h-8 rounded object-cover border border-primary/50" />
+                    <span className="absolute -bottom-0.5 -left-0.5 text-[9px] bg-primary text-primary-foreground rounded px-0.5 leading-tight">@{i + 1}</span>
+                    <button
+                      onClick={() => removeMention(i)}
+                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-foreground text-background flex items-center justify-center"
+                      aria-label={`移除 @${i + 1}`}
+                    ><X className="w-2 h-2" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* 输入框 + 发送 */}
             <div className="flex items-end gap-2">
               <div className="flex flex-col gap-1">
@@ -251,20 +318,63 @@ export default function AiImage() {
                   <ImagePlus className="w-4 h-4" />
                 </Button>
               </div>
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                placeholder={refs.length === 0 ? '描述你想要的画面…(回车发送)' : '怎么改这些参考图?可用 @1 @2 指定哪一张'}
-                rows={2}
-                className="resize-none flex-1 min-h-[60px]"
-              />
+              <div className="relative flex-1">
+                {/* @ 弹层 */}
+                {mentionOpen && (
+                  <div className="absolute left-0 right-0 bottom-full mb-1 z-20 bg-popover border border-border rounded-md shadow-lg p-2">
+                    {refs.length === 0 ? (
+                      <div className="text-[11px] text-muted-foreground px-1 py-2">先点左侧 📎 或 🖼 加参考图,再用 @ 指定哪一张</div>
+                    ) : (
+                      <div className="flex gap-2 overflow-x-auto">
+                        {refs.map((url, i) => (
+                          <button
+                            key={url}
+                            onClick={() => insertMention(i)}
+                            className="relative shrink-0 rounded overflow-hidden border border-border hover:border-primary transition-colors"
+                            aria-label={`插入 @img${i + 1}`}
+                          >
+                            <img src={url} alt="" className="w-12 h-12 object-cover" />
+                            <span className="absolute bottom-0 left-0 text-[10px] bg-primary text-primary-foreground rounded-tr px-1 leading-tight">@{i + 1}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setInput(v);
+                    if (isComposing) return;
+                    const pos = e.target.selectionStart ?? v.length;
+                    const before = v.slice(0, pos);
+                    const lastAt = before.lastIndexOf('@');
+                    const prevChar = lastAt > 0 ? before[lastAt - 1] : '';
+                    const afterAt = before.slice(lastAt + 1);
+                    const validBoundary = lastAt === 0 || prevChar === ' ' || prevChar === '\n';
+                    if (lastAt >= 0 && validBoundary && /^\w{0,8}$/.test(afterAt)) {
+                      setMentionOpen(true);
+                    } else {
+                      setMentionOpen(false);
+                    }
+                  }}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={() => setIsComposing(false)}
+                  onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setMentionOpen(false); return; }
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                  placeholder={refs.length === 0 ? '描述你想要的画面…(回车发送)' : '怎么改这些参考图?输入 @ 选择哪一张'}
+                  rows={2}
+                  className="resize-none w-full min-h-[60px]"
+                />
+              </div>
               <Button onClick={send} disabled={busy || (!input.trim() && !pendingTemplate)} size="icon" className="h-9 w-9">
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </Button>
@@ -300,6 +410,26 @@ export default function AiImage() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function AspectIcon({ ratio, active }: { ratio: Aspect; active?: boolean }) {
+  const dims: Record<Aspect, { w: number; h: number }> = {
+    '1:1': { w: 14, h: 14 },
+    '3:4': { w: 11, h: 14 },
+    '9:16': { w: 8, h: 14 },
+    '16:9': { w: 18, h: 10 },
+  };
+  const { w, h } = dims[ratio];
+  return (
+    <span
+      aria-hidden
+      className={[
+        'inline-block rounded-[2px] border',
+        active ? 'border-primary bg-primary/30' : 'border-muted-foreground/60',
+      ].join(' ')}
+      style={{ width: w, height: h }}
+    />
   );
 }
 
