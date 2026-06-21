@@ -1,105 +1,56 @@
-# AI 图片 · 对话式重做
+# 活动报名流程优化
 
-把营销中心"图片优化"完全替换为"AI 图片"。整个页面只有**一个对话框**,所有能力(文生图/图生图/多图融合/模板)都在这一个对话里完成。
+## 问题诊断
 
-## 一、页面结构
+当前 `公开活动页 → 点击报名 → 跳到 /u/c/:short` 这一段实际要经过 **3 次往返**，而 UI 上只有一个安静的"提交中"按钮，所以体感像卡死：
 
-路由仍是 `/me/marketing/photo`,页面标题改 **AI 图片**。
+1. **submit → `activity-apply` edge function**
+   - 如果填了"探店截图"字段，前端把整张图 base64（最大 5MB → 约 6.7MB payload）上传给 function；function 再 decode → 上传 Storage → 写 application → 写 voucher_claim。手机弱网下常常 5–10 秒。
+2. **`navigate('/u/c/{short_code}')`**
+   - PublicClaim 重新挂载，只显示一个旋转圈。
+3. **PublicClaim → `voucher-claim-status`**
+   - 再发一次请求拉券详情，又是 1–3 秒空白。
 
-```text
-┌──────────────────────────────────┐
-│ PageHeader  AI 图片               │
-│ ShopPicker                        │
-├──────────────────────────────────┤
-│                                   │
-│        对话消息流                  │
-│  ┌──────────────────────────┐    │
-│  │ 你: 给这个杯子换个木桌背景 │    │
-│  │     @img1                 │    │
-│  └──────────────────────────┘    │
-│  ┌──────────────────────────┐    │
-│  │ BOOMER: [出图缩略图]      │    │
-│  │ [下载][写文案][做视频][分享]│   │
-│  └──────────────────────────┘    │
-│                                   │
-├──────────────────────────────────┤
-│ [模板▾]                           │  ← 模板入口在输入栏上方
-├──────────────────────────────────┤
-│ 📎 [img1][img2] +                 │  ← 已附图缩略图条(可×删除)
-│ ┌────────────────────────────┐   │
-│ │ @ 提它图,描述你想要的画面…   │ ↑ │
-│ └────────────────────────────┘   │
-│ 比例: 1:1 3:4 9:16 16:9           │
-└──────────────────────────────────┘
-```
+中间这两段（步骤 2、3）的等待是**纯浪费**——服务端报名成功时已经有完整的券信息，前端却扔掉重新拉。
 
-- **附图条**:点 📎 上传 或 从图库选,可同时挂 0-4 张。
-- **@ 提及**:输入 `@` 弹出已挂的图缩略图选择器,插入 token `@img1`。没 @ 任何图但附图条里有图 = 默认全部参与。
-- **比例 chips**:1:1 / 3:4 / 9:16 / 16:9,默认 1:1。
-- **模板按钮**:下拉一个分类网格(商品海报 / 活动海报 / 朋友圈封面,每类 3-4 个)。
-  - 选一个模板 = 往**输入框自动填一段 prompt 草稿 + 弹一个迷你字段表单**(商品名/价格/卖点等),用户改完点发送即可。不是另一个页面,只是"帮你写好那句话"的快捷方式。
+## 优化目标
 
-## 二、对话语义
+1. 报名按钮按下后，立刻出现**全屏 / 卡片级的「正在报名中，请稍等…」**遮罩，带步骤文案（"正在上传资料 → 正在生成优惠券"），消除"按了没反应"的错觉。
+2. 跳到优惠券页时**直接显示券**，不再有第二次空白等待。
+3. 顺手把上传图片的体积压下来，让弱网用户更快完成 step 1。
 
-每条用户消息 = 一次 AI 出图请求。AI 回一张图(或失败提示)。
-- **没附图** → 纯文生图。
-- **附 1 张图** → 图生图。
-- **附 2-4 张图** → 多图融合。
-- **@imgN** 只是个提示词标记,后端会把 `@img1` 替换成"参考图1",并把对应图传给模型。
-- 历史消息**只在本页内存**留存(刷新即失,与"灵兽对话"一致,避免改库),想保留就点"下载"或"分享到中古圈"。
-- 出图结果同时落 `marketing_assets`(沿用现有表,`kind='photo'`,meta 里记 prompt / refs / aspect / template_id),自动进图库。
+## 具体改动
 
-## 三、模型与后端
+### 1. `supabase/functions/activity-apply/index.ts`
+- 成功分支返回**完整 claim 负载**（与 `voucher-claim-status` 同构）：`{ ok, short_code, claim: { code, status, expires_at, voucher: {...} } }`，"already 已领取"的分支同样返回。
+- 其它逻辑保持不变；不动 DB 结构。
 
-新建 `supabase/functions/ai-image-chat/index.ts`:
+### 2. `src/pages/public/PublicActivity.tsx`
+- 把 `submit()` 改为分阶段更新进度文案：
+  - `phase = 'uploading'` → "正在上传报名资料…"（有图片字段时）
+  - `phase = 'submitting'` → "正在为您生成优惠券…"
+  - `phase = 'done'` → "报名成功，正在打开优惠券…"
+- 提交期间渲染一个**居中遮罩卡片**（沿用暖棕主题）：BOOMER 文案 + spinner + 当前阶段文字 + "请勿关闭页面"。按钮自身也改为 `disabled + 正在报名中…`。
+- 在调用 `navigate` 时把 `claim` 整包通过 `navigate(url, { state: { claim } })` 传过去；本地也 `sessionStorage.setItem('claim:'+code, json)` 兜底，防刷新丢失。
+- 图片字段（type === 'image'）上传前做**客户端压缩**：用 canvas 缩到最长边 1280px、JPEG q=0.82，然后再转 dataURL。新增一个小工具函数 `compressImageToDataUrl(file)`（放在本文件内部即可，不新增公共文件）。同时把当前 5MB 上限保留作为兜底校验。
 
-```ts
-POST /ai-image-chat
-{
-  shop_id: string,
-  prompt: string,                  // 用户那句话(模板模式由前端拼好)
-  aspect: '1:1'|'3:4'|'9:16'|'16:9',
-  refs: string[],                  // 已附图 url(顺序 = @img1,@img2…)
-  template_id?: string,
-  meta?: { style?: string }
-}
-→ { ok: true, output_url, asset_id }
-```
+### 3. `src/pages/public/PublicClaim.tsx`
+- 进入时先看 `location.state?.claim` 或 `sessionStorage` 里的 `claim:{short}`，命中就立刻渲染、不显示 loading；后台再静默调用 `voucher-claim-status` 做一次刷新（拿最新状态/过期信息），刷新失败也不报错。
+- 没有命中（用户直接打开链接）时维持现有流程，但 loading 文案从纯 spinner 改为 "正在加载您的优惠券…"。
 
-- 固定模型 `google/gemini-3.1-flash-image-preview`(Nano Banana 2),走 `/v1/chat/completions` + `modalities:["image","text"]`,沿用 `beautify-image` 那套鉴权/落库/限额代码。
-- 限额:每用户每天 50 张。
-- 模板 prompt 模板集中在 Edge Function 一个常量 `TEMPLATES`,前端只传 `template_id + fields`,后端拼最终 prompt(改文案不用动前端)。
+### 4. 不动的地方
+- `voucher-claim-status`、`voucher_claims`/`activities` 表结构、RLS。
+- 后台「我的活动 → 活动详情」页面不动。
+- `ActivityFeedbackView` 不动（它是已领过券后再次进入活动页的视图，本身已经很快）。
 
-## 四、模板首期清单(占位,可后续微调)
+## 验证步骤
 
-| 分类 | 模板 |
-|---|---|
-| 商品海报 | 中古胶片质感单品 / 日杂自然光单品 / 极简白底带价签 |
-| 活动海报 | 周末特卖 / 新到货上新 / 清仓最后三天 |
-| 朋友圈封面 | 一周精选 9 宫格风 / 单品大字报 / 店内氛围 |
+1. 走一遍："新手机号 + 带图片字段"的活动报名 → 期望按下后立刻出现「正在报名中…」遮罩，阶段文字依次切换，跳转后**无白屏**，券二维码立即出现。
+2. 走一遍："不带图片字段"的活动 → 应该 < 1.5s 完成。
+3. 在刚领到券的页面**刷新**：仍能立刻显示券（命中 sessionStorage），后台静默刷新状态。
+4. 直接打开别人发的 `/u/c/:short` 链接：维持现状但 loading 文案更友好。
 
-每个模板的字段表单 ≤3 个,字段都可空。
+## 不在本次范围
 
-## 五、文件改动清单
-
-- **新建** `supabase/functions/ai-image-chat/index.ts`
-- **新建** `src/pages/marketing/AiImage.tsx`(对话主页面,替换 `MarketingPhoto.tsx`)
-- **新建** `src/components/marketing/ai-image/`
-  - `ChatMessage.tsx`(用户气泡 + AI 出图气泡,带四个动作按钮)
-  - `AttachmentBar.tsx`(附图缩略图条 + 上传/从图库)
-  - `MentionInput.tsx`(`@` 弹图选择)
-  - `AspectChips.tsx`
-  - `TemplateMenu.tsx` + `TemplateFieldDialog.tsx`
-  - `templates.ts`(模板元数据,prompt 模板放后端)
-- **编辑** `src/App.tsx`:`/me/marketing/photo` 路由指向新 `AiImage`(URL 不变)。
-- **编辑** `src/pages/MyMarketing.tsx`:卡片文案 "图片优化"→"AI 图片",描述改"和 AI 对话出图/改图/做海报"。
-- **保留不动** `MarketingPhoto.tsx` + `beautify-image` Edge Function(留作回滚,下一轮清理)。
-
-## 六、明确不做(留后续)
-
-- 多轮上下文真传给模型(本期每条消息独立请求,不带历史 — 出图模型不需要)
-- 4 选 1
-- 涂抹局部重绘
-- 持久化对话历史到数据库
-
-同意就动工。要不要我现在就把"模板首期清单"里每个模板的 prompt 草稿一并敲定,还是先把对话框搭起来,模板 prompt 之后再调?
+- 把 Storage 上传改成"前端直传 + signed url"（更彻底但要新增策略，留作下一步）。
+- 重做活动详情页统计实时刷新。
