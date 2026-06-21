@@ -290,6 +290,24 @@ export default function AiImage() {
               </div>
             )}
 
+            {/* @ 提及链:已被 @ 的图缩略图 */}
+            {mentionedIdxs.length > 0 && (
+              <div className="flex gap-1.5 items-center flex-wrap pt-0.5">
+                <span className="text-[10px] text-muted-foreground">已@:</span>
+                {mentionedIdxs.map((i) => (
+                  <div key={i} className="relative">
+                    <img src={refs[i]} alt="" className="w-8 h-8 rounded object-cover border border-primary/50" />
+                    <span className="absolute -bottom-0.5 -left-0.5 text-[9px] bg-primary text-primary-foreground rounded px-0.5 leading-tight">@{i + 1}</span>
+                    <button
+                      onClick={() => removeMention(i)}
+                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-foreground text-background flex items-center justify-center"
+                      aria-label={`移除 @${i + 1}`}
+                    ><X className="w-2 h-2" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* 输入框 + 发送 */}
             <div className="flex items-end gap-2">
               <div className="flex flex-col gap-1">
@@ -300,20 +318,63 @@ export default function AiImage() {
                   <ImagePlus className="w-4 h-4" />
                 </Button>
               </div>
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                placeholder={refs.length === 0 ? '描述你想要的画面…(回车发送)' : '怎么改这些参考图?可用 @1 @2 指定哪一张'}
-                rows={2}
-                className="resize-none flex-1 min-h-[60px]"
-              />
+              <div className="relative flex-1">
+                {/* @ 弹层 */}
+                {mentionOpen && (
+                  <div className="absolute left-0 right-0 bottom-full mb-1 z-20 bg-popover border border-border rounded-md shadow-lg p-2">
+                    {refs.length === 0 ? (
+                      <div className="text-[11px] text-muted-foreground px-1 py-2">先点左侧 📎 或 🖼 加参考图,再用 @ 指定哪一张</div>
+                    ) : (
+                      <div className="flex gap-2 overflow-x-auto">
+                        {refs.map((url, i) => (
+                          <button
+                            key={url}
+                            onClick={() => insertMention(i)}
+                            className="relative shrink-0 rounded overflow-hidden border border-border hover:border-primary transition-colors"
+                            aria-label={`插入 @img${i + 1}`}
+                          >
+                            <img src={url} alt="" className="w-12 h-12 object-cover" />
+                            <span className="absolute bottom-0 left-0 text-[10px] bg-primary text-primary-foreground rounded-tr px-1 leading-tight">@{i + 1}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setInput(v);
+                    if (isComposing) return;
+                    const pos = e.target.selectionStart ?? v.length;
+                    const before = v.slice(0, pos);
+                    const lastAt = before.lastIndexOf('@');
+                    const prevChar = lastAt > 0 ? before[lastAt - 1] : '';
+                    const afterAt = before.slice(lastAt + 1);
+                    const validBoundary = lastAt === 0 || prevChar === ' ' || prevChar === '\n';
+                    if (lastAt >= 0 && validBoundary && /^\w{0,8}$/.test(afterAt)) {
+                      setMentionOpen(true);
+                    } else {
+                      setMentionOpen(false);
+                    }
+                  }}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={() => setIsComposing(false)}
+                  onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setMentionOpen(false); return; }
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                  placeholder={refs.length === 0 ? '描述你想要的画面…(回车发送)' : '怎么改这些参考图?输入 @ 选择哪一张'}
+                  rows={2}
+                  className="resize-none w-full min-h-[60px]"
+                />
+              </div>
               <Button onClick={send} disabled={busy || (!input.trim() && !pendingTemplate)} size="icon" className="h-9 w-9">
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </Button>
