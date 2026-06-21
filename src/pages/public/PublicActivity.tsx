@@ -23,6 +23,39 @@ async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+// 客户端把图压到最长边 1280px、JPEG q=0.82，避免 5MB base64 阻塞弱网上传
+async function compressImageToDataUrl(file: File, maxEdge = 1280, quality = 0.82): Promise<string> {
+  try {
+    if (!file.type.startsWith('image/')) return await fileToDataUrl(file);
+    const bitmap = await createImageBitmap(file).catch(() => null);
+    let w: number, h: number;
+    let source: CanvasImageSource;
+    if (bitmap) {
+      w = bitmap.width; h = bitmap.height; source = bitmap;
+    } else {
+      const url = URL.createObjectURL(file);
+      const img = await new Promise<HTMLImageElement>((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = rej;
+        i.src = url;
+      });
+      w = img.naturalWidth; h = img.naturalHeight; source = img;
+    }
+    const scale = Math.min(1, maxEdge / Math.max(w, h));
+    const tw = Math.round(w * scale); const th = Math.round(h * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = tw; canvas.height = th;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return await fileToDataUrl(file);
+    ctx.drawImage(source, 0, 0, tw, th);
+    return canvas.toDataURL('image/jpeg', quality);
+  } catch {
+    return await fileToDataUrl(file);
+  }
+}
+
+
 function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
   return (
     <div
