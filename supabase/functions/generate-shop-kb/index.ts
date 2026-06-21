@@ -37,7 +37,10 @@ Deno.serve(async (req) => {
 **示范话术** → 一段可直接读出来的话术，自然口语化
 **升级处理** → 1-2 条何时上报店长`;
 
-    const system = type === "qa" ? sysQa : sysSop;
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+    const kbHits = await kbSearch(admin, { query: `${topic} ${hint}`.trim(), scope: 'copy', shopId: shop_id, k: 5 });
+    const kbBlock = formatKbBlock(kbHits);
+    const system = (type === "qa" ? sysQa : sysSop) + kbBlock;
 
     const userPrompt = `请为以下主题生成一条${type === "qa" ? "客户问答" : "门店 SOP"}词条：
 
