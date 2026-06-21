@@ -405,7 +405,7 @@ ${isExplore ? '七' : '六'}、最终解释权
                             onChange={async (e) => {
                               const file = e.target.files?.[0]; if (!file) return;
                               if (file.size > 5 * 1024 * 1024) { toast.error('图片不能超过 5MB'); return; }
-                              const dataUrl = await fileToDataUrl(file);
+                              const dataUrl = await compressImageToDataUrl(file);
                               setFormData((d) => ({ ...d, [f.key]: dataUrl }));
                             }}
                           />
@@ -428,7 +428,7 @@ ${isExplore ? '七' : '六'}、最终解释权
                         onChange={async (e) => {
                           const file = e.target.files?.[0]; if (!file) return;
                           if (file.size > 5 * 1024 * 1024) { toast.error('图片不能超过 5MB'); return; }
-                          const dataUrl = await fileToDataUrl(file);
+                          const dataUrl = await compressImageToDataUrl(file);
                           setFormData((d) => ({ ...d, [f.key]: dataUrl }));
                         }}
                       />
