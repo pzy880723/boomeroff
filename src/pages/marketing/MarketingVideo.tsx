@@ -102,30 +102,41 @@ export default function MarketingVideo() {
     setRendering(true);
     try {
       let finalScript = script;
-      // 多段视频且未选角色 → 自动生成兜底角色身份板,保证跨段人物一致
+      // 多段视频且未选角色 → 尝试生成兜底角色身份板;失败不阻塞渲染
       if (duration > 12 && !character && !script.character) {
         toast.message('为保证角色不变脸,正在生成兜底主角…', { duration: 4000 });
-        const anc = await supabase.functions.invoke('ensure-auto-anchor-character', {
-          body: { shop_id: shopId, video_type: vtype, style, brief_summary: briefTranscript.slice(0, 600) },
-        });
-        if (anc.error) throw anc.error;
-        const anchorChar = (anc.data as any)?.character;
-        if (anchorChar) {
-          finalScript = { ...script, character: {
-            id: anchorChar.id, name: anchorChar.name, role_label: anchorChar.role_label,
-            visual_signature: anchorChar.visual_signature, core_emotion: anchorChar.core_emotion,
-            cover_url: anchorChar.cover_url,
-          } };
+        try {
+          const anc = await supabase.functions.invoke('ensure-auto-anchor-character', {
+            body: { shop_id: shopId, video_type: vtype, style, brief_summary: briefTranscript.slice(0, 600) },
+          });
+          if (anc.error) throw anc.error;
+          if ((anc.data as any)?.error) throw new Error((anc.data as any).error);
+          const anchorChar = (anc.data as any)?.character;
+          if (anchorChar) {
+            finalScript = { ...script, character: {
+              id: anchorChar.id, name: anchorChar.name, role_label: anchorChar.role_label,
+              visual_signature: anchorChar.visual_signature, core_emotion: anchorChar.core_emotion,
+              cover_url: anchorChar.cover_url,
+            } };
+          }
+        } catch (ancErr: any) {
+          console.warn('[auto-anchor] failed, continue without', ancErr);
+          toast.message('兜底主角生成失败,跳过,继续提交渲染', { duration: 3000 });
         }
       }
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
         body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId },
       });
       if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      setJobId((data as any).job_id);
+      const resp = data as any;
+      if (resp?.ok === false) throw new Error(resp.error || '渲染提交失败');
+      if (resp?.error) throw new Error(resp.error);
+      setJobId(resp.job_id);
       toast.success('已确认脚本，渲染任务已入队');
-    } catch (e: any) { toast.error(e?.message || '提交失败'); }
+    } catch (e: any) {
+      const msg = e?.message || e?.error?.message || '提交失败,请稍后重试';
+      toast.error(msg);
+    }
     finally { setRendering(false); }
   };
 
@@ -143,8 +154,8 @@ export default function MarketingVideo() {
       <PageHeader title="AI 视频" back="/me/marketing" subtitle="营销中心 / 文生视频" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
         <StepBar
-          steps={['选店铺', '立意沟通', '确认分镜', '渲染']}
-          current={!shopId ? 0 : userTurns < 1 ? 0 : !script ? 1 : !jobId ? 2 : 3}
+          steps={['选店铺', '参考图/主角', '立意沟通', '确认分镜', '渲染']}
+          current={!shopId ? 0 : userTurns < 1 ? 1 : !script ? 2 : !jobId ? 3 : 4}
         />
 
         <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
@@ -197,10 +208,31 @@ export default function MarketingVideo() {
           </div>
         </section>
 
+        {/* 参考图(可选) */}
+        <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <SectionLabel num="05">参考图(可选,最多 20 张)</SectionLabel>
+            <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => setPickerOpen(true)}>
+              <FolderOpen className="w-3.5 h-3.5" />从素材库导入
+            </Button>
+          </div>
+          <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" />
+          <p className="text-[10px] text-muted-foreground">不上传也能生成。AI 会按场景从这些图里挑最贴合的一张。</p>
+        </section>
+
+        {/* 主角(可选) */}
+        <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
+          <SectionLabel num="06">主角(可选)</SectionLabel>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            选一个固定主角,所有镜头都用 TA,跨段不变脸。{duration > 12 && '多段视频如果不选,系统会自动先生成一张兜底角色身份板。'}
+          </p>
+          <CharacterPicker shopId={shopId} value={character} onChange={(c) => { setCharacter(c); setScript(null); }} />
+        </section>
+
         {/* 立意沟通 */}
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <SectionLabel num="05">立意沟通</SectionLabel>
+            <SectionLabel num="07">立意沟通</SectionLabel>
             <Button size="sm" onClick={genScript} disabled={generating || userTurns < 1} className="h-7 text-[11px]">
               {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
               生成分镜
@@ -215,27 +247,6 @@ export default function MarketingVideo() {
             onChange={(m) => { setBrief(m); setScript(null); }}
           />
         </section>
-
-        {/* 主角(可选) */}
-        <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
-          <SectionLabel num="06">主角(可选)</SectionLabel>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            选一个固定主角,所有镜头都用 TA,跨段不变脸。{duration > 12 && '多段视频如果不选,系统会自动先生成一张兜底角色身份板。'}
-          </p>
-          <CharacterPicker shopId={shopId} value={character} onChange={(c) => { setCharacter(c); setScript(null); }} />
-        </section>
-
-        {/* 参考图(可选) */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">参考图(可选,最多 20 张)</span>
-            <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => setPickerOpen(true)}>
-              <FolderOpen className="w-3.5 h-3.5" />从素材库导入
-            </Button>
-          </div>
-          <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" />
-          <p className="text-[10px] text-muted-foreground px-1">不上传也能生成。AI 会按场景从这些图里挑最贴合的一张。</p>
-        </div>
 
         {/* 分镜确认 */}
         {script && (

@@ -174,18 +174,18 @@ Deno.serve(async (req) => {
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
     const ARK_KEY = Deno.env.get("ARK_API_KEY");
-    if (!ARK_KEY) return json({ error: "未配置 ARK_API_KEY" }, 500);
+    if (!ARK_KEY) return json({ ok: false, error: "未配置 ARK_API_KEY" });
 
     const auth = req.headers.get("Authorization");
-    if (!auth) return json({ error: "未授权" }, 401);
+    if (!auth) return json({ ok: false, error: "未授权" }, 401);
     const userClient = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
     const { data: u } = await userClient.auth.getUser();
-    if (!u.user) return json({ error: "未授权" }, 401);
+    if (!u.user) return json({ ok: false, error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
     const script = body.script;
     if (!script || !script.hook || !Array.isArray(script.scenes) || !script.outro) {
-      return json({ error: "脚本格式不完整" }, 400);
+      return json({ ok: false, error: "脚本格式不完整" });
     }
 
     const styleKey = normalizeStyle(body.style || script.style);
@@ -202,7 +202,6 @@ Deno.serve(async (req) => {
     const totalDur = Number(script.total_duration_s) || 0;
     const imageUrls: string[] = Array.isArray(script.image_urls) ? script.image_urls : [];
     const character = (script.character && typeof script.character === "object") ? script.character : null;
-    // 优先顺序：用户镜头参考图 > 角色身份板封面（保持人物一致性）
     const characterCover: string | undefined = character?.cover_url;
     const firstImage = imageUrls[0] || characterCover;
 
@@ -213,7 +212,7 @@ Deno.serve(async (req) => {
       const r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, firstImage });
       if (!r.ok) {
         console.error("[render single] ark error", r.error, r.raw);
-        return json({ error: r.error, raw: r.raw }, 502);
+        return json({ ok: false, error: r.error, raw: r.raw });
       }
       const { data: job, error: jErr } = await admin.from("marketing_video_jobs").insert({
         user_id: u.user.id,
@@ -225,7 +224,7 @@ Deno.serve(async (req) => {
       }).select().single();
       if (jErr) {
         console.error("[render] job insert", jErr);
-        return json({ error: "排队失败" }, 500);
+        return json({ ok: false, error: "排队失败: " + jErr.message });
       }
       await admin.from("marketing_assets").insert({
         user_id: u.user.id,
@@ -234,116 +233,87 @@ Deno.serve(async (req) => {
         input_image_urls: imageUrls,
         output_url: null,
         meta: {
-          job_id: job.id,
-          task_id: r.id,
-          video_type: script.video_type,
-          duration,
-          aspect: ratio,
-          mode: firstImage ? "image2video" : "text2video",
-          topic: script.topic || "",
-          style: styleKey,
-          style_label: VIDEO_STYLE_LABELS[styleKey],
-          model,
-          status: "queued",
-          segment_total: 1,
-          character_id: character?.id || null,
+          job_id: job.id, task_id: r.id, video_type: script.video_type,
+          duration, aspect: ratio, mode: firstImage ? "image2video" : "text2video",
+          topic: script.topic || "", style: styleKey,
+          style_label: VIDEO_STYLE_LABELS[styleKey], model, status: "queued",
+          segment_total: 1, character_id: character?.id || null,
           character_name: character?.name || null,
         },
       });
-      return json({ success: true, job_id: job.id, task_id: r.id, status: "queued", segment_total: 1 });
+      return json({ ok: true, success: true, job_id: job.id, task_id: r.id, status: "queued", segment_total: 1 });
     }
 
-    // ============ 多段路径 ============
+    // ============ 多段路径(并行提交) ============
     const subScripts = splitScript(script);
     const segmentTotal = subScripts.length;
-    console.log("[render multi] split into", segmentTotal, "segments");
+    console.log("[render multi] split into", segmentTotal, "segments, submitting in parallel");
 
-    // 1) 先建父任务(不带 provider_task_id)
+    // 1) 先建父任务
     const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
-      user_id: u.user.id,
-      script,
-      status: "running",
-      shop_id: shopId,
-      provider: "volcengine_seedance",
-      provider_task_id: null,
-      segment_total: segmentTotal,
-      segment_index: null,
-      parent_job_id: null,
+      user_id: u.user.id, script, status: "running", shop_id: shopId,
+      provider: "volcengine_seedance", provider_task_id: null,
+      segment_total: segmentTotal, segment_index: null, parent_job_id: null,
     }).select().single();
     if (pErr || !parent) {
       console.error("[render multi] parent insert", pErr);
-      return json({ error: "排队失败" }, 500);
+      return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
     }
 
-    // 2) 串行提交各段
-    const childTaskIds: string[] = [];
-    for (let i = 0; i < subScripts.length; i++) {
-      const sub = subScripts[i];
+    // 2) 并行提交所有段
+    const submissions = await Promise.all(subScripts.map((sub, i) => {
       const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
       const prompt = buildPrompt(sub, styleKey, shopBlock, label, character);
       const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
-      // 跨段一致性策略：
-      //   有角色身份板 → 每段都用角色封面做 first_frame（最大化主角锁定）
-      //   无角色 → 仅第 1 段用用户参考图 first_frame
       const useFirst = characterCover || (i === 0 ? firstImage : undefined);
-      const r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, firstImage: useFirst });
-      if (!r.ok) {
-        console.error("[render multi] seg", i, "ark error", r.error);
-        // 标记父任务失败,已提交的子任务保留(供日志查阅)
-        await admin.from("marketing_video_jobs").update({
-          status: "failed", error: `第 ${i + 1} 段创建失败: ${r.error}`,
-        }).eq("id", parent.id);
-        return json({ error: r.error, raw: r.raw }, 502);
-      }
-      childTaskIds.push(r.id);
-      await admin.from("marketing_video_jobs").insert({
-        user_id: u.user.id,
-        script: sub,
-        status: "queued",
-        shop_id: shopId,
-        provider: "volcengine_seedance",
-        provider_task_id: r.id,
-        parent_job_id: parent.id,
-        segment_index: i,
-        segment_total: segmentTotal,
-      });
+      return submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, firstImage: useFirst })
+        .then((r) => ({ i, r, sub, duration }));
+    }));
+
+    // 3) 检查失败
+    const failed = submissions.find((s) => !s.r.ok);
+    if (failed) {
+      const errMsg = `第 ${failed.i + 1} 段创建失败: ${(failed.r as any).error}`;
+      console.error("[render multi]", errMsg);
+      await admin.from("marketing_video_jobs").update({ status: "failed", error: errMsg }).eq("id", parent.id);
+      return json({ ok: false, error: errMsg, raw: (failed.r as any).raw });
     }
 
-    // 3) 在素材库插一条占位,绑定到父任务
+    // 4) 全部成功 → 写入子任务记录
+    const childTaskIds = submissions.map((s) => (s.r as any).id as string);
+    const childRows = submissions.map((s) => ({
+      user_id: u.user.id, script: s.sub, status: "queued", shop_id: shopId,
+      provider: "volcengine_seedance", provider_task_id: (s.r as any).id,
+      parent_job_id: parent.id, segment_index: s.i, segment_total: segmentTotal,
+    }));
+    const { error: childErr } = await admin.from("marketing_video_jobs").insert(childRows);
+    if (childErr) {
+      console.error("[render multi] children insert", childErr);
+      return json({ ok: false, error: "子任务入库失败: " + childErr.message });
+    }
+
+    // 5) 占位 marketing_assets
     await admin.from("marketing_assets").insert({
-      user_id: u.user.id,
-      kind: "video",
-      shop_id: shopId,
-      input_image_urls: imageUrls,
-      output_url: null,
+      user_id: u.user.id, kind: "video", shop_id: shopId,
+      input_image_urls: imageUrls, output_url: null,
       meta: {
-        job_id: parent.id,
-        video_type: script.video_type,
-        duration: totalDur,
-        aspect: ratio,
+        job_id: parent.id, video_type: script.video_type,
+        duration: totalDur, aspect: ratio,
         mode: firstImage ? "image2video" : "text2video",
-        topic: script.topic || "",
-        style: styleKey,
-        style_label: VIDEO_STYLE_LABELS[styleKey],
-        model,
-        status: "running",
-        segment_total: segmentTotal,
-        segment_done: 0,
-        stage: "generating",
-        character_id: character?.id || null,
+        topic: script.topic || "", style: styleKey,
+        style_label: VIDEO_STYLE_LABELS[styleKey], model,
+        status: "running", segment_total: segmentTotal, segment_done: 0,
+        stage: "generating", character_id: character?.id || null,
         character_name: character?.name || null,
       },
     });
 
     return json({
-      success: true,
-      job_id: parent.id,
-      status: "running",
-      segment_total: segmentTotal,
-      child_task_ids: childTaskIds,
+      ok: true, success: true, job_id: parent.id, status: "running",
+      segment_total: segmentTotal, child_task_ids: childTaskIds,
     });
   } catch (e) {
     console.error("[render] error", e);
-    return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
+    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" });
   }
 });
