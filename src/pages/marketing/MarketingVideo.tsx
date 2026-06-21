@@ -102,30 +102,41 @@ export default function MarketingVideo() {
     setRendering(true);
     try {
       let finalScript = script;
-      // 多段视频且未选角色 → 自动生成兜底角色身份板,保证跨段人物一致
+      // 多段视频且未选角色 → 尝试生成兜底角色身份板;失败不阻塞渲染
       if (duration > 12 && !character && !script.character) {
         toast.message('为保证角色不变脸,正在生成兜底主角…', { duration: 4000 });
-        const anc = await supabase.functions.invoke('ensure-auto-anchor-character', {
-          body: { shop_id: shopId, video_type: vtype, style, brief_summary: briefTranscript.slice(0, 600) },
-        });
-        if (anc.error) throw anc.error;
-        const anchorChar = (anc.data as any)?.character;
-        if (anchorChar) {
-          finalScript = { ...script, character: {
-            id: anchorChar.id, name: anchorChar.name, role_label: anchorChar.role_label,
-            visual_signature: anchorChar.visual_signature, core_emotion: anchorChar.core_emotion,
-            cover_url: anchorChar.cover_url,
-          } };
+        try {
+          const anc = await supabase.functions.invoke('ensure-auto-anchor-character', {
+            body: { shop_id: shopId, video_type: vtype, style, brief_summary: briefTranscript.slice(0, 600) },
+          });
+          if (anc.error) throw anc.error;
+          if ((anc.data as any)?.error) throw new Error((anc.data as any).error);
+          const anchorChar = (anc.data as any)?.character;
+          if (anchorChar) {
+            finalScript = { ...script, character: {
+              id: anchorChar.id, name: anchorChar.name, role_label: anchorChar.role_label,
+              visual_signature: anchorChar.visual_signature, core_emotion: anchorChar.core_emotion,
+              cover_url: anchorChar.cover_url,
+            } };
+          }
+        } catch (ancErr: any) {
+          console.warn('[auto-anchor] failed, continue without', ancErr);
+          toast.message('兜底主角生成失败,跳过,继续提交渲染', { duration: 3000 });
         }
       }
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
         body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId },
       });
       if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      setJobId((data as any).job_id);
+      const resp = data as any;
+      if (resp?.ok === false) throw new Error(resp.error || '渲染提交失败');
+      if (resp?.error) throw new Error(resp.error);
+      setJobId(resp.job_id);
       toast.success('已确认脚本，渲染任务已入队');
-    } catch (e: any) { toast.error(e?.message || '提交失败'); }
+    } catch (e: any) {
+      const msg = e?.message || e?.error?.message || '提交失败,请稍后重试';
+      toast.error(msg);
+    }
     finally { setRendering(false); }
   };
 
