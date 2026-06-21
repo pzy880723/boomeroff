@@ -116,6 +116,8 @@ export default function PublicActivity() {
     })();
   }, [shareToken]);
 
+  const [submitPhase, setSubmitPhase] = useState<'idle' | 'uploading' | 'submitting' | 'done'>('idle');
+
   // 检测是否已领取过（本地缓存 / URL ?claim=）
   useEffect(() => {
     if (!shareToken) return;
@@ -152,6 +154,10 @@ export default function PublicActivity() {
     if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
     if (!agreed) { toast.error('请先勾选并同意《活动参与确认协议》'); return; }
     setSubmitting(true);
+    const hasImage = Object.values(formData).some((v) => typeof v === 'string' && v.startsWith('data:'));
+    setSubmitPhase(hasImage ? 'uploading' : 'submitting');
+    // 切换到 submitting 文案的时机：弱网下 upload 已经在 invoke 内进行，这里短暂延后切到 "正在生成优惠券…"
+    const phaseTimer = window.setTimeout(() => setSubmitPhase('submitting'), hasImage ? 1200 : 0);
     const { data, error: e } = await supabase.functions.invoke('activity-apply', {
       body: {
         share_token: shareToken,
@@ -160,8 +166,10 @@ export default function PublicActivity() {
         form_data: formData,
       },
     });
-    setSubmitting(false);
+    window.clearTimeout(phaseTimer);
     if (e || (data as any)?.error) {
+      setSubmitting(false);
+      setSubmitPhase('idle');
       toast.error((data as any)?.error || e?.message || '报名失败');
       return;
     }
@@ -169,11 +177,22 @@ export default function PublicActivity() {
     if (d?.short_code) {
       if (d.already) toast.info('您已领取过该活动的优惠券');
       localStorage.setItem(`activity_claim:${shareToken}`, d.short_code);
-      navigate(`/u/c/${d.short_code}`, { replace: true });
+      if (d.claim) {
+        try { sessionStorage.setItem(`claim:${d.short_code}`, JSON.stringify(d.claim)); } catch {}
+      }
+      setSubmitPhase('done');
+      // 极短的"成功"过渡，给用户看一眼"报名成功"再跳
+      window.setTimeout(() => {
+        navigate(`/u/c/${d.short_code}`, { replace: true, state: { claim: d.claim } });
+      }, 250);
       return;
     }
+    setSubmitting(false);
+    setSubmitPhase('idle');
     toast.error('报名成功但未生成优惠券，请联系客服');
   };
+
+
 
 
   // 主题色（与海报/券同款暖棕系）
