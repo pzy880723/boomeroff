@@ -17,6 +17,7 @@ import { NotificationManager } from '@/components/admin/NotificationManager';
 import { ActivityReviewPanel } from '@/components/admin/ActivityReviewPanel';
 import { SmsTestPanel } from '@/components/admin/SmsTestPanel';
 import { MarketingPresetsPanel } from '@/components/admin/MarketingPresetsPanel';
+import { BrandKbManager } from '@/components/admin/BrandKbManager';
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
