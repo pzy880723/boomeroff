@@ -573,6 +573,26 @@ ${isExplore ? '七' : '六'}、最终解释权
       </div>
 
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+
+      {submitting && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6" style={bgStyle}>
+          <div className="w-full max-w-xs rounded-2xl bg-[#fdf6e8] p-6 text-center text-[#3b2410] shadow-2xl space-y-3">
+            <div className="flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-[#8e1f10]" />
+            </div>
+            <p className="text-base font-semibold">
+              {submitPhase === 'done' ? '报名成功！' : '正在报名中，请稍等…'}
+            </p>
+            <p className="text-[12px] text-[#6b3a18]/80 leading-relaxed">
+              {submitPhase === 'uploading' && '正在上传报名资料…'}
+              {submitPhase === 'submitting' && '正在为您生成优惠券…'}
+              {submitPhase === 'done' && '正在打开您的优惠券…'}
+              {submitPhase === 'idle' && '即将开始…'}
+            </p>
+            <p className="text-[11px] text-[#6b3a18]/60">请勿关闭或刷新本页面</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
