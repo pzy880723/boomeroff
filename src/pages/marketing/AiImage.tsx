@@ -413,6 +413,26 @@ export default function AiImage() {
   );
 }
 
+function AspectIcon({ ratio, active }: { ratio: Aspect; active?: boolean }) {
+  const dims: Record<Aspect, { w: number; h: number }> = {
+    '1:1': { w: 14, h: 14 },
+    '3:4': { w: 11, h: 14 },
+    '9:16': { w: 8, h: 14 },
+    '16:9': { w: 18, h: 10 },
+  };
+  const { w, h } = dims[ratio];
+  return (
+    <span
+      aria-hidden
+      className={[
+        'inline-block rounded-[2px] border',
+        active ? 'border-primary bg-primary/30' : 'border-muted-foreground/60',
+      ].join(' ')}
+      style={{ width: w, height: h }}
+    />
+  );
+}
+
 // ===== 子组件 =====
 
 function EmptyState() {
