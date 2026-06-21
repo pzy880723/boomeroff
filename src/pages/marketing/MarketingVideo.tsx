@@ -154,8 +154,8 @@ export default function MarketingVideo() {
       <PageHeader title="AI 视频" back="/me/marketing" subtitle="营销中心 / 文生视频" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
         <StepBar
-          steps={['选店铺', '立意沟通', '确认分镜', '渲染']}
-          current={!shopId ? 0 : userTurns < 1 ? 0 : !script ? 1 : !jobId ? 2 : 3}
+          steps={['选店铺', '参考图/主角', '立意沟通', '确认分镜', '渲染']}
+          current={!shopId ? 0 : userTurns < 1 ? 1 : !script ? 2 : !jobId ? 3 : 4}
         />
 
         <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
