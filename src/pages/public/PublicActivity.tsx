@@ -341,11 +341,6 @@ ${isExplore ? '七' : '六'}、最终解释权
               }
             }}
           />
-        ) : notStarted ? (
-          <div className="bg-[#fdf6e8] rounded-2xl p-6 text-center text-sm text-[#3b2410] space-y-1">
-            <p className="font-medium">活动尚未开始</p>
-            <p className="text-xs text-muted-foreground">开始时间：{fmt(activity.starts_at)}</p>
-          </div>
         ) : ended ? (
           <div className="bg-[#fdf6e8] rounded-2xl p-6 text-center text-sm space-y-1">
             <p className="font-medium text-[#8e1f10]">活动已结束</p>
@@ -353,7 +348,13 @@ ${isExplore ? '七' : '六'}、最终解释权
           </div>
         ) : (
           <div className="bg-[#fdf6e8] rounded-2xl p-4 space-y-3 text-[#2d1b0e] shadow-xl">
+            {notStarted && (
+              <div className="rounded-lg bg-[#fff3d8] border border-[#e8d5b3] px-3 py-2 text-[12px] text-[#6b3a18] leading-relaxed">
+                活动将于 <span className="font-medium">{fmt(activity.starts_at)}</span> 开始，现在即可提前报名，优惠券会在活动开始当日生效。
+              </div>
+            )}
             <p className="text-sm font-semibold">填写下方信息即可确认报名</p>
+
 
             <div className="space-y-1.5">
               <Label className="text-xs text-[#6b3a18]">姓名 *</Label>
