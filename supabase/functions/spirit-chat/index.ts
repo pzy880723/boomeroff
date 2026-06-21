@@ -122,6 +122,45 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: '当内部知识库和工具都查不到、或问题涉及外部世界 / 时事 / 品牌新闻 / 公开行情时，调用这个工具联网搜索。返回 3-5 条带标题、摘要、来源链接、配图的网页结果。请把得到的图片用 Markdown 图片语法 ![](url) 插入回答中，并在末尾列出来源。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '搜索关键词，简体中文或英文均可' },
+          limit: { type: 'number', description: '返回条数，默认 4，最多 6' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_diagram',
+      description: '当用户希望你把某个总结、概念、对比、流程"画成一张图"或"做成示意图/卡片/海报/插画"时，调用此工具生成一张图片，并把返回的图片 URL 用 Markdown 语法 ![示意图](url) 嵌入回答里。**只在能显著提升理解时调用，普通回答不要画图。**',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: '画面描述（中文/英文），尽量具体，包含主体、风格、要点文字' },
+          style: {
+            type: 'string',
+            enum: ['illustration', 'infographic', 'flowchart', 'poster'],
+            description: 'illustration=暖萌插画(默认), infographic=信息图, flowchart=流程图, poster=海报',
+          },
+          aspect: {
+            type: 'string',
+            enum: ['1:1', '4:3', '3:4', '16:9'],
+            description: '画面比例，默认 1:1',
+          },
+        },
+        required: ['prompt'],
+      },
+    },
+  },
 ];
 
 // ── 容器内 shops 缓存（同一 isolate 复用 60s）──
