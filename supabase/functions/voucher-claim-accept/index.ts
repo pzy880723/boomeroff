@@ -33,12 +33,10 @@ Deno.serve(async (req) => {
 
     const { data: voucher } = await admin
       .from('vouchers')
-      .select('starts_at, ends_at')
+      .select('ends_at')
       .eq('id', claim.voucher_id)
       .maybeSingle();
-    if (voucher?.starts_at && new Date(voucher.starts_at) > new Date()) {
-      return json({ error: '该券尚未到生效时间' }, 400);
-    }
+    // 允许提前领取：starts_at 在未来仍可领取，券会在生效日后才可核销
     if (voucher?.ends_at && new Date(voucher.ends_at) < new Date()) {
       return json({ error: '该券已结束，无法领取' }, 400);
     }
