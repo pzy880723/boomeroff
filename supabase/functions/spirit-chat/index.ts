@@ -12,6 +12,7 @@
 // - 落库 + 用量写入用 EdgeRuntime.waitUntil，[DONE] 提前返回
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { kbSearch, formatKbBlock, kbSourcesMeta } from '../_shared/kb.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
