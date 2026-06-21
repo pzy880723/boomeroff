@@ -397,7 +397,7 @@ Deno.serve(async (req) => {
       });
 
     const modelMessages: any[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: finalSystemPrompt },
       ...chatHistory,
     ];
 
