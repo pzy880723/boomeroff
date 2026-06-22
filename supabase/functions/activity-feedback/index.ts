@@ -82,16 +82,20 @@ Deno.serve(async (req) => {
     if (action === 'lookup_by_phone') {
       const phone = String(body?.phone || '').trim();
       if (!/^1[3-9]\d{9}$/.test(phone)) return json({ error: '手机号格式不正确' }, 400);
-      const { data: app } = await sb
+      const { data: apps } = await sb
         .from('activity_applications')
-        .select('id, voucher_claim:voucher_claims(short_code)')
+        .select('id, voucher_claim_id, voucher_claim:voucher_claims(short_code)')
         .eq('activity_id', activity.id)
         .eq('applicant_phone', phone)
-        .maybeSingle();
-      const short_code = (app as any)?.voucher_claim?.short_code as string | undefined;
-      if (!short_code) return json({ found: false });
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const app = (apps || [])[0] as any;
+      if (!app) return json({ found: false });
+      const short_code = app?.voucher_claim?.short_code as string | undefined;
+      if (!short_code) return json({ found: true, pending: true });
       return json({ found: true, short_code });
     }
+
 
     const short_code = String(body?.short_code || '').trim().toUpperCase();
     if (!short_code) return json({ error: 'short_code required' }, 400);
