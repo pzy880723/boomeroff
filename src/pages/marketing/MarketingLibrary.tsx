@@ -16,6 +16,8 @@ import { CharacterCard } from '@/components/marketing/CharacterCard';
 import { CharacterDialog } from '@/components/marketing/CharacterDialog';
 import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
 
+import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
+
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
 export default function MarketingLibrary() {
