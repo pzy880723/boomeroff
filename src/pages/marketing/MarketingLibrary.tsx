@@ -555,6 +555,19 @@ export default function MarketingLibrary() {
         onDeleted={(id) => { setCharacters((prev) => prev.filter((x) => x.id !== id)); setCharacterDetail(null); }}
       />
 
+      <AssetTagDialog
+        open={!!tagEditAsset}
+        onOpenChange={(o) => !o && setTagEditAsset(null)}
+        assetId={tagEditAsset?.id || null}
+        initialTags={tagEditAsset?.tags || []}
+        initialCategory={tagEditAsset?.category || null}
+        suggestedTags={tagOptions}
+        onSaved={(tags, category) => {
+          if (!tagEditAsset) return;
+          setItems((prev) => prev.map((x) => x.id === tagEditAsset.id ? { ...x, tags, category } : x));
+        }}
+      />
+
       <AlertDialog open={confirmDel} onOpenChange={setConfirmDel}>
         <AlertDialogContent>
           <AlertDialogHeader>
