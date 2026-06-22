@@ -197,14 +197,21 @@ export default function MarketingLibrary() {
     return ({ queued: '排队中', running: '渲染中' } as Record<string, string>)[s || ''] || s || '排队中';
   };
 
+  const tagOptions = useMemo(() => {
+    const set = new Set<string>(DEFAULT_TAGS);
+    items.forEach((it) => (Array.isArray(it.tags) ? it.tags : []).forEach((t: string) => set.add(t)));
+    return Array.from(set);
+  }, [items]);
+
   const filtered = useMemo(() => {
     let list = items;
     if (shopId) list = list.filter((it) => it.shop_id === shopId);
     if (tab === 'photo') list = list.filter((it) => it.kind === 'photo');
     else if (tab === 'copy') list = list.filter((it) => it.kind === 'copy');
     else if (tab === 'video') list = list.filter((it) => it.kind === 'video');
+    if (activeTag) list = list.filter((it) => Array.isArray(it.tags) && it.tags.includes(activeTag));
     return list;
-  }, [items, shopId, tab]);
+  }, [items, shopId, tab, activeTag]);
 
   const groups = useMemo(() => {
     const map = new Map<string, any[]>();
