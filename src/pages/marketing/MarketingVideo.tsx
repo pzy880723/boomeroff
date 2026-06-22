@@ -404,9 +404,10 @@ function SceneRow({
   return (
     <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <span className="font-display text-[11px] text-accent tracking-[0.18em]">{num}</span>
           <span className="text-[11px] font-semibold text-foreground">{title}</span>
+          {scene.image_binding && <BindingBadge binding={scene.image_binding} />}
         </div>
         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
           <span>{scene.duration_s}s</span>
@@ -507,4 +508,37 @@ function FieldBlock({ label, children }: { label: string; children: React.ReactN
       {children}
     </div>
   );
+}
+
+function BindingBadge({ binding }: { binding: { source: string; expected: number | null; confidence: number | null } }) {
+  const { source, expected, confidence } = binding;
+  if (source === 'free') return null;
+  if (source === 'unbound') {
+    return (
+      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+        草稿标[无图]
+      </span>
+    );
+  }
+  if (source === 'locked') {
+    return (
+      <span
+        className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30"
+        title={`AI 与草稿一致 · 置信度 ${Math.round((confidence ?? 1) * 100)}%`}
+      >
+        🔒 锁定 #{expected} · {Math.round((confidence ?? 1) * 100)}%
+      </span>
+    );
+  }
+  if (source === 'forced') {
+    return (
+      <span
+        className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30"
+        title={`AI 给的图与草稿不一致,已按草稿强制改回 #${expected} · 置信度 ${Math.round((confidence ?? 0.6) * 100)}%`}
+      >
+        ⚠ 已校正→#{expected} · {Math.round((confidence ?? 0.6) * 100)}%
+      </span>
+    );
+  }
+  return null;
 }

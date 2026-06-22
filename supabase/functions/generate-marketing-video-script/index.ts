@@ -219,6 +219,58 @@ ${refList}
         }
       }
     }
+
+    // === 分镜与图片绑定校验 ===
+    // 如果用户用了 approved_script,严格按草稿里 [图 #N] 标注重新绑定 image_index,
+    // 并给每个镜头附上 image_binding: { source, expected, confidence }
+    {
+      const segments: { marker: number | null }[] = [];
+      if (approvedScript) {
+        const lines = approvedScript.split(/\r?\n/);
+        for (const raw of lines) {
+          const line = raw.trim();
+          if (!/^(开场|中段\s*\d+|收尾)/.test(line)) continue;
+          const mImg = line.match(/\[图\s*#\s*(\d+)\s*\]/);
+          if (mImg) {
+            const n = parseInt(mImg[1], 10);
+            segments.push({ marker: imageUrls.length && n >= 0 && n < imageUrls.length ? n : null });
+          } else {
+            segments.push({ marker: null });
+          }
+        }
+      }
+      const allClips = [script.hook, ...script.scenes, script.outro];
+      const applyBinding = (clip: any, seg?: { marker: number | null }) => {
+        if (!seg || !approvedScript) {
+          clip.image_binding = { source: 'free', expected: null, confidence: null };
+          return;
+        }
+        if (seg.marker === null) {
+          // 草稿标 [无图]
+          clip.image_index = null;
+          clip.image_binding = { source: 'unbound', expected: null, confidence: 1 };
+          return;
+        }
+        const aiVal = clip.image_index;
+        const matched = aiVal === seg.marker;
+        clip.image_index = seg.marker; // 强制绑定
+        clip.image_binding = {
+          source: matched ? 'locked' : 'forced',
+          expected: seg.marker,
+          confidence: matched ? 1 : 0.6,
+        };
+      };
+      if (segments.length && segments.length === allClips.length) {
+        allClips.forEach((c, i) => applyBinding(c, segments[i]));
+      } else if (segments.length) {
+        // 段数不匹配:仍按顺序绑前 N 个,剩余标 free
+        allClips.forEach((c, i) => applyBinding(c, segments[i]));
+        console.warn(`[script] segments=${segments.length} vs clips=${allClips.length}, partial binding`);
+      } else {
+        allClips.forEach((c) => applyBinding(c));
+      }
+    }
+
     script.aspect = aspect;
     script.total_duration_s = duration;
     script.mode = "text2video";
