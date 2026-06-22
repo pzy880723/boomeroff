@@ -72,6 +72,9 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
 - 称呼用"你",绝不用"主播""宝宝们"。
 - 当信息够拍了,主动说一句:"我觉得够了,你可以点上面的『让 AI 写一版完整脚本』。"`;
 
+    const midCount = Math.max(1, Math.round(duration / 2.5) - 2);  // 15→4, 20→6, 30→10
+    const wordsLo = Math.round(duration * 12);   // 15→180, 30→360
+    const wordsHi = Math.round(duration * 18);   // 15→270, 30→540
     const sysDraft = `${presets.brand}
 ${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
 
@@ -83,11 +86,11 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
 开场(约2秒):一段话,描述画面感觉+第一句台词/字幕。[图 #N]
 中段1(约X秒):...[图 #N]
 中段2(约X秒):...[图 #N]
-(根据时长可写 2-4 段中段)
+(根据时长写 ${midCount} 段中段,可上下浮动 1 段)
 收尾(约2秒):升华或行动召唤+落版字幕。[图 #N]
 
 铁律:
-- 全文 150-300 字,口语化,像跟同事讲怎么拍这条片子。
+- 全文 ${wordsLo}-${wordsHi} 字,口语化,像跟同事讲怎么拍这条片子。时长越长段数越多、内容越细。
 - **每一段结尾必须用 [图 #N] 标注它对应哪张参考图**(N 是 0 起的 index,只能从店员实际上传的那几张里挑;没有参考图就一律写 [无图])。
 - 同一张图不要连续用两段。
 - 称呼用"你",绝不用"主播""宝宝们""保真""限时抢"等违禁词。
