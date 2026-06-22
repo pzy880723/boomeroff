@@ -243,6 +243,26 @@ export default function MarketingVideo() {
           </div>
           <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" />
           <p className="text-[10px] text-muted-foreground">不上传也能生成。AI 会按场景从这些图里挑最贴合的一张。</p>
+          {urls.length > 0 && (
+            <div className="border-t border-accent/10 pt-2 space-y-1">
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <span className="font-display tracking-[0.18em] uppercase text-accent">AI 看到的内容</span>
+                {descLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+              </div>
+              {imageDescriptions.length > 0 ? (
+                <ul className="space-y-0.5 max-h-32 overflow-y-auto pr-1">
+                  {imageDescriptions.map((d) => (
+                    <li key={d.index} className="text-[10.5px] leading-snug text-muted-foreground">
+                      <span className="text-accent">[图 #{d.index}]</span> {d.summary}
+                      {d.best_for && <span className="text-foreground/40"> · {d.best_for}</span>}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                !descLoading && <p className="text-[10px] text-muted-foreground/60">等下…AI 正在看你的图。</p>
+              )}
+            </div>
+          )}
         </section>
 
         {/* 主角(可选) */}
@@ -264,12 +284,14 @@ export default function MarketingVideo() {
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            先和 AI 助理简单聊几句,把要拍的东西、想要的感觉说清楚。聊够了再点右上「生成分镜」。
+            先聊几句 → 让 AI 在对话框里写一版完整脚本(带 [图 #N] 标注)→ 满意后点右上「生成分镜」拆成镜头。
           </p>
           <VideoBriefChat
             context={{ video_type: vtype, duration, aspect, style }}
             messages={brief}
             onChange={(m) => { setBrief(m); setScript(null); }}
+            shopId={shopId}
+            imageDescriptions={imageDescriptions}
           />
         </section>
 
