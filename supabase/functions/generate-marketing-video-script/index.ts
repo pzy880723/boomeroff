@@ -198,13 +198,27 @@ ${refList}
       dialogue: clean(sc?.dialogue, 60),
       subtitle: clean(sc?.subtitle ?? sc?.text, 14),
       image_index: clampIdx(sc?.image_index),
-      duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), 6),
+      duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), perClipMax + 1),
       motion: (sc?.motion || "推镜").toString().slice(0, 16),
     });
 
     script.hook = sanitizeScene(script.hook);
     script.outro = sanitizeScene(script.outro);
-    script.scenes = script.scenes.slice(0, 6).map(sanitizeScene);
+    script.scenes = script.scenes.slice(0, maxScenes).map(sanitizeScene);
+    if (script.scenes.length < minScenes) {
+      console.warn(`[script] only ${script.scenes.length} scenes returned, expected >= ${minScenes} for ${duration}s`);
+    }
+    // 等比缩放,使总时长 ≈ duration
+    {
+      const allClips = [script.hook, ...script.scenes, script.outro];
+      const sum = allClips.reduce((a: number, c: any) => a + (Number(c.duration_s) || 0), 0);
+      if (sum > 0 && Math.abs(sum - duration) > 0.5) {
+        const k = duration / sum;
+        for (const c of allClips) {
+          c.duration_s = Math.round(((Number(c.duration_s) || 0) * k) * 10) / 10;
+        }
+      }
+    }
     script.aspect = aspect;
     script.total_duration_s = duration;
     script.mode = "text2video";
