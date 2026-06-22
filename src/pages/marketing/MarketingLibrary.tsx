@@ -442,6 +442,20 @@ export default function MarketingLibrary() {
                             </div>
                           )}
 
+                          {it.kind === 'photo' && !manageMode && (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => { e.stopPropagation(); setTagEditAsset(it); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setTagEditAsset(it); } }}
+                              className="absolute bottom-1 left-1 max-w-[80%] text-[9px] bg-foreground/55 text-background px-1.5 py-0.5 rounded cursor-pointer hover:bg-foreground/80 transition-colors truncate"
+                            >
+                              {Array.isArray(it.tags) && it.tags.length > 0
+                                ? `${it.tags[0]}${it.tags.length > 1 ? ` +${it.tags.length - 1}` : ''}`
+                                : '+标签'}
+                            </span>
+                          )}
+
                           {it.kind === 'video' && (
                             <>
                               <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
