@@ -239,6 +239,15 @@ export default function MarketingVideo() {
 
         <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
 
+        {shopId && restoredAt && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-accent/20 bg-accent/5 px-3 py-2 text-[11px]">
+            <span className="text-muted-foreground">
+              已恢复 {Math.max(1, Math.round((Date.now() - restoredAt) / 60000))} 分钟前的草稿
+            </span>
+            <button onClick={clearDraft} className="text-accent hover:underline font-medium">清空重来</button>
+          </div>
+        )}
+
         {!shopId ? (
           <p className="text-center text-[12px] text-muted-foreground py-8">请先选择店铺，再开始创作。</p>
         ) : (<>
