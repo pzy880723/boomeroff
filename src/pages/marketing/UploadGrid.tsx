@@ -26,9 +26,10 @@ export type UploadGridProps = {
   max?: number;
   preset?: 'thumb' | 'hd';
   title?: string;
+  shopId?: string | null;
 };
 
-export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title = '素材' }: UploadGridProps) {
+export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title = '素材', shopId = null }: UploadGridProps) {
   const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -58,7 +59,7 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
       const { data: hit } = await supabase
         .from('marketing_assets' as any)
         .select('id, output_url, meta')
-        .eq('created_by', user.id)
+        .eq('user_id', user.id)
         .eq('meta->>sha256', hash)
         .not('output_url', 'is', null)
         .limit(1)
@@ -88,7 +89,8 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     // 入库（失败不阻塞参考图使用）
     try {
       await supabase.from('marketing_assets' as any).insert({
-        created_by: user.id,
+        user_id: user.id,
+        shop_id: shopId,
         kind: 'photo',
         output_url: finalUrl,
         input_image_urls: [finalUrl],

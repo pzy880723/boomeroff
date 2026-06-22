@@ -304,7 +304,7 @@ export default function MarketingVideo() {
               <FolderOpen className="w-3.5 h-3.5" />从素材库导入
             </Button>
           </div>
-          <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" />
+          <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" shopId={shopId} />
           <p className="text-[10px] text-muted-foreground">不上传也能生成。AI 会按场景从这些图里挑最贴合的一张。</p>
           {urls.length > 0 && (
             <div className="border-t border-accent/10 pt-2 space-y-1">
