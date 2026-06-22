@@ -404,9 +404,10 @@ function SceneRow({
   return (
     <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <span className="font-display text-[11px] text-accent tracking-[0.18em]">{num}</span>
           <span className="text-[11px] font-semibold text-foreground">{title}</span>
+          {scene.image_binding && <BindingBadge binding={scene.image_binding} />}
         </div>
         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
           <span>{scene.duration_s}s</span>
