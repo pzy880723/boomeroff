@@ -1,76 +1,35 @@
-# BOOMER 多模态升级方案
+## 问题诊断
 
-让浮窗里的 BOOMER 在对话中能够：① 遇到不会的问题自动联网搜索 ② 在回复里插入相关图片 ③ 把总结直接生成一张示意图发给你。
+数据库里确实出现了重复申请（活动 `47ef3992…`：`13564388627`、`13916289997` 各有 2 条记录）。三个原因叠加：
 
-## 一、能力清单
+1. **`activity-apply` 去重判断有漏洞**：只有当"已有申请且已挂上 `voucher_claim.short_code`"时才返回已领取；只要旧记录的 claim 还没回写或查询失败，就会再插一条新申请 + 新券。同时没有数据库唯一约束兜底。
+2. **`activity-feedback` 的 `lookup_by_phone` 用 `.maybeSingle()`**：一旦该手机号有多条记录就直接报错或返回 `null`，前端显示"未查询到您的领取记录"。
+3. **再次扫码进入活动页时不会自动识别**：只读 `localStorage` 和 URL `?claim=`，换个浏览器/清缓存就当成新用户。
 
-1. **联网搜索（已部分具备，需打通到 spirit-chat）**
-   - 复用 `web-search-grounding` 里已接入的 Gemini `google_search` 工具
-   - 在 `spirit-chat` edge function 中开启 `tools: [{ google_search: {} }]`,模型不确定时自动触发
-   - 搜索来源（标题 + URL）通过 SSE 推回前端,在气泡下方显示"参考来源 N 条"折叠列表
+## 修复方案
 
-2. **图片插入（图文并茂）**
-   - 模型输出 Markdown,前端用 `react-markdown` 渲染 `![alt](url)`
-   - 图片来源两路:
-     - 联网搜索结果里的图片(Gemini grounding 返回的 image refs / 网页 og:image)
-     - 知识库 `kb_documents` 关联的 `marketing_assets` 图片 URL(KB 检索时一并带回)
-   - 系统提示词新增:"必要时用 Markdown 图片语法插入相关配图,优先用[内部知识参考]里附带的图片 URL,其次用联网搜索结果中的图片"
+### 1. 数据库（migration）
+- 先合并历史重复：每个 `(activity_id, applicant_phone)` 只保留最早一条；如果它没有 `voucher_claim_id`，把后来那条的 claim 接过来；其余的 application 删除（保留 `voucher_claims` 不动，避免影响用户已领的券，但解除外键关联）。
+- 加唯一索引：`CREATE UNIQUE INDEX activity_applications_activity_phone_uniq ON activity_applications(activity_id, applicant_phone);`，从根上杜绝重复。
 
-3. **示意图生成(按需文生图)**
-   - 给模型注册一个 `generate_diagram` 工具:
-     - 参数:`prompt`(中文描述)、`style`(`illustration` | `infographic` | `flowchart`)、`aspect_ratio`
-     - 执行端:edge function 调用 Lovable AI `google/gemini-3.1-flash-image-preview` 生成图,上传到 `chat-images` storage bucket,返回公开 URL
-   - 模型在总结时若判断"用图更清楚"会自动调用,把返回的 URL 以 `![示意图](url)` 嵌入回复
-   - 也支持用户显式说"画个示意图"/"做成图给我"触发
+### 2. `supabase/functions/activity-apply/index.ts`
+- 不论旧记录是否带有 short_code，都视为"已申请"，按下列逻辑处理：
+  - 旧记录已有 claim → 直接返回 `already:true` + `short_code`。
+  - 旧记录还没 claim（异常情况）→ 现场为它补建一张 `voucher_claims` 并回写 `voucher_claim_id`，再返回。
+- 把 `applicant_phone` 查询的 `.maybeSingle()` 改成 `order(created_at asc).limit(1)`，避免多行导致报错。
+- 插入失败若命中新加的唯一约束（错误码 `23505`），回退到"查已有记录并返回"的分支，保证并发也不会重复。
 
-4. **(可选)用户上图 → BOOMER 看图回答**
-   - 浮窗输入框新增 📎 上传按钮,图片转 base64 作为 `image_url` part 传给模型(spirit-chat 已用 Gemini,天然支持 vision)
-   - 本轮先做"BOOMER 发图给你",看图能力如需要可一并打开,请确认
+### 3. `supabase/functions/activity-feedback/index.ts`
+- `lookup_by_phone` 改成按 `created_at desc` 取最新一条，并支持"有申请但还没 claim"的场景（这时也告诉前端 `found:true`，让用户跳到反馈/补发页或提示"已报名，正在出券"）。
 
-## 二、技术改动
+### 4. `src/pages/public/PublicActivity.tsx`
+- 报名表单的手机号字段失焦时，自动调用 `lookup_by_phone`：命中就直接切到反馈模式（显示已领的 short_code），不再让用户重复填表。
+- "我已领取过 → 输入手机号查询"弹窗保留，作为补救入口；同时把按钮文案在主表单上方做一行小提示："已报名过？换个浏览器/重新扫码也能用手机号找回 →"。
 
-### Edge Function: `supabase/functions/spirit-chat/index.ts`
-- 在 `tools` 数组里加入:
-  - `google_search`(grounding,内置)
-  - `generate_diagram`(自定义,带 `execute` 调用图像生成 API + storage 上传)
-- SSE 事件类型扩展:
-  - `__kb_sources`(已存在)
-  - `__web_sources`:`[{title, url, snippet}]`
-  - `__tool_call`:`{name, status}` 用于前端显示"BOOMER 正在搜索…/正在画图…"状态条
-- 系统提示追加多模态输出规范(Markdown 图片、引用来源、何时画示意图)
+### 5. 部署 & 验证
+- 部署 `activity-apply`、`activity-feedback` 两个 edge function。
+- 用现有 `13564388627` 走一遍：重复提交应返回 `already:true`；`lookup_by_phone` 应返回原 short_code；扫码进入填手机号失焦应自动跳反馈页。
 
-### Storage
-- 新增 bucket `chat-images`(public read),用于存放 BOOMER 生成的示意图
-- RLS:仅 service_role 可写,所有人可读
-
-### 前端: `src/components/spirit/SpiritChatDrawer.tsx`(或对应组件)
-- 消息渲染换为 `ReactMarkdown` + `remark-gfm`,允许 `img` 标签;给图片加圆角 + 点击放大
-- 气泡下方加两个折叠区:
-  - 🔗 参考来源 (`__web_sources`)
-  - 📚 品牌知识库 (`__kb_sources`,已存在)
-- 工具调用中显示 inline loading:"🔍 联网搜索中…" / "🎨 生成示意图中…"
-- "★ 加入知识库"按钮对带图回复同样可用(图片 URL 一并存进 `accepted_output`)
-
-### Portal 开关(管理员)
-- `app_settings.spirit_chat_features`:
-  - `web_search_enabled`(默认 on)
-  - `diagram_generation_enabled`(默认 on)
-  - `max_images_per_reply`(默认 2,防止滥用)
-
-## 三、成本与体验保护
-
-- 联网搜索:仅在模型自己判断需要时触发,不每次都搜
-- 生成示意图:单次约 1-2 credits,系统提示约束"仅在能显著提升理解时才画,不要为每条回复都画"
-- 前端图片懒加载 + 最大宽度,移动端体验优先
-- 失败降级:搜索失败 → 纯文本回答 + 提示"暂时联网失败";画图失败 → 文字描述 + 提示"示意图生成失败"
-
-## 四、不在本次范围
-
-- 视频生成回复(后续)
-- 用户上传图片让 BOOMER 看图(等你确认是否一起做)
-- 把生成的示意图自动回灌到知识库(可在"★ 加入知识库"按钮里手动触发,已支持)
-
-## 五、需要你确认
-
-1. 用户在浮窗里**上传图片**给 BOOMER 看 —— 本轮一起做,还是先只做 BOOMER 发图?
-2. 生成示意图默认风格倾向:**插画风(暖萌、贴近 BOOMER 品牌)** 还是 **信息图/流程图(严谨)**?还是让模型按内容自动选?
+## 影响范围
+- 仅活动报名/查券链路；不动券核销、活动管理列表。
+- 数据清理只删除"多余 application 行"，已发放的 `voucher_claims` 不删（保留用户已领的优惠券）。

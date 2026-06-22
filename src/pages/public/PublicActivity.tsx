@@ -370,10 +370,24 @@ ${isExplore ? '七' : '六'}、最终解释权
               <Input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                onBlur={async () => {
+                  if (!/^1[3-9]\d{9}$/.test(phone)) return;
+                  if (feedbackCode) return;
+                  const { data } = await supabase.functions.invoke('activity-feedback', {
+                    body: { action: 'lookup_by_phone', share_token: shareToken, phone },
+                  });
+                  const d = data as any;
+                  if (d?.found && d?.short_code) {
+                    localStorage.setItem(`activity_claim:${shareToken}`, d.short_code);
+                    setFeedbackCode(d.short_code);
+                    toast.info('检测到您已报名，已为您切换到发布反馈');
+                  }
+                }}
                 inputMode="numeric"
                 maxLength={11}
                 className="bg-white border-[#e8d5b3] rounded-xl h-11"
               />
+
             </div>
 
             {fields.map((f) => (
