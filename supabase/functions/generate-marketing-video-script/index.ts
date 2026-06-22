@@ -114,7 +114,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}${imgDescBlock}
 - 画幅 ${aspect}。
 - 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
 - subtitle ≤ 14 字。scene 30–80 字，action 15–50 字，dialogue ≤ 30 字(可为空)。
-- 镜头条数 4–6 条；每条 2–5 秒。
+- 镜头总条数 ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间;每条 ${perClipMin}–${perClipMax} 秒,所有镜头 duration_s 之和必须 ≈ ${duration} 秒。
 - 不写"主播""直播间""保真""保证升值"等违禁词。`;
 
     const refList = imageUrls.length
