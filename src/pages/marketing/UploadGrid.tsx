@@ -90,6 +90,7 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     try {
       await supabase.from('marketing_assets' as any).insert({
         created_by: user.id,
+        shop_id: shopId,
         kind: 'photo',
         output_url: finalUrl,
         input_image_urls: [finalUrl],
