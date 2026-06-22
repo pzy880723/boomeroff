@@ -509,3 +509,36 @@ function FieldBlock({ label, children }: { label: string; children: React.ReactN
     </div>
   );
 }
+
+function BindingBadge({ binding }: { binding: { source: string; expected: number | null; confidence: number | null } }) {
+  const { source, expected, confidence } = binding;
+  if (source === 'free') return null;
+  if (source === 'unbound') {
+    return (
+      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+        草稿标[无图]
+      </span>
+    );
+  }
+  if (source === 'locked') {
+    return (
+      <span
+        className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30"
+        title={`AI 与草稿一致 · 置信度 ${Math.round((confidence ?? 1) * 100)}%`}
+      >
+        🔒 锁定 #{expected} · {Math.round((confidence ?? 1) * 100)}%
+      </span>
+    );
+  }
+  if (source === 'forced') {
+    return (
+      <span
+        className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30"
+        title={`AI 给的图与草稿不一致,已按草稿强制改回 #${expected} · 置信度 ${Math.round((confidence ?? 0.6) * 100)}%`}
+      >
+        ⚠ 已校正→#{expected} · {Math.round((confidence ?? 0.6) * 100)}%
+      </span>
+    );
+  }
+  return null;
+}
