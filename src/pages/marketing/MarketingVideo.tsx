@@ -56,8 +56,62 @@ export default function MarketingVideo() {
   const [script, setScript] = useState<any>(null);
   const [rendering, setRendering] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [restoredAt, setRestoredAt] = useState<number | null>(null);
 
-  useEffect(() => { setScript(null); setJobId(null); setCharacter(null); }, [shopId]);
+  // 草稿本地保存 key
+  const draftKey = shopId ? `mv:draft:${shopId}` : '';
+
+  // 切换店铺时:先尝试恢复该 shop 的草稿,没有就清空
+  useEffect(() => {
+    setScript(null); setJobId(null); setCharacter(null); setRestoredAt(null);
+    if (!draftKey) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (Array.isArray(d.urls)) setUrls(d.urls);
+      if (d.vtype) setVtype(d.vtype);
+      if (d.style) setStyle(d.style);
+      if (d.duration) setDuration(d.duration);
+      if (d.aspect) setAspect(d.aspect);
+      if (typeof d.highlight === 'string') setHighlight(d.highlight);
+      if (d.character) setCharacter(d.character);
+      if (Array.isArray(d.brief) && d.brief.length) setBrief(d.brief);
+      if (d.script) setScript(d.script);
+      if (d.updatedAt) setRestoredAt(d.updatedAt);
+    } catch (e) { console.warn('[mv-draft] restore failed', e); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shopId]);
+
+  // 任一草稿字段变化 → debounce 写入 localStorage
+  useEffect(() => {
+    if (!draftKey) return;
+    const t = setTimeout(() => {
+      const payload = { urls, vtype, style, duration, aspect, highlight, character, brief, script, updatedAt: Date.now() };
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(payload));
+      } catch (e) {
+        // 容量爆了:退一步,不存图与角色
+        try { localStorage.setItem(draftKey, JSON.stringify({ ...payload, urls: [], character: null, script: null })); }
+        catch { /* 放弃 */ }
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [draftKey, urls, vtype, style, duration, aspect, highlight, character, brief, script]);
+
+  // 提交渲染成功后清掉草稿
+  useEffect(() => {
+    if (jobId && draftKey) {
+      try { localStorage.removeItem(draftKey); } catch {}
+      setRestoredAt(null);
+    }
+  }, [jobId, draftKey]);
+
+  const clearDraft = () => {
+    if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
+    setUrls([]); setVtype('store_tour'); setStyle('steady'); setDuration(15); setAspect('9:16');
+    setHighlight(''); setCharacter(null); setBrief([]); setScript(null); setJobId(null); setRestoredAt(null);
+  };
 
   // 上传/移除参考图后,后台让 AI 看一遍,产出每张图的简短描述,给 BriefChat 和分镜共用
   useEffect(() => {
@@ -185,6 +239,15 @@ export default function MarketingVideo() {
 
         <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
 
+        {shopId && restoredAt && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-accent/20 bg-accent/5 px-3 py-2 text-[11px]">
+            <span className="text-muted-foreground">
+              已恢复 {Math.max(1, Math.round((Date.now() - restoredAt) / 60000))} 分钟前的草稿
+            </span>
+            <button onClick={clearDraft} className="text-accent hover:underline font-medium">清空重来</button>
+          </div>
+        )}
+
         {!shopId ? (
           <p className="text-center text-[12px] text-muted-foreground py-8">请先选择店铺，再开始创作。</p>
         ) : (<>
@@ -292,6 +355,7 @@ export default function MarketingVideo() {
             onChange={(m) => { setBrief(m); setScript(null); }}
             shopId={shopId}
             imageDescriptions={imageDescriptions}
+            imageUrls={urls}
           />
         </section>
 
