@@ -1,30 +1,44 @@
-## 问题定位
+## 问题
+分镜数量被写死成"4–6 条 + hook + outro"(`generate-marketing-video-script` 第 111、201 行),草稿脚本中段也固定 2–4 段,无视 15s/20s/30s 的差别 — 30s 太挤、15s 太松。
 
-`/me/marketing/image`(`src/pages/marketing/AiImage.tsx`)第 205 行:
-```tsx
-<div className="flex flex-col h-[calc(100vh-3.5rem)]">
+## 改法(两个 edge function,纯 prompt + 清洗逻辑)
+
+### 1. `supabase/functions/generate-marketing-video-script/index.ts`
+按 ≈2.5s/镜估算总镜数:
+
+```ts
+// 在 duration 解析下加:
+const targetClips = Math.max(3, Math.round(duration / 2.5));   // 15→6, 20→8, 30→12
+const minScenes = Math.max(2, targetClips - 2);                // hook+outro 占 2
+const maxScenes = targetClips + 1;                             // 给 AI 一点弹性
+const perClipMin = duration >= 25 ? 1.5 : 2;
+const perClipMax = duration >= 25 ? 3.5 : 5;
 ```
 
-只减了 PageHeader 的 3.5rem,**没有减底部 Tab 栏的 4rem**(`MainLayout` 给 `main` 加了 `pb-16`,`BottomTabBar` 高 12 ≈ 3rem 但留了安全区)。结果整个 flex 容器的"底"落在屏幕外面,输入区(模板/尺寸/附图/输入框)被 Tab 栏挡住,看起来"超出底部"。另外移动端浏览器地址栏伸缩用 `100vh` 还会再多算一截。
+- 把第 111 行 `镜头条数 4–6 条;每条 2–5 秒` 改成
+  `镜头条数 = 总时长/约2.5秒 ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度 ${minScenes}–${maxScenes} 条;每条 ${perClipMin}–${perClipMax} 秒,总和必须 ≈ ${duration} 秒。`
+- 第 195 行 `duration_s` 上限从 6 改成 `perClipMax + 1`(保留兜底,避免某条独大)。
+- 第 201 行 `script.scenes = script.scenes.slice(0, 6)` 改成 `slice(0, maxScenes)`;若 `script.scenes.length < minScenes`,记一条 warn(不强制重生,前端依旧能用)。
+- 生成后增加一次时长均摊:把所有 clip 的 `duration_s` 等比缩放到总和 = `duration`,避免 AI 给出 4s+4s+4s 这种 30s 视频却只算 12s 的情况。
 
-## 改法(只动 AiImage 一处,纯 CSS)
+### 2. `supabase/functions/marketing-video-brief-chat/index.ts`(draft_script 分支)
+把第 83–94 行的"中段 2–4 段、全文 150–300 字"改成按时长动态:
 
-`src/pages/marketing/AiImage.tsx` 第 205 行,把外层容器高度从
-```tsx
-<div className="flex flex-col h-[calc(100vh-3.5rem)]">
+```ts
+const midCount = Math.max(1, Math.round(duration / 2.5) - 2);  // 15→4, 20→6, 30→10
+const wordsLo = Math.round(duration * 12);   // 15→180, 30→360
+const wordsHi = Math.round(duration * 18);   // 15→270, 30→540
 ```
-改成
-```tsx
-<div className="flex flex-col h-[calc(100dvh-3.5rem-4rem)]">
-```
 
-- `100dvh` 替代 `100vh`,跟着手机地址栏自适应,不会再算多。
-- `-4rem` 把底部 Tab 栏的 `pb-16` 减掉。
-- flex 布局已经有 `shrink-0`(输入区)+ `flex-1 overflow-y-auto`(对话流),所以容器一旦高度正确,输入区就自动钉在底部、不再被遮、也不会跟着对话流上下滑。
+- 模板提示从"中段 2–4 段"改成"中段 ${midCount} 段(可上下浮动 1 段)";
+- "全文 150–300 字"改成"全文 ${wordsLo}–${wordsHi} 字";
+- 仍然每段结尾 `[图 #N]`,规则不变。
 
-不动的部分:输入区内部排版、模板/比例/附图/textarea 都保持现状,只是它现在真的会贴在可见区域底部。其他 marketing 页面(Photo/Copy/Video)不受影响。
+### 3. 兼容
+前端 `VideoScenesCard` / `VideoBriefChat` 不动 — `scenes` 数组本来就支持任意长度。
 
 ## 验证
-1. iPhone 视口 390×598 打开 `/me/marketing/image`,输入框完全可见,在底部 Tab 栏上方,不能滑动。
-2. 滚动对话区,顶部 ShopPicker 不动、底部输入区不动,只有中间消息流滚。
-3. 横屏 / iPad 也正常,因为 `dvh` 自适应。
+- 15s 视频:草稿大约 4 段中段,生成后 `scenes.length` 在 4–7 之间,总 duration ≈15s。
+- 30s 视频:草稿 8–10 段,生成后 `scenes.length` 在 9–13 之间,总 duration ≈30s。
+- 20s 视频:介于两者之间。
+- 不动 UI、不动数据库。

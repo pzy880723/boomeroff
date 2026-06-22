@@ -33,6 +33,12 @@ Deno.serve(async (req) => {
     const videoType: VideoType = (Object.keys(presets.videoRules) as VideoType[]).includes(body.video_type)
       ? body.video_type : "store_tour";
     const duration: number = [15, 20, 30].includes(Number(body.duration)) ? Number(body.duration) : 15;
+    // 按 ~2.5s/镜估算总镜数(含 hook + outro)
+    const targetClips = Math.max(3, Math.round(duration / 2.5));    // 15→6, 20→8, 30→12
+    const minScenes = Math.max(2, targetClips - 2);
+    const maxScenes = targetClips + 1;
+    const perClipMin = duration >= 25 ? 1.5 : 2;
+    const perClipMax = duration >= 25 ? 3.5 : 5;
     const aspect: string = ["9:16", "1:1", "16:9"].includes(body.aspect) ? body.aspect : "9:16";
     const topic = (body.topic || "").toString().trim().slice(0, 200);
     const highlight = (body.highlight || "").toString().trim().slice(0, 80);
@@ -108,7 +114,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}${imgDescBlock}
 - 画幅 ${aspect}。
 - 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
 - subtitle ≤ 14 字。scene 30–80 字，action 15–50 字，dialogue ≤ 30 字(可为空)。
-- 镜头条数 4–6 条；每条 2–5 秒。
+- 镜头总条数 ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间;每条 ${perClipMin}–${perClipMax} 秒,所有镜头 duration_s 之和必须 ≈ ${duration} 秒。
 - 不写"主播""直播间""保真""保证升值"等违禁词。`;
 
     const refList = imageUrls.length
@@ -192,13 +198,27 @@ ${refList}
       dialogue: clean(sc?.dialogue, 60),
       subtitle: clean(sc?.subtitle ?? sc?.text, 14),
       image_index: clampIdx(sc?.image_index),
-      duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), 6),
+      duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), perClipMax + 1),
       motion: (sc?.motion || "推镜").toString().slice(0, 16),
     });
 
     script.hook = sanitizeScene(script.hook);
     script.outro = sanitizeScene(script.outro);
-    script.scenes = script.scenes.slice(0, 6).map(sanitizeScene);
+    script.scenes = script.scenes.slice(0, maxScenes).map(sanitizeScene);
+    if (script.scenes.length < minScenes) {
+      console.warn(`[script] only ${script.scenes.length} scenes returned, expected >= ${minScenes} for ${duration}s`);
+    }
+    // 等比缩放,使总时长 ≈ duration
+    {
+      const allClips = [script.hook, ...script.scenes, script.outro];
+      const sum = allClips.reduce((a: number, c: any) => a + (Number(c.duration_s) || 0), 0);
+      if (sum > 0 && Math.abs(sum - duration) > 0.5) {
+        const k = duration / sum;
+        for (const c of allClips) {
+          c.duration_s = Math.round(((Number(c.duration_s) || 0) * k) * 10) / 10;
+        }
+      }
+    }
     script.aspect = aspect;
     script.total_duration_s = duration;
     script.mode = "text2video";
