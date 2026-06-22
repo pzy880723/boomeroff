@@ -32,6 +32,10 @@ Deno.serve(async (req) => {
     const videoTypeKey: string = ctx.video_type || 'store_tour';
     const duration: number = Number(ctx.duration) || 15;
     const aspect: string = ctx.aspect || '9:16';
+    const mode: 'chat' | 'draft_script' = body.mode === 'draft_script' ? 'draft_script' : 'chat';
+    const imageDescriptions: { index: number; summary: string; best_for?: string }[] = Array.isArray(body.image_descriptions)
+      ? body.image_descriptions.slice(0, 20)
+      : [];
 
     const presets = await loadMarketingPresets();
     const rule = (presets.videoRules as any)[videoTypeKey] || presets.videoRules.store_tour;
@@ -40,8 +44,13 @@ Deno.serve(async (req) => {
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
 
-    const sys = `${presets.brand}
-${shopBlock ? `\n${shopBlock}\n` : ""}
+    const imgBlock = imageDescriptions.length
+      ? `\n店员已上传的参考图(共 ${imageDescriptions.length} 张):\n` +
+        imageDescriptions.map((d) => `  [图 #${d.index}] ${d.summary}${d.best_for ? `(适合${d.best_for})` : ''}`).join('\n')
+      : '\n(店员没有上传参考图)';
+
+    const sysChat = `${presets.brand}
+${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
 
 你是 BOOMER·OFF 中古店「视频策划助理」,正在和店员对话,帮 ta 把这条短视频的拍摄要点聊清楚。
 
@@ -61,11 +70,39 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}
 - 每次回复 ≤ 60 字,口语化,像同事讨论,不要列表不要 emoji。
 - 不要直接输出分镜或脚本(脚本由后续步骤生成)。
 - 称呼用"你",绝不用"主播""宝宝们"。
-- 当信息够拍了,主动说一句:"我觉得够了,你可以点上面的『生成分镜』。"`;
+- 当信息够拍了,主动说一句:"我觉得够了,你可以点上面的『让 AI 写一版完整脚本』。"`;
+
+    const sysDraft = `${presets.brand}
+${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
+
+你是 BOOMER·OFF 中古店「视频脚本作者」。基于上面跟店员的对话和参考图描述,直接输出一版**完整的口语化叙事脚本**给店员看。
+
+当前预设:类型 ${rule.label} · 风格 ${VIDEO_STYLE_LABELS[styleKey]} · 时长 ${duration} 秒 · 画幅 ${aspect}。
+
+输出格式(纯文本,不用 Markdown 标题):
+开场(约2秒):一段话,描述画面感觉+第一句台词/字幕。[图 #N]
+中段1(约X秒):...[图 #N]
+中段2(约X秒):...[图 #N]
+(根据时长可写 2-4 段中段)
+收尾(约2秒):升华或行动召唤+落版字幕。[图 #N]
+
+铁律:
+- 全文 150-300 字,口语化,像跟同事讲怎么拍这条片子。
+- **每一段结尾必须用 [图 #N] 标注它对应哪张参考图**(N 是 0 起的 index,只能从店员实际上传的那几张里挑;没有参考图就一律写 [无图])。
+- 同一张图不要连续用两段。
+- 称呼用"你",绝不用"主播""宝宝们""保真""限时抢"等违禁词。
+- 不要列分镜表格,就是一段一段顺着讲。`;
+
+    const sys = mode === 'draft_script' ? sysDraft : sysChat;
+
+    const lastUserExtra = mode === 'draft_script'
+      ? [{ role: 'user' as const, content: '请基于上面的对话和参考图,现在就给我写一版完整脚本。' }]
+      : [];
 
     const chat = [
       { role: 'system', content: sys },
       ...messages.map((m) => ({ role: m.role, content: (m.content || '').toString().slice(0, 1000) })),
+      ...lastUserExtra,
     ];
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -74,7 +111,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: chat,
-        temperature: 0.7,
+        temperature: mode === 'draft_script' ? 0.85 : 0.7,
       }),
     });
     if (!aiRes.ok) {
@@ -85,8 +122,9 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}
       return json({ error: "AI 回复失败" }, 500);
     }
     const data = await aiRes.json();
-    const reply: string = (data?.choices?.[0]?.message?.content || "").toString().trim().slice(0, 280);
-    return json({ success: true, reply });
+    const maxLen = mode === 'draft_script' ? 1200 : 280;
+    const reply: string = (data?.choices?.[0]?.message?.content || "").toString().trim().slice(0, maxLen);
+    return json({ success: true, reply, mode });
   } catch (e) {
     console.error("[brief-chat] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
