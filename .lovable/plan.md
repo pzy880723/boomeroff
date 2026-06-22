@@ -1,49 +1,161 @@
-# 营销视频流程两项升级
+## 目标
 
-## 一、草稿 / 分镜 自动保存与恢复
+四件事一起做:
+1. 上传/入库实时进度 + 失败原因 + 重试
+2. 同 shop_id 的素材库实时同步(子账户也能看到)
+3. 哈希去重提升到「整店」级别
+4. 素材库标签/品类 + 筛选
 
-**目标**:刷新页面、断网、误关 Tab,回来还能继续 — 不用从 0 重新和 AI 聊。
+---
 
-存储:`localStorage`(无需新建表,刷新即恢复;不上云,避免污染 `marketing_video_jobs`)。
-Key:`mv:draft:{shopId}`,内容包含:
-- `urls`(参考图)
-- `vtype / style / duration / aspect / highlight`
-- `character`(选中的角色)
-- `brief`(对话 + draft_script,即 BriefMsg[])
-- `script`(已生成的分镜,如果有)
-- `updatedAt`
+## 1. 数据库迁移
 
-行为:
-1. **写**:在 `MarketingVideo.tsx` 里加一个 `useEffect`,以上字段任一变化、debounce 500ms 后写入 localStorage。
-2. **读**:挂载时(以及 `shopId` 切换时)读取对应 key,若存在则填充各 state。
-3. **顶部提示**:若恢复了草稿,顶部显示一条浅色条 "已恢复 X 分钟前的草稿 · [清空重来]"。点清空 = 删 key + reset 所有 state。
-4. **清空时机**:成功提交渲染任务(`jobId` 拿到)后自动清除该 shop 的 key,避免下次回来还看到旧草稿。
-5. **容量保护**:写之前 try/catch;若超额(罕见,主要是 base64 头像)就只存非图字段。
+```sql
+-- 1.1 给 marketing_assets 加标签 + 强化去重元数据
+ALTER TABLE public.marketing_assets
+  ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS category text,         -- 单选品类(可空)
+  ADD COLUMN IF NOT EXISTS sha256 text;            -- 从 meta 提升为正式列,便于索引
 
-## 二、草稿脚本里 [图 #N] 渲染成可点缩略图
+-- 回填一次历史 sha256
+UPDATE public.marketing_assets
+   SET sha256 = meta->>'sha256'
+ WHERE sha256 IS NULL AND meta ? 'sha256';
 
-**目标**:草稿是大段中文,夹着 `[图 #3]` 这种纯文字标记很费眼。改成行内小缩略图,鼠标/手指点一下能放大预览,清楚知道每段对应哪张图。
+CREATE INDEX IF NOT EXISTS idx_ma_shop_sha     ON public.marketing_assets(shop_id, sha256) WHERE sha256 IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ma_user_sha     ON public.marketing_assets(user_id, sha256) WHERE sha256 IS NOT NULL AND shop_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_ma_shop_tags    ON public.marketing_assets USING GIN (tags);
 
-改动文件:`src/components/marketing/VideoBriefChat.tsx`
+-- 1.2 RLS:扩展 SELECT/INSERT/UPDATE/DELETE 到「同 shop_id 的成员」
+--      复用 staff_profiles.shop_id 关系判断成员归属
+DROP POLICY IF EXISTS "own assets read"   ON public.marketing_assets;
+DROP POLICY IF EXISTS "own assets write"  ON public.marketing_assets;
+DROP POLICY IF EXISTS "own assets update" ON public.marketing_assets;
+DROP POLICY IF EXISTS "own assets delete" ON public.marketing_assets;
 
-1. 给 `VideoBriefChat` 新增 prop:`imageUrls: string[]`。`MarketingVideo.tsx` 调用处传入当前 `urls`。
-2. 新建一个小组件 `DraftScriptText({ text, imageUrls })`:
-   - 用正则 `/\[图\s*#(\d+)\]/g` 拆分文本。
-   - 命中的片段渲染成一个行内 chip:`<button>` 包一个 16×16 的圆角缩略图 + `#N` 角标,`inline-flex align-middle mx-0.5`。
-   - 未命中索引(超出范围)显示成灰色 `[图 #N?]`,提示该图已被删。
-   - 点击 chip 打开一个轻量 `Dialog`(用现有 shadcn `Dialog`),里面放大显示该图(`max-h-[70vh] object-contain`)。
-3. `[无图]` 标记保持原样文字,不做特殊处理。
-4. 只对 `kind === 'draft_script'` 的气泡用 `DraftScriptText`,普通聊天气泡保持纯文本。
-5. 样式细节:chip 使用 `bg-accent/10 border border-accent/30 rounded-md px-1`,缩略图 `object-cover`,保证在 `whitespace-pre-wrap` 行内也不破坏排版(给气泡加 `leading-loose` 避免行高被撑爆)。
+CREATE POLICY "shop members read" ON public.marketing_assets FOR SELECT TO authenticated
+USING (
+  auth.uid() = user_id
+  OR (shop_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.staff_profiles sp
+    WHERE sp.user_id = auth.uid() AND sp.shop_id = marketing_assets.shop_id
+  ))
+  OR public.has_role(auth.uid(), 'admin')
+);
 
-## 不动的地方
+CREATE POLICY "shop members write" ON public.marketing_assets FOR INSERT TO authenticated
+WITH CHECK (auth.uid() = user_id);   -- 仍要求作者=自己
 
-- 后端、edge function、数据库 schema 全部不动 — 纯前端升级。
-- 分镜区(`SceneRow` / `BindingBadge`)上次刚改过,不动。
-- 不动 `marketing_video_jobs` 表,不引入云端草稿(下次如果你想多端同步再说)。
+CREATE POLICY "own update" ON public.marketing_assets FOR UPDATE TO authenticated
+USING (auth.uid() = user_id OR public.has_role(auth.uid(), 'admin'))
+WITH CHECK (auth.uid() = user_id OR public.has_role(auth.uid(), 'admin'));
 
-## 验证
+CREATE POLICY "own delete" ON public.marketing_assets FOR DELETE TO authenticated
+USING (auth.uid() = user_id OR public.has_role(auth.uid(), 'admin'));
 
-- 填好表单 + 聊出草稿 → 刷新 → 一切复原,顶部出现"已恢复 X 分钟前的草稿"。
-- 点 chip 能弹窗看大图;删掉某张图后,引用它的 chip 变灰提示。
-- 提交渲染拿到 jobId → 刷新 → 草稿已清空,回到全新状态。
+-- 1.3 开启实时
+ALTER PUBLICATION supabase_realtime ADD TABLE public.marketing_assets;
+ALTER TABLE public.marketing_assets REPLICA IDENTITY FULL;
+```
+
+> 安全:写入仍要求 `user_id = auth.uid()`,任何成员只能用自己的身份入库,但同店其他成员可以读到。
+
+---
+
+## 2. 去重逻辑改成「整店共享」
+
+`UploadGrid.tsx` 和 `LibraryImagePickerDialog.tsx` 的查重 SQL:
+
+```ts
+let q = supabase.from('marketing_assets')
+  .select('id, output_url').eq('sha256', hash).limit(1);
+if (shopId) q = q.eq('shop_id', shopId);
+else q = q.eq('user_id', user.id).is('shop_id', null);
+const { data } = await q.maybeSingle();
+```
+
+命中时直接复用 URL,toast 提示「已在素材库中复用」。
+
+入库 insert 加上 `sha256: hash` 列(而不仅是 meta)。
+
+---
+
+## 3. LibraryImagePickerDialog 加进度/错误/重试 + 标签筛选
+
+### 3.1 上传 UI 升级(与 UploadGrid 同款)
+
+复用 `UploadGrid` 内部的 `ItemTile` 风格 —— 抽出成共享组件 `src/components/marketing/UploadProgressTiles.tsx`:
+- 缩略图 + stage 圆环(compressing / uploading / done / error)
+- 每张失败显示错误文案,点击 ↻ 重试
+- 顶部细进度条 + "上传中 X/N"
+
+`UploadGrid.tsx` 改用这个共享组件,行为不变。
+`LibraryImagePickerDialog.tsx` 在「上传到素材库」按钮下方加同款进度区。
+
+### 3.2 错误原因可见
+
+`uploadMarketingImages` 已经在 `onProgress` 里回传 `error`;把它原样写到 tile 的 `error` 字段,失败时显示 `e.message`(如 `storage 上传失败 (403)`、`图片压缩失败`、`网络超时`、`已存在但 RLS 拒绝读取` 等)。
+catch 的兜底 message 用 `e?.message || JSON.stringify(e).slice(0,80)`,不再吞成「上传失败」。
+
+### 3.3 标签筛选 + 编辑
+
+dialog 顶部加一条 chip 行:
+```
+[全部] [门头] [商品] [人物] [场景] [其他]   ＋自定义
+```
+
+数据来源:从当前店铺/当前用户已有 assets 的 `tags` 聚合 + 内置 6 个默认 chip。
+点击 chip 触发 `q.contains('tags', [tag])` 重新查询。
+
+每张缩略图右下角 hover/长按出「✎」打开 `AssetTagDialog`(新文件,极轻量):
+- 多选 tags(可新增字符串)
+- 单选 category
+- 保存 → `update marketing_assets set tags=..., category=... where id=...`
+不影响选图勾选状态。
+
+`UploadGrid` 入库时:如果父页有 `defaultTags`(可选 prop),写入 assets.tags。
+`MarketingLibrary` 列表页同步加 tag chip 筛选条。
+
+---
+
+## 4. 实时订阅
+
+在 `LibraryImagePickerDialog.tsx`(open 时)和 `MarketingLibrary.tsx`(mounted 时)新增 `useEffect`:
+
+```ts
+useEffect(() => {
+  if (!shopId) return;
+  const ch = supabase.channel(`ma:${shopId}`)
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'marketing_assets', filter: `shop_id=eq.${shopId}` },
+        () => load())
+    .subscribe();
+  return () => { supabase.removeChannel(ch); };
+}, [shopId]);
+```
+
+debounce 500ms 合并 load。
+
+---
+
+## 5. 受影响文件
+
+- `supabase/migrations/<ts>_marketing_assets_tags_shared.sql`(新)
+- `src/pages/marketing/UploadGrid.tsx`(查重改 shop 级、把 ItemTile 抽出)
+- `src/components/marketing/UploadProgressTiles.tsx`(新,共享进度瓦片)
+- `src/components/marketing/LibraryImagePickerDialog.tsx`(进度/错误/重试 + tag chip + 实时订阅)
+- `src/components/marketing/AssetTagDialog.tsx`(新,改 tags/category)
+- `src/pages/marketing/MarketingLibrary.tsx`(tag chip 筛选 + 实时订阅 + 单图标签编辑入口)
+- `src/lib/fileSha256.ts`(确认存在,无改动)
+
+不动:`uploadMarketingImages.ts`、edge functions、`marketing_video_jobs`、其它 RLS。
+
+---
+
+## 6. 验证
+
+1. 主账号上传 3 张图(含 1 张重复)→ 进度条满、toast「新增 2 / 去重 1」、列表立刻多 2 张。
+2. 故意断网 → tile 显示具体错误,点 ↻ 恢复后成功。
+3. 子账号(同 shop_id)登录素材库 → 看到主账号刚传的图;主账号再传 1 张,子账号页面 1s 内出现新缩略图。
+4. 子账号上传同 hash 文件 → 命中复用,不产生第二行记录。
+5. 给某图打「门头」tag → 列表 chip 选「门头」只剩这一张;LibraryImagePickerDialog 同样能筛。

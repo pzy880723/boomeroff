@@ -16,6 +16,8 @@ import { CharacterCard } from '@/components/marketing/CharacterCard';
 import { CharacterDialog } from '@/components/marketing/CharacterDialog';
 import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
 
+import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
+
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
 export default function MarketingLibrary() {
@@ -33,6 +35,8 @@ export default function MarketingLibrary() {
   const [characters, setCharacters] = useState<any[]>([]);
   const [characterDetail, setCharacterDetail] = useState<any | null>(null);
   const [createCharOpen, setCreateCharOpen] = useState(false);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
   const currentShop = shops.find((s) => s.id === shopId);
@@ -40,16 +44,35 @@ export default function MarketingLibrary() {
   const load = async () => {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
+    // 有 shopId 时按店铺读(同店成员共享);否则只看自己
+    let q = supabase
       .from('marketing_assets' as any)
       .select('*')
-      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(200);
+    if (shopId) q = q.eq('shop_id', shopId);
+    else q = q.eq('user_id', user.id);
+    const { data } = await q;
     setItems((data as any[]) || []);
     setLoading(false);
   };
-  useEffect(() => { load(); }, [user]);
+  useEffect(() => { load(); }, [user, shopId]);
+
+  // 实时订阅:同 shop 内素材变化自动刷新(子账号能立刻看到主账号上传的图)
+  const reloadTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    const filter = shopId ? `shop_id=eq.${shopId}` : `user_id=eq.${user.id}`;
+    const ch = supabase
+      .channel(`ma-lib:${shopId || user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketing_assets', filter }, () => {
+        if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
+        reloadTimer.current = window.setTimeout(load, 400);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, shopId]);
 
   // 加载角色（按当前店铺）
   useEffect(() => {
@@ -174,14 +197,21 @@ export default function MarketingLibrary() {
     return ({ queued: '排队中', running: '渲染中' } as Record<string, string>)[s || ''] || s || '排队中';
   };
 
+  const tagOptions = useMemo(() => {
+    const set = new Set<string>(DEFAULT_TAGS);
+    items.forEach((it) => (Array.isArray(it.tags) ? it.tags : []).forEach((t: string) => set.add(t)));
+    return Array.from(set);
+  }, [items]);
+
   const filtered = useMemo(() => {
     let list = items;
     if (shopId) list = list.filter((it) => it.shop_id === shopId);
     if (tab === 'photo') list = list.filter((it) => it.kind === 'photo');
     else if (tab === 'copy') list = list.filter((it) => it.kind === 'copy');
     else if (tab === 'video') list = list.filter((it) => it.kind === 'video');
+    if (activeTag) list = list.filter((it) => Array.isArray(it.tags) && it.tags.includes(activeTag));
     return list;
-  }, [items, shopId, tab]);
+  }, [items, shopId, tab, activeTag]);
 
   const groups = useMemo(() => {
     const map = new Map<string, any[]>();
@@ -333,8 +363,32 @@ export default function MarketingLibrary() {
               )
             )}
           </div>
+
+          {/* tag 筛选 */}
+          {(tab === 'all' || tab === 'photo') && tagOptions.length > 0 && (
+            <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5">
+              <button
+                onClick={() => setActiveTag(null)}
+                className={[
+                  'shrink-0 text-[11px] px-2.5 py-1 rounded-full border transition-colors',
+                  !activeTag ? 'bg-accent text-accent-foreground border-accent' : 'bg-card border-border',
+                ].join(' ')}
+              >全部</button>
+              {tagOptions.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setActiveTag(activeTag === t ? null : t)}
+                  className={[
+                    'shrink-0 text-[11px] px-2.5 py-1 rounded-full border transition-colors',
+                    activeTag === t ? 'bg-accent text-accent-foreground border-accent' : 'bg-card border-border',
+                  ].join(' ')}
+                >{t}</button>
+              ))}
+            </div>
+          )}
+
           {!loading && filtered.length > 0 && (
-            <p className="text-[11px] text-muted-foreground px-1">共 {filtered.length} 条</p>
+            <p className="text-[11px] text-muted-foreground px-1">共 {filtered.length} 条{activeTag ? ` · 标签「${activeTag}」` : ''}</p>
           )}
 
           {loading && (
@@ -386,6 +440,20 @@ export default function MarketingLibrary() {
                                 ? <Video className="w-6 h-6 text-muted-foreground" />
                                 : <ImageIcon className="w-6 h-6 text-muted-foreground" />}
                             </div>
+                          )}
+
+                          {it.kind === 'photo' && !manageMode && (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => { e.stopPropagation(); setTagEditAsset(it); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setTagEditAsset(it); } }}
+                              className="absolute bottom-1 left-1 max-w-[80%] text-[9px] bg-foreground/55 text-background px-1.5 py-0.5 rounded cursor-pointer hover:bg-foreground/80 transition-colors truncate"
+                            >
+                              {Array.isArray(it.tags) && it.tags.length > 0
+                                ? `${it.tags[0]}${it.tags.length > 1 ? ` +${it.tags.length - 1}` : ''}`
+                                : '+标签'}
+                            </span>
                           )}
 
                           {it.kind === 'video' && (
@@ -499,6 +567,19 @@ export default function MarketingLibrary() {
         onOpenChange={(o) => !o && setCharacterDetail(null)}
         onUpdated={(c) => { setCharacters((prev) => prev.map((x) => x.id === c.id ? c : x)); setCharacterDetail(c); }}
         onDeleted={(id) => { setCharacters((prev) => prev.filter((x) => x.id !== id)); setCharacterDetail(null); }}
+      />
+
+      <AssetTagDialog
+        open={!!tagEditAsset}
+        onOpenChange={(o) => !o && setTagEditAsset(null)}
+        assetId={tagEditAsset?.id || null}
+        initialTags={tagEditAsset?.tags || []}
+        initialCategory={tagEditAsset?.category || null}
+        suggestedTags={tagOptions}
+        onSaved={(tags, category) => {
+          if (!tagEditAsset) return;
+          setItems((prev) => prev.map((x) => x.id === tagEditAsset.id ? { ...x, tags, category } : x));
+        }}
       />
 
       <AlertDialog open={confirmDel} onOpenChange={setConfirmDel}>

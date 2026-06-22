@@ -757,6 +757,7 @@ export type Database = {
       }
       marketing_assets: {
         Row: {
+          category: string | null
           created_at: string
           id: string
           input_image_urls: string[]
@@ -766,10 +767,13 @@ export type Database = {
           output_url: string | null
           published_at: string | null
           published_platforms: string[]
+          sha256: string | null
           shop_id: string | null
+          tags: string[]
           user_id: string
         }
         Insert: {
+          category?: string | null
           created_at?: string
           id?: string
           input_image_urls?: string[]
@@ -779,10 +783,13 @@ export type Database = {
           output_url?: string | null
           published_at?: string | null
           published_platforms?: string[]
+          sha256?: string | null
           shop_id?: string | null
+          tags?: string[]
           user_id: string
         }
         Update: {
+          category?: string | null
           created_at?: string
           id?: string
           input_image_urls?: string[]
@@ -792,7 +799,9 @@ export type Database = {
           output_url?: string | null
           published_at?: string | null
           published_platforms?: string[]
+          sha256?: string | null
           shop_id?: string | null
+          tags?: string[]
           user_id?: string
         }
         Relationships: [
