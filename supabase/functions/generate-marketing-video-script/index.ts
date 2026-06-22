@@ -33,6 +33,12 @@ Deno.serve(async (req) => {
     const videoType: VideoType = (Object.keys(presets.videoRules) as VideoType[]).includes(body.video_type)
       ? body.video_type : "store_tour";
     const duration: number = [15, 20, 30].includes(Number(body.duration)) ? Number(body.duration) : 15;
+    // 按 ~2.5s/镜估算总镜数(含 hook + outro)
+    const targetClips = Math.max(3, Math.round(duration / 2.5));    // 15→6, 20→8, 30→12
+    const minScenes = Math.max(2, targetClips - 2);
+    const maxScenes = targetClips + 1;
+    const perClipMin = duration >= 25 ? 1.5 : 2;
+    const perClipMax = duration >= 25 ? 3.5 : 5;
     const aspect: string = ["9:16", "1:1", "16:9"].includes(body.aspect) ? body.aspect : "9:16";
     const topic = (body.topic || "").toString().trim().slice(0, 200);
     const highlight = (body.highlight || "").toString().trim().slice(0, 80);
