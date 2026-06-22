@@ -59,7 +59,7 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
       const { data: hit } = await supabase
         .from('marketing_assets' as any)
         .select('id, output_url, meta')
-        .eq('created_by', user.id)
+        .eq('user_id', user.id)
         .eq('meta->>sha256', hash)
         .not('output_url', 'is', null)
         .limit(1)
