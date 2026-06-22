@@ -49,6 +49,8 @@ export default function MarketingVideo() {
   const [brief, setBrief] = useState<BriefMsg[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [character, setCharacter] = useState<Character | null>(null);
+  const [imageDescriptions, setImageDescriptions] = useState<{ index: number; summary: string; best_for?: string; tags?: string[] }[]>([]);
+  const [descLoading, setDescLoading] = useState(false);
 
   const [generating, setGenerating] = useState(false);
   const [script, setScript] = useState<any>(null);
@@ -57,7 +59,28 @@ export default function MarketingVideo() {
 
   useEffect(() => { setScript(null); setJobId(null); setCharacter(null); }, [shopId]);
 
+  // 上传/移除参考图后,后台让 AI 看一遍,产出每张图的简短描述,给 BriefChat 和分镜共用
+  useEffect(() => {
+    if (!urls.length) { setImageDescriptions([]); return; }
+    const handle = setTimeout(async () => {
+      setDescLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('describe-marketing-images', {
+          body: { image_urls: urls },
+        });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+        setImageDescriptions(((data as any)?.descriptions || []) as any);
+      } catch (e: any) {
+        console.warn('[describe-images] failed', e);
+      } finally { setDescLoading(false); }
+    }, 800);
+    return () => clearTimeout(handle);
+  }, [urls.join('|')]);
+
   const userTurns = brief.filter((m) => m.role === 'user').length;
+  // 取对话里最近一条 draft_script 作为已确认脚本
+  const approvedScript = [...brief].reverse().find((m) => m.role === 'assistant' && (m as any).kind === 'draft_script')?.content || '';
 
   const briefTranscript = brief
     .map((m) => `${m.role === 'user' ? '店员' : '助理'}：${m.content}`)
@@ -86,6 +109,8 @@ export default function MarketingVideo() {
           highlight,
           style,
           brief_transcript: briefTranscript,
+          approved_script: approvedScript,
+          image_descriptions: imageDescriptions,
           character: charPayload,
         },
       });
