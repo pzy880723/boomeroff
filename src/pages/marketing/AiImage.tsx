@@ -202,7 +202,7 @@ export default function AiImage() {
     <>
       <PageHeader title="AI 图片" back="/me/marketing" subtitle="营销中心 / 对话出图" />
 
-      <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+      <div className="flex flex-col h-[calc(100dvh-3.5rem-4rem)]">
         {/* 顶部:店铺选择 */}
         <div className="container mx-auto max-w-screen-md w-full px-4 pt-3 pb-2 shrink-0">
           <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
