@@ -26,9 +26,10 @@ export type UploadGridProps = {
   max?: number;
   preset?: 'thumb' | 'hd';
   title?: string;
+  shopId?: string | null;
 };
 
-export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title = '素材' }: UploadGridProps) {
+export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title = '素材', shopId = null }: UploadGridProps) {
   const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
