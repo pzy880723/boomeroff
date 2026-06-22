@@ -68,7 +68,7 @@ export default function MarketingCopy() {
 
         <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
 
-        {shopId && <UploadGrid urls={urls} onChange={setUrls} max={9} preset="thumb" title="素材" />}
+        {shopId && <UploadGrid urls={urls} onChange={setUrls} max={9} preset="thumb" title="素材" shopId={shopId} />}
 
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-5">
           <SectionLabel num="01">平台</SectionLabel>
