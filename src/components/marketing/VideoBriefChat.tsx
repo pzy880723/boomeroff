@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Send, RefreshCw, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 export interface BriefMsg { role: 'user' | 'assistant'; content: string; kind?: 'chat' | 'draft_script' }
 export interface BriefContext {
@@ -22,6 +23,7 @@ interface Props {
   onChange: (msgs: BriefMsg[]) => void;
   shopId?: string | null;
   imageDescriptions?: { index: number; summary: string; best_for?: string }[];
+  imageUrls?: string[];
 }
 
 const INITIAL: BriefMsg = {
@@ -29,10 +31,57 @@ const INITIAL: BriefMsg = {
   content: '想拍什么?随便聊聊——是想突出某件商品、某个区域,还是想给观众一种特定的感觉?我来帮你把要点理清楚。',
 };
 
-export function VideoBriefChat({ context, messages, onChange, shopId, imageDescriptions }: Props) {
+// 把草稿脚本里的 [图 #N] 标记渲染成可点缩略图
+function DraftScriptText({ text, imageUrls, onPreview }: { text: string; imageUrls: string[]; onPreview: (url: string) => void }) {
+  const parts: Array<{ kind: 'text' | 'img'; value: string; idx?: number }> = [];
+  const re = /\[图\s*#(\d+)\]/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push({ kind: 'text', value: text.slice(last, m.index) });
+    parts.push({ kind: 'img', value: m[0], idx: Number(m[1]) });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ kind: 'text', value: text.slice(last) });
+
+  return (
+    <span className="leading-loose">
+      {parts.map((p, i) => {
+        if (p.kind === 'text') return <span key={i}>{p.value}</span>;
+        const n = p.idx!;
+        const url = imageUrls[n - 1];
+        if (!url) {
+          return (
+            <span
+              key={i}
+              className="inline-flex items-center align-middle mx-0.5 px-1 py-[1px] rounded-md bg-muted text-muted-foreground/70 text-[10px] border border-border"
+              title="该图已被删除"
+            >
+              [图 #{n}?]
+            </span>
+          );
+        }
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onPreview(url); }}
+            className="inline-flex items-center align-middle gap-1 mx-0.5 px-1 py-[1px] rounded-md bg-accent/10 border border-accent/30 hover:bg-accent/20 transition"
+          >
+            <img src={url} alt="" className="w-4 h-4 rounded-sm object-cover" />
+            <span className="text-[10px] text-accent font-semibold">#{n}</span>
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+
+export function VideoBriefChat({ context, messages, onChange, shopId, imageDescriptions, imageUrls = [] }: Props) {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [drafting, setDrafting] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -131,7 +180,9 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
               {m.kind === 'draft_script' && (
                 <div className="text-[9px] uppercase tracking-[0.18em] text-accent font-semibold mb-1">脚本草稿 · 可继续讨论修改</div>
               )}
-              {m.content}
+              {m.kind === 'draft_script'
+                ? <DraftScriptText text={m.content} imageUrls={imageUrls} onPreview={setPreviewUrl} />
+                : m.content}
             </div>
           </div>
         ))}
@@ -160,6 +211,12 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
         </Button>
       </div>
+
+      <Dialog open={!!previewUrl} onOpenChange={(o) => !o && setPreviewUrl(null)}>
+        <DialogContent className="max-w-[92vw] sm:max-w-lg p-2 bg-background/95">
+          {previewUrl && <img src={previewUrl} alt="" className="w-full max-h-[70vh] object-contain rounded" />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
