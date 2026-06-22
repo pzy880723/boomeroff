@@ -76,25 +76,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 统一走"直接领取"流程（不再有审核分支）
-    const { data: existing } = await admin
+    // 统一走"直接领取"流程；任意已存在的申请都视为已报名
+    const existingResp = await admin
       .from('activity_applications')
       .select('id, voucher_claim_id, voucher_claim:voucher_claims(short_code)')
       .eq('activity_id', activity.id)
       .eq('applicant_phone', applicant_phone)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (existing?.voucher_claim_id && (existing as any).voucher_claim?.short_code) {
-      const shortCode = (existing as any).voucher_claim.short_code;
-      const fullClaim = await fetchFullClaim(admin, shortCode);
-      return json({
-        ok: true,
-        requires_review: false,
-        already: true,
-        short_code: shortCode,
-        claim: fullClaim,
-      });
+      .order('created_at', { ascending: true })
+      .limit(1);
+    const existing = (existingResp.data || [])[0] as any;
+    if (existing) {
+      const reused = await ensureClaimForApplication(admin, existing, activity.voucher_id, applicant_name, applicant_phone);
+      const fullClaim = await fetchFullClaim(admin, reused.short_code);
+      return json({ ok: true, requires_review: false, already: true, short_code: reused.short_code, claim: fullClaim });
     }
 
     const nowIso = new Date().toISOString();
@@ -110,7 +104,25 @@ Deno.serve(async (req) => {
       })
       .select('id')
       .single();
-    if (iErr) return json({ error: iErr.message }, 400);
+    if (iErr) {
+      // 并发或历史重复 → 回退到"返回已申请"
+      if ((iErr as any).code === '23505') {
+        const again = await admin
+          .from('activity_applications')
+          .select('id, voucher_claim_id, voucher_claim:voucher_claims(short_code)')
+          .eq('activity_id', activity.id)
+          .eq('applicant_phone', applicant_phone)
+          .order('created_at', { ascending: true })
+          .limit(1);
+        const row = (again.data || [])[0] as any;
+        if (row) {
+          const reused = await ensureClaimForApplication(admin, row, activity.voucher_id, applicant_name, applicant_phone);
+          const fullClaim = await fetchFullClaim(admin, reused.short_code);
+          return json({ ok: true, requires_review: false, already: true, short_code: reused.short_code, claim: fullClaim });
+        }
+      }
+      return json({ error: iErr.message }, 400);
+    }
 
     const { data: claim, error: cErr } = await admin
       .from('voucher_claims')
@@ -132,6 +144,7 @@ Deno.serve(async (req) => {
       fetchFullClaim(admin, claim.short_code),
       admin.from('activity_applications').update({ voucher_claim_id: claim.id }).eq('id', app.id),
     ]);
+
 
     return json({ ok: true, requires_review: false, short_code: claim.short_code, claim: fullClaim });
   } catch (e) {
