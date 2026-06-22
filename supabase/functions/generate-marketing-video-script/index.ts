@@ -38,6 +38,10 @@ Deno.serve(async (req) => {
     const highlight = (body.highlight || "").toString().trim().slice(0, 80);
     const styleKey = normalizeStyle(body.style);
     const briefTranscript = (body.brief_transcript || "").toString().trim().slice(0, 2000);
+    const approvedScript = (body.approved_script || "").toString().trim().slice(0, 3000);
+    const imageDescriptions: { index: number; summary: string; best_for?: string }[] = Array.isArray(body.image_descriptions)
+      ? body.image_descriptions.slice(0, 20)
+      : [];
     const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
@@ -60,8 +64,25 @@ Deno.serve(async (req) => {
     const kbHits = kbQuery ? await kbSearch(adminKb, { query: kbQuery, scope: 'video', shopId, k: 6 }) : [];
     const kbBlock = formatKbBlock(kbHits);
 
+    const imgDescBlock = imageDescriptions.length
+      ? `\n参考图描述(已经过 AI 识图,scene/action 必须基于这些具体细节):\n` +
+        imageDescriptions.map((d) => `  [图 #${d.index}] ${d.summary}${d.best_for ? `(适合${d.best_for})` : ''}`).join('\n')
+      : '';
+
+    const approvedBlock = approvedScript
+      ? `\n店员已确认的脚本草稿(请严格按这份脚本拆分镜,不要自由发挥):
+"""
+${approvedScript}
+"""
+拆分规则:
+- 草稿里每段末尾的 [图 #N] 是该镜必须使用的参考图,image_index 必须等于 N,不许换。
+- 草稿没标 [图 #N] 或写了 [无图] 的段,image_index 填 null。
+- 段数 = 分镜数(开场 → hook,中段 → scenes,收尾 → outro)。
+- scene/action 要把草稿里那段话的画面感讲具体(结合参考图描述里的细节)。`
+      : '';
+
     const sys = `${presets.brand}
-${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}
+${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}
 你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】(全中文)。
 
 重要：这是文生视频(text-to-video)。每一镜要给出**完整的中文描述**，让视频模型直接照拍。
@@ -71,9 +92,11 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}
 - dialogue 台词 / 口播：人物说的话或画外音。没有就填空字符串 ""。
 - subtitle 屏幕字幕：叠加在画面上的字幕，≤14 字，可与台词不同(更短)。
 
-参考图(image_index)：当上传了参考图时，这是一个**素材池**(共 ${imageUrls.length} 张)。
+参考图(image_index)：${approvedScript
+        ? '严格按草稿里的 [图 #N] 标记取值,不要自己挑。'
+        : `当上传了参考图时，这是一个**素材池**(共 ${imageUrls.length} 张)。
 为每一镜从池子里挑**最贴合那一镜内容**的那张，输出对应 index(0 起)。
-不要所有镜头都用同一张；找不到合适的就填 null。
+不要所有镜头都用同一张；找不到合适的就填 null。`}
 
 整体风格基调:${VIDEO_STYLE_LABELS[styleKey]}(${VIDEO_STYLE_EN[styleKey]})
 每一镜的 scene / action 都要自然体现这套基调(光线/色调/运镜节奏)。

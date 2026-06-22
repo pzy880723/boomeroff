@@ -49,6 +49,8 @@ export default function MarketingVideo() {
   const [brief, setBrief] = useState<BriefMsg[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [character, setCharacter] = useState<Character | null>(null);
+  const [imageDescriptions, setImageDescriptions] = useState<{ index: number; summary: string; best_for?: string; tags?: string[] }[]>([]);
+  const [descLoading, setDescLoading] = useState(false);
 
   const [generating, setGenerating] = useState(false);
   const [script, setScript] = useState<any>(null);
@@ -57,7 +59,28 @@ export default function MarketingVideo() {
 
   useEffect(() => { setScript(null); setJobId(null); setCharacter(null); }, [shopId]);
 
+  // 上传/移除参考图后,后台让 AI 看一遍,产出每张图的简短描述,给 BriefChat 和分镜共用
+  useEffect(() => {
+    if (!urls.length) { setImageDescriptions([]); return; }
+    const handle = setTimeout(async () => {
+      setDescLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('describe-marketing-images', {
+          body: { image_urls: urls },
+        });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+        setImageDescriptions(((data as any)?.descriptions || []) as any);
+      } catch (e: any) {
+        console.warn('[describe-images] failed', e);
+      } finally { setDescLoading(false); }
+    }, 800);
+    return () => clearTimeout(handle);
+  }, [urls.join('|')]);
+
   const userTurns = brief.filter((m) => m.role === 'user').length;
+  // 取对话里最近一条 draft_script 作为已确认脚本
+  const approvedScript = [...brief].reverse().find((m) => m.role === 'assistant' && (m as any).kind === 'draft_script')?.content || '';
 
   const briefTranscript = brief
     .map((m) => `${m.role === 'user' ? '店员' : '助理'}：${m.content}`)
@@ -86,6 +109,8 @@ export default function MarketingVideo() {
           highlight,
           style,
           brief_transcript: briefTranscript,
+          approved_script: approvedScript,
+          image_descriptions: imageDescriptions,
           character: charPayload,
         },
       });
@@ -218,6 +243,26 @@ export default function MarketingVideo() {
           </div>
           <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" />
           <p className="text-[10px] text-muted-foreground">不上传也能生成。AI 会按场景从这些图里挑最贴合的一张。</p>
+          {urls.length > 0 && (
+            <div className="border-t border-accent/10 pt-2 space-y-1">
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <span className="font-display tracking-[0.18em] uppercase text-accent">AI 看到的内容</span>
+                {descLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+              </div>
+              {imageDescriptions.length > 0 ? (
+                <ul className="space-y-0.5 max-h-32 overflow-y-auto pr-1">
+                  {imageDescriptions.map((d) => (
+                    <li key={d.index} className="text-[10.5px] leading-snug text-muted-foreground">
+                      <span className="text-accent">[图 #{d.index}]</span> {d.summary}
+                      {d.best_for && <span className="text-foreground/40"> · {d.best_for}</span>}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                !descLoading && <p className="text-[10px] text-muted-foreground/60">等下…AI 正在看你的图。</p>
+              )}
+            </div>
+          )}
         </section>
 
         {/* 主角(可选) */}
@@ -239,12 +284,14 @@ export default function MarketingVideo() {
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            先和 AI 助理简单聊几句,把要拍的东西、想要的感觉说清楚。聊够了再点右上「生成分镜」。
+            先聊几句 → 让 AI 在对话框里写一版完整脚本(带 [图 #N] 标注)→ 满意后点右上「生成分镜」拆成镜头。
           </p>
           <VideoBriefChat
             context={{ video_type: vtype, duration, aspect, style }}
             messages={brief}
             onChange={(m) => { setBrief(m); setScript(null); }}
+            shopId={shopId}
+            imageDescriptions={imageDescriptions}
           />
         </section>
 
