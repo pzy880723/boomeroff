@@ -44,16 +44,35 @@ export default function MarketingLibrary() {
   const load = async () => {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
+    // 有 shopId 时按店铺读(同店成员共享);否则只看自己
+    let q = supabase
       .from('marketing_assets' as any)
       .select('*')
-      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(200);
+    if (shopId) q = q.eq('shop_id', shopId);
+    else q = q.eq('user_id', user.id);
+    const { data } = await q;
     setItems((data as any[]) || []);
     setLoading(false);
   };
-  useEffect(() => { load(); }, [user]);
+  useEffect(() => { load(); }, [user, shopId]);
+
+  // 实时订阅:同 shop 内素材变化自动刷新(子账号能立刻看到主账号上传的图)
+  const reloadTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    const filter = shopId ? `shop_id=eq.${shopId}` : `user_id=eq.${user.id}`;
+    const ch = supabase
+      .channel(`ma-lib:${shopId || user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketing_assets', filter }, () => {
+        if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
+        reloadTimer.current = window.setTimeout(load, 400);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, shopId]);
 
   // 加载角色（按当前店铺）
   useEffect(() => {
