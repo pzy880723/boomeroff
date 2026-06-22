@@ -346,6 +346,7 @@ export default function MarketingVideo() {
             onChange={(m) => { setBrief(m); setScript(null); }}
             shopId={shopId}
             imageDescriptions={imageDescriptions}
+            imageUrls={urls}
           />
         </section>
 
