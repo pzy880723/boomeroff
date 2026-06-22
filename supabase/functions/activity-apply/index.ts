@@ -164,6 +164,40 @@ async function fetchFullClaim(admin: ReturnType<typeof createClient>, shortCode:
   return data;
 }
 
+async function ensureClaimForApplication(
+  admin: ReturnType<typeof createClient>,
+  app: { id: string; voucher_claim_id: string | null; voucher_claim?: { short_code: string } | null },
+  voucherId: string,
+  name: string,
+  phone: string,
+): Promise<{ short_code: string }> {
+  const existingCode = (app as any)?.voucher_claim?.short_code as string | undefined;
+  if (app.voucher_claim_id && existingCode) return { short_code: existingCode };
+  // 关联了 claim_id 但 join 没拿到 → 直接按 id 取
+  if (app.voucher_claim_id) {
+    const { data } = await admin.from('voucher_claims').select('short_code').eq('id', app.voucher_claim_id).maybeSingle();
+    if (data?.short_code) return { short_code: data.short_code };
+  }
+  // 没绑券 → 补发一张
+  const nowIso = new Date().toISOString();
+  const { data: claim, error } = await admin
+    .from('voucher_claims')
+    .insert({
+      voucher_id: voucherId,
+      activity_application_id: app.id,
+      source: 'activity',
+      status: 'claimed',
+      recipient_name: name,
+      recipient_phone: phone,
+      claimed_at: nowIso,
+    })
+    .select('id, short_code')
+    .single();
+  if (error || !claim) throw new Error(error?.message || '补发优惠券失败');
+  await admin.from('activity_applications').update({ voucher_claim_id: claim.id }).eq('id', app.id);
+  return { short_code: claim.short_code };
+}
+
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
