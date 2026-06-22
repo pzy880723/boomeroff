@@ -100,6 +100,18 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     return { url: finalUrl, reused: false };
   };
 
+  const processWithRetry = async (
+    file: File,
+    onStage: (s: UploadStage, url?: string, error?: string) => void,
+  ): Promise<{ url: string; reused: boolean }> => {
+    try {
+      return await processOne(file, onStage);
+    } catch {
+      await new Promise((r) => setTimeout(r, 1000));
+      return await processOne(file, onStage);
+    }
+  };
+
   const onPick = async (files: FileList | null) => {
     if (!files || !user) return;
     const picked = Array.from(files).slice(0, remaining);
@@ -130,10 +142,16 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
 
     const successUrls: string[] = [];
     let reusedCount = 0;
-    await Promise.all(
-      newItems.map(async (it) => {
+    // 并发限流:最多 3 张同时压缩+上传,避免一次 20 张大图把手机搞 OOM/卡死
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    const worker = async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= newItems.length) return;
+        const it = newItems[i];
         try {
-          const { url, reused } = await processOne(it.file, (stage, url, error) =>
+          const { url, reused } = await processWithRetry(it.file, (stage, url, error) =>
             updateItem(it.id, { stage, url, error }),
           );
           successUrls.push(url);
@@ -141,8 +159,9 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
         } catch (e: any) {
           updateItem(it.id, { stage: 'error', error: e?.message || '失败' });
         }
-      }),
-    );
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, newItems.length) }, worker));
 
     if (successUrls.length) onChange([...urls, ...successUrls]);
     setItems((prev) => prev.filter((it) => it.stage !== 'done'));
