@@ -363,8 +363,32 @@ export default function MarketingLibrary() {
               )
             )}
           </div>
+
+          {/* tag 筛选 */}
+          {(tab === 'all' || tab === 'photo') && tagOptions.length > 0 && (
+            <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5">
+              <button
+                onClick={() => setActiveTag(null)}
+                className={[
+                  'shrink-0 text-[11px] px-2.5 py-1 rounded-full border transition-colors',
+                  !activeTag ? 'bg-accent text-accent-foreground border-accent' : 'bg-card border-border',
+                ].join(' ')}
+              >全部</button>
+              {tagOptions.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setActiveTag(activeTag === t ? null : t)}
+                  className={[
+                    'shrink-0 text-[11px] px-2.5 py-1 rounded-full border transition-colors',
+                    activeTag === t ? 'bg-accent text-accent-foreground border-accent' : 'bg-card border-border',
+                  ].join(' ')}
+                >{t}</button>
+              ))}
+            </div>
+          )}
+
           {!loading && filtered.length > 0 && (
-            <p className="text-[11px] text-muted-foreground px-1">共 {filtered.length} 条</p>
+            <p className="text-[11px] text-muted-foreground px-1">共 {filtered.length} 条{activeTag ? ` · 标签「${activeTag}」` : ''}</p>
           )}
 
           {loading && (
