@@ -154,6 +154,7 @@ export default function MarketingVideo() {
         id: character.id, name: character.name, role_label: character.role_label,
         visual_signature: character.visual_signature, core_emotion: character.core_emotion,
         cover_url: character.cover_url,
+        extra_reference_urls: character.extra_reference_urls || [],
       } : null;
       const { data, error } = await supabase.functions.invoke('generate-marketing-video-script', {
         body: {
