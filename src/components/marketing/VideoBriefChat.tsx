@@ -9,7 +9,7 @@ import { Loader2, Send, RefreshCw, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
-export interface BriefMsg { role: 'user' | 'assistant'; content: string; kind?: 'chat' | 'draft_script' }
+export interface BriefMsg { role: 'user' | 'assistant'; content: string; kind?: 'chat' | 'draft_script'; options?: string[]; done?: boolean }
 export interface BriefContext {
   video_type: string;
   duration: number;
