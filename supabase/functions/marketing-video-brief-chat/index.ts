@@ -113,14 +113,19 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
       ...lastUserExtra,
     ];
 
+    const aiBody: Record<string, unknown> = {
+      model: "google/gemini-3-flash-preview",
+      messages: chat,
+      temperature: mode === 'draft_script' ? 0.85 : 0.7,
+    };
+    if (mode === 'chat') {
+      aiBody.response_format = { type: 'json_object' };
+    }
+
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: chat,
-        temperature: mode === 'draft_script' ? 0.85 : 0.7,
-      }),
+      body: JSON.stringify(aiBody),
     });
     if (!aiRes.ok) {
       const t = await aiRes.text();
@@ -130,9 +135,37 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
       return json({ error: "AI 回复失败" }, 500);
     }
     const data = await aiRes.json();
-    const maxLen = mode === 'draft_script' ? 1200 : 280;
-    const reply: string = (data?.choices?.[0]?.message?.content || "").toString().trim().slice(0, maxLen);
-    return json({ success: true, reply, mode });
+    const raw: string = (data?.choices?.[0]?.message?.content || "").toString().trim();
+
+    if (mode === 'draft_script') {
+      return json({ success: true, reply: raw.slice(0, 1200), mode });
+    }
+
+    // chat 模式:解析 JSON,失败降级成纯文本(没选项)
+    let reply = '';
+    let options: string[] = [];
+    let done = false;
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      reply = (parsed?.reply || '').toString().trim().slice(0, 200);
+      if (Array.isArray(parsed?.options)) {
+        options = parsed.options
+          .map((o: unknown) => (o == null ? '' : o.toString().trim()))
+          .filter((s: string) => s.length > 0 && s.length <= 20)
+          .slice(0, 4);
+      }
+      done = parsed?.done === true;
+    } catch (_e) {
+      reply = raw.slice(0, 200);
+    }
+    if (!reply) reply = '好的,继续说。';
+    // 确保最后兜底「其他」
+    if (!done && options.length > 0 && !options.some((o) => /其他|我自己说|自己说/.test(o))) {
+      options.push('其他(我自己说)');
+      options = options.slice(0, 4);
+    }
+    return json({ success: true, reply, options, done, mode });
   } catch (e) {
     console.error("[brief-chat] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
