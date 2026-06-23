@@ -496,6 +496,27 @@ export default function MarketingVideo() {
         max={20 - urls.length}
         onConfirm={(picked) => { setUrls([...urls, ...picked].slice(0, 20)); setScript(null); }}
       />
+
+      {/* 分镜行的「素材库」入口 */}
+      <LibraryImagePickerDialog
+        open={sceneLibraryOpen}
+        onOpenChange={setSceneLibraryOpen}
+        shopId={shopId}
+        max={Math.max(1, 20 - urls.length)}
+        onConfirm={(picked) => {
+          if (sceneTarget != null) assignImageToTarget(sceneTarget, picked);
+        }}
+      />
+
+      {/* 分镜行的「上传」隐藏 input */}
+      <input
+        ref={sceneFileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={onSceneFiles}
+      />
     </>
   );
 }
