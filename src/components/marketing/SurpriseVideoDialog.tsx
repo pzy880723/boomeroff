@@ -162,7 +162,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 
         {activeJob ? (
           <RenderingBody
-            job={activeJob} phase={renderPhase}
+            job={activeJob} phase={renderPhase} progress={progress}
             onClose={() => onOpenChange(false)}
           />
         ) : picking || !pick ? (
