@@ -66,11 +66,16 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
 3) 有没有特别想入镜的画面或细节
 4) 有没有不想拍到的东西(禁忌)
 
-铁律:
-- 每次回复 ≤ 60 字,口语化,像同事讨论,不要列表不要 emoji。
+**严格输出 JSON**(不要任何额外文字、不要 Markdown 代码块包裹),格式:
+{"reply":"一句问话(≤40字,口语化,称呼用你)","options":["选项A","选项B","选项C","其他(我自己说)"],"done":false}
+
+选项铁律:
+- 每轮 reply 只问 1 个问题,options 给 2-4 个可点选项,每个 ≤ 12 字,口语化、互斥、覆盖店员最常见的答案。
+- options 最后一项**总是**「其他(我自己说)」,让店员可以打字。
+- 已经答过的维度不再追问,要顺着上一轮的回答深入或换下一个维度。
 - 不要直接输出分镜或脚本(脚本由后续步骤生成)。
-- 称呼用"你",绝不用"主播""宝宝们"。
-- 当信息够拍了,主动说一句:"我觉得够了,你可以点上面的『让 AI 写一版完整脚本』。"`;
+- 绝不用"主播""宝宝们"等违禁词。
+- 当信息够拍了:reply 写 "我觉得够了,你可以点上面的『让 AI 写一版完整脚本』。",options 给 [],done 设为 true。`;
 
     const midCount = Math.max(1, Math.round(duration / 2.5) - 2);  // 15→4, 20→6, 30→10
     const wordsLo = Math.round(duration * 12);   // 15→180, 30→360
@@ -108,14 +113,19 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
       ...lastUserExtra,
     ];
 
+    const aiBody: Record<string, unknown> = {
+      model: "google/gemini-3-flash-preview",
+      messages: chat,
+      temperature: mode === 'draft_script' ? 0.85 : 0.7,
+    };
+    if (mode === 'chat') {
+      aiBody.response_format = { type: 'json_object' };
+    }
+
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: chat,
-        temperature: mode === 'draft_script' ? 0.85 : 0.7,
-      }),
+      body: JSON.stringify(aiBody),
     });
     if (!aiRes.ok) {
       const t = await aiRes.text();
@@ -125,9 +135,37 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
       return json({ error: "AI 回复失败" }, 500);
     }
     const data = await aiRes.json();
-    const maxLen = mode === 'draft_script' ? 1200 : 280;
-    const reply: string = (data?.choices?.[0]?.message?.content || "").toString().trim().slice(0, maxLen);
-    return json({ success: true, reply, mode });
+    const raw: string = (data?.choices?.[0]?.message?.content || "").toString().trim();
+
+    if (mode === 'draft_script') {
+      return json({ success: true, reply: raw.slice(0, 1200), mode });
+    }
+
+    // chat 模式:解析 JSON,失败降级成纯文本(没选项)
+    let reply = '';
+    let options: string[] = [];
+    let done = false;
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      reply = (parsed?.reply || '').toString().trim().slice(0, 200);
+      if (Array.isArray(parsed?.options)) {
+        options = parsed.options
+          .map((o: unknown) => (o == null ? '' : o.toString().trim()))
+          .filter((s: string) => s.length > 0 && s.length <= 20)
+          .slice(0, 4);
+      }
+      done = parsed?.done === true;
+    } catch (_e) {
+      reply = raw.slice(0, 200);
+    }
+    if (!reply) reply = '好的,继续说。';
+    // 确保最后兜底「其他」
+    if (!done && options.length > 0 && !options.some((o) => /其他|我自己说|自己说/.test(o))) {
+      options.push('其他(我自己说)');
+      options = options.slice(0, 4);
+    }
+    return json({ success: true, reply, options, done, mode });
   } catch (e) {
     console.error("[brief-chat] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);

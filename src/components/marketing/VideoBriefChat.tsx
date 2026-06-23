@@ -9,7 +9,7 @@ import { Loader2, Send, RefreshCw, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
-export interface BriefMsg { role: 'user' | 'assistant'; content: string; kind?: 'chat' | 'draft_script' }
+export interface BriefMsg { role: 'user' | 'assistant'; content: string; kind?: 'chat' | 'draft_script'; options?: string[]; done?: boolean }
 export interface BriefContext {
   video_type: string;
   duration: number;
@@ -28,7 +28,8 @@ interface Props {
 
 const INITIAL: BriefMsg = {
   role: 'assistant',
-  content: '想拍什么?随便聊聊——是想突出某件商品、某个区域,还是想给观众一种特定的感觉?我来帮你把要点理清楚。',
+  content: '想拍什么?先选个大方向,或者点「其他」自己说。',
+  options: ['突出某件商品', '展示某个区域', '某个活动/节日', '其他(我自己说)'],
 };
 
 // 把草稿脚本里的 [图 #N] 标记渲染成可点缩略图
@@ -93,12 +94,16 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, busy, drafting]);
 
-  const send = async () => {
-    const text = input.trim();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const send = async (override?: string) => {
+    const text = (override ?? input).trim();
     if (!text || busy) return;
-    const next: BriefMsg[] = [...messages, { role: 'user', content: text }];
+    // 清掉所有 assistant 消息上的 options(只让最新一条挂)
+    const stripped = messages.map((m) => (m.options ? { ...m, options: undefined } : m));
+    const next: BriefMsg[] = [...stripped, { role: 'user', content: text }];
     onChange(next);
-    setInput('');
+    if (override == null) setInput('');
     setBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke('marketing-video-brief-chat', {
@@ -107,12 +112,24 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       const reply = ((data as any)?.reply || '').toString().trim() || '好的,继续说。';
-      onChange([...next, { role: 'assistant', content: reply }]);
+      const opts = Array.isArray((data as any)?.options) ? (data as any).options as string[] : [];
+      const done = (data as any)?.done === true;
+      onChange([...next, { role: 'assistant', content: reply, options: done ? undefined : opts, done }]);
     } catch (e: any) {
       toast.error(e?.message || 'AI 回复失败');
       onChange(next);
     } finally { setBusy(false); }
   };
+
+  const handleOption = (opt: string) => {
+    if (busy || drafting) return;
+    if (/其他|我自己说|自己说/.test(opt)) {
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
+    }
+    send(opt);
+  };
+
 
   const draftScript = async () => {
     if (drafting || busy) return;
@@ -165,27 +182,47 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
       </div>
 
       <div ref={scrollRef} className="max-h-80 overflow-y-auto p-3 space-y-2">
-        {messages.map((m, i) => (
-          <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
-            <div
-              className={[
-                'max-w-[88%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap',
-                m.role === 'user'
-                  ? 'bg-primary text-primary-foreground rounded-br-sm'
-                  : m.kind === 'draft_script'
-                    ? 'bg-accent/10 text-foreground rounded-bl-sm border border-accent/30'
-                    : 'bg-muted/60 text-foreground rounded-bl-sm',
-              ].join(' ')}
-            >
-              {m.kind === 'draft_script' && (
-                <div className="text-[9px] uppercase tracking-[0.18em] text-accent font-semibold mb-1">脚本草稿 · 可继续讨论修改</div>
+        {messages.map((m, i) => {
+          const isLast = i === messages.length - 1;
+          const showOptions = isLast && m.role === 'assistant' && !busy && !drafting && Array.isArray(m.options) && m.options.length > 0;
+          return (
+            <div key={i}>
+              <div className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                <div
+                  className={[
+                    'max-w-[88%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap',
+                    m.role === 'user'
+                      ? 'bg-primary text-primary-foreground rounded-br-sm'
+                      : m.kind === 'draft_script'
+                        ? 'bg-accent/10 text-foreground rounded-bl-sm border border-accent/30'
+                        : 'bg-muted/60 text-foreground rounded-bl-sm',
+                  ].join(' ')}
+                >
+                  {m.kind === 'draft_script' && (
+                    <div className="text-[9px] uppercase tracking-[0.18em] text-accent font-semibold mb-1">脚本草稿 · 可继续讨论修改</div>
+                  )}
+                  {m.kind === 'draft_script'
+                    ? <DraftScriptText text={m.content} imageUrls={imageUrls} onPreview={setPreviewUrl} />
+                    : m.content}
+                </div>
+              </div>
+              {showOptions && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5 pl-1">
+                  {m.options!.map((opt, oi) => (
+                    <button
+                      key={oi}
+                      type="button"
+                      onClick={() => handleOption(opt)}
+                      className="px-2.5 py-1 rounded-full bg-accent/10 hover:bg-accent/20 border border-accent/30 text-[11px] text-accent font-medium transition active:scale-95"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
               )}
-              {m.kind === 'draft_script'
-                ? <DraftScriptText text={m.content} imageUrls={imageUrls} onPreview={setPreviewUrl} />
-                : m.content}
             </div>
-          </div>
-        ))}
+          );
+        })}
         {(busy || drafting) && (
           <div className="flex justify-start">
             <div className="bg-muted/60 rounded-2xl rounded-bl-sm px-3 py-1.5 text-[12px] text-muted-foreground">
@@ -195,19 +232,21 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
         )}
       </div>
 
+
       <div className="border-t border-accent/10 p-2 flex gap-2 items-end">
         <Textarea
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
           }}
-          placeholder="说说你想拍什么…(可以让 AI 改脚本,比如:图 3 换成图 5)"
+          placeholder="可以直接点上面的选项;想自己说也能打字"
           rows={1}
           className="flex-1 resize-none text-sm min-h-[36px] max-h-24"
           disabled={busy || drafting}
         />
-        <Button size="sm" onClick={send} disabled={busy || drafting || !input.trim()} className="h-9 px-3">
+        <Button size="sm" onClick={() => send()} disabled={busy || drafting || !input.trim()} className="h-9 px-3">
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
         </Button>
       </div>
