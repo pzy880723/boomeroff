@@ -254,7 +254,12 @@ export default function MarketingVideo() {
       merged = merged.slice(0, 20);
       setUrls(merged);
       const firstIdx = indices[0];
-      const patch = (sc: any) => ({ ...sc, image_index: firstIdx, image_binding: { source: 'manual', expected: firstIdx, confidence: 1 } });
+      const patch = (sc: any) => ({
+        ...sc,
+        image_index: firstIdx,
+        image_ref: { index: firstIdx, role: (sc?.image_ref?.role as ImageRole) || 'first' },
+        image_binding: { source: 'manual', expected: firstIdx, confidence: 1 },
+      });
       if (target === 'hook') return { ...prev, hook: patch(prev.hook) };
       if (target === 'outro') return { ...prev, outro: patch(prev.outro) };
       const scenes = [...prev.scenes];
