@@ -199,7 +199,14 @@ export function AssetDetailDialog({
               </div>
             )}
             {asset.output_url ? (
-              <video src={asset.output_url} controls className="w-full rounded-lg" />
+              <video
+                src={asset.output_url}
+                controls
+                playsInline
+                preload="auto"
+                poster={asset.meta?.cover_url || (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) || (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) || undefined}
+                className="w-full rounded-lg bg-black"
+              />
             ) : (
               <p className="text-sm text-muted-foreground text-center py-6">
                 视频还在排队渲染，完成后这里会出现可播放的视频。
