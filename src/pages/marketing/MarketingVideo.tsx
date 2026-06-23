@@ -623,8 +623,8 @@ function SceneRow({
             <Input
               value={subtitle}
               onChange={(e) => onField('subtitle', e.target.value)}
-              placeholder="≤14 字"
-              maxLength={14}
+              placeholder="≤24 字"
+              maxLength={24}
               className="bg-card h-8 text-sm"
             />
           </FieldBlock>
