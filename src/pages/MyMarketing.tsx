@@ -18,6 +18,7 @@ export default function MyMarketing() {
   const [today, setToday] = useState(0);
   const [recents, setRecents] = useState<RecentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [surpriseOpen, setSurpriseOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
