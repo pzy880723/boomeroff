@@ -97,29 +97,31 @@ export function LibraryImagePickerDialog({
     setPending((p) => p.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   const removePending = (id: string) => setPending((p) => p.filter((it) => it.id !== id));
 
-  const processOne = async (
-    file: File,
-    onStage: (s: UploadStage, error?: string) => void,
-  ): Promise<{ url: string; reused: boolean }> => {
-    if (!user) throw new Error('未登录');
-    onStage('compressing');
-    const hash = await fileSha256(file).catch(() => `r-${Math.random()}`);
-
-    // 整店级去重
+  const lookupExistingBatch = async (hashes: string[]): Promise<Map<string, string>> => {
+    const map = new Map<string, string>();
+    if (!user || hashes.length === 0) return map;
     try {
       let q = supabase
         .from('marketing_assets' as any)
-        .select('output_url')
-        .eq('sha256', hash)
-        .not('output_url', 'is', null)
-        .limit(1);
+        .select('output_url, sha256')
+        .in('sha256', hashes)
+        .not('output_url', 'is', null);
       if (shopId) q = q.eq('shop_id', shopId);
       else q = q.eq('user_id', user.id).is('shop_id', null);
-      const { data } = await q.maybeSingle();
-      const hit = (data as any)?.output_url;
-      if (hit) { onStage('done'); return { url: hit, reused: true }; }
-    } catch {}
+      const { data } = await q;
+      ((data as any[]) || []).forEach((r) => {
+        if (r?.sha256 && r?.output_url && !map.has(r.sha256)) map.set(r.sha256, r.output_url);
+      });
+    } catch { /* ignore */ }
+    return map;
+  };
 
+  const processOne = async (
+    file: File,
+    hash: string,
+    onStage: (s: UploadStage, error?: string) => void,
+  ): Promise<string> => {
+    if (!user) throw new Error('未登录');
     let finalUrl: string | undefined;
     let finalErr: string | undefined;
     await uploadMarketingImages(user.id, [file], {
@@ -132,7 +134,8 @@ export function LibraryImagePickerDialog({
     });
     if (!finalUrl) throw new Error(finalErr || '上传失败');
 
-    const ins = await supabase.from('marketing_assets' as any).insert({
+    // 入库异步,不阻塞下一张
+    void supabase.from('marketing_assets' as any).insert({
       user_id: user.id,
       shop_id: shopId,
       kind: 'photo',
@@ -141,23 +144,19 @@ export function LibraryImagePickerDialog({
       sha256: hash,
       tags: activeTag ? [activeTag] : [],
       meta: { source: 'library_picker_upload', sha256: hash, filename: file.name },
-    });
-    if (ins.error) throw new Error(ins.error.message || '入库失败');
+    }).then(({ error }) => { if (error) console.warn('[picker] insert failed', error.message); });
 
-    return { url: finalUrl, reused: false };
+    return finalUrl;
   };
 
-  const runOne = async (id: string, file: File) => {
+  const runOne = async (id: string, file: File, hash: string) => {
     try {
-      const { url, reused } = await processOne(file, (stage, error) => updatePending(id, { stage, error }));
-      // 自动勾选(不超过 max)
+      const url = await processOne(file, hash, (stage, error) => updatePending(id, { stage, error }));
       setSel((prev) => {
         if (prev.size >= max || prev.has(url)) return prev;
         const next = new Set(prev); next.add(url); return next;
       });
-      if (reused) toast.success('已在素材库中复用');
       setTimeout(() => removePending(id), 50);
-      await load();
     } catch (e: any) {
       const msg = e?.message || (typeof e === 'string' ? e : JSON.stringify(e || {}).slice(0, 80)) || '上传失败';
       updatePending(id, { stage: 'error', error: msg });
@@ -169,22 +168,58 @@ export function LibraryImagePickerDialog({
     const arr = Array.from(files).slice(0, max);
     if (!arr.length) return;
 
-    const newItems: Pending[] = arr.map((f) => ({
+    // 并行算 hash
+    const hashes = await Promise.all(arr.map((f) => fileSha256(f).catch(() => `r-${Math.random()}`)));
+
+    // 批量 DB 查重
+    const hitMap = await lookupExistingBatch(hashes);
+    let reusedCount = 0;
+    const needUpload: { file: File; hash: string }[] = [];
+    arr.forEach((f, i) => {
+      const hit = hitMap.get(hashes[i]);
+      if (hit) {
+        reusedCount += 1;
+        setSel((prev) => {
+          if (prev.size >= max || prev.has(hit)) return prev;
+          const next = new Set(prev); next.add(hit); return next;
+        });
+      } else {
+        needUpload.push({ file: f, hash: hashes[i] });
+      }
+    });
+    if (reusedCount > 0) toast.success(`已复用 ${reusedCount} 张`);
+    if (needUpload.length === 0) return;
+
+    const newItems: (Pending & { hash: string })[] = needUpload.map((x) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      file: f,
-      preview: URL.createObjectURL(f),
+      file: x.file,
+      hash: x.hash,
+      preview: URL.createObjectURL(x.file),
       stage: 'queued',
     }));
     setPending((p) => [...p, ...newItems]);
-    // 串行(对话框场景上传量小,避免并发)
-    for (const it of newItems) await runOne(it.id, it.file);
+
+    // 并发 worker pool
+    const CONCURRENCY = 4;
+    let cursor = 0;
+    const worker = async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= newItems.length) return;
+        const it = newItems[i];
+        await runOne(it.id, it.file, it.hash);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, newItems.length) }, worker));
+    await load();
   };
 
   const retry = async (id: string) => {
     const it = pending.find((x) => x.id === id);
     if (!it) return;
     updatePending(id, { stage: 'queued', error: undefined });
-    await runOne(id, it.file);
+    const hash = (it as any).hash || await fileSha256(it.file).catch(() => `r-${Math.random()}`);
+    await runOne(id, it.file, hash);
   };
 
   const pendingActive = pending.filter((p) => p.stage !== 'error').length;
