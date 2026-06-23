@@ -18,11 +18,19 @@ export type StitchProgress = (info: {
   total: number;
 }) => void;
 
+export type StitchFetchOptions = {
+  init?: RequestInit;
+};
+
 /**
  * 顺序拼接多段 MP4 为一支 MP4。所有段应使用同一编码参数（Seedance 同一模型输出一致）。
  * @returns 拼好的 MP4 Blob
  */
-export async function stitchSegmentUrls(urls: string[], onProgress?: StitchProgress): Promise<Blob> {
+export async function stitchSegmentUrls(
+  urls: string[],
+  onProgress?: StitchProgress,
+  options?: StitchFetchOptions,
+): Promise<Blob> {
   if (!urls.length) throw new Error('没有可拼接的段');
   const total = urls.length;
 
@@ -30,7 +38,7 @@ export async function stitchSegmentUrls(urls: string[], onProgress?: StitchProgr
   const blobs: Blob[] = [];
   for (let i = 0; i < urls.length; i++) {
     onProgress?.({ stage: 'download', segment: i + 1, total });
-    const res = await fetch(urls[i]);
+    const res = await fetch(urls[i], options?.init);
     if (!res.ok) throw new Error(`第 ${i + 1} 段下载失败 (${res.status})`);
     blobs.push(await res.blob());
   }

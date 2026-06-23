@@ -97,16 +97,32 @@ export default function MarketingLibrary() {
     if (stitchingRef.current.has(asset.id)) return;
     stitchingRef.current.add(asset.id);
     const parentJobId: string = asset.meta?.job_id;
+    const normalizeSegmentUrl = (url: string) => {
+      if (url.startsWith('/functions/v1/')) return `${import.meta.env.VITE_SUPABASE_URL}${url}`;
+      try {
+        const u = new URL(url);
+        if (u.hostname === 'ark-content-generation-cn-beijing.tos-cn-beijing.volces.com') {
+          return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/poll-marketing-video?segment=${encodeURIComponent(url)}`;
+        }
+      } catch {}
+      return url;
+    };
     try {
       setItems((prev) => prev.map((x) => x.id === asset.id ? {
         ...x, meta: { ...(x.meta || {}), status: 'stitching', stage: 'stitching', stitch_progress: 0 },
       } : x));
-      const blob = await stitchSegmentUrls(segmentUrls, (info) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      const authHeaders = accessToken ? {
+        Authorization: `Bearer ${accessToken}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      } : undefined;
+      const blob = await stitchSegmentUrls(segmentUrls.map(normalizeSegmentUrl), (info) => {
         const pct = Math.round(((info.segment - 1) / Math.max(1, info.total)) * 100);
         setItems((prev) => prev.map((x) => x.id === asset.id ? {
           ...x, meta: { ...(x.meta || {}), stitch_progress: pct, stitch_stage: info.stage },
         } : x));
-      });
+      }, authHeaders ? { init: { headers: authHeaders } } : undefined);
       const path = `${user.id}/${parentJobId}.mp4`;
       const up = await supabase.storage.from('marketing-videos').upload(path, blob, {
         contentType: 'video/mp4', upsert: true,
@@ -139,7 +155,10 @@ export default function MarketingLibrary() {
   // 用稳定签名当依赖,避免 items 引用变化导致 effect 反复重建 -> tick 立即触发 -> setItems -> 循环闪烁
   const pendingVideos = useMemo(
     () => items.filter(
-      (it) => it.kind === 'video' && it.meta?.job_id && !['succeeded', 'failed'].includes(it.meta?.status),
+      (it) => it.kind === 'video' && it.meta?.job_id && (
+        !['succeeded', 'failed'].includes(it.meta?.status)
+        || (it.meta?.status === 'failed' && !it.output_url && Array.isArray(it.meta?.segment_urls) && it.meta.segment_urls.length === it.meta?.segment_total)
+      ),
     ),
     [items],
   );
@@ -187,8 +206,9 @@ export default function MarketingLibrary() {
         } catch {}
       }
     };
-    const t = setInterval(tick, 10000); // 不立即执行,避免 effect 重建瞬时回环
-    return () => { cancelled = true; clearInterval(t); };
+    const first = window.setTimeout(tick, 600);
+    const t = setInterval(tick, 10000); // 稳定依赖下轮询,避免 effect 重建瞬时回环
+    return () => { cancelled = true; clearTimeout(first); clearInterval(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSig]);
 

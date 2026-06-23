@@ -12,12 +12,45 @@ const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const ARK_TASK_BASE = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
+const ARK_PROXY_PREFIX = "/functions/v1/poll-marketing-video?segment=";
 
 function mapArkStatus(s: string): string {
   if (s === "succeeded") return "succeeded";
   if (s === "failed" || s === "expired" || s === "cancelled") return "failed";
   if (s === "queued") return "queued";
   return "running";
+}
+
+function encodeSegmentUrl(url: string): string {
+  return `${ARK_PROXY_PREFIX}${encodeURIComponent(url)}`;
+}
+
+function decodeSegmentUrl(req: Request): string | null {
+  const url = new URL(req.url);
+  const seg = url.searchParams.get("segment");
+  if (!seg) return null;
+  let decoded = seg;
+  for (let i = 0; i < 2; i += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+  return decoded;
+}
+
+function isAllowedSegmentUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" &&
+      u.hostname === "ark-content-generation-cn-beijing.tos-cn-beijing.volces.com" &&
+      u.pathname.endsWith(".mp4");
+  } catch {
+    return false;
+  }
 }
 
 async function pollOne(arkKey: string, taskId: string) {
@@ -57,6 +90,30 @@ async function updateAssetMeta(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
+    const segmentUrl = decodeSegmentUrl(req);
+    if (req.method === "GET" && segmentUrl) {
+      if (!isAllowedSegmentUrl(segmentUrl)) return json({ error: "不支持的分段地址" }, 400);
+
+      const range = req.headers.get("range");
+      const upstream = await fetch(segmentUrl, {
+        headers: range ? { range } : undefined,
+      });
+      if (!upstream.ok || !upstream.body) {
+        return json({ error: `分段读取失败(${upstream.status})` }, upstream.status || 502);
+      }
+
+      const headers = new Headers(corsHeaders);
+      headers.set("Content-Type", upstream.headers.get("Content-Type") || "video/mp4");
+      const length = upstream.headers.get("Content-Length");
+      const rangeOut = upstream.headers.get("Content-Range");
+      const acceptRanges = upstream.headers.get("Accept-Ranges");
+      if (length) headers.set("Content-Length", length);
+      if (rangeOut) headers.set("Content-Range", rangeOut);
+      if (acceptRanges) headers.set("Accept-Ranges", acceptRanges);
+      headers.set("Cache-Control", "private, max-age=3600");
+      return new Response(upstream.body, { status: upstream.status, headers });
+    }
+
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -161,8 +218,8 @@ Deno.serve(async (req) => {
 
       return json({
         status: parentStatus, is_parent: true,
-        segment_total: job.segment_total, segment_done: done,
-        segment_urls: segUrls, error: anyFailed,
+          segment_total: job.segment_total, segment_done: done,
+          segment_urls: segUrls.map((u) => u ? encodeSegmentUrl(u) : null), error: anyFailed,
       });
     }
 
