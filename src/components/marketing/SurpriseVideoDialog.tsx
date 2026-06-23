@@ -49,6 +49,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [excluded, setExcluded] = useState<string[]>([]);
   const [activeJob, setActiveJob] = useState<ActiveRenderJob | null>(null);
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = () => {
@@ -60,7 +61,9 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     const tick = async () => {
       const r = await pollRenderJob(jobId);
       setRenderPhase(r.phase);
+      if (r.progress) setProgress(r.progress);
       if (r.phase === 'done') {
+        setProgress((p) => p ? { done: p.total, total: p.total } : { done: 1, total: 1 });
         clearActiveRenderJob(shop);
         stopPolling();
         toast.success('🎬 视频拍好了,去素材库看看');
@@ -71,7 +74,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       }
     };
     tick();
-    pollRef.current = window.setInterval(tick, 10000);
+    pollRef.current = window.setInterval(tick, 4000);
   };
 
   const doPick = async (exclude: string[] = []) => {
