@@ -11,7 +11,7 @@ import { fileSha256 } from '@/lib/fileSha256';
 import { supabase } from '@/integrations/supabase/client';
 import { UploadProgressBar, ItemTile, type UploadTileItem } from '@/components/marketing/UploadProgressTiles';
 
-type Item = UploadTileItem & { file: File; url?: string };
+type Item = UploadTileItem & { file: File; url?: string; hash?: string };
 
 export type UploadGridProps = {
   urls: string[];
