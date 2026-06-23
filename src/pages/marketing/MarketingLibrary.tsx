@@ -206,8 +206,8 @@ export default function MarketingLibrary() {
         } catch {}
       }
     };
-    const first = window.setTimeout(tick, 600);
-    const t = setInterval(tick, 10000); // 稳定依赖下轮询,避免 effect 重建瞬时回环
+    const first = window.setTimeout(tick, 400);
+    const t = setInterval(tick, 4000); // 加快进度反馈
     return () => { cancelled = true; clearTimeout(first); clearInterval(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSig]);
