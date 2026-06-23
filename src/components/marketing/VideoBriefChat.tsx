@@ -182,27 +182,47 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
       </div>
 
       <div ref={scrollRef} className="max-h-80 overflow-y-auto p-3 space-y-2">
-        {messages.map((m, i) => (
-          <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
-            <div
-              className={[
-                'max-w-[88%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap',
-                m.role === 'user'
-                  ? 'bg-primary text-primary-foreground rounded-br-sm'
-                  : m.kind === 'draft_script'
-                    ? 'bg-accent/10 text-foreground rounded-bl-sm border border-accent/30'
-                    : 'bg-muted/60 text-foreground rounded-bl-sm',
-              ].join(' ')}
-            >
-              {m.kind === 'draft_script' && (
-                <div className="text-[9px] uppercase tracking-[0.18em] text-accent font-semibold mb-1">脚本草稿 · 可继续讨论修改</div>
+        {messages.map((m, i) => {
+          const isLast = i === messages.length - 1;
+          const showOptions = isLast && m.role === 'assistant' && !busy && !drafting && Array.isArray(m.options) && m.options.length > 0;
+          return (
+            <div key={i}>
+              <div className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                <div
+                  className={[
+                    'max-w-[88%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap',
+                    m.role === 'user'
+                      ? 'bg-primary text-primary-foreground rounded-br-sm'
+                      : m.kind === 'draft_script'
+                        ? 'bg-accent/10 text-foreground rounded-bl-sm border border-accent/30'
+                        : 'bg-muted/60 text-foreground rounded-bl-sm',
+                  ].join(' ')}
+                >
+                  {m.kind === 'draft_script' && (
+                    <div className="text-[9px] uppercase tracking-[0.18em] text-accent font-semibold mb-1">脚本草稿 · 可继续讨论修改</div>
+                  )}
+                  {m.kind === 'draft_script'
+                    ? <DraftScriptText text={m.content} imageUrls={imageUrls} onPreview={setPreviewUrl} />
+                    : m.content}
+                </div>
+              </div>
+              {showOptions && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5 pl-1">
+                  {m.options!.map((opt, oi) => (
+                    <button
+                      key={oi}
+                      type="button"
+                      onClick={() => handleOption(opt)}
+                      className="px-2.5 py-1 rounded-full bg-accent/10 hover:bg-accent/20 border border-accent/30 text-[11px] text-accent font-medium transition active:scale-95"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
               )}
-              {m.kind === 'draft_script'
-                ? <DraftScriptText text={m.content} imageUrls={imageUrls} onPreview={setPreviewUrl} />
-                : m.content}
             </div>
-          </div>
-        ))}
+          );
+        })}
         {(busy || drafting) && (
           <div className="flex justify-start">
             <div className="bg-muted/60 rounded-2xl rounded-bl-sm px-3 py-1.5 text-[12px] text-muted-foreground">
@@ -211,6 +231,7 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
           </div>
         )}
       </div>
+
 
       <div className="border-t border-accent/10 p-2 flex gap-2 items-end">
         <Textarea
