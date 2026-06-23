@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles, RefreshCw, ArrowRight, Wand2, Camera, MessageSquare } from 'lucide-react';
@@ -7,45 +7,33 @@ import { useEffectiveShop } from '@/hooks/useShops';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
+import {
+  getActiveRenderJob, setActiveRenderJob, clearActiveRenderJob,
+  pollRenderJob, getInflightPick, setInflightPick,
+  type ActiveRenderJob,
+} from '@/lib/surpriseJob';
 
 interface PickedAsset {
-  asset_id: string;
-  index: number;
-  url: string;
-  summary: string;
-  category: string | null;
+  asset_id: string; index: number; url: string; summary: string; category: string | null;
 }
-
 interface SceneClip {
-  scene?: string;
-  action?: string;
-  dialogue?: string;
-  subtitle?: string;
-  duration_s?: number;
-  motion?: string;
-  image_index?: number | null;
+  scene?: string; action?: string; dialogue?: string; subtitle?: string;
+  duration_s?: number; motion?: string; image_index?: number | null;
 }
-
 interface ScriptShape {
-  hook?: SceneClip | null;
-  scenes?: SceneClip[];
-  outro?: SceneClip | null;
-  total_duration_s?: number;
-  bgm?: string;
+  hook?: SceneClip | null; scenes?: SceneClip[]; outro?: SceneClip | null;
+  total_duration_s?: number; bgm?: string;
 }
-
 interface SurpriseResult {
   ok: boolean;
   picked: { asset_id: string; cover_url: string; summary: string; category: string | null; tags: string[] };
   assets: PickedAsset[];
   script: ScriptShape;
-  vtype: string;
-  vtype_label: string;
-  style: string;
+  vtype: string; vtype_label: string; style: string;
   character: { id: string; name: string; cover_url: string | null } | null;
-  duration: number;
-  aspect: string;
+  duration: number; aspect: string;
   job_id?: string;
+  __warn?: string;
 }
 
 const STYLE_LABEL: Record<string, string> = {
@@ -59,15 +47,43 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [submitting, setSubmitting] = useState(false);
   const [pick, setPick] = useState<SurpriseResult | null>(null);
   const [excluded, setExcluded] = useState<string[]>([]);
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [activeJob, setActiveJob] = useState<ActiveRenderJob | null>(null);
+  const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
+  const pollRef = useRef<number | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
+  };
+
+  const startPolling = (jobId: string, shop: string) => {
+    stopPolling();
+    const tick = async () => {
+      const r = await pollRenderJob(jobId);
+      setRenderPhase(r.phase);
+      if (r.phase === 'done') {
+        clearActiveRenderJob(shop);
+        stopPolling();
+        toast.success('🎬 视频拍好了,去素材库看看');
+      } else if (r.phase === 'failed') {
+        clearActiveRenderJob(shop);
+        stopPolling();
+        toast.error(r.error || '渲染失败');
+      }
+    };
+    tick();
+    pollRef.current = window.setInterval(tick, 10000);
+  };
 
   const doPick = async (exclude: string[] = []) => {
     if (!shopId) return;
     setPicking(true); setPick(null);
+    // 复用 inflight，避免 close→open 时重派
+    const existing = getInflightPick(shopId);
+    const promise = existing || setInflightPick(shopId, supabase.functions.invoke('surprise-marketing-video', {
+      body: { shop_id: shopId, preview: true, exclude_asset_ids: exclude },
+    }));
     try {
-      const { data, error } = await supabase.functions.invoke('surprise-marketing-video', {
-        body: { shop_id: shopId, preview: true, exclude_asset_ids: exclude },
-      });
+      const { data, error } = await promise as any;
       if (error) throw error;
       const d = data as any;
       if (d?.ok === false) throw new Error(d.error || '随机失败');
@@ -78,13 +94,24 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     } finally { setPicking(false); }
   };
 
+  // 打开时:优先恢复已有渲染任务,否则跑 A 段
   useEffect(() => {
-    if (open) {
-      setJobId(null); setPick(null); setExcluded([]);
-      doPick([]);
+    if (!open || !shopId) return;
+    const job = getActiveRenderJob(shopId);
+    if (job) {
+      setActiveJob(job);
+      setRenderPhase('running');
+      startPolling(job.jobId, shopId);
+      return;
     }
+    setActiveJob(null);
+    if (!pick) doPick(excluded);
+    return () => { stopPolling(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, shopId]);
+
+  // 关弹窗不取消 inflight、不清 jobId，仅停止本组件 polling
+  useEffect(() => () => stopPolling(), []);
 
   const reroll = () => {
     const newEx = pick ? Array.from(new Set([...excluded, pick.picked.asset_id])).slice(-20) : excluded;
@@ -98,19 +125,23 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     try {
       const { data, error } = await supabase.functions.invoke('surprise-marketing-video', {
         body: {
-          shop_id: shopId,
-          preview: false,
-          script: pick.script,
-          picked_assets: pick.assets,
-          vtype: pick.vtype,
-          style: pick.style,
+          shop_id: shopId, preview: false,
+          script: pick.script, picked_assets: pick.assets,
+          vtype: pick.vtype, style: pick.style,
         },
       });
       if (error) throw error;
       const d = data as any;
       if (d?.ok === false || !d?.job_id) throw new Error(d?.error || '提交失败');
-      setJobId(d.job_id);
-      toast.success('已入队,正在生成视频…');
+      const job: ActiveRenderJob = {
+        jobId: d.job_id, coverUrl: pick.picked.cover_url,
+        createdAt: Date.now(), segmentTotal: d.segment_total,
+      };
+      setActiveRenderJob(shopId, job);
+      setActiveJob(job);
+      setRenderPhase('queued');
+      startPolling(d.job_id, shopId);
+      toast.success('已入队,关掉也会继续跑');
     } catch (e: any) {
       toast.error(e?.message || '提交失败');
     } finally { setSubmitting(false); }
@@ -118,42 +149,32 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[88vh] overflow-hidden flex flex-col p-0">
-        <DialogHeader className="px-5 pt-5 pb-3 border-b">
-          <DialogTitle className="flex items-center gap-2">
-            <Wand2 className="w-4 h-4 text-accent" />
-            BOOMER 帮你拍一条
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[88vh] overflow-hidden flex flex-col p-0 rounded-2xl gap-0">
+        <DialogHeader className="px-4 pt-4 pb-2.5 border-b">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Wand2 className="w-4 h-4 text-accent shrink-0" />
+            <span className="truncate">BOOMER 帮你拍一条</span>
           </DialogTitle>
         </DialogHeader>
 
-        {jobId ? (
-          <div className="space-y-4 p-5">
-            <div className="flex flex-col items-center text-center gap-3">
-              <img src={boomerIdle} alt="" className="w-20 h-20 object-contain" />
-              <div>
-                <div className="text-base font-semibold">惊喜正在路上 🎬</div>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  视频在后台生成,大约 1–2 分钟。<br />到素材库就能看到成品。
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>关闭</Button>
-              <Link to="/me/marketing/library" className="flex-1">
-                <Button className="w-full">去素材库 <ArrowRight className="w-4 h-4 ml-1" /></Button>
-              </Link>
-            </div>
-          </div>
+        {activeJob ? (
+          <RenderingBody
+            job={activeJob} phase={renderPhase}
+            onClose={() => onOpenChange(false)}
+          />
         ) : picking || !pick ? (
-          <div className="py-16 px-5 flex flex-col items-center gap-3 text-sm text-muted-foreground">
-            <Loader2 className="w-6 h-6 animate-spin text-accent" />
-            BOOMER 正在挑素材、写脚本…
-            <span className="text-[10px]">通常 3–8 秒</span>
+          <div className="py-16 px-4 flex flex-col items-center gap-3 text-sm text-muted-foreground">
+            <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
+            <Loader2 className="w-5 h-5 animate-spin text-accent" />
+            <div className="text-center">
+              BOOMER 正在挑素材、写脚本…
+              <div className="text-[10px] mt-1 opacity-70">通常 3–8 秒</div>
+            </div>
           </div>
         ) : (
           <>
             <ScriptBody pick={pick} />
-            <div className="border-t px-5 pt-3 pb-4 space-y-2 bg-background">
+            <div className="border-t px-4 pt-3 pb-4 space-y-2 bg-background">
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
                   <RefreshCw className="w-4 h-4 mr-1" /> 换一组
@@ -164,7 +185,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 </Button>
               </div>
               <p className="text-[10px] text-center text-muted-foreground">
-                所有画面都来自你的素材库,渲染时严格按这份脚本执行
+                画面全部来自你的素材库,关掉弹窗也会继续拍
               </p>
             </div>
           </>
@@ -174,13 +195,50 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   );
 }
 
+function RenderingBody({
+  job, phase, onClose,
+}: { job: ActiveRenderJob; phase: 'queued' | 'running' | 'done' | 'failed'; onClose: () => void }) {
+  const label = phase === 'queued' ? '排队中…'
+    : phase === 'done' ? '拍好啦 🎬'
+    : phase === 'failed' ? '失败,可重试' : '渲染中…';
+  return (
+    <div className="space-y-4 p-4">
+      <div className="flex items-center gap-3">
+        {job.coverUrl ? (
+          <img src={job.coverUrl} alt="" className="w-16 h-[88px] rounded-md object-cover ring-1 ring-border shrink-0" />
+        ) : (
+          <img src={boomerIdle} alt="" className="w-16 h-16 object-contain shrink-0" />
+        )}
+        <div className="min-w-0">
+          <div className="text-base font-semibold flex items-center gap-2">
+            {phase !== 'done' && phase !== 'failed' && <Loader2 className="w-4 h-4 animate-spin text-accent" />}
+            {label}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed break-words">
+            BOOMER 已经接单,大约 1–2 分钟。<br />关掉弹窗也会继续,完成后到素材库查看。
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={onClose}>
+          关闭(后台继续)
+        </Button>
+        <Link to="/me/marketing/library" className="flex-1">
+          <Button className="w-full" onClick={onClose}>
+            去素材库 <ArrowRight className="w-4 h-4 ml-1" />
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function ScriptBody({ pick }: { pick: SurpriseResult }) {
   const clips: { label: string; clip: SceneClip }[] = [];
   if (pick.script.hook) clips.push({ label: '钩子', clip: pick.script.hook });
   (pick.script.scenes || []).forEach((s, i) => clips.push({ label: `镜头${i + 1}`, clip: s }));
   if (pick.script.outro) clips.push({ label: '收尾', clip: pick.script.outro });
 
-  // 计算每镜起始时间
   let acc = 0;
   const withTime = clips.map(({ label, clip }) => {
     const start = acc;
@@ -192,9 +250,8 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
   const assetByIdx = new Map(pick.assets.map((a) => [a.index, a]));
 
   return (
-    <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-      {/* 顶部 chip 行 */}
-      <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-w-0">
+      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
         <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-semibold">
           9:16 · 15s
         </span>
@@ -203,12 +260,17 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
         {pick.character && <Chip>主角 · {pick.character.name}</Chip>}
       </div>
 
-      {/* 入选素材缩略行 */}
+      {pick.__warn === 'assets_reused' && (
+        <div className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-1.5 leading-snug">
+          素材偏少,已尽量打散；建议补拍几张实景图让分镜更丰富。
+        </div>
+      )}
+
       <div>
         <div className="text-[11px] text-muted-foreground mb-1.5">入选素材 · {pick.assets.length} 张实景</div>
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 pb-1 snap-x">
           {pick.assets.map((a) => (
-            <div key={a.asset_id} className="shrink-0 w-14 h-20 rounded-md overflow-hidden bg-muted ring-1 ring-border relative">
+            <div key={a.asset_id} className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted ring-1 ring-border relative snap-start">
               <img src={a.url} alt="" className="w-full h-full object-cover" />
               <div className="absolute bottom-0 right-0 px-1 text-[9px] bg-black/55 text-white rounded-tl">#{a.index}</div>
             </div>
@@ -216,7 +278,6 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
         </div>
       </div>
 
-      {/* 分镜列表 */}
       <div>
         <div className="text-[11px] text-muted-foreground mb-2">BOOMER 拟好的脚本 · {clips.length} 个分镜</div>
         <div className="space-y-2">
@@ -224,8 +285,8 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
             const idx = clip.image_index;
             const asset = typeof idx === 'number' ? assetByIdx.get(idx) : undefined;
             return (
-              <div key={i} className="flex gap-2.5 p-2 rounded-lg border bg-card">
-                <div className="shrink-0 w-14 h-20 rounded-md overflow-hidden bg-muted relative">
+              <div key={i} className="flex gap-2 p-2 rounded-lg border bg-card min-w-0">
+                <div className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted relative">
                   {asset ? (
                     <img src={asset.url} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -236,33 +297,33 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
                   <div className="absolute top-0 left-0 px-1 text-[9px] bg-black/55 text-white rounded-br">{label}</div>
                 </div>
                 <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-[11px] font-semibold tracking-wide text-accent">
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <div className="text-[11px] font-semibold tracking-wide text-accent shrink-0">
                       {start.toFixed(1)}s – {(start + dur).toFixed(1)}s
                     </div>
                     {clip.motion && (
-                      <span className="text-[10px] text-muted-foreground">{clip.motion}</span>
+                      <span className="text-[10px] text-muted-foreground truncate">{clip.motion}</span>
                     )}
                   </div>
                   {clip.scene && (
-                    <div className="text-[12px] leading-snug">
+                    <div className="text-[12px] leading-snug break-words">
                       <span className="text-muted-foreground">场景 · </span>{clip.scene}
                     </div>
                   )}
                   {clip.action && (
-                    <div className="text-[12px] leading-snug flex gap-1">
+                    <div className="text-[12px] leading-snug flex gap-1 break-words">
                       <Camera className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
-                      <span>{clip.action}</span>
+                      <span className="min-w-0">{clip.action}</span>
                     </div>
                   )}
                   {clip.dialogue && (
-                    <div className="text-[12px] leading-snug flex gap-1 text-foreground/85">
+                    <div className="text-[12px] leading-snug flex gap-1 text-foreground/85 break-words">
                       <MessageSquare className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
-                      <span>"{clip.dialogue}"</span>
+                      <span className="min-w-0">"{clip.dialogue}"</span>
                     </div>
                   )}
                   {clip.subtitle && (
-                    <div className="text-[11px] leading-snug text-muted-foreground">
+                    <div className="text-[11px] leading-snug text-muted-foreground break-words">
                       字幕:{clip.subtitle}
                     </div>
                   )}
@@ -278,7 +339,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full border border-accent/30 bg-accent/5 text-foreground/80 tracking-wide">
+    <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full border border-accent/30 bg-accent/5 text-foreground/80 tracking-wide whitespace-nowrap">
       {children}
     </span>
   );
