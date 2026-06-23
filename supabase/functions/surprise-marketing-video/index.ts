@@ -84,6 +84,67 @@ function summarizeAsset(a: any): string {
   return parts.join(' · ') || '店内实景';
 }
 
+// 把脚本里每个分镜分配到一个不同的素材 index;不够则就回退到 usage 最少的。
+function enforceUniqueAssets(
+  scriptIn: any,
+  assets: Array<{ index: number; summary?: string; category?: string | null; tags?: string[] }>,
+): { script: any; usedIndices: number[]; reused: boolean } {
+  const script = JSON.parse(JSON.stringify(scriptIn || {}));
+  const clips: any[] = [];
+  if (script.hook) clips.push(script.hook);
+  if (Array.isArray(script.scenes)) clips.push(...script.scenes);
+  if (script.outro) clips.push(script.outro);
+
+  const N = assets.length;
+  if (N === 0) return { script, usedIndices: [], reused: false };
+  const usage = new Array(N).fill(0);
+  const used = new Set<number>();
+  const usedOrder: number[] = [];
+  let reused = false;
+
+  const scoreFor = (clip: any, ai: number): number => {
+    const a = assets[ai];
+    const text = `${clip?.scene || ''} ${clip?.action || ''} ${clip?.dialogue || ''} ${clip?.subtitle || ''}`.toLowerCase();
+    let s = 0;
+    if (a.category && text.includes(String(a.category).toLowerCase())) s += 2;
+    for (const t of (a.tags || [])) {
+      if (t && text.includes(String(t).toLowerCase())) s += 1;
+    }
+    if (a.summary) {
+      const tokens = String(a.summary).split(/[ ,，/·]+/).filter((x) => x.length >= 2);
+      for (const t of tokens) if (text.includes(t.toLowerCase())) s += 1;
+    }
+    return s;
+  };
+
+  for (const clip of clips) {
+    const hint = typeof clip?.image_index === 'number' ? clip.image_index : null;
+    let chosen = -1;
+    if (hint != null && hint >= 0 && hint < N && !used.has(hint)) {
+      chosen = hint;
+    } else {
+      // 优先未用素材；并列按文本匹配分高优先；再并列 usage 低优先
+      const candidates: number[] = [];
+      for (let i = 0; i < N; i++) if (!used.has(i)) candidates.push(i);
+      const pool = candidates.length ? candidates : Array.from({ length: N }, (_, i) => i);
+      if (candidates.length === 0) reused = true;
+      let bestScore = -1, bestUsage = Infinity;
+      for (const i of pool) {
+        const sc = scoreFor(clip, i);
+        if (sc > bestScore || (sc === bestScore && usage[i] < bestUsage)) {
+          bestScore = sc; bestUsage = usage[i]; chosen = i;
+        }
+      }
+    }
+    if (chosen < 0) chosen = 0;
+    clip.image_index = chosen;
+    usage[chosen] += 1;
+    used.add(chosen);
+    usedOrder.push(chosen);
+  }
+  return { script, usedIndices: usedOrder, reused };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
