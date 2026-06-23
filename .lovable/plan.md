@@ -1,62 +1,92 @@
-## 「惊喜一下」升级:出完整脚本 + 分镜头 + 每镜配图
+## 调整范围
 
-### 现在的问题
-- 弹窗只展示一张封面 + "中古好物"占位标题,信息量太少。
-- 没生成脚本,用户不知道这条 15 秒视频到底拍什么、说什么。
-- "标题/内容"字段其实是素材的 meta,不是视频内容,容易误导。
+前端排版/状态 + edge function 一处后处理，**不改数据库**。
 
-### 目标
-点开"惊喜一下",BOOMER 直接出一份**可拍摄的完整脚本**:
-- 1 个钩子镜头 + 2–3 个中段镜头 + 1 个收尾镜头(总时长 15s,9:16)
-- 每个镜头都绑定一张**素材库里真实存在的实景商品/店铺图**(因为是实体店,必须用真实素材,不凭空生成)
-- 每镜显示:画面缩略图 + 场景描述 + 镜头动作 + 口播/字幕 + 时长
-- 顶部仍然展示:路线/风格/主角 tag,但去掉误导性的"中古好物"标题块
+---
 
-### 改动点
+## 1. 「惊喜一下」按钮重排版
 
-**1. `surprise-marketing-video` edge function**
-- **挑多张素材而不是一张**:按 vtype 在素材库里加权挑 3–5 张图(主图权重最高,其余作分镜补充);全部来自该店铺 `marketing_assets` (kind=photo),真实实景。
-- **preview 模式也生成脚本**:复用现有 `generate-marketing-video-script`,把所有挑出的图喂进去(`image_urls` + `image_descriptions`),让 AI 把每个 scene 的 `image_index` 绑到合适的素材上。
-- 返回结构升级:
-  ```
-  {
-    picked: {              // 主图(仍作为封面展示)
-      asset_id, cover_url, summary, tags, category
-    },
-    assets: [              // 本次入选的所有素材,带原始 url/描述
-      { asset_id, url, summary, category }
-    ],
-    script: { hook, scenes[], outro, total_duration, ... },  // 完整脚本
-    vtype, vtype_label, style, character, duration: 15, aspect: '9:16'
-  }
-  ```
-- 正式提交(preview=false)时:复用同一份 script 调 `render-marketing-video`,不再二次生成,**避免预览和实际渲染不一致**。
-- "换一组":重新挑素材 + 重新生脚本(整体洗牌)。
+当前问题:整块 primary 渐变 + 大图标，太重、太"广告位"，与首页其他卡片不一脉相承。
 
-**2. `SurpriseVideoDialog.tsx` 重做内容区**
-- 顶部:封面缩略 + 9:16·15s 角标 + 路线/风格/主角三个 chip(去掉"中古好物"那行无意义标题)。
-- 中部:**分镜头时间线**(滚动列表),每条:
-  ```
-  [缩略图]  钩子 · 0–2s
-            场景:店门口暖光招牌特写
-            动作:手推门,镜头跟进
-            口播:"东京下北泽淘到的小秘密"
-  ```
-  视觉上参考 MarketingVideo 里现有的 SegmentPreview / SceneRow 风格(已有组件可借鉴 UI 语言)。
-- 底部按钮不变:`换一组` / `就拍这条`。
-- 加载态文案改成"BOOMER 正在挑素材、写脚本…"(因为现在确实更慢一点,3–8s)。
-- 提交后过渡页保持不变(去素材库等渲染)。
+改为「年鉴卡片」语言:
 
-**3. 文案细化**
-- 去掉 dialog 里 "中古好物" 这一类占位标题,改成统一的小标题"BOOMER 拟好的脚本"。
-- 每镜下方加一行小灰字:"实景素材来自你的素材库",强调实拍属性。
+- 容器:`bg-card` + `border-accent/30` + `shadow-sm`，左侧细古铜金竖线（`before:` 伪元素）作为强调,不再用大色块。
+- 左侧:换成 `BOOMER` 头像（`boomer-idle.png`,40×40 圆角）取代 `Wand2`，呼应首页 Hero。
+- 中部:
+  - kicker：`font-display tracking-[0.18em] text-accent text-[10px]` → `惊喜 · SURPRISE`
+  - 主标题 15px 半粗：`让 BOOMER 替你拍一条`
+  - 描述 11px muted：`自动选品 · 写脚本 · 竖版 15 秒`
+- 右侧:小胶囊 `9:16 · 15s`(accent 描边) + `ChevronRight`。
+- hover/active：`border-accent/40` + `active:scale-[0.995]`。
 
-### 不动的部分
-- 数据库 schema、`render-marketing-video`、`poll-marketing-video`、`MyMarketing.tsx` 入口卡、`marketingSegments.ts`。
-- 9:16 / 15s / 调性映射 / 角色 50% 概率等业务规则。
+若当前有进行中渲染任务（见 §3），右侧胶囊换为 `生成中…` + 旋转图标，点击直接展开既有任务弹窗。
 
-### 验收
-- 打开"惊喜一下",3–8s 内出现:封面 + 完整脚本(钩子+2–3 中段+收尾),每镜都有缩略图、动作、口播、时长。
-- "换一组"会同时换素材组合和脚本。
-- "就拍这条" → 入队 → 去素材库能看到对应视频,内容跟预览的脚本一致。
-- 没有任何镜头使用素材库以外的图。
+---
+
+## 2. 弹窗在 390px 上左右溢出
+
+只改 `SurpriseVideoDialog.tsx`：
+
+- `DialogContent` 改为 `w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[88vh] overflow-hidden flex flex-col p-0 rounded-2xl`。
+- 全部 `px-5` → `px-4`，分镜卡 `gap-2.5` → `gap-2`，缩略图 `w-14 h-20` → `w-12 h-[68px]`，chip 行加 `flex-wrap min-w-0`。
+- 顶部入选素材横滑行：`-mx-4 px-4 snap-x` 避免被 padding 截断。
+- 分镜文本块 `min-w-0 break-words`，防长字幕撑宽。
+
+目标：375px / 390px 屏幕左右各留 12px 安全距，不再贴边/溢出。
+
+---
+
+## 3. 关掉弹窗任务继续跑
+
+当前两段会"丢"：
+
+- **A 段（挑素材+写脚本 3–8s）**：关闭即组件卸载，再开重派一次。
+- **B 段（已点"就拍这条"，渲染 1–2 分钟）**：`jobId` 只在组件 state，关闭即丢，下次打开看不到进度。
+
+新增 `src/lib/surpriseJob.ts`（模块级 + `localStorage` 持久化）：
+
+- 模块级 `inflightPick: Promise<SurpriseResult> | null` —— A 段去重。
+- `getActiveRenderJob(shopId)` / `setActiveRenderJob(shopId, { jobId, cover_url, createdAt })` / `clearActiveRenderJob(shopId)`，`localStorage` key `boomer.surprise.job:<shopId>`，TTL 30 分钟自动清。
+- `pollRenderJob(jobId)`：沿用现有 video 模块的 polling（读 `marketing_render_jobs` 状态或 `poll-marketing-video` edge fn，按现有惯例），返回 `queued|rendering|done|failed`。
+
+`SurpriseVideoDialog` 行为变化:
+
+1. 打开时先查 `getActiveRenderJob`:
+   - 命中 → 进入「渲染进行中」视图：BOOMER + 进度文案 + 封面缩略 + 「去素材库」/「关闭(后台继续)」；启动 polling，done 时 `clearActiveRenderJob` + toast `🎬 视频拍好了`。
+   - 未命中 → 走 A 段，但 `doPick` 改成复用 `inflightPick`，不重复派单。
+2. 关闭弹窗：不取消 inflight、不清 jobId，仅隐藏 UI。
+3. 「就拍这条」成功后：`setActiveRenderJob(shopId, ...)`，UI 切到「渲染进行中」。
+4. `MyMarketing` mount 时读 `getActiveRenderJob`，给按钮加「生成中…」徽标，点击直接展开进行中弹窗。
+
+边界：同一 shop 同时只允许一条 surprise 在跑，「换一组」只在 A 段可用。
+
+---
+
+## 4. 每一组镜头都不能重复（同一素材不被多个分镜复用）
+
+当前 `generate-marketing-video-script` 可能给多个分镜分配同一个 `image_index`。改造放在 `surprise-marketing-video/index.ts` 内，**纯后处理 + 重采样**，不动脚本生成 fn：
+
+1. **保证素材数 ≥ 分镜数**：脚本回来后，统计真实分镜数 `sceneCount = (hook?1:0) + scenes.length + (outro?1:0)`。若 `pickedAssets.length < sceneCount`：
+   - 从剩余 pool（已剔除 `exclude` 和已选）继续 `sampleWeighted` 补齐到 `sceneCount`；
+   - pool 也不够时，允许复用，但下一步会优先未用素材，再回退到"使用次数最少"的素材。
+2. **强制一对一映射**（按分镜出场顺序遍历）：
+   - 维护 `used: Set<number>` 和 `usage: number[]`（每个 asset 的已用次数）。
+   - 对每个分镜：
+     - 若模型给的 `image_index` 合法且未在 `used` 中，保留；
+     - 否则在所有未用素材里挑：先按 `asset.summary/category/tags` 与该分镜文本（`scene/action/dialogue`）做朴素关键词重合度打分，分数最高的优先；并列时选 `usage` 最低的；再并列随机。
+     - 选中后 `used.add(idx)`、`usage[idx]++`；写回 `clip.image_index = idx`。
+   - pool 不足以一对一时（极端：素材数 < 分镜数且补齐也失败），从 `usage` 最低集合里挑——保证"分散度最大"，并在返回里加 `__warn: 'assets_reused'` 供前端可选提示。
+3. **入选素材列表只展示真正用到的**：`assets` 数组按最终 `image_index` 出现顺序去重输出（保留 `index` 字段对齐分镜），未被任何分镜引用的素材剔除——前端"入选素材 · N 张实景"和分镜缩略图严格一致，不会出现"列了 5 张但只用了 3 张"或"同张图反复出现"。
+4. 提交模式（`!preview && body.script && body.picked_assets`）也跑同样后处理：因为前端"就拍这条"会回传 preview 阶段的 script，本身已经处理过；但仍要做一次幂等校验，防止用户中途手改。
+
+不动 `render-marketing-video`：它按 `image_index` 取图，前端展示和最终渲染天然一致。
+
+---
+
+## 验证
+
+- 390×844：按钮新样式 + 弹窗左右各 12px 间距 + 缩略图横滑无截断。
+- 进入弹窗 → 关闭 → 立刻重开：不出现重复 loading。
+- 「就拍这条」→ 关闭 → 回 `/me/marketing`：按钮显示「生成中…」；再次点击直接看到进行中视图；done 后按钮恢复默认。
+- 多次「换一组」：每组里所有分镜的缩略图互不重复，且入选素材数量 = 分镜数量。
+- 极端：素材库只有 2 张图但脚本 4 个分镜 → 优雅降级 + 顶部出现轻量提示「素材偏少,已尽量打散」。
