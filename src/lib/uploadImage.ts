@@ -55,8 +55,7 @@ export async function compressForUpload(
         if (octx) {
           octx.drawImage(bitmap, 0, 0, w, h);
           try {
-            // @ts-expect-error convertToBlob 在所有现代浏览器中可用
-            blob = await oc.convertToBlob({ type: 'image/jpeg', quality });
+            blob = await (oc as any).convertToBlob({ type: 'image/jpeg', quality });
           } catch { /* fallthrough to canvas */ }
         }
       }
