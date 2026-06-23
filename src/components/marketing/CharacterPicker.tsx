@@ -1,8 +1,12 @@
-// 视频页"选择主角"组件：横滑选 + 新建
-import { useEffect, useState } from 'react';
+// 视频页"选择主角"组件：横滑选 + 新建 + 附加参考图(最多 2 张)
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, User, X } from 'lucide-react';
+import { Plus, User, X, Upload, FolderOpen, Loader2 } from 'lucide-react';
 import { CharacterCreateDialog } from './CharacterCreateDialog';
+import { LibraryImagePickerDialog } from './LibraryImagePickerDialog';
+import { useAuth } from '@/hooks/useAuth';
+import { uploadMarketingImages } from '@/pages/marketing/uploadMarketingImages';
+import { toast } from 'sonner';
 
 export type Character = {
   id: string;
@@ -12,7 +16,11 @@ export type Character = {
   visual_signature: string | null;
   core_emotion: string | null;
   auto_anchor?: boolean;
+  /** 仅在前端/本次视频中使用,不持久化到 marketing_characters 表 */
+  extra_reference_urls?: string[];
 };
+
+const MAX_EXTRA_REFS = 2;
 
 export function CharacterPicker({
   shopId, value, onChange,
@@ -23,6 +31,10 @@ export function CharacterPicker({
 }) {
   const [items, setItems] = useState<Character[]>([]);
   const [open, setOpen] = useState(false);
+  const [libOpen, setLibOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
 
   const load = async () => {
     if (!shopId) { setItems([]); return; }
@@ -35,18 +47,100 @@ export function CharacterPicker({
   };
   useEffect(() => { load(); }, [shopId]);
 
+  const extras = value?.extra_reference_urls || [];
+  const remain = Math.max(0, MAX_EXTRA_REFS - extras.length);
+
+  const addExtras = (urls: string[]) => {
+    if (!value || !urls.length) return;
+    const merged = [...extras];
+    for (const u of urls) {
+      if (!u) continue;
+      if (merged.includes(u)) continue;
+      merged.push(u);
+      if (merged.length >= MAX_EXTRA_REFS) break;
+    }
+    onChange({ ...value, extra_reference_urls: merged });
+  };
+  const removeExtra = (u: string) => {
+    if (!value) return;
+    onChange({ ...value, extra_reference_urls: extras.filter((x) => x !== u) });
+  };
+
+  const onFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length || !user || !value) return;
+    setUploading(true);
+    const tid = toast.loading(`上传中 (0/${files.length})`);
+    let done = 0;
+    try {
+      const results = await uploadMarketingImages(user.id, files.slice(0, remain), {
+        preset: 'thumb',
+        onProgress: (ev) => {
+          if (ev.stage === 'done') { done++; toast.loading(`上传中 (${done}/${files.length})`, { id: tid }); }
+        },
+      });
+      toast.dismiss(tid);
+      const ok = results.filter((u): u is string => !!u);
+      if (!ok.length) { toast.error('上传失败'); return; }
+      addExtras(ok);
+      toast.success(`已加入 ${ok.length} 张主角参考图`);
+    } catch (err: any) {
+      toast.dismiss(tid);
+      toast.error(err?.message || '上传失败');
+    } finally { setUploading(false); }
+  };
+
   return (
     <div className="space-y-2">
       {value && (
-        <div className="flex items-center gap-2 bg-primary/5 border border-primary/30 rounded-md p-2">
-          <img src={value.cover_url} className="w-10 h-10 object-cover rounded" alt="" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-medium truncate">{value.name}</p>
-            <p className="text-[10px] text-muted-foreground truncate">{value.role_label || '主角'}</p>
+        <div className="space-y-2 bg-primary/5 border border-primary/30 rounded-md p-2">
+          <div className="flex items-center gap-2">
+            <img src={value.cover_url} className="w-10 h-10 object-cover rounded" alt="" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-medium truncate">{value.name}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{value.role_label || '主角'}</p>
+            </div>
+            <button onClick={() => onChange(null)} className="p-1 hover:bg-background rounded" aria-label="取消选择">
+              <X className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
           </div>
-          <button onClick={() => onChange(null)} className="p-1 hover:bg-background rounded" aria-label="取消选择">
-            <X className="w-3.5 h-3.5 text-muted-foreground" />
-          </button>
+          <div className="border-t border-primary/15 pt-2">
+            <p className="text-[10px] text-muted-foreground mb-1.5">
+              附加参考图({extras.length}/{MAX_EXTRA_REFS}) · 每段视频都会带这些图,用来锁人物长相 / 服装
+            </p>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {extras.map((u) => (
+                <div key={u} className="relative w-12 h-12 rounded overflow-hidden border border-primary/20 group">
+                  <img src={u} alt="" className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => removeExtra(u)}
+                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                    aria-label="删除"
+                  >
+                    <X className="w-3.5 h-3.5 text-white" />
+                  </button>
+                </div>
+              ))}
+              {remain > 0 && (
+                <>
+                  <button
+                    onClick={() => setLibOpen(true)}
+                    className="w-12 h-12 rounded border border-dashed border-accent/40 bg-accent/5 text-accent flex flex-col items-center justify-center text-[8px] gap-0.5 hover:bg-accent/10"
+                  >
+                    <FolderOpen className="w-3 h-3" />素材库
+                  </button>
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading}
+                    className="w-12 h-12 rounded border border-dashed border-accent/40 bg-accent/5 text-accent flex flex-col items-center justify-center text-[8px] gap-0.5 hover:bg-accent/10 disabled:opacity-50"
+                  >
+                    {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}上传
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
       <div className="flex gap-1.5 overflow-x-auto scrollbar-none pb-1">
@@ -62,7 +156,7 @@ export function CharacterPicker({
           return (
             <button
               key={c.id}
-              onClick={() => onChange(active ? null : c)}
+              onClick={() => onChange(active ? null : { ...c, extra_reference_urls: value?.id === c.id ? value.extra_reference_urls : [] })}
               className={[
                 'flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all relative',
                 active ? 'border-primary ring-1 ring-primary' : 'border-transparent hover:border-accent/40',
@@ -84,8 +178,16 @@ export function CharacterPicker({
         open={open}
         onOpenChange={setOpen}
         shopId={shopId}
-        onCreated={(c) => { setItems((prev) => [c, ...prev]); onChange(c); }}
+        onCreated={(c) => { setItems((prev) => [c, ...prev]); onChange({ ...c, extra_reference_urls: [] }); }}
       />
+      <LibraryImagePickerDialog
+        open={libOpen}
+        onOpenChange={setLibOpen}
+        shopId={shopId}
+        max={remain}
+        onConfirm={(picked) => addExtras(picked)}
+      />
+      <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onFiles} />
     </div>
   );
 }
