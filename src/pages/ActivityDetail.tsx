@@ -65,15 +65,16 @@ export default function ActivityDetail() {
 
   useEffect(() => { load(); }, [load]);
 
-  // 实时同步：申请表 + 优惠券领取表
+  // 轮询同步：申请表和优惠券领取表含手机号等隐私字段，不通过 Realtime 广播；
+  // 改为页面可见时每 15 秒静默刷新一次。
   useEffect(() => {
     if (!id) return;
-    const channel = supabase
-      .channel(`activity-detail-${id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_applications', filter: `activity_id=eq.${id}` }, () => load(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'voucher_claims' }, () => load(true))
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') load(true);
+    }, 15000);
+    const onVis = () => { if (document.visibilityState === 'visible') load(true); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVis); };
   }, [id, load]);
 
 
