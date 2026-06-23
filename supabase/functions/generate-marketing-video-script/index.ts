@@ -96,7 +96,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}${imgDescBlock}
 - scene  场景描述：地点、环境、光线、色调、道具、画面构图、镜头景别(特写/中景/全景)。
 - action 人物动作 / 镜头运动：人物在做什么 + 镜头怎么动(推/拉/摇/移/俯/仰/手持/定格)。如无人物只描写镜头。
 - dialogue 台词 / 口播：人物说的话或画外音。没有就填空字符串 ""。
-- subtitle 屏幕字幕：叠加在画面上的字幕，≤14 字，可与台词不同(更短)。
+- subtitle 屏幕字幕：叠加在画面上的字幕，≤24 字，可与台词不同(更短)。
 
 参考图(image_index)：${approvedScript
         ? '严格按草稿里的 [图 #N] 标记取值,不要自己挑。'
