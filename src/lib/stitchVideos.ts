@@ -18,11 +18,19 @@ export type StitchProgress = (info: {
   total: number;
 }) => void;
 
+export type StitchFetchOptions = {
+  init?: RequestInit;
+};
+
 /**
  * 顺序拼接多段 MP4 为一支 MP4。所有段应使用同一编码参数（Seedance 同一模型输出一致）。
  * @returns 拼好的 MP4 Blob
  */
-export async function stitchSegmentUrls(urls: string[], onProgress?: StitchProgress): Promise<Blob> {
+export async function stitchSegmentUrls(
+  urls: string[],
+  onProgress?: StitchProgress,
+  options?: StitchFetchOptions,
+): Promise<Blob> {
   if (!urls.length) throw new Error('没有可拼接的段');
   const total = urls.length;
 
@@ -30,7 +38,7 @@ export async function stitchSegmentUrls(urls: string[], onProgress?: StitchProgr
   const blobs: Blob[] = [];
   for (let i = 0; i < urls.length; i++) {
     onProgress?.({ stage: 'download', segment: i + 1, total });
-    const res = await fetch(urls[i]);
+    const res = await fetch(urls[i], options?.init);
     if (!res.ok) throw new Error(`第 ${i + 1} 段下载失败 (${res.status})`);
     blobs.push(await res.blob());
   }
@@ -76,8 +84,10 @@ export async function stitchSegmentUrls(urls: string[], onProgress?: StitchProgr
       const sink = new EncodedPacketSink(vTrack);
       const decoderCfg = (await vTrack.getDecoderConfig()) || undefined;
       let lastEnd = videoOffset;
+      let baseTs: number | null = null;
       for await (const pkt of sink.packets()) {
-        const ts = pkt.timestamp + videoOffset;
+        baseTs ??= pkt.timestamp;
+        const ts = Math.max(0, pkt.timestamp - baseTs) + videoOffset;
         const shifted = pkt.clone({ timestamp: ts });
         const meta = !videoMetaSent && decoderCfg ? { decoderConfig: decoderCfg } : undefined;
         await videoSrc.add(shifted, meta);
@@ -93,8 +103,10 @@ export async function stitchSegmentUrls(urls: string[], onProgress?: StitchProgr
       const sink = new EncodedPacketSink(aTrack);
       const decoderCfg = (await aTrack.getDecoderConfig()) || undefined;
       let lastEnd = audioOffset;
+      let baseTs: number | null = null;
       for await (const pkt of sink.packets()) {
-        const ts = pkt.timestamp + audioOffset;
+        baseTs ??= pkt.timestamp;
+        const ts = Math.max(0, pkt.timestamp - baseTs) + audioOffset;
         const shifted = pkt.clone({ timestamp: ts });
         const meta = !audioMetaSent && decoderCfg ? { decoderConfig: decoderCfg } : undefined;
         await audioSrc.add(shifted, meta);
