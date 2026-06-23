@@ -37,36 +37,33 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
   const updateItem = (id: string, patch: Partial<Item>) =>
     setItems(prev => prev.map(it => (it.id === id ? { ...it, ...patch } : it)));
 
-  // 查重:优先 shop 级,无 shop 时退回 user 私有
-  const lookupExisting = async (hash: string): Promise<string | null> => {
-    if (!user) return null;
+  // 批量查重:一次拿到所有命中
+  const lookupExistingBatch = async (hashes: string[]): Promise<Map<string, string>> => {
+    const map = new Map<string, string>();
+    if (!user || hashes.length === 0) return map;
     try {
       let q = supabase
         .from('marketing_assets' as any)
-        .select('output_url')
-        .eq('sha256', hash)
-        .not('output_url', 'is', null)
-        .limit(1);
+        .select('output_url, sha256')
+        .in('sha256', hashes)
+        .not('output_url', 'is', null);
       if (shopId) q = q.eq('shop_id', shopId);
       else q = q.eq('user_id', user.id).is('shop_id', null);
-      const { data } = await q.maybeSingle();
-      return (data as any)?.output_url || null;
-    } catch {
-      return null;
-    }
+      const { data } = await q;
+      ((data as any[]) || []).forEach((r) => {
+        if (r?.sha256 && r?.output_url && !map.has(r.sha256)) map.set(r.sha256, r.output_url);
+      });
+    } catch { /* ignore */ }
+    return map;
   };
 
+  // 单图上传:hash 已预先算好,不再重算;insert 走 fire-and-forget,不阻塞下一张
   const processOne = async (
     file: File,
+    hash: string,
     onStage: (s: UploadStage, url?: string, error?: string) => void,
-  ): Promise<{ url: string; reused: boolean }> => {
+  ): Promise<string> => {
     if (!user) throw new Error('未登录');
-    onStage('compressing');
-    const hash = await fileSha256(file);
-
-    const hit = await lookupExisting(hash);
-    if (hit) { onStage('done', hit); return { url: hit, reused: true }; }
-
     let finalUrl: string | undefined;
     let finalErr: string | undefined;
     await uploadMarketingImages(user.id, [file], {
@@ -79,8 +76,10 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     });
     if (!finalUrl) throw new Error(finalErr || '上传失败');
 
-    try {
-      await supabase.from('marketing_assets' as any).insert({
+    // 入库异步:不让 worker 等 insert RTT
+    void supabase
+      .from('marketing_assets' as any)
+      .insert({
         user_id: user.id,
         shop_id: shopId,
         kind: 'photo',
@@ -89,11 +88,9 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
         sha256: hash,
         tags: defaultTags,
         meta: { source: 'reference_upload', sha256: hash, filename: file.name },
-      });
-    } catch (e: any) {
-      console.warn('[upload-grid] asset insert failed', e?.message);
-    }
-    return { url: finalUrl, reused: false };
+      })
+      .then(({ error }) => { if (error) console.warn('[upload-grid] asset insert failed', error.message); });
+    return finalUrl;
   };
 
   const onPick = async (files: FileList | null) => {
@@ -101,28 +98,43 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     const picked = Array.from(files).slice(0, remaining);
     if (!picked.length) { toast.error(`最多 ${max} 张`); return; }
 
+    // 1) 并行算 hash
     const hashes = await Promise.all(picked.map((f) => fileSha256(f).catch(() => `r-${Math.random()}`)));
-    const seen = new Set<string>();
-    const arr: File[] = [];
-    const localDupCount = picked.length - new Set(hashes).size;
+
+    // 2) 本地去重
+    const localSeen = new Set<string>();
+    const localKeep: { file: File; hash: string }[] = [];
     picked.forEach((f, i) => {
       const h = hashes[i];
-      if (seen.has(h)) return;
-      seen.add(h);
-      arr.push(f);
+      if (localSeen.has(h)) return;
+      localSeen.add(h);
+      localKeep.push({ file: f, hash: h });
+    });
+    const localDupCount = picked.length - localKeep.length;
+
+    // 3) 一次 DB 查重(整店级)
+    const hitMap = await lookupExistingBatch(localKeep.map((x) => x.hash));
+
+    // 4) 命中的直接复用 URL,未命中的进上传队列
+    const reusedUrls: string[] = [];
+    const toUpload: { file: File; hash: string }[] = [];
+    localKeep.forEach((x) => {
+      const hit = hitMap.get(x.hash);
+      if (hit) reusedUrls.push(hit);
+      else toUpload.push(x);
     });
 
-    const newItems: Item[] = arr.map((f) => ({
+    const newItems: (Item & { hash: string })[] = toUpload.map((x) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      file: f,
-      preview: URL.createObjectURL(f),
+      file: x.file,
+      hash: x.hash,
+      preview: URL.createObjectURL(x.file),
       stage: 'queued',
     }));
     setItems((prev) => [...prev, ...newItems]);
 
     const successUrls: string[] = [];
-    let reusedCount = 0;
-    const CONCURRENCY = 3;
+    const CONCURRENCY = 4;
     let cursor = 0;
     const worker = async () => {
       while (true) {
@@ -130,11 +142,10 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
         if (i >= newItems.length) return;
         const it = newItems[i];
         try {
-          const { url, reused } = await processOne(it.file, (stage, url, error) =>
+          const url = await processOne(it.file, it.hash, (stage, url, error) =>
             updateItem(it.id, { stage, url, error }),
           );
           successUrls.push(url);
-          if (reused) reusedCount += 1;
         } catch (e: any) {
           const msg = e?.message || (typeof e === 'string' ? e : JSON.stringify(e || {}).slice(0, 80)) || '上传失败';
           updateItem(it.id, { stage: 'error', error: msg });
@@ -143,11 +154,12 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, newItems.length) }, worker));
 
-    if (successUrls.length) onChange([...urls, ...successUrls]);
+    const allNew = [...reusedUrls, ...successUrls];
+    if (allNew.length) onChange([...urls, ...allNew]);
     setItems((prev) => prev.filter((it) => it.stage !== 'done'));
 
-    const newlyAdded = successUrls.length - reusedCount;
-    const dedupTotal = reusedCount + localDupCount;
+    const newlyAdded = successUrls.length;
+    const dedupTotal = reusedUrls.length + localDupCount;
     if (newlyAdded > 0 || dedupTotal > 0) {
       const parts: string[] = [];
       if (newlyAdded > 0) parts.push(`新增 ${newlyAdded} 张`);
