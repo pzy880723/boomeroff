@@ -407,7 +407,7 @@ export default function MarketingVideo() {
             </Button>
           </div>
           <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" shopId={shopId} />
-          <p className="text-[10px] text-muted-foreground">不上传也能生成。AI 会按场景从这些图里挑最贴合的一张。</p>
+          <p className="text-[10px] text-muted-foreground">不上传也能生成。上传后,在分镜里给每张图选「开头 / 结尾 / 参考」,会真正进入对应视频段。</p>
           {urls.length > 0 && (
             <div className="border-t border-accent/10 pt-2 space-y-1">
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
