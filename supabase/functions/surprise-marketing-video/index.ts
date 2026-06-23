@@ -208,38 +208,80 @@ Deno.serve(async (req) => {
     if (!scriptRes.ok || !scriptData?.script) {
       return json({ ok: false, error: scriptData?.error || '脚本生成失败' });
     }
-    const script = scriptData.script;
+    let script = scriptData.script;
 
-    const picked = {
-      asset_id: hero.id,
-      cover_url: hero.output_url,
-      summary: heroSummary,
-      tags: hero.tags || [],
-      category: hero.category || null,
-    };
-    const assets = pickedAssets.map((a: any, i: number) => ({
-      asset_id: a.id,
-      index: i,
-      url: a.output_url,
-      summary: summarizeAsset(a),
-      category: a.category || null,
+    // ====== 强制分镜与素材一对一(同一张不被两个分镜复用) ======
+    // 先用入选素材做映射;若分镜数 > 素材数,从 pool 剩余里继续补齐
+    let assetsForScript = pickedAssets.map((a: any, i: number) => ({
+      asset_id: a.id, index: i, url: a.output_url,
+      summary: summarizeAsset(a), category: a.category || null,
+      tags: a.tags || [],
     }));
+    const sceneCount = (script.hook ? 1 : 0) + (Array.isArray(script.scenes) ? script.scenes.length : 0) + (script.outro ? 1 : 0);
+    if (sceneCount > assetsForScript.length) {
+      const usedIds = new Set(pickedAssets.map((a: any) => a.id));
+      const remain = pool.filter((a: any) => !usedIds.has(a.id));
+      const need = sceneCount - assetsForScript.length;
+      const extraWeighted = remain.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
+      const extras = sampleWeighted(extraWeighted, Math.min(need, remain.length));
+      for (const a of extras) {
+        assetsForScript.push({
+          asset_id: a.id, index: assetsForScript.length, url: a.output_url,
+          summary: summarizeAsset(a), category: a.category || null, tags: a.tags || [],
+        });
+      }
+    }
+    const enforced = enforceUniqueAssets(script, assetsForScript);
+    script = enforced.script;
+    const usedIndices = enforced.usedIndices;
+    const reused = enforced.reused;
+
+    // 只输出真正被分镜引用到的素材,按出场顺序去重并重排 index
+    const orderUsed: number[] = [];
+    const seen = new Set<number>();
+    for (const i of usedIndices) {
+      if (!seen.has(i)) { seen.add(i); orderUsed.push(i); }
+    }
+    const oldToNew = new Map<number, number>();
+    orderUsed.forEach((old, n) => oldToNew.set(old, n));
+    const assets = orderUsed.map((old, n) => ({
+      asset_id: assetsForScript[old].asset_id, index: n,
+      url: assetsForScript[old].url,
+      summary: assetsForScript[old].summary,
+      category: assetsForScript[old].category,
+    }));
+    // 重写 script 里的 image_index 为新的连续 index
+    const remap = (c: any) => {
+      if (c && typeof c.image_index === 'number' && oldToNew.has(c.image_index)) {
+        c.image_index = oldToNew.get(c.image_index);
+      }
+      return c;
+    };
+    if (script.hook) script.hook = remap(script.hook);
+    if (Array.isArray(script.scenes)) script.scenes = script.scenes.map(remap);
+    if (script.outro) script.outro = remap(script.outro);
+
+    // hero 始终用第一个被使用的素材,确保封面与首镜一致
+    const heroAsset = assets[0] ? pickedAssets.find((a: any) => a.id === assets[0].asset_id) || hero : hero;
+    const picked = {
+      asset_id: heroAsset.id,
+      cover_url: heroAsset.output_url,
+      summary: summarizeAsset(heroAsset),
+      tags: heroAsset.tags || [],
+      category: heroAsset.category || null,
+    };
     const characterOut = character
       ? { id: character.id, name: character.name, cover_url: character.cover_url }
       : null;
 
-    const result = {
-      ok: true,
-      picked,
-      assets,
-      script,
-      vtype,
-      vtype_label: vtypeLabel,
-      style,
+    const result: any = {
+      ok: true, picked, assets, script,
+      vtype, vtype_label: vtypeLabel, style,
       character: characterOut,
-      duration: 15,
-      aspect: '9:16',
+      duration: 15, aspect: '9:16',
     };
+    if (reused) result.__warn = 'assets_reused';
+
 
     if (preview) return json(result);
 
