@@ -4,10 +4,11 @@ import { AuthPage } from '@/components/auth/AuthPage';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Link } from 'react-router-dom';
 import {
-  Sparkles, FileText, Video, Library, ChevronRight, Loader2,
+  Sparkles, FileText, Video, Library, ChevronRight, Loader2, Wand2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
+import { SurpriseVideoDialog } from '@/components/marketing/SurpriseVideoDialog';
 
 interface RecentItem { id: string; kind: string; output_url: string | null; created_at: string; }
 
