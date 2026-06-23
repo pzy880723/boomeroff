@@ -199,11 +199,38 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 }
 
 function RenderingBody({
-  job, phase, onClose,
-}: { job: ActiveRenderJob; phase: 'queued' | 'running' | 'done' | 'failed'; onClose: () => void }) {
+  job, phase, progress, onClose,
+}: {
+  job: ActiveRenderJob; phase: 'queued' | 'running' | 'done' | 'failed';
+  progress: { done: number; total: number } | null;
+  onClose: () => void;
+}) {
+  const [elapsed, setElapsed] = useState(() => Math.max(0, Math.floor((Date.now() - (job.createdAt || Date.now())) / 1000)));
+  useEffect(() => {
+    if (phase === 'done' || phase === 'failed') return;
+    const t = window.setInterval(() => {
+      setElapsed(Math.max(0, Math.floor((Date.now() - (job.createdAt || Date.now())) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [phase, job.createdAt]);
+
+  // 进度估算:有 segment 进度时用真实值;否则按 90 秒预期 + 防超过 95%
+  const pct = (() => {
+    if (phase === 'done') return 100;
+    if (phase === 'failed') return 0;
+    if (progress && progress.total > 0) {
+      return Math.min(99, Math.round((progress.done / progress.total) * 100));
+    }
+    const expected = 90;
+    return Math.min(95, Math.round((elapsed / expected) * 100));
+  })();
+
   const label = phase === 'queued' ? '排队中…'
     : phase === 'done' ? '拍好啦 🎬'
     : phase === 'failed' ? '失败,可重试' : '渲染中…';
+  const mm = String(Math.floor(elapsed / 60)).padStart(1, '0');
+  const ss = String(elapsed % 60).padStart(2, '0');
+
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center gap-3">
@@ -212,16 +239,38 @@ function RenderingBody({
         ) : (
           <img src={boomerIdle} alt="" className="w-16 h-16 object-contain shrink-0" />
         )}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-base font-semibold flex items-center gap-2">
             {phase !== 'done' && phase !== 'failed' && <Loader2 className="w-4 h-4 animate-spin text-accent" />}
             {label}
           </div>
           <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed break-words">
-            BOOMER 已经接单,大约 1–2 分钟。<br />关掉弹窗也会继续,完成后到素材库查看。
+            关掉弹窗也会继续,完成后到素材库查看。
           </p>
         </div>
       </div>
+
+      {/* 进度条 */}
+      <div className="space-y-1.5">
+        <div className="h-2 rounded-full bg-muted overflow-hidden">
+          <div
+            className={[
+              'h-full rounded-full transition-all duration-500',
+              phase === 'failed' ? 'bg-destructive' : 'bg-accent',
+            ].join(' ')}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
+          <span>
+            {progress && progress.total > 0
+              ? `分镜 ${Math.min(progress.done, progress.total)}/${progress.total}`
+              : phase === 'queued' ? '排队中' : '渲染中'}
+          </span>
+          <span>{pct}% · {mm}:{ss}</span>
+        </div>
+      </div>
+
       <div className="flex gap-2">
         <Button variant="outline" className="flex-1" onClick={onClose}>
           关闭(后台继续)
