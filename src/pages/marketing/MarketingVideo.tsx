@@ -549,11 +549,14 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 }
 
 function SceneRow({
-  title, num, scene, urls, onField, onImg,
+  title, num, scene, urls, onField, onImg, onPickLibrary, onPickUpload, uploading,
 }: {
   title: string; num: string; scene: any; urls: string[];
   onField: (field: 'scene' | 'action' | 'dialogue' | 'subtitle' | 'motion', v: string) => void;
   onImg: (v: number | null) => void;
+  onPickLibrary: () => void;
+  onPickUpload: () => void;
+  uploading?: boolean;
 }) {
   const refImg = scene.image_index !== null && scene.image_index !== undefined && urls[scene.image_index];
   // 兼容旧字段
