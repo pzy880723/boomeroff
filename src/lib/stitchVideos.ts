@@ -84,8 +84,10 @@ export async function stitchSegmentUrls(
       const sink = new EncodedPacketSink(vTrack);
       const decoderCfg = (await vTrack.getDecoderConfig()) || undefined;
       let lastEnd = videoOffset;
+      let baseTs: number | null = null;
       for await (const pkt of sink.packets()) {
-        const ts = pkt.timestamp + videoOffset;
+        baseTs ??= pkt.timestamp;
+        const ts = Math.max(0, pkt.timestamp - baseTs) + videoOffset;
         const shifted = pkt.clone({ timestamp: ts });
         const meta = !videoMetaSent && decoderCfg ? { decoderConfig: decoderCfg } : undefined;
         await videoSrc.add(shifted, meta);
@@ -101,8 +103,10 @@ export async function stitchSegmentUrls(
       const sink = new EncodedPacketSink(aTrack);
       const decoderCfg = (await aTrack.getDecoderConfig()) || undefined;
       let lastEnd = audioOffset;
+      let baseTs: number | null = null;
       for await (const pkt of sink.packets()) {
-        const ts = pkt.timestamp + audioOffset;
+        baseTs ??= pkt.timestamp;
+        const ts = Math.max(0, pkt.timestamp - baseTs) + audioOffset;
         const shifted = pkt.clone({ timestamp: ts });
         const meta = !audioMetaSent && decoderCfg ? { decoderConfig: decoderCfg } : undefined;
         await audioSrc.add(shifted, meta);
