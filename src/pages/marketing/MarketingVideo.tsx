@@ -231,6 +231,38 @@ export default function MarketingVideo() {
     scenes[i] = { ...scenes[i], [field]: val };
     setScript({ ...script, scenes });
   };
+  // 设置/清空一个镜头的图绑定:同时写 image_index(向下兼容)和 image_ref。
+  const setSceneImage = (key: 'hook' | 'outro' | number, index: number | null) => {
+    const apply = (sc: any) => {
+      if (index === null) {
+        const { image_ref: _r, ...rest } = sc || {};
+        return { ...rest, image_index: null };
+      }
+      const role: ImageRole = (sc?.image_ref?.role as ImageRole) || 'first';
+      return { ...sc, image_index: index, image_ref: { index, role } };
+    };
+    if (key === 'hook') setScript({ ...script, hook: apply(script.hook) });
+    else if (key === 'outro') setScript({ ...script, outro: apply(script.outro) });
+    else {
+      const scenes = [...script.scenes];
+      scenes[key] = apply(scenes[key]);
+      setScript({ ...script, scenes });
+    }
+  };
+  const setSceneImageRole = (key: 'hook' | 'outro' | number, role: ImageRole) => {
+    const apply = (sc: any) => {
+      const ref = effectiveImageRef(sc);
+      if (!ref) return sc;
+      return { ...sc, image_index: ref.index, image_ref: { index: ref.index, role } };
+    };
+    if (key === 'hook') setScript({ ...script, hook: apply(script.hook) });
+    else if (key === 'outro') setScript({ ...script, outro: apply(script.outro) });
+    else {
+      const scenes = [...script.scenes];
+      scenes[key] = apply(scenes[key]);
+      setScript({ ...script, scenes });
+    }
+  };
 
   // —— 分镜行手动替换图:目标 + 入口 ——
   type SceneTarget = 'hook' | 'outro' | number;
