@@ -196,7 +196,7 @@ ${refList}
       scene: clean(sc?.scene, 200),
       action: clean(sc?.action, 120),
       dialogue: clean(sc?.dialogue, 60),
-      subtitle: clean(sc?.subtitle ?? sc?.text, 14),
+      subtitle: clean(sc?.subtitle ?? sc?.text, 24),
       image_index: clampIdx(sc?.image_index),
       duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), perClipMax + 1),
       motion: (sc?.motion || "推镜").toString().slice(0, 16),
