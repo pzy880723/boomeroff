@@ -17,6 +17,7 @@ import { CharacterPicker, type Character } from '@/components/marketing/Characte
 import { useEffectiveShop } from '@/hooks/useShops';
 import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
+import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
