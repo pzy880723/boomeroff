@@ -17,6 +17,7 @@ import { CharacterPicker, type Character } from '@/components/marketing/Characte
 import { useEffectiveShop } from '@/hooks/useShops';
 import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
+import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -153,6 +154,7 @@ export default function MarketingVideo() {
         id: character.id, name: character.name, role_label: character.role_label,
         visual_signature: character.visual_signature, core_emotion: character.core_emotion,
         cover_url: character.cover_url,
+        extra_reference_urls: character.extra_reference_urls || [],
       } : null;
       const { data, error } = await supabase.functions.invoke('generate-marketing-video-script', {
         body: {
@@ -229,6 +231,38 @@ export default function MarketingVideo() {
     scenes[i] = { ...scenes[i], [field]: val };
     setScript({ ...script, scenes });
   };
+  // 设置/清空一个镜头的图绑定:同时写 image_index(向下兼容)和 image_ref。
+  const setSceneImage = (key: 'hook' | 'outro' | number, index: number | null) => {
+    const apply = (sc: any) => {
+      if (index === null) {
+        const { image_ref: _r, ...rest } = sc || {};
+        return { ...rest, image_index: null };
+      }
+      const role: ImageRole = (sc?.image_ref?.role as ImageRole) || 'first';
+      return { ...sc, image_index: index, image_ref: { index, role } };
+    };
+    if (key === 'hook') setScript({ ...script, hook: apply(script.hook) });
+    else if (key === 'outro') setScript({ ...script, outro: apply(script.outro) });
+    else {
+      const scenes = [...script.scenes];
+      scenes[key] = apply(scenes[key]);
+      setScript({ ...script, scenes });
+    }
+  };
+  const setSceneImageRole = (key: 'hook' | 'outro' | number, role: ImageRole) => {
+    const apply = (sc: any) => {
+      const ref = effectiveImageRef(sc);
+      if (!ref) return sc;
+      return { ...sc, image_index: ref.index, image_ref: { index: ref.index, role } };
+    };
+    if (key === 'hook') setScript({ ...script, hook: apply(script.hook) });
+    else if (key === 'outro') setScript({ ...script, outro: apply(script.outro) });
+    else {
+      const scenes = [...script.scenes];
+      scenes[key] = apply(scenes[key]);
+      setScript({ ...script, scenes });
+    }
+  };
 
   // —— 分镜行手动替换图:目标 + 入口 ——
   type SceneTarget = 'hook' | 'outro' | number;
@@ -252,7 +286,12 @@ export default function MarketingVideo() {
       merged = merged.slice(0, 20);
       setUrls(merged);
       const firstIdx = indices[0];
-      const patch = (sc: any) => ({ ...sc, image_index: firstIdx, image_binding: { source: 'manual', expected: firstIdx, confidence: 1 } });
+      const patch = (sc: any) => ({
+        ...sc,
+        image_index: firstIdx,
+        image_ref: { index: firstIdx, role: (sc?.image_ref?.role as ImageRole) || 'first' },
+        image_binding: { source: 'manual', expected: firstIdx, confidence: 1 },
+      });
       if (target === 'hook') return { ...prev, hook: patch(prev.hook) };
       if (target === 'outro') return { ...prev, outro: patch(prev.outro) };
       const scenes = [...prev.scenes];
@@ -368,7 +407,7 @@ export default function MarketingVideo() {
             </Button>
           </div>
           <UploadGrid urls={urls} onChange={(next) => { setUrls(next); setScript(null); }} max={20} preset="thumb" title="" shopId={shopId} />
-          <p className="text-[10px] text-muted-foreground">不上传也能生成。AI 会按场景从这些图里挑最贴合的一张。</p>
+          <p className="text-[10px] text-muted-foreground">不上传也能生成。上传后,在分镜里给每张图选「开头 / 结尾 / 参考」,会真正进入对应视频段。</p>
           {urls.length > 0 && (
             <div className="border-t border-accent/10 pt-2 space-y-1">
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -436,23 +475,28 @@ export default function MarketingVideo() {
               </Button>
             </div>
 
+            <SegmentPreview script={script} urls={urls} character={character} />
+
             <SceneRow title="钩子" num="00" scene={script.hook} urls={urls}
               onField={(f, v) => updateScene('hook', f, v)}
-              onImg={(v) => updateScene('hook', 'image_index', v)}
+              onImg={(v) => setSceneImage('hook', v)}
+              onRole={(r) => setSceneImageRole('hook', r)}
               onPickLibrary={() => openSceneLibrary('hook')}
               onPickUpload={() => openSceneUpload('hook')}
               uploading={sceneUploading} />
             {script.scenes.map((sc: any, i: number) => (
               <SceneRow key={i} title="镜头" num={String(i + 1).padStart(2, '0')} scene={sc} urls={urls}
                 onField={(f, v) => updateMid(i, f, v)}
-                onImg={(v) => updateMid(i, 'image_index', v)}
+                onImg={(v) => setSceneImage(i, v)}
+                onRole={(r) => setSceneImageRole(i, r)}
                 onPickLibrary={() => openSceneLibrary(i)}
                 onPickUpload={() => openSceneUpload(i)}
                 uploading={sceneUploading} />
             ))}
             <SceneRow title="收尾" num="99" scene={script.outro} urls={urls}
               onField={(f, v) => updateScene('outro', f, v)}
-              onImg={(v) => updateScene('outro', 'image_index', v)}
+              onImg={(v) => setSceneImage('outro', v)}
+              onRole={(r) => setSceneImageRole('outro', r)}
               onPickLibrary={() => openSceneLibrary('outro')}
               onPickUpload={() => openSceneUpload('outro')}
               uploading={sceneUploading} />
@@ -548,17 +592,27 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
+const ROLE_LABEL: Record<ImageRole, string> = { first: '开头', last: '结尾', reference: '参考' };
+const ROLE_HINT: Record<ImageRole, string> = {
+  first: '本镜头将作为它所属视频段的开场画面',
+  last: '作为段尾画面,与开头帧约束运动方向',
+  reference: '仅用于锁定主体形象,不固定在帧位上',
+};
+
 function SceneRow({
-  title, num, scene, urls, onField, onImg, onPickLibrary, onPickUpload, uploading,
+  title, num, scene, urls, onField, onImg, onRole, onPickLibrary, onPickUpload, uploading,
 }: {
   title: string; num: string; scene: any; urls: string[];
   onField: (field: 'scene' | 'action' | 'dialogue' | 'subtitle' | 'motion', v: string) => void;
   onImg: (v: number | null) => void;
+  onRole: (r: ImageRole) => void;
   onPickLibrary: () => void;
   onPickUpload: () => void;
   uploading?: boolean;
 }) {
-  const refImg = scene.image_index !== null && scene.image_index !== undefined && urls[scene.image_index];
+  const eff = effectiveImageRef(scene);
+  const refImg = eff && urls[eff.index];
+  const role: ImageRole = eff?.role || 'first';
   // 兼容旧字段
   const sceneText = scene.scene ?? scene.video_prompt ?? '';
   const subtitle = scene.subtitle ?? scene.text ?? '';
@@ -583,11 +637,33 @@ function SceneRow({
         </div>
       </div>
       <div className="flex gap-3">
-        {refImg ? (
-          <img src={refImg} alt="" className="w-16 h-16 object-cover rounded border border-accent/15 flex-shrink-0" />
-        ) : (
-          <div className="w-16 h-16 rounded border border-dashed border-border bg-card flex items-center justify-center text-[9px] text-muted-foreground text-center px-1 leading-tight flex-shrink-0">无参考图</div>
-        )}
+        <div className="flex-shrink-0 flex flex-col items-center gap-1">
+          {refImg ? (
+            <div className="relative w-16 h-16 rounded border border-accent/15 overflow-hidden">
+              <img src={refImg} alt="" className="w-full h-full object-cover" />
+              <span className="absolute top-0.5 right-0.5 text-[9px] px-1 py-px rounded-full bg-black/70 text-white font-medium">
+                {ROLE_LABEL[role]}
+              </span>
+            </div>
+          ) : (
+            <div className="w-16 h-16 rounded border border-dashed border-border bg-card flex items-center justify-center text-[9px] text-muted-foreground text-center px-1 leading-tight">无参考图</div>
+          )}
+          {refImg && (
+            <div className="flex rounded border border-border overflow-hidden text-[9px]">
+              {(['first', 'last', 'reference'] as ImageRole[]).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => onRole(r)}
+                  className={[
+                    'px-1 py-px transition-colors',
+                    role === r ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground',
+                  ].join(' ')}
+                  title={ROLE_HINT[r]}
+                >{ROLE_LABEL[r]}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="flex-1 space-y-2 min-w-0">
           <FieldBlock label="场景">
             <Textarea
@@ -635,7 +711,7 @@ function SceneRow({
                 onClick={() => onImg(null)}
                 className={[
                   'text-[10px] px-1.5 h-5 rounded border transition-colors',
-                  scene.image_index === null || scene.image_index === undefined
+                  !eff
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-card text-muted-foreground border-border hover:border-accent/50',
                 ].join(' ')}
@@ -647,7 +723,7 @@ function SceneRow({
                 onClick={() => onImg(i)}
                 className={[
                   'text-[10px] px-1.5 h-5 rounded border transition-colors',
-                  scene.image_index === i
+                  eff?.index === i
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-card text-muted-foreground border-border hover:border-accent/50',
                 ].join(' ')}
@@ -674,6 +750,66 @@ function SceneRow({
     </div>
   );
 }
+
+function SegmentPreview({ script, urls, character }: { script: any; urls: string[]; character: Character | null }) {
+  const segments: SegmentPlan[] = planSegments(script);
+  if (!segments.length) return null;
+  const charRefs: string[] = [];
+  if (character?.cover_url) charRefs.push(character.cover_url);
+  for (const u of character?.extra_reference_urls || []) charRefs.push(u);
+
+  const Thumb = ({ url, label, dashed }: { url?: string | null; label: string; dashed?: boolean }) => (
+    <div className="flex flex-col items-center gap-0.5">
+      {url ? (
+        <img src={url} alt="" className="w-10 h-10 object-cover rounded border border-accent/20" />
+      ) : (
+        <div className={`w-10 h-10 rounded border ${dashed ? 'border-dashed' : ''} border-border bg-muted/40 flex items-center justify-center text-[8px] text-muted-foreground`}>无</div>
+      )}
+      <span className="text-[8.5px] text-muted-foreground">{label}</span>
+    </div>
+  );
+
+  return (
+    <div className="border border-accent/20 rounded-lg p-3 space-y-2 bg-accent/5">
+      <div className="flex items-center gap-2">
+        <span className="font-display text-[11px] text-accent tracking-[0.18em]">分段预览</span>
+        <span className="w-1 h-1 rounded-full bg-accent" />
+        <span className="text-[10px] text-muted-foreground">{segments.length} 段 · 按 ≤10s 自动拆分,所见即所得</span>
+      </div>
+      <div className="space-y-2">
+        {segments.map((seg) => {
+          const firstUrl = seg.firstIndex !== null ? urls[seg.firstIndex] : undefined;
+          const lastUrl = seg.lastIndex !== null ? urls[seg.lastIndex] : undefined;
+          const refUrls = seg.refIndices.map((i) => urls[i]).filter(Boolean);
+          const allRefs = Array.from(new Set([...charRefs, ...refUrls])).slice(0, 3);
+          const mode = firstUrl
+            ? (lastUrl && lastUrl !== firstUrl ? '首尾帧' : '图生视频')
+            : (allRefs.length ? '参考生视频' : '纯文生');
+          return (
+            <div key={seg.index} className="bg-card border border-border rounded p-2 space-y-1.5">
+              <div className="flex items-center justify-between text-[10.5px]">
+                <span className="font-semibold text-foreground">第 {seg.index + 1} 段</span>
+                <span className="text-muted-foreground">{seg.durationS}s · {seg.sceneLabels.join(' + ')}</span>
+                <span className="text-accent text-[9.5px] px-1.5 py-px rounded-full border border-accent/30 bg-accent/5">{mode}</span>
+              </div>
+              <div className="flex items-end gap-2 flex-wrap">
+                <Thumb url={firstUrl} label="开头" dashed={!firstUrl} />
+                <Thumb url={lastUrl} label="结尾" dashed={!lastUrl} />
+                <div className="w-px h-10 bg-border mx-0.5" />
+                {allRefs.length > 0 ? (
+                  allRefs.map((u, i) => <Thumb key={u} url={u} label={i === 0 && charRefs.includes(u) ? '主角' : '参考'} />)
+                ) : (
+                  <Thumb label="参考" dashed />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 
 
 function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {

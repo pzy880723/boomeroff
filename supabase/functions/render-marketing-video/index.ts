@@ -4,6 +4,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
+import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segments.ts";
+
+// Seedance 1.5 pro / 2.x 才支持 reference_image 和 last_frame。
+// 旧模型自动降级,只发 first_frame。
+function modelSupportsAdvancedRefs(model: string): boolean {
+  return /seedance-(1-5|2)/i.test(model) || /seedance.*pro/i.test(model);
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -134,12 +141,26 @@ function splitScript(script: any): any[] {
 
 async function submitArkTask(opts: {
   arkKey: string; model: string; prompt: string; ratio: string; duration: number;
-  firstImage?: string;
-}): Promise<{ ok: true; id: string } | { ok: false; error: string; raw?: unknown }> {
+  firstImage?: string; lastImage?: string; referenceImages?: string[];
+}): Promise<{ ok: true; id: string; mode: string } | { ok: false; error: string; raw?: unknown }> {
   const content: any[] = [{ type: "text", text: opts.prompt }];
+  const advanced = modelSupportsAdvancedRefs(opts.model);
+  const refs = (opts.referenceImages || []).filter(Boolean);
+  if (advanced) {
+    for (const url of refs.slice(0, 2)) {
+      content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
+    }
+  }
   if (opts.firstImage) {
     content.push({ type: "image_url", image_url: { url: opts.firstImage }, role: "first_frame" });
   }
+  if (advanced && opts.lastImage && opts.lastImage !== opts.firstImage) {
+    content.push({ type: "image_url", image_url: { url: opts.lastImage }, role: "last_frame" });
+  }
+  const mode = opts.firstImage
+    ? (opts.lastImage && opts.lastImage !== opts.firstImage ? "first_last_frame" : "image2video")
+    : (refs.length ? "reference2video" : "text2video");
+
   const arkBody: Record<string, unknown> = {
     model: opts.model,
     content,
@@ -164,7 +185,28 @@ async function submitArkTask(opts: {
       raw: arkJson,
     };
   }
-  return { ok: true, id: arkJson.id };
+  return { ok: true, id: arkJson.id, mode };
+}
+
+/** 组装某段的图片三件套:角色参考图(每段都带)+ 段内 first/last。 */
+function resolveSegmentImages(
+  sub: ScriptLike,
+  imageUrls: string[],
+  character: { cover_url?: string; extra_reference_urls?: string[] } | null,
+  fallbackFirst?: string,
+): { firstImage?: string; lastImage?: string; referenceImages: string[] } {
+  const picks = pickSegmentImages(sub);
+  const firstImage = picks.firstIndex !== null ? imageUrls[picks.firstIndex] : undefined;
+  const lastImage = picks.lastIndex !== null ? imageUrls[picks.lastIndex] : undefined;
+  const refSet = new Set<string>();
+  if (character?.cover_url) refSet.add(character.cover_url);
+  for (const u of character?.extra_reference_urls || []) if (u) refSet.add(u);
+  for (const i of picks.refIndices) if (imageUrls[i]) refSet.add(imageUrls[i]);
+  return {
+    firstImage: firstImage || fallbackFirst,
+    lastImage,
+    referenceImages: Array.from(refSet).slice(0, 3),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -203,13 +245,18 @@ Deno.serve(async (req) => {
     const imageUrls: string[] = Array.isArray(script.image_urls) ? script.image_urls : [];
     const character = (script.character && typeof script.character === "object") ? script.character : null;
     const characterCover: string | undefined = character?.cover_url;
-    const firstImage = imageUrls[0] || characterCover;
+    const fallbackFirst = imageUrls[0] || characterCover;
 
     // ============ 单段路径 ============
     if (totalDur <= MAX_SEG_DUR + 2) {
       const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
-      const r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, firstImage });
+      const imgs = resolveSegmentImages(script, imageUrls, character, fallbackFirst);
+      console.log("[render single] model=", model, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
+      const r = await submitArkTask({
+        arkKey: ARK_KEY, model, prompt, ratio, duration,
+        firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
+      });
       if (!r.ok) {
         console.error("[render single] ark error", r.error, r.raw);
         return json({ ok: false, error: r.error, raw: r.raw });
@@ -234,11 +281,16 @@ Deno.serve(async (req) => {
         output_url: null,
         meta: {
           job_id: job.id, task_id: r.id, video_type: script.video_type,
-          duration, aspect: ratio, mode: firstImage ? "image2video" : "text2video",
+          duration, aspect: ratio, mode: r.mode,
           topic: script.topic || "", style: styleKey,
           style_label: VIDEO_STYLE_LABELS[styleKey], model, status: "queued",
           segment_total: 1, character_id: character?.id || null,
           character_name: character?.name || null,
+          image_usage: {
+            reference_count: imgs.referenceImages.length,
+            first: imgs.firstImage || null,
+            last: imgs.lastImage || null,
+          },
         },
       });
       return json({ ok: true, success: true, job_id: job.id, task_id: r.id, status: "queued", segment_total: 1 });
@@ -265,9 +317,14 @@ Deno.serve(async (req) => {
       const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
       const prompt = buildPrompt(sub, styleKey, shopBlock, label, character);
       const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
-      const useFirst = characterCover || (i === 0 ? firstImage : undefined);
-      return submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, firstImage: useFirst })
-        .then((r) => ({ i, r, sub, duration }));
+      // 只有第 1 段在完全无图时兜底用 image_urls[0],其他段不强塞
+      const segFallback = i === 0 ? fallbackFirst : undefined;
+      const imgs = resolveSegmentImages(sub, imageUrls, character, segFallback);
+      console.log(`[render multi] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
+      return submitArkTask({
+        arkKey: ARK_KEY, model, prompt, ratio, duration,
+        firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
+      }).then((r) => ({ i, r, sub, duration, imgs }));
     }));
 
     // 3) 检查失败
@@ -293,18 +350,28 @@ Deno.serve(async (req) => {
     }
 
     // 5) 占位 marketing_assets
+    const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
+    const anyFirst = submissions.some((s) => !!s.imgs.firstImage);
     await admin.from("marketing_assets").insert({
       user_id: u.user.id, kind: "video", shop_id: shopId,
       input_image_urls: imageUrls, output_url: null,
       meta: {
         job_id: parent.id, video_type: script.video_type,
         duration: totalDur, aspect: ratio,
-        mode: firstImage ? "image2video" : "text2video",
+        mode: anyFirst ? "image2video" : (totalRefImages > 0 ? "reference2video" : "text2video"),
         topic: script.topic || "", style: styleKey,
         style_label: VIDEO_STYLE_LABELS[styleKey], model,
         status: "running", segment_total: segmentTotal, segment_done: 0,
         stage: "generating", character_id: character?.id || null,
         character_name: character?.name || null,
+        image_usage: {
+          per_segment: submissions.map((s) => ({
+            segment_index: s.i,
+            reference_count: s.imgs.referenceImages.length,
+            first: s.imgs.firstImage || null,
+            last: s.imgs.lastImage || null,
+          })),
+        },
       },
     });
 
