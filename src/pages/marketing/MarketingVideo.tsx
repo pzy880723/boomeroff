@@ -628,9 +628,9 @@ function SceneRow({
               className="bg-card h-8 text-sm"
             />
           </FieldBlock>
-          {urls.length > 0 && (
-            <div className="flex gap-1 flex-wrap pt-1">
-              <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground self-center mr-1">参考图</span>
+          <div className="flex gap-1 flex-wrap pt-1 items-center">
+            <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground self-center mr-1">参考图</span>
+            {urls.length > 0 && (
               <button
                 onClick={() => onImg(null)}
                 className={[
@@ -640,27 +640,41 @@ function SceneRow({
                     : 'bg-card text-muted-foreground border-border hover:border-accent/50',
                 ].join(' ')}
               >无</button>
-              {urls.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => onImg(i)}
-                  className={[
-                    'text-[10px] px-1.5 h-5 rounded border transition-colors',
-                    scene.image_index === i
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-card text-muted-foreground border-border hover:border-accent/50',
-                  ].join(' ')}
-                >
-                  #{i}
-                </button>
-              ))}
-            </div>
-          )}
+            )}
+            {urls.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => onImg(i)}
+                className={[
+                  'text-[10px] px-1.5 h-5 rounded border transition-colors',
+                  scene.image_index === i
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card text-muted-foreground border-border hover:border-accent/50',
+                ].join(' ')}
+              >
+                #{i}
+              </button>
+            ))}
+            <button
+              onClick={onPickLibrary}
+              className="text-[10px] px-1.5 h-5 rounded border border-accent/40 bg-accent/5 text-accent hover:bg-accent/15 transition-colors inline-flex items-center gap-0.5"
+            >
+              <ImagePlus className="w-2.5 h-2.5" />素材库
+            </button>
+            <button
+              onClick={onPickUpload}
+              disabled={uploading}
+              className="text-[10px] px-1.5 h-5 rounded border border-accent/40 bg-accent/5 text-accent hover:bg-accent/15 transition-colors inline-flex items-center gap-0.5 disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Upload className="w-2.5 h-2.5" />}上传
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
 
 function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
