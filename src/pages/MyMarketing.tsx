@@ -4,10 +4,11 @@ import { AuthPage } from '@/components/auth/AuthPage';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Link } from 'react-router-dom';
 import {
-  Sparkles, FileText, Video, Library, ChevronRight, Loader2,
+  Sparkles, FileText, Video, Library, ChevronRight, Loader2, Wand2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
+import { SurpriseVideoDialog } from '@/components/marketing/SurpriseVideoDialog';
 
 interface RecentItem { id: string; kind: string; output_url: string | null; created_at: string; }
 
@@ -17,6 +18,7 @@ export default function MyMarketing() {
   const [today, setToday] = useState(0);
   const [recents, setRecents] = useState<RecentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [surpriseOpen, setSurpriseOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -71,6 +73,27 @@ export default function MyMarketing() {
             />
           </div>
         </section>
+
+        {/* ===== 惊喜一下 · 一键随机视频 ===== */}
+        <button
+          type="button"
+          onClick={() => setSurpriseOpen(true)}
+          className="group w-full text-left bg-gradient-to-br from-primary to-primary/85 text-primary-foreground rounded-[0.875rem] border border-accent/30 shadow-md p-4 flex items-center gap-4 transition-all hover:shadow-lg active:scale-[0.995] relative overflow-hidden"
+        >
+          <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center shrink-0">
+            <Wand2 className="w-6 h-6" strokeWidth={1.6} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-display text-[10px] tracking-[0.18em] opacity-80">惊喜</span>
+              <h3 className="text-[15px] font-semibold leading-none">没灵感?让 BOOMER 替你拍一条</h3>
+            </div>
+            <p className="text-[11px] opacity-90 mt-1.5 leading-relaxed">
+              自动选品 · 自动写脚本 · 9:16 / 15 秒竖版片,一键产出
+            </p>
+          </div>
+          <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-0.5 transition-transform" />
+        </button>
 
         {/* ===== 三大工具 ===== */}
         <section className="space-y-3">
@@ -173,6 +196,8 @@ export default function MyMarketing() {
         {/* 底部细古铜金线 */}
         <div className="absolute left-0 right-0 bottom-0 h-[3px] bg-accent/20 pointer-events-none" />
       </div>
+
+      <SurpriseVideoDialog open={surpriseOpen} onOpenChange={setSurpriseOpen} />
     </>
   );
 }
