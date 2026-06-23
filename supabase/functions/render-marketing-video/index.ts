@@ -141,12 +141,26 @@ function splitScript(script: any): any[] {
 
 async function submitArkTask(opts: {
   arkKey: string; model: string; prompt: string; ratio: string; duration: number;
-  firstImage?: string;
-}): Promise<{ ok: true; id: string } | { ok: false; error: string; raw?: unknown }> {
+  firstImage?: string; lastImage?: string; referenceImages?: string[];
+}): Promise<{ ok: true; id: string; mode: string } | { ok: false; error: string; raw?: unknown }> {
   const content: any[] = [{ type: "text", text: opts.prompt }];
+  const advanced = modelSupportsAdvancedRefs(opts.model);
+  const refs = (opts.referenceImages || []).filter(Boolean);
+  if (advanced) {
+    for (const url of refs.slice(0, 2)) {
+      content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
+    }
+  }
   if (opts.firstImage) {
     content.push({ type: "image_url", image_url: { url: opts.firstImage }, role: "first_frame" });
   }
+  if (advanced && opts.lastImage && opts.lastImage !== opts.firstImage) {
+    content.push({ type: "image_url", image_url: { url: opts.lastImage }, role: "last_frame" });
+  }
+  const mode = opts.firstImage
+    ? (opts.lastImage && opts.lastImage !== opts.firstImage ? "first_last_frame" : "image2video")
+    : (refs.length ? "reference2video" : "text2video");
+
   const arkBody: Record<string, unknown> = {
     model: opts.model,
     content,
@@ -171,7 +185,28 @@ async function submitArkTask(opts: {
       raw: arkJson,
     };
   }
-  return { ok: true, id: arkJson.id };
+  return { ok: true, id: arkJson.id, mode };
+}
+
+/** 组装某段的图片三件套:角色参考图(每段都带)+ 段内 first/last。 */
+function resolveSegmentImages(
+  sub: ScriptLike,
+  imageUrls: string[],
+  character: { cover_url?: string; extra_reference_urls?: string[] } | null,
+  fallbackFirst?: string,
+): { firstImage?: string; lastImage?: string; referenceImages: string[] } {
+  const picks = pickSegmentImages(sub);
+  const firstImage = picks.firstIndex !== null ? imageUrls[picks.firstIndex] : undefined;
+  const lastImage = picks.lastIndex !== null ? imageUrls[picks.lastIndex] : undefined;
+  const refSet = new Set<string>();
+  if (character?.cover_url) refSet.add(character.cover_url);
+  for (const u of character?.extra_reference_urls || []) if (u) refSet.add(u);
+  for (const i of picks.refIndices) if (imageUrls[i]) refSet.add(imageUrls[i]);
+  return {
+    firstImage: firstImage || fallbackFirst,
+    lastImage,
+    referenceImages: Array.from(refSet).slice(0, 3),
+  };
 }
 
 Deno.serve(async (req) => {
