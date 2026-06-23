@@ -438,15 +438,25 @@ export default function MarketingVideo() {
 
             <SceneRow title="钩子" num="00" scene={script.hook} urls={urls}
               onField={(f, v) => updateScene('hook', f, v)}
-              onImg={(v) => updateScene('hook', 'image_index', v)} />
+              onImg={(v) => updateScene('hook', 'image_index', v)}
+              onPickLibrary={() => openSceneLibrary('hook')}
+              onPickUpload={() => openSceneUpload('hook')}
+              uploading={sceneUploading} />
             {script.scenes.map((sc: any, i: number) => (
               <SceneRow key={i} title="镜头" num={String(i + 1).padStart(2, '0')} scene={sc} urls={urls}
                 onField={(f, v) => updateMid(i, f, v)}
-                onImg={(v) => updateMid(i, 'image_index', v)} />
+                onImg={(v) => updateMid(i, 'image_index', v)}
+                onPickLibrary={() => openSceneLibrary(i)}
+                onPickUpload={() => openSceneUpload(i)}
+                uploading={sceneUploading} />
             ))}
             <SceneRow title="收尾" num="99" scene={script.outro} urls={urls}
               onField={(f, v) => updateScene('outro', f, v)}
-              onImg={(v) => updateScene('outro', 'image_index', v)} />
+              onImg={(v) => updateScene('outro', 'image_index', v)}
+              onPickLibrary={() => openSceneLibrary('outro')}
+              onPickUpload={() => openSceneUpload('outro')}
+              uploading={sceneUploading} />
+
 
             <div className="text-[11px] text-muted-foreground border-t border-border pt-3 flex items-center gap-3 flex-wrap">
               <span>BGM · {script.bgm}</span>
