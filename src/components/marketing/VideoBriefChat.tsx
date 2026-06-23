@@ -250,20 +250,6 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
         </Button>
       </div>
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-          }}
-          placeholder="说说你想拍什么…(可以让 AI 改脚本,比如:图 3 换成图 5)"
-          rows={1}
-          className="flex-1 resize-none text-sm min-h-[36px] max-h-24"
-          disabled={busy || drafting}
-        />
-        <Button size="sm" onClick={send} disabled={busy || drafting || !input.trim()} className="h-9 px-3">
-          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-        </Button>
-      </div>
 
       <Dialog open={!!previewUrl} onOpenChange={(o) => !o && setPreviewUrl(null)}>
         <DialogContent className="max-w-[92vw] sm:max-w-lg p-2 bg-background/95">
