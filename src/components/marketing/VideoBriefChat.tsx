@@ -94,12 +94,16 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, busy, drafting]);
 
-  const send = async () => {
-    const text = input.trim();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const send = async (override?: string) => {
+    const text = (override ?? input).trim();
     if (!text || busy) return;
-    const next: BriefMsg[] = [...messages, { role: 'user', content: text }];
+    // 清掉所有 assistant 消息上的 options(只让最新一条挂)
+    const stripped = messages.map((m) => (m.options ? { ...m, options: undefined } : m));
+    const next: BriefMsg[] = [...stripped, { role: 'user', content: text }];
     onChange(next);
-    setInput('');
+    if (override == null) setInput('');
     setBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke('marketing-video-brief-chat', {
@@ -108,12 +112,24 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       const reply = ((data as any)?.reply || '').toString().trim() || '好的,继续说。';
-      onChange([...next, { role: 'assistant', content: reply }]);
+      const opts = Array.isArray((data as any)?.options) ? (data as any).options as string[] : [];
+      const done = (data as any)?.done === true;
+      onChange([...next, { role: 'assistant', content: reply, options: done ? undefined : opts, done }]);
     } catch (e: any) {
       toast.error(e?.message || 'AI 回复失败');
       onChange(next);
     } finally { setBusy(false); }
   };
+
+  const handleOption = (opt: string) => {
+    if (busy || drafting) return;
+    if (/其他|我自己说|自己说/.test(opt)) {
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
+    }
+    send(opt);
+  };
+
 
   const draftScript = async () => {
     if (drafting || busy) return;
