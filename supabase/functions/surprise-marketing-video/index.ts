@@ -1,7 +1,11 @@
 // 「惊喜一下」一键随机推广视频
-// 从店铺素材库随机挑一张商品图,按店铺调性随机视频路线/风格,
-// 生成 15s 9:16 竖版脚本并提交渲染,返回 job_id。
-// preview=true 时只返回 picked 不渲染,用于"换一组"。
+// 流程:
+//   1. 从店铺素材库随机挑 3–5 张实景商品/店铺图(实体店必须用真实素材)
+//   2. 按店铺调性随机视频路线/风格
+//   3. 调 generate-marketing-video-script 出完整脚本(钩子+中段+收尾,15s 9:16)
+//   4. preview=true → 返回 { picked, assets, script, ... } 供前端展示分镜
+//   5. preview=false → 用同一份 script 调 render-marketing-video 入队,返回 job_id
+// 前端在"换一组"时重新挑;"就拍这条"时把已生成的 script + assets 一起回传,避免二次生成造成不一致。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadShopContext } from "../_shared/shop-context.ts";
 
@@ -22,7 +26,6 @@ const VIDEO_TYPES = [
 const STYLES = ['steady', 'lively', 'energetic', 'elegant', 'nostalgic', 'playful'] as const;
 type SType = typeof STYLES[number];
 
-// 店铺 tone → 允许的风格白名单(模糊匹配)
 function styleByTone(tone: string | null | undefined): readonly SType[] {
   const t = (tone || '').toLowerCase();
   if (/高冷|高级|沉稳|稳重|克制/.test(t)) return ['elegant', 'steady', 'nostalgic'];
@@ -43,15 +46,42 @@ function pickWeighted<T>(items: { item: T; w: number }[]): T {
   return items[items.length - 1].item;
 }
 
-function pickVtypeByAsset(asset: any): typeof VIDEO_TYPES[number]['v'] {
-  const tags: string[] = [...(asset.tags || []), asset.category || ''].filter(Boolean);
-  const text = tags.join(' ');
+function pickVtypeByAssets(assets: any[]): typeof VIDEO_TYPES[number]['v'] {
+  const text = assets.flatMap((a) => [...(a.tags || []), a.category || '']).filter(Boolean).join(' ');
   const weighted = VIDEO_TYPES.map((t) => {
     let w = 1;
     for (const hint of t.tagHint) if (text.includes(hint)) w += 2;
     return { item: t.v, w };
   });
   return pickWeighted(weighted);
+}
+
+// 不放回加权采样
+function sampleWeighted<T>(items: { item: T; w: number }[], n: number): T[] {
+  const pool = items.slice();
+  const out: T[] = [];
+  while (out.length < n && pool.length) {
+    const total = pool.reduce((s, x) => s + Math.max(x.w, 0), 0);
+    if (total <= 0) { out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].item); continue; }
+    let r = Math.random() * total;
+    let idx = pool.length - 1;
+    for (let i = 0; i < pool.length; i++) {
+      r -= Math.max(pool[i].w, 0);
+      if (r <= 0) { idx = i; break; }
+    }
+    out.push(pool[idx].item);
+    pool.splice(idx, 1);
+  }
+  return out;
+}
+
+function summarizeAsset(a: any): string {
+  const meta = (a.meta || {}) as any;
+  if (meta.summary) return String(meta.summary).slice(0, 120);
+  const parts: string[] = [];
+  if (a.category) parts.push(a.category);
+  if (Array.isArray(a.tags) && a.tags.length) parts.push(a.tags.slice(0, 3).join('/'));
+  return parts.join(' · ') || '店内实景';
 }
 
 Deno.serve(async (req) => {
@@ -75,9 +105,25 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
-    // 1) 拉素材库里这家店的"商品图"(kind=photo, 有 output_url)
+    // ====== 提交模式:前端回传了 preview 时生成的 script,直接渲染 ======
+    if (!preview && body.script && body.picked_assets && body.vtype && body.style) {
+      const script = body.script;
+      const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ script: { ...script, video_type: body.vtype }, style: body.style, shop_id: shopId }),
+      });
+      const renderData = await renderRes.json().catch(() => ({}));
+      if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {
+        return json({ ok: false, error: renderData?.error || '渲染提交失败' });
+      }
+      return json({ ok: true, job_id: renderData.job_id, segment_total: renderData.segment_total || 1 });
+    }
+
+    // ====== Preview / 兜底:全流程 ======
+    // 1) 拉素材库里这家店的"商品图"
     const ninetyDays = new Date(Date.now() - 90 * 86400 * 1000).toISOString();
-    let query = admin.from("marketing_assets")
+    const { data: assetsRaw, error: aErr } = await admin.from("marketing_assets")
       .select("id, output_url, tags, category, meta, created_at")
       .eq("shop_id", shopId)
       .eq("kind", "photo")
@@ -85,30 +131,31 @@ Deno.serve(async (req) => {
       .gte("created_at", ninetyDays)
       .order("created_at", { ascending: false })
       .limit(80);
-    const { data: assetsRaw, error: aErr } = await query;
     if (aErr) return json({ ok: false, error: "读取素材失败: " + aErr.message });
-    let assets = (assetsRaw || []).filter((a: any) => !exclude.includes(a.id));
-    if (assets.length === 0) {
-      // 兜底:不限 90 天
+    let pool = (assetsRaw || []).filter((a: any) => !exclude.includes(a.id));
+    if (pool.length === 0) {
       const { data: any2 } = await admin.from("marketing_assets")
         .select("id, output_url, tags, category, meta, created_at")
         .eq("shop_id", shopId).eq("kind", "photo").not("output_url", "is", null)
         .order("created_at", { ascending: false }).limit(40);
-      assets = (any2 || []).filter((a: any) => !exclude.includes(a.id));
+      pool = (any2 || []).filter((a: any) => !exclude.includes(a.id));
     }
-    if (assets.length === 0) {
+    if (pool.length === 0) {
       return json({ ok: false, error: "素材库还没有商品图,先去拍/上传几张" });
     }
 
-    // 2) 加权随机选品(越新权重越高)
-    const weighted = assets.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
-    const picked = pickWeighted(weighted);
+    // 2) 加权挑 3–5 张(越新权重越高);主图取第一张
+    const weighted = pool.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
+    const targetCount = Math.min(pool.length, 3 + Math.floor(Math.random() * 3)); // 3,4,5
+    const pickedAssets = sampleWeighted(weighted, targetCount);
+    const hero = pickedAssets[0];
 
-    // 3) 选 vtype + style
-    const vtype = pickVtypeByAsset(picked);
+    // 3) vtype + style
+    const vtype = pickVtypeByAssets(pickedAssets);
     const shopCtx = await loadShopContext(shopId);
     const styleWhite = styleByTone(shopCtx?.tone);
     const style = styleWhite[Math.floor(Math.random() * styleWhite.length)];
+    const vtypeLabel = VIDEO_TYPES.find((x) => x.v === vtype)?.label || '探店';
 
     // 4) 50% 概率取一个角色
     let character: any = null;
@@ -122,47 +169,32 @@ Deno.serve(async (req) => {
       }
     } catch (_) { /* ignore */ }
 
-    const vtypeLabel = VIDEO_TYPES.find((x) => x.v === vtype)?.label || '探店';
-    const pickedSummary = (picked.meta as any)?.summary || picked.tags?.join('/') || picked.category || '这件中古好物';
-    const pickedTitle = (picked.meta as any)?.title || picked.category || '中古好物';
+    // 5) 生成脚本 — 用全部入选素材
+    const imageUrls = pickedAssets.map((a: any) => a.output_url);
+    const imageDescriptions = pickedAssets.map((a: any, i: number) => ({
+      index: i,
+      summary: summarizeAsset(a),
+    }));
+    const heroSummary = summarizeAsset(hero);
 
-    const result = {
-      ok: true,
-      picked: {
-        asset_id: picked.id,
-        cover_url: picked.output_url,
-        title: pickedTitle,
-        summary: pickedSummary,
-        tags: picked.tags || [],
-        category: picked.category || null,
-      },
-      vtype,
-      vtype_label: vtypeLabel,
-      style,
-      character: character ? { id: character.id, name: character.name, cover_url: character.cover_url } : null,
-      duration: 15,
-      aspect: '9:16',
-    };
+    const briefTranscript =
+      `店员:来一条 15 秒竖版${vtypeLabel}视频,主打${vtypeLabel === '探店' ? '店铺氛围' : '这件「' + heroSummary + '」'}。\n` +
+      `助理:好的,按${vtypeLabel}节奏拆 3–4 个分镜,所有画面都用上传的实景照片,体现店铺调性。`;
 
-    if (preview) return json(result);
-
-    // 5) 调脚本生成
-    const briefTranscript = `店员：来一条 15 秒竖版${vtypeLabel}视频，主角是这件「${pickedTitle}」。\n助理：好的，按${vtypeLabel}节奏，${VIDEO_TYPES.find((x) => x.v === vtype)?.label}风格，体现店铺调性。`;
     const scriptRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-marketing-video-script`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body: JSON.stringify({
         shop_id: shopId,
-        image_urls: [picked.output_url],
+        image_urls: imageUrls,
         video_type: vtype,
         duration: 15,
         aspect: '9:16',
-        topic: `${vtypeLabel} · ${pickedTitle}`,
-        highlight: pickedSummary.slice(0, 40),
+        topic: `${vtypeLabel} · ${heroSummary}`,
+        highlight: heroSummary.slice(0, 40),
         style,
         brief_transcript: briefTranscript,
-        approved_script: '',
-        image_descriptions: [{ index: 0, summary: pickedSummary }],
+        image_descriptions: imageDescriptions,
         character: character ? {
           id: character.id, name: character.name, role_label: character.role_label,
           visual_signature: character.visual_signature, core_emotion: character.core_emotion,
@@ -177,7 +209,40 @@ Deno.serve(async (req) => {
     }
     const script = scriptData.script;
 
-    // 6) 提交渲染
+    const picked = {
+      asset_id: hero.id,
+      cover_url: hero.output_url,
+      summary: heroSummary,
+      tags: hero.tags || [],
+      category: hero.category || null,
+    };
+    const assets = pickedAssets.map((a: any, i: number) => ({
+      asset_id: a.id,
+      index: i,
+      url: a.output_url,
+      summary: summarizeAsset(a),
+      category: a.category || null,
+    }));
+    const characterOut = character
+      ? { id: character.id, name: character.name, cover_url: character.cover_url }
+      : null;
+
+    const result = {
+      ok: true,
+      picked,
+      assets,
+      script,
+      vtype,
+      vtype_label: vtypeLabel,
+      style,
+      character: characterOut,
+      duration: 15,
+      aspect: '9:16',
+    };
+
+    if (preview) return json(result);
+
+    // preview=false 且没有传 script:直接渲染当前脚本
     const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
@@ -187,7 +252,6 @@ Deno.serve(async (req) => {
     if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {
       return json({ ok: false, error: renderData?.error || '渲染提交失败' });
     }
-
     return json({ ...result, job_id: renderData.job_id, segment_total: renderData.segment_total || 1 });
   } catch (e) {
     console.error("[surprise] error", e);
