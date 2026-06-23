@@ -136,14 +136,24 @@ export default function MarketingLibrary() {
   };
 
   // 轮询未完成视频任务
-  useEffect(() => {
-    const pending = items.filter(
+  // 用稳定签名当依赖,避免 items 引用变化导致 effect 反复重建 -> tick 立即触发 -> setItems -> 循环闪烁
+  const pendingVideos = useMemo(
+    () => items.filter(
       (it) => it.kind === 'video' && it.meta?.job_id && !['succeeded', 'failed'].includes(it.meta?.status),
-    );
-    if (!pending.length) return;
+    ),
+    [items],
+  );
+  const pendingSig = pendingVideos
+    .map((it) => `${it.id}:${it.meta?.status || ''}:${it.meta?.segment_done || 0}/${it.meta?.segment_total || 0}`)
+    .join('|');
+  const pendingRef = useRef<any[]>([]);
+  pendingRef.current = pendingVideos;
+
+  useEffect(() => {
+    if (!pendingSig) return;
     let cancelled = false;
     const tick = async () => {
-      for (const it of pending) {
+      for (const it of pendingRef.current) {
         if (cancelled) return;
         try {
           const { data } = await supabase.functions.invoke('poll-marketing-video', { body: { job_id: it.meta.job_id } });
@@ -177,10 +187,10 @@ export default function MarketingLibrary() {
         } catch {}
       }
     };
-    tick();
-    const t = setInterval(tick, 10000);
+    const t = setInterval(tick, 10000); // 不立即执行,避免 effect 重建瞬时回环
     return () => { cancelled = true; clearInterval(t); };
-  }, [items]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSig]);
 
   const statusLabel = (it: any) => {
     const s = it.meta?.status;
