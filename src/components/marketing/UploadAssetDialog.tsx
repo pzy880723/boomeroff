@@ -71,6 +71,14 @@ export function UploadAssetDialog({
           }
         }
         toast.success(`已上传 ${uploaded.length} 张图片到素材库`);
+        // 后台静默打标:不 await,不阻塞;每批最多 12 张,大量上传分批触发
+        const ids = uploaded.map((r) => r.id).filter(Boolean);
+        for (let i = 0; i < ids.length; i += 12) {
+          const slice = ids.slice(i, i + 12);
+          supabase.functions.invoke('auto-tag-marketing-asset', { body: { asset_ids: slice } })
+            .catch(() => { /* 静默失败,下次生成视频时会兜底 */ });
+        }
+
       } else if (kind === 'copy') {
         const t = title.trim(); const b = bodyText.trim();
         if (!b) { toast.error('请填写文案正文'); setBusy(false); return; }
