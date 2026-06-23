@@ -31,7 +31,52 @@ export async function compressForUpload(
   if (input.type && !input.type.startsWith('image/')) return input;
   if (input.type === 'image/gif') return input;
   if (input.size <= minSize) return input;
+  // thumb 模式下,已经是 JPEG 且 < 200KB 的直接放行,省掉 decode/encode
+  if (
+    (optsOrMaxWidth as CompressOptions)?.preset === 'thumb'
+    && (input.type === 'image/jpeg' || input.type === 'image/jpg')
+    && input.size <= 200 * 1024
+  ) {
+    return input;
+  }
 
+  // 优先走 createImageBitmap(后台线程解码,主线程不卡)+ OffscreenCanvas
+  try {
+    if (typeof createImageBitmap === 'function') {
+      const bitmap = await createImageBitmap(input);
+      const ratio = Math.min(maxWidth / bitmap.width, 1);
+      const w = Math.round(bitmap.width * ratio);
+      const h = Math.round(bitmap.height * ratio);
+
+      let blob: Blob | null = null;
+      if (typeof OffscreenCanvas !== 'undefined') {
+        const oc = new OffscreenCanvas(w, h);
+        const octx = oc.getContext('2d');
+        if (octx) {
+          octx.drawImage(bitmap, 0, 0, w, h);
+          try {
+            blob = await (oc as any).convertToBlob({ type: 'image/jpeg', quality });
+          } catch { /* fallthrough to canvas */ }
+        }
+      }
+      if (!blob) {
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(bitmap, 0, 0, w, h);
+          blob = await new Promise<Blob | null>(res => canvas.toBlob(b => res(b), 'image/jpeg', quality));
+        }
+      }
+      bitmap.close?.();
+      if (!blob) return input;
+      return blob.size < input.size ? blob : input;
+    }
+  } catch (e) {
+    console.warn('[compressForUpload] bitmap path failed, fallback:', e);
+  }
+
+  // 回退:老的 <img> + canvas
   try {
     const url = URL.createObjectURL(input);
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
