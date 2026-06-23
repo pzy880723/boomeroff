@@ -4,6 +4,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
+import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segments.ts";
+
+// Seedance 1.5 pro / 2.x 才支持 reference_image 和 last_frame。
+// 旧模型自动降级,只发 first_frame。
+function modelSupportsAdvancedRefs(model: string): boolean {
+  return /seedance-(1-5|2)/i.test(model) || /seedance.*pro/i.test(model);
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
