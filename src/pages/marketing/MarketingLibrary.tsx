@@ -448,8 +448,23 @@ export default function MarketingLibrary() {
                       const checked = selected.has(it.id);
                       const thumbUrl = it.kind === 'photo'
                         ? it.output_url
-                        : (it.meta?.cover_url || it.output_url);
+                        : (it.meta?.cover_url
+                            || (Array.isArray(it.meta?.image_urls) && it.meta.image_urls[0])
+                            || (Array.isArray(it.input_image_urls) && it.input_image_urls[0])
+                            || it.output_url);
                       const showStatus = it.kind === 'video' && it.meta?.status && it.meta.status !== 'succeeded';
+                      const segTotal = Number(it.meta?.segment_total) || 0;
+                      const segDone = Number(it.meta?.segment_done) || 0;
+                      const stitchPct = Number(it.meta?.stitch_progress) || 0;
+                      const isStitching = it.meta?.status === 'stitching';
+                      const isFailed = it.meta?.status === 'failed';
+                      const videoPct = isFailed
+                        ? 0
+                        : isStitching
+                          ? Math.max(80, Math.min(99, 80 + Math.round(stitchPct * 0.2)))
+                          : segTotal > 0
+                            ? Math.min(95, Math.round((segDone / segTotal) * 80))
+                            : 8;
                       return (
                         <button
                           type="button"
@@ -461,10 +476,10 @@ export default function MarketingLibrary() {
                           ].join(' ')}
                         >
                           {thumbUrl ? (
-                            it.kind === 'video' && !it.meta?.cover_url && it.output_url ? (
-                              <video src={it.output_url} className="w-full h-full object-cover" muted preload="metadata" playsInline />
+                            it.kind === 'video' && !it.meta?.cover_url && !(Array.isArray(it.input_image_urls) && it.input_image_urls[0]) && it.output_url ? (
+                              <video src={it.output_url} className="w-full h-full object-cover" muted preload="none" playsInline />
                             ) : (
-                              <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                              <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                             )
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
@@ -488,7 +503,7 @@ export default function MarketingLibrary() {
                             </span>
                           )}
 
-                          {it.kind === 'video' && (
+                          {it.kind === 'video' && !showStatus && (
                             <>
                               <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                 <span className="w-7 h-7 rounded-full bg-black/45 backdrop-blur flex items-center justify-center">
@@ -500,10 +515,22 @@ export default function MarketingLibrary() {
                           )}
 
                           {showStatus && (
-                            <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1.5 py-0.5 text-center truncate">
-                              {statusLabel(it)}
-                            </span>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent flex flex-col justify-end p-1.5 gap-1">
+                              <div className="text-white text-[10px] leading-tight font-medium truncate text-center">
+                                {statusLabel(it)}
+                              </div>
+                              <div className="h-1 rounded-full bg-white/25 overflow-hidden">
+                                <div
+                                  className={[
+                                    'h-full rounded-full transition-all duration-500',
+                                    isFailed ? 'bg-destructive' : 'bg-accent',
+                                  ].join(' ')}
+                                  style={{ width: `${videoPct}%` }}
+                                />
+                              </div>
+                            </div>
                           )}
+
 
                           {manageMode && (
                             <span className={[
