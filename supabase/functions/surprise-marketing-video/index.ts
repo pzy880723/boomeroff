@@ -107,11 +107,12 @@ Deno.serve(async (req) => {
 
     // ====== 提交模式:前端回传了 preview 时生成的 script,直接渲染 ======
     if (!preview && body.script && body.picked_assets && body.vtype && body.style) {
-      const script = body.script;
+      // 幂等再跑一次去重(防用户中途手改)
+      const fixed = enforceUniqueAssets(body.script, body.picked_assets);
       const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ script: { ...script, video_type: body.vtype }, style: body.style, shop_id: shopId }),
+        body: JSON.stringify({ script: { ...fixed.script, video_type: body.vtype }, style: body.style, shop_id: shopId }),
       });
       const renderData = await renderRes.json().catch(() => ({}));
       if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {
