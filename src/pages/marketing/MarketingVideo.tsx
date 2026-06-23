@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ArrowRight, FolderOpen } from 'lucide-react';
+import { Loader2, ArrowRight, FolderOpen, ImagePlus, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { UploadGrid } from './UploadGrid';
 import { AspectPicker } from './AspectPicker';
@@ -15,6 +15,8 @@ import { ShopPicker } from '@/components/marketing/ShopPicker';
 import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePickerDialog';
 import { CharacterPicker, type Character } from '@/components/marketing/CharacterPicker';
 import { useEffectiveShop } from '@/hooks/useShops';
+import { useAuth } from '@/hooks/useAuth';
+import { uploadMarketingImages } from './uploadMarketingImages';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -228,6 +230,67 @@ export default function MarketingVideo() {
     setScript({ ...script, scenes });
   };
 
+  // —— 分镜行手动替换图:目标 + 入口 ——
+  type SceneTarget = 'hook' | 'outro' | number;
+  const { user } = useAuth();
+  const [sceneTarget, setSceneTarget] = useState<SceneTarget | null>(null);
+  const [sceneLibraryOpen, setSceneLibraryOpen] = useState(false);
+  const sceneFileRef = useRef<HTMLInputElement>(null);
+  const [sceneUploading, setSceneUploading] = useState(false);
+
+  const assignImageToTarget = (target: SceneTarget, newUrls: string[]) => {
+    if (!newUrls.length) return;
+    setScript((prev: any) => {
+      if (!prev) return prev;
+      let merged = [...urls];
+      const indices: number[] = [];
+      for (const u of newUrls) {
+        let idx = merged.indexOf(u);
+        if (idx < 0) { merged.push(u); idx = merged.length - 1; }
+        indices.push(idx);
+      }
+      merged = merged.slice(0, 20);
+      setUrls(merged);
+      const firstIdx = indices[0];
+      const patch = (sc: any) => ({ ...sc, image_index: firstIdx, image_binding: { source: 'manual', expected: firstIdx, confidence: 1 } });
+      if (target === 'hook') return { ...prev, hook: patch(prev.hook) };
+      if (target === 'outro') return { ...prev, outro: patch(prev.outro) };
+      const scenes = [...prev.scenes];
+      scenes[target] = patch(scenes[target]);
+      return { ...prev, scenes };
+    });
+  };
+
+  const openSceneLibrary = (target: SceneTarget) => { setSceneTarget(target); setSceneLibraryOpen(true); };
+  const openSceneUpload = (target: SceneTarget) => { setSceneTarget(target); sceneFileRef.current?.click(); };
+
+  const onSceneFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length || sceneTarget == null || !user) return;
+    setSceneUploading(true);
+    const tid = toast.loading(`上传中 (0/${files.length})`);
+    let done = 0;
+    try {
+      const results = await uploadMarketingImages(user.id, files, {
+        preset: 'hd',
+        onProgress: (ev) => {
+          if (ev.stage === 'done') { done++; toast.loading(`上传中 (${done}/${files.length})`, { id: tid }); }
+        },
+      });
+      const ok = results.filter((u): u is string => !!u);
+      toast.dismiss(tid);
+      if (!ok.length) { toast.error('上传失败'); return; }
+      assignImageToTarget(sceneTarget, ok);
+      toast.success(`已加入 ${ok.length} 张并替换`);
+    } catch (err: any) {
+      toast.dismiss(tid);
+      toast.error(err?.message || '上传失败');
+    } finally { setSceneUploading(false); }
+  };
+
+
+
   return (
     <>
       <PageHeader title="AI 视频" back="/me/marketing" subtitle="营销中心 / 文生视频" />
@@ -375,15 +438,25 @@ export default function MarketingVideo() {
 
             <SceneRow title="钩子" num="00" scene={script.hook} urls={urls}
               onField={(f, v) => updateScene('hook', f, v)}
-              onImg={(v) => updateScene('hook', 'image_index', v)} />
+              onImg={(v) => updateScene('hook', 'image_index', v)}
+              onPickLibrary={() => openSceneLibrary('hook')}
+              onPickUpload={() => openSceneUpload('hook')}
+              uploading={sceneUploading} />
             {script.scenes.map((sc: any, i: number) => (
               <SceneRow key={i} title="镜头" num={String(i + 1).padStart(2, '0')} scene={sc} urls={urls}
                 onField={(f, v) => updateMid(i, f, v)}
-                onImg={(v) => updateMid(i, 'image_index', v)} />
+                onImg={(v) => updateMid(i, 'image_index', v)}
+                onPickLibrary={() => openSceneLibrary(i)}
+                onPickUpload={() => openSceneUpload(i)}
+                uploading={sceneUploading} />
             ))}
             <SceneRow title="收尾" num="99" scene={script.outro} urls={urls}
               onField={(f, v) => updateScene('outro', f, v)}
-              onImg={(v) => updateScene('outro', 'image_index', v)} />
+              onImg={(v) => updateScene('outro', 'image_index', v)}
+              onPickLibrary={() => openSceneLibrary('outro')}
+              onPickUpload={() => openSceneUpload('outro')}
+              uploading={sceneUploading} />
+
 
             <div className="text-[11px] text-muted-foreground border-t border-border pt-3 flex items-center gap-3 flex-wrap">
               <span>BGM · {script.bgm}</span>
@@ -423,6 +496,27 @@ export default function MarketingVideo() {
         max={20 - urls.length}
         onConfirm={(picked) => { setUrls([...urls, ...picked].slice(0, 20)); setScript(null); }}
       />
+
+      {/* 分镜行的「素材库」入口 */}
+      <LibraryImagePickerDialog
+        open={sceneLibraryOpen}
+        onOpenChange={setSceneLibraryOpen}
+        shopId={shopId}
+        max={Math.max(1, 20 - urls.length)}
+        onConfirm={(picked) => {
+          if (sceneTarget != null) assignImageToTarget(sceneTarget, picked);
+        }}
+      />
+
+      {/* 分镜行的「上传」隐藏 input */}
+      <input
+        ref={sceneFileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={onSceneFiles}
+      />
     </>
   );
 }
@@ -455,11 +549,14 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 }
 
 function SceneRow({
-  title, num, scene, urls, onField, onImg,
+  title, num, scene, urls, onField, onImg, onPickLibrary, onPickUpload, uploading,
 }: {
   title: string; num: string; scene: any; urls: string[];
   onField: (field: 'scene' | 'action' | 'dialogue' | 'subtitle' | 'motion', v: string) => void;
   onImg: (v: number | null) => void;
+  onPickLibrary: () => void;
+  onPickUpload: () => void;
+  uploading?: boolean;
 }) {
   const refImg = scene.image_index !== null && scene.image_index !== undefined && urls[scene.image_index];
   // 兼容旧字段
@@ -531,9 +628,9 @@ function SceneRow({
               className="bg-card h-8 text-sm"
             />
           </FieldBlock>
-          {urls.length > 0 && (
-            <div className="flex gap-1 flex-wrap pt-1">
-              <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground self-center mr-1">参考图</span>
+          <div className="flex gap-1 flex-wrap pt-1 items-center">
+            <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground self-center mr-1">参考图</span>
+            {urls.length > 0 && (
               <button
                 onClick={() => onImg(null)}
                 className={[
@@ -543,27 +640,41 @@ function SceneRow({
                     : 'bg-card text-muted-foreground border-border hover:border-accent/50',
                 ].join(' ')}
               >无</button>
-              {urls.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => onImg(i)}
-                  className={[
-                    'text-[10px] px-1.5 h-5 rounded border transition-colors',
-                    scene.image_index === i
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-card text-muted-foreground border-border hover:border-accent/50',
-                  ].join(' ')}
-                >
-                  #{i}
-                </button>
-              ))}
-            </div>
-          )}
+            )}
+            {urls.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => onImg(i)}
+                className={[
+                  'text-[10px] px-1.5 h-5 rounded border transition-colors',
+                  scene.image_index === i
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card text-muted-foreground border-border hover:border-accent/50',
+                ].join(' ')}
+              >
+                #{i}
+              </button>
+            ))}
+            <button
+              onClick={onPickLibrary}
+              className="text-[10px] px-1.5 h-5 rounded border border-accent/40 bg-accent/5 text-accent hover:bg-accent/15 transition-colors inline-flex items-center gap-0.5"
+            >
+              <ImagePlus className="w-2.5 h-2.5" />素材库
+            </button>
+            <button
+              onClick={onPickUpload}
+              disabled={uploading}
+              className="text-[10px] px-1.5 h-5 rounded border border-accent/40 bg-accent/5 text-accent hover:bg-accent/15 transition-colors inline-flex items-center gap-0.5 disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Upload className="w-2.5 h-2.5" />}上传
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
 
 function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
