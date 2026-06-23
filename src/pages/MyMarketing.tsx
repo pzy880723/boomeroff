@@ -74,6 +74,27 @@ export default function MyMarketing() {
           </div>
         </section>
 
+        {/* ===== 惊喜一下 · 一键随机视频 ===== */}
+        <button
+          type="button"
+          onClick={() => setSurpriseOpen(true)}
+          className="group w-full text-left bg-gradient-to-br from-primary to-primary/85 text-primary-foreground rounded-[0.875rem] border border-accent/30 shadow-md p-4 flex items-center gap-4 transition-all hover:shadow-lg active:scale-[0.995] relative overflow-hidden"
+        >
+          <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center shrink-0">
+            <Wand2 className="w-6 h-6" strokeWidth={1.6} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-display text-[10px] tracking-[0.18em] opacity-80">惊喜</span>
+              <h3 className="text-[15px] font-semibold leading-none">没灵感?让 BOOMER 替你拍一条</h3>
+            </div>
+            <p className="text-[11px] opacity-90 mt-1.5 leading-relaxed">
+              自动选品 · 自动写脚本 · 9:16 / 15 秒竖版片,一键产出
+            </p>
+          </div>
+          <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-0.5 transition-transform" />
+        </button>
+
         {/* ===== 三大工具 ===== */}
         <section className="space-y-3">
           <SectionLabel className="px-1">创作工坊</SectionLabel>
