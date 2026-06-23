@@ -230,6 +230,67 @@ export default function MarketingVideo() {
     setScript({ ...script, scenes });
   };
 
+  // —— 分镜行手动替换图:目标 + 入口 ——
+  type SceneTarget = 'hook' | 'outro' | number;
+  const { user } = useAuth();
+  const [sceneTarget, setSceneTarget] = useState<SceneTarget | null>(null);
+  const [sceneLibraryOpen, setSceneLibraryOpen] = useState(false);
+  const sceneFileRef = useRef<HTMLInputElement>(null);
+  const [sceneUploading, setSceneUploading] = useState(false);
+
+  const assignImageToTarget = (target: SceneTarget, newUrls: string[]) => {
+    if (!newUrls.length) return;
+    setScript((prev: any) => {
+      if (!prev) return prev;
+      let merged = [...urls];
+      const indices: number[] = [];
+      for (const u of newUrls) {
+        let idx = merged.indexOf(u);
+        if (idx < 0) { merged.push(u); idx = merged.length - 1; }
+        indices.push(idx);
+      }
+      merged = merged.slice(0, 20);
+      setUrls(merged);
+      const firstIdx = indices[0];
+      const patch = (sc: any) => ({ ...sc, image_index: firstIdx, image_binding: { source: 'manual', expected: firstIdx, confidence: 1 } });
+      if (target === 'hook') return { ...prev, hook: patch(prev.hook) };
+      if (target === 'outro') return { ...prev, outro: patch(prev.outro) };
+      const scenes = [...prev.scenes];
+      scenes[target] = patch(scenes[target]);
+      return { ...prev, scenes };
+    });
+  };
+
+  const openSceneLibrary = (target: SceneTarget) => { setSceneTarget(target); setSceneLibraryOpen(true); };
+  const openSceneUpload = (target: SceneTarget) => { setSceneTarget(target); sceneFileRef.current?.click(); };
+
+  const onSceneFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length || sceneTarget == null || !user) return;
+    setSceneUploading(true);
+    const tid = toast.loading(`上传中 (0/${files.length})`);
+    let done = 0;
+    try {
+      const results = await uploadMarketingImages(user.id, files, {
+        preset: 'hd',
+        onProgress: (ev) => {
+          if (ev.stage === 'done') { done++; toast.loading(`上传中 (${done}/${files.length})`, { id: tid }); }
+        },
+      });
+      const ok = results.filter((u): u is string => !!u);
+      toast.dismiss(tid);
+      if (!ok.length) { toast.error('上传失败'); return; }
+      assignImageToTarget(sceneTarget, ok);
+      toast.success(`已加入 ${ok.length} 张并替换`);
+    } catch (err: any) {
+      toast.dismiss(tid);
+      toast.error(err?.message || '上传失败');
+    } finally { setSceneUploading(false); }
+  };
+
+
+
   return (
     <>
       <PageHeader title="AI 视频" back="/me/marketing" subtitle="营销中心 / 文生视频" />
