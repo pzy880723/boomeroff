@@ -41,9 +41,9 @@ export default function MarketingLibrary() {
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
   const currentShop = shops.find((s) => s.id === shopId);
 
-  const load = async () => {
+  const fetchItems = async (silent = false) => {
     if (!user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     // 有 shopId 时按店铺读(同店成员共享);否则只看自己
     let q = supabase
       .from('marketing_assets' as any)
@@ -54,11 +54,13 @@ export default function MarketingLibrary() {
     else q = q.eq('user_id', user.id);
     const { data } = await q;
     setItems((data as any[]) || []);
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
-  useEffect(() => { load(); }, [user, shopId]);
+  // 保留 load 名字给其它地方使用（如有）
+  const load = () => fetchItems(false);
+  useEffect(() => { fetchItems(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user, shopId]);
 
-  // 实时订阅:同 shop 内素材变化自动刷新(子账号能立刻看到主账号上传的图)
+  // 实时订阅:同 shop 内素材变化静默刷新(不触发整页 loading 骨架闪烁)
   const reloadTimer = useRef<number | null>(null);
   useEffect(() => {
     if (!user) return;
@@ -67,7 +69,7 @@ export default function MarketingLibrary() {
       .channel(`ma-lib:${shopId || user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'marketing_assets', filter }, () => {
         if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
-        reloadTimer.current = window.setTimeout(load, 400);
+        reloadTimer.current = window.setTimeout(() => fetchItems(true), 400);
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -134,14 +136,24 @@ export default function MarketingLibrary() {
   };
 
   // 轮询未完成视频任务
-  useEffect(() => {
-    const pending = items.filter(
+  // 用稳定签名当依赖,避免 items 引用变化导致 effect 反复重建 -> tick 立即触发 -> setItems -> 循环闪烁
+  const pendingVideos = useMemo(
+    () => items.filter(
       (it) => it.kind === 'video' && it.meta?.job_id && !['succeeded', 'failed'].includes(it.meta?.status),
-    );
-    if (!pending.length) return;
+    ),
+    [items],
+  );
+  const pendingSig = pendingVideos
+    .map((it) => `${it.id}:${it.meta?.status || ''}:${it.meta?.segment_done || 0}/${it.meta?.segment_total || 0}`)
+    .join('|');
+  const pendingRef = useRef<any[]>([]);
+  pendingRef.current = pendingVideos;
+
+  useEffect(() => {
+    if (!pendingSig) return;
     let cancelled = false;
     const tick = async () => {
-      for (const it of pending) {
+      for (const it of pendingRef.current) {
         if (cancelled) return;
         try {
           const { data } = await supabase.functions.invoke('poll-marketing-video', { body: { job_id: it.meta.job_id } });
@@ -175,10 +187,10 @@ export default function MarketingLibrary() {
         } catch {}
       }
     };
-    tick();
-    const t = setInterval(tick, 10000);
+    const t = setInterval(tick, 10000); // 不立即执行,避免 effect 重建瞬时回环
     return () => { cancelled = true; clearInterval(t); };
-  }, [items]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSig]);
 
   const statusLabel = (it: any) => {
     const s = it.meta?.status;

@@ -1,41 +1,63 @@
+## 问题
+素材库页面在有"生成中"视频任务(截图里 `生成中 0/3`)时不停闪烁、loading 转圈反复出现。
 
-# 分镜「关联图片」支持手动替换(素材库 / 上传)
+## 根因
+`src/pages/marketing/MarketingLibrary.tsx` 第 137–181 行的视频轮询 `useEffect`：
+- 依赖数组是 `[items]`
+- effect 一进来就同步 `tick()`，tick 里调用 `poll-marketing-video` 并 `setItems` 更新 status / 进度 / segment_done
+- `setItems` → items 引用变 → effect 清掉 interval 重新跑 → 又立刻 `tick()` …
 
-## 现状
-- 每个镜头 `scene.image_index` 指向 `urls[]`(顶部参考图池子)。
-- `SceneRow` 底部只有一排 `#0 #1 #2 …` 切换按钮,只能在已有 urls 之间选,不能换库里的别的图,也不能临时上传。
+于是只要有 1 个未完成视频任务,就会不停重渲染 + 不停发轮询请求,UI 闪烁。
 
-## 改造
-在 `SceneRow` 那排参考图 chip 旁边加两个按钮:**「素材库」** 和 **「上传」**;选/传的图直接追加到 `urls`,并把当前镜头 `image_index` 指向新加的那张。
+另外 `load()` 里每次都 `setLoading(true)`,实时订阅触发的 reload(第 63–75 行)在频繁更新时也会让骨架/loading 反复出现,加重闪烁感。
 
-### 1) `MarketingVideo.tsx`
-- 新增 `addImagesAndAssign(sceneTargetId, newUrls)` 辅助:
-  - 把 `newUrls` 中**还没在 `urls` 里**的追加到 `urls` 末尾(去重)。
-  - 把命中的图(原已有或新加)对应的 index,赋给目标 scene 的 `image_index`(只取第一张)。
-  - `sceneTargetId` 用 `'hook' | 'outro' | mid 索引`,复用现有 `updateScene` / `updateMid`。
-- 把 `addImagesAndAssign` 透传给 `SceneRow`。
-- 渲染 `<LibraryImagePickerDialog>`(单实例)+ 一个隐藏 `<input type=file multiple accept=image/*>`,由当前点击的 scene 来决定回调对象。用一个 `pickerTarget` state 记录 `{ scene: 'hook'|'outro'|number }`。
-- 直接上传走现有 `uploadMarketingImages`(已支持 shop_id / hash 去重)。上传完拿到 url 数组,调 `addImagesAndAssign`。上传过程用 sonner toast 提示进度。
+## 修复方案(只动这一个文件)
 
-### 2) `SceneRow`
-- 在「参考图」标签那行末尾追加两个按钮(同样 `text-[10px] h-5` 样式,搭配 lucide 图标):
-  - 📚「素材库」→ `onPickLibrary()`
-  - ⬆️「上传」→ `onPickUpload()`
-- 新增 props:`onPickLibrary: () => void; onPickUpload: () => void;`。
-- 不动其他字段,不动 `urls.map(...)` 那排已有 chip。
+1. **重写轮询 effect 依赖**：不再依赖整个 `items`,而是依赖 pending 任务的稳定签名 —— 把所有未完成 video 的 `id|status|segment_done|segment_total` 拼成一个字符串作为依赖。这样：
+   - 真有新任务进入 pending 时才重订阅
+   - tick 内 `setItems` 触发的"无意义"items 引用变化不会重启 effect
+   - 用 `useRef` 持有最新 pending 列表,interval 里读 ref,而不是闭包里的旧数组
 
-### 3) 边界
-- `urls` 上限按现有 `LibraryImagePickerDialog` 的 `max` 走(默认 20);不动。
-- 选/传**多张**时,按上面的规则,首张赋给当前 scene,其余仅追加到池子,供后续手动切换。
-- 图片描述 `imageDescriptions` 由现有 useEffect 监听 `urls.join('|')` 自动重算,无需手动触发。
+2. **interval 改为先等 10s 再 tick**：去掉 effect 启动时的同步 `tick()`,避免一进来就发请求 + setItems 的瞬时回环。首次也用 `setTimeout` 触发,或直接让 `setInterval` 自己 10s 后第一次触发。
 
-## 不动的部分
-- 数据库 / RLS / edge functions / 视频生成 / 渲染管线全部不变。
-- 顶部「参考图/主角」步骤的上传入口、字段、画幅、风格选择都不变。
+3. **实时订阅的静默刷新**：把 `load()` 拆出一个 `reload()` 版本(不 `setLoading(true)`),postgres_changes 回调走 `reload()`,首次加载才走 `load()`。这样后台同步不会让整页骨架闪。
 
-## 涉及文件
-- `src/pages/marketing/MarketingVideo.tsx`(加 picker state + handler,改 `SceneRow` 调用)
-- `src/pages/marketing/MarketingVideo.tsx` 内的 `SceneRow`(加 2 个按钮和 props)
+## 技术细节
 
-## 预期效果
-店员看分镜时,任意镜头都能一键从素材库换图或现场再传一张,新图自动加入顶部图池,后续别的镜头也能选它。
+```text
+useEffect 依赖：
+  const pendingSig = items
+    .filter(it => it.kind === 'video' && it.meta?.job_id
+                  && !['succeeded','failed'].includes(it.meta?.status))
+    .map(it => `${it.id}:${it.meta?.status||''}:${it.meta?.segment_done||0}/${it.meta?.segment_total||0}`)
+    .join('|');
+
+  const pendingRef = useRef<any[]>([]);
+  pendingRef.current = pending;          // 每次渲染同步
+
+  useEffect(() => {
+    if (!pendingSig) return;
+    let cancelled = false;
+    const tick = async () => { for (const it of pendingRef.current) { … } };
+    const t = setInterval(tick, 10000);  // 不再立即 tick
+    return () => { cancelled = true; clearInterval(t); };
+  }, [pendingSig]);
+```
+
+```text
+load 拆分：
+  const fetchItems = async (silent = false) => {
+    if (!user) return;
+    if (!silent) setLoading(true);
+    … setItems(data || []);
+    if (!silent) setLoading(false);
+  };
+  // 首次 + 切店铺
+  useEffect(() => { fetchItems(false); }, [user, shopId]);
+  // 实时订阅
+  reloadTimer.current = window.setTimeout(() => fetchItems(true), 400);
+```
+
+## 不会改动
+- `runStitch` 拼接逻辑、edge function、DB schema、其他 tab/筛选/UI 都保持不变。
+- 其它页面无改动。
