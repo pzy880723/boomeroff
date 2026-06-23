@@ -84,6 +84,67 @@ function summarizeAsset(a: any): string {
   return parts.join(' · ') || '店内实景';
 }
 
+// 把脚本里每个分镜分配到一个不同的素材 index;不够则就回退到 usage 最少的。
+function enforceUniqueAssets(
+  scriptIn: any,
+  assets: Array<{ index: number; summary?: string; category?: string | null; tags?: string[] }>,
+): { script: any; usedIndices: number[]; reused: boolean } {
+  const script = JSON.parse(JSON.stringify(scriptIn || {}));
+  const clips: any[] = [];
+  if (script.hook) clips.push(script.hook);
+  if (Array.isArray(script.scenes)) clips.push(...script.scenes);
+  if (script.outro) clips.push(script.outro);
+
+  const N = assets.length;
+  if (N === 0) return { script, usedIndices: [], reused: false };
+  const usage = new Array(N).fill(0);
+  const used = new Set<number>();
+  const usedOrder: number[] = [];
+  let reused = false;
+
+  const scoreFor = (clip: any, ai: number): number => {
+    const a = assets[ai];
+    const text = `${clip?.scene || ''} ${clip?.action || ''} ${clip?.dialogue || ''} ${clip?.subtitle || ''}`.toLowerCase();
+    let s = 0;
+    if (a.category && text.includes(String(a.category).toLowerCase())) s += 2;
+    for (const t of (a.tags || [])) {
+      if (t && text.includes(String(t).toLowerCase())) s += 1;
+    }
+    if (a.summary) {
+      const tokens = String(a.summary).split(/[ ,，/·]+/).filter((x) => x.length >= 2);
+      for (const t of tokens) if (text.includes(t.toLowerCase())) s += 1;
+    }
+    return s;
+  };
+
+  for (const clip of clips) {
+    const hint = typeof clip?.image_index === 'number' ? clip.image_index : null;
+    let chosen = -1;
+    if (hint != null && hint >= 0 && hint < N && !used.has(hint)) {
+      chosen = hint;
+    } else {
+      // 优先未用素材；并列按文本匹配分高优先；再并列 usage 低优先
+      const candidates: number[] = [];
+      for (let i = 0; i < N; i++) if (!used.has(i)) candidates.push(i);
+      const pool = candidates.length ? candidates : Array.from({ length: N }, (_, i) => i);
+      if (candidates.length === 0) reused = true;
+      let bestScore = -1, bestUsage = Infinity;
+      for (const i of pool) {
+        const sc = scoreFor(clip, i);
+        if (sc > bestScore || (sc === bestScore && usage[i] < bestUsage)) {
+          bestScore = sc; bestUsage = usage[i]; chosen = i;
+        }
+      }
+    }
+    if (chosen < 0) chosen = 0;
+    clip.image_index = chosen;
+    usage[chosen] += 1;
+    used.add(chosen);
+    usedOrder.push(chosen);
+  }
+  return { script, usedIndices: usedOrder, reused };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -107,11 +168,12 @@ Deno.serve(async (req) => {
 
     // ====== 提交模式:前端回传了 preview 时生成的 script,直接渲染 ======
     if (!preview && body.script && body.picked_assets && body.vtype && body.style) {
-      const script = body.script;
+      // 幂等再跑一次去重(防用户中途手改)
+      const fixed = enforceUniqueAssets(body.script, body.picked_assets);
       const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ script: { ...script, video_type: body.vtype }, style: body.style, shop_id: shopId }),
+        body: JSON.stringify({ script: { ...fixed.script, video_type: body.vtype }, style: body.style, shop_id: shopId }),
       });
       const renderData = await renderRes.json().catch(() => ({}));
       if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {
@@ -207,38 +269,80 @@ Deno.serve(async (req) => {
     if (!scriptRes.ok || !scriptData?.script) {
       return json({ ok: false, error: scriptData?.error || '脚本生成失败' });
     }
-    const script = scriptData.script;
+    let script = scriptData.script;
 
-    const picked = {
-      asset_id: hero.id,
-      cover_url: hero.output_url,
-      summary: heroSummary,
-      tags: hero.tags || [],
-      category: hero.category || null,
-    };
-    const assets = pickedAssets.map((a: any, i: number) => ({
-      asset_id: a.id,
-      index: i,
-      url: a.output_url,
-      summary: summarizeAsset(a),
-      category: a.category || null,
+    // ====== 强制分镜与素材一对一(同一张不被两个分镜复用) ======
+    // 先用入选素材做映射;若分镜数 > 素材数,从 pool 剩余里继续补齐
+    let assetsForScript = pickedAssets.map((a: any, i: number) => ({
+      asset_id: a.id, index: i, url: a.output_url,
+      summary: summarizeAsset(a), category: a.category || null,
+      tags: a.tags || [],
     }));
+    const sceneCount = (script.hook ? 1 : 0) + (Array.isArray(script.scenes) ? script.scenes.length : 0) + (script.outro ? 1 : 0);
+    if (sceneCount > assetsForScript.length) {
+      const usedIds = new Set(pickedAssets.map((a: any) => a.id));
+      const remain = pool.filter((a: any) => !usedIds.has(a.id));
+      const need = sceneCount - assetsForScript.length;
+      const extraWeighted = remain.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
+      const extras = sampleWeighted(extraWeighted, Math.min(need, remain.length));
+      for (const a of extras) {
+        assetsForScript.push({
+          asset_id: a.id, index: assetsForScript.length, url: a.output_url,
+          summary: summarizeAsset(a), category: a.category || null, tags: a.tags || [],
+        });
+      }
+    }
+    const enforced = enforceUniqueAssets(script, assetsForScript);
+    script = enforced.script;
+    const usedIndices = enforced.usedIndices;
+    const reused = enforced.reused;
+
+    // 只输出真正被分镜引用到的素材,按出场顺序去重并重排 index
+    const orderUsed: number[] = [];
+    const seen = new Set<number>();
+    for (const i of usedIndices) {
+      if (!seen.has(i)) { seen.add(i); orderUsed.push(i); }
+    }
+    const oldToNew = new Map<number, number>();
+    orderUsed.forEach((old, n) => oldToNew.set(old, n));
+    const assets = orderUsed.map((old, n) => ({
+      asset_id: assetsForScript[old].asset_id, index: n,
+      url: assetsForScript[old].url,
+      summary: assetsForScript[old].summary,
+      category: assetsForScript[old].category,
+    }));
+    // 重写 script 里的 image_index 为新的连续 index
+    const remap = (c: any) => {
+      if (c && typeof c.image_index === 'number' && oldToNew.has(c.image_index)) {
+        c.image_index = oldToNew.get(c.image_index);
+      }
+      return c;
+    };
+    if (script.hook) script.hook = remap(script.hook);
+    if (Array.isArray(script.scenes)) script.scenes = script.scenes.map(remap);
+    if (script.outro) script.outro = remap(script.outro);
+
+    // hero 始终用第一个被使用的素材,确保封面与首镜一致
+    const heroAsset = assets[0] ? pickedAssets.find((a: any) => a.id === assets[0].asset_id) || hero : hero;
+    const picked = {
+      asset_id: heroAsset.id,
+      cover_url: heroAsset.output_url,
+      summary: summarizeAsset(heroAsset),
+      tags: heroAsset.tags || [],
+      category: heroAsset.category || null,
+    };
     const characterOut = character
       ? { id: character.id, name: character.name, cover_url: character.cover_url }
       : null;
 
-    const result = {
-      ok: true,
-      picked,
-      assets,
-      script,
-      vtype,
-      vtype_label: vtypeLabel,
-      style,
+    const result: any = {
+      ok: true, picked, assets, script,
+      vtype, vtype_label: vtypeLabel, style,
       character: characterOut,
-      duration: 15,
-      aspect: '9:16',
+      duration: 15, aspect: '9:16',
     };
+    if (reused) result.__warn = 'assets_reused';
+
 
     if (preview) return json(result);
 

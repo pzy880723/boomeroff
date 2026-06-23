@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEffectiveShop } from '@/hooks/useShops';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Link } from 'react-router-dom';
 import {
-  Sparkles, FileText, Video, Library, ChevronRight, Loader2, Wand2,
+  Sparkles, FileText, Video, Library, ChevronRight, Loader2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
 import { SurpriseVideoDialog } from '@/components/marketing/SurpriseVideoDialog';
+import { getActiveRenderJob } from '@/lib/surpriseJob';
 
 interface RecentItem { id: string; kind: string; output_url: string | null; created_at: string; }
 
@@ -19,6 +21,25 @@ export default function MyMarketing() {
   const [recents, setRecents] = useState<RecentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [surpriseOpen, setSurpriseOpen] = useState(false);
+  const { shopId } = useEffectiveShop();
+  const [hasActiveJob, setHasActiveJob] = useState(false);
+
+  useEffect(() => {
+    if (!shopId) { setHasActiveJob(false); return; }
+    const refresh = () => setHasActiveJob(!!getActiveRenderJob(shopId));
+    refresh();
+    const onChange = () => refresh();
+    const onStorage = (e: StorageEvent) => { if (e.key && e.key.includes('boomer.surprise.job')) refresh(); };
+    window.addEventListener('boomer.surprise.change', onChange as EventListener);
+    window.addEventListener('storage', onStorage);
+    const t = window.setInterval(refresh, 5000);
+    return () => {
+      window.removeEventListener('boomer.surprise.change', onChange as EventListener);
+      window.removeEventListener('storage', onStorage);
+      window.clearInterval(t);
+    };
+  }, [shopId]);
+
 
   useEffect(() => {
     if (!user) return;
@@ -78,22 +99,36 @@ export default function MyMarketing() {
         <button
           type="button"
           onClick={() => setSurpriseOpen(true)}
-          className="group w-full text-left bg-gradient-to-br from-primary to-primary/85 text-primary-foreground rounded-[0.875rem] border border-accent/30 shadow-md p-4 flex items-center gap-4 transition-all hover:shadow-lg active:scale-[0.995] relative overflow-hidden"
+          className="group w-full text-left bg-card rounded-[0.875rem] border border-accent/30 shadow-sm p-4 pl-5 flex items-center gap-3.5 relative overflow-hidden transition-all hover:border-accent/50 active:scale-[0.995] before:absolute before:left-0 before:top-3 before:bottom-3 before:w-[2px] before:bg-accent/70 before:rounded-r"
         >
-          <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center shrink-0">
-            <Wand2 className="w-6 h-6" strokeWidth={1.6} />
-          </div>
+          <img
+            src={boomerIdle}
+            alt=""
+            className="w-10 h-10 object-contain shrink-0 select-none"
+            draggable={false}
+          />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-display text-[10px] tracking-[0.18em] opacity-80">惊喜</span>
-              <h3 className="text-[15px] font-semibold leading-none">没灵感?让 BOOMER 替你拍一条</h3>
-            </div>
-            <p className="text-[11px] opacity-90 mt-1.5 leading-relaxed">
-              自动选品 · 自动写脚本 · 9:16 / 15 秒竖版片,一键产出
+            <div className="font-display text-[10px] tracking-[0.18em] text-accent">惊喜 · SURPRISE</div>
+            <h3 className="text-[15px] font-semibold leading-tight mt-0.5 truncate">
+              让 BOOMER 替你拍一条
+            </h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug truncate">
+              自动选品 · 写脚本 · 竖版 15 秒
             </p>
           </div>
-          <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-0.5 transition-transform" />
+          {hasActiveJob ? (
+            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold tracking-wide px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/30">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              生成中
+            </span>
+          ) : (
+            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold tracking-wider px-2 py-1 rounded-full border border-accent/30 text-accent">
+              9:16 · 15s
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          )}
         </button>
+
 
         {/* ===== 三大工具 ===== */}
         <section className="space-y-3">
