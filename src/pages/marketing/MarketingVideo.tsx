@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ArrowRight, FolderOpen } from 'lucide-react';
+import { Loader2, ArrowRight, FolderOpen, ImagePlus, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { UploadGrid } from './UploadGrid';
 import { AspectPicker } from './AspectPicker';
@@ -15,6 +15,8 @@ import { ShopPicker } from '@/components/marketing/ShopPicker';
 import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePickerDialog';
 import { CharacterPicker, type Character } from '@/components/marketing/CharacterPicker';
 import { useEffectiveShop } from '@/hooks/useShops';
+import { useAuth } from '@/hooks/useAuth';
+import { uploadMarketingImages } from './uploadMarketingImages';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
