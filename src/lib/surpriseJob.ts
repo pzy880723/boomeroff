@@ -45,16 +45,22 @@ export function clearActiveRenderJob(shopId: string) {
 
 export type RenderPhase = 'queued' | 'running' | 'done' | 'failed';
 
-export async function pollRenderJob(jobId: string): Promise<{ phase: RenderPhase; video_url?: string | null; error?: string }> {
+export async function pollRenderJob(jobId: string): Promise<{
+  phase: RenderPhase; video_url?: string | null; error?: string;
+  progress?: { done: number; total: number };
+}> {
   try {
     const { data, error } = await supabase.functions.invoke('poll-marketing-video', { body: { job_id: jobId } });
     if (error) return { phase: 'running', error: error.message };
     const d = data as any;
     const s: string = d?.status || 'running';
-    if (s === 'succeeded') return { phase: 'done', video_url: d?.video_url || null };
-    if (s === 'failed') return { phase: 'failed', error: d?.error };
-    if (s === 'queued') return { phase: 'queued' };
-    return { phase: 'running' };
+    const total = Number(d?.segment_total) || 0;
+    const done = Number(d?.segment_done) || 0;
+    const progress = total > 0 ? { done: Math.min(done, total), total } : undefined;
+    if (s === 'succeeded') return { phase: 'done', video_url: d?.video_url || null, progress };
+    if (s === 'failed') return { phase: 'failed', error: d?.error, progress };
+    if (s === 'queued') return { phase: 'queued', progress };
+    return { phase: 'running', progress };
   } catch (e: any) {
     return { phase: 'running', error: e?.message };
   }
