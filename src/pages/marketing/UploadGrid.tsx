@@ -176,7 +176,8 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     if (!it) return;
     updateItem(id, { stage: 'queued', error: undefined });
     try {
-      const { url } = await processOne(it.file, (stage, url, error) =>
+      const hash = it.hash || await fileSha256(it.file).catch(() => `r-${Math.random()}`);
+      const url = await processOne(it.file, hash, (stage, url, error) =>
         updateItem(id, { stage, url, error }),
       );
       onChange([...urls, url]);
