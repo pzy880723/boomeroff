@@ -196,6 +196,8 @@ export default function MyMarketing() {
         {/* 底部细古铜金线 */}
         <div className="absolute left-0 right-0 bottom-0 h-[3px] bg-accent/20 pointer-events-none" />
       </div>
+
+      <SurpriseVideoDialog open={surpriseOpen} onOpenChange={setSurpriseOpen} />
     </>
   );
 }
