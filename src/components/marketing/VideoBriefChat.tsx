@@ -235,6 +235,21 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
 
       <div className="border-t border-accent/10 p-2 flex gap-2 items-end">
         <Textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+          }}
+          placeholder="可以直接点上面的选项;想自己说也能打字"
+          rows={1}
+          className="flex-1 resize-none text-sm min-h-[36px] max-h-24"
+          disabled={busy || drafting}
+        />
+        <Button size="sm" onClick={() => send()} disabled={busy || drafting || !input.trim()} className="h-9 px-3">
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+        </Button>
+      </div>
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
