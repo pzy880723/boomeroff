@@ -389,6 +389,11 @@ export default function MarketingVideo() {
             <AspectPicker value={aspect} onChange={(v) => setAspect(v as typeof ASPECTS[number])} />
           </div>
 
+          <SectionLabel num="05">渲染模型</SectionLabel>
+          <div className="-mt-1">
+            <SeedanceModelPicker value={modelId} onChange={setModelId} />
+          </div>
+
           <div className="pt-1">
             <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1">想突出的点</p>
             <Input
