@@ -522,7 +522,7 @@ export default function MarketingVideo() {
                 </div>
                 <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
                   {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  确认脚本，开始渲染
+                  用 {getSeedanceShortLabel(modelId)} 开始渲染
                 </Button>
               </>
             ) : (
