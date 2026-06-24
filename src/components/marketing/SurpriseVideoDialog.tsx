@@ -173,8 +173,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
             <Loader2 className="w-5 h-5 animate-spin text-accent" />
             <div className="text-center">
-              BOOMER 正在挑素材、写脚本…
-              <div className="text-[10px] mt-1 opacity-70">通常 3–8 秒</div>
+              BOOMER 正在挑素材、写脚本、画分镜…
+              <div className="text-[10px] mt-1 opacity-70">通常 10–15 秒,分镜静帧让最终视频更稳</div>
             </div>
           </div>
         ) : (
