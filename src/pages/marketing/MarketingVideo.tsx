@@ -60,6 +60,7 @@ export default function MarketingVideo() {
   const [generating, setGenerating] = useState(false);
   const [script, setScript] = useState<any>(null);
   const [rendering, setRendering] = useState(false);
+  const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
   const [jobId, setJobId] = useState<string | null>(null);
   const [restoredAt, setRestoredAt] = useState<number | null>(null);
 
