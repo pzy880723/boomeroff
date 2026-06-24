@@ -565,15 +565,16 @@ export default function MarketingVideo() {
                 </Button>
               </>
             ) : (
-              <div className="rounded-lg border border-success/40 bg-success/5 p-3 text-xs space-y-2">
-                <p className="font-medium text-foreground">渲染任务已入队 · ID {jobId.slice(0, 8)}</p>
-                <p className="text-muted-foreground">视频会在后台合成，完成后出现在素材库。</p>
-                <Button asChild size="sm" variant="outline" className="w-full">
-                  <Link to="/me/marketing/library">
-                    去素材库查看进度 <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                </Button>
-              </div>
+              <RenderProgressCard
+                jobId={jobId}
+                modelId={renderModelId || modelId}
+                startedAt={renderStartedAt || Date.now()}
+                segmentTotal={renderSegmentTotal}
+                phase={renderPhase}
+                progress={renderProgress}
+                videoUrl={renderVideoUrl}
+                error={renderError}
+              />
             )}
           </section>
         )}
