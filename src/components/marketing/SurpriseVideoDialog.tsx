@@ -19,6 +19,7 @@ interface PickedAsset {
 interface SceneClip {
   scene?: string; action?: string; dialogue?: string; subtitle?: string;
   duration_s?: number; motion?: string; image_index?: number | null;
+  storyboard_url?: string | null;
 }
 interface ScriptShape {
   hook?: SceneClip | null; scenes?: SceneClip[]; outro?: SceneClip | null;
@@ -33,7 +34,9 @@ interface SurpriseResult {
   character: { id: string; name: string; cover_url: string | null } | null;
   duration: number; aspect: string;
   job_id?: string;
+  storyboard?: { scene_index: number; url: string | null; key: string }[];
   __warn?: string;
+  __sb_warn?: string;
 }
 
 const STYLE_LABEL: Record<string, string> = {
