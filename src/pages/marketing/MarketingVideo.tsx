@@ -18,6 +18,8 @@ import { useEffectiveShop } from '@/hooks/useShops';
 import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
 import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
+import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
+import { DEFAULT_SEEDANCE_2 } from '@/lib/seedanceModels';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -58,6 +60,7 @@ export default function MarketingVideo() {
   const [generating, setGenerating] = useState(false);
   const [script, setScript] = useState<any>(null);
   const [rendering, setRendering] = useState(false);
+  const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
   const [jobId, setJobId] = useState<string | null>(null);
   const [restoredAt, setRestoredAt] = useState<number | null>(null);
 
@@ -208,7 +211,7 @@ export default function MarketingVideo() {
         }
       }
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
-        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId },
+        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId, model: modelId },
       });
       if (error) throw error;
       const resp = data as any;
@@ -513,10 +516,15 @@ export default function MarketingVideo() {
             </div>
 
             {!jobId ? (
-              <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
-                {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                确认脚本，开始渲染
-              </Button>
+              <>
+                <div className="border-t border-border pt-3">
+                  <SeedanceModelPicker value={modelId} onChange={setModelId} />
+                </div>
+                <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
+                  {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  确认脚本，开始渲染
+                </Button>
+              </>
             ) : (
               <div className="rounded-lg border border-success/40 bg-success/5 p-3 text-xs space-y-2">
                 <p className="font-medium text-foreground">渲染任务已入队 · ID {jobId.slice(0, 8)}</p>

@@ -12,6 +12,8 @@ import {
   pollRenderJob, getInflightPick, setInflightPick,
   type ActiveRenderJob,
 } from '@/lib/surpriseJob';
+import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
+import { DEFAULT_SEEDANCE_2, getSeedanceModel } from '@/lib/seedanceModels';
 
 interface PickedAsset {
   asset_id: string; index: number; url: string; summary: string; category: string | null;
@@ -53,6 +55,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [activeJob, setActiveJob] = useState<ActiveRenderJob | null>(null);
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = () => {
@@ -134,6 +137,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           shop_id: shopId, preview: false,
           script: pick.script, picked_assets: pick.assets,
           vtype: pick.vtype, style: pick.style,
+          model: modelId,
         },
       });
       if (error) throw error;
@@ -179,8 +183,9 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
         ) : (
           <>
-            <ScriptBody pick={pick} />
-            <div className="border-t px-4 pt-3 pb-4 space-y-2 bg-background">
+            <ScriptBody pick={pick} modelLabel={getSeedanceModel(modelId).label} />
+            <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
+              <SeedanceModelPicker value={modelId} onChange={setModelId} compact />
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
                   <RefreshCw className="w-4 h-4 mr-1" /> 换一组
@@ -191,7 +196,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 </Button>
               </div>
               <p className="text-[10px] text-center text-muted-foreground">
-                画面全部来自你的素材库,关掉弹窗也会继续拍
+                单段直出 · 无拼接 · 关掉弹窗也会继续拍
               </p>
             </div>
           </>
@@ -288,7 +293,7 @@ function RenderingBody({
   );
 }
 
-function ScriptBody({ pick }: { pick: SurpriseResult }) {
+function ScriptBody({ pick, modelLabel }: { pick: SurpriseResult; modelLabel?: string }) {
   const clips: { label: string; clip: SceneClip }[] = [];
   if (pick.script.hook) clips.push({ label: '钩子', clip: pick.script.hook });
   (pick.script.scenes || []).forEach((s, i) => clips.push({ label: `镜头${i + 1}`, clip: s }));
@@ -313,6 +318,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
         <Chip>路线 · {pick.vtype_label}</Chip>
         <Chip>风格 · {STYLE_LABEL[pick.style] || pick.style}</Chip>
         {pick.character && <Chip>主角 · {pick.character.name}</Chip>}
+        {modelLabel && <Chip>模型 · {modelLabel}</Chip>}
       </div>
 
       {pick.__warn === 'assets_reused' && (

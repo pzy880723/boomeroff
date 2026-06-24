@@ -1,16 +1,10 @@
-// 提交视频渲染任务到火山方舟 Seedance API。
-// 单段(≤12s)走单任务;长视频会自动按 ≤10s 拆成多段子任务,父任务汇总,
-// 全部段完成后由客户端用 mediabunny 拼接成一支 MP4。
+// 提交视频渲染任务到火山方舟 Seedance 2.0 API。
+// 单段 ≤15s 直出,不再拼接;>15s 才会拆段(目前 surprise/标准生成都锁 15s,基本走单段)。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segments.ts";
-
-// Seedance 1.5 pro / 2.x 才支持 reference_image 和 last_frame。
-// 旧模型自动降级,只发 first_frame。
-function modelSupportsAdvancedRefs(model: string): boolean {
-  return /seedance-(1-5|2)/i.test(model) || /seedance.*pro/i.test(model);
-}
+import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT } from "../_shared/seedance-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,8 +14,7 @@ const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
-const DEFAULT_MODEL = "doubao-seedance-1-5-pro-251215";
-const MAX_SEG_DUR = 10; // 单段渲染上限(秒),给 Seedance 留余量
+const MAX_SEG_DUR = SEEDANCE_MAX_SINGLE_SHOT; // 单段渲染上限(秒)= 15
 
 function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string, segLabel?: string, character?: any): string {
   const styleEn = VIDEO_STYLE_EN[styleKey];
@@ -65,7 +58,7 @@ function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string, se
 function clampDuration(d: any): number {
   const n = Number(d) || 5;
   if (n < 4) return 4;
-  if (n > 12) return 12;
+  if (n > MAX_SEG_DUR) return MAX_SEG_DUR;
   return Math.round(n);
 }
 
@@ -141,37 +134,35 @@ function splitScript(script: any): any[] {
 
 async function submitArkTask(opts: {
   arkKey: string; model: string; prompt: string; ratio: string; duration: number;
+  resolution: string;
   firstImage?: string; lastImage?: string; referenceImages?: string[];
 }): Promise<{ ok: true; id: string; mode: string } | { ok: false; error: string; raw?: unknown }> {
   const content: any[] = [{ type: "text", text: opts.prompt }];
-  const advanced = modelSupportsAdvancedRefs(opts.model);
+  // Seedance 2.0 全系都支持 reference_image / first_frame / last_frame / generate_audio
   const refs = (opts.referenceImages || []).filter(Boolean);
-  if (advanced) {
-    for (const url of refs.slice(0, 2)) {
-      content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
-    }
+  for (const url of refs.slice(0, 2)) {
+    content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
   }
   if (opts.firstImage) {
     content.push({ type: "image_url", image_url: { url: opts.firstImage }, role: "first_frame" });
   }
-  if (advanced && opts.lastImage && opts.lastImage !== opts.firstImage) {
+  if (opts.lastImage && opts.lastImage !== opts.firstImage) {
     content.push({ type: "image_url", image_url: { url: opts.lastImage }, role: "last_frame" });
   }
   const mode = opts.firstImage
     ? (opts.lastImage && opts.lastImage !== opts.firstImage ? "first_last_frame" : "image2video")
     : (refs.length ? "reference2video" : "text2video");
 
+  // 2.0 系列:不发送 seed / camera_fixed(2.0 不支持)
   const arkBody: Record<string, unknown> = {
     model: opts.model,
     content,
-    resolution: "720p",
+    resolution: opts.resolution,
     ratio: opts.ratio,
     duration: opts.duration,
     watermark: false,
+    generate_audio: true,
   };
-  if (/seedance-(1-5|2)/i.test(opts.model)) {
-    arkBody.generate_audio = true;
-  }
   const arkRes = await fetch(ARK_ENDPOINT, {
     method: "POST",
     headers: { "Authorization": `Bearer ${opts.arkKey}`, "Content-Type": "application/json" },
@@ -267,8 +258,21 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
+    // 模型解析顺序:body.model → marketing_presets.video_model → 默认 Seedance 2.0 Pro
+    // 不在白名单的回退到默认并日志告警
     const { data: presets } = await admin.from("marketing_presets").select("value").eq("key", "video_model").maybeSingle();
-    const model = (presets?.value as any)?.id || DEFAULT_MODEL;
+    const requestedModel =
+      (typeof body.model === "string" && body.model) ||
+      (presets?.value as any)?.id ||
+      DEFAULT_SEEDANCE_2;
+    const modelInfo = resolveSeedanceModel(requestedModel);
+    const model = modelInfo.id;
+    if (model !== requestedModel) {
+      console.warn(`[render] requested model ${requestedModel} not in Seedance 2.0 whitelist, falling back to ${model}`);
+    }
+    const requestedRes = typeof body.resolution === "string" ? body.resolution : "720p";
+    const resolution = clampResolution(modelInfo, requestedRes);
+    const resolutionDowngraded = resolution !== requestedRes.toLowerCase();
 
     const ratio = normalizeRatio(script.aspect);
     const totalDur = Number(script.total_duration_s) || 0;
@@ -277,14 +281,14 @@ Deno.serve(async (req) => {
     const characterCover: string | undefined = character?.cover_url;
     const fallbackFirst = imageUrls[0] || characterCover;
 
-    // ============ 单段路径 ============
-    if (totalDur <= MAX_SEG_DUR + 2) {
+    // ============ 单段路径(≤15s 全部走这里,杜绝拼接) ============
+    if (totalDur <= MAX_SEG_DUR) {
       const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
       const imgs = resolveSegmentImages(script, imageUrls, character, fallbackFirst);
-      console.log("[render single] model=", model, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
+      console.log("[render single] model=", model, "res=", resolution, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
       const r = await submitArkTask({
-        arkKey: ARK_KEY, model, prompt, ratio, duration,
+        arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
         firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
       });
       if (!r.ok) {
@@ -311,11 +315,13 @@ Deno.serve(async (req) => {
         output_url: null,
         meta: {
           job_id: job.id, task_id: r.id, video_type: script.video_type,
-          duration, aspect: ratio, mode: r.mode,
+          duration, aspect: ratio, mode: r.mode, resolution,
           topic: script.topic || "", style: styleKey,
-          style_label: VIDEO_STYLE_LABELS[styleKey], model, status: "queued",
+          style_label: VIDEO_STYLE_LABELS[styleKey], model,
+          model_label: modelInfo.label, status: "queued",
           segment_total: 1, character_id: character?.id || null,
           character_name: character?.name || null,
+          warnings: resolutionDowngraded ? ["resolution_downgraded"] : [],
           image_usage: {
             reference_count: imgs.referenceImages.length,
             first: imgs.firstImage || null,
@@ -352,7 +358,7 @@ Deno.serve(async (req) => {
       const imgs = resolveSegmentImages(sub, imageUrls, character, segFallback);
       console.log(`[render multi] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
       return submitArkTask({
-        arkKey: ARK_KEY, model, prompt, ratio, duration,
+        arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
         firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
       }).then((r) => ({ i, r, sub, duration, imgs }));
     }));
@@ -390,7 +396,8 @@ Deno.serve(async (req) => {
         duration: totalDur, aspect: ratio,
         mode: anyFirst ? "image2video" : (totalRefImages > 0 ? "reference2video" : "text2video"),
         topic: script.topic || "", style: styleKey,
-        style_label: VIDEO_STYLE_LABELS[styleKey], model,
+        style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
+        warnings: resolutionDowngraded ? ["resolution_downgraded"] : [],
         status: "running", segment_total: segmentTotal, segment_done: 0,
         stage: "generating", character_id: character?.id || null,
         character_name: character?.name || null,
