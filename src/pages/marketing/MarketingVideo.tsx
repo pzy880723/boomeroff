@@ -901,3 +901,114 @@ function BindingBadge({ binding }: { binding: { source: string; expected: number
   }
   return null;
 }
+
+function fmtClock(s: number): string {
+  const m = Math.floor(Math.max(0, s) / 60);
+  const r = Math.max(0, s) % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function RenderProgressCard({
+  jobId, modelId, startedAt, segmentTotal, phase, progress, videoUrl, error,
+}: {
+  jobId: string;
+  modelId: string;
+  startedAt: number;
+  segmentTotal: number;
+  phase: RenderPhase;
+  progress: { done: number; total: number } | null;
+  videoUrl: string | null;
+  error: string | null;
+}) {
+  const model = getSeedanceModel(modelId);
+  const [elapsed, setElapsed] = useState(() => Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+  useEffect(() => {
+    if (phase === 'done' || phase === 'failed') return;
+    const t = window.setInterval(() => {
+      setElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [phase, startedAt]);
+
+  // 预计单段约 90 秒(Fast 75 / Mini 60),多段额外 +20s 拼接
+  const perSeg = /fast/i.test(model.id) ? 75 : /mini/i.test(model.id) ? 60 : 90;
+  const expected = Math.max(30, perSeg * Math.max(1, segmentTotal) + (segmentTotal > 1 ? 20 : 0));
+  const remaining = Math.max(0, expected - elapsed);
+
+  const pct = (() => {
+    if (phase === 'done') return 100;
+    if (phase === 'failed') return 0;
+    if (progress && progress.total > 0) {
+      return Math.min(99, Math.round((progress.done / progress.total) * 100));
+    }
+    return Math.min(95, Math.round((elapsed / expected) * 100));
+  })();
+
+  const label =
+    phase === 'queued' ? '排队中…' :
+    phase === 'done' ? '渲染完成 🎬' :
+    phase === 'failed' ? '渲染失败' : '渲染中…';
+
+  const tone =
+    phase === 'done' ? 'border-success/40 bg-success/5' :
+    phase === 'failed' ? 'border-destructive/40 bg-destructive/5' :
+    'border-accent/40 bg-accent/5';
+
+  return (
+    <div className={`rounded-lg border ${tone} p-3 text-xs space-y-3`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {phase !== 'done' && phase !== 'failed' && <Loader2 className="w-4 h-4 animate-spin text-accent shrink-0" />}
+          <span className="font-medium text-foreground truncate">{label}</span>
+        </div>
+        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent font-semibold shrink-0">
+          {model.label}
+        </span>
+      </div>
+
+      <div className="space-y-1">
+        <div className="h-2 rounded-full bg-muted overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${phase === 'failed' ? 'bg-destructive' : 'bg-accent'}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
+          <span>
+            {progress && progress.total > 1
+              ? `分段 ${Math.min(progress.done, progress.total)}/${progress.total}`
+              : phase === 'queued' ? '排队中' : phase === 'done' ? '已完成' : '单段直出'}
+          </span>
+          <span>
+            {pct}% · 已用 {fmtClock(elapsed)}
+            {phase !== 'done' && phase !== 'failed' && ` · 预计还需 ${fmtClock(remaining)}`}
+          </span>
+        </div>
+      </div>
+
+      {phase === 'failed' && error && (
+        <p className="text-[11px] text-destructive leading-snug">失败原因:{error}</p>
+      )}
+
+      <div className="text-[10px] text-muted-foreground flex items-center justify-between">
+        <span>任务 ID · {jobId.slice(0, 8)}</span>
+        <span>关掉页面也会继续渲染</span>
+      </div>
+
+      <div className="flex gap-2">
+        {phase === 'done' && videoUrl ? (
+          <Button asChild size="sm" className="flex-1">
+            <a href={videoUrl} target="_blank" rel="noreferrer">
+              查看视频 <ArrowRight className="w-3.5 h-3.5 ml-1" />
+            </a>
+          </Button>
+        ) : null}
+        <Button asChild size="sm" variant="outline" className="flex-1">
+          <Link to="/me/marketing/library">
+            去素材库 <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
