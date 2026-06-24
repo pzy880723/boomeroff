@@ -12,6 +12,8 @@ import {
   pollRenderJob, getInflightPick, setInflightPick,
   type ActiveRenderJob,
 } from '@/lib/surpriseJob';
+import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
+import { DEFAULT_SEEDANCE_2, getSeedanceModel } from '@/lib/seedanceModels';
 
 interface PickedAsset {
   asset_id: string; index: number; url: string; summary: string; category: string | null;
