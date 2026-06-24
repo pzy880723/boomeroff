@@ -1,0 +1,65 @@
+// Seedance 2.0 系列模型清单(前端用)。后端 _shared/seedance-models.ts 字段保持一致。
+// 用户在生成视频前直接选择;选不到时默认走 Pro。
+export interface SeedanceModel {
+  id: string;
+  label: string;
+  tagline: string;
+  max_duration: number;
+  resolutions: string[];
+  supports_audio: boolean;
+  speed: string;
+  cost: string;
+  best_for: string;
+  available: boolean;
+  available_at?: string;
+  recommended?: boolean;
+}
+
+export const SEEDANCE_2_MODELS: SeedanceModel[] = [
+  {
+    id: "doubao-seedance-2-0-260128",
+    label: "Seedance 2.0 Pro",
+    tagline: "画质最强",
+    max_duration: 15,
+    resolutions: ["480p", "720p", "1080p", "4K"],
+    supports_audio: true,
+    speed: "标准",
+    cost: "高",
+    best_for: "成片、对外发布、需要 1080p/4K",
+    available: true,
+    recommended: true,
+  },
+  {
+    id: "doubao-seedance-2-0-fast-260128",
+    label: "Seedance 2.0 Fast",
+    tagline: "更快更便宜",
+    max_duration: 15,
+    resolutions: ["480p", "720p"],
+    supports_audio: true,
+    speed: "快(约 1/2 用时)",
+    cost: "中",
+    best_for: "日常短视频、批量出片",
+    available: true,
+  },
+  {
+    id: "doubao-seedance-2-0-mini-260615",
+    label: "Seedance 2.0 Mini",
+    tagline: "最便宜 · 测试稿",
+    max_duration: 15,
+    resolutions: ["480p", "720p"],
+    supports_audio: true,
+    speed: "最快",
+    cost: "最低",
+    best_for: "测试稿、灵感稿",
+    available: false,
+    available_at: "2026-06-25",
+  },
+];
+
+export const DEFAULT_SEEDANCE_2 = "doubao-seedance-2-0-260128";
+export const SEEDANCE_MAX_SINGLE_SHOT = 15;
+
+export function getSeedanceModel(id?: string | null): SeedanceModel {
+  if (!id) return SEEDANCE_2_MODELS[0];
+  return SEEDANCE_2_MODELS.find((m) => m.id === id) || SEEDANCE_2_MODELS[0];
+}
