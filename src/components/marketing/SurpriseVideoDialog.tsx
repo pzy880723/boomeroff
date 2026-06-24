@@ -183,8 +183,9 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
         ) : (
           <>
-            <ScriptBody pick={pick} />
-            <div className="border-t px-4 pt-3 pb-4 space-y-2 bg-background">
+            <ScriptBody pick={pick} modelLabel={getSeedanceModel(modelId).label} />
+            <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
+              <SeedanceModelPicker value={modelId} onChange={setModelId} compact />
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
                   <RefreshCw className="w-4 h-4 mr-1" /> 换一组
@@ -195,7 +196,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 </Button>
               </div>
               <p className="text-[10px] text-center text-muted-foreground">
-                画面全部来自你的素材库,关掉弹窗也会继续拍
+                单段直出 · 无拼接 · 关掉弹窗也会继续拍
               </p>
             </div>
           </>
