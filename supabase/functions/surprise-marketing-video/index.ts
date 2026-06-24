@@ -170,10 +170,12 @@ Deno.serve(async (req) => {
     if (!preview && body.script && body.picked_assets && body.vtype && body.style) {
       // 幂等再跑一次去重(防用户中途手改)
       const fixed = enforceUniqueAssets(body.script, body.picked_assets);
+      const renderBody: any = { script: { ...fixed.script, video_type: body.vtype }, style: body.style, shop_id: shopId };
+      if (typeof body.model === 'string' && body.model) renderBody.model = body.model;
       const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ script: { ...fixed.script, video_type: body.vtype }, style: body.style, shop_id: shopId }),
+        body: JSON.stringify(renderBody),
       });
       const renderData = await renderRes.json().catch(() => ({}));
       if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {
