@@ -515,17 +515,16 @@ export default function MarketingVideo() {
               <span className="text-accent">{script.style_label || '稳重'} · 文生视频</span>
             </div>
 
-            {!jobId && (
-              <div className="border-t border-border pt-3">
-                <SeedanceModelPicker value={modelId} onChange={setModelId} />
-              </div>
-            )}
-
-
-              <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
-                {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                确认脚本，开始渲染
-              </Button>
+            {!jobId ? (
+              <>
+                <div className="border-t border-border pt-3">
+                  <SeedanceModelPicker value={modelId} onChange={setModelId} />
+                </div>
+                <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
+                  {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  确认脚本，开始渲染
+                </Button>
+              </>
             ) : (
               <div className="rounded-lg border border-success/40 bg-success/5 p-3 text-xs space-y-2">
                 <p className="font-medium text-foreground">渲染任务已入队 · ID {jobId.slice(0, 8)}</p>
