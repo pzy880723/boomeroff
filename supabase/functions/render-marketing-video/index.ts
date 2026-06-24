@@ -188,23 +188,53 @@ async function submitArkTask(opts: {
   return { ok: true, id: arkJson.id, mode };
 }
 
-/** 组装某段的图片三件套:角色参考图(每段都带)+ 段内 first/last。 */
+/** 组装某段的图片三件套:角色参考图(每段都带)+ 段内 first/last。
+ *  优先用 clip.storyboard_url(分镜静帧),没有再回退到原实景素材。 */
 function resolveSegmentImages(
   sub: ScriptLike,
   imageUrls: string[],
   character: { cover_url?: string; extra_reference_urls?: string[] } | null,
   fallbackFirst?: string,
 ): { firstImage?: string; lastImage?: string; referenceImages: string[] } {
-  const picks = pickSegmentImages(sub);
-  const firstImage = picks.firstIndex !== null ? imageUrls[picks.firstIndex] : undefined;
-  const lastImage = picks.lastIndex !== null ? imageUrls[picks.lastIndex] : undefined;
+  // 1) 收集本段内 clips 顺序(hook → scenes → outro)
+  const seq: any[] = [];
+  if (sub.hook && (sub.hook.scene || sub.hook.action || sub.hook.storyboard_url)) seq.push(sub.hook);
+  if (Array.isArray(sub.scenes)) seq.push(...sub.scenes);
+  if (sub.outro && (sub.outro.scene || sub.outro.action || sub.outro.storyboard_url)) seq.push(sub.outro);
+
+  // 2) 先按 storyboard_url 找首/尾帧
+  const sbUrls: string[] = [];
+  for (const sc of seq) {
+    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) sbUrls.push(sc.storyboard_url);
+  }
+  let firstImage: string | undefined;
+  let lastImage: string | undefined;
+  if (sbUrls.length) {
+    firstImage = sbUrls[0];
+    if (sbUrls.length > 1) lastImage = sbUrls[sbUrls.length - 1];
+  } else {
+    // 3) 没有静帧 → 老逻辑,从实景素材里挑
+    const picks = pickSegmentImages(sub);
+    if (picks.firstIndex !== null) firstImage = imageUrls[picks.firstIndex];
+    if (picks.lastIndex !== null) lastImage = imageUrls[picks.lastIndex];
+  }
+
+  // 4) reference 永远塞角色身份板 + 段内绑定的实景照(锁人物 + 锁商品)
   const refSet = new Set<string>();
   if (character?.cover_url) refSet.add(character.cover_url);
   for (const u of character?.extra_reference_urls || []) if (u) refSet.add(u);
+  const picks = pickSegmentImages(sub);
   for (const i of picks.refIndices) if (imageUrls[i]) refSet.add(imageUrls[i]);
+  // 把段内绑定的实景照也加进 reference,即使被静帧顶掉了 first/last,
+  // 模型也能看到真实店铺/商品样子
+  for (const sc of seq) {
+    const idx = typeof sc?.image_index === 'number' ? sc.image_index : null;
+    if (idx !== null && imageUrls[idx]) refSet.add(imageUrls[idx]);
+  }
+
   return {
     firstImage: firstImage || fallbackFirst,
-    lastImage,
+    lastImage: lastImage && lastImage !== firstImage ? lastImage : undefined,
     referenceImages: Array.from(refSet).slice(0, 3),
   };
 }
