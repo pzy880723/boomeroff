@@ -13,7 +13,7 @@ import {
   type ActiveRenderJob,
 } from '@/lib/surpriseJob';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
-import { DEFAULT_SEEDANCE_2, getSeedanceModel } from '@/lib/seedanceModels';
+import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel } from '@/lib/seedanceModels';
 
 interface PickedAsset {
   asset_id: string; index: number; url: string; summary: string; category: string | null;
@@ -183,16 +183,22 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
         ) : (
           <>
-            <ScriptBody pick={pick} modelLabel={getSeedanceModel(modelId).label} />
+            <ScriptBody pick={pick} />
             <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
               <SeedanceModelPicker value={modelId} onChange={setModelId} compact />
+              <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
+                <Sparkles className="w-3 h-3 shrink-0" />
+                <span className="truncate">
+                  将使用 <b>{getSeedanceModel(modelId).label}</b> · 最长 {getSeedanceModel(modelId).max_duration}s · 单段直出
+                </span>
+              </div>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
                   <RefreshCw className="w-4 h-4 mr-1" /> 换一组
                 </Button>
                 <Button className="flex-1" onClick={start} disabled={submitting}>
                   {submitting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
-                  就拍这条
+                  就用 {getSeedanceShortLabel(modelId)} 拍
                 </Button>
               </div>
               <p className="text-[10px] text-center text-muted-foreground">
@@ -293,7 +299,7 @@ function RenderingBody({
   );
 }
 
-function ScriptBody({ pick, modelLabel }: { pick: SurpriseResult; modelLabel?: string }) {
+function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
   const clips: { label: string; clip: SceneClip }[] = [];
   if (pick.script.hook) clips.push({ label: '钩子', clip: pick.script.hook });
   (pick.script.scenes || []).forEach((s, i) => clips.push({ label: `镜头${i + 1}`, clip: s }));
@@ -318,7 +324,7 @@ function ScriptBody({ pick, modelLabel }: { pick: SurpriseResult; modelLabel?: s
         <Chip>路线 · {pick.vtype_label}</Chip>
         <Chip>风格 · {STYLE_LABEL[pick.style] || pick.style}</Chip>
         {pick.character && <Chip>主角 · {pick.character.name}</Chip>}
-        {modelLabel && <Chip>模型 · {modelLabel}</Chip>}
+        
       </div>
 
       {pick.__warn === 'assets_reused' && (

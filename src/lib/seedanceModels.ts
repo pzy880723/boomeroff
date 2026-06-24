@@ -63,3 +63,8 @@ export function getSeedanceModel(id?: string | null): SeedanceModel {
   if (!id) return SEEDANCE_2_MODELS[0];
   return SEEDANCE_2_MODELS.find((m) => m.id === id) || SEEDANCE_2_MODELS[0];
 }
+
+export function getSeedanceShortLabel(id?: string | null): string {
+  const m = getSeedanceModel(id);
+  return m.label.replace(/^Seedance\s*2\.0\s*/i, '') || m.label;
+}

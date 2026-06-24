@@ -19,7 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
 import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
-import { DEFAULT_SEEDANCE_2 } from '@/lib/seedanceModels';
+import { DEFAULT_SEEDANCE_2, getSeedanceShortLabel } from '@/lib/seedanceModels';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -522,7 +522,7 @@ export default function MarketingVideo() {
                 </div>
                 <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
                   {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  确认脚本，开始渲染
+                  用 {getSeedanceShortLabel(modelId)} 开始渲染
                 </Button>
               </>
             ) : (
