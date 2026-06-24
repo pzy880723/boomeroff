@@ -258,8 +258,21 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
+    // 模型解析顺序:body.model → marketing_presets.video_model → 默认 Seedance 2.0 Pro
+    // 不在白名单的回退到默认并日志告警
     const { data: presets } = await admin.from("marketing_presets").select("value").eq("key", "video_model").maybeSingle();
-    const model = (presets?.value as any)?.id || DEFAULT_MODEL;
+    const requestedModel =
+      (typeof body.model === "string" && body.model) ||
+      (presets?.value as any)?.id ||
+      DEFAULT_SEEDANCE_2;
+    const modelInfo = resolveSeedanceModel(requestedModel);
+    const model = modelInfo.id;
+    if (model !== requestedModel) {
+      console.warn(`[render] requested model ${requestedModel} not in Seedance 2.0 whitelist, falling back to ${model}`);
+    }
+    const requestedRes = typeof body.resolution === "string" ? body.resolution : "720p";
+    const resolution = clampResolution(modelInfo, requestedRes);
+    const resolutionDowngraded = resolution !== requestedRes.toLowerCase();
 
     const ratio = normalizeRatio(script.aspect);
     const totalDur = Number(script.total_duration_s) || 0;
@@ -268,14 +281,14 @@ Deno.serve(async (req) => {
     const characterCover: string | undefined = character?.cover_url;
     const fallbackFirst = imageUrls[0] || characterCover;
 
-    // ============ 单段路径 ============
-    if (totalDur <= MAX_SEG_DUR + 2) {
+    // ============ 单段路径(≤15s 全部走这里,杜绝拼接) ============
+    if (totalDur <= MAX_SEG_DUR) {
       const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
       const imgs = resolveSegmentImages(script, imageUrls, character, fallbackFirst);
-      console.log("[render single] model=", model, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
+      console.log("[render single] model=", model, "res=", resolution, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
       const r = await submitArkTask({
-        arkKey: ARK_KEY, model, prompt, ratio, duration,
+        arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
         firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
       });
       if (!r.ok) {
