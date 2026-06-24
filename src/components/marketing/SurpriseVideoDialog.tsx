@@ -55,6 +55,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [activeJob, setActiveJob] = useState<ActiveRenderJob | null>(null);
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = () => {
