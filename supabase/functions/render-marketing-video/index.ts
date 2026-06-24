@@ -1,16 +1,10 @@
-// 提交视频渲染任务到火山方舟 Seedance API。
-// 单段(≤12s)走单任务;长视频会自动按 ≤10s 拆成多段子任务,父任务汇总,
-// 全部段完成后由客户端用 mediabunny 拼接成一支 MP4。
+// 提交视频渲染任务到火山方舟 Seedance 2.0 API。
+// 单段 ≤15s 直出,不再拼接;>15s 才会拆段(目前 surprise/标准生成都锁 15s,基本走单段)。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segments.ts";
-
-// Seedance 1.5 pro / 2.x 才支持 reference_image 和 last_frame。
-// 旧模型自动降级,只发 first_frame。
-function modelSupportsAdvancedRefs(model: string): boolean {
-  return /seedance-(1-5|2)/i.test(model) || /seedance.*pro/i.test(model);
-}
+import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT } from "../_shared/seedance-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,8 +14,7 @@ const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
-const DEFAULT_MODEL = "doubao-seedance-1-5-pro-251215";
-const MAX_SEG_DUR = 10; // 单段渲染上限(秒),给 Seedance 留余量
+const MAX_SEG_DUR = SEEDANCE_MAX_SINGLE_SHOT; // 单段渲染上限(秒)= 15
 
 function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string, segLabel?: string, character?: any): string {
   const styleEn = VIDEO_STYLE_EN[styleKey];
