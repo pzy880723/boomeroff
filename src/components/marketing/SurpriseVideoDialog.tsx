@@ -320,16 +320,29 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
           素材偏少,已尽量打散；建议补拍几张实景图让分镜更丰富。
         </div>
       )}
+      {pick.__sb_warn && (
+        <div className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-1.5 leading-snug">
+          分镜静帧生成跳过(将直接用实景照渲染):{pick.__sb_warn}
+        </div>
+      )}
 
       <div>
-        <div className="text-[11px] text-muted-foreground mb-1.5">入选素材 · {pick.assets.length} 张实景</div>
+        <div className="text-[11px] text-muted-foreground mb-1.5">
+          {withTime.some((w) => w.clip.storyboard_url)
+            ? `分镜静帧 · ${withTime.filter((w) => w.clip.storyboard_url).length}/${withTime.length} 张已合成`
+            : `入选素材 · ${pick.assets.length} 张实景`}
+        </div>
         <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 pb-1 snap-x">
-          {pick.assets.map((a) => (
-            <div key={a.asset_id} className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted ring-1 ring-border relative snap-start">
-              <img src={a.url} alt="" className="w-full h-full object-cover" />
-              <div className="absolute bottom-0 right-0 px-1 text-[9px] bg-black/55 text-white rounded-tl">#{a.index}</div>
-            </div>
-          ))}
+          {(withTime.some((w) => w.clip.storyboard_url) ? withTime : pick.assets.map((a, i) => ({ label: `#${i}`, clip: { storyboard_url: null }, asset: a }))).map((it: any, i) => {
+            const url = it.clip?.storyboard_url || it.asset?.url || it.url;
+            const label = it.label;
+            return (
+              <div key={i} className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted ring-1 ring-border relative snap-start">
+                {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : null}
+                <div className="absolute bottom-0 right-0 px-1 text-[9px] bg-black/55 text-white rounded-tl">{label || `#${i}`}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -339,17 +352,21 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
           {withTime.map(({ label, clip, start, dur }, i) => {
             const idx = clip.image_index;
             const asset = typeof idx === 'number' ? assetByIdx.get(idx) : undefined;
+            const frameUrl = clip.storyboard_url || asset?.url || null;
             return (
               <div key={i} className="flex gap-2 p-2 rounded-lg border bg-card min-w-0">
                 <div className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted relative">
-                  {asset ? (
-                    <img src={asset.url} alt="" className="w-full h-full object-cover" />
+                  {frameUrl ? (
+                    <img src={frameUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-[9px] text-muted-foreground text-center px-1">
                       自由<br />镜头
                     </div>
                   )}
                   <div className="absolute top-0 left-0 px-1 text-[9px] bg-black/55 text-white rounded-br">{label}</div>
+                  {clip.storyboard_url && (
+                    <div className="absolute bottom-0 right-0 px-1 text-[8px] bg-accent/85 text-white rounded-tl">分镜</div>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center justify-between gap-2 min-w-0">
