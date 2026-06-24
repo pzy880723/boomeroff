@@ -318,6 +318,7 @@ function ScriptBody({ pick, modelLabel }: { pick: SurpriseResult; modelLabel?: s
         <Chip>路线 · {pick.vtype_label}</Chip>
         <Chip>风格 · {STYLE_LABEL[pick.style] || pick.style}</Chip>
         {pick.character && <Chip>主角 · {pick.character.name}</Chip>}
+        {modelLabel && <Chip>模型 · {modelLabel}</Chip>}
       </div>
 
       {pick.__warn === 'assets_reused' && (
