@@ -226,7 +226,14 @@ export default function MarketingVideo() {
       if (resp?.ok === false) throw new Error(resp.error || '渲染提交失败');
       if (resp?.error) throw new Error(resp.error);
       setJobId(resp.job_id);
-      toast.success('已确认脚本，渲染任务已入队');
+      setRenderModelId(modelId);
+      setRenderStartedAt(Date.now());
+      setRenderSegmentTotal(Number(resp.segment_total) || 1);
+      setRenderPhase('queued');
+      setRenderProgress(null);
+      setRenderVideoUrl(null);
+      setRenderError(null);
+      toast.success(`已用 ${getSeedanceShortLabel(modelId)} 入队渲染`);
     } catch (e: any) {
       const msg = e?.message || e?.error?.message || '提交失败,请稍后重试';
       toast.error(msg);
