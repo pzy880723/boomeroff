@@ -241,6 +241,25 @@ export default function MarketingVideo() {
     finally { setRendering(false); }
   };
 
+  // 轮询渲染进度
+  useEffect(() => {
+    if (!jobId) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const tick = async () => {
+      const r = await pollRenderJob(jobId);
+      if (cancelled) return;
+      setRenderPhase(r.phase);
+      if (r.progress) setRenderProgress(r.progress);
+      if (r.video_url) setRenderVideoUrl(r.video_url);
+      if (r.error && r.phase === 'failed') setRenderError(r.error);
+      if (r.phase === 'done' || r.phase === 'failed') return;
+      timer = window.setTimeout(tick, 3000);
+    };
+    tick();
+    return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
+  }, [jobId]);
+
   const updateScene = (key: 'hook' | 'outro', field: string, val: any) => {
     setScript({ ...script, [key]: { ...script[key], [field]: val } });
   };
