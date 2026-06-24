@@ -343,6 +343,30 @@ Deno.serve(async (req) => {
     };
     if (reused) result.__warn = 'assets_reused';
 
+    // ====== 分镜静帧:preview 阶段把脚本里每个分镜先合成静态画面 ======
+    // 这一步把"模型空想"变成"模型让一张确定的图动起来",且每段都把角色画进画面。
+    try {
+      const sbRes = await fetch(`${SUPABASE_URL}/functions/v1/storyboard-marketing-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({
+          script, assets, character, shop_id: shopId, style,
+        }),
+      });
+      const sbData = await sbRes.json().catch(() => ({}));
+      if (sbRes.ok && sbData?.ok && sbData.script) {
+        result.script = sbData.script;
+        script = sbData.script;
+        result.storyboard = sbData.frames || [];
+        result.storyboard_session_id = sbData.session_id;
+      } else {
+        console.warn("[surprise] storyboard skipped:", sbData?.error);
+        result.__sb_warn = sbData?.error || 'storyboard_failed';
+      }
+    } catch (e) {
+      console.warn("[surprise] storyboard error:", e);
+      result.__sb_warn = e instanceof Error ? e.message : 'storyboard_error';
+    }
 
     if (preview) return json(result);
 
