@@ -515,7 +515,13 @@ export default function MarketingVideo() {
               <span className="text-accent">{script.style_label || '稳重'} · 文生视频</span>
             </div>
 
-            {!jobId ? (
+            {!jobId && (
+              <div className="border-t border-border pt-3">
+                <SeedanceModelPicker value={modelId} onChange={setModelId} />
+              </div>
+            )}
+
+
               <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
                 {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 确认脚本，开始渲染
