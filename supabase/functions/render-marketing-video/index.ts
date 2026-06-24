@@ -134,37 +134,35 @@ function splitScript(script: any): any[] {
 
 async function submitArkTask(opts: {
   arkKey: string; model: string; prompt: string; ratio: string; duration: number;
+  resolution: string;
   firstImage?: string; lastImage?: string; referenceImages?: string[];
 }): Promise<{ ok: true; id: string; mode: string } | { ok: false; error: string; raw?: unknown }> {
   const content: any[] = [{ type: "text", text: opts.prompt }];
-  const advanced = modelSupportsAdvancedRefs(opts.model);
+  // Seedance 2.0 全系都支持 reference_image / first_frame / last_frame / generate_audio
   const refs = (opts.referenceImages || []).filter(Boolean);
-  if (advanced) {
-    for (const url of refs.slice(0, 2)) {
-      content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
-    }
+  for (const url of refs.slice(0, 2)) {
+    content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
   }
   if (opts.firstImage) {
     content.push({ type: "image_url", image_url: { url: opts.firstImage }, role: "first_frame" });
   }
-  if (advanced && opts.lastImage && opts.lastImage !== opts.firstImage) {
+  if (opts.lastImage && opts.lastImage !== opts.firstImage) {
     content.push({ type: "image_url", image_url: { url: opts.lastImage }, role: "last_frame" });
   }
   const mode = opts.firstImage
     ? (opts.lastImage && opts.lastImage !== opts.firstImage ? "first_last_frame" : "image2video")
     : (refs.length ? "reference2video" : "text2video");
 
+  // 2.0 系列:不发送 seed / camera_fixed(2.0 不支持)
   const arkBody: Record<string, unknown> = {
     model: opts.model,
     content,
-    resolution: "720p",
+    resolution: opts.resolution,
     ratio: opts.ratio,
     duration: opts.duration,
     watermark: false,
+    generate_audio: true,
   };
-  if (/seedance-(1-5|2)/i.test(opts.model)) {
-    arkBody.generate_audio = true;
-  }
   const arkRes = await fetch(ARK_ENDPOINT, {
     method: "POST",
     headers: { "Authorization": `Bearer ${opts.arkKey}`, "Content-Type": "application/json" },
