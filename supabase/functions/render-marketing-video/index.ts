@@ -358,7 +358,7 @@ Deno.serve(async (req) => {
       const imgs = resolveSegmentImages(sub, imageUrls, character, segFallback);
       console.log(`[render multi] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
       return submitArkTask({
-        arkKey: ARK_KEY, model, prompt, ratio, duration,
+        arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
         firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
       }).then((r) => ({ i, r, sub, duration, imgs }));
     }));
