@@ -299,7 +299,7 @@ function RenderingBody({
   );
 }
 
-function ScriptBody({ pick, modelLabel }: { pick: SurpriseResult; modelLabel?: string }) {
+function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
   const clips: { label: string; clip: SceneClip }[] = [];
   if (pick.script.hook) clips.push({ label: '钩子', clip: pick.script.hook });
   (pick.script.scenes || []).forEach((s, i) => clips.push({ label: `镜头${i + 1}`, clip: s }));
