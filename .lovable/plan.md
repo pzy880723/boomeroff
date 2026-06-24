@@ -1,92 +1,115 @@
-## 调整范围
 
-前端排版/状态 + edge function 一处后处理，**不改数据库**。
+# 加一道「分镜静帧」中间层
 
----
+## 现状链路（问题所在）
 
-## 1. 「惊喜一下」按钮重排版
+```text
+惊喜一下 → 挑实景素材 → 写脚本(文字) → Seedance 直接生成视频
+                                              ↑
+                                  每段的 first_frame 用的是「随机一张实景商品图」
+                                  角色 cover 只塞进 reference_image(权重低)
+                                  → 模型按实景空镜拍，人物经常不出现，段间跳变
+```
 
-当前问题:整块 primary 渐变 + 大图标，太重、太"广告位"，与首页其他卡片不一脉相承。
+## 目标链路（行业通用做法）
 
-改为「年鉴卡片」语言:
+```text
+惊喜一下 → 挑实景素材 → 写脚本(文字)
+                            ↓
+                    【新增】分镜静帧生成
+                    每个分镜 → 用 Nano Banana(gemini-3.1-flash-image)
+                    把「角色身份板 + 商品照 + 店铺照 + 该镜文字描述」
+                    合成一张「这一镜应该长什么样」的静态图
+                            ↓
+                    UI 展示 N 张静帧给用户预览/换图
+                            ↓
+                    Seedance 渲染：first_frame = 本镜静帧
+                                   last_frame  = 下一镜静帧(段间无缝)
+                                   reference   = 角色身份板(锁人物)
+```
 
-- 容器:`bg-card` + `border-accent/30` + `shadow-sm`，左侧细古铜金竖线（`before:` 伪元素）作为强调,不再用大色块。
-- 左侧:换成 `BOOMER` 头像（`boomer-idle.png`,40×40 圆角）取代 `Wand2`，呼应首页 Hero。
-- 中部:
-  - kicker：`font-display tracking-[0.18em] text-accent text-[10px]` → `惊喜 · SURPRISE`
-  - 主标题 15px 半粗：`让 BOOMER 替你拍一条`
-  - 描述 11px muted：`自动选品 · 写脚本 · 竖版 15 秒`
-- 右侧:小胶囊 `9:16 · 15s`(accent 描边) + `ChevronRight`。
-- hover/active：`border-accent/40` + `active:scale-[0.995]`。
+## 要做的事
 
-若当前有进行中渲染任务（见 §3），右侧胶囊换为 `生成中…` + 旋转图标，点击直接展开既有任务弹窗。
+### 1. 新 edge function：`storyboard-marketing-video`
 
----
+输入：`{ script, picked_assets, character, shop_id, style }`
+对脚本里每个分镜（hook + scenes + outro）并行调一次 Nano Banana（`google/gemini-3.1-flash-image`，多图融合），prompt 模板：
 
-## 2. 弹窗在 390px 上左右溢出
+```
+风格：${styleEn}，9:16 竖版，影视质感单帧定格。
+角色：${character.name}，外观锁：${visual_signature}（必须 100% 还原参考图里的脸/发型/服装）。
+场景：${clip.scene}
+动作瞬间：${clip.action}
+画面里必须包含的商品/场景元素：${本镜绑定的实景照描述}
+不要：字幕、文字水印、卡通化、UI 元素。
+```
+附图（合成参考）：角色 cover + 该镜绑定的实景素材 1–2 张。
 
-只改 `SurpriseVideoDialog.tsx`：
+输出：上传到 storage `marketing-storyboards/{shop_id}/{job_id}/{seg}.jpg`，回写：
+```json
+{ ok: true, frames: [{ scene_index, url, prompt }] }
+```
 
-- `DialogContent` 改为 `w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[88vh] overflow-hidden flex flex-col p-0 rounded-2xl`。
-- 全部 `px-5` → `px-4`，分镜卡 `gap-2.5` → `gap-2`，缩略图 `w-14 h-20` → `w-12 h-[68px]`，chip 行加 `flex-wrap min-w-0`。
-- 顶部入选素材横滑行：`-mx-4 px-4 snap-x` 避免被 padding 截断。
-- 分镜文本块 `min-w-0 break-words`，防长字幕撑宽。
+并把 URL 写回 `script.scenes[i].storyboard_url` / `script.hook.storyboard_url` / `script.outro.storyboard_url`。
 
-目标：375px / 390px 屏幕左右各留 12px 安全距，不再贴边/溢出。
+### 2. `surprise-marketing-video` preview 流程改造
 
----
+`preview=true` 现在返回 `{ picked, assets, script, ... }` —— 多加一步：
+拿到 `script` 后立刻调 `storyboard-marketing-video`，把 N 张分镜静帧塞进返回值：
+```json
+{ ok: true, ..., script, storyboard: [{ scene_index, url }] }
+```
 
-## 3. 关掉弹窗任务继续跑
+### 3. `render-marketing-video` 改首/尾帧来源
 
-当前两段会"丢"：
+旧逻辑（`resolveSegmentImages`）：从 `image_urls` 里按 `image_index` 挑实景照当 first/last_frame。
+新逻辑（优先级）：
+1. 若该镜有 `storyboard_url` → 用静帧
+2. 段间衔接：本段最后一个分镜的下一段第一个分镜的 storyboard_url → 当本段 `last_frame`
+3. 角色 cover + 角色 `extra_reference_urls` → 永远作 `reference_image`（人物锁）
+4. 兜底：原来的实景照
 
-- **A 段（挑素材+写脚本 3–8s）**：关闭即组件卸载，再开重派一次。
-- **B 段（已点"就拍这条"，渲染 1–2 分钟）**：`jobId` 只在组件 state，关闭即丢，下次打开看不到进度。
+效果：
+- 每段首/尾都是「我们设计好的画面」，Seedance 只做"让这张图动起来 4 秒"，方差大幅缩小
+- 段 N 的 last_frame == 段 N+1 的 first_frame → 拼接处自然无缝
+- 角色身份板每段都进 reference → 人脸/服装一致
 
-新增 `src/lib/surpriseJob.ts`（模块级 + `localStorage` 持久化）：
+### 4. `SurpriseVideoDialog` UI 升级
 
-- 模块级 `inflightPick: Promise<SurpriseResult> | null` —— A 段去重。
-- `getActiveRenderJob(shopId)` / `setActiveRenderJob(shopId, { jobId, cover_url, createdAt })` / `clearActiveRenderJob(shopId)`，`localStorage` key `boomer.surprise.job:<shopId>`，TTL 30 分钟自动清。
-- `pollRenderJob(jobId)`：沿用现有 video 模块的 polling（读 `marketing_render_jobs` 状态或 `poll-marketing-video` edge fn，按现有惯例），返回 `queued|rendering|done|failed`。
+preview 返回后，渲染区从「N 张原始素材缩略图」改成「N 个分镜卡片」：
+```
+[钩子] [镜头1] [镜头2] [镜头3] [收尾]
+ 静帧   静帧    静帧    静帧    静帧
+ 2.5s   3s      3s      3.5s    3s
+ "..."  "..."   "..."   "..."   "..."
+```
+- 点单张静帧 → 弹小窗显示该镜文字 + 「重画这张」按钮（再调一次 storyboard for that one scene）
+- 底部按钮：`再换一组` / `就拍这条`
 
-`SurpriseVideoDialog` 行为变化:
+### 5. 数据库小改
 
-1. 打开时先查 `getActiveRenderJob`:
-   - 命中 → 进入「渲染进行中」视图：BOOMER + 进度文案 + 封面缩略 + 「去素材库」/「关闭(后台继续)」；启动 polling，done 时 `clearActiveRenderJob` + toast `🎬 视频拍好了`。
-   - 未命中 → 走 A 段，但 `doPick` 改成复用 `inflightPick`，不重复派单。
-2. 关闭弹窗：不取消 inflight、不清 jobId，仅隐藏 UI。
-3. 「就拍这条」成功后：`setActiveRenderJob(shopId, ...)`，UI 切到「渲染进行中」。
-4. `MyMarketing` mount 时读 `getActiveRenderJob`，给按钮加「生成中…」徽标，点击直接展开进行中弹窗。
+`marketing_video_jobs` 用现有 `script` jsonb 存 `storyboard_url`（不需要建新表）。
 
-边界：同一 shop 同时只允许一条 surprise 在跑，「换一组」只在 A 段可用。
+### 6. 关于「角色必须出场」
 
----
+跟你前面的吐槽一起修：`surprise-marketing-video` 里 `Math.random() < 0.5` 的概率挑角色 → 改为「店里若已建角色则 100% 用」。脚本生成 prompt 里 `每个镜头都把 TA 自然带入` 那段保留，但因为静帧已经合成出人，已不再依赖 Seedance 自己想象。
 
-## 4. 每一组镜头都不能重复（同一素材不被多个分镜复用）
+## 成本与时间
 
-当前 `generate-marketing-video-script` 可能给多个分镜分配同一个 `image_index`。改造放在 `surprise-marketing-video/index.ts` 内，**纯后处理 + 重采样**，不动脚本生成 fn：
+- Nano Banana 每张 ~$0.039，6 个分镜 ≈ $0.24/视频，加在视频成本里可忽略
+- 静帧并行生成耗时 ~6-10s，加到现有 90s 渲染流程头部 → 用户感知端到端 +10s 不到
+- preview 弹窗多一个 loading：`脚本已生成，正在画分镜...`
 
-1. **保证素材数 ≥ 分镜数**：脚本回来后，统计真实分镜数 `sceneCount = (hook?1:0) + scenes.length + (outro?1:0)`。若 `pickedAssets.length < sceneCount`：
-   - 从剩余 pool（已剔除 `exclude` 和已选）继续 `sampleWeighted` 补齐到 `sceneCount`；
-   - pool 也不够时，允许复用，但下一步会优先未用素材，再回退到"使用次数最少"的素材。
-2. **强制一对一映射**（按分镜出场顺序遍历）：
-   - 维护 `used: Set<number>` 和 `usage: number[]`（每个 asset 的已用次数）。
-   - 对每个分镜：
-     - 若模型给的 `image_index` 合法且未在 `used` 中，保留；
-     - 否则在所有未用素材里挑：先按 `asset.summary/category/tags` 与该分镜文本（`scene/action/dialogue`）做朴素关键词重合度打分，分数最高的优先；并列时选 `usage` 最低的；再并列随机。
-     - 选中后 `used.add(idx)`、`usage[idx]++`；写回 `clip.image_index = idx`。
-   - pool 不足以一对一时（极端：素材数 < 分镜数且补齐也失败），从 `usage` 最低集合里挑——保证"分散度最大"，并在返回里加 `__warn: 'assets_reused'` 供前端可选提示。
-3. **入选素材列表只展示真正用到的**：`assets` 数组按最终 `image_index` 出现顺序去重输出（保留 `index` 字段对齐分镜），未被任何分镜引用的素材剔除——前端"入选素材 · N 张实景"和分镜缩略图严格一致，不会出现"列了 5 张但只用了 3 张"或"同张图反复出现"。
-4. 提交模式（`!preview && body.script && body.picked_assets`）也跑同样后处理：因为前端"就拍这条"会回传 preview 阶段的 script，本身已经处理过；但仍要做一次幂等校验，防止用户中途手改。
+## 实现顺序
 
-不动 `render-marketing-video`：它按 `image_index` 取图，前端展示和最终渲染天然一致。
+1. 新建 `supabase/functions/storyboard-marketing-video/index.ts`
+2. 改 `surprise-marketing-video`：preview 末尾调 storyboard，把结果合入返回
+3. 改 `render-marketing-video`：`resolveSegmentImages` 优先用 storyboard_url
+4. 改 `SurpriseVideoDialog`：渲染分镜卡片 + 单镜重画
+5. 角色 100% 出场 + 脚本 prompt 微调
 
----
+## 不在本次改动里
 
-## 验证
-
-- 390×844：按钮新样式 + 弹窗左右各 12px 间距 + 缩略图横滑无截断。
-- 进入弹窗 → 关闭 → 立刻重开：不出现重复 loading。
-- 「就拍这条」→ 关闭 → 回 `/me/marketing`：按钮显示「生成中…」；再次点击直接看到进行中视图；done 后按钮恢复默认。
-- 多次「换一组」：每组里所有分镜的缩略图互不重复，且入选素材数量 = 分镜数量。
-- 极端：素材库只有 2 张图但脚本 4 个分镜 → 优雅降级 + 顶部出现轻量提示「素材偏少,已尽量打散」。
+- 用户手改分镜文字 → 留到下版
+- 真人 + 虚拟角色同框的特殊静帧 → 留到下版
+- 角色训练 / LoRA → 不动
