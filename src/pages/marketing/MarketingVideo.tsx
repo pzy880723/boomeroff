@@ -63,6 +63,13 @@ export default function MarketingVideo() {
   const [rendering, setRendering] = useState(false);
   const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [renderModelId, setRenderModelId] = useState<string | null>(null);
+  const [renderStartedAt, setRenderStartedAt] = useState<number | null>(null);
+  const [renderSegmentTotal, setRenderSegmentTotal] = useState<number>(1);
+  const [renderPhase, setRenderPhase] = useState<RenderPhase>('queued');
+  const [renderProgress, setRenderProgress] = useState<{ done: number; total: number } | null>(null);
+  const [renderVideoUrl, setRenderVideoUrl] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
   const [restoredAt, setRestoredAt] = useState<number | null>(null);
 
   // 草稿本地保存 key
