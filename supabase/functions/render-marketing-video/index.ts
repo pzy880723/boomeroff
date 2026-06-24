@@ -315,11 +315,13 @@ Deno.serve(async (req) => {
         output_url: null,
         meta: {
           job_id: job.id, task_id: r.id, video_type: script.video_type,
-          duration, aspect: ratio, mode: r.mode,
+          duration, aspect: ratio, mode: r.mode, resolution,
           topic: script.topic || "", style: styleKey,
-          style_label: VIDEO_STYLE_LABELS[styleKey], model, status: "queued",
+          style_label: VIDEO_STYLE_LABELS[styleKey], model,
+          model_label: modelInfo.label, status: "queued",
           segment_total: 1, character_id: character?.id || null,
           character_name: character?.name || null,
+          warnings: resolutionDowngraded ? ["resolution_downgraded"] : [],
           image_usage: {
             reference_count: imgs.referenceImages.length,
             first: imgs.firstImage || null,
