@@ -211,7 +211,7 @@ export default function MarketingVideo() {
         }
       }
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
-        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId },
+        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId, model: modelId },
       });
       if (error) throw error;
       const resp = data as any;
