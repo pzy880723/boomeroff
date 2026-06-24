@@ -58,7 +58,7 @@ function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string, se
 function clampDuration(d: any): number {
   const n = Number(d) || 5;
   if (n < 4) return 4;
-  if (n > 12) return 12;
+  if (n > MAX_SEG_DUR) return MAX_SEG_DUR;
   return Math.round(n);
 }
 
