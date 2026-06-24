@@ -219,14 +219,14 @@ Deno.serve(async (req) => {
     const style = styleWhite[Math.floor(Math.random() * styleWhite.length)];
     const vtypeLabel = VIDEO_TYPES.find((x) => x.v === vtype)?.label || '探店';
 
-    // 4) 50% 概率取一个角色
+    // 4) 角色:店里若已建角色 → 100% 出场(随机挑一个)
     let character: any = null;
     try {
       const { data: chars } = await admin.from("marketing_characters")
         .select("id, name, role_label, visual_signature, core_emotion, cover_url, extra_reference_urls")
         .eq("shop_id", shopId)
         .limit(20);
-      if (chars && chars.length && Math.random() < 0.5) {
+      if (chars && chars.length) {
         character = chars[Math.floor(Math.random() * chars.length)];
       }
     } catch (_) { /* ignore */ }
