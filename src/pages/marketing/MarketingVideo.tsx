@@ -18,6 +18,8 @@ import { useEffectiveShop } from '@/hooks/useShops';
 import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
 import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
+import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
+import { DEFAULT_SEEDANCE_2 } from '@/lib/seedanceModels';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
