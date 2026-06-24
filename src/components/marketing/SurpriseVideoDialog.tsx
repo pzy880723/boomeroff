@@ -137,6 +137,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           shop_id: shopId, preview: false,
           script: pick.script, picked_assets: pick.assets,
           vtype: pick.vtype, style: pick.style,
+          model: modelId,
         },
       });
       if (error) throw error;
