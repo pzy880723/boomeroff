@@ -1,46 +1,42 @@
-## 问题定位
+## 目标
+在「惊喜一下」和「AI 自定义视频」两处的 Seedance 渲染模型选择旁，新增分辨率选择（720p / 1080p / 4K），按模型能力灰化不支持档位，并贯通到后端渲染。
 
-1. **静帧泛黄**:`supabase/functions/storyboard-marketing-video/index.ts` 写死了「室内暖色调」+「与其他分镜色调/光线保持一致」,等同于给所有图加暖黄滤镜。
-2. **灯箱滑不动**:`src/components/voucher/ImageLightbox.tsx` 只接了按钮和键盘事件,没有 touch 手势。
-3. **点灯箱关闭按钮 = 退出整个 Surprise 弹窗回到营销首页**:`ImageLightbox` portal 到 `document.body`,在 React 树里仍属于 Radix `Dialog` 的子节点;Radix 通过监听全局 `pointerdown` 判断"DialogContent 外的点击 = 关闭弹窗"。灯箱真实 DOM 在 Dialog 之外,所以点灯箱关闭 X / 蒙层任意位置 → 父 Surprise Dialog 也被一并关掉。
+## 模型能力矩阵（前端枚举）
+- **Pro**：720p / 1080p / 4K，默认 1080p
+- **Fast**：720p / 1080p（4K 灰化，提示「Fast 不支持 4K，请切换 Pro」），默认 720p
+- **Mini**：720p / 1080p（4K 灰化），默认 720p
 
-## 改动
+切换模型时：若当前分辨率不在新模型能力内，自动回落到该模型默认档，并 Toast 提示。
 
-### 1. 静帧去滤镜(`supabase/functions/storyboard-marketing-video/index.ts`)
+## 改动点
 
-`buildFramePrompt`:
-- 删掉「**室内暖色调**」的字样,改为中性写实:`真实店内自然光,白平衡准确,色彩干净不偏色,无滤镜、无暖黄/复古调色`。
-- 删掉「与其他分镜色调/光线保持一致」,保留「构图/角色身份一致」即可,避免模型互相对齐到偏黄。
-- 在「严禁」一行追加:`严禁加滤镜、暖黄调色、复古褪色、绿青色偏、HDR 过曝`。
+### 1. `src/components/marketing/SeedanceModelPicker.tsx`
+- 在折叠胶囊摘要中追加「· 1080p」之类的当前分辨率标签。
+- 在 Popover 内每张模型卡片下方新增一行「分辨率」三按钮组（720p / 1080p / 4K），不支持的档显示为 disabled + tooltip。
+- 新增 props：`resolution`, `onResolutionChange`，并导出 `MODEL_RESOLUTIONS` 常量供后端参数构造与文案复用。
 
-### 2. 灯箱支持滑动(`src/components/voucher/ImageLightbox.tsx`)
+### 2. `SurpriseVideoDialog.tsx`（惊喜一下）
+- 维持 `selectedModelId` state，旁边新增 `selectedResolution` state，默认随模型推荐值。
+- 切模型时按能力矩阵 reconcile 分辨率。
+- 「就拍这条」按钮文案补上分辨率：例如「用 Pro · 1080p 开始渲染」。
+- 调 `render-marketing-video` / `surprise-marketing-video` 时透传 `resolution`。
 
-- 加 `onTouchStart` / `onTouchEnd` 记录手指起点和终点 X;水平位移 > 50px 时切换上下张(向左滑 = 下一张)。
-- 加 `onWheel` 适配触控板横向滚动。
-- 阻止图片本身的 touch 冒泡,避免误触发关闭。
+### 3. `MarketingVideo.tsx`（AI 自定义视频）
+- 在「05 渲染模型」区块下方加「分辨率」一行（复用 Picker 内的按钮组件或同款 UI）。
+- 任务入队、渲染进度卡中的当前模型展示同时显示分辨率徽标。
 
-### 3. 灯箱不再误关父 Dialog(`src/components/voucher/ImageLightbox.tsx`)
+### 4. 后端
+- `supabase/functions/render-marketing-video/index.ts`：
+  - 读取请求参数中的 `resolution`（合法值 `720p|1080p|4k`）。
+  - 与模型能力矩阵交叉校验，非法时返回 422 并附 `allowed`。
+  - 将该值映射成火山方舟 Seedance API 的 `resolution`/`size` 参数（替代当前根据模型自动降级的硬编码逻辑；Pro 仍允许 4K）。
+- `supabase/functions/surprise-marketing-video/index.ts`：透传 `resolution` 给 render 调用。
+- `marketing_video_jobs` 表写入 `metadata.resolution` 便于历史回看（不需要新字段，复用现有 jsonb metadata）。
 
-灯箱根节点上拦截会冒泡到 Radix 的指针事件,让父 Dialog 检测不到「外部点击」:
-
-```tsx
-const stopPointer = (e: React.PointerEvent | React.MouseEvent | React.TouchEvent) => e.stopPropagation();
-
-<div
-  onPointerDown={stopPointer}
-  onPointerUp={stopPointer}
-  onMouseDown={stopPointer}
-  onTouchStart={...combined}
-  ...
->
-```
-
-Radix 的 `onPointerDownOutside` 在 capture 阶段读 `event.target`,但 Lovable 项目里同类灯箱已采用「在 portal 根节点 stopPropagation pointerdown」就能阻止 Radix 误判;若仍不够,使用 `event.stopImmediatePropagation` 的原生监听补一道保险:`useEffect` 给根 div 绑定 `pointerdown` capture 监听并 `stopPropagation`。
-
-同时给 portal 根节点加 `data-lightbox-root`,方便排查。
+### 5. 共享常量
+- 新建 `src/lib/marketing/seedanceModels.ts`（若已有则扩展），导出 `MODEL_RESOLUTIONS`、`DEFAULT_RESOLUTION_BY_MODEL`、`reconcileResolution(modelId, current)`，前后端各自 import（后端复制一份到 functions 目录的本地工具文件以避免跨目录 import）。
 
 ## 验收
-
-- 重新点惊喜一下,生成的分镜静帧不再普遍偏黄,色彩接近实拍。
-- 手机上点缩略图打开灯箱后,左右滑动能切上下张,1/N 计数同步。
-- 点灯箱右上角 X 或蒙层关闭 = 只关灯箱,Surprise 弹窗保持打开。
+- 切 Pro → 4K 可选；切 Fast 后 4K 自动回退到 720p 并 Toast。
+- 惊喜一下与自定义视频的渲染进度卡都显示「模型 + 分辨率」。
+- 后端日志中 `resolution` 字段与前端选择一致；非法组合被拒并提示。
