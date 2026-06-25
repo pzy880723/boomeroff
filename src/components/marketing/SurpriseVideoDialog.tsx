@@ -104,13 +104,14 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       const d = data as any;
       if (d?.ok === false) throw new Error(d.error || '随机失败');
       setPick(d as SurpriseResult);
+      setSavedPick(shopId, d, exclude);
     } catch (e: any) {
       toast.error(e?.message || '随机失败');
       onOpenChange(false);
     } finally { setPicking(false); }
   };
 
-  // 打开时:优先恢复已有渲染任务,否则跑 A 段
+  // 打开时:优先恢复已有渲染任务 → 已保存的 pick → 再发起新一轮
   useEffect(() => {
     if (!open || !shopId) return;
     const job = getActiveRenderJob(shopId);
@@ -121,6 +122,12 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       return;
     }
     setActiveJob(null);
+    const saved = getSavedPick<SurpriseResult>(shopId);
+    if (saved) {
+      setPick(saved.pick);
+      setExcluded(saved.excluded || []);
+      return () => { stopPolling(); };
+    }
     if (!pick) doPick(excluded);
     return () => { stopPolling(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,6 +137,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   useEffect(() => () => stopPolling(), []);
 
   const reroll = () => {
+    if (shopId) clearSavedPick(shopId);
     const newEx = pick ? Array.from(new Set([...excluded, pick.picked.asset_id])).slice(-20) : excluded;
     setExcluded(newEx);
     doPick(newEx);
