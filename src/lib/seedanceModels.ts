@@ -1,11 +1,14 @@
 // Seedance 2.0 系列模型清单(前端用)。后端 _shared/seedance-models.ts 字段保持一致。
 // 用户在生成视频前直接选择;选不到时默认走 Pro。
+export type SeedanceResolution = "720p" | "1080p" | "4K";
+
 export interface SeedanceModel {
   id: string;
   label: string;
   tagline: string;
   max_duration: number;
-  resolutions: string[];
+  resolutions: SeedanceResolution[];
+  default_resolution: SeedanceResolution;
   supports_audio: boolean;
   speed: string;
   cost: string;
@@ -21,7 +24,8 @@ export const SEEDANCE_2_MODELS: SeedanceModel[] = [
     label: "Seedance 2.0 Pro",
     tagline: "画质最强",
     max_duration: 15,
-    resolutions: ["480p", "720p", "1080p", "4K"],
+    resolutions: ["720p", "1080p", "4K"],
+    default_resolution: "1080p",
     supports_audio: true,
     speed: "标准",
     cost: "高",
@@ -34,7 +38,8 @@ export const SEEDANCE_2_MODELS: SeedanceModel[] = [
     label: "Seedance 2.0 Fast",
     tagline: "更快更便宜",
     max_duration: 15,
-    resolutions: ["480p", "720p"],
+    resolutions: ["720p", "1080p"],
+    default_resolution: "720p",
     supports_audio: true,
     speed: "快(约 1/2 用时)",
     cost: "中",
@@ -46,7 +51,8 @@ export const SEEDANCE_2_MODELS: SeedanceModel[] = [
     label: "Seedance 2.0 Mini",
     tagline: "最便宜 · 测试稿",
     max_duration: 15,
-    resolutions: ["480p", "720p"],
+    resolutions: ["720p", "1080p"],
+    default_resolution: "720p",
     supports_audio: true,
     speed: "最快",
     cost: "最低",
@@ -58,6 +64,7 @@ export const SEEDANCE_2_MODELS: SeedanceModel[] = [
 
 export const DEFAULT_SEEDANCE_2 = "doubao-seedance-2-0-260128";
 export const SEEDANCE_MAX_SINGLE_SHOT = 15;
+export const ALL_RESOLUTIONS: SeedanceResolution[] = ["720p", "1080p", "4K"];
 
 export function getSeedanceModel(id?: string | null): SeedanceModel {
   if (!id) return SEEDANCE_2_MODELS[0];
@@ -67,4 +74,11 @@ export function getSeedanceModel(id?: string | null): SeedanceModel {
 export function getSeedanceShortLabel(id?: string | null): string {
   const m = getSeedanceModel(id);
   return m.label.replace(/^Seedance\s*2\.0\s*/i, '') || m.label;
+}
+
+// 切模型时,如果旧分辨率不在新模型能力内,回落到新模型推荐档。
+export function reconcileResolution(modelId: string, current?: SeedanceResolution | null): SeedanceResolution {
+  const m = getSeedanceModel(modelId);
+  if (current && m.resolutions.includes(current)) return current;
+  return m.default_resolution;
 }

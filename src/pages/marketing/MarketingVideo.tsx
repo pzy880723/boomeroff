@@ -19,7 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
 import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
-import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel } from '@/lib/seedanceModels';
+import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
 
 const VIDEO_TYPES = [
@@ -62,8 +62,14 @@ export default function MarketingVideo() {
   const [script, setScript] = useState<any>(null);
   const [rendering, setRendering] = useState(false);
   const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
+  const [resolution, setResolution] = useState<SeedanceResolution>(() => getSeedanceModel(DEFAULT_SEEDANCE_2).default_resolution);
+  const handleModelChange = (id: string) => {
+    setModelId(id);
+    setResolution((cur) => reconcileResolution(id, cur));
+  };
   const [jobId, setJobId] = useState<string | null>(null);
   const [renderModelId, setRenderModelId] = useState<string | null>(null);
+  const [renderResolution, setRenderResolution] = useState<SeedanceResolution | null>(null);
   const [renderStartedAt, setRenderStartedAt] = useState<number | null>(null);
   const [renderSegmentTotal, setRenderSegmentTotal] = useState<number>(1);
   const [renderPhase, setRenderPhase] = useState<RenderPhase>('queued');
@@ -219,7 +225,7 @@ export default function MarketingVideo() {
         }
       }
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
-        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId, model: modelId },
+        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId, model: modelId, resolution },
       });
       if (error) throw error;
       const resp = data as any;
@@ -227,13 +233,14 @@ export default function MarketingVideo() {
       if (resp?.error) throw new Error(resp.error);
       setJobId(resp.job_id);
       setRenderModelId(modelId);
+      setRenderResolution(resolution);
       setRenderStartedAt(Date.now());
       setRenderSegmentTotal(Number(resp.segment_total) || 1);
       setRenderPhase('queued');
       setRenderProgress(null);
       setRenderVideoUrl(null);
       setRenderError(null);
-      toast.success(`已用 ${getSeedanceShortLabel(modelId)} 入队渲染`);
+      toast.success(`已用 ${getSeedanceShortLabel(modelId)} · ${resolution} 入队渲染`);
     } catch (e: any) {
       const msg = e?.message || e?.error?.message || '提交失败,请稍后重试';
       toast.error(msg);
@@ -425,7 +432,12 @@ export default function MarketingVideo() {
 
           <SectionLabel num="05">渲染模型</SectionLabel>
           <div className="-mt-1">
-            <SeedanceModelPicker value={modelId} onChange={setModelId} />
+            <SeedanceModelPicker
+              value={modelId}
+              onChange={handleModelChange}
+              resolution={resolution}
+              onResolutionChange={setResolution}
+            />
           </div>
 
           <div className="pt-1">
@@ -557,17 +569,23 @@ export default function MarketingVideo() {
             {!jobId ? (
               <>
                 <div className="border-t border-border pt-3">
-                  <SeedanceModelPicker value={modelId} onChange={setModelId} />
+                  <SeedanceModelPicker
+                    value={modelId}
+                    onChange={handleModelChange}
+                    resolution={resolution}
+                    onResolutionChange={setResolution}
+                  />
                 </div>
                 <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
                   {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  用 {getSeedanceShortLabel(modelId)} 开始渲染
+                  用 {getSeedanceShortLabel(modelId)} · {resolution} 开始渲染
                 </Button>
               </>
             ) : (
               <RenderProgressCard
                 jobId={jobId}
                 modelId={renderModelId || modelId}
+                resolution={renderResolution || resolution}
                 startedAt={renderStartedAt || Date.now()}
                 segmentTotal={renderSegmentTotal}
                 phase={renderPhase}
@@ -909,10 +927,11 @@ function fmtClock(s: number): string {
 }
 
 function RenderProgressCard({
-  jobId, modelId, startedAt, segmentTotal, phase, progress, videoUrl, error,
+  jobId, modelId, resolution, startedAt, segmentTotal, phase, progress, videoUrl, error,
 }: {
   jobId: string;
   modelId: string;
+  resolution?: SeedanceResolution;
   startedAt: number;
   segmentTotal: number;
   phase: RenderPhase;
@@ -962,7 +981,7 @@ function RenderProgressCard({
           <span className="font-medium text-foreground truncate">{label}</span>
         </div>
         <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent font-semibold shrink-0">
-          {model.label}
+          {model.label}{resolution ? ` · ${resolution}` : ''}
         </span>
       </div>
 

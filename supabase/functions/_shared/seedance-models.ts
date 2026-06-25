@@ -3,7 +3,8 @@ export interface SeedanceModelInfo {
   id: string;
   label: string;
   max_duration: number;
-  resolutions: string[];
+  resolutions: string[];           // lowercase: 720p / 1080p / 4k
+  default_resolution: string;
   supports_audio: boolean;
 }
 
@@ -12,21 +13,24 @@ export const SEEDANCE_2_MODELS: SeedanceModelInfo[] = [
     id: "doubao-seedance-2-0-260128",
     label: "Seedance 2.0 Pro",
     max_duration: 15,
-    resolutions: ["480p", "720p", "1080p", "4k"],
+    resolutions: ["720p", "1080p", "4k"],
+    default_resolution: "1080p",
     supports_audio: true,
   },
   {
     id: "doubao-seedance-2-0-fast-260128",
     label: "Seedance 2.0 Fast",
     max_duration: 15,
-    resolutions: ["480p", "720p"],
+    resolutions: ["720p", "1080p"],
+    default_resolution: "720p",
     supports_audio: true,
   },
   {
     id: "doubao-seedance-2-0-mini-260615",
     label: "Seedance 2.0 Mini",
     max_duration: 15,
-    resolutions: ["480p", "720p"],
+    resolutions: ["720p", "1080p"],
+    default_resolution: "720p",
     supports_audio: true,
   },
 ];
@@ -39,10 +43,10 @@ export function resolveSeedanceModel(requested?: string | null): SeedanceModelIn
   return SEEDANCE_2_MODELS.find((m) => m.id === requested) || SEEDANCE_2_MODELS[0];
 }
 
+// 把任意输入归一化到该模型能力内的合法分辨率。
+// 不支持的档(如 Fast 选 4K) → 回落到该模型 default_resolution。
 export function clampResolution(model: SeedanceModelInfo, requested: string): string {
-  const r = requested.toLowerCase();
+  const r = (requested || "").toLowerCase().replace("k", "k"); // "4K" → "4k"
   if (model.resolutions.includes(r)) return r;
-  // 降级:1080p/4k → 720p
-  if (r === "1080p" || r === "4k") return model.resolutions.includes("720p") ? "720p" : model.resolutions[model.resolutions.length - 1];
-  return "720p";
+  return model.default_resolution;
 }
