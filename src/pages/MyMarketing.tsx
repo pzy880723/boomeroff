@@ -113,7 +113,7 @@ export default function MyMarketing() {
               让 BOOMER 替你拍一条
             </h3>
             <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug truncate">
-              自动选品 · 写脚本 · 竖版 15 秒
+              自动选图 · 写脚本 · 竖版 15 秒
             </p>
           </div>
           {hasActiveJob ? (
