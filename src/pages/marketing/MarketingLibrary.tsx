@@ -89,13 +89,31 @@ export default function MarketingLibrary() {
     })();
   }, [shopId]);
 
-  // 客户端拼接锁:每个 asset 只触发一次
+  // 客户端拼接锁:每个 asset 只触发一次(失败后也不再重试,避免 403 循环)
   const stitchingRef = useRef<Set<string>>(new Set());
+
+  // 标记单个视频任务为失败,并落库
+  const markAssetFailed = async (assetId: string, currentMeta: any, error: string) => {
+    const nextMeta = { ...(currentMeta || {}), status: 'failed', error };
+    delete nextMeta.stitch_progress; delete nextMeta.stitch_stage;
+    setItems((prev) => prev.map((x) => x.id === assetId ? { ...x, meta: nextMeta } : x));
+    try {
+      await supabase.from('marketing_assets' as any).update({ meta: nextMeta }).eq('id', assetId);
+    } catch {}
+  };
 
   const runStitch = async (asset: any, segmentUrls: string[]) => {
     if (!user) return;
     if (stitchingRef.current.has(asset.id)) return;
     stitchingRef.current.add(asset.id);
+
+    // 过期短路:火山方舟分段 URL 仅 24h 有效,超过 23h 直接判失败,不再尝试
+    const createdAt = new Date(asset.created_at).getTime();
+    if (Number.isFinite(createdAt) && Date.now() - createdAt > 23 * 60 * 60 * 1000) {
+      await markAssetFailed(asset.id, asset.meta, '视频分段链接已过期(超过 24 小时),请重新生成');
+      return;
+    }
+
     const parentJobId: string = asset.meta?.job_id;
     const normalizeSegmentUrl = (url: string) => {
       if (url.startsWith('/functions/v1/')) return `${import.meta.env.VITE_SUPABASE_URL}${url}`;
@@ -117,12 +135,17 @@ export default function MarketingLibrary() {
         Authorization: `Bearer ${accessToken}`,
         apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
       } : undefined;
-      const blob = await stitchSegmentUrls(segmentUrls.map(normalizeSegmentUrl), (info) => {
+      // 90 秒整体超时
+      const stitchPromise = stitchSegmentUrls(segmentUrls.map(normalizeSegmentUrl), (info) => {
         const pct = Math.round(((info.segment - 1) / Math.max(1, info.total)) * 100);
         setItems((prev) => prev.map((x) => x.id === asset.id ? {
           ...x, meta: { ...(x.meta || {}), stitch_progress: pct, stitch_stage: info.stage },
         } : x));
       }, authHeaders ? { init: { headers: authHeaders } } : undefined);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('拼接超时,请重新生成此视频')), 90_000);
+      });
+      const blob = await Promise.race([stitchPromise, timeoutPromise]);
       const path = `${user.id}/${parentJobId}.mp4`;
       const up = await supabase.storage.from('marketing-videos').upload(path, blob, {
         contentType: 'video/mp4', upsert: true,
@@ -142,14 +165,62 @@ export default function MarketingLibrary() {
       const raw = e?.message || '拼接失败';
       const expired = /403/.test(raw) || /分段读取失败/.test(raw);
       const err = expired ? '视频分段链接已过期(超过 24 小时),请重新生成此视频' : raw;
-      setItems((prev) => prev.map((x) => x.id === asset.id ? {
-        ...x, meta: { ...(x.meta || {}), status: 'failed', error: err },
-      } : x));
-      await supabase.from('marketing_assets' as any).update({
-        meta: { ...(asset.meta || {}), status: 'failed', error: err },
-      }).eq('id', asset.id);
+      await markAssetFailed(asset.id, asset.meta, err);
       toast.error(err);
-      // 故意不从 stitchingRef 删除:同一会话内不再自动重试,避免 403 循环
+    }
+  };
+
+  // 删除单个素材(含对应视频任务)
+  const deleteAssetById = async (assetId: string, jobId?: string) => {
+    try {
+      await supabase.from('marketing_assets' as any).delete().eq('id', assetId);
+      if (jobId) {
+        try { await supabase.from('marketing_video_jobs' as any).delete().eq('id', jobId); } catch {}
+      }
+      setItems((prev) => prev.filter((x) => x.id !== assetId));
+      // 同步清理可能残留的草稿/任务恢复键
+      try {
+        Object.keys(localStorage).forEach((k) => {
+          if (!/^(surprise-job-|marketing-video-draft-)/.test(k)) return;
+          const v = localStorage.getItem(k) || '';
+          if (jobId && v.includes(jobId)) localStorage.removeItem(k);
+          else if (v.includes(assetId)) localStorage.removeItem(k);
+        });
+      } catch {}
+    } catch (e: any) {
+      toast.error(e?.message || '删除失败');
+    }
+  };
+
+  // 批量清理本店所有失败视频
+  const [cleaningFailed, setCleaningFailed] = useState(false);
+  const cleanupFailedVideos = async () => {
+    const failedList = items.filter((it) => it.kind === 'video' && it.meta?.status === 'failed');
+    if (!failedList.length) { toast('没有失败的视频需要清理'); return; }
+    setCleaningFailed(true);
+    const ids = failedList.map((it) => it.id);
+    const jobIds = failedList.map((it) => it.meta?.job_id).filter(Boolean);
+    try {
+      await supabase.from('marketing_assets' as any).delete().in('id', ids);
+      if (jobIds.length) {
+        try { await supabase.from('marketing_video_jobs' as any).delete().in('id', jobIds); } catch {}
+      }
+      setItems((prev) => prev.filter((x) => !ids.includes(x.id)));
+      // 清理孤儿草稿
+      try {
+        Object.keys(localStorage).forEach((k) => {
+          if (!/^(surprise-job-|marketing-video-draft-)/.test(k)) return;
+          const v = localStorage.getItem(k) || '';
+          if (jobIds.some((jid) => v.includes(jid)) || ids.some((id) => v.includes(id))) {
+            localStorage.removeItem(k);
+          }
+        });
+      } catch {}
+      toast.success(`已清理 ${ids.length} 条失败视频`);
+    } catch (e: any) {
+      toast.error(e?.message || '清理失败');
+    } finally {
+      setCleaningFailed(false);
     }
   };
 
