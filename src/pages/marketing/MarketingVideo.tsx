@@ -224,23 +224,30 @@ export default function MarketingVideo() {
           toast.message('兜底主角生成失败,跳过,继续提交渲染', { duration: 3000 });
         }
       }
+      const reqModel = (overrides?.modelId) ?? modelId;
+      const reqRes = (overrides?.resolution) ?? resolution;
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
-        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId, model: modelId, resolution },
+        body: {
+          script: { ...finalScript, video_type: vtype }, style, shop_id: shopId,
+          model: reqModel, resolution: reqRes,
+          disable_storyboard: !!overrides?.disable_storyboard,
+          disable_references: !!overrides?.disable_references,
+        },
       });
       if (error) throw error;
       const resp = data as any;
       if (resp?.ok === false) throw new Error(resp.error || '渲染提交失败');
       if (resp?.error) throw new Error(resp.error);
       setJobId(resp.job_id);
-      setRenderModelId(modelId);
-      setRenderResolution(resolution);
+      setRenderModelId(reqModel);
+      setRenderResolution(reqRes);
       setRenderStartedAt(Date.now());
       setRenderSegmentTotal(Number(resp.segment_total) || 1);
       setRenderPhase('queued');
       setRenderProgress(null);
       setRenderVideoUrl(null);
       setRenderError(null);
-      toast.success(`已用 ${getSeedanceShortLabel(modelId)} · ${resolution} 入队渲染`);
+      toast.success(`已用 ${getSeedanceShortLabel(reqModel)} · ${reqRes} 入队渲染`);
     } catch (e: any) {
       const msg = e?.message || e?.error?.message || '提交失败,请稍后重试';
       toast.error(msg);
