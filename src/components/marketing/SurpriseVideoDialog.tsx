@@ -349,6 +349,10 @@ function RenderingBody({
         </div>
       </div>
 
+      {phase === 'failed' && (
+        <VideoFailureCard error={error} onApplyFix={onApplyFix} busy={busy} />
+      )}
+
       <div className="flex gap-2">
         <Button variant="outline" className="flex-1" onClick={onClose}>
           关闭(后台继续)
