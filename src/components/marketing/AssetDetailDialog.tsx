@@ -4,12 +4,27 @@ import { Play } from 'lucide-react';
 
 function LazyVideoPlayer({ src, poster }: { src: string; poster?: string }) {
   const [active, setActive] = useState(false);
+  const [posterUrl, setPosterUrl] = useState<string | undefined>(poster);
+  const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => { setPosterUrl(poster); }, [poster]);
+
   useEffect(() => {
     if (active && videoRef.current) {
-      videoRef.current.play().catch(() => {});
+      // 静默尝试播放;移动浏览器拒绝 autoplay 时只是 reject,不要让它冒成渲染异常
+      Promise.resolve().then(() => videoRef.current?.play().catch(() => {}));
     }
   }, [active]);
+
+  if (!src) {
+    return (
+      <div className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex items-center justify-center text-xs text-muted-foreground">
+        视频暂不可用
+      </div>
+    );
+  }
+
   if (!active) {
     return (
       <button
@@ -17,8 +32,18 @@ function LazyVideoPlayer({ src, poster }: { src: string; poster?: string }) {
         onClick={() => setActive(true)}
         className="relative w-full rounded-lg bg-black overflow-hidden aspect-[9/16] max-h-[70vh] flex items-center justify-center"
       >
-        {poster ? (
-          <img src={poster} alt="" className="absolute inset-0 w-full h-full object-contain" loading="eager" decoding="async" fetchPriority="high" />
+        {posterUrl ? (
+          <img
+            src={posterUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-contain"
+            loading="eager"
+            decoding="async"
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore — 小写属性对所有 React 版本都安全
+            fetchpriority="high"
+            onError={() => setPosterUrl(undefined)}
+          />
         ) : null}
         <span className="relative w-14 h-14 rounded-full bg-black/55 backdrop-blur flex items-center justify-center">
           <Play className="w-7 h-7 text-white fill-white" />
@@ -26,19 +51,35 @@ function LazyVideoPlayer({ src, poster }: { src: string; poster?: string }) {
       </button>
     );
   }
+
+  if (videoError) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setVideoError(false); setActive(false); }}
+        className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground"
+      >
+        <span>视频加载失败</span>
+        <span className="underline">点这里重试</span>
+      </button>
+    );
+  }
+
   return (
     <video
       ref={videoRef}
       src={src}
       controls
-      autoPlay
       playsInline
       preload="metadata"
-      poster={poster}
+      poster={posterUrl}
+      onError={() => setVideoError(true)}
       className="w-full rounded-lg bg-black"
     />
   );
 }
+
+
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';

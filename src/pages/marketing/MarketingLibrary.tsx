@@ -19,6 +19,7 @@ import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDia
 import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
 import { thumbUrl as thumb } from '@/lib/imageUrl';
 import { extractFirstFrame } from '@/lib/extractFirstFrame';
+import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
 
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
@@ -46,18 +47,29 @@ export default function MarketingLibrary() {
   const fetchItems = async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
-    // 有 shopId 时按店铺读(同店成员共享);否则只看自己
-    let q = supabase
-      .from('marketing_assets' as any)
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(200);
-    if (shopId) q = q.eq('shop_id', shopId);
-    else q = q.eq('user_id', user.id);
-    const { data } = await q;
-    setItems((data as any[]) || []);
-    if (!silent) setLoading(false);
+    try {
+      // 有 shopId 时按店铺读(同店成员共享);否则只看自己
+      let q = supabase
+        .from('marketing_assets' as any)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (shopId) q = q.eq('shop_id', shopId);
+      else q = q.eq('user_id', user.id);
+      const { data, error } = await q;
+      if (error) throw error;
+      // meta 偶发 null,统一兜底成对象,避免下游 .status / .cover_url 直接炸
+      const safe = ((data as any[]) || []).map((it) => ({ ...it, meta: it?.meta ?? {} }));
+      setItems(safe);
+    } catch (e) {
+      // 静默刷新失败时不要让异常冒到组件树
+      // eslint-disable-next-line no-console
+      console.warn('[MarketingLibrary] fetchItems failed:', e);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   };
+
   // 保留 load 名字给其它地方使用（如有）
   const load = () => fetchItems(false);
   useEffect(() => { fetchItems(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user, shopId]);
@@ -417,8 +429,10 @@ export default function MarketingLibrary() {
   ];
 
   return (
-    <>
+    <LibraryErrorBoundary>
+      <>
       <PageHeader title="素材库" back="/me/marketing" subtitle="营销中心 / 按店铺管理" />
+
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-4 pb-12">
         {/* 店铺：管理员可切，店员锁定 */}
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-3 space-y-2">
@@ -812,7 +826,10 @@ export default function MarketingLibrary() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+      </>
+    </LibraryErrorBoundary>
+
+
   );
 }
 
