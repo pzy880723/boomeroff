@@ -196,7 +196,7 @@ export default function MarketingVideo() {
     finally { setGenerating(false); }
   };
 
-  const confirmRender = async () => {
+  const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean }) => {
     if (!script) return;
     if (!shopId) return toast.error('请先选择店铺');
     setRendering(true);
