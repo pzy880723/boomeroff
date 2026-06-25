@@ -21,6 +21,7 @@ import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } fro
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
+import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
