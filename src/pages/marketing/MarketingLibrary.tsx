@@ -741,6 +741,7 @@ export default function MarketingLibrary() {
           setItems((prev) => prev.map((it) => (it.id === next.id ? { ...it, ...next } : it)));
           setDetail(next);
         }}
+        onDelete={(a) => deleteAssetById(a.id, a.meta?.job_id)}
       />
 
       {uploadKind && shopId && (
