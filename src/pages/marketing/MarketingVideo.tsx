@@ -958,6 +958,7 @@ function fmtClock(s: number): string {
 
 function RenderProgressCard({
   jobId, modelId, resolution, startedAt, segmentTotal, phase, progress, videoUrl, error,
+  busy, onApplyFix,
 }: {
   jobId: string;
   modelId: string;
@@ -968,6 +969,8 @@ function RenderProgressCard({
   progress: { done: number; total: number } | null;
   videoUrl: string | null;
   error: string | null;
+  busy?: boolean;
+  onApplyFix?: (fix: import('@/lib/videoFailure').VideoFix) => void | Promise<void>;
 }) {
   const model = getSeedanceModel(modelId);
   const [elapsed, setElapsed] = useState(() => Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
