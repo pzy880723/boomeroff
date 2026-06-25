@@ -14,7 +14,7 @@ import {
 } from '@/lib/surpriseJob';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
-import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel } from '@/lib/seedanceModels';
+import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 
 interface PickedAsset {
   asset_id: string; index: number; url: string; summary: string; category: string | null;
@@ -57,6 +57,11 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
+  const [resolution, setResolution] = useState<SeedanceResolution>(() => getSeedanceModel(DEFAULT_SEEDANCE_2).default_resolution);
+  const handleModelChange = (id: string) => {
+    setModelId(id);
+    setResolution((cur) => reconcileResolution(id, cur));
+  };
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = () => {
