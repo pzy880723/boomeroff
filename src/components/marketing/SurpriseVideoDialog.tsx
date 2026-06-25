@@ -444,6 +444,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
           })}
         </div>
       </div>
+      <ImageLightbox open={lbOpen} onClose={() => setLbOpen(false)} images={lightboxUrls} initialIndex={lbIdx} />
     </div>
   );
 }
