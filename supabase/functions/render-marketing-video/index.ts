@@ -408,8 +408,10 @@ Deno.serve(async (req) => {
       const prompt = buildPrompt(sub, styleKey, shopBlock, label, character);
       const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
       // 只有第 1 段在完全无图时兜底用 image_urls[0],其他段不强塞
-      const segFallback = i === 0 ? fallbackFirst : undefined;
-      const imgs = resolveSegmentImages(sub, imageUrls, character, segFallback);
+      const segFallback = i === 0 && !disableReferences ? fallbackFirst : undefined;
+      const effectiveCharacter = disableReferences ? null : character;
+      const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
+      if (disableReferences) imgs.referenceImages = [];
       console.log(`[render multi] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
       return submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
