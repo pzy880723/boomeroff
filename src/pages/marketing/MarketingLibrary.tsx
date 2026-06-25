@@ -418,8 +418,9 @@ export default function MarketingLibrary() {
 
   return (
     <LibraryErrorBoundary>
-
+      <>
       <PageHeader title="素材库" back="/me/marketing" subtitle="营销中心 / 按店铺管理" />
+
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-4 pb-12">
         {/* 店铺：管理员可切，店员锁定 */}
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-3 space-y-2">
