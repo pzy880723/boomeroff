@@ -397,6 +397,51 @@ export function AssetDetailDialog({
                 视频还在排队渲染，完成后这里会出现可播放的视频。
               </p>
             )}
+
+            {/* 视频可用时:一键生成小红书文案 + 下载 */}
+            {asset.output_url && (
+              <div className="space-y-2 pt-1">
+                {videoCopy ? (
+                  <div className="border border-accent/15 rounded-lg p-3 space-y-2 bg-card">
+                    <div className="flex items-center justify-between">
+                      <span className="font-display text-[11px] text-accent tracking-[0.18em]">小红书文案</span>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => copy(videoCopyText(videoCopy))}>
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={generateVideoCopy} disabled={genCopyLoading}>
+                          {genCopyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                        </Button>
+                      </div>
+                    </div>
+                    {videoCopy.title && <p className="font-display text-[15px] leading-snug">{videoCopy.title}</p>}
+                    {videoCopy.body && <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">{videoCopy.body}</p>}
+                    {videoCopy.hashtags && videoCopy.hashtags.length > 0 && (
+                      <p className="text-[11px] text-accent">{videoCopy.hashtags.join(' ')}</p>
+                    )}
+                    {videoCopy.first_comment && (
+                      <p className="text-[11px] text-muted-foreground border-t border-border pt-1.5">
+                        <span className="text-accent font-semibold mr-1">首评</span>{videoCopy.first_comment}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <Button variant="outline" className="w-full" onClick={generateVideoCopy} disabled={genCopyLoading}>
+                    {genCopyLoading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
+                    一键生成小红书文案
+                  </Button>
+                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => copy(asset.output_url)}>
+                    <Copy className="w-3.5 h-3.5 mr-1" />复制链接
+                  </Button>
+                  <Button className="flex-1" onClick={downloadVideo} disabled={downloading}>
+                    {downloading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1" />}
+                    下载视频{videoCopy ? ' + 复制文案' : ''}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
