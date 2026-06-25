@@ -21,6 +21,7 @@ import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } fro
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
+import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -196,7 +197,7 @@ export default function MarketingVideo() {
     finally { setGenerating(false); }
   };
 
-  const confirmRender = async () => {
+  const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean }) => {
     if (!script) return;
     if (!shopId) return toast.error('请先选择店铺');
     setRendering(true);
@@ -224,23 +225,30 @@ export default function MarketingVideo() {
           toast.message('兜底主角生成失败,跳过,继续提交渲染', { duration: 3000 });
         }
       }
+      const reqModel = (overrides?.modelId) ?? modelId;
+      const reqRes = (overrides?.resolution) ?? resolution;
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
-        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId, model: modelId, resolution },
+        body: {
+          script: { ...finalScript, video_type: vtype }, style, shop_id: shopId,
+          model: reqModel, resolution: reqRes,
+          disable_storyboard: !!overrides?.disable_storyboard,
+          disable_references: !!overrides?.disable_references,
+        },
       });
       if (error) throw error;
       const resp = data as any;
       if (resp?.ok === false) throw new Error(resp.error || '渲染提交失败');
       if (resp?.error) throw new Error(resp.error);
       setJobId(resp.job_id);
-      setRenderModelId(modelId);
-      setRenderResolution(resolution);
+      setRenderModelId(reqModel);
+      setRenderResolution(reqRes);
       setRenderStartedAt(Date.now());
       setRenderSegmentTotal(Number(resp.segment_total) || 1);
       setRenderPhase('queued');
       setRenderProgress(null);
       setRenderVideoUrl(null);
       setRenderError(null);
-      toast.success(`已用 ${getSeedanceShortLabel(modelId)} · ${resolution} 入队渲染`);
+      toast.success(`已用 ${getSeedanceShortLabel(reqModel)} · ${reqRes} 入队渲染`);
     } catch (e: any) {
       const msg = e?.message || e?.error?.message || '提交失败,请稍后重试';
       toast.error(msg);
@@ -576,7 +584,7 @@ export default function MarketingVideo() {
                     onResolutionChange={setResolution}
                   />
                 </div>
-                <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
+                <Button onClick={() => confirmRender()} disabled={rendering} className="w-full h-11">
                   {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   用 {getSeedanceShortLabel(modelId)} · {resolution} 开始渲染
                 </Button>
@@ -592,6 +600,29 @@ export default function MarketingVideo() {
                 progress={renderProgress}
                 videoUrl={renderVideoUrl}
                 error={renderError}
+                busy={rendering}
+                onApplyFix={async (fix) => {
+                  if (fix.kind === 'delete') {
+                    setJobId(null); setRenderError(null); setRenderPhase('queued');
+                    toast.message('已清除失败任务');
+                    return;
+                  }
+                  const patch = fix.patch || {};
+                  if (patch.modelId) {
+                    setModelId(patch.modelId);
+                    setResolution((cur) => reconcileResolution(patch.modelId!, (patch.resolution as SeedanceResolution) || cur));
+                  } else if (patch.resolution) {
+                    setResolution(patch.resolution as SeedanceResolution);
+                  }
+                  // 清掉当前 jobId,然后重新提交
+                  setJobId(null);
+                  await confirmRender({
+                    modelId: patch.modelId,
+                    resolution: (patch.resolution as SeedanceResolution) || undefined,
+                    disable_storyboard: patch.disable_storyboard,
+                    disable_references: patch.disable_references,
+                  });
+                }}
               />
             )}
           </section>
@@ -928,6 +959,7 @@ function fmtClock(s: number): string {
 
 function RenderProgressCard({
   jobId, modelId, resolution, startedAt, segmentTotal, phase, progress, videoUrl, error,
+  busy, onApplyFix,
 }: {
   jobId: string;
   modelId: string;
@@ -938,6 +970,8 @@ function RenderProgressCard({
   progress: { done: number; total: number } | null;
   videoUrl: string | null;
   error: string | null;
+  busy?: boolean;
+  onApplyFix?: (fix: import('@/lib/videoFailure').VideoFix) => void | Promise<void>;
 }) {
   const model = getSeedanceModel(modelId);
   const [elapsed, setElapsed] = useState(() => Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
@@ -1005,8 +1039,8 @@ function RenderProgressCard({
         </div>
       </div>
 
-      {phase === 'failed' && error && (
-        <p className="text-[11px] text-destructive leading-snug">失败原因:{error}</p>
+      {phase === 'failed' && (
+        <VideoFailureCard error={error} onApplyFix={onApplyFix} busy={busy} compact />
       )}
 
       <div className="text-[10px] text-muted-foreground flex items-center justify-between">

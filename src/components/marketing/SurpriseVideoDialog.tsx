@@ -16,6 +16,8 @@ import {
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
+import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
+import type { VideoFix } from '@/lib/videoFailure';
 
 interface PickedAsset {
   asset_id: string; index: number; url: string; summary: string; category: string | null;
@@ -57,6 +59,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [activeJob, setActiveJob] = useState<ActiveRenderJob | null>(null);
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
   const [resolution, setResolution] = useState<SeedanceResolution>(() => getSeedanceModel(DEFAULT_SEEDANCE_2).default_resolution);
   const handleModelChange = (id: string) => {
@@ -77,13 +80,14 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       if (r.progress) setProgress(r.progress);
       if (r.phase === 'done') {
         setProgress((p) => p ? { done: p.total, total: p.total } : { done: 1, total: 1 });
+        setRenderError(null);
         clearActiveRenderJob(shop);
         stopPolling();
         toast.success('🎬 视频拍好了,去素材库看看');
       } else if (r.phase === 'failed') {
+        setRenderError(r.error || '渲染失败');
         clearActiveRenderJob(shop);
         stopPolling();
-        toast.error(r.error || '渲染失败');
       }
     };
     tick();
@@ -143,17 +147,22 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     doPick(newEx);
   };
 
-  const start = async () => {
+  const start = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean }) => {
     if (!shopId || !pick) return;
+    const useModel = overrides?.modelId || modelId;
+    const useRes = overrides?.resolution || resolution;
     setSubmitting(true);
+    setRenderError(null);
     try {
       const { data, error } = await supabase.functions.invoke('surprise-marketing-video', {
         body: {
           shop_id: shopId, preview: false,
           script: pick.script, picked_assets: pick.assets,
           vtype: pick.vtype, style: pick.style,
-          model: modelId,
-          resolution,
+          model: useModel,
+          resolution: useRes,
+          disable_storyboard: !!overrides?.disable_storyboard,
+          disable_references: !!overrides?.disable_references,
         },
       });
       if (error) throw error;
@@ -174,6 +183,32 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     } finally { setSubmitting(false); }
   };
 
+  const handleFix = async (fix: VideoFix) => {
+    if (!shopId) return;
+    if (fix.kind === 'delete') {
+      setActiveJob(null); setRenderError(null);
+      clearActiveRenderJob(shopId);
+      toast.message('已清除失败任务');
+      return;
+    }
+    const patch = fix.patch || {};
+    if (patch.modelId) {
+      setModelId(patch.modelId);
+      setResolution((cur) => reconcileResolution(patch.modelId!, (patch.resolution as SeedanceResolution) || cur));
+    } else if (patch.resolution) {
+      setResolution(patch.resolution as SeedanceResolution);
+    }
+    setRenderError(null);
+    setActiveJob(null);
+    clearActiveRenderJob(shopId);
+    await start({
+      modelId: patch.modelId,
+      resolution: (patch.resolution as SeedanceResolution) || undefined,
+      disable_storyboard: patch.disable_storyboard,
+      disable_references: patch.disable_references,
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[88vh] overflow-hidden flex flex-col p-0 rounded-2xl gap-0">
@@ -187,6 +222,9 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         {activeJob ? (
           <RenderingBody
             job={activeJob} phase={renderPhase} progress={progress}
+            error={renderError}
+            onApplyFix={handleFix}
+            busy={submitting}
             onClose={() => onOpenChange(false)}
           />
         ) : picking || !pick ? (
@@ -219,7 +257,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
                   <RefreshCw className="w-4 h-4 mr-1" /> 换一组
                 </Button>
-                <Button className="flex-1" onClick={start} disabled={submitting}>
+                <Button className="flex-1" onClick={() => start()} disabled={submitting}>
                   {submitting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
                   就用 {getSeedanceShortLabel(modelId)} · {resolution} 拍
                 </Button>
@@ -236,11 +274,14 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 }
 
 function RenderingBody({
-  job, phase, progress, onClose,
+  job, phase, progress, onClose, error, onApplyFix, busy,
 }: {
   job: ActiveRenderJob; phase: 'queued' | 'running' | 'done' | 'failed';
   progress: { done: number; total: number } | null;
   onClose: () => void;
+  error?: string | null;
+  onApplyFix?: (fix: VideoFix) => void | Promise<void>;
+  busy?: boolean;
 }) {
   const [elapsed, setElapsed] = useState(() => Math.max(0, Math.floor((Date.now() - (job.createdAt || Date.now())) / 1000)));
   useEffect(() => {
@@ -307,6 +348,10 @@ function RenderingBody({
           <span>{pct}% · {mm}:{ss}</span>
         </div>
       </div>
+
+      {phase === 'failed' && (
+        <VideoFailureCard error={error} onApplyFix={onApplyFix} busy={busy} />
+      )}
 
       <div className="flex gap-2">
         <Button variant="outline" className="flex-1" onClick={onClose}>

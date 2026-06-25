@@ -1,39 +1,70 @@
-## 问题
+# 视频生成错误"人话化"+ 一键修复
 
-火山方舟 Seedance 渲染时报：
-`InputImageSensitiveContentDetected.PrivacyInformation – The request failed because the input image may contain real person`
+## 现在的问题
+当 Seedance 渲染失败时，前端直接把英文报错（比如 `the parameter resolution specified in the request is not valid for model doubao-seedance-2-0-fast in flf2v ...`、`input image may contain real person`、`account ... has not activated the model`、`last frame image content cannot be mixed with reference image`、`分段读取失败(403)`）原样吐给你。看不懂，也不知道该改什么。
 
-原因：我们在 storyboard 阶段用 Gemini 合成的分镜静帧，主角脸太像真人，被方舟的"真人识别"内容安全策略拦下。同一个分镜（first/last frame 都是这张图）连续报错 3 次。
+## 要做的事
 
-## 修复思路（分两层兜底，确保不再卡住）
+### 1. 后端：把每种已知错误打上"机器可读的原因码"
+在 `render-marketing-video` / `poll-marketing-video` / `surprise-marketing-video` 抓到火山 / 拼接错误时，除了原文，再额外写入 `failure`：
 
-### 1. 让分镜静帧不再像"真人"
-改 `storyboard-marketing-video` 的 prompt：
-- 明确加上"轻度风格化 / 漫感插画 / 略带海报感"等措辞，避免照片级真人面孔
-- 显式禁止"photorealistic real person face, real human photograph, documentary photo"
-- 保留角色身份板的发型/服装/体型识别度，但不要照片级肤质和瞳孔细节
+```
+{
+  code: 'resolution_not_supported' | 'real_person_blocked' | 'model_not_activated'
+      | 'ref_and_lastframe_conflict' | 'segment_url_expired' | 'stitch_failed'
+      | 'unknown',
+  title: 中文一句话标题,
+  detail: 中文解释（为什么发生）,
+  fixes: [{ id, label, kind: 'auto' | 'manual' }],
+  raw: 原始英文（折叠在"查看技术细节"里）
+}
+```
 
-### 2. 渲染端自动降级，永不再因为这一条卡住
-改 `render-marketing-video`：
-- 捕获方舟返回的 `InputImageSensitiveContentDetected` 错误码
-- 自动重试一次，本次去掉 `first_frame` + `last_frame`，只保留 `reference_image`（角色身份）+ 文本 prompt
-- 如还报错，再重试一次，去掉所有参考图，纯文本生成（保底必出片）
-- 把降级原因写进 `marketing_video_jobs.error` 的备注里，前端弹窗显示"分镜帧被安全策略拒绝，已自动降级渲染"
+写入 `marketing_video_jobs.meta.failure`，让前端能直接读。
 
-### 3. 失败任务收尾
-把现在卡住的这条素材库视频任务标为 failed，让用户能直接点 ✕ 删除，不再无限重试。
+### 2. 前端：失败卡片改版
+当前 `SurpriseVideoDialog` / `MarketingVideo` / `AssetDetailDialog` 里的视频失败态，只显示一行红字。改成：
 
-## 涉及文件
+```text
+┌───────────────────────────────┐
+│ ⚠️ 渲染失败                    │
+│ {中文标题}                      │
+│ {中文解释，2-3 行}              │
+│                               │
+│ 建议这样改 ↓                   │
+│ [ 一键切换到 Pro 模型 ]         │
+│ [ 一键降到 720p ]               │
+│ [ 不用首尾帧，仅用参考图 ]      │
+│ [ 重新生成分镜静帧 ]            │
+│ [ 重试 ]                       │
+│                               │
+│ ▸ 查看技术细节                 │
+└───────────────────────────────┘
+```
 
-- `supabase/functions/storyboard-marketing-video/index.ts` — 改 prompt
-- `supabase/functions/render-marketing-video/index.ts` — 加错误码识别 + 两级降级重试
-- `src/components/marketing/SurpriseVideoDialog.tsx` / `MarketingLibrary.tsx` — 失败提示文案微调（可选）
+按钮按 `failure.fixes` 动态渲染，点一下就改对应字段并立即重渲染，不需要你回去翻设置。
 
-## 验证
+### 3. 已知错误的映射表（先覆盖这 6 类）
 
-- 用现在这条素材重新跑一次「帮我拍一条」，确认：
-  1. 新生成的分镜静帧不会再被判真人
-  2. 即使被判真人，也会自动降级渲染并出片
-- 看 `render-marketing-video` 日志里是否打印降级路径
+| 触发关键词 | 中文标题 | 一键修复选项 |
+|---|---|---|
+| `resolution ... not valid ... fast ... flf2v` | Fast 模型不支持当前分辨率组合 | ① 切到 Pro（保持画质） ② 降到 720p（继续用 Fast） |
+| `input image may contain real person` | 画面被判定为"真人"被拦 | ① 重新生成分镜静帧（加大插画感） ② 去掉首尾帧只用参考图 ③ 换纯文字渲染 |
+| `has not activated the model` | 当前模型未开通 | ① 自动切到 Fast ② 自动切到 Mini |
+| `last frame ... cannot be mixed with reference` | 首尾帧和参考图冲突 | ① 自动去掉参考图（已在后端做，前端补提示） |
+| `分段读取失败(403)` / `expired` | 分段链接已过期（>24h） | ① 重新生成整条视频（旧分段无法续拼） |
+| 其他 | 渲染失败 | ① 重试 ② 切到更稳的 Fast |
 
-需要我按这个方案改吗？
+### 4. "一键调整视频内容"入口
+在失败卡片下方再加一条 `🪄 让 BOOMER 自动改一版`：直接调 `surprise-marketing-video` 复用当前脚本和素材，但应用上面推荐的修复（换模型 / 换分辨率 / 不用首尾帧），不用你做任何选择。
+
+## 技术细节（给开发看）
+- 新增 `supabase/functions/_shared/video-failure.ts`：`classifyVolcError(raw): Failure`，集中维护关键词→code 映射。
+- `render-marketing-video`、`poll-marketing-video`、`stitchVideos.ts` 抛错路径统一调用，写入 `meta.failure`。
+- 新增 `src/components/marketing/VideoFailureCard.tsx`，被三处复用：`SurpriseVideoDialog`、`MarketingVideo`（分镜行）、`AssetDetailDialog`（素材库视频）。
+- 修复按钮统一通过 `useVideoFixActions(jobId, failure)` 触发；`auto` 类直接改参数并 `render-marketing-video` 重渲；`manual` 类只跳转到对应设置位。
+- 不改数据库 schema，复用 `meta jsonb`。
+
+## 不做
+- 不改脚本/分镜生成逻辑本身。
+- 不改 Seedance 调用参数默认值（只在"修复时"才覆盖）。

@@ -257,9 +257,18 @@ Deno.serve(async (req) => {
     if (!u.user) return json({ ok: false, error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
-    const script = body.script;
+    let script = body.script;
     if (!script || !script.hook || !Array.isArray(script.scenes) || !script.outro) {
       return json({ ok: false, error: "脚本格式不完整" });
+    }
+    // 一键修复开关:disable_storyboard = 扔掉分镜静帧首尾帧,disable_references = 连参考图也不要
+    const disableStoryboard = !!body.disable_storyboard;
+    const disableReferences = !!body.disable_references;
+    if (disableStoryboard) {
+      const strip = (c: any) => { if (c && typeof c === 'object') c.storyboard_url = null; };
+      script = JSON.parse(JSON.stringify(script));
+      strip(script.hook); strip(script.outro);
+      if (Array.isArray(script.scenes)) script.scenes.forEach(strip);
     }
 
     const styleKey = normalizeStyle(body.style || script.style);
@@ -296,7 +305,9 @@ Deno.serve(async (req) => {
     if (totalDur <= MAX_SEG_DUR) {
       const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
-      const imgs = resolveSegmentImages(script, imageUrls, character, fallbackFirst);
+      const effectiveCharacter = disableReferences ? null : character;
+      const imgs = resolveSegmentImages(script, imageUrls, effectiveCharacter, disableReferences ? undefined : fallbackFirst);
+      if (disableReferences) imgs.referenceImages = [];
       const _hasFirst = !!imgs.firstImage;
       const _hasLast = !!imgs.lastImage && imgs.lastImage !== imgs.firstImage;
       const _mode = _hasFirst && _hasLast ? "frames" : _hasFirst ? "image2video" : imgs.referenceImages.length ? "reference" : "text";
@@ -397,8 +408,10 @@ Deno.serve(async (req) => {
       const prompt = buildPrompt(sub, styleKey, shopBlock, label, character);
       const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
       // 只有第 1 段在完全无图时兜底用 image_urls[0],其他段不强塞
-      const segFallback = i === 0 ? fallbackFirst : undefined;
-      const imgs = resolveSegmentImages(sub, imageUrls, character, segFallback);
+      const segFallback = i === 0 && !disableReferences ? fallbackFirst : undefined;
+      const effectiveCharacter = disableReferences ? null : character;
+      const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
+      if (disableReferences) imgs.referenceImages = [];
       console.log(`[render multi] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
       return submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
