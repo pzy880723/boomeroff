@@ -366,10 +366,15 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
             const url = it.clip?.storyboard_url || it.asset?.url || it.url;
             const label = it.label;
             return (
-              <div key={i} className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted ring-1 ring-border relative snap-start">
+              <button
+                type="button"
+                key={i}
+                onClick={() => url && openLb(Math.min(i, Math.max(0, lightboxUrls.length - 1)))}
+                className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted ring-1 ring-border relative snap-start active:scale-95 transition-transform"
+              >
                 {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : null}
                 <div className="absolute bottom-0 right-0 px-1 text-[9px] bg-black/55 text-white rounded-tl">{label || `#${i}`}</div>
-              </div>
+              </button>
             );
           })}
         </div>
