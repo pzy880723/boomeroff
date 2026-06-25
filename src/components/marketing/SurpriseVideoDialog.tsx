@@ -192,11 +192,17 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           <>
             <ScriptBody pick={pick} />
             <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
-              <SeedanceModelPicker value={modelId} onChange={setModelId} compact />
+              <SeedanceModelPicker
+                value={modelId}
+                onChange={handleModelChange}
+                resolution={resolution}
+                onResolutionChange={setResolution}
+                compact
+              />
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 shrink-0" />
                 <span className="truncate">
-                  将使用 <b>{getSeedanceModel(modelId).label}</b> · 最长 {getSeedanceModel(modelId).max_duration}s · 单段直出
+                  将使用 <b>{getSeedanceModel(modelId).label}</b> · {resolution} · 最长 {getSeedanceModel(modelId).max_duration}s · 单段直出
                 </span>
               </div>
               <div className="flex gap-2">
@@ -205,7 +211,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 </Button>
                 <Button className="flex-1" onClick={start} disabled={submitting}>
                   {submitting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
-                  就用 {getSeedanceShortLabel(modelId)} 拍
+                  就用 {getSeedanceShortLabel(modelId)} · {resolution} 拍
                 </Button>
               </div>
               <p className="text-[10px] text-center text-muted-foreground">
