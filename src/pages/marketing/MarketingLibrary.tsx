@@ -153,12 +153,11 @@ export default function MarketingLibrary() {
 
   // 轮询未完成视频任务
   // 用稳定签名当依赖,避免 items 引用变化导致 effect 反复重建 -> tick 立即触发 -> setItems -> 循环闪烁
+  // 失败的任务不再自动重新拉取/重新拼接:火山方舟分段 URL 只有 24h,过期后只能重新生成
   const pendingVideos = useMemo(
     () => items.filter(
-      (it) => it.kind === 'video' && it.meta?.job_id && (
-        !['succeeded', 'failed'].includes(it.meta?.status)
-        || (it.meta?.status === 'failed' && !it.output_url && Array.isArray(it.meta?.segment_urls) && it.meta.segment_urls.length === it.meta?.segment_total)
-      ),
+      (it) => it.kind === 'video' && it.meta?.job_id
+        && !['succeeded', 'failed'].includes(it.meta?.status),
     ),
     [items],
   );
