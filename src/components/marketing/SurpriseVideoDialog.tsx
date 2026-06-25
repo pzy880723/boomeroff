@@ -254,7 +254,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
                   <RefreshCw className="w-4 h-4 mr-1" /> 换一组
                 </Button>
-                <Button className="flex-1" onClick={start} disabled={submitting}>
+                <Button className="flex-1" onClick={() => start()} disabled={submitting}>
                   {submitting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
                   就用 {getSeedanceShortLabel(modelId)} · {resolution} 拍
                 </Button>
