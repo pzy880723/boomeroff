@@ -257,9 +257,18 @@ Deno.serve(async (req) => {
     if (!u.user) return json({ ok: false, error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
-    const script = body.script;
+    let script = body.script;
     if (!script || !script.hook || !Array.isArray(script.scenes) || !script.outro) {
       return json({ ok: false, error: "脚本格式不完整" });
+    }
+    // 一键修复开关:disable_storyboard = 扔掉分镜静帧首尾帧,disable_references = 连参考图也不要
+    const disableStoryboard = !!body.disable_storyboard;
+    const disableReferences = !!body.disable_references;
+    if (disableStoryboard) {
+      const strip = (c: any) => { if (c && typeof c === 'object') c.storyboard_url = null; };
+      script = JSON.parse(JSON.stringify(script));
+      strip(script.hook); strip(script.outro);
+      if (Array.isArray(script.scenes)) script.scenes.forEach(strip);
     }
 
     const styleKey = normalizeStyle(body.style || script.style);
