@@ -16,6 +16,7 @@ import {
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
+import { getModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import type { VideoFix } from '@/lib/videoFailure';
 
@@ -60,11 +61,19 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
-  const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
-  const [resolution, setResolution] = useState<SeedanceResolution>(() => getSeedanceModel(DEFAULT_SEEDANCE_2).default_resolution);
+  const [modelId, setModelId] = useState<string>(() => getModelPrefs().modelId);
+  const [resolution, setResolution] = useState<SeedanceResolution>(() => getModelPrefs().resolution);
   const handleModelChange = (id: string) => {
     setModelId(id);
-    setResolution((cur) => reconcileResolution(id, cur));
+    setResolution((cur) => {
+      const next = reconcileResolution(id, cur);
+      saveModelPrefs(id, next);
+      return next;
+    });
+  };
+  const handleResolutionChange = (r: SeedanceResolution) => {
+    setResolution(r);
+    saveModelPrefs(modelId, r);
   };
   const pollRef = useRef<number | null>(null);
 
@@ -244,7 +253,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 value={modelId}
                 onChange={handleModelChange}
                 resolution={resolution}
-                onResolutionChange={setResolution}
+                onResolutionChange={handleResolutionChange}
                 compact
               />
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">

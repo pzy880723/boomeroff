@@ -22,6 +22,7 @@ import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker'
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
+import { getModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -62,11 +63,19 @@ export default function MarketingVideo() {
   const [generating, setGenerating] = useState(false);
   const [script, setScript] = useState<any>(null);
   const [rendering, setRendering] = useState(false);
-  const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
-  const [resolution, setResolution] = useState<SeedanceResolution>(() => getSeedanceModel(DEFAULT_SEEDANCE_2).default_resolution);
+  const [modelId, setModelId] = useState<string>(() => getModelPrefs().modelId);
+  const [resolution, setResolution] = useState<SeedanceResolution>(() => getModelPrefs().resolution);
   const handleModelChange = (id: string) => {
     setModelId(id);
-    setResolution((cur) => reconcileResolution(id, cur));
+    setResolution((cur) => {
+      const next = reconcileResolution(id, cur);
+      saveModelPrefs(id, next);
+      return next;
+    });
+  };
+  const handleResolutionChange = (r: SeedanceResolution) => {
+    setResolution(r);
+    saveModelPrefs(modelId, r);
   };
   const [jobId, setJobId] = useState<string | null>(null);
   const [renderModelId, setRenderModelId] = useState<string | null>(null);
@@ -444,7 +453,7 @@ export default function MarketingVideo() {
               value={modelId}
               onChange={handleModelChange}
               resolution={resolution}
-              onResolutionChange={setResolution}
+              onResolutionChange={handleResolutionChange}
             />
           </div>
 
@@ -581,7 +590,7 @@ export default function MarketingVideo() {
                     value={modelId}
                     onChange={handleModelChange}
                     resolution={resolution}
-                    onResolutionChange={setResolution}
+                    onResolutionChange={handleResolutionChange}
                   />
                 </div>
                 <Button onClick={() => confirmRender()} disabled={rendering} className="w-full h-11">
