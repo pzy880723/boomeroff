@@ -208,6 +208,24 @@ export function AssetDetailDialog({
                 poster={asset.meta?.cover_url || (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) || (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) || undefined}
                 className="w-full rounded-lg bg-black"
               />
+            ) : asset.meta?.status === 'failed' ? (
+              <div className="space-y-3 py-4">
+                <p className="text-sm text-destructive text-center">
+                  {asset.meta?.error || '视频生成失败,请删除后重新生成。'}
+                </p>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={() => {
+                    if (confirm('确认删除这条失败的视频任务？')) {
+                      onDelete?.(asset);
+                      onOpenChange(false);
+                    }
+                  }}
+                >
+                  删除此任务
+                </Button>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-6">
                 视频还在排队渲染，完成后这里会出现可播放的视频。
