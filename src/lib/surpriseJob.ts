@@ -3,7 +3,40 @@
 import { supabase } from '@/integrations/supabase/client';
 
 const TTL_MS = 30 * 60 * 1000;
+const PICK_TTL_MS = 60 * 60 * 1000;
 const keyOf = (shopId: string) => `boomer.surprise.job:${shopId}`;
+const pickKeyOf = (shopId: string) => `boomer.surprise.pick:${shopId}`;
+
+export interface SavedPick<T = any> {
+  pick: T;
+  excluded: string[];
+  createdAt: number;
+}
+
+export function getSavedPick<T = any>(shopId: string | null | undefined): SavedPick<T> | null {
+  if (!shopId) return null;
+  try {
+    const raw = localStorage.getItem(pickKeyOf(shopId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SavedPick<T>;
+    if (!parsed?.pick || !parsed.createdAt) return null;
+    if (Date.now() - parsed.createdAt > PICK_TTL_MS) {
+      localStorage.removeItem(pickKeyOf(shopId));
+      return null;
+    }
+    return parsed;
+  } catch { return null; }
+}
+
+export function setSavedPick<T = any>(shopId: string, pick: T, excluded: string[] = []) {
+  try {
+    localStorage.setItem(pickKeyOf(shopId), JSON.stringify({ pick, excluded, createdAt: Date.now() }));
+  } catch {}
+}
+
+export function clearSavedPick(shopId: string) {
+  try { localStorage.removeItem(pickKeyOf(shopId)); } catch {}
+}
 
 export interface ActiveRenderJob {
   jobId: string;
