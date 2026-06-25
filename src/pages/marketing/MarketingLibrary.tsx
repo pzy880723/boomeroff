@@ -89,6 +89,39 @@ export default function MarketingLibrary() {
     })();
   }, [shopId]);
 
+  // 挂载时清理 localStorage 中指向已不存在/已失败任务的恢复键,避免
+  // SurpriseVideoDialog / MarketingVideo 抢占焦点把用户卷回旧的生成界面
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const recoveryKeys = Object.keys(localStorage).filter((k) =>
+          /^(surprise-job-|marketing-video-draft-)/.test(k),
+        );
+        if (!recoveryKeys.length) return;
+        const { data } = await supabase
+          .from('marketing_video_jobs' as any)
+          .select('id,status')
+          .eq('user_id', user.id);
+        const aliveJobs = new Map<string, string>(
+          ((data as any[]) || []).map((r) => [r.id as string, r.status as string]),
+        );
+        recoveryKeys.forEach((k) => {
+          const v = localStorage.getItem(k) || '';
+          const jobMatches = v.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) || [];
+          const orphan = jobMatches.length === 0
+            ? false
+            : jobMatches.every((jid) => {
+                const s = aliveJobs.get(jid);
+                return !s || ['failed', 'cancelled'].includes(s);
+              });
+          if (orphan) localStorage.removeItem(k);
+        });
+      } catch {}
+    })();
+  }, [user]);
+
+
   // 客户端拼接锁:每个 asset 只触发一次(失败后也不再重试,避免 403 循环)
   const stitchingRef = useRef<Set<string>>(new Set());
 
