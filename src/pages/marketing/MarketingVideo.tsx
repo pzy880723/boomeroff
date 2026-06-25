@@ -453,7 +453,7 @@ export default function MarketingVideo() {
               value={modelId}
               onChange={handleModelChange}
               resolution={resolution}
-              onResolutionChange={setResolution}
+              onResolutionChange={handleResolutionChange}
             />
           </div>
 
@@ -590,7 +590,7 @@ export default function MarketingVideo() {
                     value={modelId}
                     onChange={handleModelChange}
                     resolution={resolution}
-                    onResolutionChange={setResolution}
+                    onResolutionChange={handleResolutionChange}
                   />
                 </div>
                 <Button onClick={() => confirmRender()} disabled={rendering} className="w-full h-11">
