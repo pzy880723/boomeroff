@@ -10,6 +10,7 @@ import boomerIdle from '@/assets/boomer/boomer-idle.png';
 import {
   getActiveRenderJob, setActiveRenderJob, clearActiveRenderJob,
   pollRenderJob, getInflightPick, setInflightPick,
+  getSavedPick, setSavedPick, clearSavedPick,
   type ActiveRenderJob,
 } from '@/lib/surpriseJob';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
