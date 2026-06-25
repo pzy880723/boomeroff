@@ -59,6 +59,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [activeJob, setActiveJob] = useState<ActiveRenderJob | null>(null);
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
   const [resolution, setResolution] = useState<SeedanceResolution>(() => getSeedanceModel(DEFAULT_SEEDANCE_2).default_resolution);
   const handleModelChange = (id: string) => {
