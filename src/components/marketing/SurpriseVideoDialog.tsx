@@ -389,7 +389,12 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
             const frameUrl = clip.storyboard_url || asset?.url || null;
             return (
               <div key={i} className="flex gap-2 p-2 rounded-lg border bg-card min-w-0">
-                <div className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted relative">
+                <button
+                  type="button"
+                  onClick={() => frameUrl && openLb(Math.min(i, Math.max(0, lightboxUrls.length - 1)))}
+                  disabled={!frameUrl}
+                  className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted relative active:scale-95 transition-transform disabled:active:scale-100"
+                >
                   {frameUrl ? (
                     <img src={frameUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -401,7 +406,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
                   {clip.storyboard_url && (
                     <div className="absolute bottom-0 right-0 px-1 text-[8px] bg-accent/85 text-white rounded-tl">分镜</div>
                   )}
-                </div>
+                </button>
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center justify-between gap-2 min-w-0">
                     <div className="text-[11px] font-semibold tracking-wide text-accent shrink-0">
