@@ -16,12 +16,13 @@ interface CopyCand {
 }
 
 export function AssetDetailDialog({
-  asset, open, onOpenChange, onUpdated,
+  asset, open, onOpenChange, onUpdated, onDelete,
 }: {
   asset: any | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onUpdated?: (next: any) => void;
+  onDelete?: (asset: any) => void;
 }) {
   const [cands, setCands] = useState<CopyCand[]>([]);
   const [editing, setEditing] = useState<number | null>(null);
