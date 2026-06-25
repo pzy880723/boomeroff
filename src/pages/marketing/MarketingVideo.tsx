@@ -225,7 +225,7 @@ export default function MarketingVideo() {
         }
       }
       const { data, error } = await supabase.functions.invoke('render-marketing-video', {
-        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId, model: modelId },
+        body: { script: { ...finalScript, video_type: vtype }, style, shop_id: shopId, model: modelId, resolution },
       });
       if (error) throw error;
       const resp = data as any;
@@ -233,13 +233,14 @@ export default function MarketingVideo() {
       if (resp?.error) throw new Error(resp.error);
       setJobId(resp.job_id);
       setRenderModelId(modelId);
+      setRenderResolution(resolution);
       setRenderStartedAt(Date.now());
       setRenderSegmentTotal(Number(resp.segment_total) || 1);
       setRenderPhase('queued');
       setRenderProgress(null);
       setRenderVideoUrl(null);
       setRenderError(null);
-      toast.success(`已用 ${getSeedanceShortLabel(modelId)} 入队渲染`);
+      toast.success(`已用 ${getSeedanceShortLabel(modelId)} · ${resolution} 入队渲染`);
     } catch (e: any) {
       const msg = e?.message || e?.error?.message || '提交失败,请稍后重试';
       toast.error(msg);
