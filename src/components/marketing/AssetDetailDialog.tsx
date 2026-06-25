@@ -200,13 +200,9 @@ export function AssetDetailDialog({
               </div>
             )}
             {asset.output_url ? (
-              <video
+              <LazyVideoPlayer
                 src={asset.output_url}
-                controls
-                playsInline
-                preload="auto"
-                poster={asset.meta?.cover_url || (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) || (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) || undefined}
-                className="w-full rounded-lg bg-black"
+                poster={asset.meta?.poster_url || asset.meta?.cover_url || (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) || (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) || undefined}
               />
             ) : asset.meta?.status === 'failed' ? (
               <div className="space-y-3 py-4">
