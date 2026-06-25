@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock, Play } from 'lucide-react';
+import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock, Play, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -89,13 +89,64 @@ export default function MarketingLibrary() {
     })();
   }, [shopId]);
 
-  // 客户端拼接锁:每个 asset 只触发一次
+  // 挂载时清理 localStorage 中指向已不存在/已失败任务的恢复键,避免
+  // SurpriseVideoDialog / MarketingVideo 抢占焦点把用户卷回旧的生成界面
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const recoveryKeys = Object.keys(localStorage).filter((k) =>
+          /^(surprise-job-|marketing-video-draft-)/.test(k),
+        );
+        if (!recoveryKeys.length) return;
+        const { data } = await supabase
+          .from('marketing_video_jobs' as any)
+          .select('id,status')
+          .eq('user_id', user.id);
+        const aliveJobs = new Map<string, string>(
+          ((data as any[]) || []).map((r) => [r.id as string, r.status as string]),
+        );
+        recoveryKeys.forEach((k) => {
+          const v = localStorage.getItem(k) || '';
+          const jobMatches = v.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) || [];
+          const orphan = jobMatches.length === 0
+            ? false
+            : jobMatches.every((jid) => {
+                const s = aliveJobs.get(jid);
+                return !s || ['failed', 'cancelled'].includes(s);
+              });
+          if (orphan) localStorage.removeItem(k);
+        });
+      } catch {}
+    })();
+  }, [user]);
+
+
+  // 客户端拼接锁:每个 asset 只触发一次(失败后也不再重试,避免 403 循环)
   const stitchingRef = useRef<Set<string>>(new Set());
+
+  // 标记单个视频任务为失败,并落库
+  const markAssetFailed = async (assetId: string, currentMeta: any, error: string) => {
+    const nextMeta = { ...(currentMeta || {}), status: 'failed', error };
+    delete nextMeta.stitch_progress; delete nextMeta.stitch_stage;
+    setItems((prev) => prev.map((x) => x.id === assetId ? { ...x, meta: nextMeta } : x));
+    try {
+      await supabase.from('marketing_assets' as any).update({ meta: nextMeta }).eq('id', assetId);
+    } catch {}
+  };
 
   const runStitch = async (asset: any, segmentUrls: string[]) => {
     if (!user) return;
     if (stitchingRef.current.has(asset.id)) return;
     stitchingRef.current.add(asset.id);
+
+    // 过期短路:火山方舟分段 URL 仅 24h 有效,超过 23h 直接判失败,不再尝试
+    const createdAt = new Date(asset.created_at).getTime();
+    if (Number.isFinite(createdAt) && Date.now() - createdAt > 23 * 60 * 60 * 1000) {
+      await markAssetFailed(asset.id, asset.meta, '视频分段链接已过期(超过 24 小时),请重新生成');
+      return;
+    }
+
     const parentJobId: string = asset.meta?.job_id;
     const normalizeSegmentUrl = (url: string) => {
       if (url.startsWith('/functions/v1/')) return `${import.meta.env.VITE_SUPABASE_URL}${url}`;
@@ -117,12 +168,17 @@ export default function MarketingLibrary() {
         Authorization: `Bearer ${accessToken}`,
         apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
       } : undefined;
-      const blob = await stitchSegmentUrls(segmentUrls.map(normalizeSegmentUrl), (info) => {
+      // 90 秒整体超时
+      const stitchPromise = stitchSegmentUrls(segmentUrls.map(normalizeSegmentUrl), (info) => {
         const pct = Math.round(((info.segment - 1) / Math.max(1, info.total)) * 100);
         setItems((prev) => prev.map((x) => x.id === asset.id ? {
           ...x, meta: { ...(x.meta || {}), stitch_progress: pct, stitch_stage: info.stage },
         } : x));
       }, authHeaders ? { init: { headers: authHeaders } } : undefined);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('拼接超时,请重新生成此视频')), 90_000);
+      });
+      const blob = await Promise.race([stitchPromise, timeoutPromise]);
       const path = `${user.id}/${parentJobId}.mp4`;
       const up = await supabase.storage.from('marketing-videos').upload(path, blob, {
         contentType: 'video/mp4', upsert: true,
@@ -142,14 +198,62 @@ export default function MarketingLibrary() {
       const raw = e?.message || '拼接失败';
       const expired = /403/.test(raw) || /分段读取失败/.test(raw);
       const err = expired ? '视频分段链接已过期(超过 24 小时),请重新生成此视频' : raw;
-      setItems((prev) => prev.map((x) => x.id === asset.id ? {
-        ...x, meta: { ...(x.meta || {}), status: 'failed', error: err },
-      } : x));
-      await supabase.from('marketing_assets' as any).update({
-        meta: { ...(asset.meta || {}), status: 'failed', error: err },
-      }).eq('id', asset.id);
+      await markAssetFailed(asset.id, asset.meta, err);
       toast.error(err);
-      // 故意不从 stitchingRef 删除:同一会话内不再自动重试,避免 403 循环
+    }
+  };
+
+  // 删除单个素材(含对应视频任务)
+  const deleteAssetById = async (assetId: string, jobId?: string) => {
+    try {
+      await supabase.from('marketing_assets' as any).delete().eq('id', assetId);
+      if (jobId) {
+        try { await supabase.from('marketing_video_jobs' as any).delete().eq('id', jobId); } catch {}
+      }
+      setItems((prev) => prev.filter((x) => x.id !== assetId));
+      // 同步清理可能残留的草稿/任务恢复键
+      try {
+        Object.keys(localStorage).forEach((k) => {
+          if (!/^(surprise-job-|marketing-video-draft-)/.test(k)) return;
+          const v = localStorage.getItem(k) || '';
+          if (jobId && v.includes(jobId)) localStorage.removeItem(k);
+          else if (v.includes(assetId)) localStorage.removeItem(k);
+        });
+      } catch {}
+    } catch (e: any) {
+      toast.error(e?.message || '删除失败');
+    }
+  };
+
+  // 批量清理本店所有失败视频
+  const [cleaningFailed, setCleaningFailed] = useState(false);
+  const cleanupFailedVideos = async () => {
+    const failedList = items.filter((it) => it.kind === 'video' && it.meta?.status === 'failed');
+    if (!failedList.length) { toast('没有失败的视频需要清理'); return; }
+    setCleaningFailed(true);
+    const ids = failedList.map((it) => it.id);
+    const jobIds = failedList.map((it) => it.meta?.job_id).filter(Boolean);
+    try {
+      await supabase.from('marketing_assets' as any).delete().in('id', ids);
+      if (jobIds.length) {
+        try { await supabase.from('marketing_video_jobs' as any).delete().in('id', jobIds); } catch {}
+      }
+      setItems((prev) => prev.filter((x) => !ids.includes(x.id)));
+      // 清理孤儿草稿
+      try {
+        Object.keys(localStorage).forEach((k) => {
+          if (!/^(surprise-job-|marketing-video-draft-)/.test(k)) return;
+          const v = localStorage.getItem(k) || '';
+          if (jobIds.some((jid) => v.includes(jid)) || ids.some((id) => v.includes(id))) {
+            localStorage.removeItem(k);
+          }
+        });
+      } catch {}
+      toast.success(`已清理 ${ids.length} 条失败视频`);
+    } catch (e: any) {
+      toast.error(e?.message || '清理失败');
+    } finally {
+      setCleaningFailed(false);
     }
   };
 
@@ -175,6 +279,12 @@ export default function MarketingLibrary() {
     const tick = async () => {
       for (const it of pendingRef.current) {
         if (cancelled) return;
+        // 创建超过 23h 的待处理任务,直接判失败,跳过轮询(分段 URL 已过期)
+        const createdAt = new Date(it.created_at).getTime();
+        if (Number.isFinite(createdAt) && Date.now() - createdAt > 23 * 60 * 60 * 1000) {
+          await markAssetFailed(it.id, it.meta, '视频分段链接已过期(超过 24 小时),请重新生成');
+          continue;
+        }
         try {
           const { data } = await supabase.functions.invoke('poll-marketing-video', { body: { job_id: it.meta.job_id } });
           const next = data as any;
@@ -222,7 +332,7 @@ export default function MarketingLibrary() {
       return `拼接中${pct ? ` · ${pct}%` : '…'}`;
     }
     if (s === 'succeeded') return '已完成';
-    if (s === 'failed') return '失败';
+    if (s === 'failed') return '已失败 · 点 ✕ 删除';
     if (total > 1) {
       if (done < total) return `生成中 ${done}/${total}`;
       return '准备拼接…';
@@ -390,9 +500,23 @@ export default function MarketingLibrary() {
                   </Button>
                 </div>
               ) : (
-                <Button size="sm" variant="ghost" onClick={() => setManageMode(true)}>
-                  <Pencil className="w-3.5 h-3.5" />管理
-                </Button>
+                <div className="flex items-center gap-1">
+                  {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={cleanupFailedVideos}
+                      disabled={cleaningFailed}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      {cleaningFailed ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      清理失败视频
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => setManageMode(true)}>
+                    <Pencil className="w-3.5 h-3.5" />管理
+                  </Button>
+                </div>
               )
             )}
           </div>
@@ -532,6 +656,20 @@ export default function MarketingLibrary() {
                             </div>
                           )}
 
+                          {isFailed && !manageMode && (
+                            <button
+                              type="button"
+                              aria-label="删除失败任务"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm('删除这条失败的视频任务？')) deleteAssetById(it.id, it.meta?.job_id);
+                              }}
+                              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow"
+                            >
+                              <X className="w-3 h-3" strokeWidth={3} />
+                            </button>
+                          )}
+
 
                           {manageMode && (
                             <span className={[
@@ -603,6 +741,7 @@ export default function MarketingLibrary() {
           setItems((prev) => prev.map((it) => (it.id === next.id ? { ...it, ...next } : it)));
           setDetail(next);
         }}
+        onDelete={(a) => deleteAssetById(a.id, a.meta?.job_id)}
       />
 
       {uploadKind && shopId && (
