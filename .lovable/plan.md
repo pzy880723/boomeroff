@@ -1,33 +1,39 @@
-## 现象
-打开素材库里的视频缩略图(或视频播完)有时会被根 ErrorBoundary 接住,跳到"BOOMER 也懵了"页面,体验非常不对。
+## 问题
 
-## 排查结论(可疑点)
-1. 详情弹窗里的 `LazyVideoPlayer` 是上一轮新加的。`<img fetchPriority="high">` 在 React 版本不一致时会抛 prop 警告升级为错误;`autoPlay` + 手动 `play()` 在某些移动浏览器会抛 `DOMException`,如果某条链路把它当成渲染期异常,就会被外层 boundary 吞掉。
-2. 视频播完时,如果绑定的 `output_url` 或 `poster` 是失效的签名 URL,`<video>` 的 onerror 不会冒泡到 React;但同期 realtime `postgres_changes` 回调里 `setItems(prev => prev.map(...))` 的某次更新可能让 `LazyVideoPlayer` 的 props 变成意料外的形状(比如 meta 突然变 null),触发渲染期 throw。
-3. 现在整页只有根 ErrorBoundary,任何子树报错都会把整个 App 卷走;所以即使只是详情弹窗里的一个小错误,用户也会被踢到"BOOMER 也懵了"。
+火山方舟 Seedance 渲染时报：
+`InputImageSensitiveContentDetected.PrivacyInformation – The request failed because the input image may contain real person`
 
-## 改动范围(仅前端)
+原因：我们在 storyboard 阶段用 Gemini 合成的分镜静帧，主角脸太像真人，被方舟的"真人识别"内容安全策略拦下。同一个分镜（first/last frame 都是这张图）连续报错 3 次。
 
-### 1. `src/pages/marketing/MarketingLibrary.tsx`
-- 在页面外层用一个轻量的 `LibraryErrorBoundary` 包住,只显示一个内联的"加载视频出错,点这里重试"提示,不再冒到根 boundary。
-- 这个 boundary 同时 `console.error` 出原始 error/stack,方便下次定位。
+## 修复思路（分两层兜底，确保不再卡住）
 
-### 2. `src/components/marketing/AssetDetailDialog.tsx` — 加固 `LazyVideoPlayer`
-- 移除 `autoPlay`,只用 effect 里的 `play().catch(()=>{})`,避免某些浏览器把 autoplay 拒绝当异常抛出。
-- 把 `fetchPriority` 改成小写 `fetchpriority`(对所有 React 版本都安全)。
-- 给 poster 加 `onError={() => setPoster(undefined)}` 兜底,避免坏图无限重试。
-- 给整个 player 包一层 try/catch 的函数式渲染,任何渲染期异常 fallback 成"视频暂不可用 · 点这里重新加载"按钮,而不是抛出去。
-- 当 `src` 缺失或为空字符串时直接 render 占位,不再 mount `<video>`。
+### 1. 让分镜静帧不再像"真人"
+改 `storyboard-marketing-video` 的 prompt：
+- 明确加上"轻度风格化 / 漫感插画 / 略带海报感"等措辞，避免照片级真人面孔
+- 显式禁止"photorealistic real person face, real human photograph, documentary photo"
+- 保留角色身份板的发型/服装/体型识别度，但不要照片级肤质和瞳孔细节
 
-### 3. `MarketingLibrary.tsx` realtime 回调降噪
-- `fetchItems(true)` 失败时只 `console.warn`,不让异常冒到组件树;
-- `setItems` 的合并函数对 `meta` 做 `meta ?? {}` 兜底,防止偶发 null。
+### 2. 渲染端自动降级，永不再因为这一条卡住
+改 `render-marketing-video`：
+- 捕获方舟返回的 `InputImageSensitiveContentDetected` 错误码
+- 自动重试一次，本次去掉 `first_frame` + `last_frame`，只保留 `reference_image`（角色身份）+ 文本 prompt
+- 如还报错，再重试一次，去掉所有参考图，纯文本生成（保底必出片）
+- 把降级原因写进 `marketing_video_jobs.error` 的备注里，前端弹窗显示"分镜帧被安全策略拒绝，已自动降级渲染"
 
-## 不在范围
-- 不动数据库、不动 edge function、不动渲染/拼接管线;
-- 不改根 ErrorBoundary 的样式,只是少触发它。
+### 3. 失败任务收尾
+把现在卡住的这条素材库视频任务标为 failed，让用户能直接点 ✕ 删除，不再无限重试。
 
-## 验收
-- 反复打开/关闭任意视频卡片不再跳到错误页;
-- 视频播完后停留在详情弹窗里;
-- 真出错时弹窗内有可点击的重试按钮,控制台能看到具体堆栈。
+## 涉及文件
+
+- `supabase/functions/storyboard-marketing-video/index.ts` — 改 prompt
+- `supabase/functions/render-marketing-video/index.ts` — 加错误码识别 + 两级降级重试
+- `src/components/marketing/SurpriseVideoDialog.tsx` / `MarketingLibrary.tsx` — 失败提示文案微调（可选）
+
+## 验证
+
+- 用现在这条素材重新跑一次「帮我拍一条」，确认：
+  1. 新生成的分镜静帧不会再被判真人
+  2. 即使被判真人，也会自动降级渲染并出片
+- 看 `render-marketing-video` 日志里是否打印降级路径
+
+需要我按这个方案改吗？
