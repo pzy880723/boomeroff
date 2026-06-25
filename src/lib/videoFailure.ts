@@ -18,7 +18,7 @@ export interface VideoFix {
   /** 一键应用的参数补丁 */
   patch?: {
     modelId?: string;
-    resolution?: '480p' | '720p' | '1080p' | '2k' | '4k';
+    resolution?: string;
     disable_storyboard?: boolean;
     disable_references?: boolean;
   };
