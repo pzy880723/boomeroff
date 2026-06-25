@@ -316,6 +316,22 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
 
   const assetByIdx = new Map(pick.assets.map((a) => [a.index, a]));
 
+  // 收集可放大预览的图片(优先分镜静帧,无则用绑定的实景图)
+  const lightboxUrls = useMemo(() => {
+    const urls: string[] = [];
+    withTime.forEach(({ clip }) => {
+      const idx = clip.image_index;
+      const asset = typeof idx === 'number' ? assetByIdx.get(idx) : undefined;
+      const u = clip.storyboard_url || asset?.url;
+      if (u) urls.push(u);
+    });
+    if (urls.length === 0) pick.assets.forEach((a) => urls.push(a.url));
+    return urls;
+  }, [withTime, pick.assets]);
+  const [lbOpen, setLbOpen] = useState(false);
+  const [lbIdx, setLbIdx] = useState(0);
+  const openLb = (i: number) => { setLbIdx(i); setLbOpen(true); };
+
   return (
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-w-0">
       <div className="flex items-center gap-1.5 flex-wrap min-w-0">
