@@ -47,18 +47,29 @@ export default function MarketingLibrary() {
   const fetchItems = async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
-    // 有 shopId 时按店铺读(同店成员共享);否则只看自己
-    let q = supabase
-      .from('marketing_assets' as any)
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(200);
-    if (shopId) q = q.eq('shop_id', shopId);
-    else q = q.eq('user_id', user.id);
-    const { data } = await q;
-    setItems((data as any[]) || []);
-    if (!silent) setLoading(false);
+    try {
+      // 有 shopId 时按店铺读(同店成员共享);否则只看自己
+      let q = supabase
+        .from('marketing_assets' as any)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (shopId) q = q.eq('shop_id', shopId);
+      else q = q.eq('user_id', user.id);
+      const { data, error } = await q;
+      if (error) throw error;
+      // meta 偶发 null,统一兜底成对象,避免下游 .status / .cover_url 直接炸
+      const safe = ((data as any[]) || []).map((it) => ({ ...it, meta: it?.meta ?? {} }));
+      setItems(safe);
+    } catch (e) {
+      // 静默刷新失败时不要让异常冒到组件树
+      // eslint-disable-next-line no-console
+      console.warn('[MarketingLibrary] fetchItems failed:', e);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   };
+
   // 保留 load 名字给其它地方使用（如有）
   const load = () => fetchItems(false);
   useEffect(() => { fetchItems(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user, shopId]);
