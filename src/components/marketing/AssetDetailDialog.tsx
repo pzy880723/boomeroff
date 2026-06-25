@@ -310,6 +310,23 @@ export function AssetDetailDialog({
             )}
           </div>
         )}
+
+        {onDelete && (
+          <div className="pt-2 border-t border-border/60">
+            <Button
+              variant="outline"
+              className="w-full text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => {
+                if (confirm('确认删除这条素材？删除后无法恢复。')) {
+                  onDelete?.(asset);
+                  onOpenChange(false);
+                }
+              }}
+            >
+              <X className="w-3.5 h-3.5 mr-1" />删除此素材
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
