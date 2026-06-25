@@ -16,6 +16,8 @@ import {
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
+import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
+import type { VideoFix } from '@/lib/videoFailure';
 
 interface PickedAsset {
   asset_id: string; index: number; url: string; summary: string; category: string | null;
