@@ -499,11 +499,23 @@ export default function MarketingLibrary() {
                     <Trash2 className="w-3.5 h-3.5" />删除
                   </Button>
                 </div>
-              ) : (
-                <Button size="sm" variant="ghost" onClick={() => setManageMode(true)}>
-                  <Pencil className="w-3.5 h-3.5" />管理
-                </Button>
-              )
+                <div className="flex items-center gap-1">
+                  {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={cleanupFailedVideos}
+                      disabled={cleaningFailed}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      {cleaningFailed ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      清理失败视频
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => setManageMode(true)}>
+                    <Pencil className="w-3.5 h-3.5" />管理
+                  </Button>
+                </div>
             )}
           </div>
 
