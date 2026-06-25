@@ -583,7 +583,7 @@ export default function MarketingVideo() {
                     onResolutionChange={setResolution}
                   />
                 </div>
-                <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
+                <Button onClick={() => confirmRender()} disabled={rendering} className="w-full h-11">
                   {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   用 {getSeedanceShortLabel(modelId)} · {resolution} 开始渲染
                 </Button>
