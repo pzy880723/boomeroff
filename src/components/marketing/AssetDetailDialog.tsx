@@ -1,5 +1,45 @@
 // 营销素材详情 / 编辑抽屉。支持文案、图片、视频三种 kind。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Play } from 'lucide-react';
+
+function LazyVideoPlayer({ src, poster }: { src: string; poster?: string }) {
+  const [active, setActive] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    if (active && videoRef.current) {
+      videoRef.current.play().catch(() => {});
+    }
+  }, [active]);
+  if (!active) {
+    return (
+      <button
+        type="button"
+        onClick={() => setActive(true)}
+        className="relative w-full rounded-lg bg-black overflow-hidden aspect-[9/16] max-h-[70vh] flex items-center justify-center"
+      >
+        {poster ? (
+          <img src={poster} alt="" className="absolute inset-0 w-full h-full object-contain" loading="eager" decoding="async" fetchPriority="high" />
+        ) : null}
+        <span className="relative w-14 h-14 rounded-full bg-black/55 backdrop-blur flex items-center justify-center">
+          <Play className="w-7 h-7 text-white fill-white" />
+        </span>
+      </button>
+    );
+  }
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      controls
+      autoPlay
+      playsInline
+      preload="metadata"
+      poster={poster}
+      className="w-full rounded-lg bg-black"
+    />
+  );
+}
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
