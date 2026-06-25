@@ -813,7 +813,8 @@ export default function MarketingLibrary() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </LibraryErrorBoundary>
+
   );
 }
 
