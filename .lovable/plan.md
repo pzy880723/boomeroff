@@ -1,28 +1,40 @@
+## 背景
+
+火山 Seedance 2.0 接口规则:**`last_frame` 与 `reference_image` 互斥**(同一个 generation 任务里只能出现其中一类)。我们当前在 `render-marketing-video` 里同时下发了 `reference_image + first_frame + last_frame`,因此被火山以 `InvalidParameter` 拒绝,任务一律失败。
+
+控制台关键证据:
+```
+[render single] model= doubao-seedance-2-0-260128 res= 720p ref= 3 first= ... last= ...
+[render single] ark error ... last frame image content cannot be mixed with reference image or draft_task content
+```
+
+跟模型是否开通无关,Pro 模型已经能正常受理请求。
+
 ## 目标
-把"渲染模型"模块从占满半屏的三张大卡，缩成一行紧凑控件，详细规格收进展开层。
 
-## 方案：折叠式单行选择器
-默认状态只显示一行（约 44px 高）：
+让单段任务在两种情况下都能成功提交,并保留视觉一致性。
 
-```
-渲染模型   [Pro ✓ 推荐 ▾]   单段≤10s · 720p · ~90s
-```
+## 方案(后端二选一策略,优先保证「分镜静帧驱动」)
 
-- 左：标签"渲染模型"
-- 中：当前选中模型的胶囊按钮（名字 + 推荐/未开放徽章 + 下拉箭头）
-- 右：一行关键参数摘要（时长/分辨率/预计耗时），灰色小字
+改造点集中在 `supabase/functions/render-marketing-video/index.ts` 的单段提交逻辑里 `resolveSegmentImages` 之后的请求拼装部分:
 
-### 点击展开
-点胶囊后用 Popover（已有 `src/components/ui/popover.tsx`）弹出菜单：
-- 列出 Pro / Fast / Mini 三项，每项一行：名字 + tagline + 关键规格（最长/分辨率/速度/费用）紧凑两行布局
-- 当前项打勾，未开放项灰显并显示开放时间
-- 点击选中后立刻关闭 Popover + 触发原有 toast
+1. **优先走「首尾帧」路径(分镜静帧已生成时)**
+   - 当该段同时具备 `first_frame` 和 `last_frame`(由 storyboard 生成):
+     - 保留 `first_frame` + `last_frame`
+     - **去掉 `reference_image`**(角色形象已经被 Nano Banana 烘进静帧里,无需再传)
+   - 当只具备 `first_frame`,无 `last_frame`:
+     - 保留 `first_frame`
+     - **保留 `reference_image`**(此时不会触发互斥)
 
-### 改动文件
-- `src/components/marketing/SeedanceModelPicker.tsx`：重写为折叠式 + Popover；保留原 props (`value`/`onChange`/`compact`)，对外 API 不变，所以 `MarketingVideo.tsx`、`SurpriseVideoDialog.tsx` 无需改动。
+2. **回退到「参考图」路径(完全没有静帧时)**
+   - 没有任何静帧 → 保留 `reference_image`(角色封面 + 额外参考),不传 `first_frame` / `last_frame`,由模型自由生成。
 
-### 不动的内容
-- `seedanceModels.ts` 数据、edge function、渲染流程、确认条、按钮文案动态切换全部保留。
-- 渲染中的"当前模型"展示卡照旧。
+3. **统一日志**:在 `[render single]` 日志里新增 `mode=frames|reference` 字段,方便后续排查。
 
-效果：模块高度从 ~220px 降到 ~44px，需要看差异时一点即开。
+4. **前端无需改动**:`SeedanceModelPicker`、`SurpriseVideoDialog`、自定义页都不动。用户原有的「开头/结尾/参考」用途标记继续生效 —— 后端按以上规则自动取舍。
+
+## 验收
+
+- 在「惊喜一下」按 Pro 提交一条 15s,日志显示 `mode=frames`,任务进入 rendering 而不是 failed。
+- 关掉 storyboard(或 storyboard 跳过的情况),任务走 `mode=reference`,同样能成功提交。
+- 不再出现 `last frame image content cannot be mixed with reference image` 报错。
