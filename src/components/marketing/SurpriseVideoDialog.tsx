@@ -144,6 +144,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           script: pick.script, picked_assets: pick.assets,
           vtype: pick.vtype, style: pick.style,
           model: modelId,
+          resolution,
         },
       });
       if (error) throw error;
