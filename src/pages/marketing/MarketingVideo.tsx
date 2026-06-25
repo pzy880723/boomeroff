@@ -432,7 +432,12 @@ export default function MarketingVideo() {
 
           <SectionLabel num="05">渲染模型</SectionLabel>
           <div className="-mt-1">
-            <SeedanceModelPicker value={modelId} onChange={setModelId} />
+            <SeedanceModelPicker
+              value={modelId}
+              onChange={handleModelChange}
+              resolution={resolution}
+              onResolutionChange={setResolution}
+            />
           </div>
 
           <div className="pt-1">
