@@ -46,11 +46,11 @@ function buildFramePrompt(opts: {
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const styleZh = VIDEO_STYLE_LABELS[styleKey];
   const lines: string[] = [];
-  lines.push(`生成一张单帧定格画面(影视级电影感剧照,非插画非卡通)。`);
+  lines.push(`生成一张单帧定格画面。整体观感:轻度风格化的影视宣传海报(stylized cinematic poster / semi-illustrated keyframe),允许略带插画感,不要做成纪实摄影或真人快照。`);
   lines.push(`画幅 9:16 竖版,品牌:BOOMER·OFF 中古二手杂货店,真实店内自然光,白平衡准确,色彩干净不偏色,无滤镜、无暖黄/复古调色,货架密集真实质感。`);
   lines.push(`风格基调:${styleZh}(${styleEn}) —— 只影响构图/节奏/情绪,不影响色温与饱和度。`);
   if (character?.name) {
-    lines.push(`【主角必须出现且锁定身份】${character.name}${character.role_label ? `(${character.role_label})` : ''}。外观锁:${character.visual_signature || '严格还原参考图中的脸/发型/服装/体型'}。情绪:${character.core_emotion || '自然'}。面部/发型/服装必须 100% 与角色身份板一致,严禁换人换装。`);
+    lines.push(`【主角必须出现且锁定身份】${character.name}${character.role_label ? `(${character.role_label})` : ''}。外观锁:${character.visual_signature || '保持参考图中的发型/服装/体型/气质识别度'}。情绪:${character.core_emotion || '自然'}。脸部/发型/服装/体型与角色身份板保持识别度一致,但请用轻度风格化的画风渲染面部(略带插画感的皮肤质感、不要照片级毛孔/瞳孔反光),避免被识别为真实人物照片。`);
   }
   if (opts.boundAssetSummary) {
     lines.push(`画面中必须自然出现的实景元素:${opts.boundAssetSummary}(请参考附带的实景照,把这家店真实的氛围、商品、陈列融入画面,而不是凭空想象;颜色还原实拍,不要美化也不要调色)。`);
@@ -59,7 +59,7 @@ function buildFramePrompt(opts: {
   if (clip.action) lines.push(`动作瞬间(请定格在这一瞬间):${clip.action}`);
   if (clip.motion) lines.push(`这张图代表的镜头是「${clip.motion}」的中间一帧。`);
   lines.push(`第 ${opts.index + 1} / ${opts.total} 个分镜,与其他分镜保持角色身份、构图语言一致,但不要互相对齐色调/滤镜。`);
-  lines.push(`严禁:任何文字、字幕、水印、UI、卡通化、3D 渲染感、AI 涂抹感、面部畸变、多余手指;严禁加滤镜、暖黄调色、橙红色偏、复古褪色、青绿色偏、HDR 过曝、Instagram 风调色。`);
+  lines.push(`严禁:photorealistic real human face、documentary photograph of a real person、护照照式正脸特写;严禁任何文字、字幕、水印、UI、3D 渲染感、AI 涂抹感、面部畸变、多余手指;严禁加滤镜、暖黄调色、橙红色偏、复古褪色、青绿色偏、HDR 过曝、Instagram 风调色。`);
   return lines.join('\n');
 }
 
