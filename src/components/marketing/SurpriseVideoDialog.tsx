@@ -80,13 +80,14 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       if (r.progress) setProgress(r.progress);
       if (r.phase === 'done') {
         setProgress((p) => p ? { done: p.total, total: p.total } : { done: 1, total: 1 });
+        setRenderError(null);
         clearActiveRenderJob(shop);
         stopPolling();
         toast.success('🎬 视频拍好了,去素材库看看');
       } else if (r.phase === 'failed') {
+        setRenderError(r.error || '渲染失败');
         clearActiveRenderJob(shop);
         stopPolling();
-        toast.error(r.error || '渲染失败');
       }
     };
     tick();
