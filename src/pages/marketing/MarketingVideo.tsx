@@ -599,6 +599,29 @@ export default function MarketingVideo() {
                 progress={renderProgress}
                 videoUrl={renderVideoUrl}
                 error={renderError}
+                busy={rendering}
+                onApplyFix={async (fix) => {
+                  if (fix.kind === 'delete') {
+                    setJobId(null); setRenderError(null); setRenderPhase('queued');
+                    toast.message('已清除失败任务');
+                    return;
+                  }
+                  const patch = fix.patch || {};
+                  if (patch.modelId) {
+                    setModelId(patch.modelId);
+                    setResolution((cur) => reconcileResolution(patch.modelId!, patch.resolution || cur));
+                  } else if (patch.resolution) {
+                    setResolution(patch.resolution as SeedanceResolution);
+                  }
+                  // 清掉当前 jobId,然后重新提交
+                  setJobId(null);
+                  await confirmRender({
+                    modelId: patch.modelId,
+                    resolution: (patch.resolution as SeedanceResolution) || undefined,
+                    disable_storyboard: patch.disable_storyboard,
+                    disable_references: patch.disable_references,
+                  });
+                }}
               />
             )}
           </section>
