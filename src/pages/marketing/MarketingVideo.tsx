@@ -569,17 +569,23 @@ export default function MarketingVideo() {
             {!jobId ? (
               <>
                 <div className="border-t border-border pt-3">
-                  <SeedanceModelPicker value={modelId} onChange={setModelId} />
+                  <SeedanceModelPicker
+                    value={modelId}
+                    onChange={handleModelChange}
+                    resolution={resolution}
+                    onResolutionChange={setResolution}
+                  />
                 </div>
                 <Button onClick={confirmRender} disabled={rendering} className="w-full h-11">
                   {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  用 {getSeedanceShortLabel(modelId)} 开始渲染
+                  用 {getSeedanceShortLabel(modelId)} · {resolution} 开始渲染
                 </Button>
               </>
             ) : (
               <RenderProgressCard
                 jobId={jobId}
                 modelId={renderModelId || modelId}
+                resolution={renderResolution || resolution}
                 startedAt={renderStartedAt || Date.now()}
                 segmentTotal={renderSegmentTotal}
                 phase={renderPhase}
