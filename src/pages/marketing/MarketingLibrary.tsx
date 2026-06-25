@@ -246,6 +246,12 @@ export default function MarketingLibrary() {
     const tick = async () => {
       for (const it of pendingRef.current) {
         if (cancelled) return;
+        // 创建超过 23h 的待处理任务,直接判失败,跳过轮询(分段 URL 已过期)
+        const createdAt = new Date(it.created_at).getTime();
+        if (Number.isFinite(createdAt) && Date.now() - createdAt > 23 * 60 * 60 * 1000) {
+          await markAssetFailed(it.id, it.meta, '视频分段链接已过期(超过 24 小时),请重新生成');
+          continue;
+        }
         try {
           const { data } = await supabase.functions.invoke('poll-marketing-video', { body: { job_id: it.meta.job_id } });
           const next = data as any;
