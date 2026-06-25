@@ -332,7 +332,7 @@ export default function MarketingLibrary() {
       return `拼接中${pct ? ` · ${pct}%` : '…'}`;
     }
     if (s === 'succeeded') return '已完成';
-    if (s === 'failed') return '失败';
+    if (s === 'failed') return '已失败 · 点 ✕ 删除';
     if (total > 1) {
       if (done < total) return `生成中 ${done}/${total}`;
       return '准备拼接…';
