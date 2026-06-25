@@ -571,12 +571,14 @@ export default function MarketingLibrary() {
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
                     {mediaList.map((it) => {
                       const checked = selected.has(it.id);
-                      const thumbUrl = it.kind === 'photo'
+                      const rawThumb = it.kind === 'photo'
                         ? it.output_url
-                        : (it.meta?.cover_url
+                        : (it.meta?.poster_url
+                            || it.meta?.cover_url
                             || (Array.isArray(it.meta?.image_urls) && it.meta.image_urls[0])
                             || (Array.isArray(it.input_image_urls) && it.input_image_urls[0])
-                            || it.output_url);
+                            || null);
+                      const thumbUrl = rawThumb ? (thumb(rawThumb, 320) || rawThumb) : null;
                       const showStatus = it.kind === 'video' && it.meta?.status && it.meta.status !== 'succeeded';
                       const segTotal = Number(it.meta?.segment_total) || 0;
                       const segDone = Number(it.meta?.segment_done) || 0;
@@ -601,11 +603,7 @@ export default function MarketingLibrary() {
                           ].join(' ')}
                         >
                           {thumbUrl ? (
-                            it.kind === 'video' && !it.meta?.cover_url && !(Array.isArray(it.input_image_urls) && it.input_image_urls[0]) && it.output_url ? (
-                              <video src={it.output_url} className="w-full h-full object-cover" muted preload="none" playsInline />
-                            ) : (
-                              <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                            )
+                            <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               {it.kind === 'video'
@@ -613,6 +611,7 @@ export default function MarketingLibrary() {
                                 : <ImageIcon className="w-6 h-6 text-muted-foreground" />}
                             </div>
                           )}
+
 
                           {it.kind === 'photo' && !manageMode && (
                             <span
