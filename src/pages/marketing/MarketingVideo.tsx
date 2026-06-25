@@ -1038,8 +1038,8 @@ function RenderProgressCard({
         </div>
       </div>
 
-      {phase === 'failed' && error && (
-        <p className="text-[11px] text-destructive leading-snug">失败原因:{error}</p>
+      {phase === 'failed' && (
+        <VideoFailureCard error={error} onApplyFix={onApplyFix} busy={busy} compact />
       )}
 
       <div className="text-[10px] text-muted-foreground flex items-center justify-between">
