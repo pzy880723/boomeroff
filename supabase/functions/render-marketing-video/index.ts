@@ -297,7 +297,10 @@ Deno.serve(async (req) => {
       const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
       const imgs = resolveSegmentImages(script, imageUrls, character, fallbackFirst);
-      console.log("[render single] model=", model, "res=", resolution, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
+      const _hasFirst = !!imgs.firstImage;
+      const _hasLast = !!imgs.lastImage && imgs.lastImage !== imgs.firstImage;
+      const _mode = _hasFirst && _hasLast ? "frames" : _hasFirst ? "image2video" : imgs.referenceImages.length ? "reference" : "text";
+      console.log("[render single] model=", model, "res=", resolution, "mode=", _mode, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
       const r = await submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
         firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
