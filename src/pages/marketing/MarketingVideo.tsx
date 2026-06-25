@@ -19,7 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
 import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
-import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel } from '@/lib/seedanceModels';
+import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
 
 const VIDEO_TYPES = [
@@ -62,8 +62,14 @@ export default function MarketingVideo() {
   const [script, setScript] = useState<any>(null);
   const [rendering, setRendering] = useState(false);
   const [modelId, setModelId] = useState<string>(DEFAULT_SEEDANCE_2);
+  const [resolution, setResolution] = useState<SeedanceResolution>(() => getSeedanceModel(DEFAULT_SEEDANCE_2).default_resolution);
+  const handleModelChange = (id: string) => {
+    setModelId(id);
+    setResolution((cur) => reconcileResolution(id, cur));
+  };
   const [jobId, setJobId] = useState<string | null>(null);
   const [renderModelId, setRenderModelId] = useState<string | null>(null);
+  const [renderResolution, setRenderResolution] = useState<SeedanceResolution | null>(null);
   const [renderStartedAt, setRenderStartedAt] = useState<number | null>(null);
   const [renderSegmentTotal, setRenderSegmentTotal] = useState<number>(1);
   const [renderPhase, setRenderPhase] = useState<RenderPhase>('queued');
