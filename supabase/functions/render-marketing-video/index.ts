@@ -138,20 +138,31 @@ async function submitArkTask(opts: {
   firstImage?: string; lastImage?: string; referenceImages?: string[];
 }): Promise<{ ok: true; id: string; mode: string } | { ok: false; error: string; raw?: unknown }> {
   const content: any[] = [{ type: "text", text: opts.prompt }];
-  // Seedance 2.0 全系都支持 reference_image / first_frame / last_frame / generate_audio
-  const refs = (opts.referenceImages || []).filter(Boolean);
+  // Seedance 2.0 接口约束:last_frame 与 reference_image 互斥(同一请求只能出现其中一类)。
+  // 策略:
+  //  - 同时有 first+last(分镜静帧驱动)→ 走 frames 模式,丢弃 reference_image
+  //  - 只有 first → 可与 reference_image 共存
+  //  - 都没有 → 走 reference 模式
+  const refsAll = (opts.referenceImages || []).filter(Boolean);
+  const hasFirst = !!opts.firstImage;
+  const hasLast = !!opts.lastImage && opts.lastImage !== opts.firstImage;
+  const useFramesOnly = hasFirst && hasLast; // 互斥时优先 frames
+  const refs = useFramesOnly ? [] : refsAll;
+
   for (const url of refs.slice(0, 2)) {
     content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
   }
-  if (opts.firstImage) {
-    content.push({ type: "image_url", image_url: { url: opts.firstImage }, role: "first_frame" });
+  if (hasFirst) {
+    content.push({ type: "image_url", image_url: { url: opts.firstImage! }, role: "first_frame" });
   }
-  if (opts.lastImage && opts.lastImage !== opts.firstImage) {
-    content.push({ type: "image_url", image_url: { url: opts.lastImage }, role: "last_frame" });
+  if (hasLast) {
+    content.push({ type: "image_url", image_url: { url: opts.lastImage! }, role: "last_frame" });
   }
-  const mode = opts.firstImage
-    ? (opts.lastImage && opts.lastImage !== opts.firstImage ? "first_last_frame" : "image2video")
-    : (refs.length ? "reference2video" : "text2video");
+  const mode = useFramesOnly
+    ? "first_last_frame"
+    : hasFirst
+      ? (refs.length ? "image2video+reference" : "image2video")
+      : (refs.length ? "reference2video" : "text2video");
 
   // 2.0 系列:不发送 seed / camera_fixed(2.0 不支持)
   const arkBody: Record<string, unknown> = {
@@ -286,7 +297,10 @@ Deno.serve(async (req) => {
       const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
       const imgs = resolveSegmentImages(script, imageUrls, character, fallbackFirst);
-      console.log("[render single] model=", model, "res=", resolution, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
+      const _hasFirst = !!imgs.firstImage;
+      const _hasLast = !!imgs.lastImage && imgs.lastImage !== imgs.firstImage;
+      const _mode = _hasFirst && _hasLast ? "frames" : _hasFirst ? "image2video" : imgs.referenceImages.length ? "reference" : "text";
+      console.log("[render single] model=", model, "res=", resolution, "mode=", _mode, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
       const r = await submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
         firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
