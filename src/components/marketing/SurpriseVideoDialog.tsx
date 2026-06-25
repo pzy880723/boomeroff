@@ -253,7 +253,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 value={modelId}
                 onChange={handleModelChange}
                 resolution={resolution}
-                onResolutionChange={setResolution}
+                onResolutionChange={handleResolutionChange}
                 compact
               />
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
