@@ -1,40 +1,46 @@
-## 背景
+## 问题定位
 
-火山 Seedance 2.0 接口规则:**`last_frame` 与 `reference_image` 互斥**(同一个 generation 任务里只能出现其中一类)。我们当前在 `render-marketing-video` 里同时下发了 `reference_image + first_frame + last_frame`,因此被火山以 `InvalidParameter` 拒绝,任务一律失败。
+1. **静帧泛黄**:`supabase/functions/storyboard-marketing-video/index.ts` 写死了「室内暖色调」+「与其他分镜色调/光线保持一致」,等同于给所有图加暖黄滤镜。
+2. **灯箱滑不动**:`src/components/voucher/ImageLightbox.tsx` 只接了按钮和键盘事件,没有 touch 手势。
+3. **点灯箱关闭按钮 = 退出整个 Surprise 弹窗回到营销首页**:`ImageLightbox` portal 到 `document.body`,在 React 树里仍属于 Radix `Dialog` 的子节点;Radix 通过监听全局 `pointerdown` 判断"DialogContent 外的点击 = 关闭弹窗"。灯箱真实 DOM 在 Dialog 之外,所以点灯箱关闭 X / 蒙层任意位置 → 父 Surprise Dialog 也被一并关掉。
 
-控制台关键证据:
+## 改动
+
+### 1. 静帧去滤镜(`supabase/functions/storyboard-marketing-video/index.ts`)
+
+`buildFramePrompt`:
+- 删掉「**室内暖色调**」的字样,改为中性写实:`真实店内自然光,白平衡准确,色彩干净不偏色,无滤镜、无暖黄/复古调色`。
+- 删掉「与其他分镜色调/光线保持一致」,保留「构图/角色身份一致」即可,避免模型互相对齐到偏黄。
+- 在「严禁」一行追加:`严禁加滤镜、暖黄调色、复古褪色、绿青色偏、HDR 过曝`。
+
+### 2. 灯箱支持滑动(`src/components/voucher/ImageLightbox.tsx`)
+
+- 加 `onTouchStart` / `onTouchEnd` 记录手指起点和终点 X;水平位移 > 50px 时切换上下张(向左滑 = 下一张)。
+- 加 `onWheel` 适配触控板横向滚动。
+- 阻止图片本身的 touch 冒泡,避免误触发关闭。
+
+### 3. 灯箱不再误关父 Dialog(`src/components/voucher/ImageLightbox.tsx`)
+
+灯箱根节点上拦截会冒泡到 Radix 的指针事件,让父 Dialog 检测不到「外部点击」:
+
+```tsx
+const stopPointer = (e: React.PointerEvent | React.MouseEvent | React.TouchEvent) => e.stopPropagation();
+
+<div
+  onPointerDown={stopPointer}
+  onPointerUp={stopPointer}
+  onMouseDown={stopPointer}
+  onTouchStart={...combined}
+  ...
+>
 ```
-[render single] model= doubao-seedance-2-0-260128 res= 720p ref= 3 first= ... last= ...
-[render single] ark error ... last frame image content cannot be mixed with reference image or draft_task content
-```
 
-跟模型是否开通无关,Pro 模型已经能正常受理请求。
+Radix 的 `onPointerDownOutside` 在 capture 阶段读 `event.target`,但 Lovable 项目里同类灯箱已采用「在 portal 根节点 stopPropagation pointerdown」就能阻止 Radix 误判;若仍不够,使用 `event.stopImmediatePropagation` 的原生监听补一道保险:`useEffect` 给根 div 绑定 `pointerdown` capture 监听并 `stopPropagation`。
 
-## 目标
-
-让单段任务在两种情况下都能成功提交,并保留视觉一致性。
-
-## 方案(后端二选一策略,优先保证「分镜静帧驱动」)
-
-改造点集中在 `supabase/functions/render-marketing-video/index.ts` 的单段提交逻辑里 `resolveSegmentImages` 之后的请求拼装部分:
-
-1. **优先走「首尾帧」路径(分镜静帧已生成时)**
-   - 当该段同时具备 `first_frame` 和 `last_frame`(由 storyboard 生成):
-     - 保留 `first_frame` + `last_frame`
-     - **去掉 `reference_image`**(角色形象已经被 Nano Banana 烘进静帧里,无需再传)
-   - 当只具备 `first_frame`,无 `last_frame`:
-     - 保留 `first_frame`
-     - **保留 `reference_image`**(此时不会触发互斥)
-
-2. **回退到「参考图」路径(完全没有静帧时)**
-   - 没有任何静帧 → 保留 `reference_image`(角色封面 + 额外参考),不传 `first_frame` / `last_frame`,由模型自由生成。
-
-3. **统一日志**:在 `[render single]` 日志里新增 `mode=frames|reference` 字段,方便后续排查。
-
-4. **前端无需改动**:`SeedanceModelPicker`、`SurpriseVideoDialog`、自定义页都不动。用户原有的「开头/结尾/参考」用途标记继续生效 —— 后端按以上规则自动取舍。
+同时给 portal 根节点加 `data-lightbox-root`,方便排查。
 
 ## 验收
 
-- 在「惊喜一下」按 Pro 提交一条 15s,日志显示 `mode=frames`,任务进入 rendering 而不是 failed。
-- 关掉 storyboard(或 storyboard 跳过的情况),任务走 `mode=reference`,同样能成功提交。
-- 不再出现 `last frame image content cannot be mixed with reference image` 报错。
+- 重新点惊喜一下,生成的分镜静帧不再普遍偏黄,色彩接近实拍。
+- 手机上点缩略图打开灯箱后,左右滑动能切上下张,1/N 计数同步。
+- 点灯箱右上角 X 或蒙层关闭 = 只关灯箱,Surprise 弹窗保持打开。
