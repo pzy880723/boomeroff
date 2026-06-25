@@ -305,7 +305,9 @@ Deno.serve(async (req) => {
     if (totalDur <= MAX_SEG_DUR) {
       const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
-      const imgs = resolveSegmentImages(script, imageUrls, character, fallbackFirst);
+      const effectiveCharacter = disableReferences ? null : character;
+      const imgs = resolveSegmentImages(script, imageUrls, effectiveCharacter, disableReferences ? undefined : fallbackFirst);
+      if (disableReferences) imgs.referenceImages = [];
       const _hasFirst = !!imgs.firstImage;
       const _hasLast = !!imgs.lastImage && imgs.lastImage !== imgs.firstImage;
       const _mode = _hasFirst && _hasLast ? "frames" : _hasFirst ? "image2video" : imgs.referenceImages.length ? "reference" : "text";
