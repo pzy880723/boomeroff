@@ -182,13 +182,29 @@ export default function MarketingLibrary() {
       const blob = await Promise.race([stitchPromise, timeoutPromise]);
       const path = `${user.id}/${parentJobId}.mp4`;
       const up = await supabase.storage.from('marketing-videos').upload(path, blob, {
-        contentType: 'video/mp4', upsert: true,
+        contentType: 'video/mp4', upsert: true, cacheControl: '31536000',
       });
       if (up.error) throw up.error;
       const signed = await supabase.storage.from('marketing-videos').createSignedUrl(path, 60 * 60 * 24 * 365);
       const url = signed.data?.signedUrl;
       if (!url) throw new Error('生成播放链接失败');
-      const newMeta = { ...(asset.meta || {}), status: 'succeeded', stage: 'done', storage_path: path };
+      // 抽首帧做轻量 poster,加速详情页打开
+      let posterUrl: string | undefined;
+      try {
+        const posterBlob = await extractFirstFrame(blob);
+        if (posterBlob) {
+          const posterPath = `${user.id}/posters/${parentJobId}.jpg`;
+          const pu = await supabase.storage.from('marketing-videos').upload(posterPath, posterBlob, {
+            contentType: 'image/jpeg', upsert: true, cacheControl: '31536000',
+          });
+          if (!pu.error) {
+            const ps = await supabase.storage.from('marketing-videos').createSignedUrl(posterPath, 60 * 60 * 24 * 365);
+            posterUrl = ps.data?.signedUrl || undefined;
+          }
+        }
+      } catch (err) { console.warn('[poster] extract failed', err); }
+      const newMeta: any = { ...(asset.meta || {}), status: 'succeeded', stage: 'done', storage_path: path };
+      if (posterUrl) newMeta.poster_url = posterUrl;
       delete newMeta.stitch_progress; delete newMeta.stitch_stage;
       await supabase.from('marketing_assets' as any).update({ output_url: url, meta: newMeta }).eq('id', asset.id);
       await supabase.from('marketing_video_jobs' as any).update({ status: 'succeeded', video_url: url }).eq('id', parentJobId);
