@@ -17,6 +17,8 @@ import { CharacterDialog } from '@/components/marketing/CharacterDialog';
 import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
 
 import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
+import { thumbUrl as thumb } from '@/lib/imageUrl';
+import { extractFirstFrame } from '@/lib/extractFirstFrame';
 
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
@@ -181,13 +183,29 @@ export default function MarketingLibrary() {
       const blob = await Promise.race([stitchPromise, timeoutPromise]);
       const path = `${user.id}/${parentJobId}.mp4`;
       const up = await supabase.storage.from('marketing-videos').upload(path, blob, {
-        contentType: 'video/mp4', upsert: true,
+        contentType: 'video/mp4', upsert: true, cacheControl: '31536000',
       });
       if (up.error) throw up.error;
       const signed = await supabase.storage.from('marketing-videos').createSignedUrl(path, 60 * 60 * 24 * 365);
       const url = signed.data?.signedUrl;
       if (!url) throw new Error('生成播放链接失败');
-      const newMeta = { ...(asset.meta || {}), status: 'succeeded', stage: 'done', storage_path: path };
+      // 抽首帧做轻量 poster,加速详情页打开
+      let posterUrl: string | undefined;
+      try {
+        const posterBlob = await extractFirstFrame(blob);
+        if (posterBlob) {
+          const posterPath = `${user.id}/posters/${parentJobId}.jpg`;
+          const pu = await supabase.storage.from('marketing-videos').upload(posterPath, posterBlob, {
+            contentType: 'image/jpeg', upsert: true, cacheControl: '31536000',
+          });
+          if (!pu.error) {
+            const ps = await supabase.storage.from('marketing-videos').createSignedUrl(posterPath, 60 * 60 * 24 * 365);
+            posterUrl = ps.data?.signedUrl || undefined;
+          }
+        }
+      } catch (err) { console.warn('[poster] extract failed', err); }
+      const newMeta: any = { ...(asset.meta || {}), status: 'succeeded', stage: 'done', storage_path: path };
+      if (posterUrl) newMeta.poster_url = posterUrl;
       delete newMeta.stitch_progress; delete newMeta.stitch_stage;
       await supabase.from('marketing_assets' as any).update({ output_url: url, meta: newMeta }).eq('id', asset.id);
       await supabase.from('marketing_video_jobs' as any).update({ status: 'succeeded', video_url: url }).eq('id', parentJobId);
@@ -571,12 +589,14 @@ export default function MarketingLibrary() {
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
                     {mediaList.map((it) => {
                       const checked = selected.has(it.id);
-                      const thumbUrl = it.kind === 'photo'
+                      const rawThumb = it.kind === 'photo'
                         ? it.output_url
-                        : (it.meta?.cover_url
+                        : (it.meta?.poster_url
+                            || it.meta?.cover_url
                             || (Array.isArray(it.meta?.image_urls) && it.meta.image_urls[0])
                             || (Array.isArray(it.input_image_urls) && it.input_image_urls[0])
-                            || it.output_url);
+                            || null);
+                      const thumbUrl = rawThumb ? (thumb(rawThumb, 320) || rawThumb) : null;
                       const showStatus = it.kind === 'video' && it.meta?.status && it.meta.status !== 'succeeded';
                       const segTotal = Number(it.meta?.segment_total) || 0;
                       const segDone = Number(it.meta?.segment_done) || 0;
@@ -601,11 +621,7 @@ export default function MarketingLibrary() {
                           ].join(' ')}
                         >
                           {thumbUrl ? (
-                            it.kind === 'video' && !it.meta?.cover_url && !(Array.isArray(it.input_image_urls) && it.input_image_urls[0]) && it.output_url ? (
-                              <video src={it.output_url} className="w-full h-full object-cover" muted preload="none" playsInline />
-                            ) : (
-                              <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                            )
+                            <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               {it.kind === 'video'
@@ -613,6 +629,7 @@ export default function MarketingLibrary() {
                                 : <ImageIcon className="w-6 h-6 text-muted-foreground" />}
                             </div>
                           )}
+
 
                           {it.kind === 'photo' && !manageMode && (
                             <span
