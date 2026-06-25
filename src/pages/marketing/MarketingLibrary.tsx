@@ -139,15 +139,17 @@ export default function MarketingLibrary() {
       toast.success('视频拼接完成');
     } catch (e: any) {
       console.error('[stitch]', e);
-      const err = e?.message || '拼接失败';
+      const raw = e?.message || '拼接失败';
+      const expired = /403/.test(raw) || /分段读取失败/.test(raw);
+      const err = expired ? '视频分段链接已过期(超过 24 小时),请重新生成此视频' : raw;
       setItems((prev) => prev.map((x) => x.id === asset.id ? {
         ...x, meta: { ...(x.meta || {}), status: 'failed', error: err },
       } : x));
       await supabase.from('marketing_assets' as any).update({
         meta: { ...(asset.meta || {}), status: 'failed', error: err },
       }).eq('id', asset.id);
-      toast.error(`拼接失败:${err}`);
-      stitchingRef.current.delete(asset.id); // 允许重试
+      toast.error(err);
+      // 故意不从 stitchingRef 删除:同一会话内不再自动重试,避免 403 循环
     }
   };
 
