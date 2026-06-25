@@ -609,7 +609,7 @@ export default function MarketingVideo() {
                   const patch = fix.patch || {};
                   if (patch.modelId) {
                     setModelId(patch.modelId);
-                    setResolution((cur) => reconcileResolution(patch.modelId!, patch.resolution || cur));
+                    setResolution((cur) => reconcileResolution(patch.modelId!, (patch.resolution as SeedanceResolution) || cur));
                   } else if (patch.resolution) {
                     setResolution(patch.resolution as SeedanceResolution);
                   }
