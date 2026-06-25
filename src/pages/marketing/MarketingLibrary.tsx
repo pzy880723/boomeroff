@@ -17,6 +17,7 @@ import { CharacterDialog } from '@/components/marketing/CharacterDialog';
 import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
 
 import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
+import { thumbUrl as thumb } from '@/lib/imageUrl';
 
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
