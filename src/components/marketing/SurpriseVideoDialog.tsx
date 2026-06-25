@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles, RefreshCw, ArrowRight, Wand2, Camera, MessageSquare } from 'lucide-react';
@@ -13,6 +13,7 @@ import {
   type ActiveRenderJob,
 } from '@/lib/surpriseJob';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
+import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel } from '@/lib/seedanceModels';
 
 interface PickedAsset {
@@ -315,6 +316,22 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
 
   const assetByIdx = new Map(pick.assets.map((a) => [a.index, a]));
 
+  // 收集可放大预览的图片(优先分镜静帧,无则用绑定的实景图)
+  const lightboxUrls = useMemo(() => {
+    const urls: string[] = [];
+    withTime.forEach(({ clip }) => {
+      const idx = clip.image_index;
+      const asset = typeof idx === 'number' ? assetByIdx.get(idx) : undefined;
+      const u = clip.storyboard_url || asset?.url;
+      if (u) urls.push(u);
+    });
+    if (urls.length === 0) pick.assets.forEach((a) => urls.push(a.url));
+    return urls;
+  }, [withTime, pick.assets]);
+  const [lbOpen, setLbOpen] = useState(false);
+  const [lbIdx, setLbIdx] = useState(0);
+  const openLb = (i: number) => { setLbIdx(i); setLbOpen(true); };
+
   return (
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-w-0">
       <div className="flex items-center gap-1.5 flex-wrap min-w-0">
@@ -349,10 +366,15 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
             const url = it.clip?.storyboard_url || it.asset?.url || it.url;
             const label = it.label;
             return (
-              <div key={i} className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted ring-1 ring-border relative snap-start">
+              <button
+                type="button"
+                key={i}
+                onClick={() => url && openLb(Math.min(i, Math.max(0, lightboxUrls.length - 1)))}
+                className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted ring-1 ring-border relative snap-start active:scale-95 transition-transform"
+              >
                 {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : null}
                 <div className="absolute bottom-0 right-0 px-1 text-[9px] bg-black/55 text-white rounded-tl">{label || `#${i}`}</div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -367,7 +389,12 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
             const frameUrl = clip.storyboard_url || asset?.url || null;
             return (
               <div key={i} className="flex gap-2 p-2 rounded-lg border bg-card min-w-0">
-                <div className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted relative">
+                <button
+                  type="button"
+                  onClick={() => frameUrl && openLb(Math.min(i, Math.max(0, lightboxUrls.length - 1)))}
+                  disabled={!frameUrl}
+                  className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted relative active:scale-95 transition-transform disabled:active:scale-100"
+                >
                   {frameUrl ? (
                     <img src={frameUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -379,7 +406,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
                   {clip.storyboard_url && (
                     <div className="absolute bottom-0 right-0 px-1 text-[8px] bg-accent/85 text-white rounded-tl">分镜</div>
                   )}
-                </div>
+                </button>
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center justify-between gap-2 min-w-0">
                     <div className="text-[11px] font-semibold tracking-wide text-accent shrink-0">
@@ -417,6 +444,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
           })}
         </div>
       </div>
+      <ImageLightbox open={lbOpen} onClose={() => setLbOpen(false)} images={lightboxUrls} initialIndex={lbIdx} />
     </div>
   );
 }
