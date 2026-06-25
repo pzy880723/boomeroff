@@ -499,6 +499,7 @@ export default function MarketingLibrary() {
                     <Trash2 className="w-3.5 h-3.5" />删除
                   </Button>
                 </div>
+              ) : (
                 <div className="flex items-center gap-1">
                   {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
                     <Button
@@ -516,6 +517,7 @@ export default function MarketingLibrary() {
                     <Pencil className="w-3.5 h-3.5" />管理
                   </Button>
                 </div>
+              )
             )}
           </div>
 
