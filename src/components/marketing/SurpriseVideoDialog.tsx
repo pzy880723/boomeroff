@@ -164,6 +164,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         createdAt: Date.now(), segmentTotal: d.segment_total,
       };
       setActiveRenderJob(shopId, job);
+      clearSavedPick(shopId);
       setActiveJob(job);
       setRenderPhase('queued');
       startPolling(d.job_id, shopId);
