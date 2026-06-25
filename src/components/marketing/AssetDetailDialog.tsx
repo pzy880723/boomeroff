@@ -88,6 +88,7 @@ import { Input } from '@/components/ui/input';
 import { Copy, Download, Loader2, Pencil, Save, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 
 interface CopyCand {
   title?: string;
