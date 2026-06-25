@@ -301,10 +301,36 @@ Deno.serve(async (req) => {
       const _hasLast = !!imgs.lastImage && imgs.lastImage !== imgs.firstImage;
       const _mode = _hasFirst && _hasLast ? "frames" : _hasFirst ? "image2video" : imgs.referenceImages.length ? "reference" : "text";
       console.log("[render single] model=", model, "res=", resolution, "mode=", _mode, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
-      const r = await submitArkTask({
+
+      // 提交 + 真人内容安全策略自动降级:
+      //  尝试1: 完整 first/last/reference
+      //  尝试2: 去掉 first/last,只保留 reference(角色身份板 + 商品参考)
+      //  尝试3: 纯文本 prompt,所有参考图都去掉
+      const isSensitive = (err?: string, raw?: any) => {
+        const code = raw?.error?.code || '';
+        const msg = (err || '') + ' ' + (raw?.error?.message || '');
+        return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
+      };
+      const fallbackNotes: string[] = [];
+      let r = await submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
         firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
       });
+      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+        console.warn("[render single] sensitive image blocked, retry without first/last frames");
+        fallbackNotes.push("frames_dropped_for_safety");
+        r = await submitArkTask({
+          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
+          referenceImages: imgs.referenceImages,
+        });
+      }
+      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+        console.warn("[render single] still blocked, retry with text-only prompt");
+        fallbackNotes.push("references_dropped_for_safety");
+        r = await submitArkTask({
+          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
+        });
+      }
       if (!r.ok) {
         console.error("[render single] ark error", r.error, r.raw);
         return json({ ok: false, error: r.error, raw: r.raw });
