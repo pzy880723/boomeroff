@@ -927,10 +927,11 @@ function fmtClock(s: number): string {
 }
 
 function RenderProgressCard({
-  jobId, modelId, startedAt, segmentTotal, phase, progress, videoUrl, error,
+  jobId, modelId, resolution, startedAt, segmentTotal, phase, progress, videoUrl, error,
 }: {
   jobId: string;
   modelId: string;
+  resolution?: SeedanceResolution;
   startedAt: number;
   segmentTotal: number;
   phase: RenderPhase;
@@ -980,7 +981,7 @@ function RenderProgressCard({
           <span className="font-medium text-foreground truncate">{label}</span>
         </div>
         <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent font-semibold shrink-0">
-          {model.label}
+          {model.label}{resolution ? ` · ${resolution}` : ''}
         </span>
       </div>
 
