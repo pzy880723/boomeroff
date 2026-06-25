@@ -361,7 +361,10 @@ Deno.serve(async (req) => {
           model_label: modelInfo.label, status: "queued",
           segment_total: 1, character_id: character?.id || null,
           character_name: character?.name || null,
-          warnings: resolutionDowngraded ? ["resolution_downgraded"] : [],
+          warnings: [
+            ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
+            ...fallbackNotes,
+          ],
           image_usage: {
             reference_count: imgs.referenceImages.length,
             first: imgs.firstImage || null,
