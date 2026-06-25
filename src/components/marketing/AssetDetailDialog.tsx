@@ -85,7 +85,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Copy, Download, Loader2, Pencil, Save, X } from 'lucide-react';
+import { Copy, Download, Loader2, Pencil, Save, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -109,14 +109,28 @@ export function AssetDetailDialog({
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<CopyCand>({});
   const [saving, setSaving] = useState(false);
+  // 视频专用:一键生成的小红书文案
+  const [videoCopy, setVideoCopy] = useState<CopyCand | null>(null);
+  const [genCopyLoading, setGenCopyLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
-    if (!asset || asset.kind !== 'copy') { setCands([]); return; }
-    try {
-      const parsed = JSON.parse(asset.output_text || '[]');
-      setCands(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setCands([{ body: asset.output_text || '' }]);
+    if (!asset) { setCands([]); setVideoCopy(null); return; }
+    if (asset.kind === 'copy') {
+      try {
+        const parsed = JSON.parse(asset.output_text || '[]');
+        setCands(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setCands([{ body: asset.output_text || '' }]);
+      }
+    } else {
+      setCands([]);
+    }
+    if (asset.kind === 'video') {
+      const saved = asset.meta?.video_copy;
+      setVideoCopy(saved && (saved.title || saved.body) ? saved : null);
+    } else {
+      setVideoCopy(null);
     }
     setEditing(null);
   }, [asset]);
@@ -124,6 +138,81 @@ export function AssetDetailDialog({
   if (!asset) return null;
 
   const copy = (text: string) => { navigator.clipboard.writeText(text); toast.success('已复制'); };
+
+  const videoCopyText = (c: CopyCand | null) => {
+    if (!c) return '';
+    return [c.title, c.body, (c.hashtags || []).join(' ')].filter(Boolean).join('\n\n').trim();
+  };
+
+  const generateVideoCopy = async () => {
+    if (!asset || asset.kind !== 'video') return;
+    const poster: string | undefined =
+      asset.meta?.poster_url ||
+      asset.meta?.cover_url ||
+      (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) ||
+      (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) ||
+      undefined;
+    if (!poster) { toast.error('找不到视频封面,无法生成文案'); return; }
+    setGenCopyLoading(true);
+    try {
+      const topic = asset.meta?.topic || asset.meta?.style_label || '';
+      const { data, error } = await supabase.functions.invoke('generate-marketing-copy', {
+        body: {
+          image_urls: [poster],
+          platform: 'xhs',
+          tone: '种草',
+          highlight: topic ? `配合一条 ${asset.meta?.duration || 15}s 视频:${topic}` : '',
+          shop_id: asset.shop_id || null,
+          from_video_id: asset.id,
+        },
+      });
+      if (error) throw error;
+      const d = data as any;
+      const c: CopyCand | undefined = Array.isArray(d?.candidates) ? d.candidates[0] : undefined;
+      if (!c) throw new Error(d?.error || '生成失败');
+      setVideoCopy(c);
+      // 写回 asset.meta,下次打开能恢复
+      const nextMeta = { ...(asset.meta || {}), video_copy: c, video_copy_asset_id: d?.asset_id || null };
+      try {
+        await supabase.from('marketing_assets' as any).update({ meta: nextMeta }).eq('id', asset.id);
+        onUpdated?.({ ...asset, meta: nextMeta });
+      } catch {}
+      toast.success('文案已生成');
+    } catch (e: any) {
+      toast.error(e?.message || '生成失败');
+    } finally { setGenCopyLoading(false); }
+  };
+
+  const downloadVideo = async () => {
+    if (!asset?.output_url) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(asset.output_url, { credentials: 'omit' });
+      if (!res.ok) throw new Error('下载失败');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const tail = asset.meta?.storage_path?.split('/').pop() || `video-${asset.id}.mp4`;
+      a.download = tail.endsWith('.mp4') ? tail : `${tail}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      // 顺便复制文案
+      const txt = videoCopyText(videoCopy);
+      if (txt) {
+        try { await navigator.clipboard.writeText(txt); toast.success('视频已开始下载,文案也复制好了'); }
+        catch { toast.success('视频已开始下载'); }
+      } else {
+        toast.success('视频已开始下载');
+      }
+    } catch (e: any) {
+      // 浏览器对跨域链接 download 会被忽略,退而求其次直接新开窗口
+      window.open(asset.output_url, '_blank', 'noreferrer');
+      toast.message('已在新窗口打开,请长按/右键保存');
+    } finally { setDownloading(false); }
+  };
 
   const beginEdit = (i: number) => {
     setEditing(i);
