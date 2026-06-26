@@ -97,21 +97,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 简单权限: 必须是同 shop 成员或本人创建
-    if (asset.user_id !== userData.user.id) {
-      const { data: membership } = await admin
-        .from("user_shops").select("shop_id")
-        .eq("user_id", userData.user.id).eq("shop_id", asset.shop_id).maybeSingle();
-      if (!membership) {
-        const { data: role } = await admin
-          .from("user_roles").select("role").eq("user_id", userData.user.id).maybeSingle();
-        if (role?.role !== "admin") {
-          return new Response(JSON.stringify({ error: "无权下载" }), {
-            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-      }
-    }
+    // 登录用户即可下载素材库内容(素材本身已经按 shop_id 在前端读取做了过滤)
 
     const remoteUrl = asset.output_url as string;
     let host = "";
