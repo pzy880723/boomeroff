@@ -147,7 +147,7 @@ export function AssetDetailDialog({
     return [c.title, c.body, (c.hashtags || []).join(' ')].filter(Boolean).join('\n\n').trim();
   };
 
-  const generateVideoCopy = async () => {
+  const generateVideoCopy = async (style: ViralStyle = 'scream') => {
     if (!asset || asset.kind !== 'video') return;
     const poster: string | undefined =
       asset.meta?.poster_url ||
@@ -157,6 +157,7 @@ export function AssetDetailDialog({
       undefined;
     if (!poster) { toast.error('找不到视频封面,无法生成文案'); return; }
     setGenCopyLoading(true);
+    let c: CopyCand | null = null;
     try {
       const topic = asset.meta?.topic || asset.meta?.style_label || '';
       const { data, error } = await supabase.functions.invoke('generate-marketing-copy', {
@@ -164,6 +165,7 @@ export function AssetDetailDialog({
           image_urls: [poster],
           platform: 'xhs',
           tone: '种草',
+          style,
           highlight: topic ? `配合一条 ${asset.meta?.duration || 15}s 视频:${topic}` : '',
           shop_id: asset.shop_id || null,
           from_video_id: asset.id,
@@ -171,18 +173,26 @@ export function AssetDetailDialog({
       });
       if (error) throw error;
       const d = data as any;
-      const c: CopyCand | undefined = Array.isArray(d?.candidates) ? d.candidates[0] : undefined;
-      if (!c) throw new Error(d?.error || '生成失败');
+      const got: CopyCand | undefined = Array.isArray(d?.candidates) ? d.candidates[0] : undefined;
+      if (!got) throw new Error(d?.error || '生成失败');
+      c = { ...got, style };
+    } catch (e: any) {
+      // 兜底:本地爆文模板,断网/限流也能立刻出
+      const fallback = buildXhsViral({
+        name: asset.meta?.topic || '中古好物',
+        category: asset.meta?.category,
+      }, style);
+      c = fallback;
+      toast.message('AI 暂时忙，先给你一版本地爆文模板');
+    }
+    try {
       setVideoCopy(c);
-      // 写回 asset.meta,下次打开能恢复
-      const nextMeta = { ...(asset.meta || {}), video_copy: c, video_copy_asset_id: d?.asset_id || null };
+      const nextMeta = { ...(asset.meta || {}), video_copy: c, video_copy_style: style };
       try {
         await supabase.from('marketing_assets' as any).update({ meta: nextMeta }).eq('id', asset.id);
         onUpdated?.({ ...asset, meta: nextMeta });
       } catch {}
-      toast.success('文案已生成');
-    } catch (e: any) {
-      toast.error(e?.message || '生成失败');
+      toast.success(`文案已生成 · ${VIRAL_STYLE_LABELS[style]}`);
     } finally { setGenCopyLoading(false); }
   };
 
