@@ -170,15 +170,6 @@ export default function MyMarketing() {
         </section>
 
 
-        {/* ===== 工作流提示带 ===== */}
-        <section className="px-1">
-          <div className="flex items-center justify-between relative">
-            <div className="absolute h-px left-5 right-5 top-4 bg-accent/25 -translate-y-1/2" />
-            <FlowDot num="01" label="拍图 / 上传" />
-            <FlowDot num="02" label="AI 产出" active />
-            <FlowDot num="03" label="复制发布" />
-          </div>
-        </section>
 
         {/* ===== 素材库 ===== */}
         <section>
@@ -300,27 +291,3 @@ function ToolTile({
 }
 
 
-function FlowDot({ num, label, active = false }: { num: string; label: string; active?: boolean }) {
-  return (
-    <div className="relative flex flex-col items-center gap-1.5 z-10 w-16">
-      <div
-        className={[
-          'w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-all',
-          active
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-card border border-accent/30 text-accent',
-        ].join(' ')}
-      >
-        <span className="font-display text-[11px] leading-none">{num}</span>
-      </div>
-      <span
-        className={[
-          'text-[10px] tracking-wide',
-          active ? 'text-foreground font-medium' : 'text-muted-foreground',
-        ].join(' ')}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
