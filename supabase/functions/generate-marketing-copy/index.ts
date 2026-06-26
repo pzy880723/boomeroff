@@ -125,8 +125,9 @@ ${viralBlock}${kbBlock}
     candidates = candidates.slice(0, 3).map((c) => ({
       title: sanitize(c?.title || ""),
       body: sanitize(c?.body || ""),
-      hashtags: Array.isArray(c?.hashtags) ? c.hashtags.map((x: any) => sanitize(String(x))).filter(Boolean).slice(0, 8) : [],
+      hashtags: Array.isArray(c?.hashtags) ? c.hashtags.map((x: any) => sanitize(String(x))).filter(Boolean).slice(0, 12) : [],
       first_comment: sanitize(c?.first_comment || ""),
+      style: viralStyle || undefined,
     }));
 
     const admin = admin0;
@@ -136,10 +137,10 @@ ${viralBlock}${kbBlock}
       shop_id: shopId,
       input_image_urls: imageUrls,
       output_text: JSON.stringify(candidates),
-      meta: { platform: platformKey, tone: toneKey, product_name: productName, price, highlight, from_video_id: body.from_video_id || null },
+      meta: { platform: platformKey, tone: toneKey, style: viralStyle, product_name: productName, price, highlight, from_video_id: body.from_video_id || null },
     }).select().single();
 
-    return json({ success: true, candidates, asset_id: row?.id, __kb_sources: kbSourcesMeta(kbHits) });
+    return json({ success: true, candidates, asset_id: row?.id, style: viralStyle, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[copy] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
