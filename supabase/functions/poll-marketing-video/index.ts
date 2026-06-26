@@ -126,34 +126,81 @@ Deno.serve(async (req) => {
     const urlObj = new URL(req.url);
     const isSweep = urlObj.searchParams.get("mode") === "sweep";
     if (isSweep) {
-      const TIMEOUT_MIN = 10;
-      const cutoff = new Date(Date.now() - TIMEOUT_MIN * 60_000).toISOString();
+      // 按模型+分辨率分级超时:Pro 模型可能要 15-20 分钟,Fast/Mini 几分钟搞定
+      const timeoutMinFor = (model?: string | null, resolution?: string | null) => {
+        const m = (model || "").toLowerCase();
+        const r = (resolution || "").toLowerCase();
+        if (m.includes("fast") || m.includes("mini")) return 12;
+        if (r.includes("4k") || r.includes("2160")) return 35;
+        return 25; // Pro 720p/1080p 默认
+      };
+      const HARD_LOOKBACK_MIN = 60; // 只看最近 1 小时
       const { data: jobs } = await admin
         .from("marketing_video_jobs")
         .select("id, user_id, status, provider_task_id, parent_job_id, created_at")
         .in("status", ["queued", "running"])
-        .gt("created_at", new Date(Date.now() - 60 * 60_000).toISOString())
+        .gt("created_at", new Date(Date.now() - HARD_LOOKBACK_MIN * 60_000).toISOString())
         .limit(30);
+
+      // 预取关联 asset 的 model/resolution
+      const jobIds = (jobs || []).filter((j) => !j.parent_job_id).map((j) => j.id);
+      const assetByJob = new Map<string, any>();
+      if (jobIds.length > 0) {
+        const { data: assets } = await admin
+          .from("marketing_assets")
+          .select("id, meta")
+          .eq("kind", "video")
+          .in("meta->>job_id", jobIds);
+        for (const a of assets || []) {
+          const jid = (a.meta as any)?.job_id;
+          if (jid) assetByJob.set(jid, a);
+        }
+      }
 
       const results: any[] = [];
       for (const j of jobs || []) {
-        // 超时直接判失败
-        if (j.created_at < cutoff) {
-          const msg = "渲染超时(>10 分钟),已自动结束,请重试";
+        const asset = assetByJob.get(j.id);
+        const model = asset?.meta?.model as string | undefined;
+        const resolution = asset?.meta?.resolution as string | undefined;
+        const TIMEOUT_MIN = timeoutMinFor(model, resolution);
+        const ageMs = Date.now() - new Date(j.created_at).getTime();
+        const overTimeout = ageMs > TIMEOUT_MIN * 60_000;
+
+        if (!j.provider_task_id) {
+          // 没有 ark 任务 id,既无法核实又超时 → 失败
+          if (overTimeout) {
+            const msg = `渲染超过 ${TIMEOUT_MIN} 分钟未完成,已自动结束,请重试`;
+            await admin.from("marketing_video_jobs").update({
+              status: "failed", error: msg, last_polled_at: new Date().toISOString(),
+            }).eq("id", j.id);
+            if (!j.parent_job_id) {
+              await updateAssetMeta(admin, j.user_id, j.id, { status: "failed", error: msg });
+            }
+            results.push({ id: j.id, status: "failed", reason: "timeout_no_task" });
+          } else {
+            results.push({ id: j.id, status: j.status, skipped: "no_provider_task" });
+          }
+          continue;
+        }
+
+        // 始终先去 Ark 查最新状态(也就是"超时前再确认一次")
+        const r = await pollOne(ARK_KEY, j.provider_task_id);
+
+        // 如果 Ark 仍在 queued/running 且本地已超阈值,才判超时
+        if (overTimeout && (r.mapped === "queued" || r.mapped === "running")) {
+          const modelLabel = model || "当前模型";
+          const resLabel = resolution || "当前分辨率";
+          const msg = `渲染超过 ${TIMEOUT_MIN} 分钟未完成(${modelLabel}/${resLabel}),建议改用 Seedance Fast 或降到 720p 重试`;
           await admin.from("marketing_video_jobs").update({
             status: "failed", error: msg, last_polled_at: new Date().toISOString(),
           }).eq("id", j.id);
           if (!j.parent_job_id) {
             await updateAssetMeta(admin, j.user_id, j.id, { status: "failed", error: msg });
           }
-          results.push({ id: j.id, status: "failed", reason: "timeout" });
+          results.push({ id: j.id, status: "failed", reason: "timeout", timeout_min: TIMEOUT_MIN });
           continue;
         }
-        if (!j.provider_task_id) {
-          results.push({ id: j.id, status: j.status, skipped: "no_provider_task" });
-          continue;
-        }
-        const r = await pollOne(ARK_KEY, j.provider_task_id);
+
         await admin.from("marketing_video_jobs").update({
           status: r.mapped,
           video_url: r.video_url || null,
@@ -168,6 +215,7 @@ Deno.serve(async (req) => {
           );
         }
         results.push({ id: j.id, status: r.mapped });
+
       }
       return json({ swept: results.length, results });
     }
