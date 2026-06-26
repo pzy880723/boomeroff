@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   Loader2, ShieldCheck, ShieldAlert, ShieldOff, CheckCircle2,
-  AlertCircle, Send, Plus, X, ArrowLeft, ExternalLink,
+  AlertCircle, Send, Plus, X, ArrowLeft, ExternalLink, Clock, History, RotateCcw,
 } from 'lucide-react';
 
 const PLATFORM_LABEL: Record<string, string> = {
