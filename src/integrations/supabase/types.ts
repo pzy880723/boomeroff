@@ -1843,9 +1843,11 @@ export type Database = {
           finished_at: string | null
           id: string
           job_id: string
+          last_retry_at: string | null
           platform: string
           platform_url: string | null
           progress: number
+          retry_count: number
           started_at: string | null
           status: string
           updated_at: string
@@ -1858,9 +1860,11 @@ export type Database = {
           finished_at?: string | null
           id?: string
           job_id: string
+          last_retry_at?: string | null
           platform: string
           platform_url?: string | null
           progress?: number
+          retry_count?: number
           started_at?: string | null
           status?: string
           updated_at?: string
@@ -1873,9 +1877,11 @@ export type Database = {
           finished_at?: string | null
           id?: string
           job_id?: string
+          last_retry_at?: string | null
           platform?: string
           platform_url?: string | null
           progress?: number
+          retry_count?: number
           started_at?: string | null
           status?: string
           updated_at?: string
