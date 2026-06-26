@@ -33,13 +33,19 @@ export default function HistoryTab() {
 
   useEffect(() => { void load(); }, [shopId]);
 
-  // realtime: jobs 变化时刷新
+  // realtime: jobs / targets 任意变化静默刷新
   useEffect(() => {
     if (!shopId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      if (timer) return;
+      timer = setTimeout(() => { timer = null; void load(); }, 600);
+    };
     const ch = supabase.channel(`jobs:${shopId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_publish_jobs', filter: `shop_id=eq.${shopId}` }, () => void load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_publish_jobs', filter: `shop_id=eq.${shopId}` }, trigger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_publish_targets' }, trigger)
       .subscribe();
-    return () => { void supabase.removeChannel(ch); };
+    return () => { if (timer) clearTimeout(timer); void supabase.removeChannel(ch); };
   }, [shopId]);
 
   const cancel = async (jobId: string) => {
