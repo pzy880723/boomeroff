@@ -565,6 +565,14 @@ export function AssetDetailDialog({
                 >
                   ✈️ 一键发布到自媒体平台
                 </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={regenerateVideo}
+                  disabled={regenerating}
+                >
+                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                  用同样的脚本重新生成一条
               </div>
             )}
           </div>
