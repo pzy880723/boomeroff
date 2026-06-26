@@ -1,5 +1,5 @@
 // 一键发布工作台:挑账号、写标题/正文/标签,提交后展示进度
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuth } from '@/hooks/useAuth';
