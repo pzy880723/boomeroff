@@ -451,18 +451,29 @@ export function AssetDetailDialog({
                 poster={asset.meta?.poster_url || asset.meta?.cover_url || (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) || (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) || undefined}
               />
             ) : asset.meta?.status === 'failed' ? (
-              <VideoFailureCard
-                error={asset.meta?.error || '视频生成失败'}
-                allowRetry={false}
-                onApplyFix={(fix) => {
-                  if (fix.kind === 'delete') {
-                    if (confirm('确认删除这条失败的视频任务？')) {
-                      onDelete?.(asset);
-                      onOpenChange(false);
+              <div className="space-y-2">
+                <VideoFailureCard
+                  error={asset.meta?.error || '视频生成失败'}
+                  allowRetry={false}
+                  onApplyFix={(fix) => {
+                    if (fix.kind === 'delete') {
+                      if (confirm('确认删除这条失败的视频任务？')) {
+                        onDelete?.(asset);
+                        onOpenChange(false);
+                      }
                     }
-                  }
-                }}
-              />
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={regenerateVideo}
+                  disabled={regenerating}
+                >
+                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                  用同样的脚本重新生成
+                </Button>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-6">
                 视频还在排队渲染，完成后这里会出现可播放的视频。
