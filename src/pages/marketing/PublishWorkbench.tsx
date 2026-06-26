@@ -183,7 +183,10 @@ export default function PublishWorkbench() {
             <div className="mt-3"><Button variant="outline" size="sm" onClick={() => navigate(-1)}><ArrowLeft className="w-3.5 h-3.5 mr-1" />返回</Button></div>
           </div>
         ) : jobId ? (
-          <PublishProgress targets={targets} jobStatus={jobStatus} onBack={() => { setJobId(null); setPicked(new Set()); }} />
+          <PublishProgress targets={targets} jobStatus={jobStatus} retrying={retrying}
+            onBack={() => { setJobId(null); setPicked(new Set()); setScheduleAt(''); }}
+            onRetry={retryFailed}
+            onHistory={() => navigate('/me/marketing/publish-history')} />
         ) : (
           <>
             <div className="flex gap-3 bg-card border border-border rounded-lg p-3">
