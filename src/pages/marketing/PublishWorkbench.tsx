@@ -262,6 +262,24 @@ export default function PublishWorkbench() {
               )}
             </div>
 
+            <div>
+              <Label className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />定时发布 (可选)</Label>
+              <div className="flex gap-2 mt-1">
+                <Input type="datetime-local" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)}
+                  min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)} />
+                {scheduleAt && (
+                  <Button type="button" variant="outline" size="icon" onClick={() => setScheduleAt('')}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {scheduleAt
+                  ? `将于 ${new Date(scheduleAt).toLocaleString('zh-CN', { hour12: false })} 自动发起`
+                  : '留空 = 立即提交'}
+              </p>
+            </div>
+
             <div className="bg-muted/40 border border-border rounded-lg p-2.5">
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 ⚠️ 本工具通过模拟登录代发布:提交成功仅代表已交付给平台后台,不等于审核通过。同号短时高频发布可能触发平台风控。
@@ -269,8 +287,13 @@ export default function PublishWorkbench() {
             </div>
 
             <Button className="w-full h-12 text-base" onClick={submit} disabled={submitting || picked.size === 0 || !title.trim()}>
-              {submitting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-              提交发布 ({picked.size})
+              {submitting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                : scheduleAt ? <Clock className="w-4 h-4 mr-1.5" /> : <Send className="w-4 h-4 mr-1.5" />}
+              {scheduleAt ? `定时发布 (${picked.size})` : `提交发布 (${picked.size})`}
+            </Button>
+
+            <Button variant="ghost" className="w-full text-xs text-muted-foreground" onClick={() => navigate('/me/marketing/publish-history')}>
+              <History className="w-3.5 h-3.5 mr-1" />查看发布历史
             </Button>
           </>
         )}
