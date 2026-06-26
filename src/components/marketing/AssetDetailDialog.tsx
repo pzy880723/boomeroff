@@ -85,16 +85,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Copy, Download, Loader2, Pencil, Save, X, Sparkles } from 'lucide-react';
+import { Copy, Download, Loader2, Pencil, Save, X, Sparkles, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
+import { buildXhsViral, VIRAL_STYLE_LABELS, type ViralStyle } from '@/lib/shareCopy';
 
 interface CopyCand {
   title?: string;
   body?: string;
   hashtags?: string[];
   first_comment?: string;
+  style?: ViralStyle;
 }
 
 export function AssetDetailDialog({
@@ -145,7 +147,7 @@ export function AssetDetailDialog({
     return [c.title, c.body, (c.hashtags || []).join(' ')].filter(Boolean).join('\n\n').trim();
   };
 
-  const generateVideoCopy = async () => {
+  const generateVideoCopy = async (style: ViralStyle = 'scream') => {
     if (!asset || asset.kind !== 'video') return;
     const poster: string | undefined =
       asset.meta?.poster_url ||
@@ -155,6 +157,7 @@ export function AssetDetailDialog({
       undefined;
     if (!poster) { toast.error('找不到视频封面,无法生成文案'); return; }
     setGenCopyLoading(true);
+    let c: CopyCand | null = null;
     try {
       const topic = asset.meta?.topic || asset.meta?.style_label || '';
       const { data, error } = await supabase.functions.invoke('generate-marketing-copy', {
@@ -162,6 +165,7 @@ export function AssetDetailDialog({
           image_urls: [poster],
           platform: 'xhs',
           tone: '种草',
+          style,
           highlight: topic ? `配合一条 ${asset.meta?.duration || 15}s 视频:${topic}` : '',
           shop_id: asset.shop_id || null,
           from_video_id: asset.id,
@@ -169,18 +173,26 @@ export function AssetDetailDialog({
       });
       if (error) throw error;
       const d = data as any;
-      const c: CopyCand | undefined = Array.isArray(d?.candidates) ? d.candidates[0] : undefined;
-      if (!c) throw new Error(d?.error || '生成失败');
+      const got: CopyCand | undefined = Array.isArray(d?.candidates) ? d.candidates[0] : undefined;
+      if (!got) throw new Error(d?.error || '生成失败');
+      c = { ...got, style };
+    } catch (e: any) {
+      // 兜底:本地爆文模板,断网/限流也能立刻出
+      const fallback = buildXhsViral({
+        name: asset.meta?.topic || '中古好物',
+        category: asset.meta?.category,
+      }, style);
+      c = fallback;
+      toast.message('AI 暂时忙，先给你一版本地爆文模板');
+    }
+    try {
       setVideoCopy(c);
-      // 写回 asset.meta,下次打开能恢复
-      const nextMeta = { ...(asset.meta || {}), video_copy: c, video_copy_asset_id: d?.asset_id || null };
+      const nextMeta = { ...(asset.meta || {}), video_copy: c, video_copy_style: style };
       try {
         await supabase.from('marketing_assets' as any).update({ meta: nextMeta }).eq('id', asset.id);
         onUpdated?.({ ...asset, meta: nextMeta });
       } catch {}
-      toast.success('文案已生成');
-    } catch (e: any) {
-      toast.error(e?.message || '生成失败');
+      toast.success(`文案已生成 · ${VIRAL_STYLE_LABELS[style]}`);
     } finally { setGenCopyLoading(false); }
   };
 
@@ -408,38 +420,72 @@ export function AssetDetailDialog({
               </p>
             )}
 
-            {/* 视频可用时:一键生成小红书文案 + 下载 */}
+            {/* 视频可用时:一键生成小红书爆文 + 下载 */}
             {asset.output_url && (
               <div className="space-y-2 pt-1">
                 {videoCopy ? (
                   <div className="border border-accent/15 rounded-lg p-3 space-y-2 bg-card">
                     <div className="flex items-center justify-between">
-                      <span className="font-display text-[11px] text-accent tracking-[0.18em]">小红书文案</span>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => copy(videoCopyText(videoCopy))}>
-                          <Copy className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={generateVideoCopy} disabled={genCopyLoading}>
-                          {genCopyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                        </Button>
-                      </div>
+                      <span className="font-display text-[11px] text-accent tracking-[0.18em]">
+                        小红书爆文{videoCopy.style ? ` · ${VIRAL_STYLE_LABELS[videoCopy.style as ViralStyle]}` : ''}
+                      </span>
+                      <Button size="sm" variant="ghost" onClick={() => copy(videoCopyText(videoCopy))}>
+                        <Copy className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
                     {videoCopy.title && <p className="font-display text-[15px] leading-snug">{videoCopy.title}</p>}
                     {videoCopy.body && <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">{videoCopy.body}</p>}
                     {videoCopy.hashtags && videoCopy.hashtags.length > 0 && (
-                      <p className="text-[11px] text-accent">{videoCopy.hashtags.join(' ')}</p>
+                      <p className="text-[11px] text-accent leading-relaxed">{videoCopy.hashtags.join(' ')}</p>
                     )}
                     {videoCopy.first_comment && (
                       <p className="text-[11px] text-muted-foreground border-t border-border pt-1.5">
                         <span className="text-accent font-semibold mr-1">首评</span>{videoCopy.first_comment}
                       </p>
                     )}
+                    <div className="pt-2 border-t border-border/60">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1.5 flex items-center gap-1">
+                        <RefreshCw className="w-3 h-3" />换个风格再来一版
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(Object.keys(VIRAL_STYLE_LABELS) as ViralStyle[]).map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => generateVideoCopy(s)}
+                            disabled={genCopyLoading}
+                            className={[
+                              'px-2.5 h-7 rounded-full text-[11px] border transition-all',
+                              videoCopy.style === s
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-transparent text-foreground border-border hover:border-accent/50',
+                            ].join(' ')}
+                          >
+                            {VIRAL_STYLE_LABELS[s]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  <Button variant="outline" className="w-full" onClick={generateVideoCopy} disabled={genCopyLoading}>
-                    {genCopyLoading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
-                    一键生成小红书文案
-                  </Button>
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">挑一种爆文风格 ✨</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {(Object.keys(VIRAL_STYLE_LABELS) as ViralStyle[]).map((s) => (
+                        <Button
+                          key={s}
+                          variant="outline"
+                          size="sm"
+                          className="h-9 text-[12px] justify-center"
+                          onClick={() => generateVideoCopy(s)}
+                          disabled={genCopyLoading}
+                        >
+                          {genCopyLoading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+                          {VIRAL_STYLE_LABELS[s]}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
                 )}
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1" onClick={() => copy(asset.output_url)}>

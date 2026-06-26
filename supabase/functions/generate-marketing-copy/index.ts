@@ -35,7 +35,23 @@ Deno.serve(async (req) => {
     const price = (body.price || "").toString().trim().slice(0, 20);
     const highlight = (body.highlight || "").toString().trim().slice(0, 80);
     const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    const VIRAL_STYLES = ["scream", "heal", "story", "flex"] as const;
+    type ViralStyle = typeof VIRAL_STYLES[number];
+    const viralStyle: ViralStyle | null = VIRAL_STYLES.includes(body.style) ? body.style : null;
     if (!imageUrls.length) return json({ error: "至少上传一张图" }, 400);
+
+    const VIRAL_BRIEF: Record<ViralStyle, string> = {
+      scream: "🔥 尖叫安利体：大量感叹号 + emoji + 抓马口吻（'姐妹些!!!''救命''会哭'），情绪拉满，每句必须带至少一个 emoji。",
+      heal: "✨ 治愈日记体：慢节奏日记 + 小图标点缀（☕️🥛☀️🌿），每句开头或结尾必带 emoji，分行像呼吸。",
+      story: "📖 故事悬念体：用钩子+留白开场（'在 XX 巷子里捡到这只…👀'），逐句推进悬念，最后再亮谜底，每句带 emoji。",
+      flex: "💎 凡尔赛藏家体：低调炫耀+轻装腔（'随手翻到的小东西…🫣''懂的人自然懂'），节制但每句仍有 emoji 收尾。",
+    };
+    const TITLE_HOOKS = [
+      "数字冲击：开头放数字（99%/3 只/整条街），制造稀缺感",
+      "反转打脸：'以为…结果…' 或 '别买新的了！'",
+      "身份代入：'i 人友好''中古迷请进''XX 党看过来'",
+      "emoji 开头：用 1-2 个 emoji 起头（🥺/✨/🔥/💎/📖）",
+    ];
 
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
@@ -45,11 +61,15 @@ Deno.serve(async (req) => {
     const kbHits = kbQuery ? await kbSearch(admin0, { query: kbQuery, scope: 'copy', shopId, k: 6 }) : [];
     const kbBlock = formatKbBlock(kbHits);
 
+    const viralBlock = viralStyle
+      ? `\n【小红书爆文模式 · ${viralStyle}】\n${VIRAL_BRIEF[viralStyle]}\n标题必须命中以下任一套路：\n${TITLE_HOOKS.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}\n硬性要求：\n  - emoji 密度=爆炸级：标题至少 2 个 emoji；正文每一句结尾或中间必须有 emoji；hashtags 前缀可加 🏷️。\n  - 标题 ≤22 字，要么数字开头、要么反转词开头、要么 emoji 开头。\n  - 正文 3-5 段，每段 1-3 句，可用 ｜ · ─ 做视觉分隔。\n  - 首评必须是引导互动的问题或邀请，自带 emoji。\n  - hashtags 8-12 个，先写品类/风格/年代，再写情绪/人群（如 #i人友好 #打工人解压）。\n`
+      : "";
+
     const sys = `${presets.brand}
 ${shopBlock ? `\n${shopBlock}\n` : ""}
 平台：${presets.platforms[platformKey]}
 口吻：${presets.tones[toneKey]}
-${kbBlock}
+${viralBlock}${kbBlock}
 输出格式：严格 JSON 数组，3 个对象，每个对象字段：
 {
   "title": "标题（朋友圈留空字符串）",
@@ -105,8 +125,9 @@ ${kbBlock}
     candidates = candidates.slice(0, 3).map((c) => ({
       title: sanitize(c?.title || ""),
       body: sanitize(c?.body || ""),
-      hashtags: Array.isArray(c?.hashtags) ? c.hashtags.map((x: any) => sanitize(String(x))).filter(Boolean).slice(0, 8) : [],
+      hashtags: Array.isArray(c?.hashtags) ? c.hashtags.map((x: any) => sanitize(String(x))).filter(Boolean).slice(0, 12) : [],
       first_comment: sanitize(c?.first_comment || ""),
+      style: viralStyle || undefined,
     }));
 
     const admin = admin0;
@@ -116,10 +137,10 @@ ${kbBlock}
       shop_id: shopId,
       input_image_urls: imageUrls,
       output_text: JSON.stringify(candidates),
-      meta: { platform: platformKey, tone: toneKey, product_name: productName, price, highlight, from_video_id: body.from_video_id || null },
+      meta: { platform: platformKey, tone: toneKey, style: viralStyle, product_name: productName, price, highlight, from_video_id: body.from_video_id || null },
     }).select().single();
 
-    return json({ success: true, candidates, asset_id: row?.id, __kb_sources: kbSourcesMeta(kbHits) });
+    return json({ success: true, candidates, asset_id: row?.id, style: viralStyle, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[copy] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
