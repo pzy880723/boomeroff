@@ -52,6 +52,9 @@ Deno.serve(async (req) => {
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
     const character = (body.character && typeof body.character === "object") ? body.character : null;
+    const intent: string = typeof body.intent === "string" ? body.intent : "";
+    const isViralStoreTour = intent === "viral_store_tour";
+
 
     const rule = presets.videoRules[videoType];
 
