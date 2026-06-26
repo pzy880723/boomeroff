@@ -184,36 +184,52 @@ export function AssetDetailDialog({
     } finally { setGenCopyLoading(false); }
   };
 
-  const downloadVideo = async () => {
+  const downloadAsset = async (kind: 'video' | 'image') => {
     if (!asset?.output_url) return;
     setDownloading(true);
     try {
-      const res = await fetch(asset.output_url, { credentials: 'omit' });
-      if (!res.ok) throw new Error('下载失败');
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) throw new Error('请先登录');
+      const projectRef = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID || '';
+      const supaUrl = (import.meta as any).env?.VITE_SUPABASE_URL || (projectRef ? `https://${projectRef}.supabase.co` : '');
+      if (!supaUrl) throw new Error('无法解析下载地址');
+      const tail = asset.meta?.storage_path?.split('/').pop() || '';
+      const url = `${supaUrl}/functions/v1/download-marketing-asset?asset_id=${encodeURIComponent(asset.id)}${tail ? `&filename=${encodeURIComponent(tail)}` : ''}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(t || `下载失败 (${res.status})`);
+      }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      const tail = asset.meta?.storage_path?.split('/').pop() || `video-${asset.id}.mp4`;
-      a.download = tail.endsWith('.mp4') ? tail : `${tail}.mp4`;
+      a.href = blobUrl;
+      // 优先用响应头里的 filename
+      const cd = res.headers.get('content-disposition') || '';
+      const m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+      a.download = m ? decodeURIComponent(m[1]) : (tail || `boomer-${kind}-${asset.id.slice(0,8)}.${kind === 'video' ? 'mp4' : 'jpg'}`);
       document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      // 顺便复制文案
-      const txt = videoCopyText(videoCopy);
-      if (txt) {
-        try { await navigator.clipboard.writeText(txt); toast.success('视频已开始下载,文案也复制好了'); }
-        catch { toast.success('视频已开始下载'); }
-      } else {
-        toast.success('视频已开始下载');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+      // 视频同时复制文案
+      if (kind === 'video') {
+        const txt = videoCopyText(videoCopy);
+        if (txt) {
+          try { await navigator.clipboard.writeText(txt); toast.success('视频已下载,文案也复制好了'); return; }
+          catch { /* noop */ }
+        }
       }
+      toast.success('下载完成');
     } catch (e: any) {
-      // 浏览器对跨域链接 download 会被忽略,退而求其次直接新开窗口
-      window.open(asset.output_url, '_blank', 'noreferrer');
-      toast.message('已在新窗口打开,请长按/右键保存');
+      // 兜底:直接打开原链接
+      toast.message(e?.message || '下载失败,已尝试在新窗口打开,请长按保存');
+      try { window.open(asset.output_url, '_blank', 'noreferrer'); } catch { /* noop */ }
     } finally { setDownloading(false); }
   };
+
+  const downloadVideo = () => downloadAsset('video');
 
   const beginEdit = (i: number) => {
     setEditing(i);
