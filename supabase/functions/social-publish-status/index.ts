@@ -50,13 +50,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 收尾: 把卡 5 分钟以上 queued/running 的子任务标记 failed (timeout)
+    // 收尾: 把开始执行 5 分钟仍 running 的子任务标记 failed (定时未到不算)
     const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     await supa.from("social_publish_targets").update({
       status: "failed",
       error_message: "worker 超时未回执,请到平台后台确认是否已发布",
       finished_at: new Date().toISOString(),
-    }).eq("job_id", jobId).in("status", ["queued", "running"]).lt("created_at", cutoff);
+    }).eq("job_id", jobId).eq("status", "running").not("started_at", "is", null).lt("started_at", cutoff);
 
     const { data: targets } = await supa.from("social_publish_targets")
       .select("*, social_accounts(account_name, avatar_url, platform)")
