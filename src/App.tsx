@@ -52,9 +52,9 @@ const AiImage = lazy(() => import("./pages/marketing/AiImage"));
 const MarketingCopy = lazy(() => import("./pages/marketing/MarketingCopy"));
 const MarketingVideo = lazy(() => import("./pages/marketing/MarketingVideo"));
 const MarketingLibrary = lazy(() => import("./pages/marketing/MarketingLibrary"));
-const SocialAccounts = lazy(() => import("./pages/marketing/SocialAccounts"));
-const PublishWorkbench = lazy(() => import("./pages/marketing/PublishWorkbench"));
-const PublishHistory = lazy(() => import("./pages/marketing/PublishHistory"));
+const DispatchHome = lazy(() => import("./pages/marketing/dispatch/DispatchHome"));
+const DispatchWorkbench = lazy(() => import("./pages/marketing/dispatch/Workbench"));
+const DispatchJobDetail = lazy(() => import("./pages/marketing/dispatch/JobDetail"));
 
 const queryClient = new QueryClient();
 
@@ -116,9 +116,13 @@ const App = () => {
               <Route path="/me/marketing/copy" element={<MarketingCopy />} />
               <Route path="/me/marketing/video" element={<MarketingVideo />} />
               <Route path="/me/marketing/library" element={<MarketingLibrary />} />
-              <Route path="/me/marketing/social-accounts" element={<SocialAccounts />} />
-              <Route path="/me/marketing/publish/:assetId" element={<PublishWorkbench />} />
-              <Route path="/me/marketing/publish-history" element={<PublishHistory />} />
+              <Route path="/me/marketing/dispatch" element={<DispatchHome />} />
+              <Route path="/me/marketing/dispatch/workbench" element={<DispatchWorkbench />} />
+              <Route path="/me/marketing/dispatch/job/:jobId" element={<DispatchJobDetail />} />
+              {/* 旧路由兼容 */}
+              <Route path="/me/marketing/social-accounts" element={<Navigate to="/me/marketing/dispatch?tab=accounts" replace />} />
+              <Route path="/me/marketing/publish-history" element={<Navigate to="/me/marketing/dispatch?tab=history" replace />} />
+              <Route path="/me/marketing/publish/:assetId" element={<Navigate to="/me/marketing/dispatch/workbench" replace />} />
 
               {/* 游客版（免登录）—— 用静默 ErrorBoundary,顾客永远不会看到错误卡片 */}
               <Route

@@ -1,39 +1,35 @@
-# social-auto-upload worker 接入说明
+# social-auto-upload worker 对接说明 v2
 
-我们的 App 已经把所有多平台发布逻辑接到 `http://aigc.boomeroff.top` 这台 worker。
+App 端已经按 SAU 上游协议重写,worker 端只要满足以下几个端点就可以直接用。
 
-## 你必须做的事
+## 服务器侧基础设施
 
 ### 1. DNS
 
 ```
 aigc.boomeroff.top  →  A  →  150.158.94.248
 ```
-没做这步，Lovable Edge Function 也连不上。
 
-### 2. 强烈建议：给 worker 加一道 Header 鉴权
-
-worker 接口本身**没有任何鉴权**，谁知道域名都能用你的账号池发视频。请在 worker 这台机器的 Nginx 上加：
+### 2. Nginx 反代 + Token 鉴权(强制)
 
 ```nginx
 server {
-  listen 80;
+  listen 443 ssl http2;
   server_name aigc.boomeroff.top;
+  # ssl_certificate ...; ssl_certificate_key ...;
 
   set $sau_token "请改成一段长随机串";
 
-  # 健康检查 & 二维码图片可以不验，便于排查
+  # 二维码图片本身不验,方便前端展示
   location = /getFile { proxy_pass http://127.0.0.1:5409; }
 
   location / {
-    if ($http_x_sau_token != $sau_token) {
-      return 401;
-    }
+    if ($http_x_sau_token != $sau_token) { return 401; }
     proxy_pass http://127.0.0.1:5409;
     proxy_http_version 1.1;
     proxy_set_header X-Real-IP $remote_addr;
 
-    # SSE / 大文件 需要的设置
+    # SSE + 大文件
     proxy_buffering off;
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
@@ -42,41 +38,94 @@ server {
 }
 ```
 
-然后把这串 token 加到 Lovable Cloud 的 secret：`SAU_WORKER_TOKEN`。Edge Function 会自动带上 `X-Sau-Token` Header。
+把这串 token 加到 Lovable Cloud 的 secret:`SAU_WORKER_TOKEN`。Edge Function 会自动带上 `X-Sau-Token`。
 
-### 3. （可选但推荐）上 HTTPS
+## App 期望的接口契约
 
-`http://` 也能跑（我们通过 Edge Function 反代），但建议用 Let's Encrypt 给 `aigc.boomeroff.top` 上证书，避免明文传输 cookie。证书装好后把上面 server 块改成 `listen 443 ssl`。
+平台代号:`1=xhs 2=wechat_video 3=douyin 4=kuaishou 5=tiktok 6=bilibili`
 
-## App 这边已经做了什么（批 1）
+| 方法 | 路径 | 用途 | 返回 |
+| --- | --- | --- | --- |
+| GET | `/getValidAccounts` | 列所有 cookie 仍有效的账号 | `{code:200, data:[[id, type, name, avatar, status], ...]}` |
+| GET | `/getAccounts` | 列所有账号(兼容老 worker) | 同上 |
+| GET | `/login_qrcode?type=N` | **SSE 流**,每条 `data:` 是 JSON | 见下 |
+| POST | `/upload` (multipart `file`) | 上传素材 | `{code:200, data:"<server file path>"}` |
+| POST | `/postVideoBatch` (JSON) | 批量发视频 | `{code:200, data?, msg?}` |
+| POST | `/postImageBatch` (JSON) | **批量发图文(待实现)** | 同上 |
+| POST | `/deleteAccount?id=N` | 删账号 cookie | `{code:200}` |
+| GET | `/getTaskStatus?task_id=...` | **查单任务实时状态(待实现,可选)** | `{code, data:{status,progress,url,error}}` |
 
-- 数据库：`social_accounts` / `social_publish_jobs` / `social_publish_targets` 三张表 + RLS（店员只看自己门店）。
-- Edge Functions：
-  - `social-login-stream`（SSE 反代，扫码登录）
-  - `social-account-list`（按门店列出账号 + 同步 worker 状态）
-  - `social-account-delete`（解绑账号，会同步删除 worker 上的 cookie）
-  - `social-asset-proxy`（把 worker 的二维码图代理成 HTTPS）
-- 前端：
-  - 营销中心多了「自媒体账号」入口
-  - `/me/marketing/social-accounts` 账号管理页（扫码绑定 / 校验 / 解绑）
+### SSE 扫码事件格式(关键)
 
-## 批 2 待实施
+每条 SSE 消息 `data:` 字段必须是 JSON,字段:
+- `step`: `qr` / `scanned` / `confirmed` / `success` / `fail`
+- `qr`: 二维码图片的 base64(`data:image/png;base64,...`)或 worker 可访问的 URL,在 `step=qr` 时必传
+- `account_id`: `step=success` 时回传 worker 内的账号 id
+- `msg`: 失败原因(`step=fail` 时)
 
-- 视频「一键发布 ✈️」按钮 → 发布工作台
-- 后端 `social-publish-create` 把素材库视频流式上传到 worker `/upload` 再调 `/postVideoBatch`
-- 发布进度弹窗（可关闭后台继续）
-- 不要忘了：worker 不回执，"已提交" ≠ "已发布成功"，UI 文案要明确
+示例:
 
-## 风险点
+```
+event: progress
+data: {"step":"qr","qr":"data:image/png;base64,iVBORw0..."}
 
-- worker 没有鉴权 → 必须按第 2 步加 Nginx token，否则你的账号别人也能用
-- 单视频文件上限 160MB
-- 平台风控：同号同 IP 短时间多次发布会触发滑块/封号
-- 抖音/小红书/视频号/快手以外的平台（B站、TikTok）当前 worker 不支持，UI 已隐藏
+event: progress
+data: {"step":"scanned"}
 
-## 调试用 curl
+event: progress
+data: {"step":"success","account_id":1234,"name":"BOOMER小店","avatar":"https://..."}
+```
+
+### `/postVideoBatch` 请求体
+
+```json
+{
+  "fileList": ["<path returned by /upload>"],
+  "accountList": [1234, 5678],
+  "type": 3,
+  "title": "标题(<=100)",
+  "tags": ["夏季", "新品"],
+  "category": "可选",
+  "enableTimer": false,
+  "videosPerDay": 1,
+  "dailyTimes": [9, 14, 20],
+  "startDays": 0
+}
+```
+
+非 200 返回必须带 `msg` 字段说明失败原因(中文最好)。
+
+### `/postImageBatch` 请求体(待实现)
+
+```json
+{
+  "fileList": ["path1.jpg", "path2.jpg"],
+  "accountList": [1234],
+  "type": 1,
+  "title": "<=20",
+  "body": "正文/描述",
+  "tags": ["..."],
+  "category": "可选"
+}
+```
+
+返回与 `/postVideoBatch` 一致。
+
+## 平台覆盖
+
+我们 UI 已经开了 5 个:抖音 / 小红书 / 视频号 / 快手 / B站。其中 B站(`type=6`)如果 worker 还没接,请告知,我们 UI 临时禁用。
+
+TikTok(`type=5`)海外网络问题大,UI 当前隐藏。
+
+## 风险提示
+
+- 单视频上限 200MB(我们 Edge Function 强校验)
+- 同号同 IP 短时间多次发布会触发滑块,建议 `enableTimer=true` 排期
+- worker 没有鉴权 → 必须按上面 Nginx token 加 `X-Sau-Token`,否则你的账号别人也能用
+
+## 调试 curl
 
 ```bash
-TOKEN="你的SAU_WORKER_TOKEN"
-curl -H "X-Sau-Token: $TOKEN" http://aigc.boomeroff.top/getAccounts
+TOKEN="你的 SAU_WORKER_TOKEN"
+curl -H "X-Sau-Token: $TOKEN" https://aigc.boomeroff.top/getValidAccounts
 ```

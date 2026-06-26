@@ -1711,6 +1711,8 @@ export type Database = {
         Row: {
           account_name: string | null
           avatar_url: string | null
+          capabilities: Json
+          content_kinds: string[]
           cookie_status: string
           created_at: string
           created_by: string | null
@@ -1726,6 +1728,8 @@ export type Database = {
         Insert: {
           account_name?: string | null
           avatar_url?: string | null
+          capabilities?: Json
+          content_kinds?: string[]
           cookie_status?: string
           created_at?: string
           created_by?: string | null
@@ -1741,6 +1745,8 @@ export type Database = {
         Update: {
           account_name?: string | null
           avatar_url?: string | null
+          capabilities?: Json
+          content_kinds?: string[]
           cookie_status?: string
           created_at?: string
           created_by?: string | null
@@ -1763,6 +1769,63 @@ export type Database = {
           },
         ]
       }
+      social_platform_specs: {
+        Row: {
+          body_max: number
+          enabled: boolean
+          images_max: number
+          images_min: number
+          label: string
+          needs_cover: boolean
+          platform: string
+          sort_order: number
+          supports_image_text: boolean
+          supports_schedule: boolean
+          supports_video: boolean
+          tag_max: number
+          title_max: number
+          updated_at: string
+          video_seconds_max: number
+          video_seconds_min: number
+        }
+        Insert: {
+          body_max?: number
+          enabled?: boolean
+          images_max?: number
+          images_min?: number
+          label: string
+          needs_cover?: boolean
+          platform: string
+          sort_order?: number
+          supports_image_text?: boolean
+          supports_schedule?: boolean
+          supports_video?: boolean
+          tag_max?: number
+          title_max?: number
+          updated_at?: string
+          video_seconds_max?: number
+          video_seconds_min?: number
+        }
+        Update: {
+          body_max?: number
+          enabled?: boolean
+          images_max?: number
+          images_min?: number
+          label?: string
+          needs_cover?: boolean
+          platform?: string
+          sort_order?: number
+          supports_image_text?: boolean
+          supports_schedule?: boolean
+          supports_video?: boolean
+          tag_max?: number
+          title_max?: number
+          updated_at?: string
+          video_seconds_max?: number
+          video_seconds_min?: number
+        }
+        Relationships: []
+      }
       social_publish_jobs: {
         Row: {
           asset_id: string | null
@@ -1771,9 +1834,11 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          images: string[]
           kind: string
           media_url: string | null
           per_platform: Json
+          retry_count: number
           schedule_at: string | null
           shop_id: string
           status: string
@@ -1789,9 +1854,11 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          images?: string[]
           kind: string
           media_url?: string | null
           per_platform?: Json
+          retry_count?: number
           schedule_at?: string | null
           shop_id: string
           status?: string
@@ -1807,9 +1874,11 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          images?: string[]
           kind?: string
           media_url?: string | null
           per_platform?: Json
+          retry_count?: number
           schedule_at?: string | null
           shop_id?: string
           status?: string
@@ -1844,7 +1913,10 @@ export type Database = {
           id: string
           job_id: string
           last_retry_at: string | null
+          last_step: string | null
           platform: string
+          platform_post_id: string | null
+          platform_post_url: string | null
           platform_url: string | null
           progress: number
           retry_count: number
@@ -1861,7 +1933,10 @@ export type Database = {
           id?: string
           job_id: string
           last_retry_at?: string | null
+          last_step?: string | null
           platform: string
+          platform_post_id?: string | null
+          platform_post_url?: string | null
           platform_url?: string | null
           progress?: number
           retry_count?: number
@@ -1878,7 +1953,10 @@ export type Database = {
           id?: string
           job_id?: string
           last_retry_at?: string | null
+          last_step?: string | null
           platform?: string
+          platform_post_id?: string | null
+          platform_post_url?: string | null
           platform_url?: string | null
           progress?: number
           retry_count?: number
