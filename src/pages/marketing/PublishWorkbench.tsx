@@ -116,15 +116,8 @@ export default function PublishWorkbench() {
     } finally { setSubmitting(false); }
   };
 
-  // 轮询进度
-  const pollStatus = useCallback(async () => {
-    if (!jobId) return;
-    const { data, error } = await supabase.functions.invoke('social-publish-status', {
-      body: {}, // 用 query string
-      method: 'GET' as any,
-    } as any);
-    // 上面 invoke 不支持 GET query, 手工 fetch
-  }, [jobId]);
+  // 轮询进度 (effect 内部直接 fetch,见下方)
+
 
   useEffect(() => {
     if (!jobId) return;
