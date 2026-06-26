@@ -1,56 +1,38 @@
-## 现状诊断
+# 排查结论
 
-数据库里只有 **1 个** 真正卡着的任务：
+最近两条视频都是同一个原因失败：
 
-| ID | 状态 | 创建时间 | 最近轮询 | provider_task_id |
-|---|---|---|---|---|
-| `aba94005…b39b2d` | `running` | 06:34 UTC | 07:21 UTC | `cgt-20260626143435-5lkbv` |
+- `aba94005…`（Pro / 1080p / 15s）06:34 提交，07:26 被标记"渲染超时(>10 分钟)"
+- `2864c1db…`（Pro / 1080p / 15s）07:39 提交，07:50 被标记"渲染超时(>10 分钟)"
 
-其它历史任务都已经是 `succeeded` 或 `failed`。这一个已经"渲染"了 50 分钟，明显异常。
+火山方舟那边任务还在 `running` 我们就把它判死了。Seedance **2.0 Pro** 跑 1080p / 15 秒经常要 12–20 分钟，而我们 `poll-marketing-video` 的 sweep 阈值只给了 **10 分钟**——所以只要选 Pro，基本必"超时失败"。上一条成功的视频用的是 Fast，3 分钟就好了，所以你之前没碰到。
 
-## 真正的根因
+# 修复方案（仅改 `supabase/functions/poll-marketing-video/index.ts`）
 
-1. **没有后端轮询 cron**：现在数据库里只配了 `kb-ingest` 和 `social-publish-dispatch` 两个 cron 任务，**没有** 给 `poll-marketing-video` 配定时器。这意味着只有你打开「惊喜一下」弹窗 / 视频详情页时，前端 setInterval 才会去查 Seedance；一旦你切到别的页面或后台被回收，这个任务就被"遗忘"了。
-2. 火山 Seedance 单次任务正常应在 1-5 分钟出结果。超过 10 分钟还 `running` 基本就是火山侧排队/掉队/失败但 webhook 没通知。
-3. 现在的"24 小时自动清理"阈值太宽，用户体感是"永远在转"。
+1. **按模型分级超时**
+   - Fast / Mini：12 分钟
+   - Pro 720p / 1080p：25 分钟
+   - Pro 4K：35 分钟
+   （根据 `marketing_assets.meta.model` + `meta.resolution` 取，取不到默认 25 分钟）
 
-## 修复计划
+2. **超时前再确认一次** — 在 sweep 判定超时之前，先向 Ark 查一次该 `provider_task_id`：
+   - 若 Ark 返回 `succeeded`，按正常流程写回 `video_url`，不再判失败。
+   - 若 Ark 返回 `failed`，写真实错误（如方舟侧的"账号未激活/审核未过"）。
+   - 仅当 Ark 仍是 `queued/running` 且已超阈值，才写"渲染超时"。
 
-### A. 立刻把这一个任务推动一下
-- 用 service role 调一次 `poll-marketing-video`，强制查火山现状；如果返回 `failed/expired`，直接落库，前端就能看到"失败 + 重试"卡片。
-- 如果火山仍然 `running` 但已超 10 分钟，把它标成 `failed` 并写明 `error = "渲染超时，请重试"`，让 `VideoFailureCard` 给出重试按钮。
+3. **错误文案带模型建议** — 真正判超时时，错误改成：  
+   `"渲染超过 X 分钟未完成（{模型}/{分辨率}），建议改用 Seedance Fast 或降到 720p 重试"`。  
+   现有 `VideoFailureCard` 已能识别"超时"关键字并给"降到 720p / 用 Fast 重试"按钮，无需前端改动。
 
-### B. 加后端 cron，杜绝"被遗忘"
-新增 pg_cron 任务 `poll-marketing-video-every-min`：
+4. **手动修复历史卡死的两条记录**：将 `2864c1db…`、`aba94005…` 的 `marketing_video_jobs.status` 和 `marketing_assets.meta.status` 仍是 `failed` 不动（已经写过了），但顺手再调一次 Ark 看是否其实已经成功——若成功就回填 `video_url`。
 
-```text
-每分钟 → POST /functions/v1/poll-marketing-video?mode=sweep
-```
+# 影响范围
 
-`poll-marketing-video` 增加一个 sweep 分支（service role 调用时）：
+- 仅修改 1 个 edge function（`poll-marketing-video`）。
+- 前端无改动，沿用现有失败卡和重试按钮。
+- 数据库无 schema 改动；仅在 sweep 流程内一次性补查两条历史记录。
 
-1. `select * from marketing_video_jobs where status in ('queued','running') and created_at > now()-interval '1 hour' limit 20`
-2. 对每条调 `pollOne()`，按返回状态回写。
-3. 单条任务若 `created_at < now() - interval '10 min'` 且仍 `running` → 标 `failed`，`error = "渲染超时，已自动结束"`。
+# 验证
 
-这样不管前端有没有开着，状态都会自己往前走。
-
-### C. 前端体感优化（小改动）
-- 卡片显示「已渲染 X 分钟，超过 8 分钟仍未完成可点重试」。
-- 超时后展示 `VideoFailureCard` 的「降到 720p / 换 Fast 模型」修复按钮（这套逻辑已经有，只是没在超时场景触发）。
-
-## 涉及文件
-
-```text
-supabase/functions/poll-marketing-video/index.ts   # 加 sweep 分支 + 超时判定
-src/components/marketing/SurpriseVideoDialog.tsx   # 渲染时长提示
-src/components/marketing/VideoFailureCard.tsx      # 复用现有按钮
-+ 一条 cron.schedule SQL（用 supabase--insert 写入，不走 migration）
-```
-
-## 你需要回答我的两个问题
-
-1. **超时阈值定多少？** 我建议 **10 分钟** 兜底（Seedance Pro 平均 2-4 分钟）。如果你常跑 4K 长片可以放到 15 分钟。
-2. **要不要顺手把 `aba94005` 这一条直接标 failed？** 还是先让 sweep 来跑一次再说？
-
-确认后我去 build 模式落地。
+- 用 Pro / 1080p 重新生成一条 15s 视频，等待 15 分钟以内能拿到成功状态而不是被 sweep 杀掉。
+- 用一个故意会失败的脚本，确认错误卡片里出现"用 Fast 重试 / 降到 720p"按钮。
