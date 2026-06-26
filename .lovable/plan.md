@@ -1,38 +1,50 @@
-# 排查结论
 
-最近两条视频都是同一个原因失败：
+# 把"BOOMER 帮我拍"默认调成洗脑口播探店视频
 
-- `aba94005…`（Pro / 1080p / 15s）06:34 提交，07:26 被标记"渲染超时(>10 分钟)"
-- `2864c1db…`（Pro / 1080p / 15s）07:39 提交，07:50 被标记"渲染超时(>10 分钟)"
+## 目标
+点「BOOMER 帮我拍」一键生成的默认视频 = 15 秒竖版、有真人/角色出镜、激动语气的口播探店片，转化率优先。角色既能从素材库随机抽，也能现挑/现生成,但默认权重最高的就是这一种。
 
-火山方舟那边任务还在 `running` 我们就把它判死了。Seedance **2.0 Pro** 跑 1080p / 15 秒经常要 12–20 分钟，而我们 `poll-marketing-video` 的 sweep 阈值只给了 **10 分钟**——所以只要选 Pro，基本必"超时失败"。上一条成功的视频用的是 Fast，3 分钟就好了，所以你之前没碰到。
+## 调整点（仅本功能，不动其他入口）
 
-# 修复方案（仅改 `supabase/functions/poll-marketing-video/index.ts`）
+### 1. 默认参数 (`src/lib/surpriseJob.ts` + `src/pages/MyMarketing.tsx` 触发处)
+- `video_type` 默认权重：`store_tour`（探店） 占 70%，其余类型合计 30%（保留少量惊喜感）
+- `duration` 锁 15s、`aspect` 锁 9:16、`style` 权重：`energetic` 50% / `lively` 30% / `playful` 20%（去掉 steady/elegant/nostalgic 在默认池里的权重）
+- 强制 `with_character = true`：若用户没选角色，从 `marketing_characters` 里随机抽一个 `auto_anchor=true` 的；抽不到则调用现有角色生成 fallback
+- 渲染模型沿用 `videoModelPrefs` 上次选择，没有则默认 Seedance 2.0 Fast / 720p（出片快、便宜，符合"一键"预期）
 
-1. **按模型分级超时**
-   - Fast / Mini：12 分钟
-   - Pro 720p / 1080p：25 分钟
-   - Pro 4K：35 分钟
-   （根据 `marketing_assets.meta.model` + `meta.resolution` 取，取不到默认 25 分钟）
+### 2. 脚本生成 Prompt (`supabase/functions/generate-marketing-video-script/index.ts`)
+新增一个 `intent: "viral_store_tour"` 入参（仅 surprise 入口传）。命中时在 system prompt 追加洗脑探店专用规则：
+- hook 必须 ≤2s、第一句话是冲击型钩子（"姐妹冲！""我真的会谢""别再去 XX 了"这种口语）
+- 全片口播节奏：每镜 1.5–2.5s、6–8 镜，台词总字数 80–110（10s 有效口播 + hook/outro）
+- 每镜必须有真人动作描述（指、拿、试、转身、对镜头说），主角始终是同一人(沿用 character 锁定)
+- subtitle 用大白话短句、带情绪符号（"！""绝了""巨好出片"），≤24 字
+- 收尾固定 CTA 句式："现在冲 / 地址在评论区 / 错过等一年" 任选
 
-2. **超时前再确认一次** — 在 sweep 判定超时之前，先向 Ark 查一次该 `provider_task_id`：
-   - 若 Ark 返回 `succeeded`，按正常流程写回 `video_url`，不再判失败。
-   - 若 Ark 返回 `failed`，写真实错误（如方舟侧的"账号未激活/审核未过"）。
-   - 仅当 Ark 仍是 `queued/running` 且已超阈值，才写"渲染超时"。
+### 3. 角色挑选逻辑
+在 surprise 触发处（`MyMarketing.tsx` 中点击「BOOMER 帮我拍」的 handler）：
+```text
+if (用户已选 character) → 用它
+else if (素材库存在 auto_anchor 角色) → 随机抽 1 个
+else → 走现有 character 生成 fallback (CharacterCreateDialog 的后端逻辑)
+```
+不弹窗、不打断"一键"体验。
 
-3. **错误文案带模型建议** — 真正判超时时，错误改成：  
-   `"渲染超过 X 分钟未完成（{模型}/{分辨率}），建议改用 Seedance Fast 或降到 720p 重试"`。  
-   现有 `VideoFailureCard` 已能识别"超时"关键字并给"降到 720p / 用 Fast 重试"按钮，无需前端改动。
+### 4. UI 微调 (`SurpriseVideoDialog.tsx`)
+- 进度条文案改成"正在拍一条洗脑探店片…"
+- 完成后顶部加一行小字标签："默认风格：15s 探店口播 · 主角：{角色名}"，旁边一个"换个风格再来一条"按钮（重新触发时随机走非 store_tour 池，给用户惊喜出口）
 
-4. **手动修复历史卡死的两条记录**：将 `2864c1db…`、`aba94005…` 的 `marketing_video_jobs.status` 和 `marketing_assets.meta.status` 仍是 `failed` 不动（已经写过了），但顺手再调一次 Ark 看是否其实已经成功——若成功就回填 `video_url`。
+### 5. 不动的部分
+- "AI 自定义视频"入口、风格/类型选择器、视频素材库、发布工作台、所有后端 sweep/重试逻辑保持原状
+- `video_type` 枚举、`marketing_presets` 表结构不改，只是改默认权重
 
-# 影响范围
+## 技术细节
+- 权重随机用简单的加权数组在前端做，不进 DB
+- `intent` 字段在 `generate-marketing-video-script` 里用 `if (body.intent === 'viral_store_tour')` 走分支 prompt，不影响其他入口调用
+- 角色随机：`supabase.from('marketing_characters').select().eq('shop_id', shopId).eq('auto_anchor', true)` → 客户端 `Math.random()` 抽一个
+- 不新增表、不新增 edge function
 
-- 仅修改 1 个 edge function（`poll-marketing-video`）。
-- 前端无改动，沿用现有失败卡和重试按钮。
-- 数据库无 schema 改动；仅在 sweep 流程内一次性补查两条历史记录。
-
-# 验证
-
-- 用 Pro / 1080p 重新生成一条 15s 视频，等待 15 分钟以内能拿到成功状态而不是被 sweep 杀掉。
-- 用一个故意会失败的脚本，确认错误卡片里出现"用 Fast 重试 / 降到 720p"按钮。
+## 验收
+1. 连点 5 次「BOOMER 帮我拍」，至少 3–4 次产出的是 store_tour + energetic/lively + 带角色的 15s 竖版
+2. 生成的脚本 hook ≤2s 且首句是口语化钩子
+3. 弹窗里能看到"主角：xxx"标签
+4. 「AI 自定义视频」入口的默认值未受影响

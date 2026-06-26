@@ -52,6 +52,9 @@ Deno.serve(async (req) => {
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
     const character = (body.character && typeof body.character === "object") ? body.character : null;
+    const intent: string = typeof body.intent === "string" ? body.intent : "";
+    const isViralStoreTour = intent === "viral_store_tour";
+
 
     const rule = presets.videoRules[videoType];
 
@@ -87,8 +90,22 @@ ${approvedScript}
 - scene/action 要把草稿里那段话的画面感讲具体(结合参考图描述里的细节)。`
       : '';
 
+    const viralBlock = isViralStoreTour
+      ? `
+
+【洗脑探店口播模板 · 高转化优先】(本片必须按这套节奏拍)
+- hook(≤2 秒)第一句必须是冲击型口语钩子,从这类句式里挑:"姐妹冲!"/"别再去 XX 了"/"我真的会谢"/"不是吧还有人不知道"/"这家店我能吹一年"。情绪要激动、有感染力。
+- 中段每镜 1.5-2.5 秒,scenes 数组 5-7 段;主角始终是同一个人(沿用上面锁定的角色),每镜必须有具体动作:指货架、拿起单品、试穿/试戴、转身展示、对镜头说话。
+- 全片是真人口播节奏(不是 BGM 纯画面)。dialogue 字段每镜都要有 10-20 字口播,所有 dialogue 加起来 80-110 字,像在跟好朋友安利。
+- subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""人均 50 封顶""闭眼冲"。≤24 字。
+- outro(≤2 秒)必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。
+- 画面色调明亮、节奏快,运镜以推镜/手持/特写切换为主,避免慢悠悠的长镜头。
+- 不要写成纪录片或氛围片,目标就是 15 秒抓人 + 让人想立刻去这家店。`
+      : '';
+
     const sys = `${presets.brand}
-${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}
+${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}${viralBlock}
+
 你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】(全中文)。
 
 重要：这是文生视频(text-to-video)。每一镜要给出**完整的中文描述**，让视频模型直接照拍。

@@ -16,7 +16,7 @@ import {
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
-import { getModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
+import { getModelPrefs, getSurpriseModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import type { VideoFix } from '@/lib/videoFailure';
 
@@ -61,8 +61,9 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
-  const [modelId, setModelId] = useState<string>(() => getModelPrefs().modelId);
-  const [resolution, setResolution] = useState<SeedanceResolution>(() => getModelPrefs().resolution);
+  const [modelId, setModelId] = useState<string>(() => getSurpriseModelPrefs().modelId);
+  const [resolution, setResolution] = useState<SeedanceResolution>(() => getSurpriseModelPrefs().resolution);
+
   const handleModelChange = (id: string) => {
     setModelId(id);
     setResolution((cur) => {
@@ -241,10 +242,11 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
             <Loader2 className="w-5 h-5 animate-spin text-accent" />
             <div className="text-center">
-              BOOMER 正在挑素材、写脚本、画分镜…
-              <div className="text-[10px] mt-1 opacity-70">通常 10–15 秒,分镜静帧让最终视频更稳</div>
+              BOOMER 正在挑素材、写洗脑探店口播脚本…
+              <div className="text-[10px] mt-1 opacity-70">15s 竖版 · 真人出镜 · 高转化模板</div>
             </div>
           </div>
+
         ) : (
           <>
             <ScriptBody pick={pick} />

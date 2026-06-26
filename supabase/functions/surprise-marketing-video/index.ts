@@ -16,24 +16,24 @@ const corsHeaders = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+// 「BOOMER 帮我拍」默认走"洗脑探店口播"路线 → store_tour 占绝对权重,
+// 其余类型作为偶尔的惊喜出现,避免一键功能变成随便给一条。
 const VIDEO_TYPES = [
-  { v: 'store_tour', label: '探店', tagHint: ['店铺', '氛围', '货架'] },
-  { v: 'product_showcase', label: '产品展示', tagHint: ['服饰', '包', '配饰', '杂货', '玩具'] },
-  { v: 'store_ambience', label: '店铺氛围', tagHint: ['杂货', '陈列', '角落'] },
-  { v: 'new_arrival', label: '新品上架', tagHint: ['新品', '上新'] },
+  { v: 'store_tour', label: '探店', tagHint: ['店铺', '氛围', '货架'], baseWeight: 7 },
+  { v: 'product_showcase', label: '产品展示', tagHint: ['服饰', '包', '配饰', '杂货', '玩具'], baseWeight: 1 },
+  { v: 'store_ambience', label: '店铺氛围', tagHint: ['杂货', '陈列', '角落'], baseWeight: 1 },
+  { v: 'new_arrival', label: '新品上架', tagHint: ['新品', '上新'], baseWeight: 1 },
 ] as const;
 
 const STYLES = ['steady', 'lively', 'energetic', 'elegant', 'nostalgic', 'playful'] as const;
 type SType = typeof STYLES[number];
 
-function styleByTone(tone: string | null | undefined): readonly SType[] {
-  const t = (tone || '').toLowerCase();
-  if (/高冷|高级|沉稳|稳重|克制/.test(t)) return ['elegant', 'steady', 'nostalgic'];
-  if (/年轻|活力|俏皮|可爱|搞笑|轻松/.test(t)) return ['playful', 'lively', 'energetic'];
-  if (/怀旧|复古|文艺|岁月/.test(t)) return ['nostalgic', 'elegant', 'steady'];
-  if (/热闹|激情|促销/.test(t)) return ['energetic', 'lively'];
-  return STYLES;
-}
+// 一键场景的"高转化"风格池:激动/活泼/俏皮,加权偏向 energetic。
+const VIRAL_STYLE_WEIGHTS: { item: SType; w: number }[] = [
+  { item: 'energetic', w: 5 },
+  { item: 'lively', w: 3 },
+  { item: 'playful', w: 2 },
+];
 
 function pickWeighted<T>(items: { item: T; w: number }[]): T {
   const total = items.reduce((s, x) => s + Math.max(x.w, 0), 0);
@@ -49,12 +49,13 @@ function pickWeighted<T>(items: { item: T; w: number }[]): T {
 function pickVtypeByAssets(assets: any[]): typeof VIDEO_TYPES[number]['v'] {
   const text = assets.flatMap((a) => [...(a.tags || []), a.category || '']).filter(Boolean).join(' ');
   const weighted = VIDEO_TYPES.map((t) => {
-    let w = 1;
-    for (const hint of t.tagHint) if (text.includes(hint)) w += 2;
+    let w = t.baseWeight;
+    for (const hint of t.tagHint) if (text.includes(hint)) w += 1;
     return { item: t.v, w };
   });
   return pickWeighted(weighted);
 }
+
 
 // 不放回加权采样
 function sampleWeighted<T>(items: { item: T; w: number }[], n: number): T[] {
@@ -217,11 +218,10 @@ Deno.serve(async (req) => {
     const pickedAssets = sampleWeighted(weighted, targetCount);
     const hero = pickedAssets[0];
 
-    // 3) vtype + style
+    // 3) vtype + style:store_tour 占主导,风格用高转化池(energetic/lively/playful)。
     const vtype = pickVtypeByAssets(pickedAssets);
     const shopCtx = await loadShopContext(shopId);
-    const styleWhite = styleByTone(shopCtx?.tone);
-    const style = styleWhite[Math.floor(Math.random() * styleWhite.length)];
+    const style = pickWeighted(VIRAL_STYLE_WEIGHTS);
     const vtypeLabel = VIDEO_TYPES.find((x) => x.v === vtype)?.label || '探店';
 
     // 4) 角色:店里若已建角色 → 100% 出场(随机挑一个)
@@ -244,9 +244,12 @@ Deno.serve(async (req) => {
     }));
     const heroSummary = summarizeAsset(hero);
 
-    const briefTranscript =
-      `店员:来一条 15 秒竖版${vtypeLabel}视频,主打${vtypeLabel === '探店' ? '店铺氛围' : '这件「' + heroSummary + '」'}。\n` +
-      `助理:好的,按${vtypeLabel}节奏拆 3–4 个分镜,所有画面都用上传的实景照片,体现店铺调性。`;
+    // 洗脑探店专用 brief:让 AI 写 15 秒口播 + 真人出镜 + 高转化钩子。
+    const briefTranscript = vtype === 'store_tour'
+      ? `店员:来一条 15 秒竖版洗脑探店口播,开头第一句必须是冲击型钩子(比如"姐妹冲!"/"别再去 XX 了"/"我真的会谢"那种),全程主角对镜头说话,语气激动有感染力,结尾留 CTA("地址放评论区"/"现在冲"/"错过等一年")。\n` +
+        `助理:好,拆 6-8 个 1.5-2.5 秒小镜头,主角始终是同一个人,每镜都有动作(指/拿/试/转身),全部用上传的店内实景,字幕大白话带情绪符号。`
+      : `店员:来一条 15 秒竖版${vtypeLabel}视频,主打${heroSummary},节奏明快有感染力。\n` +
+        `助理:好的,按${vtypeLabel}节奏拆 3-4 个分镜,所有画面都用上传的实景照片。`;
 
     const scriptRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-marketing-video-script`, {
       method: 'POST',
@@ -260,6 +263,7 @@ Deno.serve(async (req) => {
         topic: `${vtypeLabel} · ${heroSummary}`,
         highlight: heroSummary.slice(0, 40),
         style,
+        intent: vtype === 'store_tour' ? 'viral_store_tour' : undefined,
         brief_transcript: briefTranscript,
         image_descriptions: imageDescriptions,
         character: character ? {
@@ -270,6 +274,7 @@ Deno.serve(async (req) => {
         } : null,
       }),
     });
+
     const scriptData = await scriptRes.json().catch(() => ({}));
     if (!scriptRes.ok || !scriptData?.script) {
       return json({ ok: false, error: scriptData?.error || '脚本生成失败' });

@@ -29,3 +29,21 @@ export function saveModelPrefs(modelId: string, resolution: SeedanceResolution) 
     localStorage.setItem(KEY, JSON.stringify({ modelId, resolution }));
   } catch { /* ignore quota / SSR */ }
 }
+
+// 「BOOMER 帮我拍」一键场景的默认偏好:Fast + 720p,出片更快更便宜。
+// 用户如果在任何视频入口手动选过模型,优先沿用 localStorage 里的记忆。
+const SURPRISE_DEFAULT: VideoModelPrefs = {
+  modelId: 'doubao-seedance-2-0-fast-260128',
+  resolution: '720p',
+};
+
+export function getSurpriseModelPrefs(): VideoModelPrefs {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return SURPRISE_DEFAULT;
+    return getModelPrefs();
+  } catch {
+    return SURPRISE_DEFAULT;
+  }
+}
+
