@@ -284,10 +284,8 @@ export function AssetDetailDialog({
                 <Button variant="outline" className="flex-1" onClick={() => copy(asset.output_url)}>
                   <Copy className="w-3.5 h-3.5" />复制链接
                 </Button>
-                <Button variant="outline" className="flex-1" asChild>
-                  <a href={asset.output_url} target="_blank" rel="noreferrer" download>
-                    <Download className="w-3.5 h-3.5" />下载
-                  </a>
+                <Button className="flex-1" onClick={() => downloadAsset('image')} disabled={downloading}>
+                  {downloading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1" />}下载
                 </Button>
               </div>
             )}
