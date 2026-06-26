@@ -16,24 +16,24 @@ const corsHeaders = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+// 「BOOMER 帮我拍」默认走"洗脑探店口播"路线 → store_tour 占绝对权重,
+// 其余类型作为偶尔的惊喜出现,避免一键功能变成随便给一条。
 const VIDEO_TYPES = [
-  { v: 'store_tour', label: '探店', tagHint: ['店铺', '氛围', '货架'] },
-  { v: 'product_showcase', label: '产品展示', tagHint: ['服饰', '包', '配饰', '杂货', '玩具'] },
-  { v: 'store_ambience', label: '店铺氛围', tagHint: ['杂货', '陈列', '角落'] },
-  { v: 'new_arrival', label: '新品上架', tagHint: ['新品', '上新'] },
+  { v: 'store_tour', label: '探店', tagHint: ['店铺', '氛围', '货架'], baseWeight: 7 },
+  { v: 'product_showcase', label: '产品展示', tagHint: ['服饰', '包', '配饰', '杂货', '玩具'], baseWeight: 1 },
+  { v: 'store_ambience', label: '店铺氛围', tagHint: ['杂货', '陈列', '角落'], baseWeight: 1 },
+  { v: 'new_arrival', label: '新品上架', tagHint: ['新品', '上新'], baseWeight: 1 },
 ] as const;
 
 const STYLES = ['steady', 'lively', 'energetic', 'elegant', 'nostalgic', 'playful'] as const;
 type SType = typeof STYLES[number];
 
-function styleByTone(tone: string | null | undefined): readonly SType[] {
-  const t = (tone || '').toLowerCase();
-  if (/高冷|高级|沉稳|稳重|克制/.test(t)) return ['elegant', 'steady', 'nostalgic'];
-  if (/年轻|活力|俏皮|可爱|搞笑|轻松/.test(t)) return ['playful', 'lively', 'energetic'];
-  if (/怀旧|复古|文艺|岁月/.test(t)) return ['nostalgic', 'elegant', 'steady'];
-  if (/热闹|激情|促销/.test(t)) return ['energetic', 'lively'];
-  return STYLES;
-}
+// 一键场景的"高转化"风格池:激动/活泼/俏皮,加权偏向 energetic。
+const VIRAL_STYLE_WEIGHTS: { item: SType; w: number }[] = [
+  { item: 'energetic', w: 5 },
+  { item: 'lively', w: 3 },
+  { item: 'playful', w: 2 },
+];
 
 function pickWeighted<T>(items: { item: T; w: number }[]): T {
   const total = items.reduce((s, x) => s + Math.max(x.w, 0), 0);
@@ -49,12 +49,13 @@ function pickWeighted<T>(items: { item: T; w: number }[]): T {
 function pickVtypeByAssets(assets: any[]): typeof VIDEO_TYPES[number]['v'] {
   const text = assets.flatMap((a) => [...(a.tags || []), a.category || '']).filter(Boolean).join(' ');
   const weighted = VIDEO_TYPES.map((t) => {
-    let w = 1;
-    for (const hint of t.tagHint) if (text.includes(hint)) w += 2;
+    let w = t.baseWeight;
+    for (const hint of t.tagHint) if (text.includes(hint)) w += 1;
     return { item: t.v, w };
   });
   return pickWeighted(weighted);
 }
+
 
 // 不放回加权采样
 function sampleWeighted<T>(items: { item: T; w: number }[], n: number): T[] {
