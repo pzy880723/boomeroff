@@ -45,10 +45,13 @@ export default function PublishWorkbench() {
   const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // 定时发布:本地 datetime-local 字符串。空 = 立即发
+  const [scheduleAt, setScheduleAt] = useState('');
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [targets, setTargets] = useState<Target[]>([]);
   const [jobStatus, setJobStatus] = useState<string>('');
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     if (!assetId || !shopId) return;
