@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.submit-public-post]
 verify_jwt = false
+
+[functions.social-login-stream]
+verify_jwt = false
+
+[functions.social-asset-proxy]
+verify_jwt = false

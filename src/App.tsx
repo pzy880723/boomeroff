@@ -52,6 +52,7 @@ const AiImage = lazy(() => import("./pages/marketing/AiImage"));
 const MarketingCopy = lazy(() => import("./pages/marketing/MarketingCopy"));
 const MarketingVideo = lazy(() => import("./pages/marketing/MarketingVideo"));
 const MarketingLibrary = lazy(() => import("./pages/marketing/MarketingLibrary"));
+const SocialAccounts = lazy(() => import("./pages/marketing/SocialAccounts"));
 
 const queryClient = new QueryClient();
 
@@ -113,6 +114,7 @@ const App = () => {
               <Route path="/me/marketing/copy" element={<MarketingCopy />} />
               <Route path="/me/marketing/video" element={<MarketingVideo />} />
               <Route path="/me/marketing/library" element={<MarketingLibrary />} />
+              <Route path="/me/marketing/social-accounts" element={<SocialAccounts />} />
 
               {/* 游客版（免登录）—— 用静默 ErrorBoundary,顾客永远不会看到错误卡片 */}
               <Route

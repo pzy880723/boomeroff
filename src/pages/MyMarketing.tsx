@@ -5,7 +5,7 @@ import { AuthPage } from '@/components/auth/AuthPage';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Link } from 'react-router-dom';
 import {
-  Sparkles, FileText, Video, Library, ChevronRight, Loader2,
+  Sparkles, FileText, Video, Library, ChevronRight, Loader2, Share2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
@@ -215,6 +215,25 @@ export default function MyMarketing() {
                   <h3 className="text-[15px] font-semibold leading-none">素材库</h3>
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-1">历史产出 · 一键复制 · 下载视频</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
+            </div>
+          </Link>
+        </section>
+
+        {/* ===== 自媒体账号入口 ===== */}
+        <section>
+          <Link to="/me/marketing/social-accounts" className="block">
+            <div className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex items-center gap-4 transition-all hover:border-accent/40 active:scale-[0.995]">
+              <div className="w-12 h-12 rounded-xl bg-accent/10 text-accent flex items-center justify-center shrink-0">
+                <Share2 className="w-5 h-5" strokeWidth={1.5} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-[10px] text-accent tracking-[0.18em]">分发</span>
+                  <h3 className="text-[15px] font-semibold leading-none">自媒体账号</h3>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">抖音 · 小红书 · 视频号 · 快手 一键发布</p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
             </div>

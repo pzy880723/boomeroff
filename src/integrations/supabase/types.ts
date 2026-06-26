@@ -1720,6 +1720,7 @@ export type Database = {
           platform: string
           shop_id: string
           updated_at: string
+          worker_account_id: number | null
           worker_account_key: string
         }
         Insert: {
@@ -1734,6 +1735,7 @@ export type Database = {
           platform: string
           shop_id: string
           updated_at?: string
+          worker_account_id?: number | null
           worker_account_key: string
         }
         Update: {
@@ -1748,6 +1750,7 @@ export type Database = {
           platform?: string
           shop_id?: string
           updated_at?: string
+          worker_account_id?: number | null
           worker_account_key?: string
         }
         Relationships: [
@@ -1777,6 +1780,7 @@ export type Database = {
           tags: string[]
           title: string | null
           updated_at: string
+          worker_file_path: string | null
         }
         Insert: {
           asset_id?: string | null
@@ -1794,6 +1798,7 @@ export type Database = {
           tags?: string[]
           title?: string | null
           updated_at?: string
+          worker_file_path?: string | null
         }
         Update: {
           asset_id?: string | null
@@ -1811,6 +1816,7 @@ export type Database = {
           tags?: string[]
           title?: string | null
           updated_at?: string
+          worker_file_path?: string | null
         }
         Relationships: [
           {
