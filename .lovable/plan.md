@@ -1,53 +1,61 @@
-## 问题诊断
+# 小红书爆文文案升级
 
-素材库视频详情里「下载视频」按钮点击没反应,根因基本可以定位:
+把视频素材详情里的「一键生成小红书文案」从平淡口播升级为四种可切换的爆文风格，标题套路混合「数字冲击 / 反转打脸 / 身份代入 / emoji 开头」，emoji 密度拉到爆炸级（每句都有）。
 
-视频文件托管在火山方舟 / Supabase Storage 的 CDN 上,跨域响应头不允许浏览器端 `fetch()` 直接读取二进制流。当前 `downloadVideo()` 走的是:
+## 1. 四种风格定义（写进 prompt + 本地兜底）
+
+| key | 风格 | 范例口吻 |
+|---|---|---|
+| `scream` | 🔥 尖叫安利体 | "姐妹些!!!🔥 这只杯子我真的会哭😭 别问 问就是冲！💥" |
+| `heal` | ✨ 治愈日记体 | "☕️ 周末·中古日记 / 一只会发光的玻璃杯🥛 在窗边坐了一下午☀️" |
+| `story` | 📖 故事悬念体 | "在京都巷子里捡到这只…👀 老板说背后有个故事📖 看到最后真的破防" |
+| `flex` | 💎 凡尔赛藏家体 | "随手翻到的小东西…居然是 70s 昭和真品🫣 懂的人自然懂✨" |
+
+每种风格内置 3-5 套标题模板，覆盖：
+- 数字冲击：`99% 的人没见过的…` / `整条街我最爱的 3 只…`
+- 反转打脸：`以为是普通 XX，结果是…😱` / `别买新的了！这只老 XX 封神`
+- 身份代入：`中古迷请进！` / `i 人友好·安静好物分享`
+- emoji 开头：`🥺 救命这只…` / `✨ 中古日记 | XX 篇`
+
+## 2. 文案结构（每条都按这个吐）
 
 ```
-fetch(asset.output_url) → blob() → <a download>
+{emoji}{钩子标题}              ← 标题套路随机命中 1 种
+─────────
+{开场惊叹句 + emoji}           ← 1 行
+{亮点 1}✨ ｜ {亮点 2}💫       ← 用 ｜/· 做视觉分隔
+{细节段落，每句结尾带 emoji}   ← 2-3 行
+{身份/情绪共鸣句}🫶
+─────────
+🏷️ #中古好物 #XX店 #XX 风 …    ← 8-12 个标签，含店铺默认 hashtag
+💬 首评：{引导互动的一句}
 ```
 
-在发布后的 `boomeroff.lovable.app` 域名下,跨域 fetch 会被 CORS 直接拒掉并抛异常,进入 catch 后虽然有 `window.open` 兜底,但浏览器对火山的 mp4 直链多半会内联播放而不是触发下载,看起来就是"点了没反应"。另外 `<a download>` 属性对跨域链接也会被浏览器忽略。
+## 3. 实施改动
 
-## 修复方案
+**前端 `AssetDetailDialog.tsx`**
+- 「生成小红书文案」按钮改成 4 颗风格 Chip（尖叫 / 治愈 / 故事 / 凡尔赛），点哪颗就用哪种风格出稿。
+- 已生成的文案下方加一排「换个风格」快捷按钮，可一键重生不同风格。
+- 显示区改用等宽卡片，保留 emoji 与分隔线视觉。
+- 复制按钮按「标题+正文+标签+首评」整段复制（保留 emoji）。
 
-### 1. 新增后端代理下载 Edge Function `download-marketing-asset`
-- 输入:`asset_id`(校验 RLS / shop 权限,避免被人当公共代理用)
-- 在服务端 fetch 远端视频流,设置:
-  - `Content-Type: video/mp4`
-  - `Content-Disposition: attachment; filename="boomer-<id>.mp4"`
-  - `Cache-Control: private, max-age=0`
-  - 标准 CORS 头
-- 用 `ReadableStream` 透传,不在内存里缓存整段视频,避免大文件 OOM
-- 同时支持图片素材(自动按 mime 透传)
+**后端 `generate-marketing-copy` edge function**
+- 新增 `style` 入参（`scream` / `heal` / `story` / `flex`），默认 `scream`。
+- 系统 prompt 大改：明确"每句必须带 emoji"、"标题必须命中 4 种套路之一"、"输出结构固定"。
+- 输出 schema 增加 `style`、`emoji_density`（恒为 `high`）字段以便前端校验。
+- 维持 sanitize（去"主播/保真"等违禁词）。
 
-### 2. 前端 `AssetDetailDialog.downloadVideo()` 改造
-- 优先调用 `supabase.functions.invoke('download-marketing-asset', { body: { asset_id } })` 拿到 blob
-- 用 blob URL 触发 `<a download>`,保证文件名为 `boomer-视频-<日期>.mp4`
-- 失败时:
-  - 先尝试老路 `fetch(output_url)` (Supabase Storage 自家文件其实是允许的,不用浪费代理调用)
-  - 再失败才 fallback 到 `window.open(..., '_blank')` 并 toast 提示"请长按保存"
-- 下载过程显示 Loader 与进度提示,避免用户以为"点了没反应"
-- 文案复制逻辑保留(成功下载后一并复制)
+**本地兜底 `src/lib/shareCopy.ts`**
+- 现有 `xhs/pyq/collector` 保留为旧入口。
+- 新增 `buildXhsViral(input, style)`，4 种风格各一套模板池，AI 失败/限流时也能立刻出爆文版本。
+- 标题/钩子/亮点/收尾分别建词库，随机组合避免雷同。
 
-### 3. 图片素材的下载按钮同步修复
-当前图片用的是 `<a href download>`,跨域同样失效。统一改走代理函数,行为与视频一致。
+**保留范围**
+- 不动视频生成、不动其它营销页面（朋友圈/藏家体仍走老逻辑）。
+- 不改数据库结构，`marketing_assets.meta` 里加 `style` 字段即可。
 
-### 4. 验证
-- 在预览域名 (`id-preview--…`) 和发布域名 (`boomeroff.lovable.app`) 下分别点击「下载视频」,确认能拿到 mp4 文件且文件名正确
-- 看 Network 面板:第一次走 edge function,响应头带 `Content-Disposition: attachment`
-- 控制台无 CORS 报错
+## 4. 验收点
 
-## 不动的部分
-
-- 视频生成/分镜/文案生成等逻辑全部保持不变
-- 数据库 schema 不动
-- 「复制链接」按钮保留原样(就是给用户复制原始 URL 用的)
-
-## 技术细节(给开发参考)
-
-- Edge function 用 `Deno.serve` + `fetch(remoteUrl)` + `new Response(remoteResp.body, { headers })`,流式转发
-- 鉴权:复用 `supabase.auth.getUser()` 校验调用者,再查 `marketing_assets` 限定 `shop_id` 在用户可见范围内
-- 大文件:Supabase Edge Function 单次响应上限约 6 MB? 否则要直接返回签名 URL 让前端跳转。先实测,如果命中限制,改为后端生成一个短期 signed URL + `?download=filename.mp4` 参数,Supabase Storage 支持 `download` query 强制 attachment
-- 实际上 Supabase Storage 公开桶 URL 加 `?download=boomer.mp4` 就能强制下载头,**如果视频实际存的是 Supabase Storage(不是火山外链),这一招就够,不需要 edge function**。需要先 view `meta.storage_path` 与 `output_url` 来源确认走哪条路
+- 在素材库视频详情点「生成」→ 选 4 种风格各跑一次，每条标题、正文、标签、首评都带 emoji，结构符合上面模板。
+- 断网/AI 限流时点击，能立刻出本地爆文版本（不是空白）。
+- 复制后粘贴到小红书草稿，emoji 与换行保留完好。
