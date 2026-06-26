@@ -97,6 +97,14 @@ export default function PublishWorkbench() {
     if (invalid.length > 0) {
       if (!confirm(`有 ${invalid.length} 个账号不在线,继续发布可能失败。仍要继续？`)) return;
     }
+    // 定时校验
+    let scheduleIso: string | undefined;
+    if (scheduleAt) {
+      const d = new Date(scheduleAt);
+      if (isNaN(d.getTime())) { toast.error('定时时间格式不对'); return; }
+      if (d.getTime() < Date.now() - 60_000) { toast.error('定时时间已过'); return; }
+      scheduleIso = d.toISOString();
+    }
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('social-publish-create', {
@@ -106,17 +114,34 @@ export default function PublishWorkbench() {
           title: title.trim(),
           description: desc.trim(),
           tags,
+          schedule_at: scheduleIso,
         },
       });
       if (error) throw error;
       const newJobId = (data as any)?.job_id;
       const errors = (data as any)?.errors || [];
-      if (errors.length > 0) toast.warning(`部分账号未成功: ${errors.join(' / ')}`);
+      const scheduled = (data as any)?.scheduled;
+      if (scheduled) toast.success(`已定时,将在 ${new Date(scheduleIso!).toLocaleString('zh-CN', { hour12: false })} 自动发布`);
+      else if (errors.length > 0) toast.warning(`部分账号未成功: ${errors.join(' / ')}`);
       else toast.success('已提交,请到平台后台查看');
       setJobId(newJobId);
     } catch (e: any) {
       toast.error('提交失败: ' + (e?.message || e));
     } finally { setSubmitting(false); }
+  };
+
+  const retryFailed = async () => {
+    if (!jobId) return;
+    setRetrying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('social-publish-retry', { body: { job_id: jobId } });
+      if (error) throw error;
+      const errs = (data as any)?.errors || [];
+      if (errs.length > 0) toast.warning('部分账号仍失败: ' + errs.join(' / '));
+      else toast.success('已重新提交');
+    } catch (e: any) {
+      toast.error('重试失败: ' + (e?.message || e));
+    } finally { setRetrying(false); }
   };
 
   // 轮询进度 (effect 内部直接 fetch,见下方)
