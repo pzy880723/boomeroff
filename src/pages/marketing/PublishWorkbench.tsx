@@ -311,18 +311,36 @@ function StatusBadge({ s }: { s: string }) {
   return <span className="text-destructive inline-flex items-center gap-0.5"><ShieldOff className="w-3 h-3" />失效</span>;
 }
 
-function PublishProgress({ targets, jobStatus, onBack }: { targets: Target[]; jobStatus: string; onBack: () => void }) {
+function PublishProgress({ targets, jobStatus, retrying, onBack, onRetry, onHistory }: {
+  targets: Target[]; jobStatus: string; retrying: boolean;
+  onBack: () => void; onRetry: () => void; onHistory: () => void;
+}) {
   const done = targets.filter(t => t.status === 'success').length;
   const fail = targets.filter(t => t.status === 'failed').length;
-  const pending = targets.filter(t => !['success', 'failed', 'cancelled'].includes(t.status)).length;
+  const scheduled = targets.filter(t => t.status === 'scheduled').length;
+  const pending = targets.filter(t => !['success', 'failed', 'cancelled', 'scheduled'].includes(t.status)).length;
+  const isScheduled = jobStatus === 'scheduled';
 
   return (
     <div className="space-y-4">
       <div className="text-center py-6 bg-card border border-border rounded-lg">
-        <p className="text-3xl font-bold">{done} <span className="text-base text-muted-foreground">/ {targets.length}</span></p>
-        <p className="text-sm text-muted-foreground mt-1">
-          {jobStatus === 'done' ? '✅ 全部已提交' : jobStatus === 'partial' ? `⚠️ 部分成功 · ${fail} 失败` : jobStatus === 'failed' ? '❌ 全部失败' : `提交中 · ${pending} 个待回执`}
-        </p>
+        {isScheduled ? (
+          <>
+            <Clock className="w-8 h-8 mx-auto text-blue-500" />
+            <p className="text-sm font-medium mt-2">已加入定时队列</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{scheduled} 个账号将在到点自动发布</p>
+          </>
+        ) : (
+          <>
+            <p className="text-3xl font-bold">{done} <span className="text-base text-muted-foreground">/ {targets.length}</span></p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {jobStatus === 'done' ? '✅ 全部已提交'
+                : jobStatus === 'partial' ? `⚠️ 部分成功 · ${fail} 失败`
+                : jobStatus === 'failed' ? '❌ 全部失败'
+                : `提交中 · ${pending} 个待回执`}
+            </p>
+          </>
+        )}
       </div>
 
       <div className="space-y-1.5">
@@ -340,10 +358,18 @@ function PublishProgress({ targets, jobStatus, onBack }: { targets: Target[]; jo
             </div>
             {t.status === 'success' && <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />}
             {t.status === 'failed' && <AlertCircle className="w-4 h-4 text-destructive shrink-0" />}
+            {t.status === 'scheduled' && <Clock className="w-4 h-4 text-blue-500 shrink-0" />}
             {['queued', 'running'].includes(t.status) && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />}
           </div>
         ))}
       </div>
+
+      {fail > 0 && (
+        <Button variant="default" className="w-full" onClick={onRetry} disabled={retrying}>
+          {retrying ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RotateCcw className="w-4 h-4 mr-1.5" />}
+          重试失败的 {fail} 个账号
+        </Button>
+      )}
 
       <div className="bg-muted/40 rounded-lg p-3 text-[11px] text-muted-foreground leading-relaxed">
         worker 在浏览器里走的是模拟点击,**"已提交"不等于"已发布成功"**。请到对应平台 APP / 后台确认稿件是否真的进了草稿箱或已审通过。
@@ -351,8 +377,8 @@ function PublishProgress({ targets, jobStatus, onBack }: { targets: Target[]; jo
 
       <div className="flex gap-2">
         <Button variant="outline" className="flex-1" onClick={onBack}>再发一次</Button>
-        <Button className="flex-1" onClick={() => window.open('https://creator.douyin.com/', '_blank')}>
-          <ExternalLink className="w-3.5 h-3.5 mr-1" />打开抖音后台
+        <Button variant="outline" className="flex-1" onClick={onHistory}>
+          <History className="w-3.5 h-3.5 mr-1" />历史
         </Button>
       </div>
     </div>
