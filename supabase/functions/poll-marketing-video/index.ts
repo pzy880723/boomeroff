@@ -120,6 +120,58 @@ Deno.serve(async (req) => {
     const ARK_KEY = Deno.env.get("ARK_API_KEY");
     if (!ARK_KEY) return json({ error: "未配置 ARK_API_KEY" }, 500);
 
+    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+
+    // ============ Sweep 模式:由 pg_cron 每分钟调用,无需用户 auth ============
+    const urlObj = new URL(req.url);
+    const isSweep = urlObj.searchParams.get("mode") === "sweep";
+    if (isSweep) {
+      const TIMEOUT_MIN = 10;
+      const cutoff = new Date(Date.now() - TIMEOUT_MIN * 60_000).toISOString();
+      const { data: jobs } = await admin
+        .from("marketing_video_jobs")
+        .select("id, user_id, status, provider_task_id, parent_job_id, created_at")
+        .in("status", ["queued", "running"])
+        .gt("created_at", new Date(Date.now() - 60 * 60_000).toISOString())
+        .limit(30);
+
+      const results: any[] = [];
+      for (const j of jobs || []) {
+        // 超时直接判失败
+        if (j.created_at < cutoff) {
+          const msg = "渲染超时(>10 分钟),已自动结束,请重试";
+          await admin.from("marketing_video_jobs").update({
+            status: "failed", error: msg, last_polled_at: new Date().toISOString(),
+          }).eq("id", j.id);
+          if (!j.parent_job_id) {
+            await updateAssetMeta(admin, j.user_id, j.id, { status: "failed", error: msg });
+          }
+          results.push({ id: j.id, status: "failed", reason: "timeout" });
+          continue;
+        }
+        if (!j.provider_task_id) {
+          results.push({ id: j.id, status: j.status, skipped: "no_provider_task" });
+          continue;
+        }
+        const r = await pollOne(ARK_KEY, j.provider_task_id);
+        await admin.from("marketing_video_jobs").update({
+          status: r.mapped,
+          video_url: r.video_url || null,
+          segment_url: r.video_url || null,
+          error: r.error || null,
+          last_polled_at: new Date().toISOString(),
+        }).eq("id", j.id);
+        if (!j.parent_job_id) {
+          await updateAssetMeta(admin, j.user_id, j.id,
+            { status: r.mapped, ...(r.error ? { error: r.error } : {}) },
+            r.video_url || null,
+          );
+        }
+        results.push({ id: j.id, status: r.mapped });
+      }
+      return json({ swept: results.length, results });
+    }
+
     const auth = req.headers.get("Authorization");
     if (!auth) return json({ error: "未授权" }, 401);
     const userClient = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
@@ -130,7 +182,7 @@ Deno.serve(async (req) => {
     const jobId: string | undefined = body.job_id;
     if (!jobId) return json({ error: "缺少 job_id" }, 400);
 
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+
     const { data: job, error: jErr } = await admin
       .from("marketing_video_jobs")
       .select("*")
