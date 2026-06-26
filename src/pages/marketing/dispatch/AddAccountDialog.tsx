@@ -1,15 +1,17 @@
 // 选平台 -> SSE 拉二维码 -> 状态实时刷新 -> 成功后通知父刷新
-import { useEffect, useRef, useState } from 'react';
+// 增强: 二维码 90s 过期自动提示刷新, 失败有重试按钮, 主动取消会关闭 SSE
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle2, XCircle, ScanLine } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ScanLine, RotateCcw } from 'lucide-react';
 import { PlatformBadge, platformLabel } from '@/components/marketing/dispatch/PlatformBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 const PLATFORMS = ['douyin', 'xhs', 'wechat_video', 'kuaishou', 'bilibili'];
+const QR_TTL_MS = 90_000;
 
-type Step = 'pick' | 'qr' | 'scanned' | 'success' | 'fail';
+type Step = 'pick' | 'qr' | 'scanned' | 'success' | 'fail' | 'expired';
 
 export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }: {
   open: boolean; onOpenChange: (o: boolean) => void; shopId: string | null; onAdded: () => void;
@@ -20,22 +22,48 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
   const [qr, setQr] = useState<string | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [accountInfo, setAccountInfo] = useState<{ id: number; name: string; avatar: string } | null>(null);
+  const [countdown, setCountdown] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+  const expireTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tickTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const cleanupTimers = () => {
+    if (expireTimerRef.current) clearTimeout(expireTimerRef.current);
+    if (tickTimerRef.current) clearInterval(tickTimerRef.current);
+    expireTimerRef.current = null;
+    tickTimerRef.current = null;
+  };
 
   useEffect(() => {
     if (!open) {
       abortRef.current?.abort();
+      cleanupTimers();
       setPlatform(null); setStep('pick'); setQr(null); setErrMsg(null); setAccountInfo(null);
     }
+    return () => { cleanupTimers(); abortRef.current?.abort(); };
   }, [open]);
 
-  const startLogin = async (p: string) => {
+  const armExpiry = useCallback(() => {
+    cleanupTimers();
+    setCountdown(Math.floor(QR_TTL_MS / 1000));
+    tickTimerRef.current = setInterval(() => {
+      setCountdown((c) => (c > 0 ? c - 1 : 0));
+    }, 1000);
+    expireTimerRef.current = setTimeout(() => {
+      abortRef.current?.abort();
+      setStep('expired');
+      cleanupTimers();
+    }, QR_TTL_MS);
+  }, []);
+
+  const startLogin = useCallback(async (p: string) => {
     if (!shopId) { toast({ title: '请先选择门店', variant: 'destructive' }); return; }
     setPlatform(p);
     setStep('qr'); setQr(null); setErrMsg(null);
     const projectId = (supabase as any).supabaseUrl?.match(/https:\/\/(.+?)\.supabase\.co/)?.[1]
       || import.meta.env.VITE_SUPABASE_PROJECT_ID;
     const fnUrl = `https://${projectId}.supabase.co/functions/v1/dispatch-account-login?platform=${p}`;
+    abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
@@ -61,19 +89,22 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') {
+        cleanupTimers();
         setStep('fail'); setErrMsg(e.message || '连接发布服务器失败');
       }
     }
-  };
+  }, [shopId, toast]);
 
   const handleEvent = async (ev: any, p: string) => {
     if (ev.step === 'qr' && ev.qr) {
       setQr(ev.qr); setStep('qr');
+      armExpiry();
     } else if (ev.step === 'scanned') {
       setStep('scanned');
+      cleanupTimers();
     } else if (ev.step === 'success' && ev.account_id) {
+      cleanupTimers();
       setAccountInfo({ id: Number(ev.account_id), name: ev.name || '', avatar: ev.avatar || '' });
-      // 写入 DB
       try {
         const { error } = await supabase.from('social_accounts').upsert({
           shop_id: shopId!,
@@ -91,9 +122,12 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
         setStep('fail'); setErrMsg(e.message);
       }
     } else if (ev.step === 'fail') {
+      cleanupTimers();
       setStep('fail'); setErrMsg(ev.msg || '扫码失败');
     }
   };
+
+  const refreshQr = () => { if (platform) void startLogin(platform); };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -127,12 +161,29 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
             <div className="text-sm text-muted-foreground flex items-center gap-1">
               <ScanLine className="w-3.5 h-3.5" /> 用{platformLabel(platform!)} App 扫码登录
             </div>
+            {qr && countdown > 0 && (
+              <div className="text-[11px] text-muted-foreground">二维码 {countdown}s 后过期</div>
+            )}
+            {qr && (
+              <Button variant="ghost" size="sm" onClick={refreshQr}>
+                <RotateCcw className="w-3.5 h-3.5 mr-1" /> 刷新二维码
+              </Button>
+            )}
           </div>
         )}
         {step === 'scanned' && (
           <div className="flex flex-col items-center gap-3 py-8">
             <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
             <div className="text-sm">已扫码,请在手机上确认…</div>
+          </div>
+        )}
+        {step === 'expired' && (
+          <div className="flex flex-col items-center gap-3 py-6">
+            <XCircle className="w-12 h-12 text-amber-500" />
+            <div className="text-sm">二维码已过期</div>
+            <Button size="sm" onClick={refreshQr}>
+              <RotateCcw className="w-3.5 h-3.5 mr-1" /> 重新生成
+            </Button>
           </div>
         )}
         {step === 'success' && (
@@ -145,8 +196,17 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
         {step === 'fail' && (
           <div className="flex flex-col items-center gap-3 py-6">
             <XCircle className="w-12 h-12 text-rose-500" />
-            <div className="text-sm text-rose-600">{errMsg || '失败'}</div>
-            <Button variant="outline" size="sm" onClick={() => { setStep('pick'); setErrMsg(null); }}>重新选择</Button>
+            <div className="text-sm text-rose-600 text-center px-4 break-all">{errMsg || '失败'}</div>
+            <div className="flex gap-2">
+              {platform && (
+                <Button size="sm" onClick={refreshQr}>
+                  <RotateCcw className="w-3.5 h-3.5 mr-1" /> 重试
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => { setStep('pick'); setErrMsg(null); setPlatform(null); }}>
+                换平台
+              </Button>
+            </div>
           </div>
         )}
       </DialogContent>
