@@ -218,11 +218,10 @@ Deno.serve(async (req) => {
     const pickedAssets = sampleWeighted(weighted, targetCount);
     const hero = pickedAssets[0];
 
-    // 3) vtype + style
+    // 3) vtype + style:store_tour 占主导,风格用高转化池(energetic/lively/playful)。
     const vtype = pickVtypeByAssets(pickedAssets);
     const shopCtx = await loadShopContext(shopId);
-    const styleWhite = styleByTone(shopCtx?.tone);
-    const style = styleWhite[Math.floor(Math.random() * styleWhite.length)];
+    const style = pickWeighted(VIRAL_STYLE_WEIGHTS);
     const vtypeLabel = VIDEO_TYPES.find((x) => x.v === vtype)?.label || '探店';
 
     // 4) 角色:店里若已建角色 → 100% 出场(随机挑一个)
@@ -245,9 +244,12 @@ Deno.serve(async (req) => {
     }));
     const heroSummary = summarizeAsset(hero);
 
-    const briefTranscript =
-      `店员:来一条 15 秒竖版${vtypeLabel}视频,主打${vtypeLabel === '探店' ? '店铺氛围' : '这件「' + heroSummary + '」'}。\n` +
-      `助理:好的,按${vtypeLabel}节奏拆 3–4 个分镜,所有画面都用上传的实景照片,体现店铺调性。`;
+    // 洗脑探店专用 brief:让 AI 写 15 秒口播 + 真人出镜 + 高转化钩子。
+    const briefTranscript = vtype === 'store_tour'
+      ? `店员:来一条 15 秒竖版洗脑探店口播,开头第一句必须是冲击型钩子(比如"姐妹冲!"/"别再去 XX 了"/"我真的会谢"那种),全程主角对镜头说话,语气激动有感染力,结尾留 CTA("地址放评论区"/"现在冲"/"错过等一年")。\n` +
+        `助理:好,拆 6-8 个 1.5-2.5 秒小镜头,主角始终是同一个人,每镜都有动作(指/拿/试/转身),全部用上传的店内实景,字幕大白话带情绪符号。`
+      : `店员:来一条 15 秒竖版${vtypeLabel}视频,主打${heroSummary},节奏明快有感染力。\n` +
+        `助理:好的,按${vtypeLabel}节奏拆 3-4 个分镜,所有画面都用上传的实景照片。`;
 
     const scriptRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-marketing-video-script`, {
       method: 'POST',
@@ -261,6 +263,7 @@ Deno.serve(async (req) => {
         topic: `${vtypeLabel} · ${heroSummary}`,
         highlight: heroSummary.slice(0, 40),
         style,
+        intent: vtype === 'store_tour' ? 'viral_store_tour' : undefined,
         brief_transcript: briefTranscript,
         image_descriptions: imageDescriptions,
         character: character ? {
@@ -271,6 +274,7 @@ Deno.serve(async (req) => {
         } : null,
       }),
     });
+
     const scriptData = await scriptRes.json().catch(() => ({}));
     if (!scriptRes.ok || !scriptData?.script) {
       return json({ ok: false, error: scriptData?.error || '脚本生成失败' });
