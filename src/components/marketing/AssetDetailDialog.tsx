@@ -116,6 +116,55 @@ export function AssetDetailDialog({
   const [videoCopy, setVideoCopy] = useState<CopyCand | null>(null);
   const [genCopyLoading, setGenCopyLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+
+  const regenerateVideo = async () => {
+    if (!asset || asset.kind !== 'video') return;
+    if (!confirm('用相同的脚本和模型,重新生成一条视频?\n(原视频会保留,新视频会出现在素材库顶部)')) return;
+    setRegenerating(true);
+    try {
+      const jobId = asset.meta?.job_id;
+      let script: any = null;
+      if (jobId) {
+        const { data: job } = await supabase
+          .from('marketing_video_jobs' as any)
+          .select('script')
+          .eq('id', jobId)
+          .maybeSingle();
+        script = (job as any)?.script || null;
+      }
+      if (!script) {
+        // 兜底:用 topic 临时拼一个最小脚本,让后端走文生视频
+        const topic = asset.meta?.topic || '中古好物随手拍';
+        script = {
+          topic,
+          video_type: asset.meta?.video_type || 'product_intro',
+          total_duration_s: asset.meta?.duration || 15,
+          hook: { caption: topic, prompt: topic },
+          outro: { caption: topic, prompt: topic },
+          mid: [],
+        };
+      }
+      const { data, error } = await supabase.functions.invoke('render-marketing-video', {
+        body: {
+          script,
+          style: asset.meta?.style || 'realistic_storefront',
+          shop_id: asset.shop_id || null,
+          model: asset.meta?.model,
+          resolution: asset.meta?.resolution,
+        },
+      });
+      if (error) throw error;
+      const resp = data as any;
+      if (resp?.ok === false || resp?.error) throw new Error(resp?.error || '提交失败');
+      toast.success('已重新入队渲染,完成后会出现在素材库');
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(e?.message || '重新生成失败,请稍后再试');
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   useEffect(() => {
     if (!asset) { setCands([]); setVideoCopy(null); return; }
@@ -402,18 +451,29 @@ export function AssetDetailDialog({
                 poster={asset.meta?.poster_url || asset.meta?.cover_url || (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) || (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) || undefined}
               />
             ) : asset.meta?.status === 'failed' ? (
-              <VideoFailureCard
-                error={asset.meta?.error || '视频生成失败'}
-                allowRetry={false}
-                onApplyFix={(fix) => {
-                  if (fix.kind === 'delete') {
-                    if (confirm('确认删除这条失败的视频任务？')) {
-                      onDelete?.(asset);
-                      onOpenChange(false);
+              <div className="space-y-2">
+                <VideoFailureCard
+                  error={asset.meta?.error || '视频生成失败'}
+                  allowRetry={false}
+                  onApplyFix={(fix) => {
+                    if (fix.kind === 'delete') {
+                      if (confirm('确认删除这条失败的视频任务？')) {
+                        onDelete?.(asset);
+                        onOpenChange(false);
+                      }
                     }
-                  }
-                }}
-              />
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={regenerateVideo}
+                  disabled={regenerating}
+                >
+                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                  用同样的脚本重新生成
+                </Button>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-6">
                 视频还在排队渲染，完成后这里会出现可播放的视频。
@@ -504,6 +564,15 @@ export function AssetDetailDialog({
                   }}
                 >
                   ✈️ 一键发布到自媒体平台
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={regenerateVideo}
+                  disabled={regenerating}
+                >
+                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                  用同样的脚本重新生成一条
                 </Button>
               </div>
             )}
