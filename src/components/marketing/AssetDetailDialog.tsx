@@ -496,6 +496,15 @@ export function AssetDetailDialog({
                     下载视频{videoCopy ? ' + 复制文案' : ''}
                   </Button>
                 </div>
+                <Button
+                  className="w-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-purple-500 text-white hover:opacity-90"
+                  onClick={() => {
+                    onOpenChange(false);
+                    window.location.href = `/me/marketing/publish/${asset.id}`;
+                  }}
+                >
+                  ✈️ 一键发布到自媒体平台
+                </Button>
               </div>
             )}
           </div>
