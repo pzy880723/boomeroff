@@ -68,8 +68,8 @@ export default function PublishWorkbench() {
         if (c?.body) setDesc(String(c.body));
         if (Array.isArray(c?.hashtags)) {
           setTags(c.hashtags.map((s: string) => String(s).replace(/^#/, '').trim()).filter(Boolean).slice(0, 10));
-        } else if (Array.isArray(a.tags)) {
-          setTags(a.tags.slice(0, 10));
+        } else if (Array.isArray((a as any).tags)) {
+          setTags((a as any).tags.slice(0, 10));
         }
       }
       setLoading(false);
