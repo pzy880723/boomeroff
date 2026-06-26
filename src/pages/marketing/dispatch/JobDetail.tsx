@@ -61,9 +61,7 @@ export default function JobDetail() {
 
   return (
     <div className="min-h-screen pb-20 bg-background">
-      <PageHeader title="发布进度" leftSlot={
-        <Button variant="ghost" size="sm" onClick={() => nav(-1)}><ArrowLeft className="w-4 h-4" /></Button>
-      } rightSlot={
+      <PageHeader title="发布进度" back="/me/marketing/dispatch?tab=history" right={
         <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
         </Button>

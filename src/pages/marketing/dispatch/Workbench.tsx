@@ -38,8 +38,9 @@ export default function Workbench() {
       const { data } = await supabase.from('marketing_assets').select('*').eq('id', presetAssetId).maybeSingle();
       if (data) {
         setAsset(data);
-        setTitle(((data.meta?.note_title || data.title || '') as string).slice(0, 30));
-        setBody((data.meta?.note_body || data.text_content || '') as string);
+        const meta = (data.meta as any) || {};
+        setTitle(((meta.note_title || meta.title || '') as string).slice(0, 30));
+        setBody((meta.note_body || data.output_text || '') as string);
         setTagsRaw(((data.tags as string[]) || []).join(' '));
       }
     })();
@@ -106,11 +107,7 @@ export default function Workbench() {
 
   return (
     <div className="min-h-screen pb-32 bg-background">
-      <PageHeader title="发布工作台" leftSlot={
-        <Button variant="ghost" size="sm" onClick={() => nav('/me/marketing/dispatch')}>
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
-      } />
+      <PageHeader title="发布工作台" back="/me/marketing/dispatch" />
 
       <div className="px-4 space-y-5 pt-3">
         {/* 1. 素材 */}
@@ -118,11 +115,11 @@ export default function Workbench() {
           <div className="text-[11px] text-muted-foreground mb-1.5 tracking-wider">1. 素材</div>
           {asset ? (
             <div className="flex items-center gap-3 p-3 bg-card rounded-xl border">
-              {asset.meta?.poster_url || asset.cover_url ? (
-                <img src={asset.meta?.poster_url || asset.cover_url} className="w-14 h-20 rounded-md object-cover" />
+              {(asset.meta?.poster_url || asset.output_url) ? (
+                <img src={asset.meta?.poster_url || asset.output_url} className="w-14 h-20 rounded-md object-cover" />
               ) : <div className="w-14 h-20 rounded-md bg-muted" />}
               <div className="flex-1 min-w-0 text-xs">
-                <div className="font-medium truncate">{asset.title || '视频素材'}</div>
+                <div className="font-medium truncate">{(asset.meta as any)?.title || '视频素材'}</div>
                 <div className="text-muted-foreground mt-1">{asset.kind === 'video' ? '视频' : '图文'}</div>
               </div>
             </div>
