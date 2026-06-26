@@ -54,6 +54,7 @@ const MarketingVideo = lazy(() => import("./pages/marketing/MarketingVideo"));
 const MarketingLibrary = lazy(() => import("./pages/marketing/MarketingLibrary"));
 const SocialAccounts = lazy(() => import("./pages/marketing/SocialAccounts"));
 const PublishWorkbench = lazy(() => import("./pages/marketing/PublishWorkbench"));
+const PublishHistory = lazy(() => import("./pages/marketing/PublishHistory"));
 
 const queryClient = new QueryClient();
 
