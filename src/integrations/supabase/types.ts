@@ -1707,6 +1707,191 @@ export type Database = {
         }
         Relationships: []
       }
+      social_accounts: {
+        Row: {
+          account_name: string | null
+          avatar_url: string | null
+          cookie_status: string
+          created_at: string
+          created_by: string | null
+          id: string
+          last_check_at: string | null
+          meta: Json
+          platform: string
+          shop_id: string
+          updated_at: string
+          worker_account_key: string
+        }
+        Insert: {
+          account_name?: string | null
+          avatar_url?: string | null
+          cookie_status?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_check_at?: string | null
+          meta?: Json
+          platform: string
+          shop_id: string
+          updated_at?: string
+          worker_account_key: string
+        }
+        Update: {
+          account_name?: string | null
+          avatar_url?: string | null
+          cookie_status?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_check_at?: string | null
+          meta?: Json
+          platform?: string
+          shop_id?: string
+          updated_at?: string
+          worker_account_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_accounts_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_publish_jobs: {
+        Row: {
+          asset_id: string | null
+          body: string | null
+          cover_url: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          media_url: string | null
+          per_platform: Json
+          schedule_at: string | null
+          shop_id: string
+          status: string
+          tags: string[]
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          body?: string | null
+          cover_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          media_url?: string | null
+          per_platform?: Json
+          schedule_at?: string | null
+          shop_id: string
+          status?: string
+          tags?: string[]
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          body?: string | null
+          cover_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          media_url?: string | null
+          per_platform?: Json
+          schedule_at?: string | null
+          shop_id?: string
+          status?: string
+          tags?: string[]
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_publish_jobs_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_publish_jobs_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_publish_targets: {
+        Row: {
+          account_id: string
+          created_at: string
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          job_id: string
+          platform: string
+          platform_url: string | null
+          progress: number
+          started_at: string | null
+          status: string
+          updated_at: string
+          worker_task_id: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id: string
+          platform: string
+          platform_url?: string | null
+          progress?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          worker_task_id?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string
+          platform?: string
+          platform_url?: string | null
+          progress?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          worker_task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_publish_targets_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_publish_targets_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "social_publish_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       spirit_conversations: {
         Row: {
           archived: boolean
