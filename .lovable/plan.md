@@ -1,61 +1,154 @@
-# 小红书爆文文案升级
 
-把视频素材详情里的「一键生成小红书文案」从平淡口播升级为四种可切换的爆文风格，标题套路混合「数字冲击 / 反转打脸 / 身份代入 / emoji 开头」，emoji 密度拉到爆炸级（每句都有）。
+# 多平台一键发布方案（接入 social-auto-upload）
 
-## 1. 四种风格定义（写进 prompt + 本地兜底）
+## 一、整体架构
 
-| key | 风格 | 范例口吻 |
-|---|---|---|
-| `scream` | 🔥 尖叫安利体 | "姐妹些!!!🔥 这只杯子我真的会哭😭 别问 问就是冲！💥" |
-| `heal` | ✨ 治愈日记体 | "☕️ 周末·中古日记 / 一只会发光的玻璃杯🥛 在窗边坐了一下午☀️" |
-| `story` | 📖 故事悬念体 | "在京都巷子里捡到这只…👀 老板说背后有个故事📖 看到最后真的破防" |
-| `flex` | 💎 凡尔赛藏家体 | "随手翻到的小东西…居然是 70s 昭和真品🫣 懂的人自然懂✨" |
+```text
+ Lovable 前端 (React)
+      │  HTTPS + JWT
+      ▼
+ Supabase Edge Function（编排层 / 鉴权 / 写库）
+      │  HTTPS + worker token
+      ▼
+ 你的 VPS：sau-worker (FastAPI + Playwright + social-auto-upload)
+      │
+      ├─ /accounts/login        ← 起浏览器 → 截二维码图 → 返给前端
+      ├─ /accounts/login/status ← 轮询登录是否成功
+      ├─ /accounts/list         ← 列出当前 cookie 状态
+      ├─ /publish/video         ← 发视频（platforms[]）
+      ├─ /publish/image-text    ← 发图文（小红书等）
+      └─ /jobs/{id}             ← 任务状态 + 日志 + 平台返回链接
 
-每种风格内置 3-5 套标题模板，覆盖：
-- 数字冲击：`99% 的人没见过的…` / `整条街我最爱的 3 只…`
-- 反转打脸：`以为是普通 XX，结果是…😱` / `别买新的了！这只老 XX 封神`
-- 身份代入：`中古迷请进！` / `i 人友好·安静好物分享`
-- emoji 开头：`🥺 救命这只…` / `✨ 中古日记 | XX 篇`
-
-## 2. 文案结构（每条都按这个吐）
-
-```
-{emoji}{钩子标题}              ← 标题套路随机命中 1 种
-─────────
-{开场惊叹句 + emoji}           ← 1 行
-{亮点 1}✨ ｜ {亮点 2}💫       ← 用 ｜/· 做视觉分隔
-{细节段落，每句结尾带 emoji}   ← 2-3 行
-{身份/情绪共鸣句}🫶
-─────────
-🏷️ #中古好物 #XX店 #XX 风 …    ← 8-12 个标签，含店铺默认 hashtag
-💬 首评：{引导互动的一句}
+ cookies 文件按 shop_id/platform/account_id 分目录存放在 VPS 本地
 ```
 
-## 3. 实施改动
+为什么这么分层：social-auto-upload 是 Python + Playwright，必须常驻浏览器 + 持久 cookie，跑不进 Edge Function；Edge Function 只做"鉴权 + 转发 + 写状态"，把 worker token 藏在后端永不下发到浏览器。
 
-**前端 `AssetDetailDialog.tsx`**
-- 「生成小红书文案」按钮改成 4 颗风格 Chip（尖叫 / 治愈 / 故事 / 凡尔赛），点哪颗就用哪种风格出稿。
-- 已生成的文案下方加一排「换个风格」快捷按钮，可一键重生不同风格。
-- 显示区改用等宽卡片，保留 emoji 与分隔线视觉。
-- 复制按钮按「标题+正文+标签+首评」整段复制（保留 emoji）。
+## 二、需要你做的事
 
-**后端 `generate-marketing-copy` edge function**
-- 新增 `style` 入参（`scream` / `heal` / `story` / `flex`），默认 `scream`。
-- 系统 prompt 大改：明确"每句必须带 emoji"、"标题必须命中 4 种套路之一"、"输出结构固定"。
-- 输出 schema 增加 `style`、`emoji_density`（恒为 `high`）字段以便前端校验。
-- 维持 sanitize（去"主播/保真"等违禁词）。
+1. 一台 Linux VPS（2C4G 起，开 443 或反代）。
+2. 我交付一个 Docker Compose：`social-auto-upload` 源码 + 我写的 FastAPI 包装层 + Playwright 镜像 + 一个挂载卷 `/data/cookies`。
+3. 你设一个 `SAU_WORKER_URL` 和 `SAU_WORKER_TOKEN`，存进 Lovable Cloud Secrets。
 
-**本地兜底 `src/lib/shareCopy.ts`**
-- 现有 `xhs/pyq/collector` 保留为旧入口。
-- 新增 `buildXhsViral(input, style)`，4 种风格各一套模板池，AI 失败/限流时也能立刻出爆文版本。
-- 标题/钩子/亮点/收尾分别建词库，随机组合避免雷同。
+## 三、数据库新增（migration）
 
-**保留范围**
-- 不动视频生成、不动其它营销页面（朋友圈/藏家体仍走老逻辑）。
-- 不改数据库结构，`marketing_assets.meta` 里加 `style` 字段即可。
+```text
+social_accounts                    每家店在每个平台绑的每个号
+  id, shop_id, platform,           douyin/xhs/wechat_video/kuaishou/bilibili/tiktok
+  account_name, avatar_url,
+  worker_account_key,              worker 端 cookie 目录名（不暴露给前端）
+  cookie_status,                   active / expired / invalid
+  last_check_at, created_by, created_at
 
-## 4. 验收点
+social_publish_jobs                每条"一键发布"任务（一个父任务）
+  id, shop_id, asset_id, kind,     video / image_text
+  title, desc, tags[], cover_url,
+  schedule_at,                     null = 立即
+  created_by, created_at
 
-- 在素材库视频详情点「生成」→ 选 4 种风格各跑一次，每条标题、正文、标签、首评都带 emoji，结构符合上面模板。
-- 断网/AI 限流时点击，能立刻出本地爆文版本（不是空白）。
-- 复制后粘贴到小红书草稿，emoji 与换行保留完好。
+social_publish_targets             父任务在每个平台/账号的子任务
+  id, job_id, account_id, platform,
+  worker_task_id,                  worker 返回的任务 id
+  status,                          queued/running/success/failed
+  platform_url,                    发布成功后的作品链接
+  error_message, started_at, finished_at
+```
+
+全部 `ENABLE ROW LEVEL SECURITY` + `GRANT SELECT/INSERT/UPDATE ... TO authenticated`；策略：店员只能看/操作 `shop_id ∈ 我有权限的店`，管理员通看。
+
+## 四、Edge Functions
+
+| 函数 | 作用 |
+|---|---|
+| `social-account-login-start` | 收 `{shop_id, platform}` → 调 worker `/accounts/login` → 返二维码图 url + `session_id` |
+| `social-account-login-poll` | 轮询 worker 直到成功 → 写 `social_accounts` |
+| `social-account-list` | 列某店所有号 + cookie 状态 |
+| `social-account-refresh` | 单号重新登录（cookie 过期场景） |
+| `social-account-delete` | 删号 + 通知 worker 清 cookie |
+| `social-publish-create` | 收发布参数 → 创父任务 + N 个子任务 → 调 worker 入队 → 立即返回 job_id |
+| `social-publish-status` | 拉父任务 + 所有子任务，给前端轮询/Realtime 兜底 |
+| `social-publish-cancel` | 子任务级取消 |
+
+worker 完成后 webhook 回打 `social-publish-webhook` 写回 `platform_url / status / error_message`，前端通过 Supabase Realtime 订阅 `social_publish_targets` 实时刷状态。
+
+## 五、前端设计（重点）
+
+### 1. 在 `/me/marketing/library` 视频/图片详情弹窗 (`AssetDetailDialog`) 加入口
+   原"下载 / 生成文案"按钮旁加 **"一键发布 ✈️"** 主按钮。
+
+### 2. 新页面 `/me/marketing/publish/:assetId` —— 发布工作台
+```text
+┌─────────────────────────────────────────────┐
+│  ← 返回                              ✈️ 发布  │
+├─────────────────────────────────────────────┤
+│  [封面缩略图]   素材名 · 15s · 9:16          │
+├─────────────────────────────────────────────┤
+│  发布模式  ⦿ 一键全平台   ◯ 分平台精修       │
+├─────────────────────────────────────────────┤
+│  标题 (各平台共用)        [____________]   │
+│  正文/文案               [____________]   │
+│  标签  #古着 #中古  + 添加                  │
+│  发布时间  ⦿ 立即  ◯ 定时 [12-26 20:00]     │
+├─────────────────────────────────────────────┤
+│  选择账号（按店铺分组，自动只展示当前店）       │
+│  ┌─ 抖音 ──────────────────────┐            │
+│  │ ☑ @中古阿喵 ●在线           │            │
+│  │ ☐ @阿喵小号  ⚠cookie已过期 重新登录 │     │
+│  └─────────────────────────────┘            │
+│  ┌─ 小红书 ─────────────────────┐            │
+│  │ ☑ @中古阿喵                  │            │
+│  └─────────────────────────────┘            │
+│  ┌─ 视频号 + 绑定账号 ───────────┐            │
+│  └─────────────────────────────┘            │
+├─────────────────────────────────────────────┤
+│         [取消]        [开始发布 →]          │
+└─────────────────────────────────────────────┘
+```
+
+"分平台精修"模式切换后，标题/文案/标签下方展开 Tab，每个平台独立一份。
+
+### 3. 发布中弹窗 `PublishProgressDialog`
+和现在视频生成进度条同款，每个平台一行：
+
+```text
+抖音 · @中古阿喵     [██████░░░░] 60% 发布中…
+小红书 · @中古阿喵   [██████████] ✅ 已发布 [查看]
+视频号 · @中古阿喵   [██░░░░░░░░] ❌ 失败 "需要重新登录" [重试][去登录]
+```
+
+可关闭，后台继续跑 —— 用 `localStorage` + Realtime 复刻 `surpriseJob` 那套机制，再次进入素材库会显示 "× 个发布任务进行中" 浮条。
+
+### 4. 新页面 `/me/marketing/social-accounts` —— 账号管理
+入口放在「营销中心」首页 BOOMER Hero 卡下方加一行：
+
+```text
+🔗 自媒体账号   抖音 2 · 小红书 1 · 视频号 1     >
+```
+
+页面内容：
+- 按平台分组的账号卡，显示头像、昵称、cookie 状态、最后校验时间。
+- 每张卡操作：`重新登录`、`检测有效性`、`解绑`。
+- 顶部「+ 添加账号」→ 弹出 `AddSocialAccountDialog`：先选平台 → Edge Function 拉二维码 → 全屏展示二维码 + 倒计时 + "已扫码请在手机确认" → 自动轮询 → 成功后回填昵称头像。
+
+### 5. 店员权限可视化
+店员只能看到自己 `shop_id` 的账号；管理员页眉多一个店铺 picker（复用现有 `ShopPicker`），可切店看/发。
+
+### 6. 历史记录
+`/me/marketing/publish/history`：按时间倒序列出父任务 + 每平台状态徽章 + 作品链接复制按钮，支持失败重试整条或单平台。
+
+## 六、风险点与边界条件
+
+- **平台风控**：高频/同号多账号会触发验证。worker 端按账号做最小 30s 间隔，前端发布按钮发起后 disable 5s。
+- **Cookie 过期**：worker 启动时定时 health-check，过期写回 `cookie_status='expired'`，前端账号卡和发布工作台都标红，引导一键重登。
+- **视频源**：worker 不走 Supabase Signed URL（容易过期），编排层先用现有 `download-marketing-asset` 把视频下载到 worker，再传给 social-auto-upload。
+- **图文模式**：第一版只接小红书图文（其他平台后续按需扩）；图片走 R2/Storage 公网代理同样思路。
+- **不上传 social-auto-upload 源码到本仓库**（避免许可证混入），我们只调它的 HTTP 接口，源码留在你 VPS 上。
+
+## 七、实施分批
+
+1. **批 1（基建）**：数据库迁移 + worker 部署文档 + `social-account-*` Edge Functions + 账号管理页 + 二维码登录闭环。
+2. **批 2（发布）**：`social-publish-*` Edge Functions + 发布工作台（仅"一键全平台"模式）+ 进度弹窗 + Realtime 回写。
+3. **批 3（精修）**：分平台 Tab、定时发布、失败重试、发布历史页、图文模式。
+4. **批 4（打磨）**：店铺 picker 接入、视频生成完成后弹"是否直接发布"、首页 hero 加"今日已发 N 条"指标。
+
+确认这套方案，我先做"批 1：账号管理 + 扫码绑定 + worker 部署文档"，跑通后再上发布链路。
