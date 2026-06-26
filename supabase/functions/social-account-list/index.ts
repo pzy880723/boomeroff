@@ -51,40 +51,56 @@ Deno.serve(async (req) => {
     const { data: rows } = await supa.from("social_accounts").select("*").eq("shop_id", shopId);
     const dbAccounts = rows || [];
 
-    // Pull worker truth
-    const workerRaw = validate ? await sauGetValidAccounts() : await sauGetAccounts();
-    const workerByKey = new Map<string, { wid: number; platform: string; name: string; ok: boolean }>();
-    for (const row of workerRaw) {
-      const [wid, ptype, , wname, status] = row;
-      const platform = CODE_PLATFORM[ptype];
-      if (!platform) continue;
-      workerByKey.set(wname || "", { wid, platform, name: wname, ok: status === 1 });
+    // Pull worker truth (tolerate worker downtime — fall back to DB cache)
+    let workerOk = true;
+    let workerErr = "";
+    let workerRaw: Array<[number, number, string, string, number]> = [];
+    try {
+      workerRaw = validate ? await sauGetValidAccounts() : await sauGetAccounts();
+    } catch (e) {
+      workerOk = false;
+      workerErr = String((e as Error)?.message || e);
+      console.warn("[social-account-list] worker unreachable:", workerErr);
     }
 
-    // Reconcile: update cookie_status + worker_account_id for our rows
-    const updates: any[] = [];
-    for (const r of dbAccounts) {
-      const w = workerByKey.get(r.worker_account_key);
-      if (w) {
-        const newStatus = w.ok ? "active" : "expired";
-        if (r.cookie_status !== newStatus || r.worker_account_id !== w.wid) {
+    if (workerOk) {
+      const workerByKey = new Map<string, { wid: number; platform: string; name: string; ok: boolean }>();
+      for (const row of workerRaw) {
+        const [wid, ptype, , wname, status] = row;
+        const platform = CODE_PLATFORM[ptype];
+        if (!platform) continue;
+        workerByKey.set(wname || "", { wid, platform, name: wname, ok: status === 1 });
+      }
+
+      // Reconcile: update cookie_status + worker_account_id for our rows
+      const updates: any[] = [];
+      for (const r of dbAccounts) {
+        const w = workerByKey.get(r.worker_account_key);
+        if (w) {
+          const newStatus = w.ok ? "active" : "expired";
+          if (r.cookie_status !== newStatus || r.worker_account_id !== w.wid) {
+            updates.push(supa.from("social_accounts").update({
+              cookie_status: newStatus,
+              worker_account_id: w.wid,
+              last_check_at: validate ? new Date().toISOString() : r.last_check_at,
+            }).eq("id", r.id));
+          }
+        } else if (r.cookie_status !== "invalid") {
           updates.push(supa.from("social_accounts").update({
-            cookie_status: newStatus,
-            worker_account_id: w.wid,
+            cookie_status: "invalid",
             last_check_at: validate ? new Date().toISOString() : r.last_check_at,
           }).eq("id", r.id));
         }
-      } else if (r.cookie_status !== "invalid") {
-        updates.push(supa.from("social_accounts").update({
-          cookie_status: "invalid",
-          last_check_at: validate ? new Date().toISOString() : r.last_check_at,
-        }).eq("id", r.id));
       }
+      if (updates.length) await Promise.all(updates);
     }
-    if (updates.length) await Promise.all(updates);
 
     const { data: fresh } = await supa.from("social_accounts").select("*").eq("shop_id", shopId).order("created_at");
-    return new Response(JSON.stringify({ accounts: fresh || [] }), {
+    return new Response(JSON.stringify({
+      accounts: fresh || [],
+      worker_online: workerOk,
+      worker_error: workerOk ? null : "发布服务暂时无法连接（502），显示的是上次同步的账号状态，请稍后重试。",
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
