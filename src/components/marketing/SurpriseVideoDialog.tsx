@@ -314,11 +314,36 @@ function RenderingBody({
     return Math.min(95, Math.round((elapsed / expected) * 100));
   })();
 
-  const label = phase === 'queued' ? '排队中…'
-    : phase === 'done' ? '拍好啦 🎬'
-    : phase === 'failed' ? '失败,可重试' : '渲染中…';
+  // 分阶段文案:按已用时间推断当前在做什么(后端是黑盒,给用户一个稳定的"进度故事")
+  const stage = (() => {
+    if (phase === 'done') return { title: '拍好啦 🎬', hint: '已上传到素材库,点下方查看' };
+    if (phase === 'failed') return { title: '这次没拍成', hint: '别急,下面给你修复方案,一键重试' };
+    if (phase === 'queued') return { title: '排队中…', hint: '正在向 Seedance 提交任务,通常 5-15 秒内开始' };
+    if (progress && progress.total > 0) {
+      const ratio = progress.done / progress.total;
+      if (ratio >= 0.95) return { title: '即将完成…', hint: '正在打包封面 + 上传到素材库' };
+      return { title: `Seedance 渲染中 · ${progress.done}/${progress.total}`, hint: '每段约 30-60 秒,稳一稳' };
+    }
+    if (elapsed < 15) return { title: '准备渲染参数…', hint: '正在把分镜静帧 + 角色参考喂给 Seedance' };
+    if (elapsed < 45) return { title: 'Seedance 起稿中…', hint: '模型在生成首帧画面,大约还要 1 分钟' };
+    if (elapsed < 90) return { title: 'Seedance 渲染中…', hint: '正在逐帧生成,马上就好' };
+    if (elapsed < 180) return { title: '正在精修画面…', hint: '高清模型耗时略长,辛苦再等一下' };
+    return { title: '正在收尾…', hint: '已经在最后阶段,关掉弹窗也会继续' };
+  })();
+
   const mm = String(Math.floor(elapsed / 60)).padStart(1, '0');
   const ss = String(elapsed % 60).padStart(2, '0');
+
+  // 预期时长(用于 ETA 估算)
+  const expectedTotal = (job.segmentTotal && job.segmentTotal > 1) ? job.segmentTotal * 60 : 120;
+  const etaSec = Math.max(0, expectedTotal - elapsed);
+  const etaText = phase === 'done' || phase === 'failed'
+    ? null
+    : etaSec > 60
+      ? `预计还要 ${Math.ceil(etaSec / 60)} 分钟`
+      : etaSec > 10
+        ? `预计还有 ${etaSec} 秒`
+        : '即将完成';
 
   return (
     <div className="space-y-4 p-4">
@@ -329,11 +354,14 @@ function RenderingBody({
           <img src={boomerIdle} alt="" className="w-16 h-16 object-contain shrink-0" />
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-base font-semibold flex items-center gap-2">
-            {phase !== 'done' && phase !== 'failed' && <Loader2 className="w-4 h-4 animate-spin text-accent" />}
-            {label}
+          <div className="text-sm font-semibold flex items-center gap-2 break-words">
+            {phase !== 'done' && phase !== 'failed' && <Loader2 className="w-4 h-4 animate-spin text-accent shrink-0" />}
+            <span className="min-w-0">{stage.title}</span>
           </div>
           <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed break-words">
+            {stage.hint}
+          </p>
+          <p className="text-[10px] text-muted-foreground/80 mt-0.5 leading-relaxed">
             关掉弹窗也会继续,完成后到素材库查看。
           </p>
         </div>
@@ -345,7 +373,10 @@ function RenderingBody({
           <div
             className={[
               'h-full rounded-full transition-all duration-500',
-              phase === 'failed' ? 'bg-destructive' : 'bg-accent',
+              phase === 'failed' ? 'bg-destructive'
+                : phase === 'done' ? 'bg-success'
+                : 'bg-accent',
+              phase !== 'done' && phase !== 'failed' ? 'animate-pulse' : '',
             ].join(' ')}
             style={{ width: `${pct}%` }}
           />
@@ -354,11 +385,15 @@ function RenderingBody({
           <span>
             {progress && progress.total > 0
               ? `分镜 ${Math.min(progress.done, progress.total)}/${progress.total}`
-              : phase === 'queued' ? '排队中' : '渲染中'}
+              : phase === 'queued' ? '排队中'
+              : phase === 'done' ? '已完成'
+              : phase === 'failed' ? '已停止'
+              : '渲染中'}
           </span>
-          <span>{pct}% · {mm}:{ss}</span>
+          <span>{pct}% · 已用 {mm}:{ss}{etaText ? ` · ${etaText}` : ''}</span>
         </div>
       </div>
+
 
       {phase === 'failed' && (
         <VideoFailureCard error={error} onApplyFix={onApplyFix} busy={busy} />
