@@ -63,7 +63,7 @@ export default function PublishWorkbench() {
       setAccounts(list);
       if (a) {
         // 复用上次生成的小红书爆文标题
-        const c = a.meta?.video_copy;
+        const c = (a.meta as any)?.video_copy;
         if (c?.title) setTitle(String(c.title).slice(0, 50));
         if (c?.body) setDesc(String(c.body));
         if (Array.isArray(c?.hashtags)) {
