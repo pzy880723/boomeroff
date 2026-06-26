@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
         } else {
           // worker 不返回回执,标记 submitted (= 视为已交付平台后台)
           await supa.from("social_publish_targets").update({
-            status: "submitted", progress: 100, started_at: new Date().toISOString(),
+            status: "success", progress: 100, started_at: new Date().toISOString(),
             finished_at: new Date().toISOString(),
           }).eq("job_id", jobId).in("account_id", accs.map(a => a.id));
         }
@@ -220,10 +220,10 @@ Deno.serve(async (req) => {
 
     // 父任务终态
     const { data: finalTargets } = await supa.from("social_publish_targets").select("status").eq("job_id", jobId);
-    const allSubmitted = (finalTargets || []).every(t => t.status === "submitted");
-    const anyOk = (finalTargets || []).some(t => t.status === "submitted");
+    const allSubmitted = (finalTargets || []).every(t => t.status === "success");
+    const anyOk = (finalTargets || []).some(t => t.status === "success");
     await supa.from("social_publish_jobs").update({
-      status: allSubmitted ? "submitted" : anyOk ? "partial" : "failed",
+      status: allSubmitted ? "done" : anyOk ? "partial" : "failed",
       updated_at: new Date().toISOString(),
     }).eq("id", jobId);
 
