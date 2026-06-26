@@ -14,7 +14,11 @@ const ALLOWED_HOSTS = new Set<string>([
 
 function isHostAllowed(host: string): boolean {
   if (ALLOWED_HOSTS.has(host)) return true;
-  // Supabase Storage 域名 (xxx.supabase.co)
+  // 火山 TOS 各区域域名 (*.tos-cn-*.volces.com / *.volccdn.com)
+  if (/\.tos-[a-z0-9-]+\.volces\.com$/i.test(host)) return true;
+  if (host.endsWith(".volces.com")) return true;
+  if (host.endsWith(".volccdn.com")) return true;
+  // Supabase Storage 域名
   if (host.endsWith(".supabase.co")) return true;
   if (host.endsWith(".supabase.in")) return true;
   return false;
