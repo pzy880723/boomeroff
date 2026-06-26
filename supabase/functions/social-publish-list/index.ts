@@ -1,4 +1,4 @@
-// 给前端轮询/拉某个 job 的父子状态;同时把卡 5 分钟以上的 running 子任务标记 failed。
+// 拉当前 shop 下的发布历史
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
@@ -23,46 +23,44 @@ Deno.serve(async (req) => {
     }
     const userId = claims.claims.sub as string;
 
-    const url = new URL(req.url);
-    const jobId = url.searchParams.get("job_id");
-    if (!jobId) {
-      return new Response(JSON.stringify({ error: "job_id required" }), {
+    const body = await req.json().catch(() => ({}));
+    const shopId = (body.shop_id as string) || "";
+    const limit = Math.min(Number(body.limit) || 50, 100);
+    if (!shopId) {
+      return new Response(JSON.stringify({ error: "shop_id required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const supa = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: job } = await supa.from("social_publish_jobs").select("*").eq("id", jobId).maybeSingle();
-    if (!job) {
-      return new Response(JSON.stringify({ error: "not found" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 权限
     const { data: roleRow } = await supa.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
     if (roleRow?.role !== "admin") {
       const { data: sp } = await supa.from("staff_profiles").select("shop_id").eq("user_id", userId).maybeSingle();
-      if (sp?.shop_id !== job.shop_id) {
+      if (sp?.shop_id !== shopId) {
         return new Response(JSON.stringify({ error: "forbidden" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
 
-    // 收尾: 把开始执行 5 分钟仍 running 的子任务标记 failed (定时未到不算)
-    const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    await supa.from("social_publish_targets").update({
-      status: "failed",
-      error_message: "worker 超时未回执,请到平台后台确认是否已发布",
-      finished_at: new Date().toISOString(),
-    }).eq("job_id", jobId).eq("status", "running").not("started_at", "is", null).lt("started_at", cutoff);
+    const { data: jobs } = await supa
+      .from("social_publish_jobs")
+      .select("id, title, cover_url, status, schedule_at, created_at, updated_at, asset_id")
+      .eq("shop_id", shopId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-    const { data: targets } = await supa.from("social_publish_targets")
-      .select("*, social_accounts(account_name, avatar_url, platform)")
-      .eq("job_id", jobId).order("created_at");
+    const jobIds = (jobs || []).map((j) => j.id);
+    let targets: any[] = [];
+    if (jobIds.length > 0) {
+      const { data: ts } = await supa
+        .from("social_publish_targets")
+        .select("id, job_id, platform, status, error_message, social_accounts(account_name, avatar_url)")
+        .in("job_id", jobIds);
+      targets = ts || [];
+    }
 
-    return new Response(JSON.stringify({ job, targets: targets || [] }), {
+    return new Response(JSON.stringify({ jobs: jobs || [], targets }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

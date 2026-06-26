@@ -4,7 +4,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEffectiveShop } from '@/hooks/useShops';
 import { AuthPage } from '@/components/auth/AuthPage';
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, RefreshCw, Trash2, ShieldCheck, ShieldAlert, ShieldOff } from 'lucide-react';
+import { Plus, Loader2, RefreshCw, Trash2, ShieldCheck, ShieldAlert, ShieldOff, History } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { AddSocialAccountDialog } from '@/components/marketing/AddSocialAccountDialog';
@@ -85,14 +86,19 @@ export default function SocialAccounts() {
     <>
       <PageHeader title="自媒体账号" back="/me/marketing" subtitle="按门店管理 · 扫码绑定 · 一键发布" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 pb-20 space-y-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={() => fetchList(true)} disabled={validating}>
             {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
             校验全部
           </Button>
-          <Button size="sm" onClick={() => setAddOpen(true)}>
-            <Plus className="w-4 h-4 mr-1" /> 添加账号
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" asChild>
+              <Link to="/me/marketing/publish-history"><History className="w-3.5 h-3.5 mr-1" />发布历史</Link>
+            </Button>
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="w-4 h-4 mr-1" /> 添加账号
+            </Button>
+          </div>
         </div>
 
         {loading ? (

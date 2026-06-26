@@ -1,13 +1,14 @@
 // 1) 校权 + 取 asset 2) 把视频字节从我们 Storage / 远端 URL 流到 worker /upload
-// 3) 建父子任务 4) 按平台分组调 /postVideoBatch 5) 返回 job_id
+// 3) 建父子任务 4) schedule_at 在未来则不分发等 cron 派单;否则直接分发到平台
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { sauFetch, PLATFORM_CODE, PLATFORM_LABEL } from "../_shared/sau.ts";
+import { sauFetch } from "../_shared/sau.ts";
+import { dispatchToWorker, finalizeJobStatus } from "../_shared/social-dispatch.ts";
 
 interface ScheduleConfig {
   enable: boolean;
   videos_per_day?: number;
-  daily_times?: number[]; // 小时数组, 如 [9, 14, 20]
+  daily_times?: number[];
   start_days?: number;
 }
 
@@ -40,6 +41,14 @@ Deno.serve(async (req) => {
     const category = (body.category || "") as string;
     const description = ((body.description || "") as string).trim();
     const schedule: ScheduleConfig = body.schedule || { enable: false };
+    // 节点定时:ISO 字符串(未来时间则不立刻分发,留给 cron)
+    const scheduleAtRaw = (body.schedule_at as string | undefined)?.trim();
+    let scheduleAt: Date | null = null;
+    if (scheduleAtRaw) {
+      const d = new Date(scheduleAtRaw);
+      if (!isNaN(d.getTime())) scheduleAt = d;
+    }
+    const isDelayed = scheduleAt && scheduleAt.getTime() > Date.now() + 30_000; // 30s 缓冲
 
     if (!assetId || accountIds.length === 0 || !title) {
       return new Response(JSON.stringify({ error: "asset_id / account_ids / title required" }), {
@@ -49,7 +58,6 @@ Deno.serve(async (req) => {
 
     const supa = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // 取 asset
     const { data: asset, error: assetErr } = await supa.from("marketing_assets").select("*").eq("id", assetId).maybeSingle();
     if (assetErr || !asset) {
       return new Response(JSON.stringify({ error: "asset not found" }), {
@@ -62,7 +70,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 取账号 & 校权
     const { data: accounts } = await supa.from("social_accounts").select("*").in("id", accountIds);
     if (!accounts || accounts.length !== accountIds.length) {
       return new Response(JSON.stringify({ error: "some accounts not found" }), {
@@ -70,13 +77,12 @@ Deno.serve(async (req) => {
       });
     }
     const shopId = accounts[0].shop_id;
-    if (accounts.some(a => a.shop_id !== shopId)) {
+    if (accounts.some((a) => a.shop_id !== shopId)) {
       return new Response(JSON.stringify({ error: "accounts must belong to same shop" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 权限: admin or 同店员工
     const { data: roleRow } = await supa.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
     const isAdmin = roleRow?.role === "admin";
     if (!isAdmin) {
@@ -88,7 +94,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 下载视频字节
+    // 上传到 worker:即使是定时,也提前传好;worker 的临时文件保留时间一般够用
     const videoResp = await fetch(asset.output_url);
     if (!videoResp.ok) {
       return new Response(JSON.stringify({ error: `视频下载失败 ${videoResp.status}` }), {
@@ -102,8 +108,6 @@ Deno.serve(async (req) => {
       });
     }
     const fileName = `boomer-${assetId.slice(0, 8)}.mp4`;
-
-    // 上传到 worker
     const fd = new FormData();
     fd.append("file", videoBlob, fileName);
     const upResp = await sauFetch("/upload", { method: "POST", body: fd });
@@ -121,7 +125,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 建父任务
+    const initialStatus = isDelayed ? "scheduled" : "running";
     const { data: jobRow, error: jobErr } = await supa.from("social_publish_jobs").insert({
       shop_id: shopId,
       asset_id: assetId,
@@ -131,9 +135,9 @@ Deno.serve(async (req) => {
       tags,
       cover_url: asset.meta?.poster_url || asset.meta?.cover_url || null,
       media_url: asset.output_url,
-      per_platform: {},
-      schedule_at: null,
-      status: "running",
+      per_platform: { category, schedule, schedule_at: scheduleAt?.toISOString() || null },
+      schedule_at: scheduleAt?.toISOString() || null,
+      status: initialStatus,
       created_by: userId,
       worker_file_path: workerFilePath,
     }).select().single();
@@ -144,88 +148,29 @@ Deno.serve(async (req) => {
     }
     const jobId = jobRow.id;
 
-    // 建子任务
-    const targets = accounts.map(a => ({
+    const targets = accounts.map((a) => ({
       job_id: jobId,
       account_id: a.id,
       platform: a.platform,
-      status: "queued",
+      status: isDelayed ? "scheduled" : "queued",
       progress: 0,
     }));
     await supa.from("social_publish_targets").insert(targets);
 
-    // 按平台分组调 /postVideoBatch
-    const byPlatform = new Map<string, typeof accounts>();
-    for (const a of accounts) {
-      const arr = byPlatform.get(a.platform) || [];
-      arr.push(a); byPlatform.set(a.platform, arr);
+    // 定时任务:暂不分发,等 cron
+    if (isDelayed) {
+      return new Response(JSON.stringify({ job_id: jobId, scheduled: true, schedule_at: scheduleAt!.toISOString() }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const errors: string[] = [];
-    for (const [platform, accs] of byPlatform.entries()) {
-      const ptype = PLATFORM_CODE[platform];
-      if (!ptype) {
-        errors.push(`${PLATFORM_LABEL[platform] || platform}: 暂不支持`);
-        await supa.from("social_publish_targets").update({
-          status: "failed", error_message: "平台暂不支持", finished_at: new Date().toISOString(),
-        }).eq("job_id", jobId).eq("platform", platform);
-        continue;
-      }
-      const accountList = accs.map(a => a.worker_account_id).filter(Boolean);
-      if (accountList.length === 0) {
-        errors.push(`${PLATFORM_LABEL[platform]}: 账号未在 worker 注册,请重新扫码`);
-        await supa.from("social_publish_targets").update({
-          status: "failed", error_message: "账号未在 worker 注册", finished_at: new Date().toISOString(),
-        }).eq("job_id", jobId).in("account_id", accs.map(a => a.id));
-        continue;
-      }
-      const payload: any = {
-        fileList: [workerFilePath],
-        accountList,
-        type: ptype,
-        title: title.slice(0, 50),
-        tags,
-        category: category || undefined,
-        enableTimer: !!schedule.enable,
-        videosPerDay: schedule.videos_per_day || 1,
-        dailyTimes: schedule.daily_times || [9, 14, 20],
-        startDays: schedule.start_days || 0,
-      };
-      try {
-        const r = await sauFetch("/postVideoBatch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const text = await r.text();
-        if (!r.ok) {
-          errors.push(`${PLATFORM_LABEL[platform]}: worker ${r.status} ${text.slice(0, 120)}`);
-          await supa.from("social_publish_targets").update({
-            status: "failed", error_message: `worker ${r.status}: ${text.slice(0, 200)}`, finished_at: new Date().toISOString(),
-          }).eq("job_id", jobId).in("account_id", accs.map(a => a.id));
-        } else {
-          // worker 不返回回执,标记 submitted (= 视为已交付平台后台)
-          await supa.from("social_publish_targets").update({
-            status: "success", progress: 100, started_at: new Date().toISOString(),
-            finished_at: new Date().toISOString(),
-          }).eq("job_id", jobId).in("account_id", accs.map(a => a.id));
-        }
-      } catch (e) {
-        errors.push(`${PLATFORM_LABEL[platform]}: ${String(e)}`);
-        await supa.from("social_publish_targets").update({
-          status: "failed", error_message: String(e), finished_at: new Date().toISOString(),
-        }).eq("job_id", jobId).in("account_id", accs.map(a => a.id));
-      }
-    }
-
-    // 父任务终态
-    const { data: finalTargets } = await supa.from("social_publish_targets").select("status").eq("job_id", jobId);
-    const allSubmitted = (finalTargets || []).every(t => t.status === "success");
-    const anyOk = (finalTargets || []).some(t => t.status === "success");
-    await supa.from("social_publish_jobs").update({
-      status: allSubmitted ? "done" : anyOk ? "partial" : "failed",
-      updated_at: new Date().toISOString(),
-    }).eq("id", jobId);
+    // 立刻分发
+    const errors = await dispatchToWorker(supa, {
+      jobId, workerFilePath, title, tags, category,
+      enableTimer: schedule.enable, videosPerDay: schedule.videos_per_day,
+      dailyTimes: schedule.daily_times, startDays: schedule.start_days,
+    }, accounts);
+    await finalizeJobStatus(supa, jobId);
 
     return new Response(JSON.stringify({ job_id: jobId, errors }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

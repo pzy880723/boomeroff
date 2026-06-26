@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   Loader2, ShieldCheck, ShieldAlert, ShieldOff, CheckCircle2,
-  AlertCircle, Send, Plus, X, ArrowLeft, ExternalLink,
+  AlertCircle, Send, Plus, X, ArrowLeft, ExternalLink, Clock, History, RotateCcw,
 } from 'lucide-react';
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -45,10 +45,13 @@ export default function PublishWorkbench() {
   const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // 定时发布:本地 datetime-local 字符串。空 = 立即发
+  const [scheduleAt, setScheduleAt] = useState('');
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [targets, setTargets] = useState<Target[]>([]);
   const [jobStatus, setJobStatus] = useState<string>('');
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     if (!assetId || !shopId) return;
@@ -94,6 +97,14 @@ export default function PublishWorkbench() {
     if (invalid.length > 0) {
       if (!confirm(`有 ${invalid.length} 个账号不在线,继续发布可能失败。仍要继续？`)) return;
     }
+    // 定时校验
+    let scheduleIso: string | undefined;
+    if (scheduleAt) {
+      const d = new Date(scheduleAt);
+      if (isNaN(d.getTime())) { toast.error('定时时间格式不对'); return; }
+      if (d.getTime() < Date.now() - 60_000) { toast.error('定时时间已过'); return; }
+      scheduleIso = d.toISOString();
+    }
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('social-publish-create', {
@@ -103,17 +114,34 @@ export default function PublishWorkbench() {
           title: title.trim(),
           description: desc.trim(),
           tags,
+          schedule_at: scheduleIso,
         },
       });
       if (error) throw error;
       const newJobId = (data as any)?.job_id;
       const errors = (data as any)?.errors || [];
-      if (errors.length > 0) toast.warning(`部分账号未成功: ${errors.join(' / ')}`);
+      const scheduled = (data as any)?.scheduled;
+      if (scheduled) toast.success(`已定时,将在 ${new Date(scheduleIso!).toLocaleString('zh-CN', { hour12: false })} 自动发布`);
+      else if (errors.length > 0) toast.warning(`部分账号未成功: ${errors.join(' / ')}`);
       else toast.success('已提交,请到平台后台查看');
       setJobId(newJobId);
     } catch (e: any) {
       toast.error('提交失败: ' + (e?.message || e));
     } finally { setSubmitting(false); }
+  };
+
+  const retryFailed = async () => {
+    if (!jobId) return;
+    setRetrying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('social-publish-retry', { body: { job_id: jobId } });
+      if (error) throw error;
+      const errs = (data as any)?.errors || [];
+      if (errs.length > 0) toast.warning('部分账号仍失败: ' + errs.join(' / '));
+      else toast.success('已重新提交');
+    } catch (e: any) {
+      toast.error('重试失败: ' + (e?.message || e));
+    } finally { setRetrying(false); }
   };
 
   // 轮询进度 (effect 内部直接 fetch,见下方)
@@ -155,7 +183,10 @@ export default function PublishWorkbench() {
             <div className="mt-3"><Button variant="outline" size="sm" onClick={() => navigate(-1)}><ArrowLeft className="w-3.5 h-3.5 mr-1" />返回</Button></div>
           </div>
         ) : jobId ? (
-          <PublishProgress targets={targets} jobStatus={jobStatus} onBack={() => { setJobId(null); setPicked(new Set()); }} />
+          <PublishProgress targets={targets} jobStatus={jobStatus} retrying={retrying}
+            onBack={() => { setJobId(null); setPicked(new Set()); setScheduleAt(''); }}
+            onRetry={retryFailed}
+            onHistory={() => navigate('/me/marketing/publish-history')} />
         ) : (
           <>
             <div className="flex gap-3 bg-card border border-border rounded-lg p-3">
@@ -234,6 +265,24 @@ export default function PublishWorkbench() {
               )}
             </div>
 
+            <div>
+              <Label className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />定时发布 (可选)</Label>
+              <div className="flex gap-2 mt-1">
+                <Input type="datetime-local" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)}
+                  min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)} />
+                {scheduleAt && (
+                  <Button type="button" variant="outline" size="icon" onClick={() => setScheduleAt('')}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {scheduleAt
+                  ? `将于 ${new Date(scheduleAt).toLocaleString('zh-CN', { hour12: false })} 自动发起`
+                  : '留空 = 立即提交'}
+              </p>
+            </div>
+
             <div className="bg-muted/40 border border-border rounded-lg p-2.5">
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 ⚠️ 本工具通过模拟登录代发布:提交成功仅代表已交付给平台后台,不等于审核通过。同号短时高频发布可能触发平台风控。
@@ -241,8 +290,13 @@ export default function PublishWorkbench() {
             </div>
 
             <Button className="w-full h-12 text-base" onClick={submit} disabled={submitting || picked.size === 0 || !title.trim()}>
-              {submitting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-              提交发布 ({picked.size})
+              {submitting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                : scheduleAt ? <Clock className="w-4 h-4 mr-1.5" /> : <Send className="w-4 h-4 mr-1.5" />}
+              {scheduleAt ? `定时发布 (${picked.size})` : `提交发布 (${picked.size})`}
+            </Button>
+
+            <Button variant="ghost" className="w-full text-xs text-muted-foreground" onClick={() => navigate('/me/marketing/publish-history')}>
+              <History className="w-3.5 h-3.5 mr-1" />查看发布历史
             </Button>
           </>
         )}
@@ -257,18 +311,36 @@ function StatusBadge({ s }: { s: string }) {
   return <span className="text-destructive inline-flex items-center gap-0.5"><ShieldOff className="w-3 h-3" />失效</span>;
 }
 
-function PublishProgress({ targets, jobStatus, onBack }: { targets: Target[]; jobStatus: string; onBack: () => void }) {
+function PublishProgress({ targets, jobStatus, retrying, onBack, onRetry, onHistory }: {
+  targets: Target[]; jobStatus: string; retrying: boolean;
+  onBack: () => void; onRetry: () => void; onHistory: () => void;
+}) {
   const done = targets.filter(t => t.status === 'success').length;
   const fail = targets.filter(t => t.status === 'failed').length;
-  const pending = targets.filter(t => !['success', 'failed', 'cancelled'].includes(t.status)).length;
+  const scheduled = targets.filter(t => t.status === 'scheduled').length;
+  const pending = targets.filter(t => !['success', 'failed', 'cancelled', 'scheduled'].includes(t.status)).length;
+  const isScheduled = jobStatus === 'scheduled';
 
   return (
     <div className="space-y-4">
       <div className="text-center py-6 bg-card border border-border rounded-lg">
-        <p className="text-3xl font-bold">{done} <span className="text-base text-muted-foreground">/ {targets.length}</span></p>
-        <p className="text-sm text-muted-foreground mt-1">
-          {jobStatus === 'done' ? '✅ 全部已提交' : jobStatus === 'partial' ? `⚠️ 部分成功 · ${fail} 失败` : jobStatus === 'failed' ? '❌ 全部失败' : `提交中 · ${pending} 个待回执`}
-        </p>
+        {isScheduled ? (
+          <>
+            <Clock className="w-8 h-8 mx-auto text-blue-500" />
+            <p className="text-sm font-medium mt-2">已加入定时队列</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{scheduled} 个账号将在到点自动发布</p>
+          </>
+        ) : (
+          <>
+            <p className="text-3xl font-bold">{done} <span className="text-base text-muted-foreground">/ {targets.length}</span></p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {jobStatus === 'done' ? '✅ 全部已提交'
+                : jobStatus === 'partial' ? `⚠️ 部分成功 · ${fail} 失败`
+                : jobStatus === 'failed' ? '❌ 全部失败'
+                : `提交中 · ${pending} 个待回执`}
+            </p>
+          </>
+        )}
       </div>
 
       <div className="space-y-1.5">
@@ -286,10 +358,18 @@ function PublishProgress({ targets, jobStatus, onBack }: { targets: Target[]; jo
             </div>
             {t.status === 'success' && <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />}
             {t.status === 'failed' && <AlertCircle className="w-4 h-4 text-destructive shrink-0" />}
+            {t.status === 'scheduled' && <Clock className="w-4 h-4 text-blue-500 shrink-0" />}
             {['queued', 'running'].includes(t.status) && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />}
           </div>
         ))}
       </div>
+
+      {fail > 0 && (
+        <Button variant="default" className="w-full" onClick={onRetry} disabled={retrying}>
+          {retrying ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RotateCcw className="w-4 h-4 mr-1.5" />}
+          重试失败的 {fail} 个账号
+        </Button>
+      )}
 
       <div className="bg-muted/40 rounded-lg p-3 text-[11px] text-muted-foreground leading-relaxed">
         worker 在浏览器里走的是模拟点击,**"已提交"不等于"已发布成功"**。请到对应平台 APP / 后台确认稿件是否真的进了草稿箱或已审通过。
@@ -297,8 +377,8 @@ function PublishProgress({ targets, jobStatus, onBack }: { targets: Target[]; jo
 
       <div className="flex gap-2">
         <Button variant="outline" className="flex-1" onClick={onBack}>再发一次</Button>
-        <Button className="flex-1" onClick={() => window.open('https://creator.douyin.com/', '_blank')}>
-          <ExternalLink className="w-3.5 h-3.5 mr-1" />打开抖音后台
+        <Button variant="outline" className="flex-1" onClick={onHistory}>
+          <History className="w-3.5 h-3.5 mr-1" />历史
         </Button>
       </div>
     </div>
