@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Copy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { UploadGrid } from './UploadGrid';
-import { StepBar } from './StepBar';
+
 import { toast } from 'sonner';
 import { ShopPicker } from '@/components/marketing/ShopPicker';
 import { useEffectiveShop } from '@/hooks/useShops';
@@ -61,10 +61,6 @@ export default function MarketingCopy() {
     <>
       <PageHeader title="AI 文案" back="/me/marketing" subtitle="营销中心 / 写文案" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
-        <StepBar
-          steps={['选店铺', '选图', '平台 / 口吻', '生成']}
-          current={!shopId ? 0 : urls.length === 0 ? 1 : cands.length === 0 ? 2 : 3}
-        />
 
         <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
 

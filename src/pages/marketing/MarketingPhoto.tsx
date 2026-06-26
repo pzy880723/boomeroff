@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Upload, Download, RotateCw, FileText, Video } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMarketingImages } from './uploadMarketingImages';
-import { StepBar } from './StepBar';
+
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ShopPicker } from '@/components/marketing/ShopPicker';
@@ -63,7 +63,7 @@ export default function MarketingPhoto() {
     <>
       <PageHeader title="图片优化" back="/me/marketing" subtitle="营销中心 / 修图工坊" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
-        <StepBar steps={['选店铺', '上传图', '选修复项', '出图']} current={!shopId ? 0 : !origUrl ? 1 : !outputUrl ? 2 : 3} />
+        
 
         <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
 
