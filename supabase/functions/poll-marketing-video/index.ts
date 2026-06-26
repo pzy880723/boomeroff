@@ -201,7 +201,6 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const r = await pollOne(ARK_KEY, j.provider_task_id);
         await admin.from("marketing_video_jobs").update({
           status: r.mapped,
           video_url: r.video_url || null,
@@ -216,6 +215,7 @@ Deno.serve(async (req) => {
           );
         }
         results.push({ id: j.id, status: r.mapped });
+
       }
       return json({ swept: results.length, results });
     }
