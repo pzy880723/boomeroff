@@ -183,7 +183,6 @@ Deno.serve(async (req) => {
     if (!jobId) return json({ error: "缺少 job_id" }, 400);
 
 
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const { data: job, error: jErr } = await admin
       .from("marketing_video_jobs")
       .select("*")
