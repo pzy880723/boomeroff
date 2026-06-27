@@ -514,12 +514,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
     }
 
-    // 2) 并行提交所有段(每段带 3 级真人内容降级链)
-    const isSensitive = (err?: string, raw?: any) => {
-      const code = raw?.error?.code || '';
-      const msg = (err || '') + ' ' + (raw?.error?.message || '');
-      return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
-    };
+    // 2) 并行提交所有段(每段带 3 级真人内容降级链;isSensitive 复用上面声明的)
     const submissions = await Promise.all(subScripts.map(async (sub, i) => {
       const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
       const prompt = buildPrompt(sub, styleKey, shopBlock, label, character, realism);
