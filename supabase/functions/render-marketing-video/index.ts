@@ -267,8 +267,14 @@ function resolveSegmentImages(
   }
 
   // 4) reference 永远塞角色身份板 + 段内绑定的实景照(锁人物 + 锁商品)
+  // 已通过火山真人认证的角色直接用 asset:// URI 顶替封面/参考图,跳过真人审核拦截
   const refSet = new Set<string>();
-  if (character?.cover_url) refSet.add(character.cover_url);
+  const verifiedUri: string | undefined = (character as any)?.verified_asset_uri || undefined;
+  if (verifiedUri) {
+    refSet.add(verifiedUri);
+  } else if (character?.cover_url) {
+    refSet.add(character.cover_url);
+  }
   for (const u of character?.extra_reference_urls || []) if (u) refSet.add(u);
   const picks = pickSegmentImages(sub);
   for (const i of picks.refIndices) if (imageUrls[i]) refSet.add(imageUrls[i]);
@@ -279,8 +285,13 @@ function resolveSegmentImages(
     if (idx !== null && imageUrls[idx]) refSet.add(imageUrls[idx]);
   }
 
+  // 若角色已认证,优先用 asset:// 作为首帧候选(顶替可能触发真人拦截的真人封面)
+  const effectiveFallbackFirst = verifiedUri && (!fallbackFirst || fallbackFirst === character?.cover_url)
+    ? verifiedUri
+    : fallbackFirst;
+
   return {
-    firstImage: firstImage || fallbackFirst,
+    firstImage: firstImage || effectiveFallbackFirst,
     lastImage: lastImage && lastImage !== firstImage ? lastImage : undefined,
     referenceImages: Array.from(refSet).slice(0, 3),
   };
