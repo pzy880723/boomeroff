@@ -58,28 +58,8 @@ async function compressImageToDataUrl(file: File, maxEdge = 1280, quality = 0.82
 }
 
 
-function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 animate-in fade-in"
-      onClick={onClose}
-    >
-      <button
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white"
-        onClick={onClose}
-        aria-label="关闭"
-      >
-        <X className="w-5 h-5" />
-      </button>
-      <img
-        src={src}
-        alt=""
-        className="max-w-[92vw] max-h-[88vh] object-contain rounded-lg"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>
-  );
-}
+// 注:统一改用 @/components/voucher/ImageLightbox(支持大关闭按钮 + 左右滑动)
+
 
 export default function PublicActivity() {
   const { shareToken = '' } = useParams();
