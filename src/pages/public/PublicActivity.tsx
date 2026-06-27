@@ -569,7 +569,7 @@ ${isExplore ? '七' : '六'}、最终解释权
         </p>
       </div>
 
-      {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      <ImageLightbox open={!!lightbox} onClose={() => setLightbox(null)} images={lightbox ? [lightbox] : []} />
 
       {submitting && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-6" style={bgStyle}>
