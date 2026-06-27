@@ -100,6 +100,7 @@ export default function MarketingVideo() {
   const [restoredAt, setRestoredAt] = useState<number | null>(null);
   const [sbBusy, setSbBusy] = useState(false);
   const [sbWarn, setSbWarn] = useState<string | null>(null);
+  const [lastSbSig, setLastSbSig] = useState<string>('');
 
   // 草稿本地保存 key
   const draftKey = shopId ? `mv:draft:${shopId}` : '';
