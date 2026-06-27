@@ -25,6 +25,9 @@ import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileR
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { getModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
+import { RealismToggle } from '@/components/marketing/RealismToggle';
+import { getRealismPref, setRealismPref } from '@/lib/realismPref';
+import type { Realism } from '@/lib/realism';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
