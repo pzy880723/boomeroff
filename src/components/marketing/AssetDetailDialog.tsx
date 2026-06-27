@@ -605,6 +605,13 @@ export function AssetDetailDialog({
           </div>
         )}
       </DialogContent>
+      {asset.kind === 'photo' && asset.output_url && (
+        <ImageLightbox
+          open={lbOpen}
+          onClose={() => setLbOpen(false)}
+          images={[asset.output_url]}
+        />
+      )}
     </Dialog>
   );
 }
