@@ -578,10 +578,18 @@ export default function MarketingVideo() {
                 <span className="w-1 h-1 rounded-full bg-accent" />
                 <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">文生视频 · 逐镜确认</span>
               </div>
-              <Button size="sm" variant="ghost" onClick={genScript} disabled={generating}>
-                {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}重新生成
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onClick={() => generateStoryboard()} disabled={sbBusy || generating} className="h-7 text-[11px]">
+                  {sbBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {sbBusy ? '合成中' : '重做分镜静帧'}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={genScript} disabled={generating}>
+                  {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}重新生成
+                </Button>
+              </div>
             </div>
+
+            <StoryboardStrip script={script} busy={sbBusy} warn={sbWarn} />
 
             <SegmentPreview script={script} urls={urls} character={character} />
 
