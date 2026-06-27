@@ -688,8 +688,9 @@ export default function MarketingLibrary() {
                               className="absolute bottom-1 left-1 max-w-[80%] text-[9px] bg-foreground/55 text-background px-1.5 py-0.5 rounded cursor-pointer hover:bg-foreground/80 transition-colors truncate"
                             >
                               {Array.isArray(it.tags) && it.tags.length > 0
-                                ? `${it.tags[0]}${it.tags.length > 1 ? ` +${it.tags.length - 1}` : ''}`
+                                ? it.tags.slice(0, 2).join(' · ') + (it.tags.length > 2 ? ` · 共${it.tags.length}` : '')
                                 : '+标签'}
+
                             </span>
                           )}
 
