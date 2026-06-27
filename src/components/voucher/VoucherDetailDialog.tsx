@@ -6,7 +6,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Copy, Send, Pencil, Trash2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, Copy, Send, Pencil, Trash2, Search } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
