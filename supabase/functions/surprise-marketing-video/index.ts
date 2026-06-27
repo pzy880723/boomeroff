@@ -246,6 +246,13 @@ Deno.serve(async (req) => {
       }
     } catch (_) { /* ignore */ }
 
+    // 5b) 若无角色,把预留的那 1 张参考槽回填给实景,把 9 张塞满
+    if (!character && pickedAssets.length < 9 && remainPool.length > scenicAssets.length) {
+      const used = new Set(pickedAssets.map((a: any) => a.id));
+      const extras = remainPool.filter((a: any) => !used.has(a.id)).slice(0, 9 - pickedAssets.length);
+      pickedAssets.push(...extras);
+    }
+
     // 6) 节日借势
     const holiday = pickUpcomingHoliday(new Date());
     const holidayBrief = formatHolidayBrief(holiday);
