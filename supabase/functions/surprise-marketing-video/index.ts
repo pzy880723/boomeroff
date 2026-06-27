@@ -269,8 +269,8 @@ Deno.serve(async (req) => {
 
     const randomHooks = sampleN(HOOK_POOL, 2).map((s) => `"${s}"`).join(" / ");
     const openingDirective = storefrontHit
-      ? `【强制开场(第 1 镜 / 0–2s · 不可改)】镜头先给参考图 1(门头/店招/logo)2 秒特写或推镜,探店博主站在门口或推门进店;subtitle 像「${shopCtx?.name || '这家店'},冲!」之类。从第 2 镜开始才进店内场景。`
-      : `【强制开场(第 1 镜 / 0–2s)】先给一个店门口的镜头,探店博主推门或转身进店;subtitle 像「${shopCtx?.name || '这家店'},冲!」。`;
+      ? `${STOREFRONT_OPENING_ZH} 参考图 1 是门头/店招/logo,务必在 0-2s 内露出;subtitle 像「${shopCtx?.name || '这家店'},冲!」之类。从第 2 镜起镜头已在店内货架间。`
+      : `${STOREFRONT_OPENING_ZH} subtitle 像「${shopCtx?.name || '这家店'},冲!」。`;
 
     const briefTranscript =
       `店员:来一条 15 秒竖版探店口播,节奏严格按下面博主人设走(慢就慢、快就快,不要前后割裂)。\n` +
