@@ -323,22 +323,29 @@ Deno.serve(async (req) => {
       const effectiveCharacter = disableReferences ? null : character;
       const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
       if (disableReferences) imgs.referenceImages = [];
-      console.log(`[render per-shot] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
+      console.log(`[render per-shot] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length}`);
       const fallbackNotes: string[] = [];
+      // L0: 全量 reference
       let r = await submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-        firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
+        referenceImages: imgs.referenceImages,
       });
-      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
-        fallbackNotes.push('frames_dropped_for_safety');
-        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: imgs.referenceImages });
+      // L1: 只留第一张参考(通常是 storyboard 静帧 / 角色板)
+      if (!r.ok && isSensitive(r.error, (r as any).raw) && imgs.referenceImages.length > 1) {
+        fallbackNotes.push('references_trimmed_for_safety');
+        r = await submitArkTask({
+          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
+          referenceImages: imgs.referenceImages.slice(0, 1),
+        });
       }
+      // L2: 纯文本
       if (!r.ok && isSensitive(r.error, (r as any).raw)) {
         fallbackNotes.push('references_dropped_for_safety');
         r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
       }
       return { i, r, sub, duration, imgs, fallbackNotes };
     }));
+
 
 
     // 3) 检查失败
