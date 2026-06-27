@@ -203,9 +203,48 @@ export default function MarketingVideo() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      setScript((data as any).script);
+      const newScript = (data as any).script;
+      setScript(newScript);
+      // 自动调用分镜静帧:把角色 + 选中的素材图 合成每一镜的定格画面,
+      // 这样渲染时模型只需要让这张确定的图动起来,不再凭空想象。
+      if (urls.length > 0 || character) {
+        await generateStoryboard(newScript);
+      }
     } catch (e: any) { toast.error(e?.message || '脚本生成失败'); }
     finally { setGenerating(false); }
+  };
+
+  const generateStoryboard = async (scriptArg?: any) => {
+    const target = scriptArg || script;
+    if (!target) return;
+    setSbBusy(true); setSbWarn(null);
+    try {
+      const assets = urls.map((u, i) => {
+        const d = imageDescriptions.find((x) => x.index === i);
+        return { asset_id: `idx-${i}`, index: i, url: u, summary: d?.summary || '', category: null };
+      });
+      const charPayload = character ? {
+        id: character.id, name: character.name, role_label: character.role_label,
+        visual_signature: character.visual_signature, core_emotion: character.core_emotion,
+        cover_url: character.cover_url,
+        extra_reference_urls: character.extra_reference_urls || [],
+      } : null;
+      const { data, error } = await supabase.functions.invoke('storyboard-marketing-video', {
+        body: { script: target, assets, character: charPayload, shop_id: shopId, style },
+      });
+      if (error) throw error;
+      const d = data as any;
+      if (!d?.ok) throw new Error(d?.error || '分镜静帧生成失败');
+      if (d.script) setScript(d.script);
+      const failed = (d.frames || []).filter((f: any) => !f.url).length;
+      if (failed) setSbWarn(`${failed} 张静帧生成失败,渲染时将回退到原素材图`);
+      toast.success(`分镜静帧已合成 ${d.succeeded}/${d.total}`);
+    } catch (e: any) {
+      setSbWarn(e?.message || '分镜静帧生成失败');
+      toast.message('分镜静帧失败,渲染将直接用原素材', { duration: 3000 });
+    } finally {
+      setSbBusy(false);
+    }
   };
 
   const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean }) => {
