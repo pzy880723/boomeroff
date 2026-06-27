@@ -142,9 +142,9 @@ function buildPrompt(
   lines.push(`严格按以下分镜拍摄,不要增加、删减或调换镜头顺序。`);
   if (character?.name) {
     if (realism === 'photoreal') {
-      lines.push(`【主体定义】将参考图中的 ${character.name}(${character.role_label || '主角'})定义为 主体1。后续所有镜头中,涉及到这位角色一律称呼「主体1」。外观锁:${character.visual_signature || '以首帧参考身份板为准'}。五官、发型、肤色、体型、年龄、气质与参考图完全一致,严禁换人或换装,严禁双胞胎/分身。`);
+      lines.push(`【主体定义】将参考图中的 ${character.name}(${character.role_label || '主角'})定义为 主体1。后续所有镜头中,涉及到这位角色一律称呼「主体1」。外观锁:${character.visual_signature || '以参考图身份板为准'}。五官、发型、肤色、体型、年龄、气质与参考图完全一致,严禁换人或换装,严禁双胞胎/分身。`);
     } else {
-      lines.push(`【主角锁定】每段必须出现同一主角:${character.name}(${character.role_label || '主角'})。外观锁:${character.visual_signature || '以首帧参考身份板为准'}。面部、发型、服装、体型、年龄、气质严格一致,严禁换人或换装。`);
+      lines.push(`【主角锁定】每段必须出现同一主角:${character.name}(${character.role_label || '主角'})。外观锁:${character.visual_signature || '以参考图身份板为准'}。面部、发型、服装、体型、年龄、气质严格一致,严禁换人或换装。`);
     }
   }
   if (segLabel) lines.push(`这是【${segLabel}】,后续会与其他段无缝拼接,请保持画面、光线、调色与人物连贯。`);
@@ -192,7 +192,7 @@ function buildPrompt(
 
 function clampDuration(d: any): number {
   const n = Number(d) || 5;
-  if (n < 4) return 4;
+  if (n < 3) return 3;          // Seedance 2.0 最短 3s
   if (n > MAX_SEG_DUR) return MAX_SEG_DUR;
   return Math.round(n);
 }
@@ -204,7 +204,7 @@ function normalizeRatio(aspect: any): string {
 }
 
 // 逐镜切段:每个非空分镜 = 1 段。
-// hook / scenes[*] / outro 各自成段,独立用自己的静帧作 first_frame 喂给 Seedance,
+// hook / scenes[*] / outro 各自成段,独立用自己的静帧 + 角色板作 reference_image 喂给 Seedance 2.0,
 // 最后由前端 ffmpeg-wasm 按 segment_index 升序拼接成成片。
 function splitScript(script: any): any[] {
   type Shot = { sc: any; role: 'hook' | 'mid' | 'outro' };
@@ -232,8 +232,8 @@ function splitScript(script: any): any[] {
   const empty = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
   return shots.map((s, i) => {
     const rawDur = Number(s.sc.duration_s);
-    // Seedance 单段最短 4s,最长 15s。短于 4s 的镜头会被拉到 4s(轻微费用上浮换语义完整)。
-    const dur = Math.max(4, Math.min(MAX_SEG_DUR, Number.isFinite(rawDur) && rawDur > 0 ? Math.round(rawDur) : 5));
+    // Seedance 2.0 单段最短 3s,最长 15s。
+    const dur = Math.max(3, Math.min(MAX_SEG_DUR, Number.isFinite(rawDur) && rawDur > 0 ? Math.round(rawDur) : 5));
     const clip = { ...s.sc, duration_s: dur };
     return {
       ...script,
@@ -289,7 +289,7 @@ async function submitArkTask(opts: {
   return { ok: true, id: arkJson.id, mode };
 }
 
-/** 组装某段的参考图集合(全 reference 模式,上限 4 张,按权重排序):
+/** 组装某段的参考图集合(Seedance 2.0 全 reference 模式,上限 9 张,按权重排序):
  *  1) 本镜 storyboard 静帧(最强信号)
  *  2) 角色身份板(优先用火山真人认证的 asset:// URI)
  *  3) 角色额外参考图
@@ -325,11 +325,9 @@ function resolveSegmentImages(
   else if (character?.cover_url) push(character.cover_url);
   // 3) 角色额外参考
   for (const u of character?.extra_reference_urls || []) push(u);
-  // 4) 段内绑定的实景照(reference 通道 + 老 first/last 字段都收进来)
+  // 4) 段内绑定的实景照(2.0 全部按 reference 通道收集)
   const picks = pickSegmentImages(sub);
   for (const i of picks.refIndices) if (imageUrls[i]) push(imageUrls[i]);
-  if (picks.firstIndex !== null && imageUrls[picks.firstIndex]) push(imageUrls[picks.firstIndex]);
-  if (picks.lastIndex !== null && imageUrls[picks.lastIndex]) push(imageUrls[picks.lastIndex]);
   for (const sc of seq) {
     const idx = typeof sc?.image_index === 'number' ? sc.image_index : null;
     if (idx !== null && imageUrls[idx]) push(imageUrls[idx]);
@@ -573,7 +571,6 @@ Deno.serve(async (req) => {
 
     // 5) 占位 marketing_assets
     const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
-    const anyFirst = submissions.some((s) => !!s.imgs.firstImage);
     const fallbackWarnings = Array.from(new Set(submissions.flatMap((s) => s.fallbackNotes)));
     await admin.from("marketing_assets").insert({
       user_id: u.user.id, kind: "video", shop_id: shopId,
@@ -581,7 +578,8 @@ Deno.serve(async (req) => {
       meta: {
         job_id: parent.id, video_type: script.video_type,
         duration: totalDur, aspect: ratio,
-        mode: anyFirst ? "image2video" : (totalRefImages > 0 ? "reference2video" : "text2video"),
+        // Seedance 2.0:有参考图 = reference2video,完全无图 = text2video。
+        mode: totalRefImages > 0 ? "reference2video" : "text2video",
         render_mode: "per_shot",
         render_strategy: "per_shot",
         auto_decision_reason: autoReason,
@@ -599,8 +597,6 @@ Deno.serve(async (req) => {
           per_segment: submissions.map((s) => ({
             segment_index: s.i,
             reference_count: s.imgs.referenceImages.length,
-            first: s.imgs.firstImage || null,
-            last: s.imgs.lastImage || null,
           })),
         },
       },

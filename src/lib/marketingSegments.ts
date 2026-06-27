@@ -1,7 +1,9 @@
 // 视频分段规划:前后端共享逻辑(前端版,后端在 supabase/functions/_shared/marketing-segments.ts 有一份对应实现)。
 // 用途:
 //   1) 在 UI 上做"分段预览",所见即所得。
-//   2) 后端 render-marketing-video 用相同规则切段并挑首帧/尾帧/参考图。
+//   2) 后端 render-marketing-video 用相同规则切段并挑参考图。
+// 备注:Seedance 2.0 全部走 reference_image,不再有"首帧/尾帧"概念;
+//      ImageRole 仍保留 first/last 是为了兼容老数据,运行时统一当参考图处理。
 
 export type ImageRole = 'first' | 'last' | 'reference';
 
@@ -49,9 +51,7 @@ export interface SegmentPlan {
   total: number;
   durationS: number;
   sceneLabels: string[];     // ['钩子','镜头1','镜头2']
-  firstIndex: number | null; // 本段首帧图在 image_urls 数组里的下标
-  lastIndex: number | null;
-  refIndices: number[];      // 本段额外参考图(去重)
+  refIndices: number[];      // 本段所有参考图下标(去重),Seedance 2.0 全 reference 模式
 }
 
 /**
@@ -112,27 +112,18 @@ export function planSegments(script: ScriptLike | null | undefined): SegmentPlan
 
   return buckets.map((bucket, i) => {
     const dur = bucket.reduce((s, x) => s + x.dur, 0);
-    let firstIndex: number | null = null;
-    let lastIndex: number | null = null;
     const refSet = new Set<number>();
     bucket.forEach((b) => {
       const ref = effectiveImageRef(b.sc);
       if (!ref) return;
-      if (ref.role === 'first') {
-        if (firstIndex === null) firstIndex = ref.index;
-      } else if (ref.role === 'last') {
-        lastIndex = ref.index;
-      } else if (ref.role === 'reference') {
-        refSet.add(ref.index);
-      }
+      // 2.0:不区分 role,所有绑定图统一进 refIndices
+      refSet.add(ref.index);
     });
     return {
       index: i,
       total: buckets.length,
       durationS: Math.min(MAX_SEG_DUR, Math.round(dur)),
       sceneLabels: bucket.map((b) => b.label),
-      firstIndex,
-      lastIndex,
       refIndices: Array.from(refSet),
     };
   });

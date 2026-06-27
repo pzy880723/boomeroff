@@ -271,7 +271,7 @@ export default function MarketingVideo() {
     }
   };
 
-  const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean }) => {
+  const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean; render_strategy?: 'auto' | 'one_shot' | 'per_shot' }) => {
     if (!script) return;
     if (!shopId) return toast.error('请先选择店铺');
     setRendering(true);
@@ -306,7 +306,7 @@ export default function MarketingVideo() {
           script: { ...finalScript, video_type: vtype }, style, shop_id: shopId,
           model: reqModel, resolution: reqRes,
           realism,
-          render_strategy: renderStrategy,
+          render_strategy: overrides?.render_strategy ?? renderStrategy,
           disable_storyboard: !!overrides?.disable_storyboard,
           disable_references: !!overrides?.disable_references,
         },
@@ -746,6 +746,7 @@ export default function MarketingVideo() {
                     resolution: (patch.resolution as SeedanceResolution) || undefined,
                     disable_storyboard: patch.disable_storyboard,
                     disable_references: patch.disable_references,
+                    render_strategy: patch.render_strategy,
                   });
                 }}
               />
@@ -814,11 +815,12 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
-const ROLE_LABEL: Record<ImageRole, string> = { first: '开头', last: '结尾', reference: '参考' };
+// Seedance 2.0 全 reference 模式:三种角色都按"参考图"喂给模型;label 仅作 UI 上下文提示。
+const ROLE_LABEL: Record<ImageRole, string> = { first: '参考', last: '参考', reference: '参考' };
 const ROLE_HINT: Record<ImageRole, string> = {
-  first: '本镜头将作为它所属视频段的开场画面',
-  last: '作为段尾画面,与开头帧约束运动方向',
-  reference: '仅用于锁定主体形象,不固定在帧位上',
+  first: 'Seedance 2.0 会把这张图作为参考图传给模型,锁定主体形象',
+  last: 'Seedance 2.0 会把这张图作为参考图传给模型,锁定主体形象',
+  reference: 'Seedance 2.0 会把这张图作为参考图传给模型,锁定主体形象',
 };
 
 function SceneRow({
@@ -1068,15 +1070,12 @@ function SegmentPreview({ script, urls, character }: { script: any; urls: string
       {open && (
         <div className="px-3 pb-3 space-y-2">
           <p className="text-[10px] text-muted-foreground leading-snug">
-            固定切成 {segments.length} 段(30s = 2×15、45s = 3×15),Seedance 只跑 {segments.length} 次,省一半 token。每段第一张作开头帧、最后一张作结尾帧,主角每段都会塞进参考图锁人。
+            按目标段数等分时长(30s = 2×15、45s = 3×15)。Seedance 2.0 每段用「参考图」喂入分镜静帧 + 角色板,模型自己排镜头切换,主角全程不变脸。
           </p>
           {segments.map((seg) => {
             const cells = segClipsOf(seg);
-            const hasFirst = cells.find((c) => c.hasImage);
-            const lastWith = [...cells].reverse().find((c) => c.hasImage && c !== hasFirst);
-            const mode = hasFirst
-              ? (lastWith ? '首尾帧' : '图生视频')
-              : (character?.cover_url ? '参考生视频' : '纯文生');
+            const refCount = cells.filter((c) => c.hasImage).length + (character?.cover_url ? 1 : 0);
+            const mode = refCount > 0 ? `参考图 ×${refCount}` : '纯文生';
             return (
               <div key={seg.index} className="bg-card border border-border rounded p-2 space-y-1.5">
                 <div className="flex items-center justify-between gap-2 text-[10.5px]">
@@ -1086,8 +1085,6 @@ function SegmentPreview({ script, urls, character }: { script: any; urls: string
                 </div>
                 <div className="flex items-end gap-1.5 overflow-x-auto pb-0.5">
                   {cells.map((cell, i) => {
-                    const isFirst = i === 0;
-                    const isLast = i === cells.length - 1 && cells.length > 1;
                     return (
                       <div key={i} className="flex flex-col items-center gap-0.5 shrink-0">
                         <div className="relative w-12 h-16 rounded border border-accent/20 overflow-hidden bg-muted/40">
@@ -1095,11 +1092,6 @@ function SegmentPreview({ script, urls, character }: { script: any; urls: string
                             <img src={thumbUrl(cell.image, 240) || cell.image} alt="" loading="lazy" className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-[8px] text-muted-foreground">无图</div>
-                          )}
-                          {(isFirst || isLast) && cell.image && (
-                            <span className="absolute top-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white py-px">
-                              {isFirst ? '开头帧' : '结尾帧'}
-                            </span>
                           )}
                           {cell.isStoryboard && (
                             <span className="absolute bottom-0 right-0 text-[7.5px] px-0.5 bg-accent text-accent-foreground">静帧</span>

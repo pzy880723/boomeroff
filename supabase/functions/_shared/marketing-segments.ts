@@ -1,6 +1,8 @@
 // Deno 端的视频分段规划。
 // 与 src/lib/marketingSegments.ts 保持同步;改一处务必两边都改。
 
+// Seedance 2.0 全部走 reference_image 通道。"first"/"last" 是 1.5 i2v 时代的字段,
+// 仍保留在类型里只是为了兼容历史数据 / 老脚本字段,运行时一律按参考图处理。
 export type ImageRole = "first" | "last" | "reference";
 
 export interface SceneImageRef {
@@ -54,10 +56,8 @@ export function effectiveImageRef(sc: SceneLike | null | undefined): SceneImageR
   return null;
 }
 
-/** 从一个(已经被 splitScript 拆出的)子脚本里挑首帧/尾帧/参考图下标。 */
+/** 从一个(已经被 splitScript 拆出的)子脚本里挑参考图下标(2.0 全 reference 模式)。 */
 export function pickSegmentImages(sub: ScriptLike): {
-  firstIndex: number | null;
-  lastIndex: number | null;
   refIndices: number[];
 } {
   const seq: SceneLike[] = [];
@@ -65,19 +65,12 @@ export function pickSegmentImages(sub: ScriptLike): {
   if (Array.isArray(sub.scenes)) seq.push(...sub.scenes);
   if (sub.outro) seq.push(sub.outro);
 
-  let firstIndex: number | null = null;
-  let lastIndex: number | null = null;
   const refSet = new Set<number>();
   for (const sc of seq) {
     const ref = effectiveImageRef(sc);
     if (!ref) continue;
-    if (ref.role === "first") {
-      if (firstIndex === null) firstIndex = ref.index;
-    } else if (ref.role === "last") {
-      lastIndex = ref.index;
-    } else if (ref.role === "reference") {
-      refSet.add(ref.index);
-    }
+    // 2.0:不管原始 role 是 first/last/reference,统统当参考图收集
+    refSet.add(ref.index);
   }
-  return { firstIndex, lastIndex, refIndices: Array.from(refSet) };
+  return { refIndices: Array.from(refSet) };
 }
