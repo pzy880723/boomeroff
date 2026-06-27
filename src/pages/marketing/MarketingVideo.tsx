@@ -511,7 +511,7 @@ export default function MarketingVideo() {
           </div>
           {duration > MAX_SEG_DUR && (
             <p className="-mt-1 text-[10px] text-muted-foreground leading-relaxed pl-1">
-              · 超过 {MAX_SEG_DUR} 秒的视频会自动拆成 {Math.ceil(duration / MAX_SEG_DUR)} 段生成,完成后在素材库里自动拼接成一支 MP4。整体约需 {Math.ceil(duration / MAX_SEG_DUR) * 2}-{Math.ceil(duration / MAX_SEG_DUR) * 3} 分钟。
+              · {duration} 秒视频会拆成 <b>{targetSegmentCount(duration)} 段 × 约 {Math.round(duration / targetSegmentCount(duration))} 秒</b> 生成,完成后自动拼接成一支 MP4。Seedance 只调用 {targetSegmentCount(duration)} 次,省一半 token。整体约 {targetSegmentCount(duration) * 2}-{targetSegmentCount(duration) * 3} 分钟。
             </p>
           )}
 
