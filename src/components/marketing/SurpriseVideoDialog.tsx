@@ -67,8 +67,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [renderError, setRenderError] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>(() => getSurpriseModelPrefs().modelId);
   const [resolution, setResolution] = useState<SeedanceResolution>(() => getSurpriseModelPrefs().resolution);
-  const [realism, setRealism] = useState<Realism>(() => getRealismPref());
-  const handleRealismChange = (r: Realism) => { setRealism(r); setRealismPref(r); };
+  const realism: Realism = SURPRISE_REALISM;
 
   const handleModelChange = (id: string) => {
     setModelId(id);
