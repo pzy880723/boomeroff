@@ -386,7 +386,7 @@ Deno.serve(async (req) => {
     const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
-      body: JSON.stringify({ script: { ...script, video_type: vtype }, style, shop_id: shopId }),
+      body: JSON.stringify({ script: { ...script, video_type: vtype }, style, shop_id: shopId, realism }),
     });
     const renderData = await renderRes.json().catch(() => ({}));
     if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {
