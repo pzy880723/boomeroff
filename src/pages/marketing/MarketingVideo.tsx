@@ -815,11 +815,12 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
-const ROLE_LABEL: Record<ImageRole, string> = { first: '开头', last: '结尾', reference: '参考' };
+// Seedance 2.0 全 reference 模式:三种角色都按"参考图"喂给模型;label 仅作 UI 上下文提示。
+const ROLE_LABEL: Record<ImageRole, string> = { first: '参考', last: '参考', reference: '参考' };
 const ROLE_HINT: Record<ImageRole, string> = {
-  first: '本镜头将作为它所属视频段的开场画面',
-  last: '作为段尾画面,与开头帧约束运动方向',
-  reference: '仅用于锁定主体形象,不固定在帧位上',
+  first: 'Seedance 2.0 会把这张图作为参考图传给模型,锁定主体形象',
+  last: 'Seedance 2.0 会把这张图作为参考图传给模型,锁定主体形象',
+  reference: 'Seedance 2.0 会把这张图作为参考图传给模型,锁定主体形象',
 };
 
 function SceneRow({
