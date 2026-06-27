@@ -208,12 +208,11 @@ Deno.serve(async (req) => {
     const hits = themeTag ? remainPool.filter(matchTheme) : [];
     const misses = themeTag ? remainPool.filter((a: any) => !matchTheme(a)) : remainPool;
 
-    // 参考图总槽位封顶 9(对齐 Seedance 2.0 reference_image 上限)
-    // 已用槽:门头 1 张 + 角色板封面 1 张(在 render-marketing-video 里合并注入);剩下全给实景
-    // 注:此处先不知道是否有角色,按"预留 1 张"保守计算,先取 scene 槽位;若后面无角色,再补 1 张
+    // 参考图槽位封顶 9(对齐 Seedance 2.0 reference_image 上限)
+    // 惊喜流程不使用角色板,主角是 AI 现场生成的虚构「探店博主」,不绑参考图。
+    // 已用槽:门头 1 张;剩下全部给实景。
     const storefrontSlot = storefrontHit ? 1 : 0;
-    const characterReserveSlot = 1; // 保守预留;无角色时下面再回填
-    const ASSET_SLOT_FOR_SCENES = Math.max(3, 9 - storefrontSlot - characterReserveSlot);
+    const ASSET_SLOT_FOR_SCENES = Math.max(3, 9 - storefrontSlot);
     const targetCount = Math.min(remainPool.length, ASSET_SLOT_FOR_SCENES);
     let scenicAssets: any[];
     if (themeTag && hits.length >= 3) {
@@ -234,25 +233,13 @@ Deno.serve(async (req) => {
       ...(storefrontHit ? [storefrontHit] : []),
       ...scenicAssets,
     ];
-
-    // 5) 角色:店里有角色 → 100% 出场,随机挑一个
-    let character: any = null;
-    try {
-      const { data: chars } = await admin.from("marketing_characters")
-        .select("id, name, role_label, visual_signature, core_emotion, cover_url, extra_reference_urls")
-        .eq("shop_id", shopId)
-        .limit(20);
-      if (chars && chars.length) {
-        character = chars[Math.floor(Math.random() * chars.length)];
-      }
-    } catch (_) { /* ignore */ }
-
-    // 5b) 若无角色,把预留的那 1 张参考槽回填给实景,把 9 张塞满
-    if (!character && pickedAssets.length < 9 && remainPool.length > scenicAssets.length) {
+    // 若实景不够,继续从剩余池补满 9 张
+    if (pickedAssets.length < 9) {
       const used = new Set(pickedAssets.map((a: any) => a.id));
       const extras = remainPool.filter((a: any) => !used.has(a.id)).slice(0, 9 - pickedAssets.length);
       pickedAssets.push(...extras);
     }
+
 
     // 6) 节日借势
     const holiday = pickUpcomingHoliday(new Date());
