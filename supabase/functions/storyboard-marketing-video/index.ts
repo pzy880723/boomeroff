@@ -7,6 +7,7 @@
 // 这一步把"模型空想画面"变成"模型只需让一张确定的画面动起来"。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
+import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
