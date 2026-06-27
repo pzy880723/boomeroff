@@ -424,15 +424,7 @@ Deno.serve(async (req) => {
       },
     });
 
-          per_segment: submissions.map((s) => ({
-            segment_index: s.i,
-            reference_count: s.imgs.referenceImages.length,
-            first: s.imgs.firstImage || null,
-            last: s.imgs.lastImage || null,
-          })),
-        },
-      },
-    });
+
 
     return json({
       ok: true, success: true, job_id: parent.id, status: "running",
