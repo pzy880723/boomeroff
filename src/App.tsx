@@ -34,6 +34,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const VouchersMine = lazy(() => import("./pages/VouchersMine"));
 const VoucherRedeem = lazy(() => import("./pages/VoucherRedeem"));
 const VoucherSharePoster = lazy(() => import("./pages/VoucherSharePoster"));
+const VerifyCallback = lazy(() => import("./pages/VerifyCallback"));
 // 公开（免登录）路由 —— 急加载,避免微信 X5 webview 拉二级 chunk 失败导致白屏/报错
 import PublicClaim from "./pages/public/PublicClaim";
 import PublicClaimByPhone from "./pages/public/PublicClaimByPhone";
