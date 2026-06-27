@@ -54,6 +54,7 @@ function buildOneShotPrompt(
 
   const lines: string[] = [];
   lines.push(`【一段 ${total}s 的 ${aspect} 短视频,整体风格:${styleEn}${overrides?.style_cue ? ` · ${overrides.style_cue}` : ''}】`);
+  lines.push(STOREFRONT_CONSTRAINT_EN);
   if (overrides?.persona_directive) {
     lines.push(`【主角(虚构探店博主 · 全片唯一主体)】${overrides.persona_directive}`);
   }
