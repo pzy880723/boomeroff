@@ -245,26 +245,41 @@ Deno.serve(async (req) => {
     const holiday = pickUpcomingHoliday(new Date());
     const holidayBrief = formatHolidayBrief(holiday);
 
-    // 7) 拼装 brief:门头锁开场 + 节日借势 + 随机钩子句池 + 多样性指令
-    const style = pickWeighted(VIRAL_STYLE_WEIGHTS);
+    // 7) 动态生成「探店博主」人设(按品类/节日/店铺现场出 persona)
     const shopCtx = await loadShopContext(shopId);
+    const allTags = Array.from(new Set(pickedAssets.flatMap((a: any) =>
+      Array.isArray(a.tags) ? a.tags.map((t: any) => String(t)) : []
+    )));
+    const allCats = Array.from(new Set(pickedAssets.map((a: any) =>
+      String(a.category || '')).filter(Boolean)));
+    const persona: InfluencerPersona = await generatePersona({
+      assetTags: allTags,
+      assetCategories: allCats,
+      shopName: shopCtx?.name || null,
+      shopCategory: (shopCtx as any)?.category || null,
+      holidayName: holiday?.name || null,
+    });
+
+    // 8) 拼装 brief:门头锁开场 + 节日借势 + 博主人设
+    const style = pickWeighted(VIRAL_STYLE_WEIGHTS);
     const heroSummary = storefrontHit
       ? `${shopCtx?.name || '本店'}门头店招`
       : summarizeAsset(scenicAssets[0] || pickedAssets[0]);
 
     const randomHooks = sampleN(HOOK_POOL, 2).map((s) => `"${s}"`).join(" / ");
     const openingDirective = storefrontHit
-      ? `【强制开场(第 1 镜 / 0–2s · 不可改)】镜头先给参考图 1(门头/店招/logo)2 秒特写或推镜,主角站在门口或推门进店;subtitle 像「${shopCtx?.name || '这家店'},冲!」之类。从第 2 镜开始才进店内场景。`
-      : `【强制开场(第 1 镜 / 0–2s)】先给一个店门口的镜头,主角推门或转身进店;subtitle 像「${shopCtx?.name || '这家店'},冲!」。注意:店里还没传门头照,模型自由发挥即可。`;
+      ? `【强制开场(第 1 镜 / 0–2s · 不可改)】镜头先给参考图 1(门头/店招/logo)2 秒特写或推镜,探店博主站在门口或推门进店;subtitle 像「${shopCtx?.name || '这家店'},冲!」之类。从第 2 镜开始才进店内场景。`
+      : `【强制开场(第 1 镜 / 0–2s)】先给一个店门口的镜头,探店博主推门或转身进店;subtitle 像「${shopCtx?.name || '这家店'},冲!」。`;
 
     const briefTranscript =
       `店员:来一条 15 秒竖版洗脑探店口播。\n` +
+      `${formatPersonaBriefZh(persona)}\n` +
       `${openingDirective}\n` +
       `${holidayBrief ? holidayBrief + '\n' : ''}` +
-      `【钩子句池】这次开场的钩子从下面里挑一种风格(可改写,不要照抄):${randomHooks}。每次拍都要不一样,不要复用上次开头。\n` +
-      `【全片要求】共 6-8 个 1.5-2.5 秒小镜头,主角始终是同一个人(沿用上面锁定的角色),每镜都有动作(指/拿/试/转身);全部用上传的店内实景;字幕大白话带情绪符号,结尾必须带 CTA(「地址放评论区」「现在冲」「错过等一年」)。`;
+      `【钩子句池】这次开场的钩子可参考(可改写,不要照抄,要贴合博主语气):${randomHooks}。每次拍都要不一样,不要复用上次开头。\n` +
+      `【全片要求】共 4-6 个 2-3 秒小镜头,主角始终是上面那位虚构博主(同人同发型同服装),每镜都有动作(指/拿/试/转身/对镜头说话);全部用上传的店内实景;字幕大白话带情绪符号,结尾必须带 CTA(参考博主 CTA「${persona.cta}」)。`;
 
-    // 8) 生成脚本
+    // 9) 生成脚本
     const imageUrls = pickedAssets.map((a: any) => a.output_url);
     const imageDescriptions = pickedAssets.map((a: any, i: number) => ({
       index: i,
@@ -286,12 +301,13 @@ Deno.serve(async (req) => {
         intent: 'viral_store_tour',
         brief_transcript: briefTranscript,
         image_descriptions: imageDescriptions,
-        character: character ? {
-          id: character.id, name: character.name, role_label: character.role_label,
-          visual_signature: character.visual_signature, core_emotion: character.core_emotion,
-          cover_url: character.cover_url,
-          extra_reference_urls: character.extra_reference_urls || [],
-        } : null,
+        // 把 persona 当虚构主角喂给脚本(用 character 字段复用现有 prompt 通路),不带 cover_url 避免被加进参考图
+        character: {
+          name: persona.label,
+          role_label: '探店博主',
+          visual_signature: persona.visual,
+          core_emotion: persona.vibe,
+        },
       }),
     });
     const scriptData = await scriptRes.json().catch(() => ({}));
@@ -300,7 +316,7 @@ Deno.serve(async (req) => {
     }
     const script = scriptData.script;
 
-    // 9) 输出 assets(给前端做参考图横排展示):门头/角色板优先,顺序就是 reference_image 顺序
+    // 10) 输出 assets(给前端做参考图横排展示)
     const assets = pickedAssets.map((a: any, i: number) => ({
       asset_id: a.id,
       index: i,
@@ -310,8 +326,7 @@ Deno.serve(async (req) => {
       role: i === 0 && storefrontHit ? 'storefront' : 'scene',
     }));
 
-    // cover:门头优先,其次角色板,再次第一张实景
-    const coverUrl = storefrontHit?.output_url || character?.cover_url || pickedAssets[0]?.output_url;
+    const coverUrl = storefrontHit?.output_url || pickedAssets[0]?.output_url;
     const picked = {
       asset_id: (storefrontHit || pickedAssets[0])?.id,
       cover_url: coverUrl,
@@ -322,25 +337,27 @@ Deno.serve(async (req) => {
       needs_storefront: needsStorefront,
     };
 
-    // 10) 渲染 prompt_overrides:开场强制门头 + 节日 vibe
+    // 11) 渲染 prompt_overrides:博主人设 + 开场强制门头 + 节日 vibe
     const openingEn = storefrontHit
-      ? "Opening shot (0-2s): exterior storefront sign and brand logo in reference image #1, character walks toward the door or pushes the door open, hand-held push-in. Only from shot #2 the camera enters the shop interior."
-      : "Opening shot (0-2s): exterior shop entrance, character pushes the door open with a hand-held push-in. Only from shot #2 the camera enters the shop interior.";
+      ? "Opening shot (0-2s): exterior storefront sign and brand logo in reference image #1, the visiting influencer walks toward the door or pushes the door open, hand-held push-in. Only from shot #2 the camera enters the shop interior."
+      : "Opening shot (0-2s): exterior shop entrance, the visiting influencer pushes the door open with a hand-held push-in. Only from shot #2 the camera enters the shop interior.";
     const styleCue = holiday?.vibe || undefined;
-    const promptOverrides = { opening: openingEn, ...(styleCue ? { style_cue: styleCue } : {}) };
-
-    const characterOut = character
-      ? { id: character.id, name: character.name, cover_url: character.cover_url }
-      : null;
+    const promptOverrides = {
+      opening: openingEn,
+      persona_directive: formatPersonaDirective(persona),
+      ...(styleCue ? { style_cue: styleCue } : {}),
+    };
 
     const result: any = {
       ok: true, picked, assets, script,
       vtype: 'store_tour', vtype_label: '洗脑探店', style,
-      character: characterOut,
+      character: null,
+      persona,
       holiday: holiday ? { name: holiday.name, days_away: holiday.daysAway } : null,
       duration: 15, aspect: '9:16',
       prompt_overrides: promptOverrides,
     };
+
 
     if (preview) return json(result);
 
