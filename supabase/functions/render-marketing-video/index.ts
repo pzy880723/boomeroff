@@ -439,7 +439,8 @@ Deno.serve(async (req) => {
       const oneShotDur = Math.max(4, Math.min(MAX_SEG_DUR, Math.round(totalDur || MAX_SEG_DUR)));
       const effectiveChar = disableReferences ? null : character;
       const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
-      const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism);
+      const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
+      const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
       const fallbackNotes: string[] = [];
       console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur}`);
 
