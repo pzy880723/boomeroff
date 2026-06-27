@@ -17,7 +17,7 @@ import { CharacterPicker, type Character } from '@/components/marketing/Characte
 import { useEffectiveShop } from '@/hooks/useShops';
 import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
-import { planSegments, effectiveImageRef, MAX_SEG_DUR, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
+import { planSegments, effectiveImageRef, MAX_SEG_DUR, targetSegmentCount, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { thumbUrl } from '@/lib/imageUrl';
