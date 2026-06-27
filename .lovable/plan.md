@@ -1,42 +1,53 @@
+## 一、分镜预览（SurpriseVideoDialog）UI 精修
 
-## 你说的问题，对在哪里
+在分镜静帧横滑条 + 每条分镜行的缩略图按钮上：
+- 增加 `rounded-xl` 圆角矩形（已有圆角，加重一档），加 `ring-1 ring-border` + `shadow-lg shadow-black/15`，让图凸显出来。
+- 容器加微微的内边距和 `bg-card`，与背景分离。
 
-1. **分段预览跟分镜静帧没关联** ✅ 确实是 UI bug
-   - `SegmentPreview` 只读 `urls`（原始素材库），完全没有看 `clip.storyboard_url`。
-   - 但后端 `render-marketing-video/resolveSegmentImages` 其实**已经优先用 `storyboard_url`** 当首/尾帧，原素材只是降级和 reference。
-   - 所以渲染并没有"用素材库的图凑视频"，是预览面板骗了你 —— 看着像两套东西。
+`ImageLightbox.tsx`（毛玻璃左右按钮也归这里管）：
+- 左右两个 `ChevronLeft/Right` 按钮，把 `bg-white/15` 改为 `bg-white/25`，再加 `shadow-lg shadow-black/40 ring-1 ring-white/30`，让毛玻璃按钮从黑底中明显跳出来。
+- 右上的关闭按钮保留现状（已有 shadow-xl）。
 
-2. **分段预览太占位** ✅ 默认折叠即可，不删。
+## 二、Lightbox 不再叠两层
 
-3. **每段应该显示这段里包含的所有分镜（用静帧）+ 主角** ✅ 信息架构改一下就好。
+`AssetDetailDialog.tsx`：移除内置的 `<ImageLightbox>` 以及触发它的图片点击（line 608-614 + 相关 `setLbOpen` state 和图片 onClick）。  
+素材库点缩略图 → 只弹 `AssetDetailDialog` 一层，恢复"原来那样"。
 
-## 改动（只动 `src/pages/marketing/MarketingVideo.tsx`，纯前端）
+## 三、`+2` 标签溢出徽章改写
 
-### A. 重写 `SegmentPreview` 卡片
+`MarketingLibrary.tsx` line 690-692 当前展示 `第一个标签 +2`，用户看不懂。改为：
+- 只有 1 个标签时：显示该标签。
+- 多个时：显示 `共 N 个标签` 或直接展示前两个 `tagA · tagB`（不带 `+N`）。
 
-不再画"开头/结尾/参考"三宫格，改成**"这一段 = 这几个分镜"**的真实视图：
+## 四、上传后自动打标签（补齐所有入口）
 
-- 每段头：`第 N 段 · X秒 · {镜头标签}` + 模式徽章（图生 / 首尾帧 / 参考生 / 文生）
-- 每段体：
-  - **横向缩略图条**：把这段里 `hook / 镜头k / outro` 按顺序排开，每个 tile 显示 `clip.storyboard_url`（没有时回退到 `urls[image_index]`，再没有显示"无图"占位）；tile 下方小字写"钩子 / 镜头k / 收尾"和时长。
-  - tile 上角小角标：第一个 tile 标"开头帧"，最后一个标"结尾帧"（与 `resolveSegmentImages` 实际取帧规则一致 —— 优先取本段第一/最后一张 `storyboard_url`）。
-  - **主角胶囊**：若有 `character.cover_url`，在段右侧固定显示一个小圆头像 + 名字，标"每段锁人"，对齐后端"角色 reference 永远塞"的行为。
-- 这样用户一眼就能看到："这一段用的就是上面这几张分镜静帧拼成的"。
+目前只有 `UploadAssetDialog` 在上传后调用 `auto-tag-marketing-asset`；`UploadGrid.tsx` 的快速批量上传路径（`processOne` line 79-92）没调用。  
+在 `UploadGrid` 的批量上传完成后，按 batch（例如每 8 个 asset_id 一组）异步 fire-and-forget 调用 `auto-tag-marketing-asset`，不阻塞 UI。
 
-### B. 默认折叠
+## 五、一次性回填历史无标签素材
 
-- 用 `<details>` 或受控 `useState(false)` 的折叠区，标题保持 `分段预览 · N 段（≤10s/段）`，右侧"展开/收起"按钮。
-- 折叠态只显示一行汇总：`共 N 段 · 总 D 秒 · 主角:{name|无}`。
+新建 edge function `backfill-marketing-asset-tags`：
+- service-role 客户端查 `marketing_assets` 中 `tags is null or tags = '{}'` 且 `kind='photo'` 且 `output_url not null`，按 shop 分批（每批 10 个 id）循环调用现有 `auto-tag-marketing-asset` 逻辑。
+- 限速：每批之间 sleep 800ms，避免 LLM 限流；总数上限例如 500 条/次，返回 `processed / remaining`，前端可多次触发。
+- 在 `MarketingLibrary.tsx` 顶部"管理模式"区，仿照"回填分镜"按钮，新增"一键补标签"按钮（仅 admin 可见），点击调用此函数，Toast 显示已处理张数和剩余张数。
 
-### C. 顺手修掉的几处不合理
+## 六、自动生成视频与标签关联
 
-1. **重做分镜静帧按钮的提示语**：当前只提示"画风切换 → 建议重做"，但**用户在分镜行手动替换了某张图**（`assignImageToTarget` / `setSceneImage`）也会让旧静帧和新绑定对不上。改成：监听 `script` 中各 clip 的 `image_index` 变化签名，一旦和上一次成功生成静帧时不一致，就在"重做分镜静帧"按钮旁边显示一个琥珀色小标"分镜图已变更，建议重做静帧"。
-2. **`generateStoryboard` 永远全量重跑**：`storyboard-marketing-video` 后端其实支持 `only_indices`。在"重做分镜静帧"按钮旁加一个"仅重做缺失/失败的"次级按钮，把 `frames` 里 `url=null` 的 `scene_index` 传过去，节省时间和额度。
-3. **`SceneRow` 缩略图仍显示原素材而非静帧**：当 `scene.storyboard_url` 存在时，左上角 64×64 缩略图优先显示静帧，原 `参考图` 角标改为"已合成静帧"，让用户看到"这一镜最终会动起来的那张"就是它，不再误以为是从素材库直接抽图渲染。
-4. **空状态文案**：脚本生成后但还没合成静帧时，在"分镜"区顶端加一行提示 `"⚠ 还没有分镜静帧，渲染会直接用原素材，质量会差。点击右上角『重做分镜静帧』"`，避免用户误提交。
+`surprise-marketing-video` 当前在素材池里按"时间新→旧"加权随机挑 3-5 张，互相之间没有主题一致性。改造为"先选主题 tag，再围绕该 tag 挑素材"：
 
-## 不动
+1. 拉素材时同时收集 `tags`、`category` 频次，得到该店最近 90 天的 Top tag 列表（出现 ≥2 次的）。
+2. 加权随机选 1 个"主题 tag/category"（频次越高权重越高）。
+3. 池内素材按"是否包含该 tag/category" 拆为命中组和未命中组：
+   - 命中 ≥3 张：从命中组里挑 3-5 张；
+   - 命中 1-2 张：命中全选 + 从池里补足到 3-5 张；
+   - 命中 0：保持当前随机逻辑兜底。
+4. 把选中的 `theme_tag` 写进返回的 `picked` 里（前端可在分镜预览顶部显示 `主题 · xxx` Chip，让用户知道这一组是围绕哪个标签拍的）。
+5. `pickVtypeByAssets` 继续基于这批素材的 tags 决定视频类型，逻辑天然受益于本次主题聚拢。
 
-- 后端 `render-marketing-video` / `storyboard-marketing-video` / 分段拆分逻辑保持不变 —— 它本身就是优先用 storyboard 静帧的。
-- `SurpriseVideoDialog` 不动（它的分段预览是另一处，已是缩略卡，必要时再单独提）。
-- `planSegments` / `marketingSegments.ts` 不动。
+> 不再为每张图额外生成参考词，仅复用既有 tags / category，无额外 token 消耗。
+
+## 技术备注
+
+- 文件：`SurpriseVideoDialog.tsx`、`ImageLightbox.tsx`、`AssetDetailDialog.tsx`、`MarketingLibrary.tsx`、`UploadGrid.tsx`、新建 `supabase/functions/backfill-marketing-asset-tags/index.ts`、`supabase/functions/surprise-marketing-video/index.ts`。
+- 不涉及数据库 schema 改动。
+- 回填函数 verify_jwt = true（前端用户 token 调用，函数内部 admin client 操作），仅 admin 可触发（在 SQL 之前先校验 `has_role(uid, 'admin')`）。

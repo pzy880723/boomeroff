@@ -119,7 +119,7 @@ export function ImageLightbox({
         <>
           <button
             type="button"
-            className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/15 backdrop-blur text-white hover:bg-white/25 active:scale-95 disabled:opacity-25 flex items-center justify-center"
+            className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/25 backdrop-blur-md text-white ring-1 ring-white/30 shadow-lg shadow-black/40 hover:bg-white/35 active:scale-95 disabled:opacity-25 flex items-center justify-center"
             disabled={safeIdx === 0}
             onClick={(e) => { e.stopPropagation(); goPrev(); }}
             aria-label="上一张"
@@ -128,13 +128,14 @@ export function ImageLightbox({
           </button>
           <button
             type="button"
-            className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/15 backdrop-blur text-white hover:bg-white/25 active:scale-95 disabled:opacity-25 flex items-center justify-center"
+            className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/25 backdrop-blur-md text-white ring-1 ring-white/30 shadow-lg shadow-black/40 hover:bg-white/35 active:scale-95 disabled:opacity-25 flex items-center justify-center"
             disabled={safeIdx === images.length - 1}
             onClick={(e) => { e.stopPropagation(); goNext(); }}
             aria-label="下一张"
           >
             <ChevronRight className="w-7 h-7" strokeWidth={2.5} />
           </button>
+
         </>
       )}
 

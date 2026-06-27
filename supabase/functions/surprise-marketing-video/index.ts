@@ -214,10 +214,46 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "素材库还没有商品图,先去拍/上传几张" });
     }
 
-    // 2) 加权挑 3–5 张(越新权重越高);主图取第一张
-    const weighted = pool.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
+    // 2) 主题聚拢:统计池里 tag / category 频次,按权重抽 1 个"主题词",围绕它挑素材
+    //    没有主题命中时退化到时间加权随机(原行为)。这样不需要给每张图额外生成参考词。
+    const themeCounter = new Map<string, number>();
+    pool.forEach((a: any) => {
+      const cat = (a.category || '').toString().trim();
+      if (cat) themeCounter.set(cat, (themeCounter.get(cat) || 0) + 1);
+      (Array.isArray(a.tags) ? a.tags : []).forEach((t: any) => {
+        const k = String(t || '').trim();
+        if (k) themeCounter.set(k, (themeCounter.get(k) || 0) + 1);
+      });
+    });
+    const themeCandidates = Array.from(themeCounter.entries())
+      .filter(([, c]) => c >= 2)
+      .map(([k, c]) => ({ item: k, w: c }));
+    let themeTag: string | null = null;
+    if (themeCandidates.length) themeTag = pickWeighted(themeCandidates);
+
+    const matchTheme = (a: any) => {
+      if (!themeTag) return false;
+      if ((a.category || '') === themeTag) return true;
+      return (Array.isArray(a.tags) ? a.tags : []).some((t: any) => String(t) === themeTag);
+    };
+    const hits = themeTag ? pool.filter(matchTheme) : [];
+    const misses = themeTag ? pool.filter((a) => !matchTheme(a)) : pool;
+
     const targetCount = Math.min(pool.length, 3 + Math.floor(Math.random() * 3)); // 3,4,5
-    const pickedAssets = sampleWeighted(weighted, targetCount);
+    let pickedAssets: any[];
+    if (themeTag && hits.length >= 3) {
+      const hitsW = hits.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
+      pickedAssets = sampleWeighted(hitsW, Math.min(targetCount, hits.length));
+    } else if (themeTag && hits.length > 0) {
+      const extraN = Math.max(0, targetCount - hits.length);
+      const extraW = misses.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
+      const extras = sampleWeighted(extraW, Math.min(extraN, misses.length));
+      pickedAssets = [...hits.slice(0, targetCount), ...extras];
+    } else {
+      // 回退:时间新→旧加权
+      const weighted = pool.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
+      pickedAssets = sampleWeighted(weighted, targetCount);
+    }
     const hero = pickedAssets[0];
 
     // 3) vtype + style:store_tour 占主导,风格用高转化池(energetic/lively/playful)。
@@ -225,6 +261,7 @@ Deno.serve(async (req) => {
     const shopCtx = await loadShopContext(shopId);
     const style = pickWeighted(VIRAL_STYLE_WEIGHTS);
     const vtypeLabel = VIDEO_TYPES.find((x) => x.v === vtype)?.label || '探店';
+
 
     // 4) 角色:店里若已建角色 → 100% 出场(随机挑一个)
     let character: any = null;
@@ -342,7 +379,9 @@ Deno.serve(async (req) => {
       summary: summarizeAsset(heroAsset),
       tags: heroAsset.tags || [],
       category: heroAsset.category || null,
+      theme_tag: themeTag,
     };
+
     const characterOut = character
       ? { id: character.id, name: character.name, cover_url: character.cover_url }
       : null;

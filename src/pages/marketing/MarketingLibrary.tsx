@@ -308,6 +308,29 @@ export default function MarketingLibrary() {
     }
   };
 
+  // 一次性给历史无标签素材补 AI 标签
+  const [backfillingTags, setBackfillingTags] = useState(false);
+  const runBackfillTags = async () => {
+    if (backfillingTags) return;
+    setBackfillingTags(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('backfill-marketing-asset-tags', { body: {} });
+      if (error || (data as any)?.ok === false) {
+        toast.error((data as any)?.error || error?.message || '补标签失败');
+        return;
+      }
+      const d = data as any;
+      const remainTxt = d.remaining > 0 ? ` · 还剩 ${d.remaining} 张,可再点一次` : ' · 全部完成';
+      toast.success(`本轮补标签 ${d.updated}/${d.processed} 张${remainTxt}`);
+      fetchItems(true);
+    } catch (e: any) {
+      toast.error(e?.message || '补标签失败');
+    } finally {
+      setBackfillingTags(false);
+    }
+  };
+
+
 
   // 轮询未完成视频任务
   // 用稳定签名当依赖,避免 items 引用变化导致 effect 反复重建 -> tick 立即触发 -> setItems -> 循环闪烁
@@ -567,6 +590,19 @@ export default function MarketingLibrary() {
                       回填分镜头
                     </Button>
                   )}
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={runBackfillTags}
+                      disabled={backfillingTags}
+                      title="给历史无标签的素材一次性补 AI 标签"
+                    >
+                      {backfillingTags ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      补标签
+                    </Button>
+                  )}
+
                   {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
                     <Button
                       size="sm"
@@ -688,8 +724,9 @@ export default function MarketingLibrary() {
                               className="absolute bottom-1 left-1 max-w-[80%] text-[9px] bg-foreground/55 text-background px-1.5 py-0.5 rounded cursor-pointer hover:bg-foreground/80 transition-colors truncate"
                             >
                               {Array.isArray(it.tags) && it.tags.length > 0
-                                ? `${it.tags[0]}${it.tags.length > 1 ? ` +${it.tags.length - 1}` : ''}`
+                                ? it.tags.slice(0, 2).join(' · ') + (it.tags.length > 2 ? ` · 共${it.tags.length}` : '')
                                 : '+标签'}
+
                             </span>
                           )}
 
