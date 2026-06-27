@@ -112,7 +112,7 @@ export function ActivityFeedbackView({
       return;
     }
     setSubmitting(true);
-    const { data: resp, error } = await supabase.functions.invoke('activity-feedback', {
+    const { error } = await invokeFn('activity-feedback', {
       body: {
         action: 'submit',
         share_token: shareToken,
@@ -123,8 +123,8 @@ export function ActivityFeedbackView({
       },
     });
     setSubmitting(false);
-    if (error || (resp as any)?.error) {
-      toast.error((resp as any)?.error || error?.message || '提交失败');
+    if (error) {
+      toast.error(error.message);
       return;
     }
     toast.success('反馈已提交，门店会尽快确认');
