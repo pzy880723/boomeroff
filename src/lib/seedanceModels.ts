@@ -64,6 +64,8 @@ export const SEEDANCE_2_MODELS: SeedanceModel[] = [
 
 export const DEFAULT_SEEDANCE_2 = "doubao-seedance-2-0-260128";
 export const SEEDANCE_MAX_SINGLE_SHOT = 15;
+// 一次成片模式下,reference_image 通道最多 9 张。与后端 _shared/seedance-models.ts 同步。
+export const SEEDANCE_MAX_REFS = 9;
 export const ALL_RESOLUTIONS: SeedanceResolution[] = ["720p", "1080p", "4K"];
 
 export function getSeedanceModel(id?: string | null): SeedanceModel {
