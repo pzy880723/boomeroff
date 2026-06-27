@@ -338,17 +338,11 @@ export function AssetDetailDialog({
         {asset.kind === 'photo' && (
           <div className="space-y-3">
             {asset.output_url ? (
-              <button
-                type="button"
-                onClick={() => setLbOpen(true)}
-                className="block w-full"
-                aria-label="放大查看"
-              >
-                <img src={asset.output_url} alt="" className="w-full rounded-lg border border-accent/15" loading="eager" decoding="async" />
-              </button>
+              <img src={asset.output_url} alt="" className="w-full rounded-lg border border-accent/15" loading="eager" decoding="async" />
             ) : (
               <p className="text-sm text-muted-foreground text-center py-8">暂无输出图</p>
             )}
+
             {asset.output_url && (
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => copy(asset.output_url)}>
