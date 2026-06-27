@@ -195,13 +195,35 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
 
           <div>
             <div className="text-xs font-medium text-muted-foreground mb-1.5">领取与核销记录</div>
+            {!loading && claims.length > 0 && (
+              <div className="relative mb-1.5">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={claimSearch}
+                  onChange={(e) => setClaimSearch(e.target.value)}
+                  placeholder="搜索姓名 / 手机号 / 券码"
+                  className="pl-8 h-8 text-xs"
+                />
+              </div>
+            )}
             {loading ? (
               <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
             ) : claims.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-3">暂无</p>
-            ) : (
+            ) : (() => {
+              const kw = claimSearch.trim().toLowerCase();
+              const filtered = !kw ? claims : claims.filter((c) =>
+                (c.recipient_name || '').toLowerCase().includes(kw)
+                || (c.recipient_phone || '').toLowerCase().includes(kw)
+                || (c.short_code || '').toLowerCase().includes(kw)
+                || (c.code || '').toLowerCase().includes(kw)
+              );
+              if (filtered.length === 0) {
+                return <p className="text-xs text-muted-foreground text-center py-3">没有匹配的记录</p>;
+              }
+              return (
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                {claims.map((c) => {
+                {filtered.map((c) => {
                   const v = formatValidityRange(c, voucher.valid_days);
                   return (
                     <div key={c.id} className="border border-border/60 rounded-lg px-2.5 py-1.5 space-y-0.5">
