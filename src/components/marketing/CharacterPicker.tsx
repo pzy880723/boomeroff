@@ -18,6 +18,8 @@ export type Character = {
   visual_signature: string | null;
   core_emotion: string | null;
   auto_anchor?: boolean;
+  verified_asset_uri?: string | null;
+  verified_at?: string | null;
   /** 仅在前端/本次视频中使用,不持久化到 marketing_characters 表 */
   extra_reference_urls?: string[];
 };
