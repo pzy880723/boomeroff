@@ -58,10 +58,12 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
   };
 
   // 单图上传:hash 已预先算好,不再重算;insert 走 fire-and-forget,不阻塞下一张
+  // 返回入库的 asset_id(用于稍后批量调 auto-tag),无 id 时为 null
   const processOne = async (
     file: File,
     hash: string,
     onStage: (s: UploadStage, url?: string, error?: string) => void,
+    onInserted?: (assetId: string) => void,
   ): Promise<string> => {
     if (!user) throw new Error('未登录');
     let finalUrl: string | undefined;
@@ -76,7 +78,7 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     });
     if (!finalUrl) throw new Error(finalErr || '上传失败');
 
-    // 入库异步:不让 worker 等 insert RTT
+    // 入库异步:不让 worker 等 insert RTT;但回写 id 后立即排队 auto-tag
     void supabase
       .from('marketing_assets' as any)
       .insert({
@@ -89,9 +91,16 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
         tags: defaultTags,
         meta: { source: 'reference_upload', sha256: hash, filename: file.name },
       })
-      .then(({ error }) => { if (error) console.warn('[upload-grid] asset insert failed', error.message); });
+      .select('id')
+      .single()
+      .then(({ data, error }) => {
+        if (error) { console.warn('[upload-grid] asset insert failed', error.message); return; }
+        const id = (data as any)?.id;
+        if (id && onInserted) onInserted(id);
+      });
     return finalUrl;
   };
+
 
   const onPick = async (files: FileList | null) => {
     if (!files || !user) return;
