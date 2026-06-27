@@ -38,6 +38,7 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
   const [creating, setCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [claimSearch, setClaimSearch] = useState('');
 
   useEffect(() => {
     if (!open || !voucher) return;
