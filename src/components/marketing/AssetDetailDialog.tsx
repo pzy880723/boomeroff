@@ -90,7 +90,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { buildXhsViral, VIRAL_STYLE_LABELS, type ViralStyle } from '@/lib/shareCopy';
-import { ImageLightbox } from '@/components/voucher/ImageLightbox';
+
 
 interface CopyCand {
   title?: string;
