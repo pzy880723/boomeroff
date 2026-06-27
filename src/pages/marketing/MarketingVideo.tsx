@@ -746,6 +746,7 @@ export default function MarketingVideo() {
                     resolution: (patch.resolution as SeedanceResolution) || undefined,
                     disable_storyboard: patch.disable_storyboard,
                     disable_references: patch.disable_references,
+                    render_strategy: patch.render_strategy,
                   });
                 }}
               />
