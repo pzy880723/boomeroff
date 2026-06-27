@@ -32,8 +32,9 @@ export function LibraryAssetPickerDialog({
   const [selVideo, setSelVideo] = useState<any | null>(null);
   const [selImgs, setSelImgs] = useState<Map<string, string>>(new Map()); // assetId -> url
   const [lbIdx, setLbIdx] = useState<number | null>(null);
+  const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
 
-  useEffect(() => { if (open) { setTab(defaultTab); setSelVideo(null); setSelImgs(new Map()); setLbIdx(null); } }, [open, defaultTab]);
+  useEffect(() => { if (open) { setTab(defaultTab); setSelVideo(null); setSelImgs(new Map()); setLbIdx(null); setLoadedImgs(new Set()); } }, [open, defaultTab]);
 
   useEffect(() => {
     if (!open || !user) return;
@@ -44,7 +45,7 @@ export function LibraryAssetPickerDialog({
         .select('id, kind, output_url, meta, tags, category, created_at, shop_id, user_id')
         .not('output_url', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(120);
+        .limit(60);
       const q1 = shopId ? base.eq('shop_id', shopId) : base.eq('user_id', user.id);
       const { data } = await q1;
       const all = (data as any[]) || [];
