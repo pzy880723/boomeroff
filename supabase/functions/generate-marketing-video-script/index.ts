@@ -214,7 +214,7 @@ ${refList}
     const sanitizeScene = (sc: any) => ({
       scene: clean(sc?.scene, 200),
       action: clean(sc?.action, 120),
-      dialogue: clean(sc?.dialogue, isViralStoreTour ? 14 : 60),
+      dialogue: clean(sc?.dialogue, isViralStoreTour ? 16 : 60),
       subtitle: clean(sc?.subtitle ?? sc?.text, 24),
       image_index: clampIdx(sc?.image_index),
       duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), perClipMax + 1),
