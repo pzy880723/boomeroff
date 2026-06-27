@@ -974,3 +974,22 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
     >{children}</button>
   );
 }
+
+function LoadMoreSentinel({ onVisible, loading }: { onVisible: () => void; loading: boolean }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) onVisible();
+    }, { rootMargin: '600px 0px' });
+    io.observe(node);
+    return () => io.disconnect();
+  }, [onVisible]);
+  return (
+    <div ref={ref} className="py-6 text-center text-[11px] text-muted-foreground">
+      {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto text-accent" /> : '上拉加载更多'}
+    </div>
+  );
+}
+
