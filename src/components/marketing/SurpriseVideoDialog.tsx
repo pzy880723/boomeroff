@@ -115,7 +115,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     // 复用 inflight，避免 close→open 时重派
     const existing = getInflightPick(shopId);
     const promise = existing || setInflightPick(shopId, supabase.functions.invoke('surprise-marketing-video', {
-      body: { shop_id: shopId, preview: true, exclude_asset_ids: exclude },
+      body: { shop_id: shopId, preview: true, exclude_asset_ids: exclude, realism },
     }));
     try {
       const { data, error } = await promise as any;
@@ -176,6 +176,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           vtype: pick.vtype, style: pick.style,
           model: useModel,
           resolution: useRes,
+          realism,
           disable_storyboard: !!overrides?.disable_storyboard,
           disable_references: !!overrides?.disable_references,
         },
