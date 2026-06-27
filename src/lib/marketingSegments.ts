@@ -112,27 +112,18 @@ export function planSegments(script: ScriptLike | null | undefined): SegmentPlan
 
   return buckets.map((bucket, i) => {
     const dur = bucket.reduce((s, x) => s + x.dur, 0);
-    let firstIndex: number | null = null;
-    let lastIndex: number | null = null;
     const refSet = new Set<number>();
     bucket.forEach((b) => {
       const ref = effectiveImageRef(b.sc);
       if (!ref) return;
-      if (ref.role === 'first') {
-        if (firstIndex === null) firstIndex = ref.index;
-      } else if (ref.role === 'last') {
-        lastIndex = ref.index;
-      } else if (ref.role === 'reference') {
-        refSet.add(ref.index);
-      }
+      // 2.0:不区分 role,所有绑定图统一进 refIndices
+      refSet.add(ref.index);
     });
     return {
       index: i,
       total: buckets.length,
       durationS: Math.min(MAX_SEG_DUR, Math.round(dur)),
       sceneLabels: bucket.map((b) => b.label),
-      firstIndex,
-      lastIndex,
       refIndices: Array.from(refSet),
     };
   });
