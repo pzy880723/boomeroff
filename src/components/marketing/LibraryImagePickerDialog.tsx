@@ -34,6 +34,7 @@ export function LibraryImagePickerDialog({
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Pending[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [lbIdx, setLbIdx] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const loadTimerRef = useRef<number | null>(null);
 
