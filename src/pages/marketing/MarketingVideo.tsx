@@ -1056,7 +1056,7 @@ function SegmentPreview({ script, urls, character }: { script: any; urls: string
       {open && (
         <div className="px-3 pb-3 space-y-2">
           <p className="text-[10px] text-muted-foreground leading-snug">
-            按 Seedance 单段 {MAX_SEG_DUR}s 上限切分,真实渲染段数 = 这里看到的段数。每段第一张作开头帧、最后一张作结尾帧,主角每段都会塞进参考图锁人。
+            固定切成 {segments.length} 段(30s = 2×15、45s = 3×15),Seedance 只跑 {segments.length} 次,省一半 token。每段第一张作开头帧、最后一张作结尾帧,主角每段都会塞进参考图锁人。
           </p>
           {segments.map((seg) => {
             const cells = segClipsOf(seg);
