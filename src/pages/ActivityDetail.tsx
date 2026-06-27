@@ -7,12 +7,13 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed } from 'lucide-react';
+import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed, Copy, Ticket } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
-  type Activity, type ActivityApplication, CLAIM_STATUS_LABEL, getActivityTimeInfo,
+  type Activity, type ActivityApplication, CLAIM_STATUS_LABEL, getActivityTimeInfo, buildClaimShareUrl,
 } from '@/lib/voucher';
+import { invokeFn } from '@/lib/invokeFn';
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
 import { PublishConfirmDialog } from '@/components/voucher/PublishConfirmDialog';
