@@ -196,6 +196,7 @@ export default function MarketingVideo() {
         visual_signature: character.visual_signature, core_emotion: character.core_emotion,
         cover_url: character.cover_url,
         extra_reference_urls: character.extra_reference_urls || [],
+        verified_asset_uri: (character as any).verified_asset_uri || null,
       } : null;
       const { data, error } = await supabase.functions.invoke('generate-marketing-video-script', {
         body: {
