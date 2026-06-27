@@ -524,6 +524,7 @@ Deno.serve(async (req) => {
         status: "running", segment_total: segmentTotal, segment_done: 0,
         stage: "generating", character_id: character?.id || null,
         character_name: character?.name || null,
+        cover_url: imageUrls[0] || character?.cover_url || null,
         image_usage: {
           per_segment: submissions.map((s) => ({
             segment_index: s.i,
