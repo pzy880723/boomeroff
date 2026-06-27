@@ -429,7 +429,7 @@ Deno.serve(async (req) => {
     // 2) 并行提交所有段
     const submissions = await Promise.all(subScripts.map((sub, i) => {
       const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
-      const prompt = buildPrompt(sub, styleKey, shopBlock, label, character);
+      const prompt = buildPrompt(sub, styleKey, shopBlock, label, character, realism);
       const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
       // 只有第 1 段在完全无图时兜底用 image_urls[0],其他段不强塞
       const segFallback = i === 0 && !disableReferences ? fallbackFirst : undefined;
