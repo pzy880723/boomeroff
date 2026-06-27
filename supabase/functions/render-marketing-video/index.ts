@@ -5,6 +5,7 @@ import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey 
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segments.ts";
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT } from "../_shared/seedance-models.ts";
+import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,12 +17,23 @@ const json = (b: unknown, s = 200) =>
 const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
 const MAX_SEG_DUR = SEEDANCE_MAX_SINGLE_SHOT; // 单段渲染上限(秒)= 15
 
-function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string, segLabel?: string, character?: any): string {
+function buildPrompt(
+  script: any,
+  styleKey: VideoStyleKey,
+  shopBlock: string,
+  segLabel?: string,
+  character?: any,
+  realism: Realism = 'stylized',
+): string {
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const lines: string[] = [];
   lines.push(`严格按以下分镜拍摄,不要增加、删减或调换镜头顺序。`);
   if (character?.name) {
-    lines.push(`【主角锁定】每段必须出现同一主角:${character.name}(${character.role_label || '主角'})。外观锁:${character.visual_signature || '以首帧参考身份板为准'}。面部、发型、服装、体型、年龄、气质严格一致,严禁换人或换装。`);
+    if (realism === 'photoreal') {
+      lines.push(`【主体定义】将参考图中的 ${character.name}(${character.role_label || '主角'})定义为 主体1。后续所有镜头中,涉及到这位角色一律称呼「主体1」。外观锁:${character.visual_signature || '以首帧参考身份板为准'}。五官、发型、肤色、体型、年龄、气质与参考图完全一致,严禁换人或换装,严禁双胞胎/分身。`);
+    } else {
+      lines.push(`【主角锁定】每段必须出现同一主角:${character.name}(${character.role_label || '主角'})。外观锁:${character.visual_signature || '以首帧参考身份板为准'}。面部、发型、服装、体型、年龄、气质严格一致,严禁换人或换装。`);
+    }
   }
   if (segLabel) lines.push(`这是【${segLabel}】,后续会与其他段无缝拼接,请保持画面、光线、调色与人物连贯。`);
   lines.push(`整体风格:${styleEn}。品牌:BOOMER·OFF 中古二手杂货店,货架密集,室内暖色调。`);
@@ -40,8 +52,8 @@ function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string, se
     const parts = [`【${label}】(${dur}秒, 运镜:${motion})`];
     if (scene) parts.push(`场景:${scene}`);
     if (action) parts.push(`动作/镜头:${action}`);
-    if (dialogue) parts.push(`台词(同步口型/画外音):"${dialogue}"`);
-    if (subtitle) parts.push(`屏幕字幕(中文叠加):"${subtitle}"`);
+    if (dialogue) parts.push(`台词(同步口型/画外音):{${dialogue}}`);
+    if (subtitle) parts.push(`屏幕字幕(中文叠加):【${subtitle}】`);
     lines.push(parts.join(' '));
   };
 
@@ -51,8 +63,19 @@ function buildPrompt(script: any, styleKey: VideoStyleKey, shopBlock: string, se
   }
   if (script.outro) pushShot('收尾', script.outro);
 
+  // 火山官方推荐的画质+约束尾段
+  if (realism === 'photoreal') {
+    lines.push(`整体画面:真人写实电影质感,高清,细节丰富,色彩自然,光影柔和,胶片颗粒微细,无滤镜,无 HDR 过曝;人物面部稳定不变形,动作自然流畅,无卡顿、无穿模、无 AI 涂抹感、无多余手指。`);
+    lines.push(`风格约束:真人写实,非动漫,非卡通,非插画,非 3D 渲染。`);
+    lines.push(`视频全程禁止出现外形、着装、配饰完全一致的人物,禁止生成同款分身、双胞胎效果,同一画面中仅保留单个对应角色。`);
+    lines.push(`不要生成任何文字或字幕,不要生成水印,不要生成 Logo。`);
+  } else {
+    lines.push(`整体画面保持轻度风格化的影视宣传质感,画面干净不偏色,无滤镜、无暖黄/复古调色;人物面部稳定不变形,动作自然流畅,无卡顿、无穿模、无多余手指。`);
+    lines.push(`不要生成任何文字或字幕,不要生成水印,不要生成 Logo。`);
+  }
+
   const out = lines.join('\n');
-  return out.length > 1800 ? out.slice(0, 1800) : out;
+  return out.length > 2000 ? out.slice(0, 2000) : out;
 }
 
 function clampDuration(d: any): number {
