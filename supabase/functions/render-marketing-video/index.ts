@@ -9,6 +9,7 @@ import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segments.ts";
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
+import { STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
