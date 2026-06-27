@@ -87,11 +87,11 @@ export function ActivityFeedbackView({
         if (!file.type.startsWith('image/')) { toast.error(`${file.name} 不是图片`); continue; }
         if (file.size > 8 * 1024 * 1024) { toast.error(`${file.name} 超过 8MB`); continue; }
         const dataUrl = await fileToDataUrl(file);
-        const { data: resp, error } = await supabase.functions.invoke('activity-feedback', {
+        const { data: resp, error } = await invokeFn<any>('activity-feedback', {
           body: { action: 'upload', share_token: shareToken, short_code: shortCode, data_url: dataUrl },
         });
-        if (error || (resp as any)?.error) {
-          toast.error((resp as any)?.error || error?.message || '上传失败');
+        if (error) {
+          toast.error(error.message);
           continue;
         }
         const r = resp as any;
