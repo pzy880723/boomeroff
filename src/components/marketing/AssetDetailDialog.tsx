@@ -90,6 +90,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { buildXhsViral, VIRAL_STYLE_LABELS, type ViralStyle } from '@/lib/shareCopy';
+import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 
 interface CopyCand {
   title?: string;
@@ -117,6 +118,7 @@ export function AssetDetailDialog({
   const [genCopyLoading, setGenCopyLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [lbOpen, setLbOpen] = useState(false);
 
   const regenerateVideo = async () => {
     if (!asset || asset.kind !== 'video') return;
@@ -336,7 +338,14 @@ export function AssetDetailDialog({
         {asset.kind === 'photo' && (
           <div className="space-y-3">
             {asset.output_url ? (
-              <img src={asset.output_url} alt="" className="w-full rounded-lg border border-accent/15" />
+              <button
+                type="button"
+                onClick={() => setLbOpen(true)}
+                className="block w-full"
+                aria-label="放大查看"
+              >
+                <img src={asset.output_url} alt="" className="w-full rounded-lg border border-accent/15" loading="eager" decoding="async" />
+              </button>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-8">暂无输出图</p>
             )}
@@ -596,6 +605,13 @@ export function AssetDetailDialog({
           </div>
         )}
       </DialogContent>
+      {asset.kind === 'photo' && asset.output_url && (
+        <ImageLightbox
+          open={lbOpen}
+          onClose={() => setLbOpen(false)}
+          images={[asset.output_url]}
+        />
+      )}
     </Dialog>
   );
 }

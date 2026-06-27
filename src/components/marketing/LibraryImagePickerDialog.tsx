@@ -8,12 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Loader2, Check, Upload } from 'lucide-react';
+import { Loader2, Check, Upload, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadMarketingImages, type UploadStage } from '@/pages/marketing/uploadMarketingImages';
 import { fileSha256 } from '@/lib/fileSha256';
 import { UploadProgressBar, ItemTile, type UploadTileItem } from './UploadProgressTiles';
 import { DEFAULT_TAGS } from './AssetTagDialog';
+import { thumbUrl } from '@/lib/imageUrl';
+import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 
 type Pending = UploadTileItem & { file: File };
 
@@ -32,6 +34,7 @@ export function LibraryImagePickerDialog({
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Pending[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [lbIdx, setLbIdx] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const loadTimerRef = useRef<number | null>(null);
 
@@ -296,31 +299,55 @@ export function LibraryImagePickerDialog({
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2">
-            {filteredItems.map((it) => {
+            {filteredItems.map((it, i) => {
               const url = it.output_url as string;
               const active = sel.has(url);
+              const thumb = thumbUrl(url, 320) || url;
               return (
-                <button key={it.id} onClick={() => toggle(url)}
-                  className={[
-                    'relative aspect-square rounded overflow-hidden border-2 transition-all',
-                    active ? 'border-accent shadow-md' : 'border-transparent hover:border-accent/40',
-                  ].join(' ')}>
-                  <img src={url} alt="" className="w-full h-full object-cover" />
-                  {Array.isArray(it.tags) && it.tags.length > 0 && (
-                    <span className="absolute bottom-1 left-1 text-[9px] bg-foreground/60 text-background px-1.5 py-0.5 rounded">
-                      {it.tags[0]}{it.tags.length > 1 ? `+${it.tags.length - 1}` : ''}
-                    </span>
-                  )}
-                  {active && (
-                    <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-accent text-accent-foreground flex items-center justify-center">
-                      <Check className="w-3 h-3" strokeWidth={3} />
-                    </div>
-                  )}
-                </button>
+                <div key={it.id} className="relative">
+                  <button onClick={() => toggle(url)}
+                    className={[
+                      'block w-full relative aspect-square rounded overflow-hidden border-2 transition-all',
+                      active ? 'border-accent shadow-md' : 'border-transparent hover:border-accent/40',
+                    ].join(' ')}>
+                    <img
+                      src={thumb}
+                      alt=""
+                      loading={i < 6 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                    />
+                    {Array.isArray(it.tags) && it.tags.length > 0 && (
+                      <span className="absolute bottom-1 left-1 text-[9px] bg-foreground/60 text-background px-1.5 py-0.5 rounded">
+                        {it.tags[0]}{it.tags.length > 1 ? `+${it.tags.length - 1}` : ''}
+                      </span>
+                    )}
+                    {active && (
+                      <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-accent text-accent-foreground flex items-center justify-center">
+                        <Check className="w-3 h-3" strokeWidth={3} />
+                      </div>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setLbIdx(i); }}
+                    className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-black/55 backdrop-blur text-white flex items-center justify-center active:scale-95"
+                    aria-label="放大查看"
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                  </button>
+                </div>
               );
             })}
           </div>
         )}
+
+        <ImageLightbox
+          open={lbIdx !== null}
+          onClose={() => setLbIdx(null)}
+          images={filteredItems.map((it) => it.output_url as string).filter(Boolean)}
+          initialIndex={lbIdx ?? 0}
+        />
 
         <div className="flex gap-2 pt-2">
           <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>取消</Button>

@@ -19,6 +19,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
 import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
+import { ImageLightbox } from '@/components/voucher/ImageLightbox';
+import { thumbUrl } from '@/lib/imageUrl';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
@@ -1121,6 +1123,7 @@ function RenderProgressCard({
 }
 
 function StoryboardStrip({ script, busy, warn }: { script: any; busy: boolean; warn: string | null }) {
+  const [lbIdx, setLbIdx] = useState<number | null>(null);
   const clips: { label: string; url: string | null }[] = [];
   if (script?.hook) clips.push({ label: '钩子', url: script.hook.storyboard_url || null });
   if (Array.isArray(script?.scenes)) {
@@ -1129,13 +1132,20 @@ function StoryboardStrip({ script, busy, warn }: { script: any; busy: boolean; w
   if (script?.outro) clips.push({ label: '收尾', url: script.outro.storyboard_url || null });
   const has = clips.some((c) => c.url);
   if (!busy && !has && !warn) return null;
+  const lbImages = clips.map((c) => c.url).filter((u): u is string => !!u);
+  // 用"含图的索引"映射回 clips 索引,点击时打开对应那张
+  const imgIdxOf = (clipIdx: number) => {
+    let count = 0;
+    for (let i = 0; i < clipIdx; i++) if (clips[i].url) count++;
+    return count;
+  };
   return (
     <div className="border border-accent/20 rounded-lg p-3 space-y-2 bg-accent/5">
       <div className="flex items-center gap-2">
         <span className="font-display text-[11px] text-accent tracking-[0.18em]">分镜静帧</span>
         <span className="w-1 h-1 rounded-full bg-accent" />
         <span className="text-[10px] text-muted-foreground">
-          {busy ? '正在合成每一镜的定格画面…' : has ? `${clips.filter((c) => c.url).length}/${clips.length} 张已就绪` : '尚未合成'}
+          {busy ? '正在合成每一镜的定格画面…' : has ? `${clips.filter((c) => c.url).length}/${clips.length} 张已就绪 · 点开放大` : '尚未合成'}
         </span>
         {busy && <Loader2 className="w-3 h-3 animate-spin text-accent" />}
       </div>
@@ -1143,7 +1153,14 @@ function StoryboardStrip({ script, busy, warn }: { script: any; busy: boolean; w
         {clips.map((c, i) => (
           <div key={i} className="flex flex-col items-center gap-1 shrink-0">
             {c.url ? (
-              <img src={c.url} alt="" className="w-16 h-28 object-cover rounded border border-accent/20 bg-muted" />
+              <button
+                type="button"
+                onClick={() => setLbIdx(imgIdxOf(i))}
+                className="w-16 h-28 rounded overflow-hidden border border-accent/20 bg-muted active:scale-95 transition-transform"
+                aria-label={`放大查看 ${c.label}`}
+              >
+                <img src={thumbUrl(c.url, 320) || c.url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              </button>
             ) : (
               <div className="w-16 h-28 rounded border border-dashed border-border bg-muted/40 flex items-center justify-center text-[9px] text-muted-foreground">
                 {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : '—'}
@@ -1156,6 +1173,12 @@ function StoryboardStrip({ script, busy, warn }: { script: any; busy: boolean; w
       {warn && (
         <p className="text-[10px] text-amber-600 leading-snug">{warn}</p>
       )}
+      <ImageLightbox
+        open={lbIdx !== null}
+        onClose={() => setLbIdx(null)}
+        images={lbImages}
+        initialIndex={lbIdx ?? 0}
+      />
     </div>
   );
 }

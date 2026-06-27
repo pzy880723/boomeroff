@@ -1,5 +1,9 @@
-// 图片放大查看器：全屏暗背景 + 支持多图左右切换 + 手势滑动
-// 注意：拦截 pointerdown 冒泡，避免父级 Radix Dialog 误判为"外部点击"而被一并关闭。
+// 通用图片放大查看器
+// 设计要点(2025-06 重做):
+// - 关闭按钮做大,放右上 + 底部各一个,手指好点中
+// - 图片留出 ≥56px 四周空白,点空白也能退出
+// - 左右大箭头 + 触摸滑动 + 键盘 ← → / Esc
+// - portal 到 body + 拦截 pointerdown 冒泡,避免 Radix Dialog 被一并关闭
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -30,7 +34,7 @@ export function ImageLightbox({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, images.length, onClose]);
 
-  // 阻止 pointerdown 冒泡到 document —— Radix Dialog 用全局 pointerdown 判定外部点击
+  // 拦截 pointerdown 冒泡,Radix Dialog 用全局 pointerdown 判定外部点击
   useEffect(() => {
     if (!open) return;
     const el = rootRef.current;
@@ -72,56 +76,107 @@ export function ImageLightbox({
     }
   };
 
+  const stop = (e: React.MouseEvent | React.TouchEvent) => e.stopPropagation();
+
   return createPortal(
     <div
       ref={rootRef}
       data-lightbox-root
-      className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center select-none"
+      className="fixed inset-0 z-[200] bg-black/92 select-none"
       onClick={onClose}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
+      style={{
+        paddingTop: 'max(env(safe-area-inset-top), 12px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 12px)',
+      }}
     >
-      <button
-        type="button"
-        className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white/10 text-white hover:bg-white/20"
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-        aria-label="关闭"
+      {/* 顶部条:页码 + 关闭(大按钮) */}
+      <div
+        className="absolute top-0 inset-x-0 flex items-center justify-between px-3 pt-3 pointer-events-none"
+        style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
       >
-        <X className="w-5 h-5" />
-      </button>
+        {images.length > 1 ? (
+          <div
+            className="pointer-events-auto text-white/90 text-[12px] bg-black/55 backdrop-blur px-3 py-1.5 rounded-full"
+            onClick={stop}
+          >
+            {safeIdx + 1} / {images.length}
+          </div>
+        ) : <div />}
+        <button
+          type="button"
+          className="pointer-events-auto w-12 h-12 rounded-full bg-white text-black shadow-xl flex items-center justify-center active:scale-95 transition-transform"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          aria-label="关闭"
+        >
+          <X className="w-6 h-6" strokeWidth={2.5} />
+        </button>
+      </div>
 
+      {/* 左右大箭头 */}
       {images.length > 1 && (
         <>
           <button
             type="button"
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-30"
+            className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/15 backdrop-blur text-white hover:bg-white/25 active:scale-95 disabled:opacity-25 flex items-center justify-center"
             disabled={safeIdx === 0}
             onClick={(e) => { e.stopPropagation(); goPrev(); }}
             aria-label="上一张"
           >
-            <ChevronLeft className="w-6 h-6" />
+            <ChevronLeft className="w-7 h-7" strokeWidth={2.5} />
           </button>
           <button
             type="button"
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-30"
+            className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/15 backdrop-blur text-white hover:bg-white/25 active:scale-95 disabled:opacity-25 flex items-center justify-center"
             disabled={safeIdx === images.length - 1}
             onClick={(e) => { e.stopPropagation(); goNext(); }}
             aria-label="下一张"
           >
-            <ChevronRight className="w-6 h-6" />
+            <ChevronRight className="w-7 h-7" strokeWidth={2.5} />
           </button>
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/80 text-xs bg-black/40 px-2 py-0.5 rounded">
-            {safeIdx + 1} / {images.length}
-          </div>
         </>
       )}
 
-      <img
-        src={src}
-        alt=""
-        className="max-w-[95vw] max-h-[90vh] object-contain pointer-events-none"
-        draggable={false}
-      />
+      {/* 居中图片,留出空白便于"点空白关闭" */}
+      <div className="absolute inset-0 flex items-center justify-center px-14 py-20">
+        <img
+          src={src}
+          alt=""
+          className="max-w-full max-h-full object-contain pointer-events-none"
+          draggable={false}
+        />
+      </div>
+
+      {/* 底部:圆点 + 关闭胶囊 */}
+      <div
+        className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 pb-3 pointer-events-none"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 14px)' }}
+      >
+        {images.length > 1 && images.length <= 12 && (
+          <div className="pointer-events-auto flex gap-1.5 bg-black/45 backdrop-blur px-2.5 py-1.5 rounded-full" onClick={stop}>
+            {images.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+                className={[
+                  'w-1.5 h-1.5 rounded-full transition-all',
+                  i === safeIdx ? 'bg-white w-4' : 'bg-white/45',
+                ].join(' ')}
+                aria-label={`第 ${i + 1} 张`}
+              />
+            ))}
+          </div>
+        )}
+        <button
+          type="button"
+          className="pointer-events-auto px-5 py-2 rounded-full bg-white/95 text-black text-[13px] font-medium shadow-xl active:scale-95"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+        >
+          关闭
+        </button>
+      </div>
     </div>,
     document.body,
   );
