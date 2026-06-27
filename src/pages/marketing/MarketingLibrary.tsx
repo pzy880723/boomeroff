@@ -533,6 +533,18 @@ export default function MarketingLibrary() {
                 </div>
               ) : (
                 <div className="flex items-center gap-1">
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={runBackfillStoryboards}
+                      disabled={backfilling}
+                      title="把历史分镜头图回填到素材库"
+                    >
+                      {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      回填分镜头
+                    </Button>
+                  )}
                   {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
                     <Button
                       size="sm"
