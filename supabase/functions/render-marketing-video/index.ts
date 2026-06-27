@@ -1,11 +1,13 @@
 // 提交视频渲染任务到火山方舟 Seedance 2.0 API。
-// 渲染策略:每个分镜 = 1 段,独立调用 Seedance(用该镜静帧作 first_frame),完成后由前端 ffmpeg-wasm 拼接。
-// 不再走"整段直出"路径——确保脚本里每个分镜的画面都真正出现在最终视频里。
+// 渲染策略由 body.render_strategy 决定:
+//   - 'one_shot':整段脚本 + 最多 9 张参考图,单次 Seedance 调用直出 ≤15s(对齐小云雀的玩法)
+//   - 'per_shot':每个分镜 = 1 段,独立调用 Seedance,完成后由前端 ffmpeg-wasm 拼接(强一致性)
+//   - 'auto'(默认):≤15s 且分镜数 ≤4 → one_shot,否则 per_shot
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segments.ts";
-import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT } from "../_shared/seedance-models.ts";
+import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 
 const corsHeaders = {
@@ -17,6 +19,115 @@ const json = (b: unknown, s = 200) =>
 
 const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
 const MAX_SEG_DUR = SEEDANCE_MAX_SINGLE_SHOT; // 单段渲染上限(秒)= 15
+
+type RenderStrategy = 'one_shot' | 'per_shot' | 'auto';
+function normalizeStrategy(v: unknown): RenderStrategy {
+  return v === 'one_shot' || v === 'per_shot' || v === 'auto' ? v : 'auto';
+}
+
+// 「一次推理多镜」Prompt:把整段脚本翻译成单条「分镜导演口令」,模型自己切镜头。
+function buildOneShotPrompt(
+  script: any,
+  styleKey: VideoStyleKey,
+  shopBlock: string,
+  character: any,
+  realism: Realism,
+): string {
+  const styleEn = VIDEO_STYLE_EN[styleKey];
+  const total = clampDuration(script.total_duration_s || 15);
+  const aspect = script.aspect || '9:16';
+  const shots: { label: string; sc: any }[] = [];
+  const isMeaningful = (sc: any) =>
+    sc && typeof sc === 'object' && (
+      (typeof sc.scene === 'string' && sc.scene.trim()) ||
+      (typeof sc.action === 'string' && sc.action.trim()) ||
+      (typeof sc.subtitle === 'string' && sc.subtitle.trim()) ||
+      (typeof sc.dialogue === 'string' && sc.dialogue.trim())
+    );
+  if (isMeaningful(script.hook)) shots.push({ label: '开场', sc: script.hook });
+  if (Array.isArray(script.scenes)) script.scenes.forEach((sc: any, i: number) => {
+    if (isMeaningful(sc)) shots.push({ label: `镜头${i + 1}`, sc });
+  });
+  if (isMeaningful(script.outro)) shots.push({ label: '收尾', sc: script.outro });
+
+  const lines: string[] = [];
+  lines.push(`【一段 ${total}s 的 ${aspect} 短视频,整体风格:${styleEn}】`);
+  if (character?.name) {
+    lines.push(`【主体1】参考图 1 中的 ${character.name}(${character.role_label || '主角'})为全片唯一主角。外观锁:${character.visual_signature || '以参考图为准'}。全程同一人,禁止换人/换装/分身/双胞胎。`);
+  }
+  lines.push(`【镜头节奏】共 ${shots.length || 1} 个镜头,以自然剪辑切换,不要黑场过渡,人物、光线、调色保持一致。`);
+
+  // 按时间线累积秒数,告诉模型每镜大概的起止
+  let t = 0;
+  for (const { label, sc } of shots) {
+    const dur = Math.max(1, Math.min(MAX_SEG_DUR, Number(sc.duration_s) || 3));
+    const start = t; const end = Math.min(total, t + dur); t = end;
+    const motion = (sc.motion || '自然运镜').toString();
+    const scene = (sc.scene || sc.video_prompt || '').toString().trim();
+    const action = (sc.action || '').toString().trim();
+    const dialogue = (sc.dialogue || '').toString().trim();
+    const subtitle = (sc.subtitle || sc.text || '').toString().trim();
+    const parts = [`【${label}】(${start}-${end}s · ${motion})`];
+    if (scene) parts.push(`场景:${scene}`);
+    if (action) parts.push(`动作:${action}`);
+    if (dialogue) parts.push(`台词(同步口型):{${dialogue}}`);
+    if (subtitle) parts.push(`屏幕字幕:【${subtitle}】`);
+    lines.push(parts.join(' '));
+  }
+
+  if (shopBlock) lines.push(`店铺背景:\n${shopBlock}`);
+  lines.push(`整体环境:BOOMER·OFF 中古二手杂货店,货架密集,室内暖色调。`);
+  if (realism === 'photoreal') {
+    lines.push(`整体画面:真人写实电影质感,高清,细节丰富,色彩自然,光影柔和;人物面部稳定不变形,动作自然流畅,无卡顿、无穿模、无 AI 涂抹感、无多余手指。`);
+    lines.push(`风格约束:真人写实,非动漫,非卡通,非插画,非 3D 渲染。`);
+  } else {
+    lines.push(`整体画面保持轻度风格化的影视宣传质感,画面干净不偏色,无滤镜、无暖黄/复古调色;人物面部稳定不变形,动作自然流畅。`);
+  }
+  lines.push(`不要生成任何文字或字幕水印,不要生成 Logo。`);
+
+  const out = lines.join('\n');
+  return out.length > 2000 ? out.slice(0, 2000) : out;
+}
+
+// 一次成片模式的参考图聚合(全 reference 通道,上限 9 张,按权重去重)
+function resolveOneShotImages(
+  script: any,
+  imageUrls: string[],
+  character: { cover_url?: string; extra_reference_urls?: string[]; verified_asset_uri?: string } | null,
+): string[] {
+  const refs: string[] = [];
+  const seen = new Set<string>();
+  const push = (u?: string | null) => {
+    if (!u || seen.has(u)) return;
+    seen.add(u); refs.push(u);
+  };
+  // 1) 角色身份板(认证 asset:// 优先)
+  if (character?.verified_asset_uri) push(character.verified_asset_uri);
+  else if (character?.cover_url) push(character.cover_url);
+  // 2) 角色额外参考
+  for (const u of character?.extra_reference_urls || []) push(u);
+  // 3) 每镜手动绑定的实景照(按出场顺序)
+  const allScenes: any[] = [];
+  if (script.hook) allScenes.push(script.hook);
+  if (Array.isArray(script.scenes)) allScenes.push(...script.scenes);
+  if (script.outro) allScenes.push(script.outro);
+  for (const sc of allScenes) {
+    const idx = typeof sc?.image_index === 'number' ? sc.image_index
+              : (typeof sc?.image_ref?.index === 'number' ? sc.image_ref.index : null);
+    if (idx !== null && imageUrls[idx]) push(imageUrls[idx]);
+  }
+  // 4) 每镜静帧(若已合成)
+  for (const sc of allScenes) {
+    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) push(sc.storyboard_url);
+  }
+  // 5) 剩余实景照按顺序补
+  for (const u of imageUrls) push(u);
+  // 6) 兜底封面
+  if (!refs.length && character?.cover_url) push(character.cover_url);
+  return refs.slice(0, SEEDANCE_MAX_REFS);
+}
+
+
 
 function buildPrompt(
   script: any,
@@ -146,7 +257,7 @@ async function submitArkTask(opts: {
   const content: any[] = [{ type: "text", text: opts.prompt }];
   // Seedance 2.0:全 reference 模式。first_frame / last_frame 与 reference_image 互斥,
   // 我们这种「分镜独立表达」的内容不需要逐帧锁画面,统一走 reference_image 通道。
-  const refs = (opts.referenceImages || []).filter(Boolean).slice(0, 4);
+  const refs = (opts.referenceImages || []).filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
   for (const url of refs) {
     content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
   }
@@ -226,7 +337,7 @@ function resolveSegmentImages(
   // 5) 实在啥都没有 → 兜底封面
   if (!refs.length && fallbackFirst) push(fallbackFirst);
 
-  return { referenceImages: refs.slice(0, 4) };
+  return { referenceImages: refs.slice(0, SEEDANCE_MAX_REFS) };
 }
 
 
@@ -291,6 +402,101 @@ Deno.serve(async (req) => {
     const characterCover: string | undefined = character?.cover_url;
     const fallbackFirst = imageUrls[0] || characterCover;
 
+    // ============ 渲染策略分发(one_shot / per_shot / auto) ============
+    const requestedStrategy = normalizeStrategy(body.render_strategy);
+    const meaningfulShotCount =
+      (script.hook && (script.hook.scene || script.hook.action || script.hook.subtitle || script.hook.dialogue) ? 1 : 0) +
+      (Array.isArray(script.scenes) ? script.scenes.filter((sc: any) => sc && (sc.scene || sc.action || sc.subtitle || sc.dialogue)).length : 0) +
+      (script.outro && (script.outro.scene || script.outro.action || script.outro.subtitle || script.outro.dialogue) ? 1 : 0);
+    let strategy: 'one_shot' | 'per_shot' = 'per_shot';
+    let autoReason = '';
+    if (requestedStrategy === 'one_shot') {
+      strategy = 'one_shot'; autoReason = 'user_one_shot';
+    } else if (requestedStrategy === 'per_shot') {
+      strategy = 'per_shot'; autoReason = 'user_per_shot';
+    } else {
+      // auto:总时长 ≤15s 且分镜数 ≤4 → one_shot
+      if (totalDur > 0 && totalDur <= MAX_SEG_DUR && meaningfulShotCount <= 4) {
+        strategy = 'one_shot';
+        autoReason = `auto:duration<=${MAX_SEG_DUR}s,shots=${meaningfulShotCount}`;
+      } else {
+        strategy = 'per_shot';
+        autoReason = `auto:duration=${totalDur}s,shots=${meaningfulShotCount}`;
+      }
+    }
+    console.log(`[render] strategy=${strategy} (${autoReason})`);
+
+    const isSensitive = (err?: string, raw?: any) => {
+      const code = raw?.error?.code || '';
+      const msg = (err || '') + ' ' + (raw?.error?.message || '');
+      return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
+    };
+
+    // ============ 一次成片(one_shot) ============
+    if (strategy === 'one_shot') {
+      const oneShotDur = Math.max(4, Math.min(MAX_SEG_DUR, Math.round(totalDur || MAX_SEG_DUR)));
+      const effectiveChar = disableReferences ? null : character;
+      const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
+      const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism);
+      const fallbackNotes: string[] = [];
+      console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur}`);
+
+      // L0: 全量参考(最多 9 张)
+      let r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: refImages });
+      // L1: 仅角色板 / 第一张
+      if (!r.ok && isSensitive(r.error, (r as any).raw) && refImages.length > 1) {
+        fallbackNotes.push('references_trimmed_for_safety');
+        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: refImages.slice(0, 1) });
+      }
+      // L2: 纯文本
+      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+        fallbackNotes.push('references_dropped_for_safety');
+        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution });
+      }
+      if (!r.ok) {
+        return json({ ok: false, error: r.error, raw: (r as any).raw });
+      }
+
+      const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
+        user_id: u.user.id, script, status: "running", shop_id: shopId,
+        provider: "volcengine_seedance", provider_task_id: r.id,
+        segment_total: 1, segment_index: 0, parent_job_id: null,
+      }).select().single();
+      if (pErr || !parent) {
+        console.error("[render one_shot] parent insert", pErr);
+        return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
+      }
+
+      await admin.from("marketing_assets").insert({
+        user_id: u.user.id, kind: "video", shop_id: shopId,
+        input_image_urls: imageUrls, output_url: null,
+        meta: {
+          job_id: parent.id, video_type: script.video_type,
+          duration: oneShotDur, aspect: ratio,
+          mode: refImages.length ? "reference2video" : "text2video",
+          render_mode: "one_shot_reference",
+          render_strategy: "one_shot",
+          auto_decision_reason: autoReason,
+          one_shot_refs: refImages,
+          topic: script.topic || "", style: styleKey,
+          style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
+          warnings: [
+            ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
+            ...fallbackNotes,
+          ],
+          status: "running", segment_total: 1, segment_done: 0,
+          stage: "generating", character_id: character?.id || null,
+          character_name: character?.name || null,
+          cover_url: imageUrls[0] || character?.cover_url || null,
+        },
+      });
+
+      return json({
+        ok: true, success: true, job_id: parent.id, status: "running",
+        segment_total: 1, render_strategy: "one_shot", auto_decision_reason: autoReason,
+      });
+    }
+
     // ============ 逐镜渲染路径(每个分镜 = 1 段,完成后由前端拼接) ============
 
     const subScripts = splitScript(script);
@@ -308,12 +514,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
     }
 
-    // 2) 并行提交所有段(每段带 3 级真人内容降级链)
-    const isSensitive = (err?: string, raw?: any) => {
-      const code = raw?.error?.code || '';
-      const msg = (err || '') + ' ' + (raw?.error?.message || '');
-      return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
-    };
+    // 2) 并行提交所有段(每段带 3 级真人内容降级链;isSensitive 复用上面声明的)
     const submissions = await Promise.all(subScripts.map(async (sub, i) => {
       const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
       const prompt = buildPrompt(sub, styleKey, shopBlock, label, character, realism);
@@ -382,6 +583,8 @@ Deno.serve(async (req) => {
         duration: totalDur, aspect: ratio,
         mode: anyFirst ? "image2video" : (totalRefImages > 0 ? "reference2video" : "text2video"),
         render_mode: "per_shot",
+        render_strategy: "per_shot",
+        auto_decision_reason: autoReason,
         topic: script.topic || "", style: styleKey,
         style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
         warnings: [
@@ -408,6 +611,7 @@ Deno.serve(async (req) => {
     return json({
       ok: true, success: true, job_id: parent.id, status: "running",
       segment_total: segmentTotal, child_task_ids: childTaskIds,
+      render_strategy: "per_shot", auto_decision_reason: autoReason,
     });
   } catch (e) {
     console.error("[render] error", e);

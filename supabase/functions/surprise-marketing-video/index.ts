@@ -431,7 +431,11 @@ Deno.serve(async (req) => {
     const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
-      body: JSON.stringify({ script: { ...script, video_type: vtype }, style, shop_id: shopId, realism }),
+      body: JSON.stringify({
+        script: { ...script, video_type: vtype }, style, shop_id: shopId, realism,
+        // 「惊喜一下」对齐小云雀:一次推理直出多镜,模型自己切镜头
+        render_strategy: 'one_shot',
+      }),
     });
     const renderData = await renderRes.json().catch(() => ({}));
     if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {

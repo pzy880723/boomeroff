@@ -1,4 +1,4 @@
-// 视频页"选择主角"组件：横滑选 + 新建 + 附加参考图(最多 2 张)
+// 视频页"选择主角"组件：横滑选 + 新建 + 附加参考图(最多 6 张,搭配角色板共 7 张,留出脚本侧再带入 2 张实景到 Seedance 的 9 张参考上限)
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, User, X, Upload, FolderOpen, Loader2 } from 'lucide-react';
@@ -24,7 +24,7 @@ export type Character = {
   extra_reference_urls?: string[];
 };
 
-const MAX_EXTRA_REFS = 2;
+const MAX_EXTRA_REFS = 6;
 
 export function CharacterPicker({
   shopId, value, onChange,
