@@ -611,6 +611,7 @@ Deno.serve(async (req) => {
     return json({
       ok: true, success: true, job_id: parent.id, status: "running",
       segment_total: segmentTotal, child_task_ids: childTaskIds,
+      render_strategy: "per_shot", auto_decision_reason: autoReason,
     });
   } catch (e) {
     console.error("[render] error", e);
