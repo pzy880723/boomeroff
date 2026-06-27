@@ -1,6 +1,8 @@
 // Deno 端的视频分段规划。
 // 与 src/lib/marketingSegments.ts 保持同步;改一处务必两边都改。
 
+// Seedance 2.0 全部走 reference_image 通道。"first"/"last" 是 1.5 i2v 时代的字段,
+// 仍保留在类型里只是为了兼容历史数据 / 老脚本字段,运行时一律按参考图处理。
 export type ImageRole = "first" | "last" | "reference";
 
 export interface SceneImageRef {
