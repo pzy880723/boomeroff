@@ -142,9 +142,9 @@ function buildPrompt(
   lines.push(`严格按以下分镜拍摄,不要增加、删减或调换镜头顺序。`);
   if (character?.name) {
     if (realism === 'photoreal') {
-      lines.push(`【主体定义】将参考图中的 ${character.name}(${character.role_label || '主角'})定义为 主体1。后续所有镜头中,涉及到这位角色一律称呼「主体1」。外观锁:${character.visual_signature || '以首帧参考身份板为准'}。五官、发型、肤色、体型、年龄、气质与参考图完全一致,严禁换人或换装,严禁双胞胎/分身。`);
+      lines.push(`【主体定义】将参考图中的 ${character.name}(${character.role_label || '主角'})定义为 主体1。后续所有镜头中,涉及到这位角色一律称呼「主体1」。外观锁:${character.visual_signature || '以参考图身份板为准'}。五官、发型、肤色、体型、年龄、气质与参考图完全一致,严禁换人或换装,严禁双胞胎/分身。`);
     } else {
-      lines.push(`【主角锁定】每段必须出现同一主角:${character.name}(${character.role_label || '主角'})。外观锁:${character.visual_signature || '以首帧参考身份板为准'}。面部、发型、服装、体型、年龄、气质严格一致,严禁换人或换装。`);
+      lines.push(`【主角锁定】每段必须出现同一主角:${character.name}(${character.role_label || '主角'})。外观锁:${character.visual_signature || '以参考图身份板为准'}。面部、发型、服装、体型、年龄、气质严格一致,严禁换人或换装。`);
     }
   }
   if (segLabel) lines.push(`这是【${segLabel}】,后续会与其他段无缝拼接,请保持画面、光线、调色与人物连贯。`);
