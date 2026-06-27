@@ -1,5 +1,5 @@
 // 视频页"选择主角"组件：横滑选 + 新建 + 附加参考图(最多 2 张)
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, User, X, Upload, FolderOpen, Loader2 } from 'lucide-react';
 import { CharacterCreateDialog } from './CharacterCreateDialog';
@@ -7,6 +7,8 @@ import { LibraryImagePickerDialog } from './LibraryImagePickerDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from '@/pages/marketing/uploadMarketingImages';
 import { toast } from 'sonner';
+import { thumbUrl } from '@/lib/imageUrl';
+import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 
 export type Character = {
   id: string;
