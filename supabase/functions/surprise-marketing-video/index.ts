@@ -1,13 +1,15 @@
-// 「惊喜一下」一键随机推广视频
+// 「惊喜一下」一键随机推广视频(锁死洗脑探店口播)
 // 流程:
-//   1. 从店铺素材库随机挑 3–5 张实景商品/店铺图(实体店必须用真实素材)
-//   2. 按店铺调性随机视频路线/风格
-//   3. 调 generate-marketing-video-script 出完整脚本(钩子+中段+收尾,15s 9:16)
-//   4. preview=true → 返回 { picked, assets, script, ... } 供前端展示分镜
-//   5. preview=false → 用同一份 script 调 render-marketing-video 入队,返回 job_id
-// 前端在"换一组"时重新挑;"就拍这条"时把已生成的 script + assets 一起回传,避免二次生成造成不一致。
+//   1. 从店铺素材库挑实景 + 优先找一张门头/店招做开场
+//   2. 借势最近的节日(暑假/端午/中秋/国庆…)
+//   3. 调 generate-marketing-video-script 出洗脑探店脚本(钩子+中段+收尾,15s 9:16)
+//   4. preview=true → 返回 { picked, assets, script, holiday, ... } 给前端展示
+//   5. preview=false → 用同一份 script 调 render-marketing-video 入队,渲染策略恒为 one_shot
+// 注意:不再做"分镜↔素材一对一"绑定;assets 就是 reference_image 池(≤9),
+//      由 Seedance one_shot 自己排镜头,人物一致性靠角色板 + 门头锁开场。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadShopContext } from "../_shared/shop-context.ts";
+import { pickUpcomingHoliday, formatHolidayBrief } from "../_shared/holiday-context.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,23 +18,28 @@ const corsHeaders = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-// 「BOOMER 帮我拍」默认走"洗脑探店口播"路线 → store_tour 占绝对权重,
-// 其余类型作为偶尔的惊喜出现,避免一键功能变成随便给一条。
-const VIDEO_TYPES = [
-  { v: 'store_tour', label: '探店', tagHint: ['店铺', '氛围', '货架'], baseWeight: 7 },
-  { v: 'product_showcase', label: '产品展示', tagHint: ['服饰', '包', '配饰', '杂货', '玩具'], baseWeight: 1 },
-  { v: 'store_ambience', label: '店铺氛围', tagHint: ['杂货', '陈列', '角落'], baseWeight: 1 },
-  { v: 'new_arrival', label: '新品上架', tagHint: ['新品', '上新'], baseWeight: 1 },
-] as const;
-
-const STYLES = ['steady', 'lively', 'energetic', 'elegant', 'nostalgic', 'playful'] as const;
+const STYLES = ['energetic', 'lively', 'playful'] as const;
 type SType = typeof STYLES[number];
 
-// 一键场景的"高转化"风格池:激动/活泼/俏皮,加权偏向 energetic。
+// 高转化探店的风格池
 const VIRAL_STYLE_WEIGHTS: { item: SType; w: number }[] = [
   { item: 'energetic', w: 5 },
   { item: 'lively', w: 3 },
   { item: 'playful', w: 2 },
+];
+
+// 钩子句式池:每次随机抽 2 个塞进 brief,让相同店每次产出不同钩子
+const HOOK_POOL = [
+  "姐妹冲!",
+  "别再去 XX 了",
+  "我真的会谢",
+  "不是吧还有人不知道",
+  "这家店我能吹一年",
+  "这家店神了!",
+  "整条街最猛的一家",
+  "拜托快冲!",
+  "别再瞎逛了",
+  "一进门就破防",
 ];
 
 function pickWeighted<T>(items: { item: T; w: number }[]): T {
@@ -46,16 +53,14 @@ function pickWeighted<T>(items: { item: T; w: number }[]): T {
   return items[items.length - 1].item;
 }
 
-function pickVtypeByAssets(assets: any[]): typeof VIDEO_TYPES[number]['v'] {
-  const text = assets.flatMap((a) => [...(a.tags || []), a.category || '']).filter(Boolean).join(' ');
-  const weighted = VIDEO_TYPES.map((t) => {
-    let w = t.baseWeight;
-    for (const hint of t.tagHint) if (text.includes(hint)) w += 1;
-    return { item: t.v, w };
-  });
-  return pickWeighted(weighted);
+function sampleN<T>(arr: T[], n: number): T[] {
+  const pool = arr.slice();
+  const out: T[] = [];
+  while (out.length < n && pool.length) {
+    out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  return out;
 }
-
 
 // 不放回加权采样
 function sampleWeighted<T>(items: { item: T; w: number }[], n: number): T[] {
@@ -85,65 +90,15 @@ function summarizeAsset(a: any): string {
   return parts.join(' · ') || '店内实景';
 }
 
-// 把脚本里每个分镜分配到一个不同的素材 index;不够则就回退到 usage 最少的。
-function enforceUniqueAssets(
-  scriptIn: any,
-  assets: Array<{ index: number; summary?: string; category?: string | null; tags?: string[] }>,
-): { script: any; usedIndices: number[]; reused: boolean } {
-  const script = JSON.parse(JSON.stringify(scriptIn || {}));
-  const clips: any[] = [];
-  if (script.hook) clips.push(script.hook);
-  if (Array.isArray(script.scenes)) clips.push(...script.scenes);
-  if (script.outro) clips.push(script.outro);
-
-  const N = assets.length;
-  if (N === 0) return { script, usedIndices: [], reused: false };
-  const usage = new Array(N).fill(0);
-  const used = new Set<number>();
-  const usedOrder: number[] = [];
-  let reused = false;
-
-  const scoreFor = (clip: any, ai: number): number => {
-    const a = assets[ai];
-    const text = `${clip?.scene || ''} ${clip?.action || ''} ${clip?.dialogue || ''} ${clip?.subtitle || ''}`.toLowerCase();
-    let s = 0;
-    if (a.category && text.includes(String(a.category).toLowerCase())) s += 2;
-    for (const t of (a.tags || [])) {
-      if (t && text.includes(String(t).toLowerCase())) s += 1;
-    }
-    if (a.summary) {
-      const tokens = String(a.summary).split(/[ ,，/·]+/).filter((x) => x.length >= 2);
-      for (const t of tokens) if (text.includes(t.toLowerCase())) s += 1;
-    }
-    return s;
-  };
-
-  for (const clip of clips) {
-    const hint = typeof clip?.image_index === 'number' ? clip.image_index : null;
-    let chosen = -1;
-    if (hint != null && hint >= 0 && hint < N && !used.has(hint)) {
-      chosen = hint;
-    } else {
-      // 优先未用素材；并列按文本匹配分高优先；再并列 usage 低优先
-      const candidates: number[] = [];
-      for (let i = 0; i < N; i++) if (!used.has(i)) candidates.push(i);
-      const pool = candidates.length ? candidates : Array.from({ length: N }, (_, i) => i);
-      if (candidates.length === 0) reused = true;
-      let bestScore = -1, bestUsage = Infinity;
-      for (const i of pool) {
-        const sc = scoreFor(clip, i);
-        if (sc > bestScore || (sc === bestScore && usage[i] < bestUsage)) {
-          bestScore = sc; bestUsage = usage[i]; chosen = i;
-        }
-      }
-    }
-    if (chosen < 0) chosen = 0;
-    clip.image_index = chosen;
-    usage[chosen] += 1;
-    used.add(chosen);
-    usedOrder.push(chosen);
-  }
-  return { script, usedIndices: usedOrder, reused };
+const STOREFRONT_KW = ['门头', '门店', '店面', '门口', '店招', '招牌', '外观', '门头照', 'logo', 'storefront', 'facade'];
+function isStorefrontAsset(a: any): boolean {
+  const cat = String(a.category || '').toLowerCase();
+  if (STOREFRONT_KW.some((k) => cat.includes(k.toLowerCase()))) return true;
+  const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t || '').toLowerCase()) : [];
+  if (tags.some((t) => STOREFRONT_KW.some((k) => t.includes(k.toLowerCase())))) return true;
+  const summary = String((a.meta || {})?.summary || '').toLowerCase();
+  if (STOREFRONT_KW.some((k) => summary.includes(k.toLowerCase()))) return true;
+  return false;
 }
 
 Deno.serve(async (req) => {
@@ -168,16 +123,21 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
-    // ====== 提交模式:前端回传了 preview 时生成的 script,直接渲染 ======
-    if (!preview && body.script && body.picked_assets && body.vtype && body.style) {
-      // 幂等再跑一次去重(防用户中途手改)
-      const fixed = enforceUniqueAssets(body.script, body.picked_assets);
-      const renderBody: any = { script: { ...fixed.script, video_type: body.vtype }, style: body.style, shop_id: shopId };
+    // ====== 提交模式:前端回传 preview 时生成的 script,直接渲染 ======
+    if (!preview && body.script && body.picked_assets && body.style) {
+      const renderBody: any = {
+        script: { ...body.script, video_type: 'store_tour' },
+        style: body.style,
+        shop_id: shopId,
+        render_strategy: 'one_shot',
+      };
       if (typeof body.model === 'string' && body.model) renderBody.model = body.model;
       if (typeof body.resolution === 'string' && body.resolution) renderBody.resolution = body.resolution;
       if (body.realism === 'photoreal' || body.realism === 'stylized') renderBody.realism = body.realism;
-      if (body.disable_storyboard) renderBody.disable_storyboard = true;
       if (body.disable_references) renderBody.disable_references = true;
+      if (body.prompt_overrides && typeof body.prompt_overrides === 'object') {
+        renderBody.prompt_overrides = body.prompt_overrides;
+      }
       const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
@@ -191,14 +151,13 @@ Deno.serve(async (req) => {
     }
 
     // ====== Preview / 兜底:全流程 ======
-    // 1) 拉素材库里这家店的"商品图"
+    // 1) 拉素材库里这家店的实景商品图(剔除合成静帧)
     const ninetyDays = new Date(Date.now() - 90 * 86400 * 1000).toISOString();
     const { data: assetsRaw, error: aErr } = await admin.from("marketing_assets")
       .select("id, output_url, tags, category, meta, created_at")
       .eq("shop_id", shopId)
       .eq("kind", "photo")
       .not("output_url", "is", null)
-      // 排除分镜静帧:它们是 AI 合成的"二手"素材,不能再被当原始店内照抽
       .or("category.is.null,category.neq.分镜头")
       .not("meta->>source", "eq", "storyboard")
       .gte("created_at", ninetyDays)
@@ -215,15 +174,18 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: false }).limit(40);
       pool = (any2 || []).filter((a: any) => !exclude.includes(a.id));
     }
-
     if (pool.length === 0) {
       return json({ ok: false, error: "素材库还没有商品图,先去拍/上传几张" });
     }
 
-    // 2) 主题聚拢:统计池里 tag / category 频次,按权重抽 1 个"主题词",围绕它挑素材
-    //    没有主题命中时退化到时间加权随机(原行为)。这样不需要给每张图额外生成参考词。
+    // 2) 找门头:命中则锁第 1 位;没命中只标记,不阻塞
+    const storefrontHit = pool.find(isStorefrontAsset) || null;
+    const needsStorefront = !storefrontHit;
+    const remainPool = storefrontHit ? pool.filter((a: any) => a.id !== storefrontHit.id) : pool;
+
+    // 3) 主题聚拢:按 tag/category 频次抽一个主题词,围绕它从剩余 pool 挑实景
     const themeCounter = new Map<string, number>();
-    pool.forEach((a: any) => {
+    remainPool.forEach((a: any) => {
       const cat = (a.category || '').toString().trim();
       if (cat) themeCounter.set(cat, (themeCounter.get(cat) || 0) + 1);
       (Array.isArray(a.tags) ? a.tags : []).forEach((t: any) => {
@@ -242,34 +204,33 @@ Deno.serve(async (req) => {
       if ((a.category || '') === themeTag) return true;
       return (Array.isArray(a.tags) ? a.tags : []).some((t: any) => String(t) === themeTag);
     };
-    const hits = themeTag ? pool.filter(matchTheme) : [];
-    const misses = themeTag ? pool.filter((a) => !matchTheme(a)) : pool;
+    const hits = themeTag ? remainPool.filter(matchTheme) : [];
+    const misses = themeTag ? remainPool.filter((a: any) => !matchTheme(a)) : remainPool;
 
-    const targetCount = Math.min(pool.length, 3 + Math.floor(Math.random() * 3)); // 3,4,5
-    let pickedAssets: any[];
+    // 实景图最多 8 张(门头 1 + 实景 8 = 9 张,角色板再优先级里替换其中一张)
+    const ASSET_SLOT_FOR_SCENES = 7;
+    const targetCount = Math.min(remainPool.length, Math.max(3, ASSET_SLOT_FOR_SCENES));
+    let scenicAssets: any[];
     if (themeTag && hits.length >= 3) {
       const hitsW = hits.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
-      pickedAssets = sampleWeighted(hitsW, Math.min(targetCount, hits.length));
+      scenicAssets = sampleWeighted(hitsW, Math.min(targetCount, hits.length));
     } else if (themeTag && hits.length > 0) {
       const extraN = Math.max(0, targetCount - hits.length);
       const extraW = misses.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
       const extras = sampleWeighted(extraW, Math.min(extraN, misses.length));
-      pickedAssets = [...hits.slice(0, targetCount), ...extras];
+      scenicAssets = [...hits.slice(0, targetCount), ...extras];
     } else {
-      // 回退:时间新→旧加权
-      const weighted = pool.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
-      pickedAssets = sampleWeighted(weighted, targetCount);
+      const weighted = remainPool.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
+      scenicAssets = sampleWeighted(weighted, targetCount);
     }
-    const hero = pickedAssets[0];
 
-    // 3) vtype + style:store_tour 占主导,风格用高转化池(energetic/lively/playful)。
-    const vtype = pickVtypeByAssets(pickedAssets);
-    const shopCtx = await loadShopContext(shopId);
-    const style = pickWeighted(VIRAL_STYLE_WEIGHTS);
-    const vtypeLabel = VIDEO_TYPES.find((x) => x.v === vtype)?.label || '探店';
+    // 4) 最终 pickedAssets:门头(若有)+ 实景
+    const pickedAssets: any[] = [
+      ...(storefrontHit ? [storefrontHit] : []),
+      ...scenicAssets,
+    ];
 
-
-    // 4) 角色:店里若已建角色 → 100% 出场(随机挑一个)
+    // 5) 角色:店里有角色 → 100% 出场,随机挑一个
     let character: any = null;
     try {
       const { data: chars } = await admin.from("marketing_characters")
@@ -281,20 +242,35 @@ Deno.serve(async (req) => {
       }
     } catch (_) { /* ignore */ }
 
-    // 5) 生成脚本 — 用全部入选素材
+    // 6) 节日借势
+    const holiday = pickUpcomingHoliday(new Date());
+    const holidayBrief = formatHolidayBrief(holiday);
+
+    // 7) 拼装 brief:门头锁开场 + 节日借势 + 随机钩子句池 + 多样性指令
+    const style = pickWeighted(VIRAL_STYLE_WEIGHTS);
+    const shopCtx = await loadShopContext(shopId);
+    const heroSummary = storefrontHit
+      ? `${shopCtx?.name || '本店'}门头店招`
+      : summarizeAsset(scenicAssets[0] || pickedAssets[0]);
+
+    const randomHooks = sampleN(HOOK_POOL, 2).map((s) => `"${s}"`).join(" / ");
+    const openingDirective = storefrontHit
+      ? `【强制开场(第 1 镜 / 0–2s · 不可改)】镜头先给参考图 1(门头/店招/logo)2 秒特写或推镜,主角站在门口或推门进店;subtitle 像「${shopCtx?.name || '这家店'},冲!」之类。从第 2 镜开始才进店内场景。`
+      : `【强制开场(第 1 镜 / 0–2s)】先给一个店门口的镜头,主角推门或转身进店;subtitle 像「${shopCtx?.name || '这家店'},冲!」。注意:店里还没传门头照,模型自由发挥即可。`;
+
+    const briefTranscript =
+      `店员:来一条 15 秒竖版洗脑探店口播。\n` +
+      `${openingDirective}\n` +
+      `${holidayBrief ? holidayBrief + '\n' : ''}` +
+      `【钩子句池】这次开场的钩子从下面里挑一种风格(可改写,不要照抄):${randomHooks}。每次拍都要不一样,不要复用上次开头。\n` +
+      `【全片要求】共 6-8 个 1.5-2.5 秒小镜头,主角始终是同一个人(沿用上面锁定的角色),每镜都有动作(指/拿/试/转身);全部用上传的店内实景;字幕大白话带情绪符号,结尾必须带 CTA(「地址放评论区」「现在冲」「错过等一年」)。`;
+
+    // 8) 生成脚本
     const imageUrls = pickedAssets.map((a: any) => a.output_url);
     const imageDescriptions = pickedAssets.map((a: any, i: number) => ({
       index: i,
-      summary: summarizeAsset(a),
+      summary: i === 0 && storefrontHit ? `门头/店招 · ${summarizeAsset(a)}` : summarizeAsset(a),
     }));
-    const heroSummary = summarizeAsset(hero);
-
-    // 洗脑探店专用 brief:让 AI 写 15 秒口播 + 真人出镜 + 高转化钩子。
-    const briefTranscript = vtype === 'store_tour'
-      ? `店员:来一条 15 秒竖版洗脑探店口播,开头第一句必须是冲击型钩子(比如"姐妹冲!"/"别再去 XX 了"/"我真的会谢"那种),全程主角对镜头说话,语气激动有感染力,结尾留 CTA("地址放评论区"/"现在冲"/"错过等一年")。\n` +
-        `助理:好,拆 6-8 个 1.5-2.5 秒小镜头,主角始终是同一个人,每镜都有动作(指/拿/试/转身),全部用上传的店内实景,字幕大白话带情绪符号。`
-      : `店员:来一条 15 秒竖版${vtypeLabel}视频,主打${heroSummary},节奏明快有感染力。\n` +
-        `助理:好的,按${vtypeLabel}节奏拆 3-4 个分镜,所有画面都用上传的实景照片。`;
 
     const scriptRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-marketing-video-script`, {
       method: 'POST',
@@ -302,13 +278,13 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         shop_id: shopId,
         image_urls: imageUrls,
-        video_type: vtype,
+        video_type: 'store_tour',
         duration: 15,
         aspect: '9:16',
-        topic: `${vtypeLabel} · ${heroSummary}`,
+        topic: `${holiday?.name ? holiday.name + ' · ' : ''}探店 · ${heroSummary}`,
         highlight: heroSummary.slice(0, 40),
         style,
-        intent: vtype === 'store_tour' ? 'viral_store_tour' : undefined,
+        intent: 'viral_store_tour',
         brief_transcript: briefTranscript,
         image_descriptions: imageDescriptions,
         character: character ? {
@@ -319,74 +295,40 @@ Deno.serve(async (req) => {
         } : null,
       }),
     });
-
     const scriptData = await scriptRes.json().catch(() => ({}));
     if (!scriptRes.ok || !scriptData?.script) {
       return json({ ok: false, error: scriptData?.error || '脚本生成失败' });
     }
-    let script = scriptData.script;
+    const script = scriptData.script;
 
-    // ====== 强制分镜与素材一对一(同一张不被两个分镜复用) ======
-    // 先用入选素材做映射;若分镜数 > 素材数,从 pool 剩余里继续补齐
-    let assetsForScript = pickedAssets.map((a: any, i: number) => ({
-      asset_id: a.id, index: i, url: a.output_url,
-      summary: summarizeAsset(a), category: a.category || null,
-      tags: a.tags || [],
+    // 9) 输出 assets(给前端做参考图横排展示):门头/角色板优先,顺序就是 reference_image 顺序
+    const assets = pickedAssets.map((a: any, i: number) => ({
+      asset_id: a.id,
+      index: i,
+      url: a.output_url,
+      summary: i === 0 && storefrontHit ? `门头 · ${summarizeAsset(a)}` : summarizeAsset(a),
+      category: a.category || null,
+      role: i === 0 && storefrontHit ? 'storefront' : 'scene',
     }));
-    const sceneCount = (script.hook ? 1 : 0) + (Array.isArray(script.scenes) ? script.scenes.length : 0) + (script.outro ? 1 : 0);
-    if (sceneCount > assetsForScript.length) {
-      const usedIds = new Set(pickedAssets.map((a: any) => a.id));
-      const remain = pool.filter((a: any) => !usedIds.has(a.id));
-      const need = sceneCount - assetsForScript.length;
-      const extraWeighted = remain.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
-      const extras = sampleWeighted(extraWeighted, Math.min(need, remain.length));
-      for (const a of extras) {
-        assetsForScript.push({
-          asset_id: a.id, index: assetsForScript.length, url: a.output_url,
-          summary: summarizeAsset(a), category: a.category || null, tags: a.tags || [],
-        });
-      }
-    }
-    const enforced = enforceUniqueAssets(script, assetsForScript);
-    script = enforced.script;
-    const usedIndices = enforced.usedIndices;
-    const reused = enforced.reused;
 
-    // 只输出真正被分镜引用到的素材,按出场顺序去重并重排 index
-    const orderUsed: number[] = [];
-    const seen = new Set<number>();
-    for (const i of usedIndices) {
-      if (!seen.has(i)) { seen.add(i); orderUsed.push(i); }
-    }
-    const oldToNew = new Map<number, number>();
-    orderUsed.forEach((old, n) => oldToNew.set(old, n));
-    const assets = orderUsed.map((old, n) => ({
-      asset_id: assetsForScript[old].asset_id, index: n,
-      url: assetsForScript[old].url,
-      summary: assetsForScript[old].summary,
-      category: assetsForScript[old].category,
-    }));
-    // 重写 script 里的 image_index 为新的连续 index
-    const remap = (c: any) => {
-      if (c && typeof c.image_index === 'number' && oldToNew.has(c.image_index)) {
-        c.image_index = oldToNew.get(c.image_index);
-      }
-      return c;
-    };
-    if (script.hook) script.hook = remap(script.hook);
-    if (Array.isArray(script.scenes)) script.scenes = script.scenes.map(remap);
-    if (script.outro) script.outro = remap(script.outro);
-
-    // hero 始终用第一个被使用的素材,确保封面与首镜一致
-    const heroAsset = assets[0] ? pickedAssets.find((a: any) => a.id === assets[0].asset_id) || hero : hero;
+    // cover:门头优先,其次角色板,再次第一张实景
+    const coverUrl = storefrontHit?.output_url || character?.cover_url || pickedAssets[0]?.output_url;
     const picked = {
-      asset_id: heroAsset.id,
-      cover_url: heroAsset.output_url,
-      summary: summarizeAsset(heroAsset),
-      tags: heroAsset.tags || [],
-      category: heroAsset.category || null,
+      asset_id: (storefrontHit || pickedAssets[0])?.id,
+      cover_url: coverUrl,
+      summary: heroSummary,
+      tags: (storefrontHit || pickedAssets[0])?.tags || [],
+      category: (storefrontHit || pickedAssets[0])?.category || null,
       theme_tag: themeTag,
+      needs_storefront: needsStorefront,
     };
+
+    // 10) 渲染 prompt_overrides:开场强制门头 + 节日 vibe
+    const openingEn = storefrontHit
+      ? "Opening shot (0-2s): exterior storefront sign and brand logo in reference image #1, character walks toward the door or pushes the door open, hand-held push-in. Only from shot #2 the camera enters the shop interior."
+      : "Opening shot (0-2s): exterior shop entrance, character pushes the door open with a hand-held push-in. Only from shot #2 the camera enters the shop interior.";
+    const styleCue = holiday?.vibe || undefined;
+    const promptOverrides = { opening: openingEn, ...(styleCue ? { style_cue: styleCue } : {}) };
 
     const characterOut = character
       ? { id: character.id, name: character.name, cover_url: character.cover_url }
@@ -394,24 +336,24 @@ Deno.serve(async (req) => {
 
     const result: any = {
       ok: true, picked, assets, script,
-      vtype, vtype_label: vtypeLabel, style,
+      vtype: 'store_tour', vtype_label: '洗脑探店', style,
       character: characterOut,
+      holiday: holiday ? { name: holiday.name, days_away: holiday.daysAway } : null,
       duration: 15, aspect: '9:16',
+      prompt_overrides: promptOverrides,
     };
-    if (reused) result.__warn = 'assets_reused';
 
-    // 「惊喜一下」不再合成分镜静帧:Gemini 画出来的人物每张脸都不一样,反而稀释角色一致性。
-    // 直接把【角色板 cover + 真实素材】作为 reference_image 喂给 Seedance one_shot,由模型一次推理出片。
     if (preview) return json(result);
 
-    // preview=false 且没有传 script:直接渲染当前脚本
+    // preview=false 且没回传 script:直接渲染
     const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body: JSON.stringify({
-        script: { ...script, video_type: vtype }, style, shop_id: shopId, realism,
-        // 「惊喜一下」对齐小云雀:一次推理直出多镜,模型自己切镜头
+        script: { ...script, video_type: 'store_tour' },
+        style, shop_id: shopId, realism,
         render_strategy: 'one_shot',
+        prompt_overrides: promptOverrides,
       }),
     });
     const renderData = await renderRes.json().catch(() => ({}));
