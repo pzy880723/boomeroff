@@ -340,8 +340,8 @@ Deno.serve(async (req) => {
 
     // 11) 渲染 prompt_overrides:博主人设 + 开场强制门头 + 节日 vibe
     const openingEn = storefrontHit
-      ? "Opening shot (0-2s): exterior storefront sign and brand logo in reference image #1, the visiting influencer walks toward the door or pushes the door open, hand-held push-in. Only from shot #2 the camera enters the shop interior."
-      : "Opening shot (0-2s): exterior shop entrance, the visiting influencer pushes the door open with a hand-held push-in. Only from shot #2 the camera enters the shop interior.";
+      ? `${STOREFRONT_OPENING_EN} The brand sign / logo from reference image #1 must appear on the lintel above the open shopfront in the opening 0-2s.`
+      : STOREFRONT_OPENING_EN;
     const styleCue = holiday?.vibe || undefined;
     const promptOverrides = {
       opening: openingEn,
