@@ -314,7 +314,7 @@ export default function ActivityDetail() {
                       <> · 核销：{format(new Date(app.voucher_claim.redeemed_at), 'yyyy-MM-dd HH:mm')}</>
                     )}
                   </p>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                     {app.publish_url && (
                       <a
                         href={app.publish_url}
@@ -327,6 +327,54 @@ export default function ActivityDetail() {
                         🔗 发布链接
                       </a>
                     )}
+                    {app.status === 'approved' && app.voucher_claim?.short_code && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] px-2"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(buildClaimShareUrl(app.voucher_claim!.short_code!));
+                              toast.success('领取链接已复制');
+                            } catch {
+                              toast.error('复制失败，请手动复制');
+                            }
+                          }}
+                        >
+                          <Copy className="w-3 h-3 mr-0.5" />复制券链接
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] px-2"
+                          onClick={() => navigate(`/me/vouchers/share/${app.voucher_claim_id}`)}
+                        >
+                          <Ticket className="w-3 h-3 mr-0.5" />查看券
+                        </Button>
+                      </>
+                    )}
+                    {app.status === 'approved' && !app.voucher_claim_id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] px-2"
+                        onClick={async () => {
+                          const { data, error } = await invokeFn<any>('voucher-claim-create', {
+                            body: { activity_application_id: app.id },
+                          });
+                          if (error) { toast.error(error.message); return; }
+                          const claim = (data as any)?.claim;
+                          if (claim?.id) {
+                            toast.success('已补发券');
+                            await load(true);
+                            navigate(`/me/vouchers/share/${claim.id}`);
+                          }
+                        }}
+                      >
+                        <Ticket className="w-3 h-3 mr-0.5" />补发券
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant={app.publish_confirmed ? 'secondary' : 'outline'}
@@ -336,6 +384,7 @@ export default function ActivityDetail() {
                       {app.publish_confirmed ? '查看发布' : '发布确认'}
                     </Button>
                   </div>
+
                 </div>
               </Card>
             ));
