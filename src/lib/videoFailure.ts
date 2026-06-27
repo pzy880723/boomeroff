@@ -4,7 +4,7 @@
 export type FixKind =
   | 'switch_model'        // 切换渲染模型
   | 'lower_resolution'    // 降到 720p
-  | 'disable_frames'      // 去掉首尾帧(只留参考图)
+  | 'disable_frames'      // 去掉分镜静帧(只留角色参考)
   | 'text_only'           // 纯文字 prompt(去掉所有图)
   | 'regen_storyboard'    // 重新生成分镜静帧
   | 'restart'             // 整条重新生成
@@ -21,6 +21,7 @@ export interface VideoFix {
     resolution?: string;
     disable_storyboard?: boolean;
     disable_references?: boolean;
+    render_strategy?: 'auto' | 'one_shot' | 'per_shot';
   };
   /** 这条修复需不需要重新提交渲染(true=自动重渲,false=只是提示) */
   reRender?: boolean;
@@ -31,7 +32,6 @@ export interface VideoFailure {
     | 'resolution_not_supported'
     | 'real_person_blocked'
     | 'model_not_activated'
-    | 'ref_and_lastframe_conflict'
     | 'segment_url_expired'
     | 'stitch_failed'
     | 'timeout'
