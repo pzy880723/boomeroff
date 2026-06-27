@@ -599,16 +599,10 @@ export function AssetDetailDialog({
           </div>
         )}
       </DialogContent>
-      {asset.kind === 'photo' && asset.output_url && (
-        <ImageLightbox
-          open={lbOpen}
-          onClose={() => setLbOpen(false)}
-          images={[asset.output_url]}
-        />
-      )}
     </Dialog>
   );
 }
+
 
 // 给列表卡片预览文案用 — 不再露出 JSON
 export function copyPreview(asset: any): string {
