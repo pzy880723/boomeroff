@@ -238,7 +238,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         <DialogHeader className="px-4 pt-4 pb-2.5 border-b">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Wand2 className="w-4 h-4 text-accent shrink-0" />
-            <span className="truncate">BOOMER 帮你拍一条 · 洗脑探店</span>
+            <span className="truncate">BOOMER 帮你拍一条 · 探店</span>
           </DialogTitle>
         </DialogHeader>
 
