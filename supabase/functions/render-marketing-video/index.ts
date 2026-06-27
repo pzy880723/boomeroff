@@ -1,5 +1,6 @@
 // 提交视频渲染任务到火山方舟 Seedance 2.0 API。
-// 单段 ≤15s 直出,不再拼接;>15s 才会拆段(目前 surprise/标准生成都锁 15s,基本走单段)。
+// 渲染策略:每个分镜 = 1 段,独立调用 Seedance(用该镜静帧作 first_frame),完成后由前端 ffmpeg-wasm 拼接。
+// 不再走"整段直出"路径——确保脚本里每个分镜的画面都真正出现在最终视频里。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
@@ -91,87 +92,47 @@ function normalizeRatio(aspect: any): string {
   return "9:16";
 }
 
-// 根据总时长确定目标段数,与 src/lib/marketingSegments.ts 同步。
-// ≤15s 单段;16-30s 两段;31-45s 三段;更长按 ceil(total/15)。
-function targetSegmentCount(totalDur: number): number {
-  const t = Math.max(1, Math.round(totalDur || 0));
-  if (t <= MAX_SEG_DUR) return 1;
-  if (t <= 30) return 2;
-  if (t <= 45) return 3;
-  return Math.ceil(t / MAX_SEG_DUR);
-}
-
-// 按"目标段数等分"切脚本(不再贪心装箱),让 30s 始终切成 2x15。
-// hook 强制进第一段,outro 强制进最后一段。
+// 逐镜切段:每个非空分镜 = 1 段。
+// hook / scenes[*] / outro 各自成段,独立用自己的静帧作 first_frame 喂给 Seedance,
+// 最后由前端 ffmpeg-wasm 按 segment_index 升序拼接成成片。
 function splitScript(script: any): any[] {
-  const hook = script.hook;
-  const outro = script.outro;
-  const mids: any[] = Array.isArray(script.scenes) ? [...script.scenes] : [];
+  type Shot = { sc: any; role: 'hook' | 'mid' | 'outro' };
+  const shots: Shot[] = [];
+  const isMeaningful = (sc: any) =>
+    sc && typeof sc === 'object' && (
+      (typeof sc.scene === 'string' && sc.scene.trim()) ||
+      (typeof sc.action === 'string' && sc.action.trim()) ||
+      (typeof sc.subtitle === 'string' && sc.subtitle.trim()) ||
+      (typeof sc.dialogue === 'string' && sc.dialogue.trim()) ||
+      (typeof sc.storyboard_url === 'string' && sc.storyboard_url) ||
+      (typeof sc.image_index === 'number')
+    );
+  if (isMeaningful(script.hook)) shots.push({ sc: script.hook, role: 'hook' });
+  if (Array.isArray(script.scenes)) {
+    for (const m of script.scenes) if (isMeaningful(m)) shots.push({ sc: m, role: 'mid' });
+  }
+  if (isMeaningful(script.outro)) shots.push({ sc: script.outro, role: 'outro' });
 
-  const all: any[] = [];
-  if (hook) all.push({ ...hook, __role: 'hook' });
-  for (const m of mids) all.push({ ...m, __role: 'mid' });
-  if (outro) all.push({ ...outro, __role: 'outro' });
-  for (const sc of all) {
-    let d = Number(sc.duration_s) || 2;
-    if (d > MAX_SEG_DUR) d = MAX_SEG_DUR;
-    sc.duration_s = d;
+  // 兜底:脚本完全为空时,造一个 5s 的空段,避免 Seedance 调用直接 0 个
+  if (!shots.length) {
+    shots.push({ sc: { duration_s: 5, scene: '', action: '', subtitle: '', dialogue: '' }, role: 'hook' });
   }
 
-  const totalDur = all.reduce((s, x) => s + (Number(x.duration_s) || 0), 0);
-  const target = targetSegmentCount(totalDur);
-  const budget = target > 0 ? totalDur / target : totalDur;
-
-  const buckets: any[][] = [];
-  let cur: any[] = [];
-  let curDur = 0;
-  for (let i = 0; i < all.length; i++) {
-    const sc = all[i];
-    const d = Number(sc.duration_s) || 0;
-    const remainingItems = all.length - i;
-    const remainingBuckets = target - buckets.length;
-    const mustCloseForBudget =
-      cur.length > 0 &&
-      buckets.length < target - 1 &&
-      curDur + d > budget &&
-      remainingItems >= remainingBuckets;
-    const mustCloseForCap = cur.length > 0 && curDur + d > MAX_SEG_DUR;
-    if (mustCloseForBudget || mustCloseForCap) {
-      buckets.push(cur);
-      cur = [];
-      curDur = 0;
-    }
-    cur.push(sc);
-    curDur += d;
-  }
-  if (cur.length) buckets.push(cur);
-  if (!buckets.length) buckets.push([]);
-
-  return buckets.map((bucket, i) => {
-    const isFirst = i === 0;
-    const isLast = i === buckets.length - 1;
-    let subHook: any = null;
-    let subOutro: any = null;
-    const subScenes: any[] = [];
-    bucket.forEach((sc) => {
-      const role = sc.__role;
-      const clean = { ...sc };
-      delete clean.__role;
-      if (role === 'hook' && isFirst && !subHook) subHook = clean;
-      else if (role === 'outro' && isLast && !subOutro) subOutro = clean;
-      else subScenes.push(clean);
-    });
-    if (!subHook) subHook = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
-    if (!subOutro) subOutro = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
-    const dur = bucket.reduce((s, x) => s + (Number(x.duration_s) || 0), 0);
+  const empty = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
+  return shots.map((s, i) => {
+    const rawDur = Number(s.sc.duration_s);
+    // Seedance 单段最短 4s,最长 15s。短于 4s 的镜头会被拉到 4s(轻微费用上浮换语义完整)。
+    const dur = Math.max(4, Math.min(MAX_SEG_DUR, Number.isFinite(rawDur) && rawDur > 0 ? Math.round(rawDur) : 5));
+    const clip = { ...s.sc, duration_s: dur };
     return {
       ...script,
-      hook: subHook,
-      scenes: subScenes,
-      outro: subOutro,
-      total_duration_s: Math.max(4, Math.min(MAX_SEG_DUR, Math.round(dur))),
+      hook: s.role === 'hook' ? clip : { ...empty },
+      scenes: s.role === 'mid' ? [clip] : [],
+      outro: s.role === 'outro' ? clip : { ...empty },
+      total_duration_s: dur,
       __segment_index: i,
-      __segment_total: buckets.length,
+      __segment_total: shots.length,
+      __shot_role: s.role,
     };
   });
 }
@@ -358,102 +319,8 @@ Deno.serve(async (req) => {
     const characterCover: string | undefined = character?.cover_url;
     const fallbackFirst = imageUrls[0] || characterCover;
 
-    // ============ 单段路径(≤15s 全部走这里,杜绝拼接) ============
-    // 🚀 关键改造:先入库 + 立刻返回 job_id,ARK 提交放后台跑,避免前端 "Failed to fetch"。
-    if (totalDur <= MAX_SEG_DUR) {
-      const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character, realism);
-      const duration = clampDuration(totalDur || MAX_SEG_DUR);
-      const effectiveCharacter = disableReferences ? null : character;
-      const imgs = resolveSegmentImages(script, imageUrls, effectiveCharacter, disableReferences ? undefined : fallbackFirst);
-      if (disableReferences) imgs.referenceImages = [];
-      const _hasFirst = !!imgs.firstImage;
-      const _hasLast = !!imgs.lastImage && imgs.lastImage !== imgs.firstImage;
-      const _mode = _hasFirst && _hasLast ? "frames" : _hasFirst ? "image2video" : imgs.referenceImages.length ? "reference" : "text";
-      console.log("[render single] model=", model, "res=", resolution, "mode=", _mode, "ref=", imgs.referenceImages.length);
+    // ============ 逐镜渲染路径(每个分镜 = 1 段,完成后由前端拼接) ============
 
-      // 1) 立刻入库占位行
-      const { data: job, error: jErr } = await admin.from("marketing_video_jobs").insert({
-        user_id: u.user.id, script, status: "queued", shop_id: shopId,
-        provider: "volcengine_seedance", provider_task_id: null,
-      }).select().single();
-      if (jErr || !job) {
-        console.error("[render] job insert", jErr);
-        return json({ ok: false, error: "排队失败: " + (jErr?.message || '未知') });
-      }
-
-      // 2) marketing_assets 占位(便于素材库立刻看到一张"渲染中")
-      await admin.from("marketing_assets").insert({
-        user_id: u.user.id, kind: "video", shop_id: shopId,
-        input_image_urls: imageUrls, output_url: null,
-        meta: {
-          job_id: job.id, task_id: null, video_type: script.video_type,
-          duration, aspect: ratio, mode: _mode, resolution,
-          topic: script.topic || "", style: styleKey,
-          style_label: VIDEO_STYLE_LABELS[styleKey], model,
-          model_label: modelInfo.label, status: "queued",
-          segment_total: 1, character_id: character?.id || null,
-          character_name: character?.name || null,
-          cover_url: imageUrls[0] || character?.cover_url || null,
-          warnings: resolutionDowngraded ? ["resolution_downgraded"] : [],
-          image_usage: {
-            reference_count: imgs.referenceImages.length,
-            first: imgs.firstImage || null, last: imgs.lastImage || null,
-          },
-        },
-      });
-
-      // 3) 后台跑 ARK 提交(带真人内容降级链)
-      const submitInBackground = async () => {
-        const isSensitive = (err?: string, raw?: any) => {
-          const code = raw?.error?.code || '';
-          const msg = (err || '') + ' ' + (raw?.error?.message || '');
-          return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
-        };
-        const fallbackNotes: string[] = [];
-        let r = await submitArkTask({
-          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-          firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
-        });
-        if (!r.ok && isSensitive(r.error, (r as any).raw)) {
-          fallbackNotes.push("frames_dropped_for_safety");
-          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: imgs.referenceImages });
-        }
-        if (!r.ok && isSensitive(r.error, (r as any).raw)) {
-          fallbackNotes.push("references_dropped_for_safety");
-          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
-        }
-        if (!r.ok) {
-          console.error("[render bg] ark error", r.error);
-          await admin.from("marketing_video_jobs").update({ status: "failed", error: r.error }).eq("id", job.id);
-          return;
-        }
-        await admin.from("marketing_video_jobs").update({ provider_task_id: r.id, status: "queued" }).eq("id", job.id);
-        if (fallbackNotes.length) {
-          // 把降级标记追加到 marketing_assets.meta(尽力,不阻塞)
-          try {
-            const { data: a } = await admin.from("marketing_assets").select("id, meta").eq("meta->>job_id", job.id).maybeSingle();
-            if (a) {
-              const m: any = a.meta || {};
-              m.task_id = r.id;
-              m.warnings = [...(m.warnings || []), ...fallbackNotes];
-              await admin.from("marketing_assets").update({ meta: m }).eq("id", a.id);
-            }
-          } catch (_) { /* ignore */ }
-        }
-      };
-      // @ts-ignore EdgeRuntime is provided by Supabase
-      if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
-        // @ts-ignore
-        EdgeRuntime.waitUntil(submitInBackground());
-      } else {
-        // 兜底:同步等(本地开发)
-        await submitInBackground();
-      }
-
-      return json({ ok: true, success: true, job_id: job.id, status: "queued", segment_total: 1 });
-    }
-
-    // ============ 多段路径(并行提交) ============
     const subScripts = splitScript(script);
     const segmentTotal = subScripts.length;
     console.log("[render multi] split into", segmentTotal, "segments, submitting in parallel");
@@ -469,8 +336,13 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
     }
 
-    // 2) 并行提交所有段
-    const submissions = await Promise.all(subScripts.map((sub, i) => {
+    // 2) 并行提交所有段(每段带 3 级真人内容降级链)
+    const isSensitive = (err?: string, raw?: any) => {
+      const code = raw?.error?.code || '';
+      const msg = (err || '') + ' ' + (raw?.error?.message || '');
+      return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
+    };
+    const submissions = await Promise.all(subScripts.map(async (sub, i) => {
       const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
       const prompt = buildPrompt(sub, styleKey, shopBlock, label, character, realism);
       const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
@@ -479,12 +351,23 @@ Deno.serve(async (req) => {
       const effectiveCharacter = disableReferences ? null : character;
       const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
       if (disableReferences) imgs.referenceImages = [];
-      console.log(`[render multi] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
-      return submitArkTask({
+      console.log(`[render per-shot] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
+      const fallbackNotes: string[] = [];
+      let r = await submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
         firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
-      }).then((r) => ({ i, r, sub, duration, imgs }));
+      });
+      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+        fallbackNotes.push('frames_dropped_for_safety');
+        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: imgs.referenceImages });
+      }
+      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+        fallbackNotes.push('references_dropped_for_safety');
+        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
+      }
+      return { i, r, sub, duration, imgs, fallbackNotes };
     }));
+
 
     // 3) 检查失败
     const failed = submissions.find((s) => !s.r.ok);
@@ -511,6 +394,7 @@ Deno.serve(async (req) => {
     // 5) 占位 marketing_assets
     const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
     const anyFirst = submissions.some((s) => !!s.imgs.firstImage);
+    const fallbackWarnings = Array.from(new Set(submissions.flatMap((s) => s.fallbackNotes)));
     await admin.from("marketing_assets").insert({
       user_id: u.user.id, kind: "video", shop_id: shopId,
       input_image_urls: imageUrls, output_url: null,
@@ -518,9 +402,13 @@ Deno.serve(async (req) => {
         job_id: parent.id, video_type: script.video_type,
         duration: totalDur, aspect: ratio,
         mode: anyFirst ? "image2video" : (totalRefImages > 0 ? "reference2video" : "text2video"),
+        render_mode: "per_shot",
         topic: script.topic || "", style: styleKey,
         style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
-        warnings: resolutionDowngraded ? ["resolution_downgraded"] : [],
+        warnings: [
+          ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
+          ...fallbackWarnings,
+        ],
         status: "running", segment_total: segmentTotal, segment_done: 0,
         stage: "generating", character_id: character?.id || null,
         character_name: character?.name || null,
@@ -535,6 +423,8 @@ Deno.serve(async (req) => {
         },
       },
     });
+
+
 
     return json({
       ok: true, success: true, job_id: parent.id, status: "running",
