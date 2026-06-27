@@ -965,64 +965,144 @@ function SceneRow({
   );
 }
 
+// 把脚本里的 clip 按 hook → scenes → outro 顺序收集,与后端 gatherClips 对齐。
+function gatherScriptClips(script: any): { label: string; clip: any }[] {
+  const out: { label: string; clip: any }[] = [];
+  if (script?.hook) out.push({ label: '钩子', clip: script.hook });
+  if (Array.isArray(script?.scenes)) script.scenes.forEach((c: any, i: number) => out.push({ label: `镜${String(i + 1).padStart(2, '0')}`, clip: c }));
+  if (script?.outro) out.push({ label: '收尾', clip: script.outro });
+  return out;
+}
+
+function computeStoryboardSig(script: any, realism: string): string {
+  if (!script) return '';
+  const clips = gatherScriptClips(script);
+  return clips
+    .map(({ clip }) => {
+      const ref = effectiveImageRef(clip);
+      const idx = ref ? `${ref.index}:${ref.role}` : '_';
+      return `${idx}|${clip?.storyboard_url ? '1' : '0'}`;
+    })
+    .join(',') + `#${realism}`;
+}
+
+function collectMissingStoryboardIndices(script: any): number[] {
+  const clips = gatherScriptClips(script);
+  const out: number[] = [];
+  clips.forEach((c, i) => { if (!c.clip?.storyboard_url) out.push(i); });
+  return out;
+}
+
+function collectStoryboardSummary(script: any): { hasAny: boolean; total: number; done: number } {
+  const clips = gatherScriptClips(script);
+  const done = clips.filter((c) => !!c.clip?.storyboard_url).length;
+  return { hasAny: done > 0, total: clips.length, done };
+}
+
 function SegmentPreview({ script, urls, character }: { script: any; urls: string[]; character: Character | null }) {
   const segments: SegmentPlan[] = planSegments(script);
+  const [open, setOpen] = useState(false);
   if (!segments.length) return null;
-  const charRefs: string[] = [];
-  if (character?.cover_url) charRefs.push(character.cover_url);
-  for (const u of character?.extra_reference_urls || []) charRefs.push(u);
+  const allClips = gatherScriptClips(script);
 
-  const Thumb = ({ url, label, dashed }: { url?: string | null; label: string; dashed?: boolean }) => (
-    <div className="flex flex-col items-center gap-0.5">
-      {url ? (
-        <img src={url} alt="" className="w-10 h-10 object-cover rounded border border-accent/20" />
-      ) : (
-        <div className={`w-10 h-10 rounded border ${dashed ? 'border-dashed' : ''} border-border bg-muted/40 flex items-center justify-center text-[8px] text-muted-foreground`}>无</div>
-      )}
-      <span className="text-[8.5px] text-muted-foreground">{label}</span>
-    </div>
-  );
+  // 把每段里包含的 clip 标签反解出来,在 allClips 里找到对应 clip 取静帧 / 实景
+  const segClipsOf = (seg: SegmentPlan) => seg.sceneLabels.map((label) => {
+    let idx = -1;
+    if (label === '钩子') idx = allClips.findIndex((c) => c.label === '钩子');
+    else if (label === '收尾') idx = allClips.findIndex((c) => c.label === '收尾');
+    else if (label.startsWith('镜头')) {
+      const n = parseInt(label.slice(2), 10) - 1;
+      idx = allClips.findIndex((c) => c.label === `镜${String(n + 1).padStart(2, '0')}`);
+    }
+    const c = idx >= 0 ? allClips[idx] : null;
+    const sb = (c?.clip?.storyboard_url as string | undefined) || undefined;
+    const ref = c ? effectiveImageRef(c.clip) : null;
+    const fallback = ref && urls[ref.index] || undefined;
+    return { label, dur: Number(c?.clip?.duration_s) || 0, image: sb || fallback, isStoryboard: !!sb, hasImage: !!(sb || fallback) };
+  });
+
+  const totalDur = segments.reduce((s, x) => s + x.durationS, 0);
 
   return (
-    <div className="border border-accent/20 rounded-lg p-3 space-y-2 bg-accent/5">
-      <div className="flex items-center gap-2">
-        <span className="font-display text-[11px] text-accent tracking-[0.18em]">分段预览</span>
-        <span className="w-1 h-1 rounded-full bg-accent" />
-        <span className="text-[10px] text-muted-foreground">{segments.length} 段 · 按 ≤10s 自动拆分,所见即所得</span>
-      </div>
-      <div className="space-y-2">
-        {segments.map((seg) => {
-          const firstUrl = seg.firstIndex !== null ? urls[seg.firstIndex] : undefined;
-          const lastUrl = seg.lastIndex !== null ? urls[seg.lastIndex] : undefined;
-          const refUrls = seg.refIndices.map((i) => urls[i]).filter(Boolean);
-          const allRefs = Array.from(new Set([...charRefs, ...refUrls])).slice(0, 3);
-          const mode = firstUrl
-            ? (lastUrl && lastUrl !== firstUrl ? '首尾帧' : '图生视频')
-            : (allRefs.length ? '参考生视频' : '纯文生');
-          return (
-            <div key={seg.index} className="bg-card border border-border rounded p-2 space-y-1.5">
-              <div className="flex items-center justify-between text-[10.5px]">
-                <span className="font-semibold text-foreground">第 {seg.index + 1} 段</span>
-                <span className="text-muted-foreground">{seg.durationS}s · {seg.sceneLabels.join(' + ')}</span>
-                <span className="text-accent text-[9.5px] px-1.5 py-px rounded-full border border-accent/30 bg-accent/5">{mode}</span>
+    <div className="border border-accent/15 rounded-lg bg-accent/5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-display text-[11px] text-accent tracking-[0.18em]">分段预览</span>
+          <span className="w-1 h-1 rounded-full bg-accent" />
+          <span className="text-[10px] text-muted-foreground truncate">
+            共 {segments.length} 段 · {totalDur}s · 主角:{character?.name || '无'}
+          </span>
+        </div>
+        <span className="text-[10px] text-accent shrink-0">{open ? '收起' : '展开'}</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-2">
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            每段 ≤10s,每段第一张作开头帧、最后一张作结尾帧,主角每段都会塞进参考图锁人。
+          </p>
+          {segments.map((seg) => {
+            const cells = segClipsOf(seg);
+            const hasFirst = cells.find((c) => c.hasImage);
+            const lastWith = [...cells].reverse().find((c) => c.hasImage && c !== hasFirst);
+            const mode = hasFirst
+              ? (lastWith ? '首尾帧' : '图生视频')
+              : (character?.cover_url ? '参考生视频' : '纯文生');
+            return (
+              <div key={seg.index} className="bg-card border border-border rounded p-2 space-y-1.5">
+                <div className="flex items-center justify-between gap-2 text-[10.5px]">
+                  <span className="font-semibold text-foreground shrink-0">第 {seg.index + 1} 段</span>
+                  <span className="text-muted-foreground truncate">{seg.durationS}s · {seg.sceneLabels.length} 镜</span>
+                  <span className="text-accent text-[9.5px] px-1.5 py-px rounded-full border border-accent/30 bg-accent/5 shrink-0">{mode}</span>
+                </div>
+                <div className="flex items-end gap-1.5 overflow-x-auto pb-0.5">
+                  {cells.map((cell, i) => {
+                    const isFirst = i === 0;
+                    const isLast = i === cells.length - 1 && cells.length > 1;
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-0.5 shrink-0">
+                        <div className="relative w-12 h-16 rounded border border-accent/20 overflow-hidden bg-muted/40">
+                          {cell.image ? (
+                            <img src={thumbUrl(cell.image, 240) || cell.image} alt="" loading="lazy" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[8px] text-muted-foreground">无图</div>
+                          )}
+                          {(isFirst || isLast) && cell.image && (
+                            <span className="absolute top-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white py-px">
+                              {isFirst ? '开头帧' : '结尾帧'}
+                            </span>
+                          )}
+                          {cell.isStoryboard && (
+                            <span className="absolute bottom-0 right-0 text-[7.5px] px-0.5 bg-accent text-accent-foreground">静帧</span>
+                          )}
+                        </div>
+                        <span className="text-[8.5px] text-muted-foreground">{cell.label}</span>
+                        <span className="text-[8px] text-muted-foreground/70">{cell.dur}s</span>
+                      </div>
+                    );
+                  })}
+                  {character?.cover_url && (
+                    <div className="flex flex-col items-center gap-0.5 shrink-0 pl-1.5 ml-1.5 border-l border-border">
+                      <div className="w-12 h-12 rounded-full overflow-hidden border border-accent/40">
+                        <img src={thumbUrl(character.cover_url, 160) || character.cover_url} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <span className="text-[8.5px] text-accent font-medium truncate max-w-[3rem]">{character.name || '主角'}</span>
+                      <span className="text-[8px] text-muted-foreground/70">锁人</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-end gap-2 flex-wrap">
-                <Thumb url={firstUrl} label="开头" dashed={!firstUrl} />
-                <Thumb url={lastUrl} label="结尾" dashed={!lastUrl} />
-                <div className="w-px h-10 bg-border mx-0.5" />
-                {allRefs.length > 0 ? (
-                  allRefs.map((u, i) => <Thumb key={u} url={u} label={i === 0 && charRefs.includes(u) ? '主角' : '参考'} />)
-                ) : (
-                  <Thumb label="参考" dashed />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
+
 
 
 
