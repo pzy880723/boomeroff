@@ -32,7 +32,7 @@ function buildOneShotPrompt(
   shopBlock: string,
   character: any,
   realism: Realism,
-  overrides?: { opening?: string; style_cue?: string } | null,
+  overrides?: { opening?: string; style_cue?: string; persona_directive?: string } | null,
 ): string {
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const total = clampDuration(script.total_duration_s || 15);
@@ -53,10 +53,13 @@ function buildOneShotPrompt(
 
   const lines: string[] = [];
   lines.push(`【一段 ${total}s 的 ${aspect} 短视频,整体风格:${styleEn}${overrides?.style_cue ? ` · ${overrides.style_cue}` : ''}】`);
+  if (overrides?.persona_directive) {
+    lines.push(`【主角(虚构探店博主 · 全片唯一主体)】${overrides.persona_directive}`);
+  }
   if (overrides?.opening) {
     lines.push(`【强制开场(0-2s · 不可省略)】${overrides.opening}`);
   }
-  if (character?.name) {
+  if (character?.name && !overrides?.persona_directive) {
     lines.push(`【主体1】参考图 1 中的 ${character.name}(${character.role_label || '主角'})为全片唯一主角。外观锁:${character.visual_signature || '以参考图为准'}。全程同一人,禁止换人/换装/分身/双胞胎。`);
   }
   lines.push(`【镜头节奏】共 ${shots.length || 1} 个镜头,以自然剪辑切换,不要黑场过渡,人物、光线、调色保持一致。`);

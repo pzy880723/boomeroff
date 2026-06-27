@@ -47,9 +47,14 @@ interface SurpriseResult {
   script: ScriptShape;
   vtype: string; vtype_label: string; style: string;
   character: { id: string; name: string; cover_url: string | null } | null;
+  persona?: {
+    label: string; gender: string; age: number;
+    visual: string; vibe: string; opener: string;
+    catchphrase: string[]; cta: string;
+  } | null;
   holiday?: { name: string; days_away: number } | null;
   duration: number; aspect: string;
-  prompt_overrides?: { opening?: string; style_cue?: string };
+  prompt_overrides?: { opening?: string; style_cue?: string; persona_directive?: string };
   job_id?: string;
   __warn?: string;
 }
@@ -432,18 +437,19 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
   const [lbIdx, setLbIdx] = useState(0);
   const openLb = (i: number) => { setLbIdx(i); setLbOpen(true); };
 
-  const characterCover = pick.character?.cover_url;
-  // 角色板放在参考图最前面展示(后端 reference_image 也是角色板优先)
-  const refTiles: { url: string; label: string; kind: 'character' | 'storefront' | 'scene' }[] = [];
-  if (characterCover) refTiles.push({ url: characterCover, label: '主角', kind: 'character' });
-  pick.assets.forEach((a) => {
+  // 惊喜流程不再使用角色板;主角=AI 现场生成的虚构「探店博主」(persona),不绑参考图
+  const refTiles: { url: string; label: string; kind: 'storefront' | 'scene' }[] = [];
+  pick.assets.forEach((a, idx) => {
+    const sceneIdx = pick.assets.slice(0, idx + 1).filter((x) => x.role !== 'storefront').length;
     refTiles.push({
       url: a.url,
-      label: a.role === 'storefront' ? '门头' : `实景${pick.assets.filter((x, i) => i <= pick.assets.indexOf(a) && x.role !== 'storefront').length}`,
+      label: a.role === 'storefront' ? '门头' : `实景${sceneIdx}`,
       kind: a.role === 'storefront' ? 'storefront' : 'scene',
     });
   });
   const refLightbox = useMemo(() => refTiles.map((t) => t.url), [refTiles.map((t) => t.url).join('|')]);
+
+  const persona = pick.persona;
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-w-0">
@@ -453,7 +459,6 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
         </span>
         <Chip>路线 · {pick.vtype_label}</Chip>
         <Chip>风格 · {STYLE_LABEL[pick.style] || pick.style}</Chip>
-        {pick.character && <Chip>主角 · {pick.character.name}</Chip>}
         {pick.holiday && (
           <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 whitespace-nowrap">
             <PartyPopper className="w-3 h-3" />
@@ -463,6 +468,26 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
         )}
         {pick.picked.theme_tag && <Chip>主题 · {pick.picked.theme_tag}</Chip>}
       </div>
+
+      {persona && (
+        <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 space-y-1">
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <span className="text-accent">🎬</span>
+            <span className="font-semibold text-foreground">今日博主 · {persona.label}</span>
+          </div>
+          <div className="text-[11px] text-muted-foreground leading-snug">
+            <span className="text-foreground/70">外观:</span>{persona.visual}
+          </div>
+          <div className="text-[11px] text-muted-foreground leading-snug">
+            <span className="text-foreground/70">语气:</span>{persona.vibe}
+          </div>
+          {persona.catchphrase?.length > 0 && (
+            <div className="text-[10px] text-muted-foreground/85">
+              口头禅:{persona.catchphrase.join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
 
       {pick.picked.needs_storefront && (
         <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded px-2.5 py-2 leading-snug flex gap-1.5">
@@ -476,7 +501,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
 
       <div>
         <div className="text-[11px] text-muted-foreground mb-1.5">
-          参考图 · {refTiles.length} 张(门头 / 主角 / 实景)· 一次性喂给 Seedance
+          参考图 · {refTiles.length} 张(门头 / 实景)· 主角由 AI 现场生成,不依赖参考图
         </div>
         <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2 pt-1 snap-x">
           {refTiles.map((t, i) => (
@@ -486,22 +511,19 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
               onClick={() => openLb(i < refLightbox.length ? i : 0)}
               className={[
                 'shrink-0 w-14 h-[78px] rounded-xl overflow-hidden bg-muted ring-1 shadow-md shadow-black/15 relative snap-start active:scale-95 transition-transform',
-                t.kind === 'storefront' ? 'ring-amber-400'
-                  : t.kind === 'character' ? 'ring-accent'
-                  : 'ring-border',
+                t.kind === 'storefront' ? 'ring-amber-400' : 'ring-border',
               ].join(' ')}
             >
               <img src={t.url} alt="" className="w-full h-full object-cover" />
               <div className={[
                 'absolute bottom-0 left-0 right-0 px-1 text-[9px] text-white text-center truncate',
-                t.kind === 'storefront' ? 'bg-amber-500/85'
-                  : t.kind === 'character' ? 'bg-accent/85'
-                  : 'bg-black/55',
+                t.kind === 'storefront' ? 'bg-amber-500/85' : 'bg-black/55',
               ].join(' ')}>{t.label}</div>
             </button>
           ))}
         </div>
       </div>
+
 
       <div>
         <div className="text-[11px] text-muted-foreground mb-2">BOOMER 拟好的脚本 · {clips.length} 个分镜 · 由 Seedance 自己排画面</div>
