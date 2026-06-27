@@ -17,12 +17,12 @@ Deno.serve(async (req) => {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  // SAU 扫码端点在不同 worker 版本里命名不一,按已知顺序回退尝试
+  // 我们部署的 SAU worker(aigc.boomeroff.top)实际只暴露 /login?type=N,其它命名保留兜底
   const candidates = [
+    `/login?type=${code}`,
     `/login_qrcode?type=${code}`,
     `/loginQrcode?type=${code}`,
     `/account/login?type=${code}`,
-    `/login?type=${code}`,
     `/qrcode?type=${code}`,
   ];
   const baseHeaders: Record<string, string> = { Accept: "text/event-stream" };
