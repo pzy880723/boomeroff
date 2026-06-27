@@ -7,12 +7,13 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed } from 'lucide-react';
+import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed, Copy, Ticket } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
-  type Activity, type ActivityApplication, CLAIM_STATUS_LABEL, getActivityTimeInfo,
+  type Activity, type ActivityApplication, CLAIM_STATUS_LABEL, getActivityTimeInfo, buildClaimShareUrl,
 } from '@/lib/voucher';
+
 import { ActivityEditDialog } from '@/components/voucher/ActivityEditDialog';
 import { ActivityShareDialog } from '@/components/voucher/ActivityShareDialog';
 import { PublishConfirmDialog } from '@/components/voucher/PublishConfirmDialog';
@@ -313,7 +314,7 @@ export default function ActivityDetail() {
                       <> · 核销：{format(new Date(app.voucher_claim.redeemed_at), 'yyyy-MM-dd HH:mm')}</>
                     )}
                   </p>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                     {app.publish_url && (
                       <a
                         href={app.publish_url}
@@ -326,6 +327,37 @@ export default function ActivityDetail() {
                         🔗 发布链接
                       </a>
                     )}
+                    {app.status === 'approved' && app.voucher_claim?.short_code && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] px-2"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(buildClaimShareUrl(app.voucher_claim!.short_code!));
+                              toast.success('领取链接已复制');
+                            } catch {
+                              toast.error('复制失败，请手动复制');
+                            }
+                          }}
+                        >
+                          <Copy className="w-3 h-3 mr-0.5" />复制券链接
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] px-2"
+                          onClick={() => navigate(`/me/vouchers/share/${app.voucher_claim_id}`)}
+                        >
+                          <Ticket className="w-3 h-3 mr-0.5" />查看券
+                        </Button>
+                      </>
+                    )}
+                    {app.status === 'approved' && !app.voucher_claim_id && (
+                      <Badge variant="destructive" className="text-[10px]">券缺失·请联系管理员</Badge>
+                    )}
+
                     <Button
                       size="sm"
                       variant={app.publish_confirmed ? 'secondary' : 'outline'}
@@ -335,6 +367,7 @@ export default function ActivityDetail() {
                       {app.publish_confirmed ? '查看发布' : '发布确认'}
                     </Button>
                   </div>
+
                 </div>
               </Card>
             ));
