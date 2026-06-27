@@ -32,6 +32,7 @@ function buildOneShotPrompt(
   shopBlock: string,
   character: any,
   realism: Realism,
+  overrides?: { opening?: string; style_cue?: string } | null,
 ): string {
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const total = clampDuration(script.total_duration_s || 15);
@@ -51,7 +52,10 @@ function buildOneShotPrompt(
   if (isMeaningful(script.outro)) shots.push({ label: '收尾', sc: script.outro });
 
   const lines: string[] = [];
-  lines.push(`【一段 ${total}s 的 ${aspect} 短视频,整体风格:${styleEn}】`);
+  lines.push(`【一段 ${total}s 的 ${aspect} 短视频,整体风格:${styleEn}${overrides?.style_cue ? ` · ${overrides.style_cue}` : ''}】`);
+  if (overrides?.opening) {
+    lines.push(`【强制开场(0-2s · 不可省略)】${overrides.opening}`);
+  }
   if (character?.name) {
     lines.push(`【主体1】参考图 1 中的 ${character.name}(${character.role_label || '主角'})为全片唯一主角。外观锁:${character.visual_signature || '以参考图为准'}。全程同一人,禁止换人/换装/分身/双胞胎。`);
   }
@@ -435,7 +439,8 @@ Deno.serve(async (req) => {
       const oneShotDur = Math.max(4, Math.min(MAX_SEG_DUR, Math.round(totalDur || MAX_SEG_DUR)));
       const effectiveChar = disableReferences ? null : character;
       const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
-      const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism);
+      const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
+      const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
       const fallbackNotes: string[] = [];
       console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur}`);
 
