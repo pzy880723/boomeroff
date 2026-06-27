@@ -3,7 +3,6 @@
 // - 中部：上传发布截图 + 发布链接 + 备注 → 自助提交反馈
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { invokeFn } from '@/lib/invokeFn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
