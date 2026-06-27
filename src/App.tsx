@@ -125,6 +125,9 @@ const App = () => {
               <Route path="/me/marketing/publish-history" element={<Navigate to="/me/marketing/dispatch?tab=history" replace />} />
               <Route path="/me/marketing/publish/:assetId" element={<Navigate to="/me/marketing/dispatch/workbench" replace />} />
 
+              {/* 火山真人认证 H5 回跳页(免登录) */}
+              <Route path="/verify-callback" element={<VerifyCallback />} />
+
               {/* 游客版（免登录）—— 用静默 ErrorBoundary,顾客永远不会看到错误卡片 */}
               <Route
                 path="/q"
