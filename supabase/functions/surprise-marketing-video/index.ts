@@ -198,6 +198,9 @@ Deno.serve(async (req) => {
       .eq("shop_id", shopId)
       .eq("kind", "photo")
       .not("output_url", "is", null)
+      // 排除分镜静帧:它们是 AI 合成的"二手"素材,不能再被当原始店内照抽
+      .or("category.is.null,category.neq.分镜头")
+      .not("meta->>source", "eq", "storyboard")
       .gte("created_at", ninetyDays)
       .order("created_at", { ascending: false })
       .limit(80);
@@ -207,9 +210,12 @@ Deno.serve(async (req) => {
       const { data: any2 } = await admin.from("marketing_assets")
         .select("id, output_url, tags, category, meta, created_at")
         .eq("shop_id", shopId).eq("kind", "photo").not("output_url", "is", null)
+        .or("category.is.null,category.neq.分镜头")
+        .not("meta->>source", "eq", "storyboard")
         .order("created_at", { ascending: false }).limit(40);
       pool = (any2 || []).filter((a: any) => !exclude.includes(a.id));
     }
+
     if (pool.length === 0) {
       return json({ ok: false, error: "素材库还没有商品图,先去拍/上传几张" });
     }
