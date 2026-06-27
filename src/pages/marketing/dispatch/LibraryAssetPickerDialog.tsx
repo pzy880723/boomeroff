@@ -136,13 +136,20 @@ export function LibraryAssetPickerDialog({
               <div className="grid grid-cols-3 gap-2">
                 {images.map((it, i) => {
                   const active = selImgs.has(it.id);
-                  const thumb = thumbUrl(it.output_url, 320) || it.output_url;
+                  const thumb = thumbUrl(it.output_url, 240) || it.output_url;
+                  const srcSet = thumbSrcSet(it.output_url, 120);
+                  const loaded = loadedImgs.has(it.id);
                   return (
                     <div key={it.id} className="relative">
                       <button onClick={() => toggleImg(it)}
-                        className={['block w-full relative aspect-square rounded overflow-hidden border-2 transition-all',
+                        className={['block w-full relative aspect-square rounded overflow-hidden border-2 transition-all bg-muted',
                           active ? 'border-accent shadow-md' : 'border-transparent hover:border-accent/40'].join(' ')}>
-                        <img src={thumb} alt="" loading={i < 6 ? 'eager' : 'lazy'} decoding="async" className="w-full h-full object-cover" />
+                        {!loaded && <Skeleton className="absolute inset-0 rounded-none" />}
+                        <img src={thumb} srcSet={srcSet} sizes="33vw" alt="" width={240} height={240}
+                          loading={i < 6 ? 'eager' : 'lazy'} decoding="async"
+                          className={`w-full h-full object-cover transition-opacity duration-200 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                          onLoad={() => setLoadedImgs((p) => p.has(it.id) ? p : new Set(p).add(it.id))}
+                          onError={() => setLoadedImgs((p) => p.has(it.id) ? p : new Set(p).add(it.id))} />
                         {active && (
                           <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-[10px] font-bold">
                             {Array.from(selImgs.keys()).indexOf(it.id) + 1}
