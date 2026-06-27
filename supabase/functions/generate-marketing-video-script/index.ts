@@ -5,6 +5,7 @@ import { loadMarketingPresets, type VideoType } from "../_shared/brand-context.t
 import { normalizeStyle, VIDEO_STYLE_LABELS, VIDEO_STYLE_EN } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
+import { STOREFRONT_CONSTRAINT_ZH, sanitizeStorefrontText } from "../_shared/storefront-constraints.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,11 +103,12 @@ ${approvedScript}
 - subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""人均 50 封顶""闭眼冲"。≤24 字。subtitle 可与 dialogue 不同,用来补关键信息。
 - outro(≤2 秒)必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。**CTA 台词 ≤10 字**。
 - 画面色调明亮、节奏快,运镜以推镜/手持/特写切换为主,避免慢悠悠的长镜头。
+- 【场景硬约束】本店在商场 B1 室内,是开放式 8 米无门店面;开场镜必须是「商场走廊视角 → 博主从走廊侧自然走入开放式店面」,严禁出现「推门 / 拉门 / 玻璃门 / 街边 / 马路 / 户外」等任何镜头与文字。
 - 不要写成纪录片或氛围片,目标就是 15 秒抓人 + 让人想立刻去这家店。`
       : '';
 
     const sys = `${presets.brand}
-${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}${viralBlock}
+${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}${viralBlock}
 
 你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】(全中文)。
 
@@ -203,8 +205,10 @@ ${refList}
     }
 
     const clean = (s: any, max: number) =>
-      (s || "").toString().replace(/主播/g, "店员").replace(/直播间/g, "店里")
-        .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "").trim().slice(0, max);
+      sanitizeStorefrontText(
+        (s || "").toString().replace(/主播/g, "店员").replace(/直播间/g, "店里")
+          .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "")
+      ).trim().slice(0, max);
     const clampIdx = (n: any): number | null => {
       if (n === null || n === undefined || n === "null") return null;
       const v = parseInt(n);

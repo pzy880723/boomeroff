@@ -9,6 +9,7 @@ import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segments.ts";
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
+import { STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +54,7 @@ function buildOneShotPrompt(
 
   const lines: string[] = [];
   lines.push(`【一段 ${total}s 的 ${aspect} 短视频,整体风格:${styleEn}${overrides?.style_cue ? ` · ${overrides.style_cue}` : ''}】`);
+  lines.push(STOREFRONT_CONSTRAINT_EN);
   if (overrides?.persona_directive) {
     lines.push(`【主角(虚构探店博主 · 全片唯一主体)】${overrides.persona_directive}`);
   }
@@ -156,6 +158,7 @@ function buildPrompt(
   }
   if (segLabel) lines.push(`这是【${segLabel}】,后续会与其他段无缝拼接,请保持画面、光线、调色与人物连贯。`);
   lines.push(`整体风格:${styleEn}。品牌:BOOMER·OFF 中古二手杂货店,货架密集,室内暖色调。`);
+  lines.push(STOREFRONT_CONSTRAINT_EN);
   if (shopBlock) lines.push(`店铺背景(中文,用于影响氛围与字幕):\n${shopBlock}`);
   lines.push(`画幅 ${script.aspect || '9:16'},本段时长约 ${script.total_duration_s || 10} 秒。`);
 

@@ -507,15 +507,16 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
         <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded px-2.5 py-2 leading-snug flex gap-1.5">
           <DoorOpen className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           <span>
-            还没有 <b>门头/店招</b> 照片,开场会让模型自由发挥。建议拍一张大门 + 招牌 + logo,标注「门头」入库,
-            下次开场就锁死门口镜头,更像探店。
+            还没有 <b>门头/店招</b> 照片。本店在<b>商场 B1 · 开放式无门店面</b>,
+            建议补拍一张「商场走廊视角」的店面 + 顶部 logo 招牌,标注「门头」入库,
+            下次开场就能锁死走廊视角,镜头更像真实探店。
           </span>
         </div>
       )}
 
       <div>
         <div className="text-[11px] text-muted-foreground mb-1.5">
-          参考图 · {refTiles.length} 张(门头 / 实景)· 主角由 AI 现场生成,不依赖参考图
+          参考图 · {refTiles.length} 张(门头 / 实景)· 商场 B1 · 开放式店面(无门)· 主角由 AI 现场生成
         </div>
         <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2 pt-1 snap-x">
           {refTiles.map((t, i) => (
