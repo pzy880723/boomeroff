@@ -590,6 +590,19 @@ export default function MarketingLibrary() {
                       回填分镜头
                     </Button>
                   )}
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={runBackfillTags}
+                      disabled={backfillingTags}
+                      title="给历史无标签的素材一次性补 AI 标签"
+                    >
+                      {backfillingTags ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      补标签
+                    </Button>
+                  )}
+
                   {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
                     <Button
                       size="sm"
