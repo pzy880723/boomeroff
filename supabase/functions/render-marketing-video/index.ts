@@ -325,11 +325,9 @@ function resolveSegmentImages(
   else if (character?.cover_url) push(character.cover_url);
   // 3) 角色额外参考
   for (const u of character?.extra_reference_urls || []) push(u);
-  // 4) 段内绑定的实景照(reference 通道 + 老 first/last 字段都收进来)
+  // 4) 段内绑定的实景照(2.0 全部按 reference 通道收集)
   const picks = pickSegmentImages(sub);
   for (const i of picks.refIndices) if (imageUrls[i]) push(imageUrls[i]);
-  if (picks.firstIndex !== null && imageUrls[picks.firstIndex]) push(imageUrls[picks.firstIndex]);
-  if (picks.lastIndex !== null && imageUrls[picks.lastIndex]) push(imageUrls[picks.lastIndex]);
   for (const sc of seq) {
     const idx = typeof sc?.image_index === 'number' ? sc.image_index : null;
     if (idx !== null && imageUrls[idx]) push(imageUrls[idx]);
