@@ -1119,3 +1119,44 @@ function RenderProgressCard({
     </div>
   );
 }
+
+function StoryboardStrip({ script, busy, warn }: { script: any; busy: boolean; warn: string | null }) {
+  const clips: { label: string; url: string | null }[] = [];
+  if (script?.hook) clips.push({ label: '钩子', url: script.hook.storyboard_url || null });
+  if (Array.isArray(script?.scenes)) {
+    script.scenes.forEach((s: any, i: number) => clips.push({ label: `镜${String(i + 1).padStart(2, '0')}`, url: s?.storyboard_url || null }));
+  }
+  if (script?.outro) clips.push({ label: '收尾', url: script.outro.storyboard_url || null });
+  const has = clips.some((c) => c.url);
+  if (!busy && !has && !warn) return null;
+  return (
+    <div className="border border-accent/20 rounded-lg p-3 space-y-2 bg-accent/5">
+      <div className="flex items-center gap-2">
+        <span className="font-display text-[11px] text-accent tracking-[0.18em]">分镜静帧</span>
+        <span className="w-1 h-1 rounded-full bg-accent" />
+        <span className="text-[10px] text-muted-foreground">
+          {busy ? '正在合成每一镜的定格画面…' : has ? `${clips.filter((c) => c.url).length}/${clips.length} 张已就绪` : '尚未合成'}
+        </span>
+        {busy && <Loader2 className="w-3 h-3 animate-spin text-accent" />}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        {clips.map((c, i) => (
+          <div key={i} className="flex flex-col items-center gap-1 shrink-0">
+            {c.url ? (
+              <img src={c.url} alt="" className="w-16 h-28 object-cover rounded border border-accent/20 bg-muted" />
+            ) : (
+              <div className="w-16 h-28 rounded border border-dashed border-border bg-muted/40 flex items-center justify-center text-[9px] text-muted-foreground">
+                {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : '—'}
+              </div>
+            )}
+            <span className="text-[9px] text-muted-foreground">{c.label}</span>
+          </div>
+        ))}
+      </div>
+      {warn && (
+        <p className="text-[10px] text-amber-600 leading-snug">{warn}</p>
+      )}
+    </div>
+  );
+}
+
