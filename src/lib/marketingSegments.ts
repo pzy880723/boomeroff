@@ -1,7 +1,9 @@
 // 视频分段规划:前后端共享逻辑(前端版,后端在 supabase/functions/_shared/marketing-segments.ts 有一份对应实现)。
 // 用途:
 //   1) 在 UI 上做"分段预览",所见即所得。
-//   2) 后端 render-marketing-video 用相同规则切段并挑首帧/尾帧/参考图。
+//   2) 后端 render-marketing-video 用相同规则切段并挑参考图。
+// 备注:Seedance 2.0 全部走 reference_image,不再有"首帧/尾帧"概念;
+//      ImageRole 仍保留 first/last 是为了兼容老数据,运行时统一当参考图处理。
 
 export type ImageRole = 'first' | 'last' | 'reference';
 
