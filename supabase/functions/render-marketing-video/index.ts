@@ -326,6 +326,7 @@ Deno.serve(async (req) => {
     const fallbackFirst = imageUrls[0] || characterCover;
 
     // ============ 单段路径(≤15s 全部走这里,杜绝拼接) ============
+    // 🚀 关键改造:先入库 + 立刻返回 job_id,ARK 提交放后台跑,避免前端 "Failed to fetch"。
     if (totalDur <= MAX_SEG_DUR) {
       const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character, realism);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
@@ -335,79 +336,87 @@ Deno.serve(async (req) => {
       const _hasFirst = !!imgs.firstImage;
       const _hasLast = !!imgs.lastImage && imgs.lastImage !== imgs.firstImage;
       const _mode = _hasFirst && _hasLast ? "frames" : _hasFirst ? "image2video" : imgs.referenceImages.length ? "reference" : "text";
-      console.log("[render single] model=", model, "res=", resolution, "mode=", _mode, "ref=", imgs.referenceImages.length, "first=", imgs.firstImage || "none", "last=", imgs.lastImage || "none");
+      console.log("[render single] model=", model, "res=", resolution, "mode=", _mode, "ref=", imgs.referenceImages.length);
 
-      // 提交 + 真人内容安全策略自动降级:
-      //  尝试1: 完整 first/last/reference
-      //  尝试2: 去掉 first/last,只保留 reference(角色身份板 + 商品参考)
-      //  尝试3: 纯文本 prompt,所有参考图都去掉
-      const isSensitive = (err?: string, raw?: any) => {
-        const code = raw?.error?.code || '';
-        const msg = (err || '') + ' ' + (raw?.error?.message || '');
-        return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
-      };
-      const fallbackNotes: string[] = [];
-      let r = await submitArkTask({
-        arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-        firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
-      });
-      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
-        console.warn("[render single] sensitive image blocked, retry without first/last frames");
-        fallbackNotes.push("frames_dropped_for_safety");
-        r = await submitArkTask({
-          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-          referenceImages: imgs.referenceImages,
-        });
-      }
-      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
-        console.warn("[render single] still blocked, retry with text-only prompt");
-        fallbackNotes.push("references_dropped_for_safety");
-        r = await submitArkTask({
-          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-        });
-      }
-      if (!r.ok) {
-        console.error("[render single] ark error", r.error, r.raw);
-        return json({ ok: false, error: r.error, raw: r.raw });
-      }
+      // 1) 立刻入库占位行
       const { data: job, error: jErr } = await admin.from("marketing_video_jobs").insert({
-        user_id: u.user.id,
-        script,
-        status: "queued",
-        shop_id: shopId,
-        provider: "volcengine_seedance",
-        provider_task_id: r.id,
+        user_id: u.user.id, script, status: "queued", shop_id: shopId,
+        provider: "volcengine_seedance", provider_task_id: null,
       }).select().single();
-      if (jErr) {
+      if (jErr || !job) {
         console.error("[render] job insert", jErr);
-        return json({ ok: false, error: "排队失败: " + jErr.message });
+        return json({ ok: false, error: "排队失败: " + (jErr?.message || '未知') });
       }
+
+      // 2) marketing_assets 占位(便于素材库立刻看到一张"渲染中")
       await admin.from("marketing_assets").insert({
-        user_id: u.user.id,
-        kind: "video",
-        shop_id: shopId,
-        input_image_urls: imageUrls,
-        output_url: null,
+        user_id: u.user.id, kind: "video", shop_id: shopId,
+        input_image_urls: imageUrls, output_url: null,
         meta: {
-          job_id: job.id, task_id: r.id, video_type: script.video_type,
-          duration, aspect: ratio, mode: r.mode, resolution,
+          job_id: job.id, task_id: null, video_type: script.video_type,
+          duration, aspect: ratio, mode: _mode, resolution,
           topic: script.topic || "", style: styleKey,
           style_label: VIDEO_STYLE_LABELS[styleKey], model,
           model_label: modelInfo.label, status: "queued",
           segment_total: 1, character_id: character?.id || null,
           character_name: character?.name || null,
-          warnings: [
-            ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
-            ...fallbackNotes,
-          ],
+          warnings: resolutionDowngraded ? ["resolution_downgraded"] : [],
           image_usage: {
             reference_count: imgs.referenceImages.length,
-            first: imgs.firstImage || null,
-            last: imgs.lastImage || null,
+            first: imgs.firstImage || null, last: imgs.lastImage || null,
           },
         },
       });
-      return json({ ok: true, success: true, job_id: job.id, task_id: r.id, status: "queued", segment_total: 1 });
+
+      // 3) 后台跑 ARK 提交(带真人内容降级链)
+      const submitInBackground = async () => {
+        const isSensitive = (err?: string, raw?: any) => {
+          const code = raw?.error?.code || '';
+          const msg = (err || '') + ' ' + (raw?.error?.message || '');
+          return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
+        };
+        const fallbackNotes: string[] = [];
+        let r = await submitArkTask({
+          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
+          firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
+        });
+        if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+          fallbackNotes.push("frames_dropped_for_safety");
+          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: imgs.referenceImages });
+        }
+        if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+          fallbackNotes.push("references_dropped_for_safety");
+          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
+        }
+        if (!r.ok) {
+          console.error("[render bg] ark error", r.error);
+          await admin.from("marketing_video_jobs").update({ status: "failed", error: r.error }).eq("id", job.id);
+          return;
+        }
+        await admin.from("marketing_video_jobs").update({ provider_task_id: r.id, status: "queued" }).eq("id", job.id);
+        if (fallbackNotes.length) {
+          // 把降级标记追加到 marketing_assets.meta(尽力,不阻塞)
+          try {
+            const { data: a } = await admin.from("marketing_assets").select("id, meta").eq("meta->>job_id", job.id).maybeSingle();
+            if (a) {
+              const m: any = a.meta || {};
+              m.task_id = r.id;
+              m.warnings = [...(m.warnings || []), ...fallbackNotes];
+              await admin.from("marketing_assets").update({ meta: m }).eq("id", a.id);
+            }
+          } catch (_) { /* ignore */ }
+        }
+      };
+      // @ts-ignore EdgeRuntime is provided by Supabase
+      if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(submitInBackground());
+      } else {
+        // 兜底:同步等(本地开发)
+        await submitInBackground();
+      }
+
+      return json({ ok: true, success: true, job_id: job.id, status: "queued", segment_total: 1 });
     }
 
     // ============ 多段路径(并行提交) ============
