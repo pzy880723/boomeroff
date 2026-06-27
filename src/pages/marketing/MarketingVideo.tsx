@@ -71,7 +71,11 @@ export default function MarketingVideo() {
   const [modelId, setModelId] = useState<string>(() => getModelPrefs().modelId);
   const [resolution, setResolution] = useState<SeedanceResolution>(() => getModelPrefs().resolution);
   const [realism, setRealism] = useState<Realism>(() => getRealismPref());
-  const handleRealismChange = (r: Realism) => { setRealism(r); setRealismPref(r); };
+  const handleRealismChange = (r: Realism) => {
+    setRealism(r);
+    setRealismPref(r);
+    if (script) toast.message('画风已切换,建议点「重做分镜静帧」重新合成');
+  };
   const handleModelChange = (id: string) => {
     setModelId(id);
     setResolution((cur) => {
