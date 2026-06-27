@@ -1,53 +1,95 @@
-## 一、分镜预览（SurpriseVideoDialog）UI 精修
+# 修复 render-marketing-video「Failed to fetch」+ 重构 Boomer 帮我拍 流程
 
-在分镜静帧横滑条 + 每条分镜行的缩略图按钮上：
-- 增加 `rounded-xl` 圆角矩形（已有圆角，加重一档），加 `ring-1 ring-border` + `shadow-lg shadow-black/15`，让图凸显出来。
-- 容器加微微的内边距和 `bg-card`，与背景分离。
+## 一、先解决眼前这个报错
 
-`ImageLightbox.tsx`（毛玻璃左右按钮也归这里管）：
-- 左右两个 `ChevronLeft/Right` 按钮，把 `bg-white/15` 改为 `bg-white/25`，再加 `shadow-lg shadow-black/40 ring-1 ring-white/30`，让毛玻璃按钮从黑底中明显跳出来。
-- 右上的关闭按钮保留现状（已有 shadow-xl）。
+**根因**：前端把整张完整脚本（含每段 600 字符的 storyboard 签名 URL + 全量 image_urls）通过 body POST 给 `render-marketing-video`，payload 体积大 + 函数冷启动，浏览器侧直接 `Failed to fetch`。
 
-## 二、Lightbox 不再叠两层
+**修法（最小改动）**：
+1. 前端 `MarketingVideo.tsx` / `surpriseJob.ts` 调用 `render-marketing-video` 时，**只传 `job_id`**（脚本已经存在 `marketing_video_jobs.script` 里），由后端自己 select 出 script，避免重复传几十 KB。
+2. 后端 `render-marketing-video/index.ts` 兼容两种入参：
+   - 旧：`{ script, ... }` 直传（向后兼容）
+   - 新：`{ job_id }` → 从 DB 读 script、character、shop_id
+3. 给 fetch 加 30 秒超时 + 一次自动重试，前端 toast 显示「网络抖动，已重试」。
+4. 增加一行 `console.log("[render] received job", job_id)` 在函数入口，便于以后看日志确认请求到没到。
 
-`AssetDetailDialog.tsx`：移除内置的 `<ImageLightbox>` 以及触发它的图片点击（line 608-614 + 相关 `setLbOpen` state 和图片 onClick）。  
-素材库点缩略图 → 只弹 `AssetDetailDialog` 一层，恢复"原来那样"。
+## 二、重构「Boomer 帮我拍」流程（按你提的顺序）
 
-## 三、`+2` 标签溢出徽章改写
+目前是：随机挑素材 → 拿素材让 AI 写脚本 → 渲染。问题：脚本被素材绑架，主角不连贯。
 
-`MarketingLibrary.tsx` line 690-692 当前展示 `第一个标签 +2`，用户看不懂。改为：
-- 只有 1 个标签时：显示该标签。
-- 多个时：显示 `共 N 个标签` 或直接展示前两个 `tagA · tagB`（不带 `+N`）。
+**新流程（脚本驱动 → 标签选素材 → 人物分镜）**：
 
-## 四、上传后自动打标签（补齐所有入口）
+```text
+1. 脚本草稿 (LLM)
+   输入: 店铺画像 + 主题(自动选 or 用户输) + 时长 + 画风
+   输出: scenes[],每段含:
+     - subtitle/dialogue/scene/action
+     - needed_tags: ["货架","试穿","特写","门头"...]  ← 新字段
+     - needs_character: true|false                    ← 新字段
+     - shot_type: "wide|medium|closeup|product"
 
-目前只有 `UploadAssetDialog` 在上传后调用 `auto-tag-marketing-asset`；`UploadGrid.tsx` 的快速批量上传路径（`processOne` line 79-92）没调用。  
-在 `UploadGrid` 的批量上传完成后，按 batch（例如每 8 个 asset_id 一组）异步 fire-and-forget 调用 `auto-tag-marketing-asset`，不阻塞 UI。
+2. 主角选定
+   marketing_characters 表里按 auto_anchor 优先 + 随机挑 1 位 → 锁定全片
 
-## 五、一次性回填历史无标签素材
+3. 标签匹配素材  (Edge: pick-assets-by-script)
+   for each scene with needs_character=false:
+     在 marketing_assets 里按 needed_tags 命中度排序,取最高
+   for each scene with needs_character=true:
+     → 标记为「需要生成人物分镜」,后面 storyboard 阶段处理
 
-新建 edge function `backfill-marketing-asset-tags`：
-- service-role 客户端查 `marketing_assets` 中 `tags is null or tags = '{}'` 且 `kind='photo'` 且 `output_url not null`，按 shop 分批（每批 10 个 id）循环调用现有 `auto-tag-marketing-asset` 逻辑。
-- 限速：每批之间 sleep 800ms，避免 LLM 限流；总数上限例如 500 条/次，返回 `processed / remaining`，前端可多次触发。
-- 在 `MarketingLibrary.tsx` 顶部"管理模式"区，仿照"回填分镜"按钮，新增"一键补标签"按钮（仅 admin 可见），点击调用此函数，Toast 显示已处理张数和剩余张数。
+4. 人物分镜静帧 (storyboard-marketing-video,已存在,小改)
+   for each needs_character 镜头:
+     用 角色参考图 + 该镜 needed_tags 命中到的场景素材
+     Gemini image-edit 合成「主角在该场景做该动作」的静帧
+   for each 非人物镜头:
+     直接用素材库挑到的图作为 first_frame
 
-## 六、自动生成视频与标签关联
+5. 渲染 (render-marketing-video)
+   每段都有 first_frame:
+     - 人物段 → 合成静帧(主角一致)
+     - 空镜/产品段 → 素材库原图
+   character 信息全程跟随,确保主角不变
 
-`surprise-marketing-video` 当前在素材池里按"时间新→旧"加权随机挑 3-5 张，互相之间没有主题一致性。改造为"先选主题 tag，再围绕该 tag 挑素材"：
+6. UI 反馈
+   SurpriseVideoDialog 顶部:
+     主题 chip · 主角 chip(头像+名字) · 模型 · ETA
+   分镜卡新增标签徽:
+     [人物镜] / [素材:tag1·tag2] / [合成中]
+```
 
-1. 拉素材时同时收集 `tags`、`category` 频次，得到该店最近 90 天的 Top tag 列表（出现 ≥2 次的）。
-2. 加权随机选 1 个"主题 tag/category"（频次越高权重越高）。
-3. 池内素材按"是否包含该 tag/category" 拆为命中组和未命中组：
-   - 命中 ≥3 张：从命中组里挑 3-5 张；
-   - 命中 1-2 张：命中全选 + 从池里补足到 3-5 张；
-   - 命中 0：保持当前随机逻辑兜底。
-4. 把选中的 `theme_tag` 写进返回的 `picked` 里（前端可在分镜预览顶部显示 `主题 · xxx` Chip，让用户知道这一组是围绕哪个标签拍的）。
-5. `pickVtypeByAssets` 继续基于这批素材的 tags 决定视频类型，逻辑天然受益于本次主题聚拢。
+## 三、改动清单（技术细节，按文件）
 
-> 不再为每张图额外生成参考词，仅复用既有 tags / category，无额外 token 消耗。
+### 后端
+- `supabase/functions/generate-marketing-video-script/index.ts`
+  - 给每个 scene 强制输出 `needed_tags`(2-4 个)、`needs_character`(boolean)、`shot_type`
+  - prompt 里说明: 「先确定故事,再描述需要什么样的画面,不要被现有素材绑架」
+- `supabase/functions/_shared/pick-assets-by-tags.ts` (新)
+  - 输入: shop_id, needed_tags[], exclude_ids[]
+  - 输出: 命中度最高的 asset(按 tags ∩ 数 + 最近上传时间)
+- `supabase/functions/surprise-marketing-video/index.ts`
+  - 流程顺序改为: 先生成脚本(无图)→ 选主角 → 按 needed_tags 配图 → 写回 script.scenes[].image_url + image_binding
+- `supabase/functions/storyboard-marketing-video/index.ts`
+  - 对 `needs_character=true` 镜头,把素材图 + 角色参考图一起喂给 Gemini image-edit,promot 强调「保持主角五官一致 + 还原场景」
+- `supabase/functions/render-marketing-video/index.ts`
+  - 接受 `{ job_id }` 入参(见第一部分)
 
-## 技术备注
+### 前端
+- `src/pages/marketing/MarketingVideo.tsx` & `src/components/marketing/SurpriseVideoDialog.tsx`
+  - 分镜卡片增加标签徽:`<Badge>人物</Badge>` / `<Badge>tag</Badge>`
+  - 调用 render 时只传 `job_id`
+- `src/lib/surpriseJob.ts`
+  - 持久化新增字段:`character_id`、`theme_tag`、每段 `needed_tags`
 
-- 文件：`SurpriseVideoDialog.tsx`、`ImageLightbox.tsx`、`AssetDetailDialog.tsx`、`MarketingLibrary.tsx`、`UploadGrid.tsx`、新建 `supabase/functions/backfill-marketing-asset-tags/index.ts`、`supabase/functions/surprise-marketing-video/index.ts`。
-- 不涉及数据库 schema 改动。
-- 回填函数 verify_jwt = true（前端用户 token 调用，函数内部 admin client 操作），仅 admin 可触发（在 SQL 之前先校验 `has_role(uid, 'admin')`）。
+## 四、关于「品牌 logo 字体」(上一轮你提到)
+
+这一项独立拆出来，等你回答 logo 资产是要我生成还是你提供后再做，不在本次 PR 里。
+
+## 五、不在本次改动里的事
+
+- 不动 marketing_assets 表结构(已有 tags 字段)
+- 不动 stitchVideos.ts(单段 15s 流程已经不走拼接)
+- 不动 AI 自定义视频的手动选图路径(那条流程用户自己挑,不需要标签匹配)
+
+## 六、风险
+
+- needed_tags 命中不到 → 回退到随机挑同 shop 任意素材,toast 提示「该镜没找到完全匹配的素材,已用近似图」
+- Gemini image-edit 合成人物可能仍有走形 → 走「角色参考图作为 reference_image」兜底,不阻塞渲染
