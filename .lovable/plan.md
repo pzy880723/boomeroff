@@ -1,70 +1,37 @@
-# 惊喜一下 → 博主人设「按品类动态生成」
+## 目标
+现在惊喜一下顶部死写「洗脑探店 · 激动快节奏」，但 AI 按品类挑出来的博主可能是老克勒、文气主理人这种慢节奏人设，两者打架。改成：**vibe 完全跟随当次 AI 生成的博主**，UI 不再硬塞「激动快节奏」字样，脚本节奏也按 persona vibe 走。
 
-## 核心修正
+## 改动
 
-不再用预设博主库，改为**让 AI 根据本次素材的品类/主题，先动态生成一位最匹配的探店博主人设**，再用这个人设去写脚本和渲染视频。
+### 1. `supabase/functions/_shared/persona-generator.ts`
+- `InfluencerPersona` 增加字段 `pace: 'slow' | 'medium' | 'fast'` 和 `tone_label: string`（例：「沉稳种草」「高能洗脑」「文气慢推」「吃货狂炫」），由 AI 根据品类自己判断；老克勒→slow/沉稳种草，潮玩→fast/高能洗脑，吃货→fast/狂炫安利。
+- system prompt 里去掉「所有人都要激动」的暗示，加一句：**节奏要符合人设本身**，老派人物允许慢条斯理，年轻人物允许高能。
+- `formatPersonaDirective` 把 pace 翻译成 Seedance 英文节奏锁（slow→calm measured delivery；fast→high-energy rapid delivery）。
+- `formatPersonaBriefZh` 把 pace + tone_label 写进 brief，明确告诉脚本生成器「本片整体节奏=X，禁止套用其他节奏的口头禅」。
+- Fallback persona 补上 pace='fast'、tone_label='高能种草'。
 
-例如：
-- 素材是瓷器/老物件 → AI 生成「55 岁老克勒大叔，旗袍马甲，文气稳重」；
-- 素材是潮玩/盲盒 → AI 生成「22 岁年轻女生，发色挑染，活泼跳脱」；
-- 素材是户外装备 → AI 生成「30 岁登山男，冲锋衣，硬朗低音」。
+### 2. `supabase/functions/surprise-marketing-video/index.ts`
+- 把 persona.pace / tone_label 透传到 `generate-marketing-video-script` 的 brief 里，让单镜台词字数按节奏浮动：slow 允许 8-12 字/镜，fast 维持 6-10 字/镜，但总字数仍 ≤ 65。
+- 返回给前端的 `persona` 对象带上新字段。
 
----
+### 3. `supabase/functions/render-marketing-video/index.ts`
+- `buildOneShotPrompt` 在拼 persona_directive 时根据 pace 调整片头节奏描述（不再无脑写 "fast cuts / hype"），改成读 persona 自己的节奏。
 
-## 改动 1：新建「博主人设生成器」步骤
-
-文件：`supabase/functions/surprise-marketing-video/index.ts`
-
-在素材打标 / 选图完成、写脚本**之前**插入一个轻量 AI 调用：
-
-输入：
-- 该批素材的 `category / tags / summary`（已有的 AI 打标结果）；
-- 店铺名 + 主营品类（来自 shop_context）；
-- 当前节日 vibe。
-
-让 Gemini 输出严格 JSON：
-```json
-{
-  "label": "55岁老克勒大叔",
-  "gender": "male",
-  "age": 55,
-  "visual": "灰白短发、圆框眼镜、棉麻立领衬衫、稳重儒雅",
-  "vibe": "慢条斯理、带点上海口音的文气探店",
-  "opener": "各位看官",
-  "catchphrase": ["这件东西可不得了", "我跟你讲", "懂行的都明白"],
-  "cta": "地址放评论区，识货的来"
-}
-```
-
-约束：必须跟素材品类匹配（瓷器/古董→中老年；潮玩/美妆→年轻；亲子→宝妈；户外→硬汉）；禁止真人姓名。
-
-把结果存在 `persona` 变量里向下传。
-
-## 改动 2：persona 注入脚本与渲染
-
-- `generate-marketing-video-script` 调用时把 `persona` 透传，system prompt 用 persona 的 `visual / vibe / opener / catchphrase / cta` 替换上一版固定句池；
-- `render-marketing-video` 的 `prompt_overrides.persona_directive` 用 persona.visual 拼一行强约束（同一人/同一发型/同一服装贯穿全片）。
-
-## 改动 3：删除预设博主库
-
-不再创建 `_shared/influencer-personas.ts`。改为新建 `_shared/persona-generator.ts`，导出 `generatePersona({ assetTags, shop, holiday })`，内部封装上述 AI 调用 + JSON 解析 + 兜底（AI 失败时回退到一个通用「年轻女生」人设，保证流程不断）。
-
-## 改动 4：前端展示
-
-`SurpriseVideoDialog.tsx` 顶部 chip 改为：
-- 「🎬 今日博主：{persona.label}」
-- 鼠标 hover / 点击展开显示 `visual` 与 `vibe` 全文，方便店主理解 AI 为什么挑这个人。
+### 4. `src/components/marketing/SurpriseVideoDialog.tsx`
+- 顶部 chip 区移除硬编码的「🔥 洗脑探店 · 激动快节奏」。
+- 改成动态渲染：
+  - 「🎬 今日博主：{persona.label}」
+  - 「🎙️ 风格：{persona.tone_label}」（颜色按 pace 区分：fast=红、medium=琥珀、slow=靛）
+  - 节日 chip 保留
+- 博主详情卡里把 vibe / 节奏一起展示，去掉与人设打架的「激动」字眼。
 
 ## 不动
-
-- 角色板（character）在惊喜流程里依旧不使用；
-- 门头锁开场、节日借势、9 张参考图封顶、台词 ≤14 字/镜、one_shot 策略、`render-marketing-video` 主体逻辑全部保留；
-- 「帮我拍」自定义流程不受影响。
-
----
+- 门头第一镜锁定逻辑、9 张参考图、节日 brief、虚构人物约束不变。
+- 脚本仍是第一人称博主口播。
 
 ## 技术细节
+- pace 在 AI JSON 输出里要求枚举值，解析时 fallback 'medium'。
+- 前端 chip 颜色用 design token（`text-destructive` / `text-amber-500` / `text-indigo-500`），不写死十六进制。
 
-- 新增的 persona AI 调用走 `google/gemini-3-flash-preview`，temperature 0.9，无图片输入，单次 ~300 tokens，延迟可忽略；
-- persona JSON 进 `surprise_jobs.result.persona` 字段持久化，便于复盘和前端展示；
-- 若素材打标信息为空，退化为按店铺主营品类生成，仍能跑通。
+## 部署
+改完后部署：`surprise-marketing-video`、`render-marketing-video`。
