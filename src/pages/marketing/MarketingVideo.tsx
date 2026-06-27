@@ -19,6 +19,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
 import { planSegments, effectiveImageRef, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
+import { ImageLightbox } from '@/components/voucher/ImageLightbox';
+import { thumbUrl } from '@/lib/imageUrl';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
