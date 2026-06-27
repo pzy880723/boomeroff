@@ -5,6 +5,7 @@ import { loadMarketingPresets, type VideoType } from "../_shared/brand-context.t
 import { normalizeStyle, VIDEO_STYLE_LABELS, VIDEO_STYLE_EN } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
+import { STOREFRONT_CONSTRAINT_ZH, sanitizeStorefrontText } from "../_shared/storefront-constraints.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
