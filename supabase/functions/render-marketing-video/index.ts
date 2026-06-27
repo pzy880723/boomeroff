@@ -232,8 +232,8 @@ function splitScript(script: any): any[] {
   const empty = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
   return shots.map((s, i) => {
     const rawDur = Number(s.sc.duration_s);
-    // Seedance 单段最短 4s,最长 15s。短于 4s 的镜头会被拉到 4s(轻微费用上浮换语义完整)。
-    const dur = Math.max(4, Math.min(MAX_SEG_DUR, Number.isFinite(rawDur) && rawDur > 0 ? Math.round(rawDur) : 5));
+    // Seedance 2.0 单段最短 3s,最长 15s。
+    const dur = Math.max(3, Math.min(MAX_SEG_DUR, Number.isFinite(rawDur) && rawDur > 0 ? Math.round(rawDur) : 5));
     const clip = { ...s.sc, duration_s: dur };
     return {
       ...script,
