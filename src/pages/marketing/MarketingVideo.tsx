@@ -615,19 +615,42 @@ export default function MarketingVideo() {
                 <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">文生视频 · 逐镜确认</span>
               </div>
               <div className="flex items-center gap-1 flex-wrap">
+                {sbStale && (
+                  <span className="text-[9.5px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                    分镜图已变更
+                  </span>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => generateStoryboard()} disabled={sbBusy || generating} className="h-7 text-[11px]">
                   {sbBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                   {sbBusy ? '合成中' : '重做分镜静帧'}
                 </Button>
+                {!sbBusy && missingSbIndices.length > 0 && hasAnyStoryboard && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => generateStoryboard(undefined, missingSbIndices)}
+                    disabled={generating}
+                    className="h-7 text-[11px] text-accent"
+                  >
+                    仅补 {missingSbIndices.length} 张
+                  </Button>
+                )}
                 <Button size="sm" variant="ghost" onClick={genScript} disabled={generating}>
                   {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}重新生成
                 </Button>
               </div>
             </div>
 
+            {script && !sbBusy && !hasAnyStoryboard && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 leading-snug">
+                ⚠ 还没有分镜静帧。如果直接渲染会用原素材图,质量会差。点右上「重做分镜静帧」先合成每一镜的定格画面。
+              </div>
+            )}
+
             <StoryboardStrip script={script} busy={sbBusy} warn={sbWarn} />
 
             <SegmentPreview script={script} urls={urls} character={character} />
+
 
             <SceneRow title="钩子" num="00" scene={script.hook} urls={urls}
               onField={(f, v) => updateScene('hook', f, v)}
