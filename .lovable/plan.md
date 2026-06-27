@@ -1,55 +1,34 @@
 
-# 素材库图片加载优化
+# 修复 Seedance Fast 在参考图模式下的 1080p 报错
 
-只动素材库的取数和缩略图链路，不改业务逻辑、不动样式风格。
+## 根因
 
-## 现状瓶颈
+火山 doubao-seedance-2-0-fast **只支持 720p**（参考图/文本两种模式都不接受 1080p）。我们 `src/lib/seedanceModels.ts` 里给 Fast 写的是 `["720p", "1080p"]`，用户记忆里上次选的是 1080p，模型 picker 又会延用旧分辨率，于是命中 r2v + 1080p → 火山报 `resolution invalid for doubao-seedance-2-0-fast in r2v`。Mini 同源限制（厂商文档目前也只标 720p），按相同处理。
 
-- `MarketingLibrary.tsx` 一次性 `select *` 拉 200 条，把 `meta`（含分段 URL、prompt、错误日志）也下发，首屏 JSON 经常几百 KB。
-- `thumbUrl()` 默认请 320px JPEG quality 72，但九宫格在 390px 屏上每格 ≈120 CSS px，dpr=2 也只要 240px；现在多请了 30%~50% 像素。
-- 没有 `format=webp`，Supabase Render 支持但目前没开。
-- 没有对 storage 域名做 `preconnect`，每张图都要重新 TLS 握手。
-- 渲染 200 个 `<img loading="lazy">`，但没有占位/骨架，用户看到的就是"灰底很久才出图"。
-- `LibraryAssetPickerDialog` 走的是同样的链路、同样问题。
+## 改动
 
-## 改动清单
+### 1) `src/lib/seedanceModels.ts`
+- Fast 的 `resolutions` 改为 `["720p"]`，`default_resolution` 维持 `"720p"`。
+- Mini 同步改为 `["720p"]`，并在 `tagline`/`best_for` 文案上提示「仅 720p」。
+- `reconcileResolution` 已经在分辨率不在新模型清单时回落到 `default_resolution`，所以一旦清单收紧，旧的 1080p 偏好会自动落回 720p——不需要改它。
 
-### 1) `src/lib/imageUrl.ts`
-- `thumbUrl` 默认宽度从 480 降到 240，质量 70。
-- 新增可选 `format` 参数，默认输出 `format=webp`（Supabase render 支持，体积 -30~50%）。
-- 新增 `thumbSrcSet(url, baseWidth)` 输出 `1x/2x` 两档 webp，配合 `<img srcset sizes>` 让高 dpr 屏精确取图。
+### 2) `src/lib/videoModelPrefs.ts`（如果记忆函数会读取分辨率）
+- 读分辨率偏好时套一层 `reconcileResolution(modelId, savedRes)`，避免把 localStorage 里旧的 1080p 直接喂给 Fast。如果文件里已经这么做了，跳过。
 
-### 2) `src/pages/marketing/MarketingLibrary.tsx`
-- `fetchItems`：
-  - `select(...)` 显式列：`id, kind, output_url, input_image_urls, tags, category, shop_id, user_id, created_at, meta`。维持 meta（视频进度、poster_url 依赖它），但去掉 `select *` 隐性带出的将来新增大列。
-  - 首屏 `limit` 由 200 → 60，新增 `loadMore`：底部 IntersectionObserver 触底再追加 60 条（`range(offset, offset+59)`）。
-  - 失败视频/补标签等按钮的判定依旧基于已加载列表，不影响。
-- 媒体格子：
-  - `img` 加 `width`/`height`（占位避免 reflow）、`sizes="(min-width:768px) 20vw, 33vw"`、`srcSet`（240/480）、`fetchpriority` 前 6 张设为 `high`，其余 `auto`。
-  - 包一层「未加载前显示 `Skeleton`」的状态：用 `onLoad` 把 `loaded` 标记 set，未 loaded 时叠一个 `animate-pulse` 占位，告别"灰底空窗"。
-- 移除一次 `thumbUrl` 内联计算 → 用 `useMemo` 按 `it.id+rawThumb` 缓存，避免每次 setState 重算 200+ 字符串。
+### 3) `supabase/functions/render-marketing-video/index.ts`
+- `clampResolution`（已存在）依赖 `_shared/seedance-models.ts`。把那份 shared 文件里的 Fast / Mini 分辨率清单同步改成 `["720p"]`，让后端兜底（即便前端绕过 picker 直接发 1080p，后端也会自动降到 720p 并打 `resolution_downgraded` 标记）。
+- 不动 `submitArkTask` 本身，依旧由 `clampResolution` 在调用前修正。
 
-### 3) `src/pages/marketing/dispatch/LibraryAssetPickerDialog.tsx`
-- 同样改 `select` 列 + 默认 60 条 + WebP 缩略图 + `Skeleton` 占位。
-- 弹窗滚动到底再追加下一页（弹窗内 IntersectionObserver，避免一次 120 张同时下载）。
+### 4) 前端 picker UI
+- `SeedanceModelPicker.tsx`（已经基于 `resolutions` 数组渲染分辨率按钮）：清单变了之后，Fast 下只会显示「720p」一个选项，UI 自动收敛。
 
-### 4) `index.html`
-- 在 `<head>` 增加：
-  ```html
-  <link rel="preconnect" href="https://<project-ref>.supabase.co" crossorigin />
-  <link rel="dns-prefetch" href="https://<project-ref>.supabase.co" />
-  ```
-  用 `VITE_SUPABASE_URL` 的 host 注入（构建期常量，可直接写死项目当前 host）。
+## 不动
 
-## 不动的部分
-
-- 数据库 schema、RLS、Edge Function、视频拼接逻辑、标签/品类编辑、Realtime 订阅、错误重试、删除流程一概不动。
-- `AssetTagDialog`、`UploadAssetDialog`、视频详情等无关组件不变。
-- 字体、配色、布局保持现状。
+- `submitArkTask` 的 r2v / t2v 分支、降级链、3 级安全降级、参考图上限 9 张、提示词、计费、UI 排版、播放/下载链路 → 都不动。
+- 不改 Pro：Pro 维持 720p/1080p/4K 三档。
 
 ## 验收
 
-- 首屏请求体大小（marketing_assets 的 JSON）下降明显（meta 仍在，但行数从 200 → 60）。
-- 图片 URL 带 `format=webp&width=240`，DevTools 看到的单图传输量从 ~30-60KB 降到 ~8-18KB。
-- 滚动到底自动加载下一页；标签筛选、店铺切换重置分页。
-- 弱网/慢图时格子先显示骨架不是灰块。
+- Fast / Mini 在 model picker 下只能选 720p，旧记忆中的 1080p 自动回落到 720p。
+- 选 Fast + r2v 重新生成，不再触发火山 `resolution invalid` 错误。
+- 若旧客户端仍传 1080p，后端 `clampResolution` 把它降到 720p，并在 `meta.warnings` 增加 `resolution_downgraded`。
