@@ -17,13 +17,36 @@ Deno.serve(async (req) => {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  // SAU 的扫码端点(常见两种命名都尝试)
-  const target = `${SAU_BASE}/login_qrcode?type=${code}`;
-  const upstream = await fetch(target, {
-    headers: SAU_TOKEN ? { "X-Sau-Token": SAU_TOKEN, "Accept": "text/event-stream" } : { "Accept": "text/event-stream" },
-  });
-  if (!upstream.ok || !upstream.body) {
-    return new Response(JSON.stringify({ error: `worker login ${upstream.status}` }), {
+  // SAU 扫码端点在不同 worker 版本里命名不一,按已知顺序回退尝试
+  const candidates = [
+    `/login_qrcode?type=${code}`,
+    `/loginQrcode?type=${code}`,
+    `/account/login?type=${code}`,
+    `/login?type=${code}`,
+    `/qrcode?type=${code}`,
+  ];
+  const baseHeaders: Record<string, string> = { Accept: "text/event-stream" };
+  if (SAU_TOKEN) baseHeaders["X-Sau-Token"] = SAU_TOKEN;
+  let upstream: Response | null = null;
+  let lastStatus = 0;
+  const tried: string[] = [];
+  for (const path of candidates) {
+    try {
+      const r = await fetch(`${SAU_BASE}${path}`, { headers: baseHeaders });
+      tried.push(`${path}=${r.status}`);
+      if (r.ok && r.body) { upstream = r; break; }
+      lastStatus = r.status;
+      try { await r.body?.cancel(); } catch { /* noop */ }
+    } catch (e) {
+      tried.push(`${path}=ERR`);
+    }
+  }
+  if (!upstream) {
+    return new Response(JSON.stringify({
+      error: `worker login ${lastStatus || 404}`,
+      hint: "worker 未暴露扫码端点,请确认 SAU_WORKER_URL 指向已实现 /login_qrcode 的版本",
+      tried,
+    }), {
       status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
