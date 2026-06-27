@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Sparkles, RefreshCw, ArrowRight, Wand2, Camera, MessageSquare } from 'lucide-react';
+import { Loader2, Sparkles, RefreshCw, ArrowRight, Wand2, Camera, MessageSquare, DoorOpen, PartyPopper } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffectiveShop } from '@/hooks/useShops';
 import { toast } from 'sonner';
@@ -25,7 +25,12 @@ import type { Realism } from '@/lib/realism';
 const SURPRISE_REALISM: Realism = 'photoreal';
 
 interface PickedAsset {
-  asset_id: string; index: number; url: string; summary: string; category: string | null;
+  asset_id: string;
+  index: number;
+  url: string;
+  summary: string;
+  category: string | null;
+  role?: 'storefront' | 'scene';
 }
 interface SceneClip {
   scene?: string; action?: string; dialogue?: string; subtitle?: string;
@@ -37,12 +42,14 @@ interface ScriptShape {
 }
 interface SurpriseResult {
   ok: boolean;
-  picked: { asset_id: string; cover_url: string; summary: string; category: string | null; tags: string[] };
+  picked: { asset_id: string; cover_url: string; summary: string; category: string | null; tags: string[]; needs_storefront?: boolean; theme_tag?: string | null };
   assets: PickedAsset[];
   script: ScriptShape;
   vtype: string; vtype_label: string; style: string;
   character: { id: string; name: string; cover_url: string | null } | null;
+  holiday?: { name: string; days_away: number } | null;
   duration: number; aspect: string;
+  prompt_overrides?: { opening?: string; style_cue?: string };
   job_id?: string;
   __warn?: string;
 }
@@ -109,7 +116,6 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const doPick = async (exclude: string[] = []) => {
     if (!shopId) return;
     setPicking(true); setPick(null);
-    // 复用 inflight，避免 close→open 时重派
     const existing = getInflightPick(shopId);
     const promise = existing || setInflightPick(shopId, supabase.functions.invoke('surprise-marketing-video', {
       body: { shop_id: shopId, preview: true, exclude_asset_ids: exclude, realism },
@@ -127,7 +133,6 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     } finally { setPicking(false); }
   };
 
-  // 打开时:优先恢复已有渲染任务 → 已保存的 pick → 再发起新一轮
   useEffect(() => {
     if (!open || !shopId) return;
     const job = getActiveRenderJob(shopId);
@@ -149,7 +154,6 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, shopId]);
 
-  // 关弹窗不取消 inflight、不清 jobId，仅停止本组件 polling
   useEffect(() => () => stopPolling(), []);
 
   const reroll = () => {
@@ -175,6 +179,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           resolution: useRes,
           realism,
           disable_references: !!overrides?.disable_references,
+          prompt_overrides: pick.prompt_overrides,
         },
       });
       if (error) throw error;
@@ -226,7 +231,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         <DialogHeader className="px-4 pt-4 pb-2.5 border-b">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Wand2 className="w-4 h-4 text-accent shrink-0" />
-            <span className="truncate">BOOMER 帮你拍一条</span>
+            <span className="truncate">BOOMER 帮你拍一条 · 洗脑探店</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -243,11 +248,10 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
             <Loader2 className="w-5 h-5 animate-spin text-accent" />
             <div className="text-center">
-              BOOMER 正在挑素材、写洗脑探店口播脚本…
+              BOOMER 正在挑素材、蹭最近节日、写洗脑探店口播…
               <div className="text-[10px] mt-1 opacity-70">15s 竖版 · 真人出镜 · 高转化模板</div>
             </div>
           </div>
-
         ) : (
           <>
             <ScriptBody pick={pick} />
@@ -262,7 +266,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 shrink-0" />
                 <span className="truncate">
-                  将使用 <b>{getSeedanceModel(modelId).label}</b> · {resolution} · 最长 {getSeedanceModel(modelId).max_duration}s · 单段直出
+                  将使用 <b>{getSeedanceModel(modelId).label}</b> · {resolution} · 一次成片
                 </span>
               </div>
               <div className="flex gap-2">
@@ -275,7 +279,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 </Button>
               </div>
               <p className="text-[10px] text-center text-muted-foreground">
-                单段直出 · 无拼接 · 关掉弹窗也会继续拍
+                一次成片 · 关掉弹窗也会继续拍
               </p>
             </div>
           </>
@@ -304,7 +308,6 @@ function RenderingBody({
     return () => window.clearInterval(t);
   }, [phase, job.createdAt]);
 
-  // 进度估算:有 segment 进度时用真实值;否则按 90 秒预期 + 防超过 95%
   const pct = (() => {
     if (phase === 'done') return 100;
     if (phase === 'failed') return 0;
@@ -315,7 +318,6 @@ function RenderingBody({
     return Math.min(95, Math.round((elapsed / expected) * 100));
   })();
 
-  // 分阶段文案:按已用时间推断当前在做什么(后端是黑盒,给用户一个稳定的"进度故事")
   const stage = (() => {
     if (phase === 'done') return { title: '拍好啦 🎬', hint: '已上传到素材库,点下方查看' };
     if (phase === 'failed') return { title: '这次没拍成', hint: '别急,下面给你修复方案,一键重试' };
@@ -325,7 +327,7 @@ function RenderingBody({
       if (ratio >= 0.95) return { title: '即将完成…', hint: '正在打包封面 + 上传到素材库' };
       return { title: `Seedance 渲染中 · ${progress.done}/${progress.total}`, hint: '每段约 30-60 秒,稳一稳' };
     }
-    if (elapsed < 15) return { title: '准备渲染参数…', hint: '正在把分镜静帧 + 角色板拼成参考图' };
+    if (elapsed < 15) return { title: '准备渲染参数…', hint: '正在把角色板 + 实景参考图打包' };
     if (elapsed < 45) return { title: 'Seedance 在排镜头…', hint: '模型正在按脚本切分镜,大约还要 1 分钟' };
     if (elapsed < 90) return { title: 'Seedance 渲染中…', hint: '正在逐帧生成,马上就好' };
     if (elapsed < 180) return { title: '正在精修画面…', hint: '高清模型耗时略长,辛苦再等一下' };
@@ -335,7 +337,6 @@ function RenderingBody({
   const mm = String(Math.floor(elapsed / 60)).padStart(1, '0');
   const ss = String(elapsed % 60).padStart(2, '0');
 
-  // 预期时长(用于 ETA 估算)
   const expectedTotal = (job.segmentTotal && job.segmentTotal > 1) ? job.segmentTotal * 60 : 120;
   const etaSec = Math.max(0, expectedTotal - elapsed);
   const etaText = phase === 'done' || phase === 'failed'
@@ -368,7 +369,6 @@ function RenderingBody({
         </div>
       </div>
 
-      {/* 进度条 */}
       <div className="space-y-1.5">
         <div className="h-2 rounded-full bg-muted overflow-hidden">
           <div
@@ -395,7 +395,6 @@ function RenderingBody({
         </div>
       </div>
 
-
       {phase === 'failed' && (
         <VideoFailureCard error={error} onApplyFix={onApplyFix} busy={busy} />
       )}
@@ -414,7 +413,7 @@ function RenderingBody({
   );
 }
 
-function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
+function ScriptBody({ pick }: { pick: SurpriseResult }) {
   const clips: { label: string; clip: SceneClip }[] = [];
   if (pick.script.hook) clips.push({ label: '钩子', clip: pick.script.hook });
   (pick.script.scenes || []).forEach((s, i) => clips.push({ label: `镜头${i + 1}`, clip: s }));
@@ -428,22 +427,23 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
     return { label, clip, start, dur };
   });
 
-  const assetByIdx = new Map(pick.assets.map((a) => [a.index, a]));
-
-  // 收集可放大预览的图片(绑定的实景图;无绑定则按入选顺序展示)
-  const lightboxUrls = useMemo(() => {
-    const urls: string[] = [];
-    withTime.forEach(({ clip }) => {
-      const idx = clip.image_index;
-      const asset = typeof idx === 'number' ? assetByIdx.get(idx) : undefined;
-      if (asset?.url) urls.push(asset.url);
-    });
-    if (urls.length === 0) pick.assets.forEach((a) => urls.push(a.url));
-    return urls;
-  }, [withTime, pick.assets]);
+  const lightboxUrls = useMemo(() => pick.assets.map((a) => a.url), [pick.assets]);
   const [lbOpen, setLbOpen] = useState(false);
   const [lbIdx, setLbIdx] = useState(0);
   const openLb = (i: number) => { setLbIdx(i); setLbOpen(true); };
+
+  const characterCover = pick.character?.cover_url;
+  // 角色板放在参考图最前面展示(后端 reference_image 也是角色板优先)
+  const refTiles: { url: string; label: string; kind: 'character' | 'storefront' | 'scene' }[] = [];
+  if (characterCover) refTiles.push({ url: characterCover, label: '主角', kind: 'character' });
+  pick.assets.forEach((a) => {
+    refTiles.push({
+      url: a.url,
+      label: a.role === 'storefront' ? '门头' : `实景${pick.assets.filter((x, i) => i <= pick.assets.indexOf(a) && x.role !== 'storefront').length}`,
+      kind: a.role === 'storefront' ? 'storefront' : 'scene',
+    });
+  });
+  const refLightbox = useMemo(() => refTiles.map((t) => t.url), [refTiles.map((t) => t.url).join('|')]);
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-w-0">
@@ -454,99 +454,100 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
         <Chip>路线 · {pick.vtype_label}</Chip>
         <Chip>风格 · {STYLE_LABEL[pick.style] || pick.style}</Chip>
         {pick.character && <Chip>主角 · {pick.character.name}</Chip>}
-        {(pick as any).theme_tag && <Chip>主题 · {(pick as any).theme_tag}</Chip>}
+        {pick.holiday && (
+          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 whitespace-nowrap">
+            <PartyPopper className="w-3 h-3" />
+            节日 · {pick.holiday.name}
+            {pick.holiday.days_away === 0 ? '(进行中)' : `(还有 ${pick.holiday.days_away} 天)`}
+          </span>
+        )}
+        {pick.picked.theme_tag && <Chip>主题 · {pick.picked.theme_tag}</Chip>}
       </div>
 
-      {pick.__warn === 'assets_reused' && (
-        <div className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-1.5 leading-snug">
-          素材偏少,已尽量打散；建议补拍几张实景图让分镜更丰富。
+      {pick.picked.needs_storefront && (
+        <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded px-2.5 py-2 leading-snug flex gap-1.5">
+          <DoorOpen className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>
+            还没有 <b>门头/店招</b> 照片,开场会让模型自由发挥。建议拍一张大门 + 招牌 + logo,标注「门头」入库,
+            下次开场就锁死门口镜头,更像探店。
+          </span>
         </div>
       )}
 
       <div>
         <div className="text-[11px] text-muted-foreground mb-1.5">
-          参考图 · {pick.assets.length} 张实景{pick.character ? ' + 1 张角色板' : ''} · 一次成片
+          参考图 · {refTiles.length} 张(门头 / 主角 / 实景)· 一次性喂给 Seedance
         </div>
         <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2 pt-1 snap-x">
-          {pick.assets.map((a, i) => (
+          {refTiles.map((t, i) => (
             <button
               type="button"
               key={i}
-              onClick={() => openLb(Math.min(i, Math.max(0, lightboxUrls.length - 1)))}
-              className="shrink-0 w-14 h-[78px] rounded-xl overflow-hidden bg-muted ring-1 ring-border shadow-md shadow-black/15 relative snap-start active:scale-95 transition-transform"
+              onClick={() => openLb(i < refLightbox.length ? i : 0)}
+              className={[
+                'shrink-0 w-14 h-[78px] rounded-xl overflow-hidden bg-muted ring-1 shadow-md shadow-black/15 relative snap-start active:scale-95 transition-transform',
+                t.kind === 'storefront' ? 'ring-amber-400'
+                  : t.kind === 'character' ? 'ring-accent'
+                  : 'ring-border',
+              ].join(' ')}
             >
-              <img src={a.url} alt="" className="w-full h-full object-cover" />
-              <div className="absolute bottom-0 right-0 px-1 text-[9px] bg-black/55 text-white rounded-tl">#{i + 1}</div>
+              <img src={t.url} alt="" className="w-full h-full object-cover" />
+              <div className={[
+                'absolute bottom-0 left-0 right-0 px-1 text-[9px] text-white text-center truncate',
+                t.kind === 'storefront' ? 'bg-amber-500/85'
+                  : t.kind === 'character' ? 'bg-accent/85'
+                  : 'bg-black/55',
+              ].join(' ')}>{t.label}</div>
             </button>
           ))}
         </div>
       </div>
 
-
       <div>
-        <div className="text-[11px] text-muted-foreground mb-2">BOOMER 拟好的脚本 · {clips.length} 个分镜</div>
+        <div className="text-[11px] text-muted-foreground mb-2">BOOMER 拟好的脚本 · {clips.length} 个分镜 · 由 Seedance 自己排画面</div>
         <div className="space-y-2">
-          {withTime.map(({ label, clip, start, dur }, i) => {
-            const idx = clip.image_index;
-            const asset = typeof idx === 'number' ? assetByIdx.get(idx) : undefined;
-            const frameUrl = asset?.url || null;
-            return (
-              <div key={i} className="flex gap-2 p-2 rounded-lg border bg-card min-w-0">
-                <button
-                  type="button"
-                  onClick={() => frameUrl && openLb(Math.min(i, Math.max(0, lightboxUrls.length - 1)))}
-                  disabled={!frameUrl}
-                  className="shrink-0 w-14 h-[78px] rounded-xl overflow-hidden bg-muted relative ring-1 ring-border shadow-md shadow-black/15 active:scale-95 transition-transform disabled:active:scale-100"
-                >
-                  {frameUrl ? (
-                    <img src={frameUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[9px] text-muted-foreground text-center px-1">
-                      自由<br />镜头
-                    </div>
-                  )}
-                  <div className="absolute top-0 left-0 px-1 text-[9px] bg-black/55 text-white rounded-br">{label}</div>
-                </button>
-
-
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-center justify-between gap-2 min-w-0">
-                    <div className="text-[11px] font-semibold tracking-wide text-accent shrink-0">
-                      {start.toFixed(1)}s – {(start + dur).toFixed(1)}s
-                    </div>
-                    {clip.motion && (
-                      <span className="text-[10px] text-muted-foreground truncate">{clip.motion}</span>
-                    )}
-                  </div>
-                  {clip.scene && (
-                    <div className="text-[12px] leading-snug break-words">
-                      <span className="text-muted-foreground">场景 · </span>{clip.scene}
-                    </div>
-                  )}
-                  {clip.action && (
-                    <div className="text-[12px] leading-snug flex gap-1 break-words">
-                      <Camera className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0">{clip.action}</span>
-                    </div>
-                  )}
-                  {clip.dialogue && (
-                    <div className="text-[12px] leading-snug flex gap-1 text-foreground/85 break-words">
-                      <MessageSquare className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0">"{clip.dialogue}"</span>
-                    </div>
-                  )}
-                  {clip.subtitle && (
-                    <div className="text-[11px] leading-snug text-muted-foreground break-words">
-                      字幕:{clip.subtitle}
-                    </div>
-                  )}
+          {withTime.map(({ label, clip, start, dur }, i) => (
+            <div key={i} className="p-2.5 rounded-lg border bg-card min-w-0 space-y-1">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-semibold shrink-0">
+                    {label}
+                  </span>
+                  <span className="text-[11px] font-semibold tracking-wide text-accent shrink-0 tabular-nums">
+                    {start.toFixed(1)}s – {(start + dur).toFixed(1)}s
+                  </span>
                 </div>
+                {clip.motion && (
+                  <span className="text-[10px] text-muted-foreground truncate">{clip.motion}</span>
+                )}
               </div>
-            );
-          })}
+              {clip.scene && (
+                <div className="text-[12px] leading-snug break-words">
+                  <span className="text-muted-foreground">场景 · </span>{clip.scene}
+                </div>
+              )}
+              {clip.action && (
+                <div className="text-[12px] leading-snug flex gap-1 break-words">
+                  <Camera className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0">{clip.action}</span>
+                </div>
+              )}
+              {clip.dialogue && (
+                <div className="text-[12px] leading-snug flex gap-1 text-foreground/85 break-words">
+                  <MessageSquare className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0">"{clip.dialogue}"</span>
+                </div>
+              )}
+              {clip.subtitle && (
+                <div className="text-[11px] leading-snug text-muted-foreground break-words">
+                  字幕:{clip.subtitle}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
-      <ImageLightbox open={lbOpen} onClose={() => setLbOpen(false)} images={lightboxUrls} initialIndex={lbIdx} />
+      <ImageLightbox open={lbOpen} onClose={() => setLbOpen(false)} images={refLightbox} initialIndex={lbIdx} />
     </div>
   );
 }
