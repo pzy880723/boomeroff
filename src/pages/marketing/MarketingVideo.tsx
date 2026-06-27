@@ -463,6 +463,19 @@ export default function MarketingVideo() {
         {!shopId ? (
           <p className="text-center text-[12px] text-muted-foreground py-8">请先选择店铺，再开始创作。</p>
         ) : (<>
+        {/* 画风(必须在生成脚本/分镜之前选好) */}
+        <section className="bg-card rounded-[0.875rem] border border-accent/30 shadow-sm p-5 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <SectionLabel num="00">画风</SectionLabel>
+            <RealismToggle value={realism} onChange={handleRealismChange} size="sm" />
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            先选好画风,再让 BOOMER 写脚本和拆分镜。当前:
+            <b className="text-foreground mx-1">{realism === 'photoreal' ? '真人写实' : '插画风'}</b>
+            · {realism === 'photoreal' ? '细节最真,偶尔触发审核' : '默认 · 过审稳定'}
+          </p>
+        </section>
+
         {/* 视频参数 */}
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-5">
           <SectionLabel num="01">视频类型</SectionLabel>
