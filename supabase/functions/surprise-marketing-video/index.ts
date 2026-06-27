@@ -362,7 +362,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
         body: JSON.stringify({
-          script, assets, character, shop_id: shopId, style,
+          script, assets, character, shop_id: shopId, style, realism,
         }),
       });
       const sbData = await sbRes.json().catch(() => ({}));
