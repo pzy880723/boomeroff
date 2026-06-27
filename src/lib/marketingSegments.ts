@@ -26,7 +26,10 @@ export interface ScriptLike {
   scenes?: SceneLike[];
 }
 
-export const MAX_SEG_DUR = 10;
+// 单段渲染上限必须与后端 render-marketing-video 的 MAX_SEG_DUR 完全一致
+// (= Seedance 单段物理上限 15s)。改这里务必同步后端,否则 UI 分段预览会与实际渲染段数不一致。
+import { SEEDANCE_MAX_SINGLE_SHOT } from './seedanceModels';
+export const MAX_SEG_DUR = SEEDANCE_MAX_SINGLE_SHOT;
 
 /** 读取一个镜头的有效图绑定,兼容老字段 image_index(默认作 first)。 */
 export function effectiveImageRef(sc: SceneLike | null | undefined): SceneImageRef | null {
