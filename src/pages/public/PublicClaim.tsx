@@ -5,7 +5,6 @@ import { useParams, useLocation } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Ticket, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { invokeFn } from '@/lib/invokeFn';
 import { QrCanvas } from '@/components/voucher/QrCanvas';
 import {
