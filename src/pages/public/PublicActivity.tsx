@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Loader2, Upload, X, ZoomIn } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeFn } from '@/lib/invokeFn';
 import { toast } from 'sonner';
 import type { ActivityField } from '@/lib/voucher';
 import { formatVoucherRule } from '@/lib/voucher';
