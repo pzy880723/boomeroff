@@ -823,6 +823,9 @@ function SceneRow({
   const eff = effectiveImageRef(scene);
   const refImg = eff && urls[eff.index];
   const role: ImageRole = eff?.role || 'first';
+  const sbImg: string | undefined = (typeof scene?.storyboard_url === 'string' && scene.storyboard_url) || undefined;
+  const thumbImg = sbImg || refImg || undefined;
+  const thumbLabel = sbImg ? '静帧' : (refImg ? ROLE_LABEL[role] : '');
   // 兼容旧字段
   const sceneText = scene.scene ?? scene.video_prompt ?? '';
   const subtitle = scene.subtitle ?? scene.text ?? '';
@@ -848,16 +851,17 @@ function SceneRow({
       </div>
       <div className="flex gap-3">
         <div className="flex-shrink-0 flex flex-col items-center gap-1">
-          {refImg ? (
-            <div className="relative w-16 h-16 rounded border border-accent/15 overflow-hidden">
-              <img src={refImg} alt="" className="w-full h-full object-cover" />
-              <span className="absolute top-0.5 right-0.5 text-[9px] px-1 py-px rounded-full bg-black/70 text-white font-medium">
-                {ROLE_LABEL[role]}
+          {thumbImg ? (
+            <div className={`relative w-16 h-16 rounded border overflow-hidden ${sbImg ? 'border-accent/40' : 'border-accent/15'}`}>
+              <img src={thumbImg} alt="" className="w-full h-full object-cover" />
+              <span className={`absolute top-0.5 right-0.5 text-[9px] px-1 py-px rounded-full font-medium ${sbImg ? 'bg-accent text-accent-foreground' : 'bg-black/70 text-white'}`}>
+                {thumbLabel}
               </span>
             </div>
           ) : (
             <div className="w-16 h-16 rounded border border-dashed border-border bg-card flex items-center justify-center text-[9px] text-muted-foreground text-center px-1 leading-tight">无参考图</div>
           )}
+
           {refImg && (
             <div className="flex rounded border border-border overflow-hidden text-[9px]">
               {(['first', 'last', 'reference'] as ImageRole[]).map((r) => (
