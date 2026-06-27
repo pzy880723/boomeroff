@@ -28,6 +28,8 @@ import { getModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 import { RealismToggle } from '@/components/marketing/RealismToggle';
 import { getRealismPref, setRealismPref } from '@/lib/realismPref';
 import type { Realism } from '@/lib/realism';
+import { RenderStrategyPicker } from '@/components/marketing/RenderStrategyPicker';
+import { getRenderStrategy, setRenderStrategy, type RenderStrategy } from '@/lib/renderStrategyPref';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -71,6 +73,8 @@ export default function MarketingVideo() {
   const [modelId, setModelId] = useState<string>(() => getModelPrefs().modelId);
   const [resolution, setResolution] = useState<SeedanceResolution>(() => getModelPrefs().resolution);
   const [realism, setRealism] = useState<Realism>(() => getRealismPref());
+  const [renderStrategy, setRenderStrategyState] = useState<RenderStrategy>(() => getRenderStrategy());
+  const handleStrategyChange = (s: RenderStrategy) => { setRenderStrategyState(s); setRenderStrategy(s); };
   const handleRealismChange = (r: Realism) => {
     setRealism(r);
     setRealismPref(r);
