@@ -257,7 +257,7 @@ async function submitArkTask(opts: {
   const content: any[] = [{ type: "text", text: opts.prompt }];
   // Seedance 2.0:全 reference 模式。first_frame / last_frame 与 reference_image 互斥,
   // 我们这种「分镜独立表达」的内容不需要逐帧锁画面,统一走 reference_image 通道。
-  const refs = (opts.referenceImages || []).filter(Boolean).slice(0, 4);
+  const refs = (opts.referenceImages || []).filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
   for (const url of refs) {
     content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
   }
@@ -337,7 +337,7 @@ function resolveSegmentImages(
   // 5) 实在啥都没有 → 兜底封面
   if (!refs.length && fallbackFirst) push(fallbackFirst);
 
-  return { referenceImages: refs.slice(0, 4) };
+  return { referenceImages: refs.slice(0, SEEDANCE_MAX_REFS) };
 }
 
 
