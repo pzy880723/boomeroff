@@ -138,15 +138,13 @@ ${opts.holidayName ? `临近节日:${opts.holidayName}` : ''}
 }
 
 function paceEn(p: PersonaPace): string {
-  if (p === 'slow') return 'calm, measured, unhurried delivery; long pauses between lines; smooth slow camera moves';
-  if (p === 'fast') return 'high-energy, rapid delivery; punchy fast cuts; brisk hand-held camera';
-  return 'natural conversational pace; balanced rhythm; steady camera moves';
+  if (p === 'fast') return 'high-energy, rapid delivery; punchy fast cuts; brisk hand-held camera; expressive, enthusiastic tone with strong emotional peaks';
+  return 'natural conversational pace with clear energy and enthusiasm; steady but lively camera moves; expressive delivery with emotional ups and downs, never flat or calm';
 }
 
 function paceZh(p: PersonaPace): string {
-  if (p === 'slow') return '慢节奏 · 留白 · 慢镜头切换,台词之间可以有呼吸';
   if (p === 'fast') return '快节奏 · 高能 · 短句快剪,情绪饱满';
-  return '中速 · 自然口语节奏 · 不疾不徐';
+  return '中速 · 带情绪 · 有起伏 · 不平铺直叙,稳但有推进感,会突然惊喜会用力安利';
 }
 
 // 拼成 Seedance Prompt 强约束(主角虚构博主,不绑参考图)
