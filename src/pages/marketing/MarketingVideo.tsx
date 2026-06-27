@@ -587,7 +587,6 @@ export default function MarketingVideo() {
                 <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">文生视频 · 逐镜确认</span>
               </div>
               <div className="flex items-center gap-1 flex-wrap">
-                <RealismToggle value={realism} onChange={handleRealismChange} size="xs" />
                 <Button size="sm" variant="ghost" onClick={() => generateStoryboard()} disabled={sbBusy || generating} className="h-7 text-[11px]">
                   {sbBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                   {sbBusy ? '合成中' : '重做分镜静帧'}
