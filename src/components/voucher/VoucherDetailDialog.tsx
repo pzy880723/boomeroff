@@ -263,8 +263,8 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
                   );
                 })}
               </div>
-
-            )}
+              );
+            })()}
           </div>
         </div>
 
