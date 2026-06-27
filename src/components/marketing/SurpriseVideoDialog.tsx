@@ -513,7 +513,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
                   type="button"
                   onClick={() => frameUrl && openLb(Math.min(i, Math.max(0, lightboxUrls.length - 1)))}
                   disabled={!frameUrl}
-                  className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted relative active:scale-95 transition-transform disabled:active:scale-100"
+                  className="shrink-0 w-14 h-[78px] rounded-xl overflow-hidden bg-muted relative ring-1 ring-border shadow-md shadow-black/15 active:scale-95 transition-transform disabled:active:scale-100"
                 >
                   {frameUrl ? (
                     <img src={frameUrl} alt="" className="w-full h-full object-cover" />
@@ -527,6 +527,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
                     <div className="absolute bottom-0 right-0 px-1 text-[8px] bg-accent/85 text-white rounded-tl">分镜</div>
                   )}
                 </button>
+
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center justify-between gap-2 min-w-0">
                     <div className="text-[11px] font-semibold tracking-wide text-accent shrink-0">
