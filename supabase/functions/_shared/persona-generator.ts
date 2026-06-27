@@ -86,7 +86,7 @@ ${opts.holidayName ? `临近节日:${opts.holidayName}` : ''}
   "age": <整数>,
   "visual": "<30-80字外观:发色/发型/穿着/气质,要让模型能照画>",
   "vibe": "<20-60字说话节奏与风格,要跟 pace 一致>",
-  "pace": "slow" | "medium" | "fast",
+  "pace": "medium" | "fast",
   "tone_label": "<≤8字风格短标签,例:沉稳种草 / 高能洗脑 / 文气慢推 / 吃货狂炫>",
   "opener": "<开场招呼≤8字,符合人设语气>",
   "catchphrase": ["<口头禅1>","<口头禅2>","<口头禅3>"],
