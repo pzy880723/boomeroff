@@ -143,6 +143,7 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     setItems((prev) => [...prev, ...newItems]);
 
     const successUrls: string[] = [];
+    const insertedIds: string[] = [];
     const CONCURRENCY = 4;
     let cursor = 0;
     const worker = async () => {
@@ -151,8 +152,11 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
         if (i >= newItems.length) return;
         const it = newItems[i];
         try {
-          const url = await processOne(it.file, it.hash, (stage, url, error) =>
-            updateItem(it.id, { stage, url, error }),
+          const url = await processOne(
+            it.file,
+            it.hash,
+            (stage, url, error) => updateItem(it.id, { stage, url, error }),
+            (assetId) => { insertedIds.push(assetId); },
           );
           successUrls.push(url);
         } catch (e: any) {
@@ -167,6 +171,19 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     if (allNew.length) onChange([...urls, ...allNew]);
     setItems((prev) => prev.filter((it) => it.stage !== 'done'));
 
+    // 等 insert 的 select id 返回(insert 是 fire-and-forget,这里给 600ms 兜底),然后按 8 个一批 fire-and-forget 调 auto-tag
+    if (insertedIds.length || newItems.length) {
+      setTimeout(() => {
+        const ids = [...insertedIds];
+        if (!ids.length) return;
+        for (let i = 0; i < ids.length; i += 8) {
+          const slice = ids.slice(i, i + 8);
+          void supabase.functions.invoke('auto-tag-marketing-asset', { body: { asset_ids: slice } })
+            .catch((err) => console.warn('[upload-grid] auto-tag failed', err?.message));
+        }
+      }, 600);
+    }
+
     const newlyAdded = successUrls.length;
     const dedupTotal = reusedUrls.length + localDupCount;
     if (newlyAdded > 0 || dedupTotal > 0) {
@@ -176,6 +193,7 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
       toast.success(parts.join(' · '));
     }
   };
+
 
   const removeUrl = (i: number) => onChange(urls.filter((_, j) => j !== i));
   const removeItem = (id: string) => setItems((prev) => prev.filter((it) => it.id !== id));
