@@ -308,6 +308,29 @@ export default function MarketingLibrary() {
     }
   };
 
+  // 一次性给历史无标签素材补 AI 标签
+  const [backfillingTags, setBackfillingTags] = useState(false);
+  const runBackfillTags = async () => {
+    if (backfillingTags) return;
+    setBackfillingTags(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('backfill-marketing-asset-tags', { body: {} });
+      if (error || (data as any)?.ok === false) {
+        toast.error((data as any)?.error || error?.message || '补标签失败');
+        return;
+      }
+      const d = data as any;
+      const remainTxt = d.remaining > 0 ? ` · 还剩 ${d.remaining} 张,可再点一次` : ' · 全部完成';
+      toast.success(`本轮补标签 ${d.updated}/${d.processed} 张${remainTxt}`);
+      fetchItems(true);
+    } catch (e: any) {
+      toast.error(e?.message || '补标签失败');
+    } finally {
+      setBackfillingTags(false);
+    }
+  };
+
+
 
   // 轮询未完成视频任务
   // 用稳定签名当依赖,避免 items 引用变化导致 effect 反复重建 -> tick 立即触发 -> setItems -> 循环闪烁
