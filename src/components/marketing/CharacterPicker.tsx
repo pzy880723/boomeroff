@@ -35,8 +35,16 @@ export function CharacterPicker({
   const [open, setOpen] = useState(false);
   const [libOpen, setLibOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [lbIdx, setLbIdx] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
+
+  // lightbox 图片合集:封面 + 全部附加参考图
+  const lbImages = useMemo(() => {
+    if (!value) return [];
+    const list = [value.cover_url, ...(value.extra_reference_urls || [])].filter(Boolean) as string[];
+    return Array.from(new Set(list));
+  }, [value]);
 
   const load = async () => {
     if (!shopId) { setItems([]); return; }
