@@ -583,6 +583,8 @@ Deno.serve(async (req) => {
         duration: totalDur, aspect: ratio,
         mode: anyFirst ? "image2video" : (totalRefImages > 0 ? "reference2video" : "text2video"),
         render_mode: "per_shot",
+        render_strategy: "per_shot",
+        auto_decision_reason: autoReason,
         topic: script.topic || "", style: styleKey,
         style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
         warnings: [
