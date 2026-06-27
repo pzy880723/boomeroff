@@ -42,11 +42,36 @@ function gatherClips(script: any): { key: 'hook' | 'scene' | 'outro'; sceneIndex
 function buildFramePrompt(opts: {
   clip: ClipLite; styleKey: VideoStyleKey; character: any | null;
   boundAssetSummary?: string; index: number; total: number;
+  realism: Realism;
 }): string {
-  const { clip, styleKey, character } = opts;
+  const { clip, styleKey, character, realism } = opts;
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const styleZh = VIDEO_STYLE_LABELS[styleKey];
   const lines: string[] = [];
+
+  if (realism === 'photoreal') {
+    // 真人写实路线:让 Nano Banana 出真人级电影摄影静帧
+    lines.push(`生成一张单帧定格画面。整体观感:真人级写实电影摄影静帧(photorealistic cinematic still, shot on full-frame mirrorless, 35mm/50mm prime, f/2.0, ISO 400),自然肤质、真实毛孔与细微高光、真实瞳孔反光、真实景深与动态范围,让人无法分辨是 AI 生成。`);
+    lines.push(`画幅 9:16 竖版,品牌:BOOMER·OFF 中古二手杂货店,真实店内自然光,白平衡准确,色彩还原真实,无滤镜、无暖黄/复古/橙调色,货架密集真实质感。`);
+    lines.push(`风格基调:${styleZh}(${styleEn}) —— 只影响构图/节奏/情绪/光线方向,不改变真实感本身。`);
+    if (character?.name) {
+      lines.push(`【主角必须出现且锁定身份】${character.name}${character.role_label ? `(${character.role_label})` : ''}。外观锁:${character.visual_signature || '保持参考图中的发型/服装/体型/气质识别度'}。情绪:${character.core_emotion || '自然'}。五官、发型、肤色、体型、眉眼神态与人脸参考图完全一致,严禁换脸,严禁美化或磨皮,保留真实皮肤纹理。`);
+    }
+    if (opts.boundAssetSummary) {
+      lines.push(`画面中必须自然出现的实景元素:${opts.boundAssetSummary}(请严格参考附带的实景照,把这家店真实的陈列、氛围、商品融入画面,颜色/陈列/光线还原实拍,不要美化、不要调色)。`);
+    }
+    if (clip.scene) lines.push(`场景:${clip.scene}`);
+    if (clip.action) lines.push(`动作瞬间(请定格在这一瞬间):${clip.action}`);
+    if (clip.motion) lines.push(`这张图代表的镜头是「${clip.motion}」的中间一帧,只用 1 种运镜。`);
+    lines.push(`第 ${opts.index + 1} / ${opts.total} 个分镜,与其他分镜保持角色身份与场景一致。`);
+    // 火山官方画质/约束词模板
+    lines.push(`画质要求:高清,细节丰富,电影质感,色彩自然,光影柔和,胶片颗粒微细。`);
+    lines.push(`风格约束:真人写实,非动漫,非卡通,非插画,非 3D 渲染,非 CG。`);
+    lines.push(`严禁:任何文字、字幕、水印、Logo、UI、画面边框;禁止双胞胎/分身/同款人物;禁止面部畸变、多余手指、塑料皮肤、过度磨皮、AI 涂抹感、HDR 过曝。`);
+    return lines.join('\n');
+  }
+
+  // 默认 stylized:保留原插画风 prompt(用户喜欢且过审稳)
   lines.push(`生成一张单帧定格画面。整体观感:轻度风格化的影视宣传海报(stylized cinematic poster / semi-illustrated keyframe),允许略带插画感,不要做成纪实摄影或真人快照。`);
   lines.push(`画幅 9:16 竖版,品牌:BOOMER·OFF 中古二手杂货店,真实店内自然光,白平衡准确,色彩干净不偏色,无滤镜、无暖黄/复古调色,货架密集真实质感。`);
   lines.push(`风格基调:${styleZh}(${styleEn}) —— 只影响构图/节奏/情绪,不影响色温与饱和度。`);
