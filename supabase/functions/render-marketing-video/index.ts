@@ -289,7 +289,7 @@ async function submitArkTask(opts: {
   return { ok: true, id: arkJson.id, mode };
 }
 
-/** 组装某段的参考图集合(全 reference 模式,上限 4 张,按权重排序):
+/** 组装某段的参考图集合(Seedance 2.0 全 reference 模式,上限 9 张,按权重排序):
  *  1) 本镜 storyboard 静帧(最强信号)
  *  2) 角色身份板(优先用火山真人认证的 asset:// URI)
  *  3) 角色额外参考图
