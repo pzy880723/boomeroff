@@ -48,17 +48,16 @@ export function classifyVideoFailure(rawIn: string | null | undefined): VideoFai
   const raw = (rawIn || '').trim();
   const r = raw.toLowerCase();
 
-  // 1) 分辨率不被该模型支持(典型:Fast 用 first+last 时不能跑 1080p)
+  // 1) 分辨率不被该模型支持(Fast/Mini 限制在 720p/1080p,Pro 才能跑 4K)
   if (
     has(r, /parameter\s+resolution.*not\s+valid/) ||
-    has(r, /resolution.*not\s+supported/) ||
-    (has(r, /flf2v/) && has(r, /resolution/))
+    has(r, /resolution.*not\s+supported/)
   ) {
     return {
       code: 'resolution_not_supported',
-      title: '这个模型不支持当前的分辨率组合',
+      title: '这个模型不支持当前的分辨率',
       detail:
-        'Fast / Mini 模型在「首尾帧拼接」模式下只支持 720p。要么把分辨率降到 720p 继续用快的,要么换成 Pro 跑更高画质。',
+        'Fast / Mini 只能跑到 1080p,4K 必须用 Pro。要么换成 Pro 跑更高画质,要么把分辨率降到 720p 继续用快的。',
       fixes: [
         { id: 'pro_keep_res', label: '换成 Pro(画质更稳)', kind: 'switch_model',
           patch: { modelId: 'doubao-seedance-2-0-pro-260128' }, reRender: true },
@@ -80,9 +79,9 @@ export function classifyVideoFailure(rawIn: string | null | undefined): VideoFai
       code: 'real_person_blocked',
       title: '分镜画面被判定为"真人照片"被火山拦了',
       detail:
-        '安全策略把分镜静帧识别成真实人物。先试着扔掉首尾帧只留参考图,如果还不行就改成纯文字渲染(画面会偏自由,但能出片)。',
+        '安全策略把分镜静帧识别成真实人物。先试着扔掉静帧只留角色板参考,如果还不行就改成纯文字渲染(画面会偏自由,但能出片)。',
       fixes: [
-        { id: 'no_frames', label: '不用首尾帧,仅用参考图', kind: 'disable_frames',
+        { id: 'no_frames', label: '不用静帧,仅用参考图', kind: 'disable_frames',
           patch: { disable_storyboard: true }, reRender: true },
         { id: 'text_only', label: '退回纯文字渲染', kind: 'text_only',
           patch: { disable_storyboard: true, disable_references: true }, reRender: true },
@@ -103,26 +102,12 @@ export function classifyVideoFailure(rawIn: string | null | undefined): VideoFai
         { id: 'sw_fast', label: '切到 Fast', kind: 'switch_model',
           patch: { modelId: 'doubao-seedance-2-0-fast-260128' }, reRender: true },
         { id: 'sw_mini', label: '切到 Mini(最省)', kind: 'switch_model',
-          patch: { modelId: 'doubao-seedance-2-0-mini-260128' }, reRender: true },
+          patch: { modelId: 'doubao-seedance-2-0-mini-260615' }, reRender: true },
       ],
       raw,
     };
   }
 
-  // 4) 首尾帧和参考图冲突
-  if (has(r, /last\s*frame.*cannot.*mixed.*reference/) || has(r, /mixed\s*with\s*reference/)) {
-    return {
-      code: 'ref_and_lastframe_conflict',
-      title: '首尾帧和参考图不能一起传',
-      detail:
-        '火山接口规定 last_frame 和 reference_image 互斥。可以一键让 BOOMER 自动放弃参考图,只用首尾帧定格画面。',
-      fixes: [
-        { id: 'drop_ref', label: '只用首尾帧,放弃参考图', kind: 'switch_model',
-          patch: { disable_references: true }, reRender: true },
-      ],
-      raw,
-    };
-  }
 
   // 5) 分段链接 403 / 过期
   if (
