@@ -204,7 +204,7 @@ function normalizeRatio(aspect: any): string {
 }
 
 // 逐镜切段:每个非空分镜 = 1 段。
-// hook / scenes[*] / outro 各自成段,独立用自己的静帧作 first_frame 喂给 Seedance,
+// hook / scenes[*] / outro 各自成段,独立用自己的静帧 + 角色板作 reference_image 喂给 Seedance 2.0,
 // 最后由前端 ffmpeg-wasm 按 segment_index 升序拼接成成片。
 function splitScript(script: any): any[] {
   type Shot = { sc: any; role: 'hook' | 'mid' | 'outro' };
