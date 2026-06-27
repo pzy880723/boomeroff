@@ -887,6 +887,9 @@ export default function MarketingLibrary() {
               </section>
             );
           })}
+          {!loading && hasMore && (
+            <LoadMoreSentinel onVisible={loadMore} loading={loadingMore} />
+          )}
         </>)}
       </div>
 
