@@ -192,7 +192,7 @@ function buildPrompt(
 
 function clampDuration(d: any): number {
   const n = Number(d) || 5;
-  if (n < 4) return 4;
+  if (n < 3) return 3;          // Seedance 2.0 最短 3s
   if (n > MAX_SEG_DUR) return MAX_SEG_DUR;
   return Math.round(n);
 }
