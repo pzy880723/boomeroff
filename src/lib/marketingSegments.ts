@@ -54,37 +54,64 @@ export interface SegmentPlan {
   refIndices: number[];      // 本段额外参考图(去重)
 }
 
-/** 按时长贪心装箱,每段 ≤ MAX_SEG_DUR 秒。与后端 splitScript 同步。 */
+/**
+ * 根据总时长决定目标段数。
+ * ≤15s 单段直出;16-30s 两段;31-45s 三段;更长按 ceil(total/15) 兜底。
+ * 与后端 _shared/marketing-segments.ts 的 targetSegmentCount 保持同步。
+ */
+export function targetSegmentCount(totalDur: number): number {
+  const t = Math.max(1, Math.round(totalDur || 0));
+  if (t <= MAX_SEG_DUR) return 1;
+  if (t <= 30) return 2;
+  if (t <= 45) return 3;
+  return Math.ceil(t / MAX_SEG_DUR);
+}
+
+/** 按目标段数等分时长(而非贪心装箱),让 30s 始终切成 2x15。与后端 splitScript 同步。 */
 export function planSegments(script: ScriptLike | null | undefined): SegmentPlan[] {
   if (!script) return [];
   const hook = script.hook;
   const outro = script.outro;
   const mids = Array.isArray(script.scenes) ? script.scenes : [];
 
-  const all: Array<{ sc: SceneLike; label: string }> = [];
-  if (hook) all.push({ sc: hook, label: '钩子' });
-  mids.forEach((m, i) => all.push({ sc: m, label: `镜头${i + 1}` }));
-  if (outro) all.push({ sc: outro, label: '收尾' });
+  const all: Array<{ sc: SceneLike; label: string; dur: number }> = [];
+  if (hook) all.push({ sc: hook, label: '钩子', dur: Math.min(MAX_SEG_DUR, Number(hook.duration_s) || 2) });
+  mids.forEach((m, i) =>
+    all.push({ sc: m, label: `镜头${i + 1}`, dur: Math.min(MAX_SEG_DUR, Number(m.duration_s) || 2) }),
+  );
+  if (outro) all.push({ sc: outro, label: '收尾', dur: Math.min(MAX_SEG_DUR, Number(outro.duration_s) || 2) });
+  if (!all.length) return [];
 
-  const buckets: Array<Array<{ sc: SceneLike; label: string }>> = [];
-  let cur: Array<{ sc: SceneLike; label: string }> = [];
+  const totalDur = all.reduce((s, x) => s + x.dur, 0);
+  const target = targetSegmentCount(totalDur);
+  const budget = totalDur / target;
+
+  const buckets: Array<Array<{ sc: SceneLike; label: string; dur: number }>> = [];
+  let cur: Array<{ sc: SceneLike; label: string; dur: number }> = [];
   let curDur = 0;
-  for (const item of all) {
-    let d = Number(item.sc.duration_s) || 2;
-    if (d > MAX_SEG_DUR) d = MAX_SEG_DUR;
-    if (curDur + d > MAX_SEG_DUR && cur.length > 0) {
+  for (let i = 0; i < all.length; i++) {
+    const item = all[i];
+    const remainingItems = all.length - i;
+    const remainingBuckets = target - buckets.length;
+    const mustCloseForBudget =
+      cur.length > 0 &&
+      buckets.length < target - 1 &&
+      curDur + item.dur > budget &&
+      remainingItems >= remainingBuckets;
+    const mustCloseForCap = cur.length > 0 && curDur + item.dur > MAX_SEG_DUR;
+    if (mustCloseForBudget || mustCloseForCap) {
       buckets.push(cur);
       cur = [];
       curDur = 0;
     }
     cur.push(item);
-    curDur += d;
+    curDur += item.dur;
   }
   if (cur.length) buckets.push(cur);
   if (!buckets.length) return [];
 
   return buckets.map((bucket, i) => {
-    const dur = bucket.reduce((s, x) => s + (Number(x.sc.duration_s) || 2), 0);
+    const dur = bucket.reduce((s, x) => s + x.dur, 0);
     let firstIndex: number | null = null;
     let lastIndex: number | null = null;
     const refSet = new Set<number>();
@@ -110,3 +137,4 @@ export function planSegments(script: ScriptLike | null | undefined): SegmentPlan
     };
   });
 }
+
