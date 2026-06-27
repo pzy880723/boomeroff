@@ -141,34 +141,16 @@ function splitScript(script: any): any[] {
 async function submitArkTask(opts: {
   arkKey: string; model: string; prompt: string; ratio: string; duration: number;
   resolution: string;
-  firstImage?: string; lastImage?: string; referenceImages?: string[];
+  referenceImages?: string[];
 }): Promise<{ ok: true; id: string; mode: string } | { ok: false; error: string; raw?: unknown }> {
   const content: any[] = [{ type: "text", text: opts.prompt }];
-  // Seedance 2.0 接口约束:last_frame 与 reference_image 互斥(同一请求只能出现其中一类)。
-  // 策略:
-  //  - 同时有 first+last(分镜静帧驱动)→ 走 frames 模式,丢弃 reference_image
-  //  - 只有 first → 可与 reference_image 共存
-  //  - 都没有 → 走 reference 模式
-  const refsAll = (opts.referenceImages || []).filter(Boolean);
-  const hasFirst = !!opts.firstImage;
-  const hasLast = !!opts.lastImage && opts.lastImage !== opts.firstImage;
-  const useFramesOnly = hasFirst && hasLast; // 互斥时优先 frames
-  const refs = useFramesOnly ? [] : refsAll;
-
-  for (const url of refs.slice(0, 2)) {
+  // Seedance 2.0:全 reference 模式。first_frame / last_frame 与 reference_image 互斥,
+  // 我们这种「分镜独立表达」的内容不需要逐帧锁画面,统一走 reference_image 通道。
+  const refs = (opts.referenceImages || []).filter(Boolean).slice(0, 4);
+  for (const url of refs) {
     content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
   }
-  if (hasFirst) {
-    content.push({ type: "image_url", image_url: { url: opts.firstImage! }, role: "first_frame" });
-  }
-  if (hasLast) {
-    content.push({ type: "image_url", image_url: { url: opts.lastImage! }, role: "last_frame" });
-  }
-  const mode = useFramesOnly
-    ? "first_last_frame"
-    : hasFirst
-      ? (refs.length ? "image2video+reference" : "image2video")
-      : (refs.length ? "reference2video" : "text2video");
+  const mode = refs.length ? "reference2video" : "text2video";
 
   // 2.0 系列:不发送 seed / camera_fixed(2.0 不支持)
   const arkBody: Record<string, unknown> = {
@@ -196,67 +178,57 @@ async function submitArkTask(opts: {
   return { ok: true, id: arkJson.id, mode };
 }
 
-/** 组装某段的图片三件套:角色参考图(每段都带)+ 段内 first/last。
- *  优先用 clip.storyboard_url(分镜静帧),没有再回退到原实景素材。 */
+/** 组装某段的参考图集合(全 reference 模式,上限 4 张,按权重排序):
+ *  1) 本镜 storyboard 静帧(最强信号)
+ *  2) 角色身份板(优先用火山真人认证的 asset:// URI)
+ *  3) 角色额外参考图
+ *  4) 段内绑定的实景照(锁商品/店铺)
+ */
 function resolveSegmentImages(
   sub: ScriptLike,
   imageUrls: string[],
   character: { cover_url?: string; extra_reference_urls?: string[] } | null,
   fallbackFirst?: string,
-): { firstImage?: string; lastImage?: string; referenceImages: string[] } {
-  // 1) 收集本段内 clips 顺序(hook → scenes → outro)
+): { referenceImages: string[] } {
   const seq: any[] = [];
   if (sub.hook && (sub.hook.scene || sub.hook.action || sub.hook.storyboard_url)) seq.push(sub.hook);
   if (Array.isArray(sub.scenes)) seq.push(...sub.scenes);
   if (sub.outro && (sub.outro.scene || sub.outro.action || sub.outro.storyboard_url)) seq.push(sub.outro);
 
-  // 2) 先按 storyboard_url 找首/尾帧
-  const sbUrls: string[] = [];
-  for (const sc of seq) {
-    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) sbUrls.push(sc.storyboard_url);
-  }
-  let firstImage: string | undefined;
-  let lastImage: string | undefined;
-  if (sbUrls.length) {
-    firstImage = sbUrls[0];
-    if (sbUrls.length > 1) lastImage = sbUrls[sbUrls.length - 1];
-  } else {
-    // 3) 没有静帧 → 老逻辑,从实景素材里挑
-    const picks = pickSegmentImages(sub);
-    if (picks.firstIndex !== null) firstImage = imageUrls[picks.firstIndex];
-    if (picks.lastIndex !== null) lastImage = imageUrls[picks.lastIndex];
-  }
+  const refs: string[] = [];
+  const seen = new Set<string>();
+  const push = (u?: string | null) => {
+    if (!u) return;
+    if (seen.has(u)) return;
+    seen.add(u);
+    refs.push(u);
+  };
 
-  // 4) reference 永远塞角色身份板 + 段内绑定的实景照(锁人物 + 锁商品)
-  // 已通过火山真人认证的角色直接用 asset:// URI 顶替封面/参考图,跳过真人审核拦截
-  const refSet = new Set<string>();
-  const verifiedUri: string | undefined = (character as any)?.verified_asset_uri || undefined;
-  if (verifiedUri) {
-    refSet.add(verifiedUri);
-  } else if (character?.cover_url) {
-    refSet.add(character.cover_url);
+  // 1) 本镜静帧(最高优先级)
+  for (const sc of seq) {
+    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) push(sc.storyboard_url);
   }
-  for (const u of character?.extra_reference_urls || []) if (u) refSet.add(u);
+  // 2) 角色身份板(认证过的 asset:// 优先)
+  const verifiedUri: string | undefined = (character as any)?.verified_asset_uri || undefined;
+  if (verifiedUri) push(verifiedUri);
+  else if (character?.cover_url) push(character.cover_url);
+  // 3) 角色额外参考
+  for (const u of character?.extra_reference_urls || []) push(u);
+  // 4) 段内绑定的实景照(reference 通道 + 老 first/last 字段都收进来)
   const picks = pickSegmentImages(sub);
-  for (const i of picks.refIndices) if (imageUrls[i]) refSet.add(imageUrls[i]);
-  // 把段内绑定的实景照也加进 reference,即使被静帧顶掉了 first/last,
-  // 模型也能看到真实店铺/商品样子
+  for (const i of picks.refIndices) if (imageUrls[i]) push(imageUrls[i]);
+  if (picks.firstIndex !== null && imageUrls[picks.firstIndex]) push(imageUrls[picks.firstIndex]);
+  if (picks.lastIndex !== null && imageUrls[picks.lastIndex]) push(imageUrls[picks.lastIndex]);
   for (const sc of seq) {
     const idx = typeof sc?.image_index === 'number' ? sc.image_index : null;
-    if (idx !== null && imageUrls[idx]) refSet.add(imageUrls[idx]);
+    if (idx !== null && imageUrls[idx]) push(imageUrls[idx]);
   }
+  // 5) 实在啥都没有 → 兜底封面
+  if (!refs.length && fallbackFirst) push(fallbackFirst);
 
-  // 若角色已认证,优先用 asset:// 作为首帧候选(顶替可能触发真人拦截的真人封面)
-  const effectiveFallbackFirst = verifiedUri && (!fallbackFirst || fallbackFirst === character?.cover_url)
-    ? verifiedUri
-    : fallbackFirst;
-
-  return {
-    firstImage: firstImage || effectiveFallbackFirst,
-    lastImage: lastImage && lastImage !== firstImage ? lastImage : undefined,
-    referenceImages: Array.from(refSet).slice(0, 3),
-  };
+  return { referenceImages: refs.slice(0, 4) };
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
