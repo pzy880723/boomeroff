@@ -1,37 +1,49 @@
 ## 目标
-现在惊喜一下顶部死写「洗脑探店 · 激动快节奏」，但 AI 按品类挑出来的博主可能是老克勒、文气主理人这种慢节奏人设，两者打架。改成：**vibe 完全跟随当次 AI 生成的博主**，UI 不再硬塞「激动快节奏」字样，脚本节奏也按 persona vibe 走。
+重构 `AssetTagDialog`,解决标签溢出屏幕、无法滚动、查找困难的问题。
 
-## 改动
+## 新弹窗布局
 
-### 1. `supabase/functions/_shared/persona-generator.ts`
-- `InfluencerPersona` 增加字段 `pace: 'slow' | 'medium' | 'fast'` 和 `tone_label: string`（例：「沉稳种草」「高能洗脑」「文气慢推」「吃货狂炫」），由 AI 根据品类自己判断；老克勒→slow/沉稳种草，潮玩→fast/高能洗脑，吃货→fast/狂炫安利。
-- system prompt 里去掉「所有人都要激动」的暗示，加一句：**节奏要符合人设本身**，老派人物允许慢条斯理，年轻人物允许高能。
-- `formatPersonaDirective` 把 pace 翻译成 Seedance 英文节奏锁（slow→calm measured delivery；fast→high-energy rapid delivery）。
-- `formatPersonaBriefZh` 把 pace + tone_label 写进 brief，明确告诉脚本生成器「本片整体节奏=X，禁止套用其他节奏的口头禅」。
-- Fallback persona 补上 pace='fast'、tone_label='高能种草'。
+```
+┌─────────────────────────────┐
+│ 标签与品类          [保存]  │ ← 顶部:标题 + 已选计数
+├─────────────────────────────┤
+│ 🔍 搜索 / 新建标签…         │ ← 固定搜索栏(粘顶)
+│ 品类: [分镜头][门店][商品]… │ ← 品类单选(粘顶,横滑)
+├─────────────────────────────┤
+│ 🔥 热门标签                 │
+│ [门头][商品][人物][分镜头]… │
+│                             │
+│ 📍 场景位置                 │ ← 可滚动区域
+│ [门头][店内][橱窗][货架]…   │
+│                             │
+│ 🛍 商品                     │
+│ [价签][细节][摆件][服饰]…   │
+│                             │
+│ 👤 人物                     │
+│ [博主][顾客][店员]…         │
+│                             │
+│ 🎬 分镜头                   │
+│ [开场][过渡][结尾]…         │
+│                             │
+│ 🎨 自定义                   │
+│ [我添加的标签 ×]…           │
+└─────────────────────────────┘
+       [取消]    [保存]
+```
 
-### 2. `supabase/functions/surprise-marketing-video/index.ts`
-- 把 persona.pace / tone_label 透传到 `generate-marketing-video-script` 的 brief 里，让单镜台词字数按节奏浮动：slow 允许 8-12 字/镜，fast 维持 6-10 字/镜，但总字数仍 ≤ 65。
-- 返回给前端的 `persona` 对象带上新字段。
+## 实现要点
 
-### 3. `supabase/functions/render-marketing-video/index.ts`
-- `buildOneShotPrompt` 在拼 persona_directive 时根据 pace 调整片头节奏描述（不再无脑写 "fast cuts / hype"），改成读 persona 自己的节奏。
-
-### 4. `src/components/marketing/SurpriseVideoDialog.tsx`
-- 顶部 chip 区移除硬编码的「🔥 洗脑探店 · 激动快节奏」。
-- 改成动态渲染：
-  - 「🎬 今日博主：{persona.label}」
-  - 「🎙️ 风格：{persona.tone_label}」（颜色按 pace 区分：fast=红、medium=琥珀、slow=靛）
-  - 节日 chip 保留
-- 博主详情卡里把 vibe / 节奏一起展示，去掉与人设打架的「激动」字眼。
-
-## 不动
-- 门头第一镜锁定逻辑、9 张参考图、节日 brief、虚构人物约束不变。
-- 脚本仍是第一人称博主口播。
-
-## 技术细节
-- pace 在 AI JSON 输出里要求枚举值，解析时 fallback 'medium'。
-- 前端 chip 颜色用 design token（`text-destructive` / `text-amber-500` / `text-indigo-500`），不写死十六进制。
-
-## 部署
-改完后部署：`surprise-marketing-video`、`render-marketing-video`。
+1. **弹窗结构**:`DialogContent` 使用 flex 列布局,固定 `max-h-[85vh]`;header + 搜索区 `sticky top-0`;中间分类标签区 `flex-1 overflow-y-auto`(用 `ScrollArea`);底部按钮 `sticky bottom-0`。
+2. **标签分组词典**(放在文件顶部 `TAG_GROUPS`):
+   - 场景位置:门头、店招、店内、橱窗、货架、收银台、试穿区、街拍
+   - 商品:商品、价签、细节、特写、套装、配饰、材质
+   - 人物:博主、顾客、店员、主角、合影
+   - 分镜头:分镜头、开场、过渡、结尾、空镜、特效
+   - 风格氛围:复古、文艺、潮流、温馨、高级感、夜景、白天
+3. **热门标签** = 当前已选 + `suggestedTags`(库内既有 tag 频次,沿用现有传入) 去重后取前 12 个,固定在搜索栏下方第一组。
+4. **搜索过滤**:输入关键字时,只显示命中分组里的标签。命中 0 个且关键字非空时,在搜索栏右侧出现「+ 新建"xxx"」按钮(回车也触发)。
+5. **多选交互**:点击即 toggle,选中底色 = `bg-accent text-accent-foreground`;已选标签不另起一行展示,保持在原分组内高亮(标题旁显示「已选 N」徽标)。
+6. **品类** 仍单选,横向 `overflow-x-auto` 一行,避免占用过多高度;保留现有 `DEFAULT_CATEGORIES`。
+7. **导出常量**:保留 `DEFAULT_TAGS` 与 `DEFAULT_CATEGORIES` 命名(外部 `MarketingLibrary` / `LibraryImagePickerDialog` 仍引用),并新增 `TAG_GROUPS` 与一个 flatten 后的 `ALL_PRESET_TAGS`,把 `DEFAULT_TAGS` 改为指向后者以保持向后兼容。
+8. **样式**:每个分组用小标题(`text-[11px] text-muted-foreground`),分组内 `flex flex-wrap gap-1.5`;弹窗宽度 `max-w-sm`,在窄屏(390px)下也能放下。
+9. **范围**:仅改 `src/components/marketing/AssetTagDialog.tsx` 一个文件,接口、入参、`onSaved` 回调签名不变;`MarketingLibrary` / `LibraryImagePickerDialog` 无需改动。
