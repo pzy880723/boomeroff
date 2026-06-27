@@ -21,7 +21,8 @@ export const SEEDANCE_2_MODELS: SeedanceModelInfo[] = [
     id: "doubao-seedance-2-0-fast-260128",
     label: "Seedance 2.0 Fast",
     max_duration: 15,
-    resolutions: ["720p", "1080p"],
+    // 火山 doubao-seedance-2-0-fast 仅支持 720p(r2v / t2v 都不接受 1080p)
+    resolutions: ["720p"],
     default_resolution: "720p",
     supports_audio: true,
   },
@@ -29,7 +30,7 @@ export const SEEDANCE_2_MODELS: SeedanceModelInfo[] = [
     id: "doubao-seedance-2-0-mini-260615",
     label: "Seedance 2.0 Mini",
     max_duration: 15,
-    resolutions: ["720p", "1080p"],
+    resolutions: ["720p"],
     default_resolution: "720p",
     supports_audio: true,
   },
