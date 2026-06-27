@@ -47,9 +47,14 @@ interface SurpriseResult {
   script: ScriptShape;
   vtype: string; vtype_label: string; style: string;
   character: { id: string; name: string; cover_url: string | null } | null;
+  persona?: {
+    label: string; gender: string; age: number;
+    visual: string; vibe: string; opener: string;
+    catchphrase: string[]; cta: string;
+  } | null;
   holiday?: { name: string; days_away: number } | null;
   duration: number; aspect: string;
-  prompt_overrides?: { opening?: string; style_cue?: string };
+  prompt_overrides?: { opening?: string; style_cue?: string; persona_directive?: string };
   job_id?: string;
   __warn?: string;
 }
