@@ -174,6 +174,7 @@ Deno.serve(async (req) => {
       const renderBody: any = { script: { ...fixed.script, video_type: body.vtype }, style: body.style, shop_id: shopId };
       if (typeof body.model === 'string' && body.model) renderBody.model = body.model;
       if (typeof body.resolution === 'string' && body.resolution) renderBody.resolution = body.resolution;
+      if (body.realism === 'photoreal' || body.realism === 'stylized') renderBody.realism = body.realism;
       if (body.disable_storyboard) renderBody.disable_storyboard = true;
       if (body.disable_references) renderBody.disable_references = true;
       const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
