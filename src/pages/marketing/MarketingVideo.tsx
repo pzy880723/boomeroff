@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -100,6 +100,7 @@ export default function MarketingVideo() {
   const [restoredAt, setRestoredAt] = useState<number | null>(null);
   const [sbBusy, setSbBusy] = useState(false);
   const [sbWarn, setSbWarn] = useState<string | null>(null);
+  const [lastSbSig, setLastSbSig] = useState<string>('');
 
   // 草稿本地保存 key
   const draftKey = shopId ? `mv:draft:${shopId}` : '';
@@ -225,7 +226,7 @@ export default function MarketingVideo() {
     finally { setGenerating(false); }
   };
 
-  const generateStoryboard = async (scriptArg?: any) => {
+  const generateStoryboard = async (scriptArg?: any, onlyIndices?: number[]) => {
     const target = scriptArg || script;
     if (!target) return;
     setSbBusy(true); setSbWarn(null);
@@ -241,12 +242,18 @@ export default function MarketingVideo() {
         extra_reference_urls: character.extra_reference_urls || [],
       } : null;
       const { data, error } = await supabase.functions.invoke('storyboard-marketing-video', {
-        body: { script: target, assets, character: charPayload, shop_id: shopId, style, realism },
+        body: {
+          script: target, assets, character: charPayload, shop_id: shopId, style, realism,
+          ...(onlyIndices && onlyIndices.length ? { only_indices: onlyIndices } : {}),
+        },
       });
       if (error) throw error;
       const d = data as any;
       if (!d?.ok) throw new Error(d?.error || '分镜静帧生成失败');
-      if (d.script) setScript(d.script);
+      if (d.script) {
+        setScript(d.script);
+        setLastSbSig(computeStoryboardSig(d.script, realism));
+      }
       const failed = (d.frames || []).filter((f: any) => !f.url).length;
       if (failed) setSbWarn(`${failed} 张静帧生成失败,渲染时将回退到原素材图`);
       toast.success(`分镜静帧已合成 ${d.succeeded}/${d.total}`);
@@ -442,7 +449,11 @@ export default function MarketingVideo() {
     } finally { setSceneUploading(false); }
   };
 
-
+  // 分镜静帧"是否过期":每次绑定/画风变了,提示重做
+  const currentSbSig = useMemo(() => computeStoryboardSig(script, realism), [script, realism]);
+  const sbStale = !!script && !!lastSbSig && lastSbSig !== currentSbSig;
+  const missingSbIndices = useMemo(() => collectMissingStoryboardIndices(script), [script]);
+  const hasAnyStoryboard = useMemo(() => collectStoryboardSummary(script).hasAny, [script]);
 
   return (
     <>
@@ -604,19 +615,42 @@ export default function MarketingVideo() {
                 <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">文生视频 · 逐镜确认</span>
               </div>
               <div className="flex items-center gap-1 flex-wrap">
+                {sbStale && (
+                  <span className="text-[9.5px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                    分镜图已变更
+                  </span>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => generateStoryboard()} disabled={sbBusy || generating} className="h-7 text-[11px]">
                   {sbBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                   {sbBusy ? '合成中' : '重做分镜静帧'}
                 </Button>
+                {!sbBusy && missingSbIndices.length > 0 && hasAnyStoryboard && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => generateStoryboard(undefined, missingSbIndices)}
+                    disabled={generating}
+                    className="h-7 text-[11px] text-accent"
+                  >
+                    仅补 {missingSbIndices.length} 张
+                  </Button>
+                )}
                 <Button size="sm" variant="ghost" onClick={genScript} disabled={generating}>
                   {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}重新生成
                 </Button>
               </div>
             </div>
 
+            {script && !sbBusy && !hasAnyStoryboard && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 leading-snug">
+                ⚠ 还没有分镜静帧。如果直接渲染会用原素材图,质量会差。点右上「重做分镜静帧」先合成每一镜的定格画面。
+              </div>
+            )}
+
             <StoryboardStrip script={script} busy={sbBusy} warn={sbWarn} />
 
             <SegmentPreview script={script} urls={urls} character={character} />
+
 
             <SceneRow title="钩子" num="00" scene={script.hook} urls={urls}
               onField={(f, v) => updateScene('hook', f, v)}
@@ -789,6 +823,9 @@ function SceneRow({
   const eff = effectiveImageRef(scene);
   const refImg = eff && urls[eff.index];
   const role: ImageRole = eff?.role || 'first';
+  const sbImg: string | undefined = (typeof scene?.storyboard_url === 'string' && scene.storyboard_url) || undefined;
+  const thumbImg = sbImg || refImg || undefined;
+  const thumbLabel = sbImg ? '静帧' : (refImg ? ROLE_LABEL[role] : '');
   // 兼容旧字段
   const sceneText = scene.scene ?? scene.video_prompt ?? '';
   const subtitle = scene.subtitle ?? scene.text ?? '';
@@ -814,16 +851,17 @@ function SceneRow({
       </div>
       <div className="flex gap-3">
         <div className="flex-shrink-0 flex flex-col items-center gap-1">
-          {refImg ? (
-            <div className="relative w-16 h-16 rounded border border-accent/15 overflow-hidden">
-              <img src={refImg} alt="" className="w-full h-full object-cover" />
-              <span className="absolute top-0.5 right-0.5 text-[9px] px-1 py-px rounded-full bg-black/70 text-white font-medium">
-                {ROLE_LABEL[role]}
+          {thumbImg ? (
+            <div className={`relative w-16 h-16 rounded border overflow-hidden ${sbImg ? 'border-accent/40' : 'border-accent/15'}`}>
+              <img src={thumbImg} alt="" className="w-full h-full object-cover" />
+              <span className={`absolute top-0.5 right-0.5 text-[9px] px-1 py-px rounded-full font-medium ${sbImg ? 'bg-accent text-accent-foreground' : 'bg-black/70 text-white'}`}>
+                {thumbLabel}
               </span>
             </div>
           ) : (
             <div className="w-16 h-16 rounded border border-dashed border-border bg-card flex items-center justify-center text-[9px] text-muted-foreground text-center px-1 leading-tight">无参考图</div>
           )}
+
           {refImg && (
             <div className="flex rounded border border-border overflow-hidden text-[9px]">
               {(['first', 'last', 'reference'] as ImageRole[]).map((r) => (
@@ -927,64 +965,144 @@ function SceneRow({
   );
 }
 
+// 把脚本里的 clip 按 hook → scenes → outro 顺序收集,与后端 gatherClips 对齐。
+function gatherScriptClips(script: any): { label: string; clip: any }[] {
+  const out: { label: string; clip: any }[] = [];
+  if (script?.hook) out.push({ label: '钩子', clip: script.hook });
+  if (Array.isArray(script?.scenes)) script.scenes.forEach((c: any, i: number) => out.push({ label: `镜${String(i + 1).padStart(2, '0')}`, clip: c }));
+  if (script?.outro) out.push({ label: '收尾', clip: script.outro });
+  return out;
+}
+
+function computeStoryboardSig(script: any, realism: string): string {
+  if (!script) return '';
+  const clips = gatherScriptClips(script);
+  return clips
+    .map(({ clip }) => {
+      const ref = effectiveImageRef(clip);
+      const idx = ref ? `${ref.index}:${ref.role}` : '_';
+      return `${idx}|${clip?.storyboard_url ? '1' : '0'}`;
+    })
+    .join(',') + `#${realism}`;
+}
+
+function collectMissingStoryboardIndices(script: any): number[] {
+  const clips = gatherScriptClips(script);
+  const out: number[] = [];
+  clips.forEach((c, i) => { if (!c.clip?.storyboard_url) out.push(i); });
+  return out;
+}
+
+function collectStoryboardSummary(script: any): { hasAny: boolean; total: number; done: number } {
+  const clips = gatherScriptClips(script);
+  const done = clips.filter((c) => !!c.clip?.storyboard_url).length;
+  return { hasAny: done > 0, total: clips.length, done };
+}
+
 function SegmentPreview({ script, urls, character }: { script: any; urls: string[]; character: Character | null }) {
   const segments: SegmentPlan[] = planSegments(script);
+  const [open, setOpen] = useState(false);
   if (!segments.length) return null;
-  const charRefs: string[] = [];
-  if (character?.cover_url) charRefs.push(character.cover_url);
-  for (const u of character?.extra_reference_urls || []) charRefs.push(u);
+  const allClips = gatherScriptClips(script);
 
-  const Thumb = ({ url, label, dashed }: { url?: string | null; label: string; dashed?: boolean }) => (
-    <div className="flex flex-col items-center gap-0.5">
-      {url ? (
-        <img src={url} alt="" className="w-10 h-10 object-cover rounded border border-accent/20" />
-      ) : (
-        <div className={`w-10 h-10 rounded border ${dashed ? 'border-dashed' : ''} border-border bg-muted/40 flex items-center justify-center text-[8px] text-muted-foreground`}>无</div>
-      )}
-      <span className="text-[8.5px] text-muted-foreground">{label}</span>
-    </div>
-  );
+  // 把每段里包含的 clip 标签反解出来,在 allClips 里找到对应 clip 取静帧 / 实景
+  const segClipsOf = (seg: SegmentPlan) => seg.sceneLabels.map((label) => {
+    let idx = -1;
+    if (label === '钩子') idx = allClips.findIndex((c) => c.label === '钩子');
+    else if (label === '收尾') idx = allClips.findIndex((c) => c.label === '收尾');
+    else if (label.startsWith('镜头')) {
+      const n = parseInt(label.slice(2), 10) - 1;
+      idx = allClips.findIndex((c) => c.label === `镜${String(n + 1).padStart(2, '0')}`);
+    }
+    const c = idx >= 0 ? allClips[idx] : null;
+    const sb = (c?.clip?.storyboard_url as string | undefined) || undefined;
+    const ref = c ? effectiveImageRef(c.clip) : null;
+    const fallback = ref && urls[ref.index] || undefined;
+    return { label, dur: Number(c?.clip?.duration_s) || 0, image: sb || fallback, isStoryboard: !!sb, hasImage: !!(sb || fallback) };
+  });
+
+  const totalDur = segments.reduce((s, x) => s + x.durationS, 0);
 
   return (
-    <div className="border border-accent/20 rounded-lg p-3 space-y-2 bg-accent/5">
-      <div className="flex items-center gap-2">
-        <span className="font-display text-[11px] text-accent tracking-[0.18em]">分段预览</span>
-        <span className="w-1 h-1 rounded-full bg-accent" />
-        <span className="text-[10px] text-muted-foreground">{segments.length} 段 · 按 ≤10s 自动拆分,所见即所得</span>
-      </div>
-      <div className="space-y-2">
-        {segments.map((seg) => {
-          const firstUrl = seg.firstIndex !== null ? urls[seg.firstIndex] : undefined;
-          const lastUrl = seg.lastIndex !== null ? urls[seg.lastIndex] : undefined;
-          const refUrls = seg.refIndices.map((i) => urls[i]).filter(Boolean);
-          const allRefs = Array.from(new Set([...charRefs, ...refUrls])).slice(0, 3);
-          const mode = firstUrl
-            ? (lastUrl && lastUrl !== firstUrl ? '首尾帧' : '图生视频')
-            : (allRefs.length ? '参考生视频' : '纯文生');
-          return (
-            <div key={seg.index} className="bg-card border border-border rounded p-2 space-y-1.5">
-              <div className="flex items-center justify-between text-[10.5px]">
-                <span className="font-semibold text-foreground">第 {seg.index + 1} 段</span>
-                <span className="text-muted-foreground">{seg.durationS}s · {seg.sceneLabels.join(' + ')}</span>
-                <span className="text-accent text-[9.5px] px-1.5 py-px rounded-full border border-accent/30 bg-accent/5">{mode}</span>
+    <div className="border border-accent/15 rounded-lg bg-accent/5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-display text-[11px] text-accent tracking-[0.18em]">分段预览</span>
+          <span className="w-1 h-1 rounded-full bg-accent" />
+          <span className="text-[10px] text-muted-foreground truncate">
+            共 {segments.length} 段 · {totalDur}s · 主角:{character?.name || '无'}
+          </span>
+        </div>
+        <span className="text-[10px] text-accent shrink-0">{open ? '收起' : '展开'}</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-2">
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            每段 ≤10s,每段第一张作开头帧、最后一张作结尾帧,主角每段都会塞进参考图锁人。
+          </p>
+          {segments.map((seg) => {
+            const cells = segClipsOf(seg);
+            const hasFirst = cells.find((c) => c.hasImage);
+            const lastWith = [...cells].reverse().find((c) => c.hasImage && c !== hasFirst);
+            const mode = hasFirst
+              ? (lastWith ? '首尾帧' : '图生视频')
+              : (character?.cover_url ? '参考生视频' : '纯文生');
+            return (
+              <div key={seg.index} className="bg-card border border-border rounded p-2 space-y-1.5">
+                <div className="flex items-center justify-between gap-2 text-[10.5px]">
+                  <span className="font-semibold text-foreground shrink-0">第 {seg.index + 1} 段</span>
+                  <span className="text-muted-foreground truncate">{seg.durationS}s · {seg.sceneLabels.length} 镜</span>
+                  <span className="text-accent text-[9.5px] px-1.5 py-px rounded-full border border-accent/30 bg-accent/5 shrink-0">{mode}</span>
+                </div>
+                <div className="flex items-end gap-1.5 overflow-x-auto pb-0.5">
+                  {cells.map((cell, i) => {
+                    const isFirst = i === 0;
+                    const isLast = i === cells.length - 1 && cells.length > 1;
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-0.5 shrink-0">
+                        <div className="relative w-12 h-16 rounded border border-accent/20 overflow-hidden bg-muted/40">
+                          {cell.image ? (
+                            <img src={thumbUrl(cell.image, 240) || cell.image} alt="" loading="lazy" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[8px] text-muted-foreground">无图</div>
+                          )}
+                          {(isFirst || isLast) && cell.image && (
+                            <span className="absolute top-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white py-px">
+                              {isFirst ? '开头帧' : '结尾帧'}
+                            </span>
+                          )}
+                          {cell.isStoryboard && (
+                            <span className="absolute bottom-0 right-0 text-[7.5px] px-0.5 bg-accent text-accent-foreground">静帧</span>
+                          )}
+                        </div>
+                        <span className="text-[8.5px] text-muted-foreground">{cell.label}</span>
+                        <span className="text-[8px] text-muted-foreground/70">{cell.dur}s</span>
+                      </div>
+                    );
+                  })}
+                  {character?.cover_url && (
+                    <div className="flex flex-col items-center gap-0.5 shrink-0 pl-1.5 ml-1.5 border-l border-border">
+                      <div className="w-12 h-12 rounded-full overflow-hidden border border-accent/40">
+                        <img src={thumbUrl(character.cover_url, 160) || character.cover_url} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <span className="text-[8.5px] text-accent font-medium truncate max-w-[3rem]">{character.name || '主角'}</span>
+                      <span className="text-[8px] text-muted-foreground/70">锁人</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-end gap-2 flex-wrap">
-                <Thumb url={firstUrl} label="开头" dashed={!firstUrl} />
-                <Thumb url={lastUrl} label="结尾" dashed={!lastUrl} />
-                <div className="w-px h-10 bg-border mx-0.5" />
-                {allRefs.length > 0 ? (
-                  allRefs.map((u, i) => <Thumb key={u} url={u} label={i === 0 && charRefs.includes(u) ? '主角' : '参考'} />)
-                ) : (
-                  <Thumb label="参考" dashed />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
+
 
 
 

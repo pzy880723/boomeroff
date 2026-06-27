@@ -1,32 +1,42 @@
-## 调整目标
 
-画风（插画风 / 真人写实）必须在「生成分镜静帧」之前就选好，不要让用户走到分镜环节再回头改。同时：
+## 你说的问题，对在哪里
 
-- **惊喜一下** = 不暴露画风开关，固定默认「真人写实」。
-- **AI 自定义视频** = 把画风选择前置到最上面（脚本生成之前），让用户先决定画风，再生成脚本 → 分镜 → 渲染。
-- 画风结构保留两个枚举（`stylized` / `photoreal`），方便后续再加新画风。
+1. **分段预览跟分镜静帧没关联** ✅ 确实是 UI bug
+   - `SegmentPreview` 只读 `urls`（原始素材库），完全没有看 `clip.storyboard_url`。
+   - 但后端 `render-marketing-video/resolveSegmentImages` 其实**已经优先用 `storyboard_url`** 当首/尾帧，原素材只是降级和 reference。
+   - 所以渲染并没有"用素材库的图凑视频"，是预览面板骗了你 —— 看着像两套东西。
 
-## 改动
+2. **分段预览太占位** ✅ 默认折叠即可，不删。
 
-### 1. 惊喜一下 (`src/components/marketing/SurpriseVideoDialog.tsx`)
-- 移除底部的 `RealismToggle`、`realism` state、`handleRealismChange` 以及相关 import。
-- 调用 `surprise-marketing-video` 预览和正式渲染时，`realism` 硬编码为 `'photoreal'`，不读 `getRealismPref()`、不写 `setRealismPref()`，避免影响自定义页的偏好。
-- 其它逻辑、布局（模型选择器、ETA、分镜预览等）保持不变。
+3. **每段应该显示这段里包含的所有分镜（用静帧）+ 主角** ✅ 信息架构改一下就好。
 
-### 2. AI 自定义视频 (`src/pages/marketing/MarketingVideo.tsx`)
-- 把 `RealismToggle` 从「生成分镜静帧」按钮旁边移除。
-- 在页面顶部、紧跟 `PageHeader` 之后（脚本/素材/角色一切配置之前）新增一张「画风」卡片：
-  - 标题「画风」+ 说明「先选好画风，再让 BOOMER 写脚本和拆分镜」。
-  - 主体是 `RealismToggle`（`size="sm"`），下面一行小字根据当前值显示对应 `hint`（如「真人写实 · 细节最真」/「插画风 · 过审稳定」）。
-  - 选择会立刻写入 `setRealismPref`，作为该用户在自定义页的默认。
-- 默认值仍走 `getRealismPref()`（首次使用 = `stylized`，由用户主动切换），保留现有偏好记忆。
-- 一旦 `script` 已生成，画风卡片切换会给一个 toast 提示「画风已切换，建议点『重做分镜静帧』重新合成」，避免老分镜与新画风不一致。生成/渲染逻辑沿用现有 `realism` 透传，无需改后端。
+## 改动（只动 `src/pages/marketing/MarketingVideo.tsx`，纯前端）
 
-### 3. 不动
-- `supabase/functions/_shared/realism.ts`、`storyboard-marketing-video`、`render-marketing-video`、`surprise-marketing-video` 的 prompt 分支全部保持不变。
-- `src/lib/realism.ts`、`src/lib/realismPref.ts`、`RealismToggle` 组件保持不变（后续加新画风时只需扩展 `REALISM_OPTIONS`）。
+### A. 重写 `SegmentPreview` 卡片
 
-## 影响文件
+不再画"开头/结尾/参考"三宫格，改成**"这一段 = 这几个分镜"**的真实视图：
 
-- 改 `src/components/marketing/SurpriseVideoDialog.tsx`
-- 改 `src/pages/marketing/MarketingVideo.tsx`
+- 每段头：`第 N 段 · X秒 · {镜头标签}` + 模式徽章（图生 / 首尾帧 / 参考生 / 文生）
+- 每段体：
+  - **横向缩略图条**：把这段里 `hook / 镜头k / outro` 按顺序排开，每个 tile 显示 `clip.storyboard_url`（没有时回退到 `urls[image_index]`，再没有显示"无图"占位）；tile 下方小字写"钩子 / 镜头k / 收尾"和时长。
+  - tile 上角小角标：第一个 tile 标"开头帧"，最后一个标"结尾帧"（与 `resolveSegmentImages` 实际取帧规则一致 —— 优先取本段第一/最后一张 `storyboard_url`）。
+  - **主角胶囊**：若有 `character.cover_url`，在段右侧固定显示一个小圆头像 + 名字，标"每段锁人"，对齐后端"角色 reference 永远塞"的行为。
+- 这样用户一眼就能看到："这一段用的就是上面这几张分镜静帧拼成的"。
+
+### B. 默认折叠
+
+- 用 `<details>` 或受控 `useState(false)` 的折叠区，标题保持 `分段预览 · N 段（≤10s/段）`，右侧"展开/收起"按钮。
+- 折叠态只显示一行汇总：`共 N 段 · 总 D 秒 · 主角:{name|无}`。
+
+### C. 顺手修掉的几处不合理
+
+1. **重做分镜静帧按钮的提示语**：当前只提示"画风切换 → 建议重做"，但**用户在分镜行手动替换了某张图**（`assignImageToTarget` / `setSceneImage`）也会让旧静帧和新绑定对不上。改成：监听 `script` 中各 clip 的 `image_index` 变化签名，一旦和上一次成功生成静帧时不一致，就在"重做分镜静帧"按钮旁边显示一个琥珀色小标"分镜图已变更，建议重做静帧"。
+2. **`generateStoryboard` 永远全量重跑**：`storyboard-marketing-video` 后端其实支持 `only_indices`。在"重做分镜静帧"按钮旁加一个"仅重做缺失/失败的"次级按钮，把 `frames` 里 `url=null` 的 `scene_index` 传过去，节省时间和额度。
+3. **`SceneRow` 缩略图仍显示原素材而非静帧**：当 `scene.storyboard_url` 存在时，左上角 64×64 缩略图优先显示静帧，原 `参考图` 角标改为"已合成静帧"，让用户看到"这一镜最终会动起来的那张"就是它，不再误以为是从素材库直接抽图渲染。
+4. **空状态文案**：脚本生成后但还没合成静帧时，在"分镜"区顶端加一行提示 `"⚠ 还没有分镜静帧，渲染会直接用原素材，质量会差。点击右上角『重做分镜静帧』"`，避免用户误提交。
+
+## 不动
+
+- 后端 `render-marketing-video` / `storyboard-marketing-video` / 分段拆分逻辑保持不变 —— 它本身就是优先用 storyboard 静帧的。
+- `SurpriseVideoDialog` 不动（它的分段预览是另一处，已是缩略卡，必要时再单独提）。
+- `planSegments` / `marketingSegments.ts` 不动。
