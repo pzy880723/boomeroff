@@ -32,6 +32,7 @@ function buildOneShotPrompt(
   shopBlock: string,
   character: any,
   realism: Realism,
+  overrides?: { opening?: string; style_cue?: string } | null,
 ): string {
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const total = clampDuration(script.total_duration_s || 15);
