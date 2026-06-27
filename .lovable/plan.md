@@ -1,97 +1,82 @@
+## 背景
 
-# 一次推理多镜（One-Shot Multi-Scene）渲染 · v2
+代码里仍混杂着大量 Seedance **1.5 时代**的「首帧 / 尾帧 / image2video / flf2v」概念。2.0 已经在 `submitArkTask` 里强制走 `reference_image` 单通道，但上下游的切段、绑定、文案、错误提示都还是按 1.5「首尾帧锁画面」的模型写的，既有死代码、又有会误导用户的文案，还藏着一个 model id typo。本次清扫把全链路统一到 2.0 心智模型：**reference_image（最多 9 张）+ one_shot / per_shot 两种策略**。
 
-对齐「小云雀」：脚本 + 角色板 + 关键参考图 **一次性** 丢给 Seedance 2.0，模型自己切 2~4 镜。保留现有「逐镜渲染」作为兜底。
+## 要清掉的 1.5 残留
 
-> 修正：Seedance 2.0 `reference_image` 通道**最多 9 张**（旧代码里写死的 `slice(0, 4)` 是 1.5 时代遗留），本次一并放开到 9。
+1. **首尾帧索引（firstIndex / lastIndex / firstImage / lastImage）**
+   - `supabase/functions/_shared/marketing-segments.ts` `pickSegmentImages` 仍返回 `firstIndex / lastIndex`，调用方再把它们当 ref 推进去，纯属对同一张图去重前的重复 push。
+   - `src/lib/marketingSegments.ts` 同步暴露的 `firstIndex / lastIndex` 也已无消费方。
 
-## 1. 参考图上限：4 → 9
+2. **`mode` 三态里的 `image2video`**
+   - `render-marketing-video` per_shot 分支仍写 `mode: anyFirst ? "image2video" : ...`，但 2.0 根本不存在 image2video。
+   - `AssetDetailDialog.tsx` 还在按 `image2video / text2video` 文案展示。
+   - 统一为 `reference2video`（有 ref）/ `text2video`（无 ref）两态。
 
-- `supabase/functions/render-marketing-video/index.ts` 内 `resolveSegmentImages()` 的 `refs.slice(0, 4)` 改为 `slice(0, 9)`；`submitArkTask()` 内 `slice(0, 4)` 同步改为 `slice(0, 9)`。
-- 新增 `_shared/seedance-models.ts` 常量 `SEEDANCE_MAX_REFS = 9`，全部从常量读。
-- 前端 `CharacterPicker` / 角色额外参考图上限提示文案同步从「最多 4 张」改为「最多 9 张」。
+3. **`image_binding` 的"首尾"语义**
+   - `generate-marketing-video-script` 把绑定写成 `{ source: 'unbound' / 'free' / 'expected' }` 还可以保留，但 `MarketingVideo.tsx` 里 `BindingBadge`/`SegmentPreview` 仍输出「开头帧 / 结尾帧 / 首尾帧」字样，要改成「参考图 #N / 自由发挥」。
 
-## 2. 新增渲染策略 `render_strategy`
+4. **`SegmentPreview` 文案（MarketingVideo.tsx ~1071-1101）**
+   - "固定切成 N 段（30s = 2×15、45s = 3×15）"
+   - "每段第一张作开头帧、最后一张作结尾帧"
+   - "首尾帧 / 图生视频"
+   - 全部按 2.0 改成"参考图驱动 / 一次成片 / 逐镜拼接"的说法。
 
-| 值 | 行为 | 用途 |
-|---|---|---|
-| `one_shot` | 整段脚本作为「分镜导演 Prompt」+ 最多 9 张参考图，单次 Seedance 调用直出 ≤15s | 「惊喜一下」默认 / 短视频默认 |
-| `per_shot` | 现有逐镜并行 + 前端 ffmpeg-wasm 拼接 | 长视频 / 强一致性 / 用户手动 |
-| `auto` | 后端按脚本特征自动判断 | 「自定义视频」默认 |
+5. **`videoFailure.ts` 的 1.5 专属分支**
+   - `resolution_not_supported`（flf2v + 首尾帧拼接）：2.0 不发首尾帧，这个码不会再触发，删除或退化为通用降分辨率。
+   - `ref_and_lastframe_conflict`（last_frame mixed reference）：同上，删除。
+   - `stitch_failed` 的修复项「改用 15 秒单段重拍」：2.0 已没有"单段直出"路径，改为「切到一次成片 one_shot」。
+   - **Typo 修复**：多处写 `doubao-seedance-2-0-mini-260128`，正确型号是 `-260615`（见 `seedanceModels.ts`）。这是 1.5 → 2.0 迁移时留下的 bug，会让"一键修复 → 切到 Mini"调用 404。
 
-`auto` 判定（无额外 AI 调用）：
-- 总时长 ≤ 15s → `one_shot`
-- 分镜数 ≤ 4、每镜 ≥ 3s、无手动绑定的实景静帧 → `one_shot`
-- 总时长 > 15s 或大量手动 `image_index` 绑定 → `per_shot`
+6. **后端 prompt / 注释里的"首帧参考身份板"**
+   - `render-marketing-video` buildPrompt 还在说"以首帧参考身份板为准"，2.0 应改为"以参考图身份板为准"。
+   - 文件头部 `// hook / scenes[*] / outro 各自成段,独立用自己的静帧作 first_frame` 注释同样过时。
 
-## 3. `one_shot` Prompt 结构
+7. **poll / surprise 函数里的过期文案**
+   - `poll-marketing-video` 超时提示"建议改用 Seedance Fast 或降到 720p"——OK 保留，但提到 "Pro 720p/1080p 默认" 处的 25 分钟估算是按 1.5 单段算的，2.0 per_shot 多段应按 `segment_total × 单段估算` 重算。
+   - `SurpriseVideoDialog` 进度文案"Seedance 起稿中…模型在生成首帧画面"是 1.5 i2v 体感，2.0 reference 模式没有"首帧"概念，改成"模型在排镜头"。
 
-按 Seedance 2.0「多镜导演口令」最佳实践，把脚本翻译为单条镜头切换指令：
+8. **`splitScript` 的最短 4s 兜底**
+   - 2.0 最短单段是 3s（官方文档），代码里写 `Math.max(4, …)` 是按 1.5 限制保守抬高。可以放宽到 3s，让短镜头不被强行拉长。
 
-```
-【15s 探店短片，9:16，真人写实电影质感】
-【主体1】参考图 1 中的人物（外观锁：…），全片同一人，禁止换人/分身。
-【镜头节奏】共 3 个镜头，自然剪辑切换，不要黑场过渡。
+## 实施步骤
 
-镜头 1（0-4s，特写推镜）：…
-镜头 2（4-10s，中景跟拍）：…
-镜头 3（10-15s，半身收尾 + CTA 字幕）：…
+1. **`_shared/marketing-segments.ts` & `src/lib/marketingSegments.ts`**
+   `pickSegmentImages` 改为只返回 `refIndices`（去掉 firstIndex/lastIndex）。前端 `SegmentPlan` 的 `firstIndex/lastIndex` 字段一并删除，外部消费方同步更新。
 
-整体：BOOMER·OFF 中古杂货店暖色货架；禁止动漫/插画/3D；不要文字水印。
-```
+2. **`render-marketing-video/index.ts`**
+   - `resolveSegmentImages` 移除 first/last 分支，直接遍历 `picks.refIndices`。
+   - per_shot 分支 `mode` 仅在 `reference2video / text2video` 之间二选一。
+   - `image_usage.per_segment` 去掉 `first / last` 字段。
+   - prompt 文案与文件注释中"首帧 / first_frame"改成"参考图"。
+   - `splitScript` 最短时长由 `Math.max(4, …)` 改为 `Math.max(3, …)`。
 
-参考图喂法（reference_image 通道，**上限 9 张**，按权重排序去重）：
-1. 角色身份板（优先 verified `asset://`）
-2. 角色额外参考图
-3. 每镜手动绑定的关键实景图（按分镜顺序）
-4. 每镜静帧（若已合成）
-5. 兜底封面
+3. **`generate-marketing-video-script/index.ts`**
+   `image_binding.source` 收敛为 `ref / free / unbound`，删除任何与 first/last 语义相关的字段。
 
-## 4. 前端 UI
+4. **`src/pages/marketing/MarketingVideo.tsx`**
+   - `SegmentPreview` 的标签/说明改成"参考图 #N / 一次成片 / 逐镜拼接"。
+   - `BindingBadge` 输出文案同步。
+   - 任何 `firstIndex/lastIndex` 的引用删除。
 
-### 「惊喜一下」
-- 硬编码 `render_strategy = 'one_shot'`，对用户不可见。
-- 进度卡文案：「BOOMER 正在一次成片，约 1~2 分钟…」，不再显示 X/Y 分段。
+5. **`src/lib/videoFailure.ts`**
+   - 删除 `resolution_not_supported` 中的 flf2v 分支判定与 `ref_and_lastframe_conflict` 整段。
+   - `stitch_failed` 的"15 秒单段重拍"改为"切到一次成片 (one_shot) 重拍"，patch 写 `{ render_strategy: 'one_shot' }`。
+   - 全文搜索 `doubao-seedance-2-0-mini-260128` → 替换为 `-260615`。
 
-### 「自定义视频」`MarketingVideo.tsx`
-画风卡片下新增胶囊式「渲染方式」切换：
+6. **`src/components/marketing/AssetDetailDialog.tsx`**
+   将 `meta.mode === 'image2video'` 的文案分支删除，只保留 `reference2video / text2video`。
 
-```
-渲染方式：[🤖 智能 (推荐)]  [🎬 一次成片]  [🧩 逐镜拼接]
-                           更快·更自然          每镜可控·更精准
-```
+7. **`poll-marketing-video/index.ts`**
+   ETA 估算改为按 `segment_total` 乘以单段时间；超时提示文案去掉"单段"措辞。
 
-- 默认 `auto`，实时显示后端解析后的「实际将走 one_shot / per_shot」徽章。
-- 「一次成片」模式：收起「分镜静帧重做」入口，提示「本模式由模型自动安排镜头切换，参考图最多 9 张，按权重自动挑选」。
-- 「逐镜拼接」模式：SceneRow / 静帧预览保持不变。
+8. **`SurpriseVideoDialog.tsx`**
+   进度提示文案把"生成首帧画面"改成"在排镜头 / 在合成参考图"。
 
-### `SegmentPreview`
-- one_shot：单卡「1 段直出 · 模型自动切镜（共 N 张参考图）」。
-- per_shot：保持现状。
+## 验证
 
-## 5. 失败降级
-
-`one_shot` 复用现有 3 级安全降级链（全 9 张参考 → 仅 1 张角色板 → 纯文本）。若 one_shot 整段被内容安全连续拦截 ≥2 次，自动回落 `per_shot` 并 toast 提示「已切换为逐镜渲染保证出片」。
-
-## 6. 数据与元信息
-
-`marketing_assets.meta` 新增字段（jsonb，无需迁移）：
-- `render_strategy`: `one_shot` / `per_shot`
-- `render_mode`: `one_shot_reference` / `per_shot_reference`
-- `one_shot_refs`: 实际喂进去的参考图 URL 数组（最多 9 张，用于复盘）
-- `auto_decision_reason`: strategy=auto 时记录判定原因（如 `duration<=15s`）
-
-## 7. 不动的部分
-
-- 模型选择（Seedance 2.0 Pro/Fast/Mini）、分辨率、画风（photoreal/stylized）、时长记忆 —— 全部保留。
-- `per_shot` 代码全部保留作为兜底和「逐镜拼接」按钮实现。
-- `stitchVideos.ts` 仅在 `per_shot` 时调用。
-- 不改数据库 schema。
-
-## 技术要点
-
-- 后端：`render-marketing-video/index.ts` 抽出 `runOneShot()` 与现有 `splitScript → 并行提交` 并列；入口按 `render_strategy` 分发。
-- Prompt 构造抽到 `_shared/one-shot-prompt.ts`，复用 `video-styles` / `realism` / `shop-context`。
-- 参考图上限统一从 `_shared/seedance-models.ts` 的 `SEEDANCE_MAX_REFS = 9` 读取。
-- 前端：新增 `src/lib/renderStrategyPref.ts`（localStorage 记忆）+ `RenderStrategyPicker.tsx`。
-- 「惊喜一下」`SurpriseVideoDialog.tsx` / `surprise-marketing-video` 显式传 `render_strategy: 'one_shot'`。
+- 跑一条「惊喜一下」（one_shot）+ 一条 30s「自定义」（per_shot）两种路径，确认：
+  - 数据库 `marketing_assets.meta.mode` 只出现 `reference2video / text2video`。
+  - 控制台无 `firstIndex/lastIndex/image2video/first_frame` 任何输出。
+- 触发一次"切到 Mini"一键修复，确认请求体里是 `-260615` 不再 404。
+- 全文 `rg -n "first_frame|last_frame|image2video|flf2v|260128"` 应只剩 `pro/fast` 的合法 model id。
