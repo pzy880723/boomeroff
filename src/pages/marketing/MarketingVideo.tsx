@@ -70,6 +70,8 @@ export default function MarketingVideo() {
   const [rendering, setRendering] = useState(false);
   const [modelId, setModelId] = useState<string>(() => getModelPrefs().modelId);
   const [resolution, setResolution] = useState<SeedanceResolution>(() => getModelPrefs().resolution);
+  const [realism, setRealism] = useState<Realism>(() => getRealismPref());
+  const handleRealismChange = (r: Realism) => { setRealism(r); setRealismPref(r); };
   const handleModelChange = (id: string) => {
     setModelId(id);
     setResolution((cur) => {
