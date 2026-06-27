@@ -255,8 +255,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
             <Loader2 className="w-5 h-5 animate-spin text-accent" />
             <div className="text-center">
-              BOOMER 正在挑素材、蹭最近节日、写洗脑探店口播…
-              <div className="text-[10px] mt-1 opacity-70">15s 竖版 · 真人出镜 · 高转化模板</div>
+              BOOMER 正在挑素材、蹭最近节日、想博主人设…
+              <div className="text-[10px] mt-1 opacity-70">15s 竖版 · 真人出镜 · 风格随博主走</div>
             </div>
           </div>
         ) : (
