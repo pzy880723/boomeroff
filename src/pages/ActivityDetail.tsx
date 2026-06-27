@@ -355,26 +355,9 @@ export default function ActivityDetail() {
                       </>
                     )}
                     {app.status === 'approved' && !app.voucher_claim_id && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-[11px] px-2"
-                        onClick={async () => {
-                          const { data, error } = await invokeFn<any>('voucher-claim-create', {
-                            body: { activity_application_id: app.id },
-                          });
-                          if (error) { toast.error(error.message); return; }
-                          const claim = (data as any)?.claim;
-                          if (claim?.id) {
-                            toast.success('已补发券');
-                            await load(true);
-                            navigate(`/me/vouchers/share/${claim.id}`);
-                          }
-                        }}
-                      >
-                        <Ticket className="w-3 h-3 mr-0.5" />补发券
-                      </Button>
+                      <Badge variant="destructive" className="text-[10px]">券缺失·请联系管理员</Badge>
                     )}
+
                     <Button
                       size="sm"
                       variant={app.publish_confirmed ? 'secondary' : 'outline'}
