@@ -460,7 +460,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
         <Chip>路线 · {pick.vtype_label}</Chip>
         <Chip>风格 · {STYLE_LABEL[pick.style] || pick.style}</Chip>
         {pick.character && <Chip>主角 · {pick.character.name}</Chip>}
-        
+        {(pick as any).theme_tag && <Chip>主题 · {(pick as any).theme_tag}</Chip>}
       </div>
 
       {pick.__warn === 'assets_reused' && (
@@ -480,7 +480,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
             ? `分镜静帧 · ${withTime.filter((w) => w.clip.storyboard_url).length}/${withTime.length} 张已合成`
             : `入选素材 · ${pick.assets.length} 张实景`}
         </div>
-        <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 pb-1 snap-x">
+        <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2 pt-1 snap-x">
           {(withTime.some((w) => w.clip.storyboard_url) ? withTime : pick.assets.map((a, i) => ({ label: `#${i}`, clip: { storyboard_url: null }, asset: a }))).map((it: any, i) => {
             const url = it.clip?.storyboard_url || it.asset?.url || it.url;
             const label = it.label;
@@ -489,7 +489,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
                 type="button"
                 key={i}
                 onClick={() => url && openLb(Math.min(i, Math.max(0, lightboxUrls.length - 1)))}
-                className="shrink-0 w-12 h-[68px] rounded-md overflow-hidden bg-muted ring-1 ring-border relative snap-start active:scale-95 transition-transform"
+                className="shrink-0 w-14 h-[78px] rounded-xl overflow-hidden bg-muted ring-1 ring-border shadow-md shadow-black/15 relative snap-start active:scale-95 transition-transform"
               >
                 {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : null}
                 <div className="absolute bottom-0 right-0 px-1 text-[9px] bg-black/55 text-white rounded-tl">{label || `#${i}`}</div>
@@ -498,6 +498,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult; modelLabel?: string }) {
           })}
         </div>
       </div>
+
 
       <div>
         <div className="text-[11px] text-muted-foreground mb-2">BOOMER 拟好的脚本 · {clips.length} 个分镜</div>
