@@ -168,7 +168,7 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
               </div>
             )}
             <div className="text-sm text-muted-foreground flex items-center gap-1">
-              <ScanLine className="w-3.5 h-3.5" /> 用{platformLabel(platform!)} App 扫码登录
+              <ScanLine className="w-3.5 h-3.5" /> 用{platformLabel(platform!)}扫码登录
             </div>
             {statusMsg && <div className="text-[11px] text-muted-foreground text-center">{statusMsg}</div>}
             {qr && countdown > 0 && (
