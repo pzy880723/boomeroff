@@ -37,6 +37,9 @@ export const SEEDANCE_2_MODELS: SeedanceModelInfo[] = [
 
 export const DEFAULT_SEEDANCE_2 = "doubao-seedance-2-0-260128";
 export const SEEDANCE_MAX_SINGLE_SHOT = 15;
+// Seedance 2.0 `reference_image` 通道最多支持 9 张图(对齐小云雀的一次成片体验)。
+// 改这里务必同步前端 src/lib/seedanceModels.ts 中的同名常量。
+export const SEEDANCE_MAX_REFS = 9;
 
 export function resolveSeedanceModel(requested?: string | null): SeedanceModelInfo {
   if (!requested) return SEEDANCE_2_MODELS[0];
