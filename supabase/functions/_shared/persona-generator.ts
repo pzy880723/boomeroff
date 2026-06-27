@@ -1,8 +1,8 @@
 // 根据本次素材的品类/标签 + 店铺/节日,让 AI 动态生成一位最匹配的「探店博主」人设。
 // 不走预设博主库 —— 瓷器→老克勒,潮玩→年轻女生,亲子→宝妈,户外→硬汉等都由 AI 现想。
-// 节奏(pace)由人设本身决定:老派人物允许慢条斯理,年轻人物允许高能。
+// 节奏(pace)由人设本身决定,但所有人设至少 medium energy,严禁优雅慢悠悠 PPT 感。
 
-export type PersonaPace = 'slow' | 'medium' | 'fast';
+export type PersonaPace = 'medium' | 'fast';
 
 export interface InfluencerPersona {
   label: string;          // 例:55岁老克勒大叔
