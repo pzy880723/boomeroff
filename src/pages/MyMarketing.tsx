@@ -69,7 +69,7 @@ export default function MyMarketing() {
   return (
     <>
       <PageHeader title="营销中心" back="/me" subtitle="一键出图 · 一键出文 · 一键出片" />
-      <div className="container mx-auto max-w-screen-md px-4 py-4 pb-12 space-y-5 relative">
+      <div className="container mx-auto max-w-screen-md px-4 py-4 pb-12 space-y-5">
 
         {/* ===== Hero · 年鉴封面 ===== */}
         <section className="relative bg-card rounded-[0.875rem] border border-accent/15 shadow-sm overflow-hidden animate-card-enter">
