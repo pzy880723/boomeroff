@@ -19,6 +19,9 @@ import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileR
 import { getModelPrefs, getSurpriseModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import type { VideoFix } from '@/lib/videoFailure';
+import { RealismToggle } from '@/components/marketing/RealismToggle';
+import { getRealismPref, setRealismPref } from '@/lib/realismPref';
+import type { Realism } from '@/lib/realism';
 
 interface PickedAsset {
   asset_id: string; index: number; url: string; summary: string; category: string | null;
@@ -63,6 +66,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [renderError, setRenderError] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>(() => getSurpriseModelPrefs().modelId);
   const [resolution, setResolution] = useState<SeedanceResolution>(() => getSurpriseModelPrefs().resolution);
+  const [realism, setRealism] = useState<Realism>(() => getRealismPref());
+  const handleRealismChange = (r: Realism) => { setRealism(r); setRealismPref(r); };
 
   const handleModelChange = (id: string) => {
     setModelId(id);
@@ -110,7 +115,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     // 复用 inflight，避免 close→open 时重派
     const existing = getInflightPick(shopId);
     const promise = existing || setInflightPick(shopId, supabase.functions.invoke('surprise-marketing-video', {
-      body: { shop_id: shopId, preview: true, exclude_asset_ids: exclude },
+      body: { shop_id: shopId, preview: true, exclude_asset_ids: exclude, realism },
     }));
     try {
       const { data, error } = await promise as any;
@@ -171,6 +176,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           vtype: pick.vtype, style: pick.style,
           model: useModel,
           resolution: useRes,
+          realism,
           disable_storyboard: !!overrides?.disable_storyboard,
           disable_references: !!overrides?.disable_references,
         },
@@ -251,6 +257,10 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           <>
             <ScriptBody pick={pick} />
             <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-muted-foreground">画风</span>
+                <RealismToggle value={realism} onChange={handleRealismChange} size="xs" />
+              </div>
               <SeedanceModelPicker
                 value={modelId}
                 onChange={handleModelChange}

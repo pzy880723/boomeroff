@@ -25,6 +25,9 @@ import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileR
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { getModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
+import { RealismToggle } from '@/components/marketing/RealismToggle';
+import { getRealismPref, setRealismPref } from '@/lib/realismPref';
+import type { Realism } from '@/lib/realism';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -67,6 +70,8 @@ export default function MarketingVideo() {
   const [rendering, setRendering] = useState(false);
   const [modelId, setModelId] = useState<string>(() => getModelPrefs().modelId);
   const [resolution, setResolution] = useState<SeedanceResolution>(() => getModelPrefs().resolution);
+  const [realism, setRealism] = useState<Realism>(() => getRealismPref());
+  const handleRealismChange = (r: Realism) => { setRealism(r); setRealismPref(r); };
   const handleModelChange = (id: string) => {
     setModelId(id);
     setResolution((cur) => {
@@ -232,7 +237,7 @@ export default function MarketingVideo() {
         extra_reference_urls: character.extra_reference_urls || [],
       } : null;
       const { data, error } = await supabase.functions.invoke('storyboard-marketing-video', {
-        body: { script: target, assets, character: charPayload, shop_id: shopId, style },
+        body: { script: target, assets, character: charPayload, shop_id: shopId, style, realism },
       });
       if (error) throw error;
       const d = data as any;
@@ -283,6 +288,7 @@ export default function MarketingVideo() {
         body: {
           script: { ...finalScript, video_type: vtype }, style, shop_id: shopId,
           model: reqModel, resolution: reqRes,
+          realism,
           disable_storyboard: !!overrides?.disable_storyboard,
           disable_references: !!overrides?.disable_references,
         },
@@ -580,7 +586,8 @@ export default function MarketingVideo() {
                 <span className="w-1 h-1 rounded-full bg-accent" />
                 <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">文生视频 · 逐镜确认</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-wrap">
+                <RealismToggle value={realism} onChange={handleRealismChange} size="xs" />
                 <Button size="sm" variant="ghost" onClick={() => generateStoryboard()} disabled={sbBusy || generating} className="h-7 text-[11px]">
                   {sbBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                   {sbBusy ? '合成中' : '重做分镜静帧'}

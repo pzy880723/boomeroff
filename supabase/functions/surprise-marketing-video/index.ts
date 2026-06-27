@@ -164,6 +164,7 @@ Deno.serve(async (req) => {
     if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
     const preview: boolean = !!body.preview;
     const exclude: string[] = Array.isArray(body.exclude_asset_ids) ? body.exclude_asset_ids.slice(0, 50) : [];
+    const realism: 'stylized' | 'photoreal' = body.realism === 'photoreal' ? 'photoreal' : 'stylized';
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
@@ -174,6 +175,7 @@ Deno.serve(async (req) => {
       const renderBody: any = { script: { ...fixed.script, video_type: body.vtype }, style: body.style, shop_id: shopId };
       if (typeof body.model === 'string' && body.model) renderBody.model = body.model;
       if (typeof body.resolution === 'string' && body.resolution) renderBody.resolution = body.resolution;
+      if (body.realism === 'photoreal' || body.realism === 'stylized') renderBody.realism = body.realism;
       if (body.disable_storyboard) renderBody.disable_storyboard = true;
       if (body.disable_references) renderBody.disable_references = true;
       const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
@@ -360,7 +362,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
         body: JSON.stringify({
-          script, assets, character, shop_id: shopId, style,
+          script, assets, character, shop_id: shopId, style, realism,
         }),
       });
       const sbData = await sbRes.json().catch(() => ({}));
@@ -384,7 +386,7 @@ Deno.serve(async (req) => {
     const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
-      body: JSON.stringify({ script: { ...script, video_type: vtype }, style, shop_id: shopId }),
+      body: JSON.stringify({ script: { ...script, video_type: vtype }, style, shop_id: shopId, realism }),
     });
     const renderData = await renderRes.json().catch(() => ({}));
     if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {

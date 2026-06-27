@@ -1,57 +1,79 @@
-## 目标
-1. 选素材弹窗加载更快  
-2. 任何放大预览：右上有大且醒目的关闭按钮 / 点空白也能退出 / 左右滑切换图片 / 预览尺寸不再撑满屏幕导致点不到边缘
+# 同时保留「插画风」和「真人写实」两种分镜风格
 
-## 一、素材选择加载慢的根因
-当前 `LibraryImagePickerDialog`、`LibraryAssetPickerDialog`、`CharacterPicker` 等弹窗在 3 列网格里直接用 `output_url` 原图（一张常常 1~3MB，120 张 = 几十 MB），并且没有 `loading="lazy"` / `decoding="async"`，所以打开就卡。
+参考火山 Seedance 2.0 提示词指南（`docs.volcengine.com/82379/2222480`）。
 
-**优化**：
-- 网格统一改成 `thumbUrl(url, 320)`（Supabase render 缩略图，单张约 20–40KB）
-- 视频用 `thumbUrl(poster, 320)`
-- 全部加 `loading="lazy"`、`decoding="async"`，首屏前 6 张用 `fetchPriority="high"`
-- 列表 `limit` 从 120 调到 60，滚动到底加载更多（简单版：保留 60 + "加载更多" 按钮）
-- 预加载只在 dialog 打开时执行，关闭后清空（已是这样，确认即可）
+## 一、产品决策
 
-## 二、Lightbox 全面重做（`src/components/voucher/ImageLightbox.tsx`）
-保留现有 props，只升级交互：
+- 保留现有插画风 prompt（用户喜欢，且能稳过火山审核）。
+- **新增「真人写实」选项**，作为另一条独立 prompt 路线。
+- 用户在前端**显式选择**画风（不再用关键词自动判定），默认保持现状 = 插画风，避免破坏现有体验。
 
-- **关闭按钮**：从 36px 增大到 **52px**，移到右上 + 加圆形白底 + 阴影；同时在底部居中再放一个「关闭」胶囊按钮（手指够得到的位置）
-- **图片不再撑满**：`max-w-[88vw] max-h-[78vh]`，四周留出**至少 60px** 的可点击空白区
-- **点空白关**：保留（现在已有），但因为图片现在小一圈，更容易点中
-- **左右滑切换**：触摸滑动已有；额外加 **鼠标拖拽** 和 **图片下方圆点导航**
-- **左右大箭头按钮**：从 40px 增大到 **56px**，垂直居中
-- **键盘**：Esc 关、← → 翻页（已有）
-- **页码**：`3 / 12` 改放到顶部胶囊里更显眼
-- **iOS 安全区**：top/bottom 都加 `env(safe-area-inset-*)`
+## 二、改动
 
-`PublicActivity.tsx` 内部还有一个简化版 ImageLightbox，统一替换成 `@/components/voucher/ImageLightbox`，免得一个地方好用、另一个不好用。
+### 1. 共享类型
 
-## 三、把"左右滑预览"接到所有还没接的地方
-排查所有点开放大的位置，统一走升级后的 `ImageLightbox`：
+新增 `supabase/functions/_shared/realism.ts`：
+```ts
+export type Realism = 'stylized' | 'photoreal';
+export const DEFAULT_REALISM: Realism = 'stylized';
+```
 
-| 位置 | 现状 | 改动 |
-|---|---|---|
-| `MarketingVideo.tsx` 分镜静帧 | 直接放大或没有 | 接入 lightbox，images = 全部分镜静帧 URL |
-| `AssetDetailDialog.tsx` 图片素材 | 单图预览 | 接入 lightbox（多张时支持滑动） |
-| `SurpriseVideoDialog.tsx` | 已接入 ✓ | 不动 |
-| `LibraryImagePickerDialog` 长按 / 双击 | 暂无 | 选中按钮上加 ⓘ 角标，点角标走 lightbox（不冲突选择交互） |
-| `CharacterPicker.tsx` 角色图 | 直接 img | 点击调 lightbox |
-| `PublicActivity.tsx` 报名图 | 自带简化版 | 换成统一组件 |
+前端镜像一份 `src/lib/realism.ts`，并提供文案：
+- `stylized` → 「插画风（默认，过审稳）」
+- `photoreal` → 「真人写实（细节最真）」
 
-## 技术细节
-- 仍走 portal 到 `document.body`，仍 stopPropagation 防 Radix Dialog 误关
-- 缩略图改造只影响展示，存库 / 选中回填的 URL 保持原图
-- 不动后端、不动数据库
+### 2. `supabase/functions/storyboard-marketing-video/index.ts`
 
-## 不在范围
-- 不改素材库主页 `MyLibrary` 的视觉
-- 不调整 Supabase render 图像服务的开关（默认已经可用）
+`buildFramePrompt` 拆成两个分支：
 
-## 影响文件
-- `src/components/voucher/ImageLightbox.tsx`（升级）
-- `src/components/marketing/LibraryImagePickerDialog.tsx`
-- `src/pages/marketing/dispatch/LibraryAssetPickerDialog.tsx`
-- `src/components/marketing/CharacterPicker.tsx`
-- `src/components/marketing/AssetDetailDialog.tsx`
-- `src/pages/marketing/MarketingVideo.tsx`
-- `src/pages/public/PublicActivity.tsx`
+- `stylized`：完全保留现有 prompt，一字不改。
+- `photoreal`（新）：
+  - 顶部：`真人级写实电影摄影静帧 (photorealistic cinematic still, 35/50mm, f/2.0)，自然肤质 / 真实毛孔 / 自然瞳孔反光 / 真实景深，让人无法分辨是 AI`
+  - 主体段：去掉"插画感面部"措辞；强调"五官、发型、肤色、体型与人脸参考图完全一致，不得换脸"，按火山推荐**大头照在前、全身照在后**排列 ref。
+  - 场景段：保留"实景照绑定"逻辑，加"颜色/陈列/光线严格还原实拍"。
+  - 画质 + 约束（用火山官方模板）：
+    - "高清，细节丰富，电影质感，色彩自然，光影柔和"
+    - "真人写实，非动漫，非卡通，非插画，非 3D 渲染"
+    - "不要生成任何文字、字幕、水印、Logo；禁止双胞胎/分身；禁止面部畸变、多余手指、塑料皮肤、过度磨皮"
+
+入参增加 `realism`,不传则用 `DEFAULT_REALISM = 'stylized'`。
+
+### 3. `supabase/functions/render-marketing-video/index.ts`
+
+同样按 `realism` 切两条 prompt 尾段：
+
+- `stylized`：保留现有写法。
+- `photoreal`：按官方进阶公式 `精准主体 + 动作 + 场景 + 光影 + 运镜 + 风格 + 画质 + 约束`：
+  - 主体定义置顶：`将参考图1（大头照）的女主定义为主体1`，全程用「主体1」指代；
+  - 镜头按「镜头 1/2/3」时序，单镜单运镜；
+  - 尾段画质+约束词同上 storyboard photoreal 模板，并加 `视频全程禁止出现外形、着装、配饰完全一致的人物，禁止生成同款分身、双胞胎效果`。
+- 已有的「real-person 拒审 → 自动降级 stylized 重试」逻辑保留；photoreal 路线触发拒审时自动落回 stylized，整条视频不会失败。
+
+### 4. 前端 UI
+
+加一个**轻量的画风选择器**，不破坏现有版面：
+
+- `src/pages/marketing/MarketingVideo.tsx`：在"生成分镜静帧"按钮旁边加一个 `RealismToggle`（Segmented：插画风 / 真人写实），默认插画风；调用 `storyboard-marketing-video` 和后续 `render-marketing-video` 时透传 `realism`。
+- `src/lib/surpriseJob.ts` + `src/pages/marketing/MyMarketing.tsx`（惊喜一下入口）：同一个 toggle 也放在惊喜弹窗里，记忆到 `localStorage`（`boomer.realism`），下次默认沿用。
+- 新组件 `src/components/marketing/RealismToggle.tsx`：12px chip 双选，符合现有视觉。
+
+### 5. 持久化
+
+新建 `src/lib/realismPref.ts`：`getRealism() / setRealism()`，`localStorage` key `boomer.realism`，缺省返回 `'stylized'`。
+
+## 三、不动
+
+- 现有插画风 prompt 一字不改。
+- 不改数据库、不动素材库相关代码。
+- 不加管理后台开关。
+
+## 四、影响文件
+
+- 新增 `supabase/functions/_shared/realism.ts`
+- 新增 `src/lib/realism.ts`、`src/lib/realismPref.ts`
+- 新增 `src/components/marketing/RealismToggle.tsx`
+- 改 `supabase/functions/storyboard-marketing-video/index.ts`
+- 改 `supabase/functions/render-marketing-video/index.ts`
+- 改 `src/pages/marketing/MarketingVideo.tsx`
+- 改 `src/pages/marketing/MyMarketing.tsx`
+- 改 `src/lib/surpriseJob.ts`（透传 realism）
