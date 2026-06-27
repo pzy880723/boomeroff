@@ -33,17 +33,25 @@ Deno.serve(async (req) => {
     const { data: rows } = await supa.from("social_accounts").select("*").eq("shop_id", shopId).order("created_at", { ascending: false });
 
     let workerOnline = true;
+    let workerMessage = "发布服务器正常";
     let valid: Awaited<ReturnType<typeof sauListAccounts>> = [];
-    try { valid = await sauListAccounts(); } catch { workerOnline = false; }
+    try {
+      valid = await sauListAccounts();
+      if (valid.length === 0) workerMessage = "发布服务器在线,但暂时没有检测到已登录账号";
+    } catch (e) {
+      workerOnline = false;
+      workerMessage = `发布服务器连接失败:${String((e as Error).message || e)}`;
+    }
 
     const validSet = new Set(valid.map(v => `${v.platform}:${v.worker_id}`));
     const accounts = (rows || []).map((r) => ({
       ...r,
       worker_online: workerOnline,
+      worker_message: workerMessage,
       online: workerOnline ? validSet.has(`${r.platform}:${r.worker_account_id}`) : null,
     }));
 
-    return j({ accounts, worker_online: workerOnline });
+    return j({ accounts, worker_online: workerOnline, worker_message: workerMessage, worker_accounts_count: valid.length });
   } catch (e) {
     return j({ error: String(e) }, 500);
   }
