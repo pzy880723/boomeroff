@@ -257,10 +257,6 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           <>
             <ScriptBody pick={pick} />
             <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] text-muted-foreground">画风</span>
-                <RealismToggle value={realism} onChange={handleRealismChange} size="xs" />
-              </div>
               <SeedanceModelPicker
                 value={modelId}
                 onChange={handleModelChange}
