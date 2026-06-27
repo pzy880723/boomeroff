@@ -1,49 +1,38 @@
 ## 目标
-重构 `AssetTagDialog`,解决标签溢出屏幕、无法滚动、查找困难的问题。
+让「惊喜一下」的探店脚本台词更够听:按 15 秒中速旁白的容量给字数(~70 字),全程一条主线讲清楚这家店;同时关掉「优雅慢悠悠」人设,所有博主至少要带点激动劲儿。
 
-## 新弹窗布局
+## 字数测算
+中速口播 4.5 字/秒,激动口播 ~5 字/秒。15 秒视频留 0.5 秒呼吸 → **目标台词总字数 65–80 字**,按 6 个镜头 ≈ 每镜 10–14 字,hook 与 CTA 各放宽到 ≤10 字。
 
-```
-┌─────────────────────────────┐
-│ 标签与品类          [保存]  │ ← 顶部:标题 + 已选计数
-├─────────────────────────────┤
-│ 🔍 搜索 / 新建标签…         │ ← 固定搜索栏(粘顶)
-│ 品类: [分镜头][门店][商品]… │ ← 品类单选(粘顶,横滑)
-├─────────────────────────────┤
-│ 🔥 热门标签                 │
-│ [门头][商品][人物][分镜头]… │
-│                             │
-│ 📍 场景位置                 │ ← 可滚动区域
-│ [门头][店内][橱窗][货架]…   │
-│                             │
-│ 🛍 商品                     │
-│ [价签][细节][摆件][服饰]…   │
-│                             │
-│ 👤 人物                     │
-│ [博主][顾客][店员]…         │
-│                             │
-│ 🎬 分镜头                   │
-│ [开场][过渡][结尾]…         │
-│                             │
-│ 🎨 自定义                   │
-│ [我添加的标签 ×]…           │
-└─────────────────────────────┘
-       [取消]    [保存]
-```
+## 改动清单
 
-## 实现要点
+### A. `supabase/functions/generate-marketing-video-script/index.ts`
+1. L99 → 把"宁可留白,不要塞满 / 每镜 6-10 字 / 总 45-65 字 / 可以留空"改成:
+   > 全片必须像真人连续口播,**dialogue 字数加起来 65–80 字**,每镜 10–14 字,**hook ≤10 字、CTA ≤10 字**;**所有镜头都要有 dialogue,不允许空台词**(纯氛围画面会让视频太平)。
+2. L100 硬规则改为按 5 字/秒估算(`dialogue 字数 ≤ duration_s × 5`),超出再删。
+3. 新增一句「**贯穿主线**」要求:
+   > 6 个镜头的 dialogue 串起来要是一段连贯的"探店日记"——从"为什么进店 → 看到了什么 → 上手体验 → 价格惊喜 → 谁适合 → 喊大家来"递进,不要每镜各说各的;反复点名店铺关键词「{店名 / 品类 / 钩子产品}」让观众记得住。
+4. L134 字数上限:`dialogue ≤ ${isViralStoreTour ? 16 : 30} 字`(从 14 提到 16,留点缓冲)。
 
-1. **弹窗结构**:`DialogContent` 使用 flex 列布局,固定 `max-h-[85vh]`;header + 搜索区 `sticky top-0`;中间分类标签区 `flex-1 overflow-y-auto`(用 `ScrollArea`);底部按钮 `sticky bottom-0`。
-2. **标签分组词典**(放在文件顶部 `TAG_GROUPS`):
-   - 场景位置:门头、店招、店内、橱窗、货架、收银台、试穿区、街拍
-   - 商品:商品、价签、细节、特写、套装、配饰、材质
-   - 人物:博主、顾客、店员、主角、合影
-   - 分镜头:分镜头、开场、过渡、结尾、空镜、特效
-   - 风格氛围:复古、文艺、潮流、温馨、高级感、夜景、白天
-3. **热门标签** = 当前已选 + `suggestedTags`(库内既有 tag 频次,沿用现有传入) 去重后取前 12 个,固定在搜索栏下方第一组。
-4. **搜索过滤**:输入关键字时,只显示命中分组里的标签。命中 0 个且关键字非空时,在搜索栏右侧出现「+ 新建"xxx"」按钮(回车也触发)。
-5. **多选交互**:点击即 toggle,选中底色 = `bg-accent text-accent-foreground`;已选标签不另起一行展示,保持在原分组内高亮(标题旁显示「已选 N」徽标)。
-6. **品类** 仍单选,横向 `overflow-x-auto` 一行,避免占用过多高度;保留现有 `DEFAULT_CATEGORIES`。
-7. **导出常量**:保留 `DEFAULT_TAGS` 与 `DEFAULT_CATEGORIES` 命名(外部 `MarketingLibrary` / `LibraryImagePickerDialog` 仍引用),并新增 `TAG_GROUPS` 与一个 flatten 后的 `ALL_PRESET_TAGS`,把 `DEFAULT_TAGS` 改为指向后者以保持向后兼容。
-8. **样式**:每个分组用小标题(`text-[11px] text-muted-foreground`),分组内 `flex flex-wrap gap-1.5`;弹窗宽度 `max-w-sm`,在窄屏(390px)下也能放下。
-9. **范围**:仅改 `src/components/marketing/AssetTagDialog.tsx` 一个文件,接口、入参、`onSaved` 回调签名不变;`MarketingLibrary` / `LibraryImagePickerDialog` 无需改动。
+### B. `supabase/functions/_shared/persona-generator.ts`
+1. **彻底禁用 `pace: 'slow'`**:`PersonaPace = 'medium' | 'fast'`,`normPace` 把 `slow` 映射为 `medium`,默认值仍是 `fast`。
+2. 重写 L60–69 的品类→pace 指引:
+   - 古董/瓷器/老物件/文玩/字画/旗袍/茶器 → **medium**,tone 例:沉稳但**带劲**地讲究 / 老克勒掏宝。**禁止"优雅 / 慢条斯理 / 留白冥想"等词**。
+   - 家居/咖啡器具/原木 → medium,tone:有质感的安利,不端着。
+   - 母婴/绘本 → medium 偏 fast。
+   - 其它原本是 fast 的全部保持 fast。
+3. `paceEn('medium')` / `paceZh('medium')` 措辞加上 **"with energy and enthusiasm / 带情绪、有起伏、不平铺直叙"**,杜绝 calm/measured 类英文出现在 Seedance prompt 里。
+4. AI 生成 JSON 的 schema 描述里 `"pace"` 枚举改为 `"medium" | "fast"`,system prompt 增加一句:"禁止生成 slow 节奏,也不要 elegant/refined/calm 这类形容词,所有人设至少要 medium energy。"
+
+### C. `supabase/functions/surprise-marketing-video/index.ts`
+1. L264 风格池保持 `energetic/lively/playful` 不变(已经够激动)。
+2. L280【全片要求】里把"4-6 个 2-3 秒小镜头"明确为"**6 个镜头,每镜都带台词,串成一段连贯的探店口播**",并补一句"博主每一镜都要有情绪起伏(惊喜/激动/安利感),不要平铺直叙"。
+
+### D. 不动的地方
+- `render-marketing-video` 的 prompt 不动:它读的是脚本里 `dialogue` 字段,字数上调后自然就够说了。
+- 其它非 surprise 流程(`store_tour` 之外的 `intent`)仍走原 30 字上限。
+
+## 影响
+- 「惊喜一下」生成的视频里博主会从头说到尾,信息密度提升约 50%,且每次都围绕店名/品类做一条主线。
+- 老克勒、家居主理人这类原来会被判 `slow` 的人设,现在仍然沉稳但会带情绪、有推进,不再"优雅得像 PPT"。
+- 不新增任何前端开关。
