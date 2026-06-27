@@ -51,7 +51,7 @@ export function AiCopySheet({
 
         <div className="mt-3 space-y-3">
           {list.length === 0 && !loading && (
-            <Button onClick={run} className="w-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-purple-500 text-white">
+            <Button onClick={run} className="w-full bg-primary text-primary-foreground">
               <Sparkles className="w-4 h-4 mr-1.5" /> 开始生成 3 条候选
             </Button>
           )}

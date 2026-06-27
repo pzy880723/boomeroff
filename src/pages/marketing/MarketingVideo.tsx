@@ -87,6 +87,8 @@ export default function MarketingVideo() {
   const [renderVideoUrl, setRenderVideoUrl] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [restoredAt, setRestoredAt] = useState<number | null>(null);
+  const [sbBusy, setSbBusy] = useState(false);
+  const [sbWarn, setSbWarn] = useState<string | null>(null);
 
   // 草稿本地保存 key
   const draftKey = shopId ? `mv:draft:${shopId}` : '';
@@ -201,9 +203,48 @@ export default function MarketingVideo() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      setScript((data as any).script);
+      const newScript = (data as any).script;
+      setScript(newScript);
+      // 自动调用分镜静帧:把角色 + 选中的素材图 合成每一镜的定格画面,
+      // 这样渲染时模型只需要让这张确定的图动起来,不再凭空想象。
+      if (urls.length > 0 || character) {
+        await generateStoryboard(newScript);
+      }
     } catch (e: any) { toast.error(e?.message || '脚本生成失败'); }
     finally { setGenerating(false); }
+  };
+
+  const generateStoryboard = async (scriptArg?: any) => {
+    const target = scriptArg || script;
+    if (!target) return;
+    setSbBusy(true); setSbWarn(null);
+    try {
+      const assets = urls.map((u, i) => {
+        const d = imageDescriptions.find((x) => x.index === i);
+        return { asset_id: `idx-${i}`, index: i, url: u, summary: d?.summary || '', category: null };
+      });
+      const charPayload = character ? {
+        id: character.id, name: character.name, role_label: character.role_label,
+        visual_signature: character.visual_signature, core_emotion: character.core_emotion,
+        cover_url: character.cover_url,
+        extra_reference_urls: character.extra_reference_urls || [],
+      } : null;
+      const { data, error } = await supabase.functions.invoke('storyboard-marketing-video', {
+        body: { script: target, assets, character: charPayload, shop_id: shopId, style },
+      });
+      if (error) throw error;
+      const d = data as any;
+      if (!d?.ok) throw new Error(d?.error || '分镜静帧生成失败');
+      if (d.script) setScript(d.script);
+      const failed = (d.frames || []).filter((f: any) => !f.url).length;
+      if (failed) setSbWarn(`${failed} 张静帧生成失败,渲染时将回退到原素材图`);
+      toast.success(`分镜静帧已合成 ${d.succeeded}/${d.total}`);
+    } catch (e: any) {
+      setSbWarn(e?.message || '分镜静帧生成失败');
+      toast.message('分镜静帧失败,渲染将直接用原素材', { duration: 3000 });
+    } finally {
+      setSbBusy(false);
+    }
   };
 
   const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean }) => {
@@ -537,10 +578,18 @@ export default function MarketingVideo() {
                 <span className="w-1 h-1 rounded-full bg-accent" />
                 <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">文生视频 · 逐镜确认</span>
               </div>
-              <Button size="sm" variant="ghost" onClick={genScript} disabled={generating}>
-                {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}重新生成
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onClick={() => generateStoryboard()} disabled={sbBusy || generating} className="h-7 text-[11px]">
+                  {sbBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {sbBusy ? '合成中' : '重做分镜静帧'}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={genScript} disabled={generating}>
+                  {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}重新生成
+                </Button>
+              </div>
             </div>
+
+            <StoryboardStrip script={script} busy={sbBusy} warn={sbWarn} />
 
             <SegmentPreview script={script} urls={urls} character={character} />
 
@@ -1070,3 +1119,44 @@ function RenderProgressCard({
     </div>
   );
 }
+
+function StoryboardStrip({ script, busy, warn }: { script: any; busy: boolean; warn: string | null }) {
+  const clips: { label: string; url: string | null }[] = [];
+  if (script?.hook) clips.push({ label: '钩子', url: script.hook.storyboard_url || null });
+  if (Array.isArray(script?.scenes)) {
+    script.scenes.forEach((s: any, i: number) => clips.push({ label: `镜${String(i + 1).padStart(2, '0')}`, url: s?.storyboard_url || null }));
+  }
+  if (script?.outro) clips.push({ label: '收尾', url: script.outro.storyboard_url || null });
+  const has = clips.some((c) => c.url);
+  if (!busy && !has && !warn) return null;
+  return (
+    <div className="border border-accent/20 rounded-lg p-3 space-y-2 bg-accent/5">
+      <div className="flex items-center gap-2">
+        <span className="font-display text-[11px] text-accent tracking-[0.18em]">分镜静帧</span>
+        <span className="w-1 h-1 rounded-full bg-accent" />
+        <span className="text-[10px] text-muted-foreground">
+          {busy ? '正在合成每一镜的定格画面…' : has ? `${clips.filter((c) => c.url).length}/${clips.length} 张已就绪` : '尚未合成'}
+        </span>
+        {busy && <Loader2 className="w-3 h-3 animate-spin text-accent" />}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        {clips.map((c, i) => (
+          <div key={i} className="flex flex-col items-center gap-1 shrink-0">
+            {c.url ? (
+              <img src={c.url} alt="" className="w-16 h-28 object-cover rounded border border-accent/20 bg-muted" />
+            ) : (
+              <div className="w-16 h-28 rounded border border-dashed border-border bg-muted/40 flex items-center justify-center text-[9px] text-muted-foreground">
+                {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : '—'}
+              </div>
+            )}
+            <span className="text-[9px] text-muted-foreground">{c.label}</span>
+          </div>
+        ))}
+      </div>
+      {warn && (
+        <p className="text-[10px] text-amber-600 leading-snug">{warn}</p>
+      )}
+    </div>
+  );
+}
+

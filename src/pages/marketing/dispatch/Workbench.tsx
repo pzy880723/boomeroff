@@ -331,7 +331,7 @@ export default function Workbench() {
       {/* 提交 */}
       <div className="fixed left-0 right-0 bottom-0 bg-background/95 backdrop-blur border-t px-4 py-3 z-30">
         <Button
-          className="w-full h-12 bg-gradient-to-r from-pink-500 via-fuchsia-500 to-purple-500 text-white text-base"
+          className="w-full h-12 bg-primary text-primary-foreground text-base"
           onClick={submit}
           disabled={submitting || selectedAccounts.length === 0 || !title.trim()}
         >

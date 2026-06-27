@@ -60,7 +60,7 @@ export default function AccountsTab() {
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           </Button>
-          <Button size="sm" onClick={() => setAddOpen(true)} className="bg-gradient-to-r from-pink-500 to-purple-500 text-white">
+          <Button size="sm" onClick={() => setAddOpen(true)} className="bg-primary text-primary-foreground">
             <Plus className="w-4 h-4 mr-1" /> 添加账号
           </Button>
         </div>

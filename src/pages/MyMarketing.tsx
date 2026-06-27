@@ -69,7 +69,7 @@ export default function MyMarketing() {
   return (
     <>
       <PageHeader title="营销中心" back="/me" subtitle="一键出图 · 一键出文 · 一键出片" />
-      <div className="container mx-auto max-w-screen-md px-4 py-4 pb-12 space-y-5 relative">
+      <div className="container mx-auto max-w-screen-md px-4 py-4 pb-12 space-y-5">
 
         {/* ===== Hero · 年鉴封面 ===== */}
         <section className="relative bg-card rounded-[0.875rem] border border-accent/15 shadow-sm overflow-hidden animate-card-enter">
@@ -130,7 +130,7 @@ export default function MyMarketing() {
         </button>
 
 
-        {/* ===== 三大工具 ===== */}
+        {/* ===== 创作工坊 ===== */}
         <section className="space-y-3">
           <SectionLabel className="px-1">创作工坊</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
@@ -169,66 +169,64 @@ export default function MyMarketing() {
           </Link>
         </section>
 
-
-
-        {/* ===== 素材库 ===== */}
-        <section>
-          <Link to="/me/marketing/library" className="block">
-            <div className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex items-center gap-4 transition-all hover:border-accent/40 active:scale-[0.995]">
-              <div className="flex -space-x-2.5 shrink-0">
-                {loading ? (
-                  <div className="w-10 h-10 rounded-lg bg-muted animate-pulse" />
-                ) : recents.length === 0 ? (
-                  <div className="w-10 h-10 rounded-lg bg-muted border border-card flex items-center justify-center">
-                    <Library className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                ) : (
-                  recents.map((r, i) => (
-                    <div
-                      key={r.id}
-                      className="w-10 h-10 rounded-lg border-2 border-card bg-muted overflow-hidden flex items-center justify-center shadow-sm"
-                      style={{ zIndex: 3 - i }}
-                    >
-                      {r.output_url && r.kind === 'photo' ? (
-                        <img src={r.output_url} alt="" className="w-full h-full object-cover" />
-                      ) : r.kind === 'copy' ? (
-                        <FileText className="w-4 h-4 text-muted-foreground" />
-                      ) : (
-                        <Video className="w-4 h-4 text-muted-foreground" />
-                      )}
+        {/* ===== 管理与分发 ===== */}
+        <section className="space-y-3">
+          <SectionLabel className="px-1">管理与分发</SectionLabel>
+          <div className="grid grid-cols-1 gap-3">
+            <Link to="/me/marketing/library" className="block">
+              <div className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex items-center gap-4 transition-all hover:border-accent/40 active:scale-[0.995]">
+                <div className="flex -space-x-2.5 shrink-0">
+                  {loading ? (
+                    <div className="w-10 h-10 rounded-lg bg-muted animate-pulse" />
+                  ) : recents.length === 0 ? (
+                    <div className="w-10 h-10 rounded-lg bg-muted border border-card flex items-center justify-center">
+                      <Library className="w-4 h-4 text-muted-foreground" />
                     </div>
-                  ))
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-display text-[10px] text-accent tracking-[0.18em]">归档</span>
-                  <h3 className="text-[15px] font-semibold leading-none">素材库</h3>
+                  ) : (
+                    recents.map((r, i) => (
+                      <div
+                        key={r.id}
+                        className="w-10 h-10 rounded-lg border-2 border-card bg-muted overflow-hidden flex items-center justify-center shadow-sm"
+                        style={{ zIndex: 3 - i }}
+                      >
+                        {r.output_url && r.kind === 'photo' ? (
+                          <img src={r.output_url} alt="" className="w-full h-full object-cover" />
+                        ) : r.kind === 'copy' ? (
+                          <FileText className="w-4 h-4 text-muted-foreground" />
+                        ) : (
+                          <Video className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1">历史产出 · 一键复制 · 下载视频</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-display text-[10px] text-accent tracking-[0.18em]">归档</span>
+                    <h3 className="text-[15px] font-semibold leading-none">素材库</h3>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">历史产出 · 一键复制 · 下载视频</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
               </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
-            </div>
-          </Link>
-        </section>
+            </Link>
 
-        {/* ===== 自媒体账号入口 ===== */}
-        <section>
-          <Link to="/me/marketing/dispatch" className="block">
-            <div className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex items-center gap-4 transition-all hover:border-accent/40 active:scale-[0.995]">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500/15 via-fuchsia-500/15 to-purple-500/15 text-fuchsia-600 flex items-center justify-center shrink-0">
-                <Share2 className="w-5 h-5" strokeWidth={1.5} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-display text-[10px] text-fuchsia-600 tracking-[0.18em]">分发</span>
-                  <h3 className="text-[15px] font-semibold leading-none">内容分发中心</h3>
+            <Link to="/me/marketing/dispatch" className="block">
+              <div className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex items-center gap-4 transition-all hover:border-accent/40 active:scale-[0.995]">
+                <div className="w-12 h-12 rounded-xl bg-accent/15 text-accent flex items-center justify-center shrink-0">
+                  <Share2 className="w-5 h-5" strokeWidth={1.5} />
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1">抖音 · 小红书 · 视频号 · 快手 · B站 一键发布</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-display text-[10px] text-accent tracking-[0.18em]">分发</span>
+                    <h3 className="text-[15px] font-semibold leading-none">内容分发中心</h3>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">抖音 · 小红书 · 视频号 · 快手 · B站 一键发布</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
               </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
-            </div>
-          </Link>
+            </Link>
+          </div>
         </section>
 
         {/* ===== 底部说明 ===== */}
@@ -237,9 +235,6 @@ export default function MyMarketing() {
           <br />
           <span className="text-accent font-semibold">已经预设给 AI，不用每次再说一遍</span>
         </p>
-
-        {/* 底部细古铜金线 */}
-        <div className="absolute left-0 right-0 bottom-0 h-[3px] bg-accent/20 pointer-events-none" />
       </div>
 
       <SurpriseVideoDialog open={surpriseOpen} onOpenChange={setSurpriseOpen} />
