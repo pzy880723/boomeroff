@@ -187,7 +187,7 @@ export function CharacterPicker({
               ].join(' ')}
               title={c.name}
             >
-              <img src={c.cover_url} className="w-full h-full object-cover" alt={c.name} />
+              <img src={thumbUrl(c.cover_url, 160) || c.cover_url} className="w-full h-full object-cover" alt={c.name} loading="lazy" decoding="async" />
               <span className="absolute inset-x-0 bottom-0 bg-black/65 text-white text-[8px] py-0.5 px-0.5 truncate">{c.name}</span>
             </button>
           );
