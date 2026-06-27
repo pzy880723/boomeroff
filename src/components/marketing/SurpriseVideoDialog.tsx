@@ -51,6 +51,8 @@ interface SurpriseResult {
     label: string; gender: string; age: number;
     visual: string; vibe: string; opener: string;
     catchphrase: string[]; cta: string;
+    pace?: 'slow' | 'medium' | 'fast';
+    tone_label?: string;
   } | null;
   holiday?: { name: string; days_away: number } | null;
   duration: number; aspect: string;
@@ -236,7 +238,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         <DialogHeader className="px-4 pt-4 pb-2.5 border-b">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Wand2 className="w-4 h-4 text-accent shrink-0" />
-            <span className="truncate">BOOMER 帮你拍一条 · 洗脑探店</span>
+            <span className="truncate">BOOMER 帮你拍一条 · 探店</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -253,8 +255,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
             <Loader2 className="w-5 h-5 animate-spin text-accent" />
             <div className="text-center">
-              BOOMER 正在挑素材、蹭最近节日、写洗脑探店口播…
-              <div className="text-[10px] mt-1 opacity-70">15s 竖版 · 真人出镜 · 高转化模板</div>
+              BOOMER 正在挑素材、蹭最近节日、想博主人设…
+              <div className="text-[10px] mt-1 opacity-70">15s 竖版 · 真人出镜 · 风格随博主走</div>
             </div>
           </div>
         ) : (
@@ -450,6 +452,14 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
   const refLightbox = useMemo(() => refTiles.map((t) => t.url), [refTiles.map((t) => t.url).join('|')]);
 
   const persona = pick.persona;
+  const paceClass = persona?.pace === 'slow'
+    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
+    : persona?.pace === 'fast'
+      ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+      : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300';
+  const paceText = persona?.pace === 'slow' ? '慢节奏'
+    : persona?.pace === 'fast' ? '快节奏'
+    : '中速';
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-w-0">
@@ -457,8 +467,12 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
         <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-semibold">
           9:16 · 15s
         </span>
-        <Chip>路线 · {pick.vtype_label}</Chip>
-        <Chip>风格 · {STYLE_LABEL[pick.style] || pick.style}</Chip>
+        <Chip>路线 · 探店</Chip>
+        {persona?.tone_label && (
+          <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${paceClass}`}>
+            🎙️ {persona.tone_label} · {paceText}
+          </span>
+        )}
         {pick.holiday && (
           <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 whitespace-nowrap">
             <PartyPopper className="w-3 h-3" />
