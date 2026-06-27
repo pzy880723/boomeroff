@@ -92,87 +92,47 @@ function normalizeRatio(aspect: any): string {
   return "9:16";
 }
 
-// 根据总时长确定目标段数,与 src/lib/marketingSegments.ts 同步。
-// ≤15s 单段;16-30s 两段;31-45s 三段;更长按 ceil(total/15)。
-function targetSegmentCount(totalDur: number): number {
-  const t = Math.max(1, Math.round(totalDur || 0));
-  if (t <= MAX_SEG_DUR) return 1;
-  if (t <= 30) return 2;
-  if (t <= 45) return 3;
-  return Math.ceil(t / MAX_SEG_DUR);
-}
-
-// 按"目标段数等分"切脚本(不再贪心装箱),让 30s 始终切成 2x15。
-// hook 强制进第一段,outro 强制进最后一段。
+// 逐镜切段:每个非空分镜 = 1 段。
+// hook / scenes[*] / outro 各自成段,独立用自己的静帧作 first_frame 喂给 Seedance,
+// 最后由前端 ffmpeg-wasm 按 segment_index 升序拼接成成片。
 function splitScript(script: any): any[] {
-  const hook = script.hook;
-  const outro = script.outro;
-  const mids: any[] = Array.isArray(script.scenes) ? [...script.scenes] : [];
+  type Shot = { sc: any; role: 'hook' | 'mid' | 'outro' };
+  const shots: Shot[] = [];
+  const isMeaningful = (sc: any) =>
+    sc && typeof sc === 'object' && (
+      (typeof sc.scene === 'string' && sc.scene.trim()) ||
+      (typeof sc.action === 'string' && sc.action.trim()) ||
+      (typeof sc.subtitle === 'string' && sc.subtitle.trim()) ||
+      (typeof sc.dialogue === 'string' && sc.dialogue.trim()) ||
+      (typeof sc.storyboard_url === 'string' && sc.storyboard_url) ||
+      (typeof sc.image_index === 'number')
+    );
+  if (isMeaningful(script.hook)) shots.push({ sc: script.hook, role: 'hook' });
+  if (Array.isArray(script.scenes)) {
+    for (const m of script.scenes) if (isMeaningful(m)) shots.push({ sc: m, role: 'mid' });
+  }
+  if (isMeaningful(script.outro)) shots.push({ sc: script.outro, role: 'outro' });
 
-  const all: any[] = [];
-  if (hook) all.push({ ...hook, __role: 'hook' });
-  for (const m of mids) all.push({ ...m, __role: 'mid' });
-  if (outro) all.push({ ...outro, __role: 'outro' });
-  for (const sc of all) {
-    let d = Number(sc.duration_s) || 2;
-    if (d > MAX_SEG_DUR) d = MAX_SEG_DUR;
-    sc.duration_s = d;
+  // 兜底:脚本完全为空时,造一个 5s 的空段,避免 Seedance 调用直接 0 个
+  if (!shots.length) {
+    shots.push({ sc: { duration_s: 5, scene: '', action: '', subtitle: '', dialogue: '' }, role: 'hook' });
   }
 
-  const totalDur = all.reduce((s, x) => s + (Number(x.duration_s) || 0), 0);
-  const target = targetSegmentCount(totalDur);
-  const budget = target > 0 ? totalDur / target : totalDur;
-
-  const buckets: any[][] = [];
-  let cur: any[] = [];
-  let curDur = 0;
-  for (let i = 0; i < all.length; i++) {
-    const sc = all[i];
-    const d = Number(sc.duration_s) || 0;
-    const remainingItems = all.length - i;
-    const remainingBuckets = target - buckets.length;
-    const mustCloseForBudget =
-      cur.length > 0 &&
-      buckets.length < target - 1 &&
-      curDur + d > budget &&
-      remainingItems >= remainingBuckets;
-    const mustCloseForCap = cur.length > 0 && curDur + d > MAX_SEG_DUR;
-    if (mustCloseForBudget || mustCloseForCap) {
-      buckets.push(cur);
-      cur = [];
-      curDur = 0;
-    }
-    cur.push(sc);
-    curDur += d;
-  }
-  if (cur.length) buckets.push(cur);
-  if (!buckets.length) buckets.push([]);
-
-  return buckets.map((bucket, i) => {
-    const isFirst = i === 0;
-    const isLast = i === buckets.length - 1;
-    let subHook: any = null;
-    let subOutro: any = null;
-    const subScenes: any[] = [];
-    bucket.forEach((sc) => {
-      const role = sc.__role;
-      const clean = { ...sc };
-      delete clean.__role;
-      if (role === 'hook' && isFirst && !subHook) subHook = clean;
-      else if (role === 'outro' && isLast && !subOutro) subOutro = clean;
-      else subScenes.push(clean);
-    });
-    if (!subHook) subHook = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
-    if (!subOutro) subOutro = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
-    const dur = bucket.reduce((s, x) => s + (Number(x.duration_s) || 0), 0);
+  const empty = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
+  return shots.map((s, i) => {
+    const rawDur = Number(s.sc.duration_s);
+    // Seedance 单段最短 4s,最长 15s。短于 4s 的镜头会被拉到 4s(轻微费用上浮换语义完整)。
+    const dur = Math.max(4, Math.min(MAX_SEG_DUR, Number.isFinite(rawDur) && rawDur > 0 ? Math.round(rawDur) : 5));
+    const clip = { ...s.sc, duration_s: dur };
     return {
       ...script,
-      hook: subHook,
-      scenes: subScenes,
-      outro: subOutro,
-      total_duration_s: Math.max(4, Math.min(MAX_SEG_DUR, Math.round(dur))),
+      hook: s.role === 'hook' ? clip : { ...empty },
+      scenes: s.role === 'mid' ? [clip] : [],
+      outro: s.role === 'outro' ? clip : { ...empty },
+      total_duration_s: dur,
       __segment_index: i,
-      __segment_total: buckets.length,
+      __segment_total: shots.length,
+      __shot_role: s.role,
     };
   });
 }
