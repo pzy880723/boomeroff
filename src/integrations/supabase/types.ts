@@ -814,6 +814,65 @@ export type Database = {
           },
         ]
       }
+      marketing_character_assets: {
+        Row: {
+          asset_id: string | null
+          asset_uri: string | null
+          character_id: string
+          created_at: string
+          created_by: string | null
+          error_reason: string | null
+          expire_at: string | null
+          h5_url: string | null
+          id: string
+          raw: Json
+          session_id: string | null
+          shop_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          asset_uri?: string | null
+          character_id: string
+          created_at?: string
+          created_by?: string | null
+          error_reason?: string | null
+          expire_at?: string | null
+          h5_url?: string | null
+          id?: string
+          raw?: Json
+          session_id?: string | null
+          shop_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          asset_uri?: string | null
+          character_id?: string
+          created_at?: string
+          created_by?: string | null
+          error_reason?: string | null
+          expire_at?: string | null
+          h5_url?: string | null
+          id?: string
+          raw?: Json
+          session_id?: string | null
+          shop_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_character_assets_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketing_characters: {
         Row: {
           auto_anchor: boolean
@@ -830,6 +889,9 @@ export type Database = {
           shop_id: string
           source: string
           updated_at: string
+          verified_asset_id: string | null
+          verified_asset_uri: string | null
+          verified_at: string | null
           visual_signature: string | null
         }
         Insert: {
@@ -847,6 +909,9 @@ export type Database = {
           shop_id: string
           source?: string
           updated_at?: string
+          verified_asset_id?: string | null
+          verified_asset_uri?: string | null
+          verified_at?: string | null
           visual_signature?: string | null
         }
         Update: {
@@ -864,6 +929,9 @@ export type Database = {
           shop_id?: string
           source?: string
           updated_at?: string
+          verified_asset_id?: string | null
+          verified_asset_uri?: string | null
+          verified_at?: string | null
           visual_signature?: string | null
         }
         Relationships: [
