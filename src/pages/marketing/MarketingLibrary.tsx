@@ -17,7 +17,8 @@ import { CharacterDialog } from '@/components/marketing/CharacterDialog';
 import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
 
 import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
-import { thumbUrl as thumb } from '@/lib/imageUrl';
+import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
+import { Skeleton } from '@/components/ui/skeleton';
 import { extractFirstFrame } from '@/lib/extractFirstFrame';
 import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
 
