@@ -1,64 +1,43 @@
-## 背景
+## 目标
 
-继续上一版改造(惊喜=洗脑探店、9 张参考图、不再分镜绑图),用户追加两条硬需求:
+1. 「帮我拍 / 惊喜一下」每次都把 9 张参考图塞满，让 Seedance 有更多素材自己思考。
+2. 缩短脚本台词字数，避免 15 秒被塞太满、AI 念糊。
 
-1. **开场镜头必须是门头**:每条探店片的第一个镜头都得展示店招/logo/大门口,不允许 AI 随意写别的钩子开场。
-2. **脚本每次都得不一样,且尽量蹭最近的节日**:暑假/端午/国庆/春节/七夕/双十一/圣诞… 自动按当前日期挑最近一个节点,把节日氛围灌进脚本里。
+---
 
-## 改动
+## 改动 1：参考图固定 9 张封顶
 
-### A. 门头封面素材识别(后端 `surprise-marketing-video`)
+文件：`supabase/functions/surprise-marketing-video/index.ts`
 
-- 新增 `pickStorefrontAsset(pool)`:从素材池里找一张最像「门头/店招/门口」的实景图,匹配规则:
-  - `category` 包含「门头/门店/店面/外观/招牌」之一,或
-  - `tags` 含「门头 / 门店 / 招牌 / logo / 店招 / 门口 / 外观」之一,或
-  - `meta.summary` 文本里出现上述关键词。
-- 命中 → 该图强制放进 `pickedAssets[0]`(后续主题聚拢仍正常跑,但首位锁死)。
-- 未命中 → 在 `picked` 上挂 `needs_storefront: true`,前端弹一条提示「补一张门头照片,开场会更带感」,但流程继续(不阻塞)。
-- 这张图同时作为 `picked.cover_url`(优先级高于角色板,因为它是探店开场)。
+- 把 `ASSET_SLOT_FOR_SCENES` 由 7 改为按「9 - 已占用槽位」动态计算：
+  - 门头占 1 张（命中时）。
+  - 角色板 `cover_url` 在 `render-marketing-video` 里会作为额外参考图注入，预留 1 张。
+  - 所以实景目标 = `9 - (storefront?1:0) - (character?1:0)`，并和 `remainPool.length` 取小。
+- `targetCount` 改为 `Math.min(remainPool.length, 9 - usedSlots)`，下限 3。
+- 池子素材不够 9 张时按现有数量拿（不报错、不阻塞）。
+- 前端 `SurpriseVideoDialog.tsx` 横排不用改，已经按返回的 `assets` 长度铺。
 
-### B. 节日感知(后端,新增 `_shared/holiday-context.ts`)
+## 改动 2：脚本台词减字、留白优先
 
-- 内置一份本土节日表(阳历 + 农历常见节点),字段:`name / startMonth / startDay / windowDays(提前多少天可以开始借势) / vibe(暖民谣/烟花夜色/家庭团聚…) / hookHints(["姐妹冲","端午粽香探店"…])`。
-- 包含:元旦、春节、情人节、女神节(3.8)、清明、五一、520、端午、儿童节、暑假(7.1–8.31)、七夕、教师节、中秋、国庆、双十一、双十二、平安夜/圣诞、跨年。
-- 农历节日(春节/端午/中秋/七夕)用静态 2026–2028 阳历日期表硬编码,够用就行,不引第三方库。
-- 导出 `pickUpcomingHoliday(now = new Date())`:返回距离今天 ≤ `windowDays` 且最近的一个,或 `null`。
+文件：`supabase/functions/generate-marketing-video-script/index.ts` 中 `viralBlock`（只动洗脑探店分支，不影响其它视频类型）。
 
-### C. 脚本生成 brief 注入(后端 `surprise-marketing-video`)
+调整以下硬约束：
 
-- 调 `generate-marketing-video-script` 前组装 `briefTranscript`:
-  - 强制段:
-    > 「第 1 镜(钩子)必须是门口/店招/logo 的特写或推镜,主角站在门口或推门进店;subtitle 可以是『XX 店,走起!』之类。后续镜头才是店内场景。」
-  - 节日段(命中时):
-    > 「现在距离【中秋】还有 12 天,脚本氛围/对白请蹭中秋:团圆、礼盒、月饼味道的小众淘货… 钩子句可以用『中秋探店,姐妹冲!』之类。」
-  - 多样性段:每次随机从 8–10 套钩子句式池里抽 2 个塞进 brief 作 hint(「别再去 XX 了」「我真的会谢」「这家店我能吹一年」…),并把当前 vibe 也写进去,让相同店每次产出不同钩子。
-- 顶层 `topic` 改成 `${holiday?.name ?? '探店'} · ${heroSummary}`,影响 KB 检索。
-- 在请求 body 加 `temperature_hint: 'high'`(纯标注,Lovable AI Gateway 不会用,但 prompt 里写明「请大胆变体,不要套同一句开头」)。
+- 每镜 `dialogue`：从「10-20 字」改为「6-10 字，可留空」。
+- 全片 `dialogue` 总字数：从「80-110 字」改为「45-65 字」，并明确「宁可留白也不要塞满，留 2-3 镜纯画面 + 字幕」。
+- 中段 `scenes` 数量：从「5-7 段」改为「4-6 段」，每镜 `2-3 秒`（之前 1.5-2.5 秒），给口播留呼吸。
+- 新增一条硬规则：「台词必须能在该镜 `duration_s` 内自然念完（按 4 字/秒估算），超出就删字或改成字幕」。
+- `subtitle` 上限保持 24 字不动（字幕快读没问题，主要卡住的是口播）。
 
-### D. 渲染 prompt(`render-marketing-video`,one_shot 分支)
+同时在 sanitize 阶段把 `dialogue` 的 `max` 由 60 收到 14，硬截断防止模型不听话。
 
-- 在 `buildOneShotPrompt` 里把"首镜=门头"这条**再写一遍**(因为 Seedance 只看渲染 prompt,不看脚本对话);如果 picked.cover_url 是门头,prompt 头部固定加:
-  > "Opening shot (0–2s): exterior storefront sign + brand logo, character walks toward the door / pushes the door open, hand-held push-in."
-- 节日命中时,把 `holiday.vibe` 也并到 style cue 里(例如「mid-autumn warm lantern glow」)。
-- 这两段都通过 `surprise-marketing-video` 在 render 调用 body 里新增 `prompt_overrides: { opening, style_cue }` 透传,而不是改 render 的核心逻辑。
+## 不动的部分
 
-### E. 前端 `SurpriseVideoDialog.tsx`
+- Seedance 2.0 渲染、`reference_image` 通道、`one_shot` 策略、门头锁开场、节日借势逻辑全部保持。
+- 非「洗脑探店」的脚本生成路径（自定义视频等）不受影响。
 
-- 顶部 chip 增加:`节日 · 中秋(还有 12 天)`(命中时)。
-- 9 张参考图横排,门头那张固定第 1 位,角标改成 `门头` 而不是 `#1`。
-- `needs_storefront: true` 时,脚本块上方挂一条琥珀色提示:「还没有门头照片,建议拍一张大门 + 店招,开场会更像探店」。
-- 文案里把"洗脑探店口播脚本"保留,loading 时附一行小字:「正在蹭最近的节日…」。
+## 技术细节
 
-### F. 不动 / 边界
-
-- `generate-marketing-video-script` 的接口不改字段,只通过 `brief_transcript`、`topic`、`highlight` 注入。
-- 自定义视频(`MarketingVideo.tsx`)流程**不动**。
-- 渲染策略仍是 `one_shot`,reference_image 顺序:门头 → 角色板 → 其余实景(总数 ≤ 9)。
-
-## 验证
-
-- 不同时间打开「惊喜一下」:6 月底显示「节日 · 端午」或「节日 · 暑假」;9 月底显示「节日 · 中秋」;无邻近节日时不显示。
-- 同一家店连续刷 3 次:钩子句、subtitle、vibe 三段每次都不重复。
-- 9 张参考图第 1 张永远是门头(命中时)或角色板兜底 + 琥珀提示。
-- 最终视频 0–2 秒画面是门口/店招特写,主角推门或转身进店;后续镜头才进店内。
-- 没有门头素材的店:看到提示,但仍能正常出片,开场退化成「主角推门」泛门口镜。
+- `SEEDANCE_MAX_REFS = 9` 已存在于 `_shared/seedance-models.ts`，无需改动。
+- `render-marketing-video` 在拼参考图时会自动用 `character.cover_url + extra_reference_urls + image_urls` 合并后截前 9 张，所以后端「实景预留 7」的旧算法在有角色板时实际只送 8 张进 Seedance —— 这次按「实槽位 = 9 - 已用」修正后就能稳定打满 9。
+- 台词长度收紧后，`generate-marketing-video-script` 内的等比缩放逻辑不变，总时长仍约 15 秒。

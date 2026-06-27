@@ -207,9 +207,13 @@ Deno.serve(async (req) => {
     const hits = themeTag ? remainPool.filter(matchTheme) : [];
     const misses = themeTag ? remainPool.filter((a: any) => !matchTheme(a)) : remainPool;
 
-    // 实景图最多 8 张(门头 1 + 实景 8 = 9 张,角色板再优先级里替换其中一张)
-    const ASSET_SLOT_FOR_SCENES = 7;
-    const targetCount = Math.min(remainPool.length, Math.max(3, ASSET_SLOT_FOR_SCENES));
+    // 参考图总槽位封顶 9(对齐 Seedance 2.0 reference_image 上限)
+    // 已用槽:门头 1 张 + 角色板封面 1 张(在 render-marketing-video 里合并注入);剩下全给实景
+    // 注:此处先不知道是否有角色,按"预留 1 张"保守计算,先取 scene 槽位;若后面无角色,再补 1 张
+    const storefrontSlot = storefrontHit ? 1 : 0;
+    const characterReserveSlot = 1; // 保守预留;无角色时下面再回填
+    const ASSET_SLOT_FOR_SCENES = Math.max(3, 9 - storefrontSlot - characterReserveSlot);
+    const targetCount = Math.min(remainPool.length, ASSET_SLOT_FOR_SCENES);
     let scenicAssets: any[];
     if (themeTag && hits.length >= 3) {
       const hitsW = hits.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
@@ -241,6 +245,13 @@ Deno.serve(async (req) => {
         character = chars[Math.floor(Math.random() * chars.length)];
       }
     } catch (_) { /* ignore */ }
+
+    // 5b) 若无角色,把预留的那 1 张参考槽回填给实景,把 9 张塞满
+    if (!character && pickedAssets.length < 9 && remainPool.length > scenicAssets.length) {
+      const used = new Set(pickedAssets.map((a: any) => a.id));
+      const extras = remainPool.filter((a: any) => !used.has(a.id)).slice(0, 9 - pickedAssets.length);
+      pickedAssets.push(...extras);
+    }
 
     // 6) 节日借势
     const holiday = pickUpcomingHoliday(new Date());

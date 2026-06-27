@@ -94,11 +94,12 @@ ${approvedScript}
       ? `
 
 【洗脑探店口播模板 · 高转化优先】(本片必须按这套节奏拍)
-- hook(≤2 秒)第一句必须是冲击型口语钩子,从这类句式里挑:"姐妹冲!"/"别再去 XX 了"/"我真的会谢"/"不是吧还有人不知道"/"这家店我能吹一年"。情绪要激动、有感染力。
-- 中段每镜 1.5-2.5 秒,scenes 数组 5-7 段;主角始终是同一个人(沿用上面锁定的角色),每镜必须有具体动作:指货架、拿起单品、试穿/试戴、转身展示、对镜头说话。
-- 全片是真人口播节奏(不是 BGM 纯画面)。dialogue 字段每镜都要有 10-20 字口播,所有 dialogue 加起来 80-110 字,像在跟好朋友安利。
-- subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""人均 50 封顶""闭眼冲"。≤24 字。
-- outro(≤2 秒)必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。
+- hook(≤2 秒)第一句必须是冲击型口语钩子,从这类句式里挑:"姐妹冲!"/"别再去 XX 了"/"我真的会谢"/"不是吧还有人不知道"/"这家店我能吹一年"。情绪要激动、有感染力。**钩子台词 ≤8 字**。
+- 中段每镜 2-3 秒,scenes 数组 4-6 段;主角始终是同一个人(沿用上面锁定的角色),每镜必须有具体动作:指货架、拿起单品、试穿/试戴、转身展示、对镜头说话。
+- 全片是真人口播节奏(不是 BGM 纯画面),但**宁可留白,不要塞满**:dialogue 每镜 6-10 字,可以留空(2-3 镜纯画面 + 字幕),所有 dialogue 加起来 45-65 字,刚好能听清楚。
+- 【硬规则】台词必须能在该镜 duration_s 内自然念完(按 4 字/秒估算,即 dialogue 字数 ≤ duration_s × 4)。超出就删字或转成 subtitle。Seedance 念得太赶会糊,字越少越稳。
+- subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""人均 50 封顶""闭眼冲"。≤24 字。subtitle 可以比 dialogue 多说一点,补足信息。
+- outro(≤2 秒)必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。**CTA 台词 ≤8 字**。
 - 画面色调明亮、节奏快,运镜以推镜/手持/特写切换为主,避免慢悠悠的长镜头。
 - 不要写成纪录片或氛围片,目标就是 15 秒抓人 + 让人想立刻去这家店。`
       : '';
@@ -130,7 +131,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${characterBlock}${kbBlock}${imgDescBlock}
 - 总时长 ≈ ${duration} 秒。
 - 画幅 ${aspect}。
 - 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
-- subtitle ≤ 24 字。scene 30–80 字，action 15–50 字，dialogue ≤ 30 字(可为空)。
+- subtitle ≤ 24 字。scene 30–80 字，action 15–50 字，dialogue ≤ ${isViralStoreTour ? 14 : 30} 字(可为空)。
 - 镜头总条数 ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间;每条 ${perClipMin}–${perClipMax} 秒,所有镜头 duration_s 之和必须 ≈ ${duration} 秒。
 - 不写"主播""直播间""保真""保证升值"等违禁词。`;
 
@@ -212,7 +213,7 @@ ${refList}
     const sanitizeScene = (sc: any) => ({
       scene: clean(sc?.scene, 200),
       action: clean(sc?.action, 120),
-      dialogue: clean(sc?.dialogue, 60),
+      dialogue: clean(sc?.dialogue, isViralStoreTour ? 14 : 60),
       subtitle: clean(sc?.subtitle ?? sc?.text, 24),
       image_index: clampIdx(sc?.image_index),
       duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), perClipMax + 1),
