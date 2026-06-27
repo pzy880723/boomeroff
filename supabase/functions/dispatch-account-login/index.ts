@@ -91,8 +91,8 @@ Deno.serve(async (req) => {
   }
   if (!upstream) {
     return new Response(JSON.stringify({
-      error: `worker login ${lastStatus || 404}`,
-      hint: "worker 未暴露扫码端点",
+      error: `发布服务器登录接口异常(${lastStatus || 404})`,
+      hint: "发布服务器未开放扫码端点",
       tried,
     }), {
       status: 502, headers: jsonHeaders,
@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
                 }
               } else {
                 finished = true;
-                send({ step: "fail", msg: "手机端可能已确认,但发布服务器没有写入账号信息。请重新扫码;如果仍失败,需要检查 worker 是否成功保存 Cookie。" });
+                send({ step: "fail", msg: "手机端可能已确认,但发布服务器没有写入账号信息。请重新扫码;如果仍失败,需要检查发布服务器是否成功保存登录凭证。" });
               }
               break;
             } else if (status === "error" || status === "fail") {
