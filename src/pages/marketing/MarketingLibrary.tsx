@@ -704,7 +704,7 @@ export default function MarketingLibrary() {
 
                 {mediaList.length > 0 && (
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
-                    {mediaList.map((it) => {
+                    {mediaList.map((it, idx) => {
                       const checked = selected.has(it.id);
                       const rawThumb = it.kind === 'photo'
                         ? it.output_url
@@ -713,7 +713,10 @@ export default function MarketingLibrary() {
                             || (Array.isArray(it.meta?.image_urls) && it.meta.image_urls[0])
                             || (Array.isArray(it.input_image_urls) && it.input_image_urls[0])
                             || null);
-                      const thumbUrl = rawThumb ? (thumb(rawThumb, 320) || rawThumb) : null;
+                      const thumbUrl = rawThumb ? (thumb(rawThumb, 240) || rawThumb) : null;
+                      const srcSet = rawThumb ? thumbSrcSet(rawThumb, 120) : undefined;
+                      const isImgLoaded = !rawThumb || loadedImgs.has(it.id);
+                      const eager = idx < 6;
                       const showStatus = it.kind === 'video' && it.meta?.status && it.meta.status !== 'succeeded';
                       const segTotal = Number(it.meta?.segment_total) || 0;
                       const segDone = Number(it.meta?.segment_done) || 0;
@@ -738,7 +741,25 @@ export default function MarketingLibrary() {
                           ].join(' ')}
                         >
                           {thumbUrl ? (
-                            <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                            <>
+                              {!isImgLoaded && (
+                                <Skeleton className="absolute inset-0 rounded-none" />
+                              )}
+                              <img
+                                src={thumbUrl}
+                                srcSet={srcSet}
+                                sizes="(min-width: 768px) 20vw, 33vw"
+                                alt=""
+                                width={240}
+                                height={240}
+                                className={`w-full h-full object-cover transition-opacity duration-200 ${isImgLoaded ? 'opacity-100' : 'opacity-0'}`}
+                                loading={eager ? 'eager' : 'lazy'}
+                                decoding="async"
+                                {...(eager ? { fetchPriority: 'high' as const } : {})}
+                                onLoad={() => setLoadedImgs((prev) => prev.has(it.id) ? prev : new Set(prev).add(it.id))}
+                                onError={() => setLoadedImgs((prev) => prev.has(it.id) ? prev : new Set(prev).add(it.id))}
+                              />
+                            </>
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               {it.kind === 'video'
@@ -746,6 +767,7 @@ export default function MarketingLibrary() {
                                 : <ImageIcon className="w-6 h-6 text-muted-foreground" />}
                             </div>
                           )}
+
 
 
                           {it.kind === 'photo' && !manageMode && (
