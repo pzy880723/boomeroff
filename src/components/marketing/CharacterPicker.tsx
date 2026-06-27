@@ -212,6 +212,12 @@ export function CharacterPicker({
         onConfirm={(picked) => addExtras(picked)}
       />
       <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onFiles} />
+      <ImageLightbox
+        open={lbIdx !== null}
+        onClose={() => setLbIdx(null)}
+        images={lbImages}
+        initialIndex={lbIdx ?? 0}
+      />
     </div>
   );
 }
