@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import type { ActivityField } from '@/lib/voucher';
 import { formatVoucherRule } from '@/lib/voucher';
 import { ActivityFeedbackView } from '@/components/public/ActivityFeedbackView';
+import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
