@@ -133,10 +133,11 @@ export function classifyVideoFailure(rawIn: string | null | undefined): VideoFai
       code: 'stitch_failed',
       title: '视频拼接失败',
       detail:
-        '浏览器端把多段视频合成一条时出了问题。把渲染锁到 15 秒以内单段直出可以彻底绕开拼接;也可以直接重试一次。',
+        '浏览器端把多段视频合成一条时出了问题。可以切到「一次成片」模式让 Seedance 直接出一条 ≤15s 的整段,绕开拼接;也可以直接重试一次。',
       fixes: [
         { id: 'retry', label: '重新拼接一次', kind: 'retry', reRender: true },
-        { id: 'restart', label: '改用 15 秒单段重拍', kind: 'restart', reRender: true },
+        { id: 'one_shot', label: '改用一次成片(不拼接)', kind: 'restart',
+          patch: { render_strategy: 'one_shot' }, reRender: true },
       ],
       raw,
     };
