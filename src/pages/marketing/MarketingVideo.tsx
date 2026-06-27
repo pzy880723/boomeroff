@@ -306,7 +306,7 @@ export default function MarketingVideo() {
           script: { ...finalScript, video_type: vtype }, style, shop_id: shopId,
           model: reqModel, resolution: reqRes,
           realism,
-          render_strategy: renderStrategy,
+          render_strategy: overrides?.render_strategy ?? renderStrategy,
           disable_storyboard: !!overrides?.disable_storyboard,
           disable_references: !!overrides?.disable_references,
         },
