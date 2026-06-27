@@ -336,8 +336,13 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
     }
 
-    // 2) 并行提交所有段
-    const submissions = await Promise.all(subScripts.map((sub, i) => {
+    // 2) 并行提交所有段(每段带 3 级真人内容降级链)
+    const isSensitive = (err?: string, raw?: any) => {
+      const code = raw?.error?.code || '';
+      const msg = (err || '') + ' ' + (raw?.error?.message || '');
+      return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
+    };
+    const submissions = await Promise.all(subScripts.map(async (sub, i) => {
       const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
       const prompt = buildPrompt(sub, styleKey, shopBlock, label, character, realism);
       const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
@@ -346,12 +351,23 @@ Deno.serve(async (req) => {
       const effectiveCharacter = disableReferences ? null : character;
       const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
       if (disableReferences) imgs.referenceImages = [];
-      console.log(`[render multi] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
-      return submitArkTask({
+      console.log(`[render per-shot] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length} first=${imgs.firstImage || "none"} last=${imgs.lastImage || "none"}`);
+      const fallbackNotes: string[] = [];
+      let r = await submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
         firstImage: imgs.firstImage, lastImage: imgs.lastImage, referenceImages: imgs.referenceImages,
-      }).then((r) => ({ i, r, sub, duration, imgs }));
+      });
+      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+        fallbackNotes.push('frames_dropped_for_safety');
+        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: imgs.referenceImages });
+      }
+      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+        fallbackNotes.push('references_dropped_for_safety');
+        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
+      }
+      return { i, r, sub, duration, imgs, fallbackNotes };
     }));
+
 
     // 3) 检查失败
     const failed = submissions.find((s) => !s.r.ok);
