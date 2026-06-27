@@ -1,5 +1,6 @@
 // 提交视频渲染任务到火山方舟 Seedance 2.0 API。
-// 单段 ≤15s 直出,不再拼接;>15s 才会拆段(目前 surprise/标准生成都锁 15s,基本走单段)。
+// 渲染策略:每个分镜 = 1 段,独立调用 Seedance(用该镜静帧作 first_frame),完成后由前端 ffmpeg-wasm 拼接。
+// 不再走"整段直出"路径——确保脚本里每个分镜的画面都真正出现在最终视频里。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
