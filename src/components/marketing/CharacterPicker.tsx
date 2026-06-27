@@ -106,7 +106,14 @@ export function CharacterPicker({
       {value && (
         <div className="space-y-2 bg-primary/5 border border-primary/30 rounded-md p-2">
           <div className="flex items-center gap-2">
-            <img src={value.cover_url} className="w-10 h-10 object-cover rounded" alt="" />
+            <button
+              type="button"
+              onClick={() => setLbIdx(0)}
+              className="w-10 h-10 rounded overflow-hidden shrink-0"
+              aria-label="放大查看封面"
+            >
+              <img src={thumbUrl(value.cover_url, 240) || value.cover_url} className="w-full h-full object-cover" alt="" loading="lazy" decoding="async" />
+            </button>
             <div className="flex-1 min-w-0">
               <p className="text-[12px] font-medium truncate">{value.name}</p>
               <p className="text-[10px] text-muted-foreground truncate">{value.role_label || '主角'}</p>
@@ -120,15 +127,22 @@ export function CharacterPicker({
               附加参考图({extras.length}/{MAX_EXTRA_REFS}) · 每段视频都会带这些图,用来锁人物长相 / 服装
             </p>
             <div className="flex flex-wrap gap-1.5 items-center">
-              {extras.map((u) => (
+              {extras.map((u, i) => (
                 <div key={u} className="relative w-12 h-12 rounded overflow-hidden border border-primary/20 group">
-                  <img src={u} alt="" className="w-full h-full object-cover" />
                   <button
-                    onClick={() => removeExtra(u)}
-                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                    type="button"
+                    onClick={() => setLbIdx(i + 1)}
+                    className="block w-full h-full"
+                    aria-label="放大查看"
+                  >
+                    <img src={thumbUrl(u, 240) || u} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeExtra(u); }}
+                    className="absolute top-0 right-0 w-5 h-5 bg-black/65 text-white flex items-center justify-center rounded-bl"
                     aria-label="删除"
                   >
-                    <X className="w-3.5 h-3.5 text-white" />
+                    <X className="w-3 h-3" />
                   </button>
                 </div>
               ))}
