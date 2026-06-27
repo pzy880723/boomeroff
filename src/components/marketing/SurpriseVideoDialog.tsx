@@ -159,7 +159,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     doPick(newEx);
   };
 
-  const start = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean }) => {
+  const start = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_references?: boolean }) => {
     if (!shopId || !pick) return;
     const useModel = overrides?.modelId || modelId;
     const useRes = overrides?.resolution || resolution;
@@ -174,7 +174,6 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           model: useModel,
           resolution: useRes,
           realism,
-          disable_storyboard: !!overrides?.disable_storyboard,
           disable_references: !!overrides?.disable_references,
         },
       });
@@ -217,7 +216,6 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     await start({
       modelId: patch.modelId,
       resolution: (patch.resolution as SeedanceResolution) || undefined,
-      disable_storyboard: patch.disable_storyboard,
       disable_references: patch.disable_references,
     });
   };
