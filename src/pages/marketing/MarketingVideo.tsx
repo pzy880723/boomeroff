@@ -449,7 +449,11 @@ export default function MarketingVideo() {
     } finally { setSceneUploading(false); }
   };
 
-
+  // 分镜静帧"是否过期":每次绑定/画风变了,提示重做
+  const currentSbSig = useMemo(() => computeStoryboardSig(script, realism), [script, realism]);
+  const sbStale = !!script && !!lastSbSig && lastSbSig !== currentSbSig;
+  const missingSbIndices = useMemo(() => collectMissingStoryboardIndices(script), [script]);
+  const hasAnyStoryboard = useMemo(() => collectStoryboardSummary(script).hasAny, [script]);
 
   return (
     <>
