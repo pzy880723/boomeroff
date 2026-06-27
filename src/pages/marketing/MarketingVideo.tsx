@@ -271,7 +271,7 @@ export default function MarketingVideo() {
     }
   };
 
-  const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean }) => {
+  const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean; render_strategy?: 'auto' | 'one_shot' | 'per_shot' }) => {
     if (!script) return;
     if (!shopId) return toast.error('请先选择店铺');
     setRendering(true);
