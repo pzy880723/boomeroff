@@ -1,8 +1,8 @@
 // 根据本次素材的品类/标签 + 店铺/节日,让 AI 动态生成一位最匹配的「探店博主」人设。
 // 不走预设博主库 —— 瓷器→老克勒,潮玩→年轻女生,亲子→宝妈,户外→硬汉等都由 AI 现想。
-// 节奏(pace)由人设本身决定:老派人物允许慢条斯理,年轻人物允许高能。
+// 节奏(pace)由人设本身决定,但所有人设至少 medium energy,严禁优雅慢悠悠 PPT 感。
 
-export type PersonaPace = 'slow' | 'medium' | 'fast';
+export type PersonaPace = 'medium' | 'fast';
 
 export interface InfluencerPersona {
   label: string;          // 例:55岁老克勒大叔
@@ -37,7 +37,8 @@ function pickStrings(v: any, max = 3): string[] {
 
 function normPace(v: any): PersonaPace {
   const s = String(v || '').toLowerCase().trim();
-  if (s === 'slow' || s === 'fast') return s;
+  if (s === 'fast') return 'fast';
+  // slow 一律归为 medium,绝不输出 slow
   return 'medium';
 }
 
@@ -57,20 +58,22 @@ export async function generatePersona(opts: {
   const sys = `你是短视频导演,要为一条 15 秒小红书/抖音「探店」口播视频挑一位最合适的探店博主。
 博主必须是虚构人物(禁止使用真人姓名/明星名),性别/年龄/穿着/语言风格 + 整体节奏都要跟店里在卖的品类强匹配。
 
-【关键】整体节奏(pace) 必须符合人设本身,不要套统一模板:
-- 古董/瓷器/老物件/文玩/字画/旗袍/茶器 → 中老年男性「老克勒」或文气阿姨,pace=slow,tone 例:沉稳种草 / 文气慢推 / 老派讲究。
-- 母婴/亲子/绘本/手作 → 30 岁宝妈或文艺姐姐,pace=medium,tone 例:温柔安利 / 妈妈日常。
-- 家居/原木/北欧/咖啡器具 → 25-35 岁主理人/设计师风,pace=medium,tone 例:质感分享 / 选物笔记。
+【硬规则 · 节奏】所有博主至少 medium energy,严禁 slow / 优雅 / 端着 / 慢条斯理 / 留白冥想 / PPT 感 / 平铺直叙。
+pace 只能是 "medium" 或 "fast"(没有 slow 这个选项)。即使是老克勒、主理人这种沉稳人设,也必须带情绪起伏、推进感、会拍桌惊呼,绝不能像茶艺师讲解。
+
+【品类→人设指引】
+- 古董/瓷器/老物件/文玩/字画/旗袍/茶器 → 中老年男性「老克勒」或行家阿姨,pace=medium,tone 例:沉稳掏宝 / 老克勒激动安利 / 行家爆料。说话稳但**带劲、会突然提高音量惊呼**,不是优雅讲解。
+- 母婴/亲子/绘本/手作 → 30 岁宝妈或文艺姐姐,pace=medium,tone 例:宝妈狂喜 / 妈妈日常爆款分享。
+- 家居/原木/北欧/咖啡器具 → 25-35 岁主理人/设计师,pace=medium,tone 例:有质感的安利 / 选物笔记带劲版。**不要"优雅"二字**。
 - 美妆/穿搭/首饰/包包 → 25 岁时髦女生,pace=fast,tone 例:精致种草 / 安利狂魔。
 - 潮玩/盲盒/二次元/谷子/动漫周边 → 年轻女生或大学生男生,pace=fast,tone 例:高能洗脑 / 二次元爆梗。
 - 食品/餐饮/烘焙/小吃 → 吃货大叔或大学女生,pace=fast,tone 例:狂炫安利 / 吃货爆裂。
 - 男装/球鞋/潮牌 → 25 岁阳光帅哥,pace=fast,tone 例:街头种草。
-- 户外/运动/装备/工具 → 30-40 岁硬汉,pace=medium,tone 例:硬核测评。
+- 户外/运动/装备/工具 → 30-40 岁硬汉,pace=medium,tone 例:硬核测评带劲版。
 - 不确定品类 → 25 岁年轻女生兜底,pace=fast,tone=高能种草。
 
-老派 / 文气 / 主理人型不要硬塞"绝绝子""家人们冲"这种高能口头禅,允许慢条斯理、留白、走心。
-年轻型不要硬塞"沉稳/老派"那一套。
-节日临近时,人设语气可贴节日气氛,但节奏仍由人设决定。`;
+vibe / tone_label / catchphrase / opener / cta 全部禁止出现:优雅、calm、refined、elegant、慢条斯理、娓娓道来、岁月静好、留白、禅意、淡然、安静。
+节日临近时,人设语气可贴节日气氛,但节奏仍至少 medium。`;
 
   const usr = `店铺:${opts.shopName || '本店'}${opts.shopCategory ? ` · ${opts.shopCategory}` : ''}
 本次素材品类/标签:${tagsLine || '(无)'}
@@ -83,7 +86,7 @@ ${opts.holidayName ? `临近节日:${opts.holidayName}` : ''}
   "age": <整数>,
   "visual": "<30-80字外观:发色/发型/穿着/气质,要让模型能照画>",
   "vibe": "<20-60字说话节奏与风格,要跟 pace 一致>",
-  "pace": "slow" | "medium" | "fast",
+  "pace": "medium" | "fast",
   "tone_label": "<≤8字风格短标签,例:沉稳种草 / 高能洗脑 / 文气慢推 / 吃货狂炫>",
   "opener": "<开场招呼≤8字,符合人设语气>",
   "catchphrase": ["<口头禅1>","<口头禅2>","<口头禅3>"],
@@ -135,15 +138,13 @@ ${opts.holidayName ? `临近节日:${opts.holidayName}` : ''}
 }
 
 function paceEn(p: PersonaPace): string {
-  if (p === 'slow') return 'calm, measured, unhurried delivery; long pauses between lines; smooth slow camera moves';
-  if (p === 'fast') return 'high-energy, rapid delivery; punchy fast cuts; brisk hand-held camera';
-  return 'natural conversational pace; balanced rhythm; steady camera moves';
+  if (p === 'fast') return 'high-energy, rapid delivery; punchy fast cuts; brisk hand-held camera; expressive, enthusiastic tone with strong emotional peaks';
+  return 'natural conversational pace with clear energy and enthusiasm; steady but lively camera moves; expressive delivery with emotional ups and downs, never flat or calm';
 }
 
 function paceZh(p: PersonaPace): string {
-  if (p === 'slow') return '慢节奏 · 留白 · 慢镜头切换,台词之间可以有呼吸';
   if (p === 'fast') return '快节奏 · 高能 · 短句快剪,情绪饱满';
-  return '中速 · 自然口语节奏 · 不疾不徐';
+  return '中速 · 带情绪 · 有起伏 · 不平铺直叙,稳但有推进感,会突然惊喜会用力安利';
 }
 
 // 拼成 Seedance Prompt 强约束(主角虚构博主,不绑参考图)
