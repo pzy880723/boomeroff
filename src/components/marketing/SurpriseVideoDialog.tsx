@@ -51,6 +51,8 @@ interface SurpriseResult {
     label: string; gender: string; age: number;
     visual: string; vibe: string; opener: string;
     catchphrase: string[]; cta: string;
+    pace?: 'slow' | 'medium' | 'fast';
+    tone_label?: string;
   } | null;
   holiday?: { name: string; days_away: number } | null;
   duration: number; aspect: string;
