@@ -402,6 +402,101 @@ Deno.serve(async (req) => {
     const characterCover: string | undefined = character?.cover_url;
     const fallbackFirst = imageUrls[0] || characterCover;
 
+    // ============ 渲染策略分发(one_shot / per_shot / auto) ============
+    const requestedStrategy = normalizeStrategy(body.render_strategy);
+    const meaningfulShotCount =
+      (script.hook && (script.hook.scene || script.hook.action || script.hook.subtitle || script.hook.dialogue) ? 1 : 0) +
+      (Array.isArray(script.scenes) ? script.scenes.filter((sc: any) => sc && (sc.scene || sc.action || sc.subtitle || sc.dialogue)).length : 0) +
+      (script.outro && (script.outro.scene || script.outro.action || script.outro.subtitle || script.outro.dialogue) ? 1 : 0);
+    let strategy: 'one_shot' | 'per_shot' = 'per_shot';
+    let autoReason = '';
+    if (requestedStrategy === 'one_shot') {
+      strategy = 'one_shot'; autoReason = 'user_one_shot';
+    } else if (requestedStrategy === 'per_shot') {
+      strategy = 'per_shot'; autoReason = 'user_per_shot';
+    } else {
+      // auto:总时长 ≤15s 且分镜数 ≤4 → one_shot
+      if (totalDur > 0 && totalDur <= MAX_SEG_DUR && meaningfulShotCount <= 4) {
+        strategy = 'one_shot';
+        autoReason = `auto:duration<=${MAX_SEG_DUR}s,shots=${meaningfulShotCount}`;
+      } else {
+        strategy = 'per_shot';
+        autoReason = `auto:duration=${totalDur}s,shots=${meaningfulShotCount}`;
+      }
+    }
+    console.log(`[render] strategy=${strategy} (${autoReason})`);
+
+    const isSensitive = (err?: string, raw?: any) => {
+      const code = raw?.error?.code || '';
+      const msg = (err || '') + ' ' + (raw?.error?.message || '');
+      return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
+    };
+
+    // ============ 一次成片(one_shot) ============
+    if (strategy === 'one_shot') {
+      const oneShotDur = Math.max(4, Math.min(MAX_SEG_DUR, Math.round(totalDur || MAX_SEG_DUR)));
+      const effectiveChar = disableReferences ? null : character;
+      const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
+      const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism);
+      const fallbackNotes: string[] = [];
+      console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur}`);
+
+      // L0: 全量参考(最多 9 张)
+      let r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: refImages });
+      // L1: 仅角色板 / 第一张
+      if (!r.ok && isSensitive(r.error, (r as any).raw) && refImages.length > 1) {
+        fallbackNotes.push('references_trimmed_for_safety');
+        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: refImages.slice(0, 1) });
+      }
+      // L2: 纯文本
+      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+        fallbackNotes.push('references_dropped_for_safety');
+        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution });
+      }
+      if (!r.ok) {
+        return json({ ok: false, error: r.error, raw: (r as any).raw });
+      }
+
+      const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
+        user_id: u.user.id, script, status: "running", shop_id: shopId,
+        provider: "volcengine_seedance", provider_task_id: r.id,
+        segment_total: 1, segment_index: 0, parent_job_id: null,
+      }).select().single();
+      if (pErr || !parent) {
+        console.error("[render one_shot] parent insert", pErr);
+        return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
+      }
+
+      await admin.from("marketing_assets").insert({
+        user_id: u.user.id, kind: "video", shop_id: shopId,
+        input_image_urls: imageUrls, output_url: null,
+        meta: {
+          job_id: parent.id, video_type: script.video_type,
+          duration: oneShotDur, aspect: ratio,
+          mode: refImages.length ? "reference2video" : "text2video",
+          render_mode: "one_shot_reference",
+          render_strategy: "one_shot",
+          auto_decision_reason: autoReason,
+          one_shot_refs: refImages,
+          topic: script.topic || "", style: styleKey,
+          style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
+          warnings: [
+            ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
+            ...fallbackNotes,
+          ],
+          status: "running", segment_total: 1, segment_done: 0,
+          stage: "generating", character_id: character?.id || null,
+          character_name: character?.name || null,
+          cover_url: imageUrls[0] || character?.cover_url || null,
+        },
+      });
+
+      return json({
+        ok: true, success: true, job_id: parent.id, status: "running",
+        segment_total: 1, render_strategy: "one_shot", auto_decision_reason: autoReason,
+      });
+    }
+
     // ============ 逐镜渲染路径(每个分镜 = 1 段,完成后由前端拼接) ============
 
     const subScripts = splitScript(script);
