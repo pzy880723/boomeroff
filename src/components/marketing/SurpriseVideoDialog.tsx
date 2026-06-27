@@ -19,6 +19,9 @@ import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileR
 import { getModelPrefs, getSurpriseModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import type { VideoFix } from '@/lib/videoFailure';
+import { RealismToggle } from '@/components/marketing/RealismToggle';
+import { getRealismPref, setRealismPref } from '@/lib/realismPref';
+import type { Realism } from '@/lib/realism';
 
 interface PickedAsset {
   asset_id: string; index: number; url: string; summary: string; category: string | null;
@@ -63,6 +66,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [renderError, setRenderError] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>(() => getSurpriseModelPrefs().modelId);
   const [resolution, setResolution] = useState<SeedanceResolution>(() => getSurpriseModelPrefs().resolution);
+  const [realism, setRealism] = useState<Realism>(() => getRealismPref());
+  const handleRealismChange = (r: Realism) => { setRealism(r); setRealismPref(r); };
 
   const handleModelChange = (id: string) => {
     setModelId(id);
