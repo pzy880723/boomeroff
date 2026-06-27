@@ -67,13 +67,14 @@ export default function PublicClaimByPhone() {
       return;
     }
     setSubmitting(true);
-    const { data, error } = await supabase.functions.invoke('voucher-claim-by-phone', {
+    const { data, error } = await invokeFn<any>('voucher-claim-by-phone', {
       body: { phone },
     });
     setSubmitting(false);
-    const errMsg = (data as any)?.error || error?.message;
-    if (errMsg) {
-      setErrorMsg('不好意思，没有搜索到对应的优惠券，请检查您的手机号是否输入正确');
+    if (error) {
+      setErrorMsg(error.message.includes('没有搜索到')
+        ? error.message
+        : '不好意思，没有搜索到对应的优惠券，请检查您的手机号是否输入正确');
       return;
     }
     const shortCode = (data as any)?.short_code;
