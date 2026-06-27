@@ -330,8 +330,8 @@ function RenderingBody({
       if (ratio >= 0.95) return { title: '即将完成…', hint: '正在打包封面 + 上传到素材库' };
       return { title: `Seedance 渲染中 · ${progress.done}/${progress.total}`, hint: '每段约 30-60 秒,稳一稳' };
     }
-    if (elapsed < 15) return { title: '准备渲染参数…', hint: '正在把分镜静帧 + 角色参考喂给 Seedance' };
-    if (elapsed < 45) return { title: 'Seedance 起稿中…', hint: '模型在生成首帧画面,大约还要 1 分钟' };
+    if (elapsed < 15) return { title: '准备渲染参数…', hint: '正在把分镜静帧 + 角色板拼成参考图' };
+    if (elapsed < 45) return { title: 'Seedance 在排镜头…', hint: '模型正在按脚本切分镜,大约还要 1 分钟' };
     if (elapsed < 90) return { title: 'Seedance 渲染中…', hint: '正在逐帧生成,马上就好' };
     if (elapsed < 180) return { title: '正在精修画面…', hint: '高清模型耗时略长,辛苦再等一下' };
     return { title: '正在收尾…', hint: '已经在最后阶段,关掉弹窗也会继续' };
