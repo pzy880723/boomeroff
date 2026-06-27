@@ -295,6 +295,7 @@ Deno.serve(async (req) => {
     }
 
     const styleKey = normalizeStyle(body.style || script.style);
+    const realism = normalizeRealism(body.realism ?? script.realism);
     const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
@@ -326,7 +327,7 @@ Deno.serve(async (req) => {
 
     // ============ 单段路径(≤15s 全部走这里,杜绝拼接) ============
     if (totalDur <= MAX_SEG_DUR) {
-      const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character);
+      const prompt = buildPrompt(script, styleKey, shopBlock, undefined, character, realism);
       const duration = clampDuration(totalDur || MAX_SEG_DUR);
       const effectiveCharacter = disableReferences ? null : character;
       const imgs = resolveSegmentImages(script, imageUrls, effectiveCharacter, disableReferences ? undefined : fallbackFirst);
