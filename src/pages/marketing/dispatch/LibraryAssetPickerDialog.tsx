@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Check, Play, Maximize2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { thumbUrl } from '@/lib/imageUrl';
+import { thumbUrl, thumbSrcSet } from '@/lib/imageUrl';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 
 export type PickedAsset =
