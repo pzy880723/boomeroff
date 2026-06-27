@@ -164,6 +164,7 @@ Deno.serve(async (req) => {
     if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
     const preview: boolean = !!body.preview;
     const exclude: string[] = Array.isArray(body.exclude_asset_ids) ? body.exclude_asset_ids.slice(0, 50) : [];
+    const realism: 'stylized' | 'photoreal' = body.realism === 'photoreal' ? 'photoreal' : 'stylized';
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
