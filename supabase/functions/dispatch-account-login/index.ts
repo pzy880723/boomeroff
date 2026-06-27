@@ -107,11 +107,17 @@ Deno.serve(async (req) => {
       const reader = upstream!.body!.getReader();
       let buf = "";
       let sawQr = false;
+      let finished = false;
       try {
         send({ step: "connecting", msg: "正在连接发布服务器" });
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            if (!finished) {
+              send({ step: "fail", msg: sawQr ? "发布服务器连接已断开,请重新扫码" : "发布服务器没有返回二维码,请稍后重试" });
+            }
+            break;
+          }
           buf += dec.decode(value, { stream: true });
           const blocks = buf.split("\n\n");
           buf = blocks.pop() || "";
@@ -151,6 +157,7 @@ Deno.serve(async (req) => {
                 if (error) {
                   send({ step: "fail", msg: `账号已登录,但写入素材系统失败:${error.message}` });
                 } else {
+                  finished = true;
                   send({ step: "success", account_id: acct.worker_id, name: acct.name, avatar: acct.avatar });
                 }
               } else {
@@ -158,6 +165,7 @@ Deno.serve(async (req) => {
               }
               break;
             } else if (status === "error" || status === "fail") {
+              finished = true;
               send({ step: "fail", msg: j.message || j.msg || "扫码失败" });
               break;
             } else if (j.message || j.msg) {
