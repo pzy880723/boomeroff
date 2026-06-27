@@ -1,45 +1,77 @@
-## 目标
-BOOMER 帮我拍 / AI 自定义视频生成的所有分镜静帧,自动归档到素材库的新增「分镜头」类别;并把数据库里已有的 156 张历史分镜头图片一次性回填进素材库。
+## 诊断结论
 
-## 改动一览
+目前账号新增卡住的主要问题不在二维码生成，而在扫码后的闭环：
 
-### 1. 新增"分镜头"作为素材类别
-- `marketing_assets.category` 是自由文本字段,直接用固定值 `分镜头` 作为统一类别名。
-- 前端 `MarketingLibrary.tsx` 和 `LibraryImagePickerDialog.tsx` 的分类筛选器目前从已有数据 distinct 出列表,会自动出现"分镜头";额外把它列入预置 chip 顺序(放到「图片」分组),无需手动建表。
+- worker 的 `/login?type=3` 能正常返回二维码，格式是 `{status:"qrcode", image:"data:image/png;base64,..."}`。
+- worker 的账号列表 `/getValidAccounts`、`/getAccounts` 当前返回空数组，所以你扫完后，前端没有任何账号能落到 `social_accounts` 表。
+- 前端现在直接从浏览器写 `social_accounts`，缺少 `created_by` 等服务端兜底；一旦 worker 不回 `account_id` 或账号列表延迟更新，就会表现为“扫了没反应”。
+- 现有 Edge Function 只转发 SSE，不负责持久化账号，也没有明确展示“已扫码、等待确认、worker 未发现新增账号”等状态。
 
-### 2. 分镜头生成时自动入库
-改 `supabase/functions/storyboard-marketing-video/index.ts`:每帧成功上传到 storage 后,额外写一条 `marketing_assets`:
-- `kind = 'photo'`
-- `category = '分镜头'`
-- `tags = ['分镜头', styleKey, `场景${index+1}`]`(去重去空)
-- `output_url` = storage 路径(沿用素材库现有 signed URL 解析逻辑)
-- `meta = { source: 'storyboard', session_id, scene_index, script_caption, video_job_id? }`
-- `sha256` 由帧字节算出,**按 (user_id, sha256) 去重**:已存在则跳过(避免同一会话重复刷)
-- `user_id` / `shop_id`:从调用入参取(函数已有 shopId;user_id 透传自 `surprise-marketing-video` / `MarketingVideo.tsx`,需要补一个 caller_user_id 参数,默认回退到 JWT 解码)
+## 修复目标
 
-不阻塞主流程:入库失败只 warn,不影响 storyboard 返回。
+把“添加自媒体账号”改成稳定闭环：
 
-### 3. 回填历史 156 张分镜图
-新建一次性 Edge Function `backfill-storyboard-assets`(管理员触发,带 admin guard):
-- 列出 `storage.objects` 中 `bucket_id='marketing-videos'` 且前缀 `storyboards/` 的所有对象
-- 路径解析 `storyboards/{shop_id}/{session_id}/{idx}.png`
-- 通过 `session_id` → `marketing_video_jobs` 反查 `user_id`(脚本里 `script.session_id` 或 `meta.storyboard_session_id`);查不到的回退到 shop 的任一管理员账号
-- 对每张图下载、算 sha256、按 (user_id, sha256) 去重后写入 `marketing_assets`,字段同上,`meta.backfilled=true`
-- 失败的图(签名失败 / 已过期 / 损坏)汇总返回,不阻塞其他
+1. 二维码能稳定显示。
+2. 扫码后前端能实时显示状态。
+3. 登录成功后由后端写入账号表，不再依赖前端自己拼数据写库。
+4. 如果 worker 没有返回账号或账号列表仍为空，界面要明确提示原因和下一步，不再静默卡住。
+5. 账号列表刷新能确认 worker 在线、账号是否有效。
 
-在 `/portal` 增加一个"回填分镜头到素材库"按钮(管理员可见,一键调用上面这个函数,显示成功/跳过/失败数量)。
+## 实施计划
 
-### 4. 前端展示
-- 素材库列表里,「分镜头」分类的卡片右上角加一个小角标 `分镜头`(用 Badge 复用现有标签样式)。
-- `LibraryImagePickerDialog` 的筛选 chip 把「分镜头」置顶,方便挑图二次创作。
+### 1. 修复 `dispatch-account-login` 的完整绑定流程
 
-## 技术细节
-- 不动 `marketing_assets` 表结构(`sha256`/`category`/`tags` 已存在)。
-- 复用现有 `compressForUpload`?不需要——分镜帧已是 1024 PNG,直接存。
-- 去重粒度:同一用户同一 sha256 跳过;不同用户的同图独立入库(保留个人素材库隔离规则)。
-- 回填脚本只跑一次,完成后按钮可保留(幂等)。
+- 登录流命中实际 worker 端点：优先 `/login?type=N`。
+- 兼容 worker 事件格式：
+  - `{status:"qrcode", image:"..."}` → 二维码
+  - `{status:"scanned"}` → 已扫码
+  - `{status:"success"}` → 登录成功
+  - `{status:"error"}` / `{status:"fail"}` → 失败
+- 在函数内读取登录前后的 worker 账号列表，识别新增账号。
+- 新增“延迟确认”机制：success 后连续轮询几次 `/getValidAccounts`，避免 worker 写 cookie 比 SSE success 慢。
+- 成功识别账号后，Edge Function 直接写入 `social_accounts`，包括：
+  - `shop_id`
+  - `platform`
+  - `worker_account_id`
+  - `worker_account_key`
+  - `account_name`
+  - `avatar_url`
+  - `cookie_status`
+  - `created_by`
+- 如果最终仍找不到账号，返回中文可读错误：例如“手机端已确认，但发布服务器没有写入账号 Cookie，请在手机端重新确认或重试”。
 
-## 不做
-- 不引入新的表/枚举。
-- 不动 surprise-marketing-video 的核心流程,只透传 user_id。
-- 不删除 storage 中原有的 storyboards/ 文件。
+### 2. 前端弹窗只负责展示状态，不再直接写数据库
+
+- `AddAccountDialog.tsx` 改为带 `shop_id` 调用登录函数。
+- 收到 success 事件后直接显示绑定成功，并刷新账号列表。
+- 去掉前端 `supabase.from('social_accounts').upsert(...)`，避免权限、字段、延迟导致失败。
+- 增加更明确的状态文案：
+  - 正在连接发布服务器
+  - 二维码已生成
+  - 已扫码，请在手机端确认
+  - 已确认，正在同步账号
+  - 绑定成功
+  - 绑定失败 + 原因 + 重试按钮
+
+### 3. 加固账号列表和 worker 状态展示
+
+- `dispatch-account-list` 保持从数据库读账号，同时合并 worker 在线状态。
+- 对 worker 返回空账号、离线、接口失败分别给前端更清晰的提示字段。
+- 账号卡片显示：在线 / 已失效 / 发布服务器未确认。
+
+### 4. 最小化数据库改动
+
+- 先不新增表、不改核心权限。
+- 如发现现有 `social_accounts` 写入策略无法覆盖当前用户门店，再补一条最小 RLS 修复迁移。
+- 不改其它营销视频、素材库、发布任务逻辑。
+
+### 5. 验证方式
+
+- 直接测试 Edge Function：确认能收到二维码事件。
+- 扫码后确认是否出现“已扫码 / 同步账号 / 成功或明确失败”。
+- 查询 `social_accounts` 是否新增记录。
+- 账号页刷新后确认账号可见。
+
+## 需要你知道的一点
+
+如果 worker 本身扫完后仍然让 `/getValidAccounts` 返回空数组，那前端和 Lovable 这边只能给出明确失败原因；真正的根因会在 worker 服务器里，通常是 Playwright 没保存 Cookie、平台风控、或 worker 没实现 success 后账号落盘。这个计划会把问题从“没反应”变成“准确显示卡在哪一步”。
