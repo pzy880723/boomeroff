@@ -54,11 +54,11 @@ export function ActivityFeedbackView({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = async () => {
-    const { data: resp, error } = await supabase.functions.invoke('activity-feedback', {
+    const { data: resp, error } = await invokeFn<any>('activity-feedback', {
       body: { action: 'get', share_token: shareToken, short_code: shortCode },
     });
-    if (error || (resp as any)?.error) {
-      toast.error((resp as any)?.error || error?.message || '加载失败');
+    if (error) {
+      toast.error(error.message);
       setLoading(false);
       // 数据不对，清掉本地缓存并返回报名页
       localStorage.removeItem(`activity_claim:${shareToken}`);
