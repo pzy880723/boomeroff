@@ -571,7 +571,6 @@ Deno.serve(async (req) => {
 
     // 5) 占位 marketing_assets
     const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
-    const anyFirst = submissions.some((s) => !!s.imgs.firstImage);
     const fallbackWarnings = Array.from(new Set(submissions.flatMap((s) => s.fallbackNotes)));
     await admin.from("marketing_assets").insert({
       user_id: u.user.id, kind: "video", shop_id: shopId,
@@ -579,7 +578,8 @@ Deno.serve(async (req) => {
       meta: {
         job_id: parent.id, video_type: script.video_type,
         duration: totalDur, aspect: ratio,
-        mode: anyFirst ? "image2video" : (totalRefImages > 0 ? "reference2video" : "text2video"),
+        // Seedance 2.0:有参考图 = reference2video,完全无图 = text2video。
+        mode: totalRefImages > 0 ? "reference2video" : "text2video",
         render_mode: "per_shot",
         render_strategy: "per_shot",
         auto_decision_reason: autoReason,
@@ -597,8 +597,6 @@ Deno.serve(async (req) => {
           per_segment: submissions.map((s) => ({
             segment_index: s.i,
             reference_count: s.imgs.referenceImages.length,
-            first: s.imgs.firstImage || null,
-            last: s.imgs.lastImage || null,
           })),
         },
       },
