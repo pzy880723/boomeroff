@@ -379,7 +379,9 @@ Deno.serve(async (req) => {
       summary: summarizeAsset(heroAsset),
       tags: heroAsset.tags || [],
       category: heroAsset.category || null,
+      theme_tag: themeTag,
     };
+
     const characterOut = character
       ? { id: character.id, name: character.name, cover_url: character.cover_url }
       : null;
