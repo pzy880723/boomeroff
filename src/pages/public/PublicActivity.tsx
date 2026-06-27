@@ -134,12 +134,12 @@ export default function PublicActivity() {
   const lookup = async () => {
     if (!/^1[3-9]\d{9}$/.test(lookupPhone)) { toast.error('请输入正确的手机号'); return; }
     setLooking(true);
-    const { data, error: e } = await supabase.functions.invoke('activity-feedback', {
+    const { data, error: e } = await invokeFn<any>('activity-feedback', {
       body: { action: 'lookup_by_phone', share_token: shareToken, phone: lookupPhone },
     });
     setLooking(false);
-    if (e || (data as any)?.error) {
-      toast.error((data as any)?.error || e?.message || '查询失败');
+    if (e) {
+      toast.error(e.message);
       return;
     }
     const d = data as any;
