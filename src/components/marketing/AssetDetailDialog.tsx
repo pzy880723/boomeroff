@@ -118,7 +118,7 @@ export function AssetDetailDialog({
   const [genCopyLoading, setGenCopyLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const [lbOpen, setLbOpen] = useState(false);
+  
 
   const regenerateVideo = async () => {
     if (!asset || asset.kind !== 'video') return;
