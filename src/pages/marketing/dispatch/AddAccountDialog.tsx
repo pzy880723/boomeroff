@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 const PLATFORMS = ['douyin', 'xhs', 'wechat_video', 'kuaishou', 'bilibili'];
 const QR_TTL_MS = 90_000;
 
-type Step = 'pick' | 'qr' | 'scanned' | 'success' | 'fail' | 'expired';
+type Step = 'pick' | 'connecting' | 'qr' | 'scanned' | 'syncing' | 'success' | 'fail' | 'expired';
 
 export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }: {
   open: boolean; onOpenChange: (o: boolean) => void; shopId: string | null; onAdded: () => void;
@@ -21,6 +21,7 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
   const [step, setStep] = useState<Step>('pick');
   const [qr, setQr] = useState<string | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [accountInfo, setAccountInfo] = useState<{ id: number; name: string; avatar: string } | null>(null);
   const [countdown, setCountdown] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -38,7 +39,7 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
     if (!open) {
       abortRef.current?.abort();
       cleanupTimers();
-      setPlatform(null); setStep('pick'); setQr(null); setErrMsg(null); setAccountInfo(null);
+      setPlatform(null); setStep('pick'); setQr(null); setErrMsg(null); setStatusMsg(null); setAccountInfo(null);
     }
     return () => { cleanupTimers(); abortRef.current?.abort(); };
   }, [open]);
@@ -59,16 +60,25 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
   const startLogin = useCallback(async (p: string) => {
     if (!shopId) { toast({ title: '请先选择门店', variant: 'destructive' }); return; }
     setPlatform(p);
-    setStep('qr'); setQr(null); setErrMsg(null);
+    setStep('connecting'); setQr(null); setErrMsg(null); setStatusMsg('正在连接发布服务器');
     const projectId = (supabase as any).supabaseUrl?.match(/https:\/\/(.+?)\.supabase\.co/)?.[1]
       || import.meta.env.VITE_SUPABASE_PROJECT_ID;
-    const fnUrl = `https://${projectId}.supabase.co/functions/v1/dispatch-account-login?platform=${p}`;
+    const fnUrl = `https://${projectId}.supabase.co/functions/v1/dispatch-account-login?platform=${p}&shop_id=${encodeURIComponent(shopId)}`;
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
-      const resp = await fetch(fnUrl, { signal: ctrl.signal });
-      if (!resp.ok || !resp.body) throw new Error(`worker ${resp.status}`);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const resp = await fetch(fnUrl, {
+        signal: ctrl.signal,
+        headers: token ? { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' } : { Accept: 'text/event-stream' },
+      });
+      if (!resp.ok || !resp.body) {
+        let detail = '';
+        try { detail = (await resp.json())?.error || ''; } catch { /* ignore */ }
+        throw new Error(detail || `发布服务器连接失败(${resp.status})`);
+      }
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
@@ -90,40 +100,33 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
     } catch (e: any) {
       if (e.name !== 'AbortError') {
         cleanupTimers();
-        setStep('fail'); setErrMsg(e.message || '连接发布服务器失败');
+        setStep('fail'); setErrMsg(e.message || '连接发布服务器失败'); setStatusMsg(null);
       }
     }
   }, [shopId, toast]);
 
   const handleEvent = async (ev: any, p: string) => {
-    if (ev.step === 'qr' && ev.qr) {
+    if (ev.msg) setStatusMsg(ev.msg);
+    if (ev.step === 'connecting') {
+      setStep('connecting');
+    } else if (ev.step === 'qr' && ev.qr) {
       setQr(ev.qr); setStep('qr');
       armExpiry();
     } else if (ev.step === 'scanned') {
       setStep('scanned');
       cleanupTimers();
+    } else if (ev.step === 'syncing') {
+      setStep('syncing');
+      cleanupTimers();
     } else if (ev.step === 'success' && ev.account_id) {
       cleanupTimers();
       setAccountInfo({ id: Number(ev.account_id), name: ev.name || '', avatar: ev.avatar || '' });
-      try {
-        const { error } = await supabase.from('social_accounts').upsert({
-          shop_id: shopId!,
-          platform: p,
-          worker_account_id: Number(ev.account_id),
-          worker_account_key: `${p}:${ev.account_id}`,
-          account_name: ev.name || null,
-          avatar_url: ev.avatar || null,
-          cookie_status: 'active',
-        }, { onConflict: 'shop_id,platform,worker_account_key' });
-        if (error) throw error;
-        setStep('success');
-        onAdded();
-      } catch (e: any) {
-        setStep('fail'); setErrMsg(e.message);
-      }
+      setStep('success');
+      setStatusMsg('绑定成功');
+      onAdded();
     } else if (ev.step === 'fail') {
       cleanupTimers();
-      setStep('fail'); setErrMsg(ev.msg || '扫码失败');
+      setStep('fail'); setErrMsg(ev.msg || '扫码失败'); setStatusMsg(null);
     }
   };
 
@@ -149,6 +152,12 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
             ))}
           </div>
         )}
+        {step === 'connecting' && (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <div className="text-sm">{statusMsg || '正在连接发布服务器'}</div>
+          </div>
+        )}
         {step === 'qr' && (
           <div className="flex flex-col items-center gap-3 py-4">
             {qr ? (
@@ -161,6 +170,7 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
             <div className="text-sm text-muted-foreground flex items-center gap-1">
               <ScanLine className="w-3.5 h-3.5" /> 用{platformLabel(platform!)} App 扫码登录
             </div>
+            {statusMsg && <div className="text-[11px] text-muted-foreground text-center">{statusMsg}</div>}
             {qr && countdown > 0 && (
               <div className="text-[11px] text-muted-foreground">二维码 {countdown}s 后过期</div>
             )}
@@ -174,7 +184,15 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
         {step === 'scanned' && (
           <div className="flex flex-col items-center gap-3 py-8">
             <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-            <div className="text-sm">已扫码,请在手机上确认…</div>
+            <div className="text-sm">已扫码，请在手机上确认</div>
+            {statusMsg && <div className="text-[11px] text-muted-foreground text-center">{statusMsg}</div>}
+          </div>
+        )}
+        {step === 'syncing' && (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <div className="text-sm">正在同步账号</div>
+            <div className="text-[11px] text-muted-foreground text-center px-4">{statusMsg || '手机端已确认，正在写入账号'}</div>
           </div>
         )}
         {step === 'expired' && (
@@ -203,7 +221,7 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
                   <RotateCcw className="w-3.5 h-3.5 mr-1" /> 重试
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => { setStep('pick'); setErrMsg(null); setPlatform(null); }}>
+            <Button variant="outline" size="sm" onClick={() => { setStep('pick'); setErrMsg(null); setStatusMsg(null); setPlatform(null); }}>
                 换平台
               </Button>
             </div>
