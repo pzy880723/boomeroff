@@ -10,6 +10,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadShopContext } from "../_shared/shop-context.ts";
 import { pickUpcomingHoliday, formatHolidayBrief } from "../_shared/holiday-context.ts";
+import { generatePersona, formatPersonaDirective, formatPersonaBriefZh, type InfluencerPersona } from "../_shared/persona-generator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
