@@ -95,15 +95,26 @@ export function LibraryAssetPickerDialog({
               <div className="grid grid-cols-3 gap-2">
                 {videos.map((it, i) => {
                   const poster = it.meta?.poster_url || it.meta?.cover_url;
-                  const thumb = poster ? (thumbUrl(poster, 320) || poster) : null;
+                  const thumb = poster ? (thumbUrl(poster, 240) || poster) : null;
+                  const srcSet = poster ? thumbSrcSet(poster, 120) : undefined;
+                  const loaded = !thumb || loadedImgs.has(it.id);
                   const active = selVideo?.id === it.id;
                   return (
                     <button key={it.id} onClick={() => setSelVideo(it)}
                       className={['relative aspect-[9/16] rounded overflow-hidden border-2 transition-all bg-muted',
                         active ? 'border-accent shadow-md' : 'border-transparent hover:border-accent/40'].join(' ')}>
-                      {thumb
-                        ? <img src={thumb} alt="" loading={i < 6 ? 'eager' : 'lazy'} decoding="async" className="w-full h-full object-cover" />
-                        : <div className="absolute inset-0 flex items-center justify-center"><Play className="w-6 h-6 text-muted-foreground" /></div>}
+                      {thumb ? (
+                        <>
+                          {!loaded && <Skeleton className="absolute inset-0 rounded-none" />}
+                          <img src={thumb} srcSet={srcSet} sizes="33vw" alt="" width={240} height={427}
+                            loading={i < 6 ? 'eager' : 'lazy'} decoding="async"
+                            className={`w-full h-full object-cover transition-opacity duration-200 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                            onLoad={() => setLoadedImgs((p) => p.has(it.id) ? p : new Set(p).add(it.id))}
+                            onError={() => setLoadedImgs((p) => p.has(it.id) ? p : new Set(p).add(it.id))} />
+                        </>
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center"><Play className="w-6 h-6 text-muted-foreground" /></div>
+                      )}
                       {active && (
                         <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-accent text-accent-foreground flex items-center justify-center">
                           <Check className="w-3 h-3" strokeWidth={3} />
