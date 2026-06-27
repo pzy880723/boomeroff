@@ -226,7 +226,7 @@ export default function MarketingVideo() {
     finally { setGenerating(false); }
   };
 
-  const generateStoryboard = async (scriptArg?: any) => {
+  const generateStoryboard = async (scriptArg?: any, onlyIndices?: number[]) => {
     const target = scriptArg || script;
     if (!target) return;
     setSbBusy(true); setSbWarn(null);
@@ -242,12 +242,18 @@ export default function MarketingVideo() {
         extra_reference_urls: character.extra_reference_urls || [],
       } : null;
       const { data, error } = await supabase.functions.invoke('storyboard-marketing-video', {
-        body: { script: target, assets, character: charPayload, shop_id: shopId, style, realism },
+        body: {
+          script: target, assets, character: charPayload, shop_id: shopId, style, realism,
+          ...(onlyIndices && onlyIndices.length ? { only_indices: onlyIndices } : {}),
+        },
       });
       if (error) throw error;
       const d = data as any;
       if (!d?.ok) throw new Error(d?.error || '分镜静帧生成失败');
-      if (d.script) setScript(d.script);
+      if (d.script) {
+        setScript(d.script);
+        setLastSbSig(computeStoryboardSig(d.script, realism));
+      }
       const failed = (d.frames || []).filter((f: any) => !f.url).length;
       if (failed) setSbWarn(`${failed} 张静帧生成失败,渲染时将回退到原素材图`);
       toast.success(`分镜静帧已合成 ${d.succeeded}/${d.total}`);
