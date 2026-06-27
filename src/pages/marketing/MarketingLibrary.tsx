@@ -17,7 +17,8 @@ import { CharacterDialog } from '@/components/marketing/CharacterDialog';
 import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
 
 import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
-import { thumbUrl as thumb } from '@/lib/imageUrl';
+import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
+import { Skeleton } from '@/components/ui/skeleton';
 import { extractFirstFrame } from '@/lib/extractFirstFrame';
 import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
 
@@ -28,6 +29,8 @@ export default function MarketingLibrary() {
   const { shopId, setShopId, shops, isAdmin, loading: shopLoading } = useEffectiveShop();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [manageMode, setManageMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDel, setConfirmDel] = useState(false);
@@ -40,29 +43,32 @@ export default function MarketingLibrary() {
   const [createCharOpen, setCreateCharOpen] = useState(false);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
+  const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
   const currentShop = shops.find((s) => s.id === shopId);
+
+  const PAGE_SIZE = 60;
+  // 只显式取需要的列,避免将来 marketing_assets 新增大字段拖慢首屏。
+  const ASSET_COLS = 'id, kind, output_url, input_image_urls, tags, category, shop_id, user_id, created_at, meta';
 
   const fetchItems = async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
     try {
-      // 有 shopId 时按店铺读(同店成员共享);否则只看自己
       let q = supabase
         .from('marketing_assets' as any)
-        .select('*')
+        .select(ASSET_COLS)
         .order('created_at', { ascending: false })
-        .limit(200);
+        .range(0, PAGE_SIZE - 1);
       if (shopId) q = q.eq('shop_id', shopId);
       else q = q.eq('user_id', user.id);
       const { data, error } = await q;
       if (error) throw error;
-      // meta 偶发 null,统一兜底成对象,避免下游 .status / .cover_url 直接炸
       const safe = ((data as any[]) || []).map((it) => ({ ...it, meta: it?.meta ?? {} }));
       setItems(safe);
+      setHasMore(safe.length === PAGE_SIZE);
     } catch (e) {
-      // 静默刷新失败时不要让异常冒到组件树
       // eslint-disable-next-line no-console
       console.warn('[MarketingLibrary] fetchItems failed:', e);
     } finally {
@@ -70,9 +76,36 @@ export default function MarketingLibrary() {
     }
   };
 
+  const loadMore = async () => {
+    if (!user || loadingMore || !hasMore || loading) return;
+    setLoadingMore(true);
+    try {
+      const offset = items.length;
+      let q = supabase
+        .from('marketing_assets' as any)
+        .select(ASSET_COLS)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (shopId) q = q.eq('shop_id', shopId);
+      else q = q.eq('user_id', user.id);
+      const { data, error } = await q;
+      if (error) throw error;
+      const more = ((data as any[]) || []).map((it) => ({ ...it, meta: it?.meta ?? {} }));
+      setItems((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...prev, ...more.filter((m) => !seen.has(m.id))];
+      });
+      setHasMore(more.length === PAGE_SIZE);
+    } catch (e) {
+      console.warn('[MarketingLibrary] loadMore failed:', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   // 保留 load 名字给其它地方使用（如有）
   const load = () => fetchItems(false);
-  useEffect(() => { fetchItems(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user, shopId]);
+  useEffect(() => { setHasMore(true); fetchItems(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user, shopId]);
 
   // 实时订阅:同 shop 内素材变化静默刷新(不触发整页 loading 骨架闪烁)
   const reloadTimer = useRef<number | null>(null);
@@ -671,7 +704,7 @@ export default function MarketingLibrary() {
 
                 {mediaList.length > 0 && (
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
-                    {mediaList.map((it) => {
+                    {mediaList.map((it, idx) => {
                       const checked = selected.has(it.id);
                       const rawThumb = it.kind === 'photo'
                         ? it.output_url
@@ -680,7 +713,10 @@ export default function MarketingLibrary() {
                             || (Array.isArray(it.meta?.image_urls) && it.meta.image_urls[0])
                             || (Array.isArray(it.input_image_urls) && it.input_image_urls[0])
                             || null);
-                      const thumbUrl = rawThumb ? (thumb(rawThumb, 320) || rawThumb) : null;
+                      const thumbUrl = rawThumb ? (thumb(rawThumb, 240) || rawThumb) : null;
+                      const srcSet = rawThumb ? thumbSrcSet(rawThumb, 120) : undefined;
+                      const isImgLoaded = !rawThumb || loadedImgs.has(it.id);
+                      const eager = idx < 6;
                       const showStatus = it.kind === 'video' && it.meta?.status && it.meta.status !== 'succeeded';
                       const segTotal = Number(it.meta?.segment_total) || 0;
                       const segDone = Number(it.meta?.segment_done) || 0;
@@ -705,7 +741,25 @@ export default function MarketingLibrary() {
                           ].join(' ')}
                         >
                           {thumbUrl ? (
-                            <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                            <>
+                              {!isImgLoaded && (
+                                <Skeleton className="absolute inset-0 rounded-none" />
+                              )}
+                              <img
+                                src={thumbUrl}
+                                srcSet={srcSet}
+                                sizes="(min-width: 768px) 20vw, 33vw"
+                                alt=""
+                                width={240}
+                                height={240}
+                                className={`w-full h-full object-cover transition-opacity duration-200 ${isImgLoaded ? 'opacity-100' : 'opacity-0'}`}
+                                loading={eager ? 'eager' : 'lazy'}
+                                decoding="async"
+                                {...(eager ? { fetchPriority: 'high' as const } : {})}
+                                onLoad={() => setLoadedImgs((prev) => prev.has(it.id) ? prev : new Set(prev).add(it.id))}
+                                onError={() => setLoadedImgs((prev) => prev.has(it.id) ? prev : new Set(prev).add(it.id))}
+                              />
+                            </>
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               {it.kind === 'video'
@@ -713,6 +767,7 @@ export default function MarketingLibrary() {
                                 : <ImageIcon className="w-6 h-6 text-muted-foreground" />}
                             </div>
                           )}
+
 
 
                           {it.kind === 'photo' && !manageMode && (
@@ -832,6 +887,9 @@ export default function MarketingLibrary() {
               </section>
             );
           })}
+          {!loading && hasMore && (
+            <LoadMoreSentinel onVisible={loadMore} loading={loadingMore} />
+          )}
         </>)}
       </div>
 
@@ -916,3 +974,22 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
     >{children}</button>
   );
 }
+
+function LoadMoreSentinel({ onVisible, loading }: { onVisible: () => void; loading: boolean }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) onVisible();
+    }, { rootMargin: '600px 0px' });
+    io.observe(node);
+    return () => io.disconnect();
+  }, [onVisible]);
+  return (
+    <div ref={ref} className="py-6 text-center text-[11px] text-muted-foreground">
+      {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto text-accent" /> : '上拉加载更多'}
+    </div>
+  );
+}
+

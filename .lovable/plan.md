@@ -1,38 +1,55 @@
-## 目标
-让「惊喜一下」的探店脚本台词更够听:按 15 秒中速旁白的容量给字数(~70 字),全程一条主线讲清楚这家店;同时关掉「优雅慢悠悠」人设,所有博主至少要带点激动劲儿。
 
-## 字数测算
-中速口播 4.5 字/秒,激动口播 ~5 字/秒。15 秒视频留 0.5 秒呼吸 → **目标台词总字数 65–80 字**,按 6 个镜头 ≈ 每镜 10–14 字,hook 与 CTA 各放宽到 ≤10 字。
+# 素材库图片加载优化
+
+只动素材库的取数和缩略图链路，不改业务逻辑、不动样式风格。
+
+## 现状瓶颈
+
+- `MarketingLibrary.tsx` 一次性 `select *` 拉 200 条，把 `meta`（含分段 URL、prompt、错误日志）也下发，首屏 JSON 经常几百 KB。
+- `thumbUrl()` 默认请 320px JPEG quality 72，但九宫格在 390px 屏上每格 ≈120 CSS px，dpr=2 也只要 240px；现在多请了 30%~50% 像素。
+- 没有 `format=webp`，Supabase Render 支持但目前没开。
+- 没有对 storage 域名做 `preconnect`，每张图都要重新 TLS 握手。
+- 渲染 200 个 `<img loading="lazy">`，但没有占位/骨架，用户看到的就是"灰底很久才出图"。
+- `LibraryAssetPickerDialog` 走的是同样的链路、同样问题。
 
 ## 改动清单
 
-### A. `supabase/functions/generate-marketing-video-script/index.ts`
-1. L99 → 把"宁可留白,不要塞满 / 每镜 6-10 字 / 总 45-65 字 / 可以留空"改成:
-   > 全片必须像真人连续口播,**dialogue 字数加起来 65–80 字**,每镜 10–14 字,**hook ≤10 字、CTA ≤10 字**;**所有镜头都要有 dialogue,不允许空台词**(纯氛围画面会让视频太平)。
-2. L100 硬规则改为按 5 字/秒估算(`dialogue 字数 ≤ duration_s × 5`),超出再删。
-3. 新增一句「**贯穿主线**」要求:
-   > 6 个镜头的 dialogue 串起来要是一段连贯的"探店日记"——从"为什么进店 → 看到了什么 → 上手体验 → 价格惊喜 → 谁适合 → 喊大家来"递进,不要每镜各说各的;反复点名店铺关键词「{店名 / 品类 / 钩子产品}」让观众记得住。
-4. L134 字数上限:`dialogue ≤ ${isViralStoreTour ? 16 : 30} 字`(从 14 提到 16,留点缓冲)。
+### 1) `src/lib/imageUrl.ts`
+- `thumbUrl` 默认宽度从 480 降到 240，质量 70。
+- 新增可选 `format` 参数，默认输出 `format=webp`（Supabase render 支持，体积 -30~50%）。
+- 新增 `thumbSrcSet(url, baseWidth)` 输出 `1x/2x` 两档 webp，配合 `<img srcset sizes>` 让高 dpr 屏精确取图。
 
-### B. `supabase/functions/_shared/persona-generator.ts`
-1. **彻底禁用 `pace: 'slow'`**:`PersonaPace = 'medium' | 'fast'`,`normPace` 把 `slow` 映射为 `medium`,默认值仍是 `fast`。
-2. 重写 L60–69 的品类→pace 指引:
-   - 古董/瓷器/老物件/文玩/字画/旗袍/茶器 → **medium**,tone 例:沉稳但**带劲**地讲究 / 老克勒掏宝。**禁止"优雅 / 慢条斯理 / 留白冥想"等词**。
-   - 家居/咖啡器具/原木 → medium,tone:有质感的安利,不端着。
-   - 母婴/绘本 → medium 偏 fast。
-   - 其它原本是 fast 的全部保持 fast。
-3. `paceEn('medium')` / `paceZh('medium')` 措辞加上 **"with energy and enthusiasm / 带情绪、有起伏、不平铺直叙"**,杜绝 calm/measured 类英文出现在 Seedance prompt 里。
-4. AI 生成 JSON 的 schema 描述里 `"pace"` 枚举改为 `"medium" | "fast"`,system prompt 增加一句:"禁止生成 slow 节奏,也不要 elegant/refined/calm 这类形容词,所有人设至少要 medium energy。"
+### 2) `src/pages/marketing/MarketingLibrary.tsx`
+- `fetchItems`：
+  - `select(...)` 显式列：`id, kind, output_url, input_image_urls, tags, category, shop_id, user_id, created_at, meta`。维持 meta（视频进度、poster_url 依赖它），但去掉 `select *` 隐性带出的将来新增大列。
+  - 首屏 `limit` 由 200 → 60，新增 `loadMore`：底部 IntersectionObserver 触底再追加 60 条（`range(offset, offset+59)`）。
+  - 失败视频/补标签等按钮的判定依旧基于已加载列表，不影响。
+- 媒体格子：
+  - `img` 加 `width`/`height`（占位避免 reflow）、`sizes="(min-width:768px) 20vw, 33vw"`、`srcSet`（240/480）、`fetchpriority` 前 6 张设为 `high`，其余 `auto`。
+  - 包一层「未加载前显示 `Skeleton`」的状态：用 `onLoad` 把 `loaded` 标记 set，未 loaded 时叠一个 `animate-pulse` 占位，告别"灰底空窗"。
+- 移除一次 `thumbUrl` 内联计算 → 用 `useMemo` 按 `it.id+rawThumb` 缓存，避免每次 setState 重算 200+ 字符串。
 
-### C. `supabase/functions/surprise-marketing-video/index.ts`
-1. L264 风格池保持 `energetic/lively/playful` 不变(已经够激动)。
-2. L280【全片要求】里把"4-6 个 2-3 秒小镜头"明确为"**6 个镜头,每镜都带台词,串成一段连贯的探店口播**",并补一句"博主每一镜都要有情绪起伏(惊喜/激动/安利感),不要平铺直叙"。
+### 3) `src/pages/marketing/dispatch/LibraryAssetPickerDialog.tsx`
+- 同样改 `select` 列 + 默认 60 条 + WebP 缩略图 + `Skeleton` 占位。
+- 弹窗滚动到底再追加下一页（弹窗内 IntersectionObserver，避免一次 120 张同时下载）。
 
-### D. 不动的地方
-- `render-marketing-video` 的 prompt 不动:它读的是脚本里 `dialogue` 字段,字数上调后自然就够说了。
-- 其它非 surprise 流程(`store_tour` 之外的 `intent`)仍走原 30 字上限。
+### 4) `index.html`
+- 在 `<head>` 增加：
+  ```html
+  <link rel="preconnect" href="https://<project-ref>.supabase.co" crossorigin />
+  <link rel="dns-prefetch" href="https://<project-ref>.supabase.co" />
+  ```
+  用 `VITE_SUPABASE_URL` 的 host 注入（构建期常量，可直接写死项目当前 host）。
 
-## 影响
-- 「惊喜一下」生成的视频里博主会从头说到尾,信息密度提升约 50%,且每次都围绕店名/品类做一条主线。
-- 老克勒、家居主理人这类原来会被判 `slow` 的人设,现在仍然沉稳但会带情绪、有推进,不再"优雅得像 PPT"。
-- 不新增任何前端开关。
+## 不动的部分
+
+- 数据库 schema、RLS、Edge Function、视频拼接逻辑、标签/品类编辑、Realtime 订阅、错误重试、删除流程一概不动。
+- `AssetTagDialog`、`UploadAssetDialog`、视频详情等无关组件不变。
+- 字体、配色、布局保持现状。
+
+## 验收
+
+- 首屏请求体大小（marketing_assets 的 JSON）下降明显（meta 仍在，但行数从 200 → 60）。
+- 图片 URL 带 `format=webp&width=240`，DevTools 看到的单图传输量从 ~30-60KB 降到 ~8-18KB。
+- 滚动到底自动加载下一页；标签筛选、店铺切换重置分页。
+- 弱网/慢图时格子先显示骨架不是灰块。

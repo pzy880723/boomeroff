@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Check, Play, Maximize2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { thumbUrl } from '@/lib/imageUrl';
+import { thumbUrl, thumbSrcSet } from '@/lib/imageUrl';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 
 export type PickedAsset =
@@ -31,8 +32,9 @@ export function LibraryAssetPickerDialog({
   const [selVideo, setSelVideo] = useState<any | null>(null);
   const [selImgs, setSelImgs] = useState<Map<string, string>>(new Map()); // assetId -> url
   const [lbIdx, setLbIdx] = useState<number | null>(null);
+  const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
 
-  useEffect(() => { if (open) { setTab(defaultTab); setSelVideo(null); setSelImgs(new Map()); setLbIdx(null); } }, [open, defaultTab]);
+  useEffect(() => { if (open) { setTab(defaultTab); setSelVideo(null); setSelImgs(new Map()); setLbIdx(null); setLoadedImgs(new Set()); } }, [open, defaultTab]);
 
   useEffect(() => {
     if (!open || !user) return;
@@ -43,7 +45,7 @@ export function LibraryAssetPickerDialog({
         .select('id, kind, output_url, meta, tags, category, created_at, shop_id, user_id')
         .not('output_url', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(120);
+        .limit(60);
       const q1 = shopId ? base.eq('shop_id', shopId) : base.eq('user_id', user.id);
       const { data } = await q1;
       const all = (data as any[]) || [];
@@ -93,15 +95,26 @@ export function LibraryAssetPickerDialog({
               <div className="grid grid-cols-3 gap-2">
                 {videos.map((it, i) => {
                   const poster = it.meta?.poster_url || it.meta?.cover_url;
-                  const thumb = poster ? (thumbUrl(poster, 320) || poster) : null;
+                  const thumb = poster ? (thumbUrl(poster, 240) || poster) : null;
+                  const srcSet = poster ? thumbSrcSet(poster, 120) : undefined;
+                  const loaded = !thumb || loadedImgs.has(it.id);
                   const active = selVideo?.id === it.id;
                   return (
                     <button key={it.id} onClick={() => setSelVideo(it)}
                       className={['relative aspect-[9/16] rounded overflow-hidden border-2 transition-all bg-muted',
                         active ? 'border-accent shadow-md' : 'border-transparent hover:border-accent/40'].join(' ')}>
-                      {thumb
-                        ? <img src={thumb} alt="" loading={i < 6 ? 'eager' : 'lazy'} decoding="async" className="w-full h-full object-cover" />
-                        : <div className="absolute inset-0 flex items-center justify-center"><Play className="w-6 h-6 text-muted-foreground" /></div>}
+                      {thumb ? (
+                        <>
+                          {!loaded && <Skeleton className="absolute inset-0 rounded-none" />}
+                          <img src={thumb} srcSet={srcSet} sizes="33vw" alt="" width={240} height={427}
+                            loading={i < 6 ? 'eager' : 'lazy'} decoding="async"
+                            className={`w-full h-full object-cover transition-opacity duration-200 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                            onLoad={() => setLoadedImgs((p) => p.has(it.id) ? p : new Set(p).add(it.id))}
+                            onError={() => setLoadedImgs((p) => p.has(it.id) ? p : new Set(p).add(it.id))} />
+                        </>
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center"><Play className="w-6 h-6 text-muted-foreground" /></div>
+                      )}
                       {active && (
                         <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-accent text-accent-foreground flex items-center justify-center">
                           <Check className="w-3 h-3" strokeWidth={3} />
@@ -123,13 +136,20 @@ export function LibraryAssetPickerDialog({
               <div className="grid grid-cols-3 gap-2">
                 {images.map((it, i) => {
                   const active = selImgs.has(it.id);
-                  const thumb = thumbUrl(it.output_url, 320) || it.output_url;
+                  const thumb = thumbUrl(it.output_url, 240) || it.output_url;
+                  const srcSet = thumbSrcSet(it.output_url, 120);
+                  const loaded = loadedImgs.has(it.id);
                   return (
                     <div key={it.id} className="relative">
                       <button onClick={() => toggleImg(it)}
-                        className={['block w-full relative aspect-square rounded overflow-hidden border-2 transition-all',
+                        className={['block w-full relative aspect-square rounded overflow-hidden border-2 transition-all bg-muted',
                           active ? 'border-accent shadow-md' : 'border-transparent hover:border-accent/40'].join(' ')}>
-                        <img src={thumb} alt="" loading={i < 6 ? 'eager' : 'lazy'} decoding="async" className="w-full h-full object-cover" />
+                        {!loaded && <Skeleton className="absolute inset-0 rounded-none" />}
+                        <img src={thumb} srcSet={srcSet} sizes="33vw" alt="" width={240} height={240}
+                          loading={i < 6 ? 'eager' : 'lazy'} decoding="async"
+                          className={`w-full h-full object-cover transition-opacity duration-200 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                          onLoad={() => setLoadedImgs((p) => p.has(it.id) ? p : new Set(p).add(it.id))}
+                          onError={() => setLoadedImgs((p) => p.has(it.id) ? p : new Set(p).add(it.id))} />
                         {active && (
                           <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-[10px] font-bold">
                             {Array.from(selImgs.keys()).indexOf(it.id) + 1}
