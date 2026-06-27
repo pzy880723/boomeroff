@@ -27,7 +27,20 @@ export interface ScriptLike {
   [k: string]: unknown;
 }
 
-export const MAX_SEG_DUR = 10;
+// 与 Seedance 单段物理上限保持一致(15s)。改这里务必同步 _shared/seedance-models.ts。
+export const MAX_SEG_DUR = 15;
+
+/**
+ * 根据总时长决定目标段数,与 src/lib/marketingSegments.ts 完全一致。
+ * ≤15s 单段直出;16-30s 两段;31-45s 三段;更长按 ceil(total/15) 兜底。
+ */
+export function targetSegmentCount(totalDur: number): number {
+  const t = Math.max(1, Math.round(totalDur || 0));
+  if (t <= MAX_SEG_DUR) return 1;
+  if (t <= 30) return 2;
+  if (t <= 45) return 3;
+  return Math.ceil(t / MAX_SEG_DUR);
+}
 
 export function effectiveImageRef(sc: SceneLike | null | undefined): SceneImageRef | null {
   if (!sc) return null;

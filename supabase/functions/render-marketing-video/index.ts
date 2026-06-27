@@ -91,27 +91,52 @@ function normalizeRatio(aspect: any): string {
   return "9:16";
 }
 
-// 把脚本按时长贪心切成 N 个子脚本,每段 ≤ MAX_SEG_DUR 秒。
+// 根据总时长确定目标段数,与 src/lib/marketingSegments.ts 同步。
+// ≤15s 单段;16-30s 两段;31-45s 三段;更长按 ceil(total/15)。
+function targetSegmentCount(totalDur: number): number {
+  const t = Math.max(1, Math.round(totalDur || 0));
+  if (t <= MAX_SEG_DUR) return 1;
+  if (t <= 30) return 2;
+  if (t <= 45) return 3;
+  return Math.ceil(t / MAX_SEG_DUR);
+}
+
+// 按"目标段数等分"切脚本(不再贪心装箱),让 30s 始终切成 2x15。
 // hook 强制进第一段,outro 强制进最后一段。
 function splitScript(script: any): any[] {
   const hook = script.hook;
   const outro = script.outro;
   const mids: any[] = Array.isArray(script.scenes) ? [...script.scenes] : [];
 
-  // 把 hook/outro 也按"镜头"处理参与装箱,以便统一时长计算。
   const all: any[] = [];
   if (hook) all.push({ ...hook, __role: 'hook' });
   for (const m of mids) all.push({ ...m, __role: 'mid' });
   if (outro) all.push({ ...outro, __role: 'outro' });
-
-  const buckets: any[][] = [];
-  let cur: any[] = [];
-  let curDur = 0;
   for (const sc of all) {
     let d = Number(sc.duration_s) || 2;
     if (d > MAX_SEG_DUR) d = MAX_SEG_DUR;
     sc.duration_s = d;
-    if (curDur + d > MAX_SEG_DUR && cur.length > 0) {
+  }
+
+  const totalDur = all.reduce((s, x) => s + (Number(x.duration_s) || 0), 0);
+  const target = targetSegmentCount(totalDur);
+  const budget = target > 0 ? totalDur / target : totalDur;
+
+  const buckets: any[][] = [];
+  let cur: any[] = [];
+  let curDur = 0;
+  for (let i = 0; i < all.length; i++) {
+    const sc = all[i];
+    const d = Number(sc.duration_s) || 0;
+    const remainingItems = all.length - i;
+    const remainingBuckets = target - buckets.length;
+    const mustCloseForBudget =
+      cur.length > 0 &&
+      buckets.length < target - 1 &&
+      curDur + d > budget &&
+      remainingItems >= remainingBuckets;
+    const mustCloseForCap = cur.length > 0 && curDur + d > MAX_SEG_DUR;
+    if (mustCloseForBudget || mustCloseForCap) {
       buckets.push(cur);
       cur = [];
       curDur = 0;
@@ -120,11 +145,8 @@ function splitScript(script: any): any[] {
     curDur += d;
   }
   if (cur.length) buckets.push(cur);
-
-  // 兜底:至少一段
   if (!buckets.length) buckets.push([]);
 
-  // 构造子脚本
   return buckets.map((bucket, i) => {
     const isFirst = i === 0;
     const isLast = i === buckets.length - 1;
@@ -139,7 +161,6 @@ function splitScript(script: any): any[] {
       else if (role === 'outro' && isLast && !subOutro) subOutro = clean;
       else subScenes.push(clean);
     });
-    // 必须有 hook + outro 才能通过下游校验,这里给占位空对象。
     if (!subHook) subHook = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
     if (!subOutro) subOutro = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
     const dur = bucket.reduce((s, x) => s + (Number(x.duration_s) || 0), 0);
@@ -154,6 +175,7 @@ function splitScript(script: any): any[] {
     };
   });
 }
+
 
 async function submitArkTask(opts: {
   arkKey: string; model: string; prompt: string; ratio: string; duration: number;

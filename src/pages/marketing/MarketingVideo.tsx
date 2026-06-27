@@ -17,7 +17,7 @@ import { CharacterPicker, type Character } from '@/components/marketing/Characte
 import { useEffectiveShop } from '@/hooks/useShops';
 import { useAuth } from '@/hooks/useAuth';
 import { uploadMarketingImages } from './uploadMarketingImages';
-import { planSegments, effectiveImageRef, MAX_SEG_DUR, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
+import { planSegments, effectiveImageRef, MAX_SEG_DUR, targetSegmentCount, type ImageRole, type SegmentPlan } from '@/lib/marketingSegments';
 import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { thumbUrl } from '@/lib/imageUrl';
@@ -511,7 +511,7 @@ export default function MarketingVideo() {
           </div>
           {duration > MAX_SEG_DUR && (
             <p className="-mt-1 text-[10px] text-muted-foreground leading-relaxed pl-1">
-              · 超过 {MAX_SEG_DUR} 秒的视频会自动拆成 {Math.ceil(duration / MAX_SEG_DUR)} 段生成,完成后在素材库里自动拼接成一支 MP4。整体约需 {Math.ceil(duration / MAX_SEG_DUR) * 2}-{Math.ceil(duration / MAX_SEG_DUR) * 3} 分钟。
+              · {duration} 秒视频会拆成 <b>{targetSegmentCount(duration)} 段 × 约 {Math.round(duration / targetSegmentCount(duration))} 秒</b> 生成,完成后自动拼接成一支 MP4。Seedance 只调用 {targetSegmentCount(duration)} 次,省一半 token。整体约 {targetSegmentCount(duration) * 2}-{targetSegmentCount(duration) * 3} 分钟。
             </p>
           )}
 
@@ -1056,7 +1056,7 @@ function SegmentPreview({ script, urls, character }: { script: any; urls: string
       {open && (
         <div className="px-3 pb-3 space-y-2">
           <p className="text-[10px] text-muted-foreground leading-snug">
-            按 Seedance 单段 {MAX_SEG_DUR}s 上限切分,真实渲染段数 = 这里看到的段数。每段第一张作开头帧、最后一张作结尾帧,主角每段都会塞进参考图锁人。
+            固定切成 {segments.length} 段(30s = 2×15、45s = 3×15),Seedance 只跑 {segments.length} 次,省一半 token。每段第一张作开头帧、最后一张作结尾帧,主角每段都会塞进参考图锁人。
           </p>
           {segments.map((seg) => {
             const cells = segClipsOf(seg);
