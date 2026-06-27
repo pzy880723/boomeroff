@@ -3,7 +3,7 @@
 // - 中部：上传发布截图 + 发布链接 + 备注 → 自助提交反馈
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeFn } from '@/lib/invokeFn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -53,11 +53,11 @@ export function ActivityFeedbackView({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = async () => {
-    const { data: resp, error } = await supabase.functions.invoke('activity-feedback', {
+    const { data: resp, error } = await invokeFn<any>('activity-feedback', {
       body: { action: 'get', share_token: shareToken, short_code: shortCode },
     });
-    if (error || (resp as any)?.error) {
-      toast.error((resp as any)?.error || error?.message || '加载失败');
+    if (error) {
+      toast.error(error.message);
       setLoading(false);
       // 数据不对，清掉本地缓存并返回报名页
       localStorage.removeItem(`activity_claim:${shareToken}`);
@@ -86,11 +86,11 @@ export function ActivityFeedbackView({
         if (!file.type.startsWith('image/')) { toast.error(`${file.name} 不是图片`); continue; }
         if (file.size > 8 * 1024 * 1024) { toast.error(`${file.name} 超过 8MB`); continue; }
         const dataUrl = await fileToDataUrl(file);
-        const { data: resp, error } = await supabase.functions.invoke('activity-feedback', {
+        const { data: resp, error } = await invokeFn<any>('activity-feedback', {
           body: { action: 'upload', share_token: shareToken, short_code: shortCode, data_url: dataUrl },
         });
-        if (error || (resp as any)?.error) {
-          toast.error((resp as any)?.error || error?.message || '上传失败');
+        if (error) {
+          toast.error(error.message);
           continue;
         }
         const r = resp as any;
@@ -111,7 +111,7 @@ export function ActivityFeedbackView({
       return;
     }
     setSubmitting(true);
-    const { data: resp, error } = await supabase.functions.invoke('activity-feedback', {
+    const { error } = await invokeFn('activity-feedback', {
       body: {
         action: 'submit',
         share_token: shareToken,
@@ -122,8 +122,8 @@ export function ActivityFeedbackView({
       },
     });
     setSubmitting(false);
-    if (error || (resp as any)?.error) {
-      toast.error((resp as any)?.error || error?.message || '提交失败');
+    if (error) {
+      toast.error(error.message);
       return;
     }
     toast.success('反馈已提交，门店会尽快确认');

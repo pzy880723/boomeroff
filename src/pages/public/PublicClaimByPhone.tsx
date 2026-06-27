@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Ticket, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeFn } from '@/lib/invokeFn';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 import logo from '@/assets/boomer-off-vintage-logo.png';
@@ -66,13 +66,14 @@ export default function PublicClaimByPhone() {
       return;
     }
     setSubmitting(true);
-    const { data, error } = await supabase.functions.invoke('voucher-claim-by-phone', {
+    const { data, error } = await invokeFn<any>('voucher-claim-by-phone', {
       body: { phone },
     });
     setSubmitting(false);
-    const errMsg = (data as any)?.error || error?.message;
-    if (errMsg) {
-      setErrorMsg('不好意思，没有搜索到对应的优惠券，请检查您的手机号是否输入正确');
+    if (error) {
+      setErrorMsg(error.message.includes('没有搜索到')
+        ? error.message
+        : '不好意思，没有搜索到对应的优惠券，请检查您的手机号是否输入正确');
       return;
     }
     const shortCode = (data as any)?.short_code;

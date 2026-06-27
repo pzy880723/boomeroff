@@ -5,7 +5,7 @@ import { useParams, useLocation } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Ticket, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeFn } from '@/lib/invokeFn';
 import { QrCanvas } from '@/components/voucher/QrCanvas';
 import {
   CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, buildClaimRedeemUrl, formatVoucherRule, formatValidityRange,
@@ -48,14 +48,14 @@ export default function PublicClaim() {
     if (!short && !legacyToken) return;
     let cancelled = false;
     (async () => {
-      const { data, error: e } = await supabase.functions.invoke('voucher-claim-status', {
+      const { data, error: e } = await invokeFn<any>('voucher-claim-status', {
         body: lookup,
       });
       if (cancelled) return;
-      if (e || (data as any)?.error) {
+      if (e) {
         // 有预置数据时，刷新失败不阻塞展示
         if (!seededClaim) {
-          setError((data as any)?.error || e?.message || '优惠券不存在');
+          setError(e.message || '优惠券不存在');
         }
         setLoading(false);
         return;
