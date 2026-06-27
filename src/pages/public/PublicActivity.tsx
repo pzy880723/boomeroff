@@ -159,7 +159,7 @@ export default function PublicActivity() {
     setSubmitPhase(hasImage ? 'uploading' : 'submitting');
     // 切换到 submitting 文案的时机：弱网下 upload 已经在 invoke 内进行，这里短暂延后切到 "正在生成优惠券…"
     const phaseTimer = window.setTimeout(() => setSubmitPhase('submitting'), hasImage ? 1200 : 0);
-    const { data, error: e } = await supabase.functions.invoke('activity-apply', {
+    const { data, error: e } = await invokeFn<any>('activity-apply', {
       body: {
         share_token: shareToken,
         applicant_name: name.trim(),
@@ -168,10 +168,10 @@ export default function PublicActivity() {
       },
     });
     window.clearTimeout(phaseTimer);
-    if (e || (data as any)?.error) {
+    if (e) {
       setSubmitting(false);
       setSubmitPhase('idle');
-      toast.error((data as any)?.error || e?.message || '报名失败');
+      toast.error(e.message);
       return;
     }
     const d = data as any;
