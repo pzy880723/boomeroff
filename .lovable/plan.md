@@ -1,51 +1,68 @@
+
 ## 目标
-30 秒视频 = **正好 2 段 × 15 秒** Seedance 渲染 + 1 次拼接,不再出现 3 段/4 段。20 秒同理走 1 段直出或 2 段(10+10),15 秒维持单段直出。
 
-## 现状问题
-- 当前 `planSegments` 用「贪心装箱、每段 ≤15s」的算法。脚本里每镜 2-3s,经常出现 6s+9s+9s+6s = 4 段,或 14s+8s+8s = 3 段,渲染调用次数翻倍,token 成本翻倍。
-- 前后端共用同一份切段逻辑(`src/lib/marketingSegments.ts` / `supabase/functions/_shared/marketing-segments.ts`),所以只需要改一处算法,两边一起跟上。
+按火山官方方案（https://www.volcengine.com/docs/82379/2333589）把真人肖像走「H5 活体认证 → 私域 Asset」通道，后续 Seedance 渲染用 `asset://` URI 引用，跳过真人审核拦截。
 
-## 方案:按目标段数等分,而不是贪心装箱
+## 一、密钥入库
 
-新增一个「目标段数」概念,根据 `total_duration_s` 直接定死:
+- 把您贴的 AK/SK 通过 `set_secret` 保存为：
+  - `VOLC_ACCESS_KEY_ID`
+  - `VOLC_SECRET_ACCESS_KEY`
+- 仅 Edge Function 后端使用（签 Volc V4），不下发前端。
 
-| 总时长 | 目标段数 | 每段预算 |
-|--------|---------|---------|
-| ≤15s   | 1       | 全部     |
-| 16–20s | 2       | ~10s/段  |
-| 21–30s | 2       | ~15s/段  |
-| 31–45s | 3       | ~15s/段  |
-| >45s   | ceil(总时长/15) | ~15s/段 |
+## 二、数据库迁移
 
-切段时:
-1. 先算 `targetSegments` 和 `budgetPerSeg = totalDur / targetSegments`。
-2. 顺序遍历分镜,累加 `duration_s`;当累加 ≥ `budgetPerSeg` 且还没到最后一段,就关掉当前段、开新段。
-3. 保留 hard cap:任何一段实际时长不得超过 `MAX_SEG_DUR (15s)`;若某一镜本身就超 15s,把它单独成段(罕见,sanitize 已经 clamp 过)。
-4. 最终段数若因 hard cap 被迫多出 1 段,允许;但绝不会比 `targetSegments` 少。
+新增 1 张表 + 角色表加 3 列：
 
-这样 30s 脚本无论有 8 镜还是 12 镜,都正好分成 2 段,每段约 15s,Seedance 调用从 3-4 次降到 2 次。
+- `marketing_character_assets`：每个角色一条记录，记录认证状态、私域 asset_id、`asset://` URI、过期时间、最近一次 verify_session_id、错误信息。
+- `marketing_characters` 增加：
+  - `verified_asset_id text`（私域资产 ID）
+  - `verified_asset_uri text`（`asset://xxx`，渲染时直接用）
+  - `verified_at timestamptz`
+- RLS：只有角色所在 shop 的成员能读写；service_role 全权。
 
-## 代码改动(2 个文件,镜像同步)
+## 三、Edge Functions（4 个）
 
-**1. `src/lib/marketingSegments.ts`**
-- 新增 `function targetSegmentCount(totalDur: number): number`(上表逻辑)。
-- 重写 `planSegments`:先算 `total = Σ duration_s`、`target = targetSegmentCount(total)`、`budget = total / target`,按预算切段,保留 15s hard cap。
-- 导出 `targetSegmentCount` 供 UI 文案使用。
+全部使用 `VOLC_ACCESS_KEY_ID/SECRET` 做 Volc V4 签名（HMAC-SHA256），不依赖 ARK key：
 
-**2. `supabase/functions/_shared/marketing-segments.ts`**
-- 同步加 `targetSegmentCount` + 重写 `splitScript`(或当前后端切段函数,需要确认实现位置,如果是在 `render-marketing-video/index.ts` 里也一起改)。
-- 顺手把这个文件里残留的 `export const MAX_SEG_DUR = 10` 改成 `15`,与前端 / Seedance 单段上限一致。
+1. `volc-identity-create-session`
+   - 入参：`character_id`
+   - 调用火山「创建真人认证会话」接口，返回 H5 跳转 URL + session_id；写入 `marketing_character_assets`（状态 `pending`）。
 
-**3. `src/pages/marketing/MarketingVideo.tsx`**
-- 分段预览头部文案更新:"30 秒视频固定切为 2 段 × 15 秒,共调用 Seedance 2 次"。让用户清楚省了钱。
+2. `volc-identity-poll`
+   - 入参：`character_id` 或 `session_id`
+   - 轮询火山结果接口；通过后拿到肖像资产，调用「资产入库」把人脸图入到火山私域 Asset，拿到 `asset_id` 和 `asset://` URI；写回 `marketing_characters.verified_asset_id/uri/verified_at`，状态置 `verified`。失败写入 `error_reason` + 状态 `failed`。
 
-## 不动的部分
-- 脚本生成端 (`generate-marketing-video-script`) 不变:它只负责出分镜,不关心怎么切段。
-- 拼接逻辑 `stitchVideos.ts` 不变。
-- 单段直出路径(≤15s)不变,「惊喜一下」仍然 0 次拼接。
+3. `volc-identity-revoke`（可选）
+   - 删除/失效私域资产，清空角色上的 verified 字段。
 
-## 验收
-- 选 30s + 生成脚本 → 分段预览显示 **2 段**,每段时长 13-15s。
-- 后端 `render-marketing-video` 日志里 Seedance 任务数 = 2,触发 1 次 stitch。
-- 选 20s → 显示 2 段(10+10);选 15s → 仍单段直出。
-- 选 45s → 显示 3 段。
+4. 改造 `render-marketing-video`
+   - 渲染参数里如果角色 `verified_asset_uri` 存在，把 `reference_image` / `first_frame` 中对应该角色的真人图替换成 `asset://...`；否则保持现行三级降级。
+   - 多段并行渲染同样适用。
+
+## 四、前端改造
+
+文件：`src/components/marketing/CharacterCard.tsx`、`CharacterCreateDialog.tsx`、`CharacterDialog.tsx`、新建 `IdentityVerifyDialog.tsx`。
+
+- 角色卡片右上角新增徽章：
+  - 未认证：灰色「未认证」+ 按钮「去认证真人」
+  - 认证中：蓝色「认证中…」（轮询）
+  - 已认证：绿色「已认证 ✓」+ 「重新认证」入口
+- 点击「去认证」→ 调 `volc-identity-create-session` → 弹窗内显示二维码（PC 扫码）或直接跳转（移动端 webview）。
+- 弹窗内每 3s 调 `volc-identity-poll`，成功后自动关闭并 toast；失败显示「人话化」原因 + 重试按钮。
+- 角色被使用在视频生成时，UI 上提示「该角色已认证，渲染将直接使用您的真人形象」。
+
+## 五、降级与排错
+
+- 未认证角色保持现有 photoreal / 三级降级策略（去 first_frame → 去 reference → 纯文本）。
+- 认证失败/资产过期时，自动回落到现有路径并在结果卡显示「角色未认证，已使用普通模式」。
+
+## 六、验收
+
+1. 新建一个真人角色 → 完成 H5 活体 → 卡片显示「已认证 ✓」。
+2. 用该角色「惊喜一下」生成视频 → 后端日志显示 `asset://` 被携带 → 不再触发 "may contain real person" 拦截。
+3. 未认证角色继续走旧逻辑，不影响现有功能。
+
+---
+
+确认无误后我切换到 build 模式，按以上顺序执行：先 `set_secret`，再迁移，再 4 个 Edge Functions，最后前端。

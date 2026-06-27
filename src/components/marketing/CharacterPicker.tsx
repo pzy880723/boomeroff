@@ -18,6 +18,8 @@ export type Character = {
   visual_signature: string | null;
   core_emotion: string | null;
   auto_anchor?: boolean;
+  verified_asset_uri?: string | null;
+  verified_at?: string | null;
   /** 仅在前端/本次视频中使用,不持久化到 marketing_characters 表 */
   extra_reference_urls?: string[];
 };
@@ -50,7 +52,7 @@ export function CharacterPicker({
     if (!shopId) { setItems([]); return; }
     const { data } = await supabase
       .from('marketing_characters' as any)
-      .select('id, name, role_label, cover_url, visual_signature, core_emotion, auto_anchor')
+      .select('id, name, role_label, cover_url, visual_signature, core_emotion, auto_anchor, verified_asset_uri, verified_at')
       .eq('shop_id', shopId)
       .order('created_at', { ascending: false });
     setItems((data as any) || []);

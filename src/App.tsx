@@ -34,6 +34,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const VouchersMine = lazy(() => import("./pages/VouchersMine"));
 const VoucherRedeem = lazy(() => import("./pages/VoucherRedeem"));
 const VoucherSharePoster = lazy(() => import("./pages/VoucherSharePoster"));
+const VerifyCallback = lazy(() => import("./pages/VerifyCallback"));
 // 公开（免登录）路由 —— 急加载,避免微信 X5 webview 拉二级 chunk 失败导致白屏/报错
 import PublicClaim from "./pages/public/PublicClaim";
 import PublicClaimByPhone from "./pages/public/PublicClaimByPhone";
@@ -123,6 +124,9 @@ const App = () => {
               <Route path="/me/marketing/social-accounts" element={<Navigate to="/me/marketing/dispatch?tab=accounts" replace />} />
               <Route path="/me/marketing/publish-history" element={<Navigate to="/me/marketing/dispatch?tab=history" replace />} />
               <Route path="/me/marketing/publish/:assetId" element={<Navigate to="/me/marketing/dispatch/workbench" replace />} />
+
+              {/* 火山真人认证 H5 回跳页(免登录) */}
+              <Route path="/verify-callback" element={<VerifyCallback />} />
 
               {/* 游客版（免登录）—— 用静默 ErrorBoundary,顾客永远不会看到错误卡片 */}
               <Route
