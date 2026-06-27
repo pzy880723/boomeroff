@@ -60,10 +60,10 @@ export default function VoucherRedeem() {
 
   const doRedeem = async () => {
     setRedeeming(true);
-    const { data, error: e } = await supabase.functions.invoke('voucher-redeem', { body: { code } });
+    const { error: e } = await invokeFn('voucher-redeem', { body: { code } });
     setRedeeming(false);
-    if (e || (data as any)?.error) {
-      toast.error((data as any)?.error || e?.message || '核销失败');
+    if (e) {
+      toast.error(e.message);
       return;
     }
     toast.success('核销成功');
