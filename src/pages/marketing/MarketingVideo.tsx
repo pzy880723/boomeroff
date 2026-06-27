@@ -87,6 +87,8 @@ export default function MarketingVideo() {
   const [renderVideoUrl, setRenderVideoUrl] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [restoredAt, setRestoredAt] = useState<number | null>(null);
+  const [sbBusy, setSbBusy] = useState(false);
+  const [sbWarn, setSbWarn] = useState<string | null>(null);
 
   // 草稿本地保存 key
   const draftKey = shopId ? `mv:draft:${shopId}` : '';
