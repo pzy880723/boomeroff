@@ -532,6 +532,11 @@ export default function MarketingVideo() {
             />
           </div>
 
+          <SectionLabel num="06">渲染方式</SectionLabel>
+          <div className="-mt-1">
+            <RenderStrategyPicker value={renderStrategy} onChange={handleStrategyChange} />
+          </div>
+
           <div className="pt-1">
             <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1">想突出的点</p>
             <Input
