@@ -14,6 +14,7 @@ export default function AccountsTab() {
   const { toast } = useToast();
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [workerOnline, setWorkerOnline] = useState(true);
+  const [workerMessage, setWorkerMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -25,6 +26,7 @@ export default function AccountsTab() {
       if (error) throw error;
       setAccounts((data?.accounts || []) as SocialAccount[]);
       setWorkerOnline(!!data?.worker_online);
+      setWorkerMessage(data?.worker_message || '');
     } catch (e: any) {
       toast({ title: '加载账号失败', description: e.message, variant: 'destructive' });
     } finally {
@@ -66,7 +68,13 @@ export default function AccountsTab() {
       {!workerOnline && (
         <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <div>发布服务器暂时连不上,只能看缓存账号。新增和发布会失败,请稍后再试。</div>
+          <div>{workerMessage || '发布服务器暂时连不上，只能看缓存账号。新增和发布会失败，请稍后再试。'}</div>
+        </div>
+      )}
+      {workerOnline && workerMessage && accounts.length === 0 && !loading && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-muted text-muted-foreground text-xs">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <div>{workerMessage}</div>
         </div>
       )}
       {accounts.length === 0 && !loading && (
@@ -82,7 +90,7 @@ export default function AccountsTab() {
               <div className="text-sm font-medium truncate">{a.account_name || '未命名账号'}</div>
               <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
                 <span>{platformLabel(a.platform)}</span>
-                {a.online === false && <span className="text-rose-600">· 已失效,请重新绑定</span>}
+                {a.online === false && <span className="text-rose-600">· 发布服务器未确认，请重新绑定</span>}
                 {a.online === true && <span className="text-emerald-600">· 在线</span>}
               </div>
             </div>
