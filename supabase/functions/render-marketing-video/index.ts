@@ -52,7 +52,10 @@ function buildOneShotPrompt(
   if (isMeaningful(script.outro)) shots.push({ label: '收尾', sc: script.outro });
 
   const lines: string[] = [];
-  lines.push(`【一段 ${total}s 的 ${aspect} 短视频,整体风格:${styleEn}】`);
+  lines.push(`【一段 ${total}s 的 ${aspect} 短视频,整体风格:${styleEn}${overrides?.style_cue ? ` · ${overrides.style_cue}` : ''}】`);
+  if (overrides?.opening) {
+    lines.push(`【强制开场(0-2s · 不可省略)】${overrides.opening}`);
+  }
   if (character?.name) {
     lines.push(`【主体1】参考图 1 中的 ${character.name}(${character.role_label || '主角'})为全片唯一主角。外观锁:${character.visual_signature || '以参考图为准'}。全程同一人,禁止换人/换装/分身/双胞胎。`);
   }
