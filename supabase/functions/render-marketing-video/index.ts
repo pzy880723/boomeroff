@@ -394,6 +394,7 @@ Deno.serve(async (req) => {
     // 5) 占位 marketing_assets
     const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
     const anyFirst = submissions.some((s) => !!s.imgs.firstImage);
+    const fallbackWarnings = Array.from(new Set(submissions.flatMap((s) => s.fallbackNotes)));
     await admin.from("marketing_assets").insert({
       user_id: u.user.id, kind: "video", shop_id: shopId,
       input_image_urls: imageUrls, output_url: null,
@@ -401,14 +402,28 @@ Deno.serve(async (req) => {
         job_id: parent.id, video_type: script.video_type,
         duration: totalDur, aspect: ratio,
         mode: anyFirst ? "image2video" : (totalRefImages > 0 ? "reference2video" : "text2video"),
+        render_mode: "per_shot",
         topic: script.topic || "", style: styleKey,
         style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
-        warnings: resolutionDowngraded ? ["resolution_downgraded"] : [],
+        warnings: [
+          ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
+          ...fallbackWarnings,
+        ],
         status: "running", segment_total: segmentTotal, segment_done: 0,
         stage: "generating", character_id: character?.id || null,
         character_name: character?.name || null,
         cover_url: imageUrls[0] || character?.cover_url || null,
         image_usage: {
+          per_segment: submissions.map((s) => ({
+            segment_index: s.i,
+            reference_count: s.imgs.referenceImages.length,
+            first: s.imgs.firstImage || null,
+            last: s.imgs.lastImage || null,
+          })),
+        },
+      },
+    });
+
           per_segment: submissions.map((s) => ({
             segment_index: s.i,
             reference_count: s.imgs.referenceImages.length,
