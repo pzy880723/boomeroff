@@ -51,9 +51,7 @@ export interface SegmentPlan {
   total: number;
   durationS: number;
   sceneLabels: string[];     // ['钩子','镜头1','镜头2']
-  firstIndex: number | null; // 本段首帧图在 image_urls 数组里的下标
-  lastIndex: number | null;
-  refIndices: number[];      // 本段额外参考图(去重)
+  refIndices: number[];      // 本段所有参考图下标(去重),Seedance 2.0 全 reference 模式
 }
 
 /**
