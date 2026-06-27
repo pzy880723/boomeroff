@@ -56,12 +56,12 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
   const directRelease = async () => {
     if (!voucher) return;
     setCreating(true);
-    const { data, error } = await supabase.functions.invoke('voucher-claim-create', {
+    const { data, error } = await invokeFn<any>('voucher-claim-create', {
       body: { voucher_id: voucher.id },
     });
     setCreating(false);
-    if (error || (data as any)?.error) {
-      toast.error((data as any)?.error || error?.message || '生成失败');
+    if (error) {
+      toast.error(error.message);
       return;
     }
     const claim = (data as any).claim;
