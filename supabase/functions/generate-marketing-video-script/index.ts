@@ -204,8 +204,10 @@ ${refList}
     }
 
     const clean = (s: any, max: number) =>
-      (s || "").toString().replace(/主播/g, "店员").replace(/直播间/g, "店里")
-        .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "").trim().slice(0, max);
+      sanitizeStorefrontText(
+        (s || "").toString().replace(/主播/g, "店员").replace(/直播间/g, "店里")
+          .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "")
+      ).trim().slice(0, max);
     const clampIdx = (n: any): number | null => {
       if (n === null || n === undefined || n === "null") return null;
       const v = parseInt(n);
