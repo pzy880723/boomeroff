@@ -509,9 +509,9 @@ export default function MarketingVideo() {
               <Chip key={d} active={duration === d} onClick={() => setDuration(d)}>{d} 秒</Chip>
             ))}
           </div>
-          {duration > 12 && (
+          {duration > MAX_SEG_DUR && (
             <p className="-mt-1 text-[10px] text-muted-foreground leading-relaxed pl-1">
-              · 超过 12 秒的视频会自动拆成 {Math.ceil(duration / 10)} 段生成,完成后在素材库里自动拼接成一支 MP4。整体约需 {Math.ceil(duration / 10) * 2}-{Math.ceil(duration / 10) * 3} 分钟。
+              · 超过 {MAX_SEG_DUR} 秒的视频会自动拆成 {Math.ceil(duration / MAX_SEG_DUR)} 段生成,完成后在素材库里自动拼接成一支 MP4。整体约需 {Math.ceil(duration / MAX_SEG_DUR) * 2}-{Math.ceil(duration / MAX_SEG_DUR) * 3} 分钟。
             </p>
           )}
 
@@ -578,7 +578,7 @@ export default function MarketingVideo() {
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
           <SectionLabel num="06">主角(可选)</SectionLabel>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            选一个固定主角,所有镜头都用 TA,跨段不变脸。{duration > 12 && '多段视频如果不选,系统会自动先生成一张兜底角色身份板。'}
+            选一个固定主角,所有镜头都用 TA,跨段不变脸。{duration > MAX_SEG_DUR && '多段视频如果不选,系统会自动先生成一张兜底角色身份板。'}
           </p>
           <CharacterPicker shopId={shopId} value={character} onChange={(c) => { setCharacter(c); setScript(null); }} />
         </section>
