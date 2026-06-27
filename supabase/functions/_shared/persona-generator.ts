@@ -37,7 +37,8 @@ function pickStrings(v: any, max = 3): string[] {
 
 function normPace(v: any): PersonaPace {
   const s = String(v || '').toLowerCase().trim();
-  if (s === 'slow' || s === 'fast') return s;
+  if (s === 'fast') return 'fast';
+  // slow 一律归为 medium,绝不输出 slow
   return 'medium';
 }
 
