@@ -7,8 +7,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Loader2, X } from 'lucide-react';
 
-export const DEFAULT_TAGS = ['门头', '商品', '人物', '场景', '细节', '价签'];
-export const DEFAULT_CATEGORIES = ['门店', '商品', '人物', '其他'];
+export const DEFAULT_TAGS = ['分镜头', '门头', '商品', '人物', '场景', '细节', '价签'];
+export const DEFAULT_CATEGORIES = ['分镜头', '门店', '商品', '人物', '其他'];
 
 export function AssetTagDialog({
   open, onOpenChange, assetId, initialTags, initialCategory, suggestedTags = [], onSaved,

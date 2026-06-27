@@ -173,6 +173,39 @@ Deno.serve(async (req) => {
         const signed = await admin.storage.from("marketing-videos").createSignedUrl(path, 60 * 60 * 24 * 30);
         const url = signed.data?.signedUrl;
         if (!url) throw new Error("签名失败");
+
+        // 入库到素材库「分镜头」类别(失败不影响主流程)
+        try {
+          const hashBuf = await crypto.subtle.digest("SHA-256", bytes);
+          const sha256 = Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+          const dup = await admin.from("marketing_assets")
+            .select("id").eq("user_id", u.user.id).eq("sha256", sha256).maybeSingle();
+          if (!dup.data) {
+            const caption = (clip.subtitle || clip.scene || clip.action || "").toString().slice(0, 60);
+            const tagList = Array.from(new Set(["分镜头", styleKey, `场景${globalIdx + 1}`].filter(Boolean))) as string[];
+            await admin.from("marketing_assets").insert({
+              user_id: u.user.id,
+              shop_id: shopId === "_" ? null : shopId,
+              kind: "photo",
+              output_url: url,
+              category: "分镜头",
+              tags: tagList,
+              sha256,
+              meta: {
+                source: "storyboard",
+                session_id: sessionId,
+                scene_index: globalIdx,
+                script_caption: caption,
+                style: styleKey,
+                storage_bucket: "marketing-videos",
+                storage_path: path,
+              },
+            });
+          }
+        } catch (e) {
+          console.warn(`[storyboard] asset insert ${globalIdx}`, e);
+        }
+
         return { ok: true as const, globalIdx, url, item };
       } catch (e) {
         console.error(`[storyboard] frame ${globalIdx}`, e);

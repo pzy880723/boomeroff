@@ -287,6 +287,28 @@ export default function MarketingLibrary() {
     }
   };
 
+  // 一次性回填历史分镜头到素材库
+  const [backfilling, setBackfilling] = useState(false);
+  const runBackfillStoryboards = async () => {
+    if (backfilling) return;
+    setBackfilling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('backfill-storyboard-assets', { body: {} });
+      if (error || (data as any)?.ok === false) {
+        toast.error((data as any)?.error || error?.message || '回填失败');
+        return;
+      }
+      const d = data as any;
+      toast.success(`回填完成:新增 ${d.inserted} / 跳过 ${d.skipped} / 失败 ${d.failed}(共 ${d.total} 张)`);
+      fetchItems(true);
+    } catch (e: any) {
+      toast.error(e?.message || '回填失败');
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
+
   // 轮询未完成视频任务
   // 用稳定签名当依赖,避免 items 引用变化导致 effect 反复重建 -> tick 立即触发 -> setItems -> 循环闪烁
   // 失败的任务不再自动重新拉取/重新拼接:火山方舟分段 URL 只有 24h,过期后只能重新生成
@@ -533,6 +555,18 @@ export default function MarketingLibrary() {
                 </div>
               ) : (
                 <div className="flex items-center gap-1">
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={runBackfillStoryboards}
+                      disabled={backfilling}
+                      title="把历史分镜头图回填到素材库"
+                    >
+                      {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      回填分镜头
+                    </Button>
+                  )}
                   {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
                     <Button
                       size="sm"
