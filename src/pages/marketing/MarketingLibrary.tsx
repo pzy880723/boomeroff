@@ -29,6 +29,8 @@ export default function MarketingLibrary() {
   const { shopId, setShopId, shops, isAdmin, loading: shopLoading } = useEffectiveShop();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [manageMode, setManageMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDel, setConfirmDel] = useState(false);
@@ -41,29 +43,32 @@ export default function MarketingLibrary() {
   const [createCharOpen, setCreateCharOpen] = useState(false);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
+  const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
   const currentShop = shops.find((s) => s.id === shopId);
+
+  const PAGE_SIZE = 60;
+  // 只显式取需要的列,避免将来 marketing_assets 新增大字段拖慢首屏。
+  const ASSET_COLS = 'id, kind, output_url, input_image_urls, tags, category, shop_id, user_id, created_at, meta';
 
   const fetchItems = async (silent = false) => {
     if (!user) return;
     if (!silent) setLoading(true);
     try {
-      // 有 shopId 时按店铺读(同店成员共享);否则只看自己
       let q = supabase
         .from('marketing_assets' as any)
-        .select('*')
+        .select(ASSET_COLS)
         .order('created_at', { ascending: false })
-        .limit(200);
+        .range(0, PAGE_SIZE - 1);
       if (shopId) q = q.eq('shop_id', shopId);
       else q = q.eq('user_id', user.id);
       const { data, error } = await q;
       if (error) throw error;
-      // meta 偶发 null,统一兜底成对象,避免下游 .status / .cover_url 直接炸
       const safe = ((data as any[]) || []).map((it) => ({ ...it, meta: it?.meta ?? {} }));
       setItems(safe);
+      setHasMore(safe.length === PAGE_SIZE);
     } catch (e) {
-      // 静默刷新失败时不要让异常冒到组件树
       // eslint-disable-next-line no-console
       console.warn('[MarketingLibrary] fetchItems failed:', e);
     } finally {
@@ -71,9 +76,36 @@ export default function MarketingLibrary() {
     }
   };
 
+  const loadMore = async () => {
+    if (!user || loadingMore || !hasMore || loading) return;
+    setLoadingMore(true);
+    try {
+      const offset = items.length;
+      let q = supabase
+        .from('marketing_assets' as any)
+        .select(ASSET_COLS)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (shopId) q = q.eq('shop_id', shopId);
+      else q = q.eq('user_id', user.id);
+      const { data, error } = await q;
+      if (error) throw error;
+      const more = ((data as any[]) || []).map((it) => ({ ...it, meta: it?.meta ?? {} }));
+      setItems((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...prev, ...more.filter((m) => !seen.has(m.id))];
+      });
+      setHasMore(more.length === PAGE_SIZE);
+    } catch (e) {
+      console.warn('[MarketingLibrary] loadMore failed:', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   // 保留 load 名字给其它地方使用（如有）
   const load = () => fetchItems(false);
-  useEffect(() => { fetchItems(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user, shopId]);
+  useEffect(() => { setHasMore(true); fetchItems(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user, shopId]);
 
   // 实时订阅:同 shop 内素材变化静默刷新(不触发整页 loading 骨架闪烁)
   const reloadTimer = useRef<number | null>(null);
