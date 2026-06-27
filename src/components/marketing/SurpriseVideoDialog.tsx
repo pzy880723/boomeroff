@@ -452,6 +452,14 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
   const refLightbox = useMemo(() => refTiles.map((t) => t.url), [refTiles.map((t) => t.url).join('|')]);
 
   const persona = pick.persona;
+  const paceClass = persona?.pace === 'slow'
+    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
+    : persona?.pace === 'fast'
+      ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+      : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300';
+  const paceText = persona?.pace === 'slow' ? '慢节奏'
+    : persona?.pace === 'fast' ? '快节奏'
+    : '中速';
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-w-0">
@@ -459,8 +467,12 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
         <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-semibold">
           9:16 · 15s
         </span>
-        <Chip>路线 · {pick.vtype_label}</Chip>
-        <Chip>风格 · {STYLE_LABEL[pick.style] || pick.style}</Chip>
+        <Chip>路线 · 探店</Chip>
+        {persona?.tone_label && (
+          <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${paceClass}`}>
+            🎙️ {persona.tone_label} · {paceText}
+          </span>
+        )}
         {pick.holiday && (
           <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 whitespace-nowrap">
             <PartyPopper className="w-3 h-3" />
