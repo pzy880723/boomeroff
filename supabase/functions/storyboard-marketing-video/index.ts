@@ -152,6 +152,7 @@ Deno.serve(async (req) => {
     const character = body.character || null;
     const shopId: string = body.shop_id || '_';
     const styleKey = normalizeStyle(body.style);
+    const realism = normalizeRealism(body.realism);
     const sessionId: string = body.session_id || crypto.randomUUID();
     const onlyIndices: number[] | null = Array.isArray(body.only_indices) ? body.only_indices : null;
 
@@ -185,6 +186,7 @@ Deno.serve(async (req) => {
         clip, styleKey, character,
         boundAssetSummary: boundSummary,
         index: globalIdx, total,
+        realism,
       });
       try {
         const dataUrl = await generateOneFrame({
