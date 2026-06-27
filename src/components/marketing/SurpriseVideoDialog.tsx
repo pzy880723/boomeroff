@@ -19,9 +19,10 @@ import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileR
 import { getModelPrefs, getSurpriseModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import type { VideoFix } from '@/lib/videoFailure';
-import { RealismToggle } from '@/components/marketing/RealismToggle';
-import { getRealismPref, setRealismPref } from '@/lib/realismPref';
 import type { Realism } from '@/lib/realism';
+
+// 惊喜一下固定真人写实,不暴露切换开关
+const SURPRISE_REALISM: Realism = 'photoreal';
 
 interface PickedAsset {
   asset_id: string; index: number; url: string; summary: string; category: string | null;
