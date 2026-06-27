@@ -155,12 +155,14 @@ Deno.serve(async (req) => {
                   meta: { worker_platform_code: acct.platform_code, source: "sau_worker" },
                 }, { onConflict: "shop_id,platform,worker_account_key" });
                 if (error) {
+                  finished = true;
                   send({ step: "fail", msg: `账号已登录,但写入素材系统失败:${error.message}` });
                 } else {
                   finished = true;
                   send({ step: "success", account_id: acct.worker_id, name: acct.name, avatar: acct.avatar });
                 }
               } else {
+                finished = true;
                 send({ step: "fail", msg: "手机端可能已确认,但发布服务器没有写入账号信息。请重新扫码;如果仍失败,需要检查 worker 是否成功保存 Cookie。" });
               }
               break;
