@@ -50,7 +50,12 @@ export default function MarketingLibrary() {
   const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
   const [imgSource, setImgSource] = useState<AssetSource | 'all'>(() => {
-    try { return (localStorage.getItem('lib.imgSource') as any) || 'upload'; } catch { return 'upload'; }
+    try {
+      const v = localStorage.getItem('lib.imgSource') as any;
+      // 旧默认是 'upload',全局升级到 'base'
+      if (v === 'base' || v === 'upload' || v === 'generated' || v === 'all') return v;
+      return 'base';
+    } catch { return 'base'; }
   });
   useEffect(() => { try { localStorage.setItem('lib.imgSource', imgSource); } catch {} }, [imgSource]);
 
