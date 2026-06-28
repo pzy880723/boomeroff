@@ -261,6 +261,28 @@ export function classifyVideoFailure(rawIn: string | null | undefined): VideoFai
     };
   }
 
+  // 7c-pre) 参考图模式下时长不合法(Seedance 2.0 r2v 只接受 5s / 10s)
+  if (
+    has(r, /parameter\s+duration.*not\s+valid.*r2v/) ||
+    has(r, /duration.*not\s+valid.*reference/) ||
+    has(r, /duration.*invalid.*r2v/)
+  ) {
+    return {
+      code: 'invalid_param',
+      title: '时长不被参考图模式支持',
+      detail:
+        '当前模型在带参考图(主角/分镜静帧)渲染时,只接受 5 秒或 10 秒。系统会自动按 10 秒分段重试;您也可以减少参考图,或者把总时长改成 15s/20s 这类整段。',
+      fixes: [
+        { id: 'snap_r2v', label: '改为 10 秒分段重试', kind: 'retry', reRender: true },
+        { id: 'no_frames', label: '去掉分镜静帧只保留主角', kind: 'disable_frames',
+          patch: { disable_storyboard: true }, reRender: true },
+        { id: 'text_only', label: '完全去掉参考图(纯文字)', kind: 'text_only',
+          patch: { disable_storyboard: true, disable_references: true }, reRender: true },
+      ],
+      raw,
+    };
+  }
+
   // 7c) 参数不合法
   if (
     has(r, /invalidargument\.parameter/) ||
