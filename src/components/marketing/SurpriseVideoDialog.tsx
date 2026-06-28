@@ -18,6 +18,7 @@ import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 import { getModelPrefs, getSurpriseModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
+import { toastVideoFailure } from '@/lib/toastVideoFailure';
 import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
 
