@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Loader2, Send, Paperclip, X, Download, FileText, Video, Sparkles, ImagePlus, LayoutGrid } from 'lucide-react';
+import { Loader2, Send, Paperclip, X, Download, FileText, Video, Sparkles, ImagePlus, LayoutGrid, Plus, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { ShopPicker } from '@/components/marketing/ShopPicker';
@@ -15,6 +15,7 @@ import { useEffectiveShop } from '@/hooks/useShops';
 import { uploadMarketingImages } from './uploadMarketingImages';
 import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePickerDialog';
 import { TEMPLATE_GROUPS, findTemplate, type AiImageTemplate } from './aiImageTemplates';
+import { SmartAdGenerateDialog, type SmartAdResultItem } from '@/components/marketing/SmartAdGenerateDialog';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
 
 type Aspect = '1:1' | '3:4' | '9:16' | '16:9';
