@@ -135,7 +135,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${character
 - 画幅 ${aspect}。
 - 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
 - subtitle ≤ 24 字。scene 30–80 字，action 15–50 字，dialogue ≤ ${isViralStoreTour ? 16 : 30} 字${isViralStoreTour ? '(洗脑探店每镜必须有 dialogue,不能为空)' : '(可为空)'}。
-- 镜头总条数 ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间;每条 ${perClipMin}–${perClipMax} 秒,所有镜头 duration_s 之和必须 ≈ ${duration} 秒。
+- 镜头总条数 ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间;每条 ${perClipMin}–${perClipMax} 秒,所有镜头 duration_s 之和 ≈ ${duration} 秒(允许 ±20% 浮动,最终以渲染端为准,不必精确到秒)。
 - 不写"主播""直播间""保真""保证升值"等违禁词。`;
 
     const refList = imageUrls.length
