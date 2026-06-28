@@ -67,6 +67,35 @@ function shuffle<T>(arr: T[]) {
 }
 
 // ── Prompt builder ────────────────────────────────────────
+const STYLE_MOOD_EN: Record<VideoStyleKey, string> = {
+  healing: "warm amber-gold practicals, low saturation, soft diffused window light, gentle film grain — cozy slice-of-life cinema",
+  premium: "cool neutral palette with deep blacks, high micro-contrast, hard key + soft fill, polished editorial mood — high-end fashion campaign",
+  vivid: "vibrant but not neon, motion blur on background, kinetic shutter drag, energetic dynamic composition — youth lifestyle ad",
+} as any;
+
+function pickOne<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function buildCinematicBaseEn(): string {
+  const camera = pickOne([
+    "shot on Arri Alexa Mini LF with anamorphic 40mm T2.0 lens, 1.5x squeeze, subtle horizontal lens flare",
+    "shot on RED Komodo 6K with Cooke S4 50mm T2.0 prime, organic optical bokeh, gentle lens breathing",
+    "shot on Sony Venice 2 with Zeiss Supreme 35mm T1.5, creamy out-of-focus areas, painterly fall-off",
+  ]);
+  const lighting = pickOne([
+    "motivated three-point lighting, strong rim light separating subject from background, soft key from a practical lamp, Rembrandt shadow on faces",
+    "single large soft source (north-facing window or 4x4 silk), negative fill on the shadow side for deep moody contrast, visible practical lamps glowing in background",
+    "split lighting with hard key + heavy negative fill, atmospheric haze catching shafts of light, golden hour color temperature spilling across shelves",
+  ]);
+  const grade = "subtle teal-and-orange cinematic color grade, rich shadow detail, filmic highlight roll-off, Kodak Portra 400 / Fuji 400H film emulation, micro halation around highlights, fine organic grain";
+  const comp = "deliberate composition (rule of thirds or centered symmetry), layered depth with foreground / midground / background, foreground bokeh element, leading lines, intentional negative space, shallow depth of field at f/1.4–f/2.0";
+  const atmo = "atmospheric haze, soft dust particles drifting in light beams, reflections on glossy surfaces, practical neon / shelf LED / pendant lamp visible in frame as story-telling motif";
+  return `CINEMATIC FILM-STILL PHOTOGRAPHY — ${camera}; ${lighting}; ${grade}; ${comp}; ${atmo}. The image must look like a frame grab from a high-budget feature film or a Magnum-grade editorial — NOT an amateur snapshot, NOT a phone photo, NOT flat lighting.`;
+}
+
+function buildPosterBaseEn(): string {
+  return `CINEMATIC POSTER ART — Mondo / Criterion Collection cover quality, semi-illustrated keyframe with bold graphic composition, painterly light, hand-finished texture, rich shadow detail, designer-grade negative space. NOT a casual illustration, NOT a flat sticker.`;
+}
+
 function buildPrompt(opts: {
   kind: AdKind;
   styleKey: VideoStyleKey;
@@ -80,42 +109,65 @@ function buildPrompt(opts: {
   const { kind, styleKey, realism, aspect, theme, refSummary, index, total } = opts;
   const styleZh = VIDEO_STYLE_LABELS[styleKey];
   const styleEn = VIDEO_STYLE_EN[styleKey];
+  const moodEn = STYLE_MOOD_EN[styleKey] || styleEn;
   const lines: string[] = [];
 
-  // 通用基调
+  // 1) 总基调:中文先讲品牌,英文锁电影术语
+  lines.push(`生成一张【电影艺术大片级】单帧画面,品牌:BOOMER·OFF 中古二手杂货店。最终观感必须是"专业团队 + 电影机 + 灯光师"才能拍出来的东西,绝对不能是普通人手机随手拍。`);
   if (realism === "photoreal") {
-    lines.push(`生成一张单帧定格画面。整体观感:真人级写实电影摄影静帧(photorealistic cinematic still, shot on full-frame mirrorless, 35mm/50mm prime, f/2.0, ISO 400),自然肤质/真实毛孔/真实瞳孔反光/真实景深与动态范围,让人无法分辨是 AI 生成。`);
+    lines.push(`真人级写实电影摄影静帧:真实皮肤纹理/真实瞳孔反光/真实景深/真实动态范围,让人无法分辨是 AI 生成。`);
+    lines.push(buildCinematicBaseEn());
   } else {
-    lines.push(`生成一张轻度风格化的影视宣传海报(stylized cinematic poster / semi-illustrated keyframe),允许略带插画感,不要做成纪实快照。`);
+    lines.push(`电影海报级风格化画面,允许带插画/油画笔触感,但必须有电影级光影体积,不是普通插画。`);
+    lines.push(buildPosterBaseEn());
   }
-  lines.push(`${ASPECT_TO_HINT[aspect]};品牌:BOOMER·OFF 中古二手杂货店;真实店内自然光,白平衡准确,色彩还原真实,无滤镜、无暖黄/复古/橙调色;货架密集真实质感。`);
-  lines.push(`风格基调:${styleZh}(${styleEn}) —— 只影响构图/光线方向/情绪,不影响真实感与色温。`);
+  lines.push(`Aspect: ${ASPECT_TO_HINT[aspect]}.`);
+  lines.push(`Style mood overlay: ${styleZh} / ${moodEn} —— 叠加在电影基底之上,只影响色温/情绪/光线方向,不要把画面拉回到 Instagram 滤镜或日杂随拍。`);
 
-  // 类型差异化
+  // 2) 三种类型差异化
   if (kind === "scene") {
-    lines.push(`【场景图】这是一张店内氛围/陈列特写:展现这家店的真实陈列、货架密度、灯光氛围、空间结构,不要主角人物特写,可以有路过的模糊背影但不抢戏。`);
+    const sceneDirector = pickOne([
+      "Wes Anderson 式正面对称构图,中心透视,层层退到深景的货架,色彩成块分布,微缩感",
+      "Roger Deakins 式自然光大场景,大面积阴影 + 一束高光从店招/灯带打下来,空间深度强烈",
+      "Christopher Doyle 式手持低角度,前景虚化的商品作画框,后景货架灯带散景成圆点",
+    ]);
+    lines.push(`【场景图 · 导演视角】${sceneDirector}。展现店内真实陈列、货架密度、灯光氛围、空间结构;不要主角人脸特写,可有路过的模糊背影做点缀。`);
+    lines.push(`色温对比:暖色卤素射灯 vs 冷色顶灯,在画面里形成戏剧化色温反差;突出货架灯带、商品高光反射、商品堆叠的层次感。`);
     lines.push(STOREFRONT_CONSTRAINT_ZH);
+    lines.push(STOREFRONT_CONSTRAINT_EN);
+    lines.push(`【店面镜头硬约束】如画面出现店面,必须呈现"商场 B1 室内走廊视角看向 8 米宽开放式店面",顶部门楣有 logo 灯箱;严禁出现任何门框/玻璃门/卷帘门/门把手/门帘/推拉门;背景必须是商场走廊/中庭/对面商铺/商场顶部灯,严禁出现街道/人行道/马路/户外天空。`);
   } else if (kind === "product") {
-    lines.push(`【商品特写】这是一张商品海报:把附带参考图中的商品作为唯一主角,居中或黄金分割位,柔光,焦点清晰,背景虚化或干净桌面/陈列。严格保留参考图中商品的真实形状、颜色、材质、Logo、印花、标签文字,绝对不要改造商品本体。`);
-    lines.push(`不要出现人脸/真人手部肌肤特写,可以有一只自然光下的手轻轻拿起或托住商品。`);
+    lines.push(`【商品特写 · 静物广告大片】参考 Apple keynote / 无印良品 lookbook / 高端杂志静物页 的质感:把参考图中的商品作为唯一主角,居中或黄金分割,硬光 + 柔光混合,商品边缘有 rim light 打出体积,背景虚化为柔和色块或干净桌面/陈列。`);
+    lines.push(`Product hero shot, beauty-dish key + rim back-light, subtle gradient backdrop, micro reflections on the surface, immaculate retouching aesthetic, magazine cover quality.`);
+    lines.push(`严格保留参考图中商品的真实形状、颜色、材质、Logo、印花、标签文字,绝对不要改造商品本体;不要出现人脸/真人手部肌肤特写,可允许一只在自然光下的手轻轻托住或拿起商品。`);
+    lines.push(`若背景隐约可见店面环境,必须是商场室内开放式店面,无门、无门框、无玻璃门。`);
+    lines.push(STOREFRONT_CONSTRAINT_EN);
   } else {
-    // person
-    lines.push(`【人物图】这是一张真人逛店瞬间:画面里有 1 位真实店员或顾客自然出现在店内,与参考图中的真实店面/陈列融为一体。`);
-    lines.push(`严格要求:真人级写实皮肤纹理,自然神态,眼神有焦点,衣着日常(避免明星脸/T 台脸/AI 网红脸);严禁面部畸变、塑料皮肤、多余手指、双胞胎分身。`);
+    const personDirector = pickOne([
+      "王家卫《花样年华》式色彩与暧昧光线,人物侧脸、不直视镜头,墙上灯带在脸上画出戏剧化阴影",
+      "杨德昌《一一》式静观长镜感,人物自然站在货架间,被窗外/灯带打出 motivated light,有'被偶遇'的故事感",
+      "是枝裕和式日常治愈光,自然柔光从侧面包裹人物,景深极浅,人物眼神有焦点",
+    ]);
+    lines.push(`【人物图 · 电影剧照感】${personDirector}。画面里 1 位真实店员或顾客自然出现在店内,与参考图中的真实店面/陈列融为一体;严禁平光证件照、严禁直视镜头摆拍。`);
+    lines.push(`真人级写实皮肤纹理、自然神态、眼神有焦点、衣着日常生活感(避免明星脸/T 台脸/AI 网红脸);面部必须有 motivated light(从货架灯/窗外/店招透出)。`);
+    lines.push(`严禁面部畸变、塑料皮肤、多余手指、双胞胎分身、AI 网红脸。`);
     lines.push(STOREFRONT_CONSTRAINT_ZH);
+    lines.push(STOREFRONT_CONSTRAINT_EN);
+    lines.push(`【店面镜头硬约束】如画面出现店面,必须是商场 B1 室内开放式店面,无门、无门框、无玻璃门、无卷帘门、无门把手;严禁街道/人行道/马路/户外天空。`);
   }
 
   if (refSummary) {
-    lines.push(`画面中必须自然出现的实景元素(来自附带参考图):${refSummary} —— 颜色/陈列/光线请严格还原实拍,不要美化、不要调色。`);
+    lines.push(`画面中必须自然融入的实景元素(来自附带参考图):${refSummary} —— 颜色/陈列/商品请严格还原实拍,只能在光影/构图上做电影化升级,不要改造商品本体或店面结构。`);
   }
   if (theme && theme.trim()) {
     lines.push(`本张图的主题氛围:${theme.trim()}`);
   }
-  lines.push(`第 ${index + 1} / ${total} 张广告图,与其它图保持品牌一致但构图与机位不要雷同。`);
-  lines.push(`画质要求:高清,细节丰富,电影质感,色彩自然,光影柔和,胶片颗粒微细。`);
-  lines.push(`严禁:任何文字、字幕、水印、Logo 文字、UI、画面边框;禁止 photorealistic real celebrity face、护照式正脸特写;禁止面部畸变、多余手指、塑料皮肤、AI 涂抹感、HDR 过曝、Instagram 调色、青绿色偏。`);
+  lines.push(`第 ${index + 1} / ${total} 张广告图,与其它图保持品牌一致但构图、机位、景别请刻意错开,避免雷同。`);
+  lines.push(`画质要求:超高清,细节丰富,电影级动态范围,光影体积感强,胶片颗粒微细。`);
+  lines.push(`NEGATIVE — strictly forbid: any text, subtitle, watermark, logo text, UI, image border; door frame, glass door, door handle, roll-up shutter, door curtain, push door, pull door, store entrance with door, shop front gate, street view, sidewalk, road, traffic, outdoor sky, night street; amateur snapshot, phone photo, flat on-camera flash, harsh direct flash, oversharpened, HDR halo, Instagram filter preset, washed out, overexposed sky, plastic AI skin, uncanny face, AI-airbrushed skin, melted hands, extra fingers, twin/clone duplicate, generic stock photo aesthetic, passport-style frontal portrait, real celebrity face.`);
   return lines.join("\n");
 }
+
 
 async function generateOneImage(opts: {
   apiKey: string; prompt: string; refImageUrls: string[];
