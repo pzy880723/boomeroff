@@ -21,13 +21,15 @@ import { assetSource, type AssetSource } from '@/lib/assetSource';
 type Pending = UploadTileItem & { file: File };
 
 export function LibraryImagePickerDialog({
-  open, onOpenChange, shopId, max = 20, onConfirm,
+  open, onOpenChange, shopId, max = 20, onConfirm, defaultSource = 'upload',
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   shopId: string | null;
   max?: number;
   onConfirm: (urls: string[]) => void;
+  /** 默认只显示「我上传的」素材;选视频参考图时建议保留默认 */
+  defaultSource?: AssetSource | 'all';
 }) {
   const { user } = useAuth();
   const [items, setItems] = useState<any[]>([]);
@@ -35,6 +37,7 @@ export function LibraryImagePickerDialog({
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Pending[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [source, setSource] = useState<AssetSource | 'all'>(defaultSource);
   const [lbIdx, setLbIdx] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const loadTimerRef = useRef<number | null>(null);
