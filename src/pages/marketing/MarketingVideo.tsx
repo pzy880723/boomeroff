@@ -32,6 +32,7 @@ import { getRealismPref, setRealismPref } from '@/lib/realismPref';
 import type { Realism } from '@/lib/realism';
 import { RenderStrategyPicker } from '@/components/marketing/RenderStrategyPicker';
 import { getRenderStrategy, setRenderStrategy, type RenderStrategy } from '@/lib/renderStrategyPref';
+import { VideoJobDetailPanel } from '@/components/marketing/VideoJobDetailPanel';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
