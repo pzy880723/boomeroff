@@ -180,6 +180,8 @@ export function CharacterPicker({
         </button>
         {items.map((c) => {
           const active = value?.id === c.id;
+          const verified = !!c.verified_asset_uri;
+          const isSoftPass = verified && c.meta?.verify_kind === 'character_sheet';
           return (
             <button
               key={c.id}
@@ -191,6 +193,17 @@ export function CharacterPicker({
               title={c.name}
             >
               <img src={thumbUrl(c.cover_url, 160) || c.cover_url} className="w-full h-full object-cover" alt={c.name} loading="lazy" decoding="async" />
+              {verified && (
+                <span
+                  className={[
+                    'absolute top-0.5 right-0.5 inline-flex items-center gap-0.5 text-white text-[8px] px-1 py-[1px] rounded leading-tight',
+                    isSoftPass ? 'bg-sky-500/90' : 'bg-emerald-500/90',
+                  ].join(' ')}
+                  title={isSoftPass ? '已通过预检(Character Sheet 软通过)' : '已通过火山真人认证'}
+                >
+                  <ShieldCheck className="w-2.5 h-2.5" />{isSoftPass ? '预检' : '已认证'}
+                </span>
+              )}
               <span className="absolute inset-x-0 bottom-0 bg-black/65 text-white text-[8px] py-0.5 px-0.5 truncate">{c.name}</span>
             </button>
           );
