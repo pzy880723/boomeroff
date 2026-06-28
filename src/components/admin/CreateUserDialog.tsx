@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { UserPlus, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface CreateUserDialogProps {
   onCreated?: () => void;
@@ -100,7 +101,7 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
+      const { data, error } = await invokeFn(
         'admin-create-user',
         {
           body: {

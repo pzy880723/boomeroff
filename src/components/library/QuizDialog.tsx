@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Loader2, CheckCircle2, XCircle, RefreshCw, Sparkles, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Question {
   stem: string;
@@ -50,7 +51,7 @@ export function QuizDialog({ open, onOpenChange, knowledgeId, kind = 'official',
     setLoading(true);
     setQuestions([]); setStep(0); setAnswers([]); setPicked(null);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-knowledge-quiz', {
+      const { data, error } = await invokeFn('generate-knowledge-quiz', {
         body: { id: knowledgeId, kind, force },
       });
       if (error) throw error;

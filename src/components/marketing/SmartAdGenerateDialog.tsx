@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Sparkles, Store, ShoppingBag, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeFn } from '@/lib/invokeFn';
 
 export type AdKind = 'scene' | 'product' | 'person';
 type Aspect = '1:1' | '3:4' | '9:16' | '16:9';
@@ -67,7 +68,7 @@ export function SmartAdGenerateDialog({ open, onOpenChange, shopId, onResults }:
     setBusy(true);
     try {
       if (typeof window !== 'undefined') localStorage.setItem('smart_ad_style_grade', styleGrade);
-      const { data, error } = await supabase.functions.invoke('ai-smart-ad-images', {
+      const { data, error } = await invokeFn('ai-smart-ad-images', {
         body: { shop_id: shopId, kinds, total, aspect, style, realism, theme: theme.trim(), style_grade: styleGrade },
       });
       if (error) throw error;

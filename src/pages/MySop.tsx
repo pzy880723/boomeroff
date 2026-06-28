@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Cat { id: string; name: string; sort_order: number }
 interface Entry {
@@ -211,7 +212,7 @@ export default function MySop() {
     if (!topic) { toast.error('请先填写标题或主题'); return; }
     setAiLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-shop-kb', {
+      const { data, error } = await invokeFn('generate-shop-kb', {
         body: {
           type: 'sop',
           topic,

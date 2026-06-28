@@ -11,6 +11,7 @@ import { UploadGrid } from './UploadGrid';
 import { toast } from 'sonner';
 import { ShopPicker } from '@/components/marketing/ShopPicker';
 import { useEffectiveShop } from '@/hooks/useShops';
+import { invokeFn } from '@/lib/invokeFn';
 
 
 type Platform = 'xhs' | 'douyin' | 'shipinhao' | 'pyq';
@@ -45,7 +46,7 @@ export default function MarketingCopy() {
     if (!urls.length) return toast.error('至少上传一张图');
     setBusy(true); setCands([]);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-marketing-copy', {
+      const { data, error } = await invokeFn('generate-marketing-copy', {
         body: { image_urls: urls, platform, tone, product_name: name, price, highlight, shop_id: shopId },
       });
       if (error) throw error;

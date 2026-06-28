@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { computeImageHash } from '@/lib/imageHash';
 import type { RecognitionResult, ProductCategory } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { invokeFn } from '@/lib/invokeFn';
 
 const VALID_CATS: ProductCategory[] = [
   'jp_porcelain', 'eu_porcelain', 'incense', 'antique_art', 'local_craft',
@@ -49,7 +50,7 @@ export function useGuestRecognition() {
       if (options.userHint && options.userHint.trim()) body.userHint = options.userHint.trim();
       options.onPhase?.('matching');
 
-      const { data, error } = await supabase.functions.invoke('recognize-product-public', { body });
+      const { data, error } = await invokeFn('recognize-product-public', { body });
 
       if (error) {
         const msg = (error as any)?.message || '识别失败';

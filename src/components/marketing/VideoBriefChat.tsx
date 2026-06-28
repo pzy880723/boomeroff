@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Send, RefreshCw, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { invokeFn } from '@/lib/invokeFn';
 
 export interface BriefMsg { role: 'user' | 'assistant'; content: string; kind?: 'chat' | 'draft_script'; options?: string[]; done?: boolean }
 export interface BriefContext {
@@ -106,7 +107,7 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
     if (override == null) setInput('');
     setBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke('marketing-video-brief-chat', {
+      const { data, error } = await invokeFn('marketing-video-brief-chat', {
         body: { messages: next, context, shop_id: shopId, image_descriptions: imageDescriptions || [] },
       });
       if (error) throw error;
@@ -135,7 +136,7 @@ export function VideoBriefChat({ context, messages, onChange, shopId, imageDescr
     if (drafting || busy) return;
     setDrafting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('marketing-video-brief-chat', {
+      const { data, error } = await invokeFn('marketing-video-brief-chat', {
         body: {
           messages,
           context,

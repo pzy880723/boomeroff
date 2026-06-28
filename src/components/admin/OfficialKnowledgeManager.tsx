@@ -24,6 +24,7 @@ import { thumbUrl } from '@/lib/imageUrl';
 import { toast } from 'sonner';
 import { AiKnowledgeDialog } from './AiKnowledgeDialog';
 import { AutoCategorizeButton } from './AutoCategorizeButton';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Item {
   id: string;
@@ -107,7 +108,7 @@ export function OfficialKnowledgeManager() {
       let rounds = 0;
       // 最多 10 轮（约 300 条），防止意外死循环
       while (rounds < 10) {
-        const { data, error } = await supabase.functions.invoke('compute-importance', {
+        const { data, error } = await invokeFn('compute-importance', {
           body: { limit: 30, onlyMissing: true },
         });
         if (error) { toast.error('计算失败：' + error.message); break; }

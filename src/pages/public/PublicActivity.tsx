@@ -91,7 +91,7 @@ export default function PublicActivity() {
   useEffect(() => {
     if (!shareToken) return;
     (async () => {
-      const { data, error: e } = await supabase.functions.invoke('activity-public', {
+      const { data, error: e } = await invokeFn('activity-public', {
         body: { share_token: shareToken },
       });
       if (e || (data as any)?.error) {

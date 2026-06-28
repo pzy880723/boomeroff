@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 type Candidate = { title?: string; body?: string; hashtags?: string[]; first_comment?: string };
 
@@ -25,7 +26,7 @@ export function AiCopySheet({
     if (imageUrls.length === 0) { toast.error('没有可分析的封面/图片'); return; }
     setLoading(true); setList([]);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-marketing-copy', {
+      const { data, error } = await invokeFn('generate-marketing-copy', {
         body: { image_urls: imageUrls.slice(0, 9), platform, tone: '种草', shop_id: shopId },
       });
       if (error) throw new Error((data as any)?.error || error.message);

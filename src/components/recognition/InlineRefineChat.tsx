@@ -17,6 +17,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
 import type { RecognitionResult, ProductCategory } from '@/types';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Msg {
   role: 'user' | 'assistant';
@@ -268,7 +269,7 @@ export function InlineRefineChat({
     if (!pendingResult) return;
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke('submit-correction', {
+      const { data, error } = await invokeFn('submit-correction', {
         body: {
           product_id: productId,
           image_url: imageUrl,

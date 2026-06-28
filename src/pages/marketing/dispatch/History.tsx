@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { STATUS_COLOR, STATUS_LABEL, type PublishJob } from '@/lib/dispatch';
 import { PlatformBadge } from '@/components/marketing/dispatch/PlatformBadge';
+import { invokeFn } from '@/lib/invokeFn';
 
 export default function HistoryTab() {
   const { shopId } = useEffectiveShop();
@@ -50,7 +51,7 @@ export default function HistoryTab() {
 
   const cancel = async (jobId: string) => {
     if (!confirm('取消这个定时任务?')) return;
-    const { error } = await supabase.functions.invoke('dispatch-job-cancel', { body: { job_id: jobId } });
+    const { error } = await invokeFn('dispatch-job-cancel', { body: { job_id: jobId } });
     if (error) toast({ title: '取消失败', description: error.message, variant: 'destructive' });
     else void load();
   };

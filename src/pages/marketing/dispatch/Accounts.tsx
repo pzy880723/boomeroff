@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PlatformBadge, platformLabel } from '@/components/marketing/dispatch/PlatformBadge';
 import type { SocialAccount } from '@/lib/dispatch';
 import AddAccountDialog from './AddAccountDialog';
+import { invokeFn } from '@/lib/invokeFn';
 
 export default function AccountsTab() {
   const { shopId } = useEffectiveShop();
@@ -22,7 +23,7 @@ export default function AccountsTab() {
     if (!shopId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('dispatch-account-list', { body: { shop_id: shopId } });
+      const { data, error } = await invokeFn('dispatch-account-list', { body: { shop_id: shopId } });
       if (error) throw error;
       setAccounts((data?.accounts || []) as SocialAccount[]);
       setWorkerOnline(!!data?.worker_online);
@@ -47,7 +48,7 @@ export default function AccountsTab() {
 
   const revoke = async (id: string) => {
     if (!confirm('确认解绑这个账号?')) return;
-    const { error } = await supabase.functions.invoke('dispatch-account-revoke', { body: { account_id: id } });
+    const { error } = await invokeFn('dispatch-account-revoke', { body: { account_id: id } });
     if (error) toast({ title: '解绑失败', description: error.message, variant: 'destructive' });
     else { toast({ title: '已解绑' }); void load(); }
   };

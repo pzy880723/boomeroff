@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
+import { invokeFn } from '@/lib/invokeFn';
 
 export interface KnowledgeRecord {
   id?: string;
@@ -74,7 +75,7 @@ export function KnowledgeEditDialog({ record, open, onOpenChange, onSaved }: Pro
       // AI 自动判定品类（用 AI 判定结果覆盖手选，避免乱归类）
       let category: ProductCategory = form.category;
       try {
-        const { data: catData } = await supabase.functions.invoke('auto-categorize-knowledge', {
+        const { data: catData } = await invokeFn('auto-categorize-knowledge', {
           body: {
             mode: 'single',
             name: form.product_name.trim(),

@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { uploadMarketingImages } from '@/pages/marketing/uploadMarketingImages';
 import { LiveCaptureWizard } from './LiveCaptureWizard';
+import { invokeFn } from '@/lib/invokeFn';
 
 export function CharacterCreateDialog({
   open, onOpenChange, shopId, onCreated,
@@ -110,7 +111,7 @@ export function CharacterCreateDialog({
         return;
       }
       // AI 生成
-      const { data, error } = await supabase.functions.invoke('generate-character-board', {
+      const { data, error } = await invokeFn('generate-character-board', {
         body: {
           shop_id: shopId,
           name: name.trim(),

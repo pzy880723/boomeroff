@@ -12,6 +12,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { z } from 'zod';
+import { invokeFn } from '@/lib/invokeFn';
 
 const registerSchema = z
   .object({
@@ -74,7 +75,7 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
+      const { data, error } = await invokeFn(
         'public-register',
         { body: { username, password, shop_id: shopId, real_name: realName.trim(), display_name: realName.trim() } },
       );

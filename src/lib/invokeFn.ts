@@ -18,14 +18,48 @@ function humanize(raw: string | undefined | null): string {
   if (low.includes('timeout') || low.includes('timed out')) {
     return '服务器响应超时，请稍后再试';
   }
-  if (low.includes('non-2xx status code') || low.includes('non 2xx')) {
+  if (low.includes('worker_resource_limit') || low.includes('not having enough compute') || low.includes('compute resources')) {
+    return '渲染服务繁忙，系统已自动重试，请稍后再试一次';
+  }
+  if (low.includes('worker_limit') || low.includes('cpu time') || low.includes('wall clock')) {
+    return '本次任务耗时过长，已自动中断，请稍后重试';
+  }
+  if (low.includes('early_drop') || low.includes('earlydrop')) {
+    return '服务连接被中断，请稍后再试';
+  }
+  if (low.includes('runtime_error') || low.includes('runtime error')) {
+    return '服务运行异常，已记录，请稍后再试';
+  }
+  if (low.includes('boot_failure') || low.includes('boot error')) {
+    return '服务启动失败，请稍后再试';
+  }
+  if (low.includes('non-2xx status code') || low.includes('non 2xx') || low.includes('non-2xx')) {
     return '服务暂时不可用，请稍后再试';
   }
   if (low.includes('cors')) {
     return '网络受限，请稍后再试';
   }
+  if (low.includes('unauthorized') || low.includes('401')) {
+    return '登录已过期，请重新登录';
+  }
+  if (low.includes('forbidden') || low.includes('403')) {
+    return '没有访问权限';
+  }
+  if (low.includes('not found') && low.length < 80) {
+    return '服务不存在或已下线';
+  }
+  if (low.includes('500') && low.includes('internal')) {
+    return '服务内部错误，请稍后再试';
+  }
+  if (low.includes('502') || low.includes('bad gateway') || low.includes('503') || low.includes('service unavailable') || low.includes('504')) {
+    return '服务暂时不可用，请稍后再试';
+  }
   if (low === 'load failed') {
     return '网络连接异常，请检查网络后重试';
+  }
+  // 完全是英文且看起来像技术堆栈/错误码的 → 兜底中文
+  if (/^[\x00-\x7F\s]+$/.test(msg) && /[a-zA-Z]/.test(msg) && msg.length > 50) {
+    return '服务暂时异常，请稍后再试';
   }
   return msg;
 }

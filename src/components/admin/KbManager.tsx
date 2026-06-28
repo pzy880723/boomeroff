@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import { Loader2, Plus, Trash2, Pencil, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Cat { id?: string; type: 'sop'|'qa'; name: string; sort_order: number }
 interface Entry { id?: string; type: 'sop'|'qa'; category_id: string | null; title: string; body: string; tags: string[]; sort_order: number }
@@ -77,7 +78,7 @@ export function KbManager({ type, title }: Props) {
     if (!topic) { toast.error('请先在标题里填写主题'); return; }
     setAiLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-shop-kb', {
+      const { data, error } = await invokeFn('generate-shop-kb', {
         body: {
           type,
           topic,

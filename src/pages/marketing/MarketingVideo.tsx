@@ -33,6 +33,7 @@ import type { Realism } from '@/lib/realism';
 import { RenderStrategyPicker } from '@/components/marketing/RenderStrategyPicker';
 import { getRenderStrategy, setRenderStrategy, type RenderStrategy } from '@/lib/renderStrategyPref';
 import { VideoJobDetailPanel } from '@/components/marketing/VideoJobDetailPanel';
+import { invokeFn } from '@/lib/invokeFn';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -170,7 +171,7 @@ export default function MarketingVideo() {
     const handle = setTimeout(async () => {
       setDescLoading(true);
       try {
-        const { data, error } = await supabase.functions.invoke('describe-marketing-images', {
+        const { data, error } = await invokeFn('describe-marketing-images', {
           body: { image_urls: urls },
         });
         if (error) throw error;
@@ -206,7 +207,7 @@ export default function MarketingVideo() {
         verified_asset_uri: (character as any).verified_asset_uri || null,
         face_pass_level: (character as any).face_pass_level || 'auto',
       } : null;
-      const { data, error } = await supabase.functions.invoke('generate-marketing-video-script', {
+      const { data, error } = await invokeFn('generate-marketing-video-script', {
         body: {
           shop_id: shopId,
           image_urls: urls,
@@ -251,7 +252,7 @@ export default function MarketingVideo() {
         extra_reference_urls: character.extra_reference_urls || [],
         verified_asset_uri: (character as any).verified_asset_uri || null,
       } : null;
-      const { data, error } = await supabase.functions.invoke('storyboard-marketing-video', {
+      const { data, error } = await invokeFn('storyboard-marketing-video', {
         body: {
           script: target, assets, character: charPayload, shop_id: shopId, style, realism,
           ...(onlyIndices && onlyIndices.length ? { only_indices: onlyIndices } : {}),
@@ -324,7 +325,7 @@ export default function MarketingVideo() {
       if (duration > 12 && !character && !script.character) {
         toast.message('为保证角色不变脸,正在生成兜底主角…', { duration: 4000 });
         try {
-          const anc = await supabase.functions.invoke('ensure-auto-anchor-character', {
+          const anc = await invokeFn('ensure-auto-anchor-character', {
             body: { shop_id: shopId, video_type: vtype, style, brief_summary: briefTranscript.slice(0, 600) },
           });
           if (anc.error) throw anc.error;
@@ -344,7 +345,7 @@ export default function MarketingVideo() {
       }
       const reqModel = (overrides?.modelId) ?? modelId;
       const reqRes = (overrides?.resolution) ?? resolution;
-      const { data, error } = await supabase.functions.invoke('render-marketing-video', {
+      const { data, error } = await invokeFn('render-marketing-video', {
         body: {
           script: { ...finalScript, video_type: vtype }, style, shop_id: shopId,
           model: reqModel, resolution: reqRes,

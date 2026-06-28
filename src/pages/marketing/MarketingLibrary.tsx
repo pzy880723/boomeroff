@@ -25,6 +25,7 @@ import { extractFirstFrame } from '@/lib/extractFirstFrame';
 import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
 import { assetSource, type AssetSource } from '@/lib/assetSource';
 import { Camera, Sparkles } from 'lucide-react';
+import { invokeFn } from '@/lib/invokeFn';
 
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
@@ -335,7 +336,7 @@ export default function MarketingLibrary() {
     if (backfilling) return;
     setBackfilling(true);
     try {
-      const { data, error } = await supabase.functions.invoke('backfill-storyboard-assets', { body: {} });
+      const { data, error } = await invokeFn('backfill-storyboard-assets', { body: {} });
       if (error || (data as any)?.ok === false) {
         toast.error((data as any)?.error || error?.message || '回填失败');
         return;
@@ -356,7 +357,7 @@ export default function MarketingLibrary() {
     if (backfillingTags) return;
     setBackfillingTags(true);
     try {
-      const { data, error } = await supabase.functions.invoke('backfill-marketing-asset-tags', { body: {} });
+      const { data, error } = await invokeFn('backfill-marketing-asset-tags', { body: {} });
       if (error || (data as any)?.ok === false) {
         toast.error((data as any)?.error || error?.message || '补标签失败');
         return;
@@ -403,7 +404,7 @@ export default function MarketingLibrary() {
           continue;
         }
         try {
-          const { data } = await supabase.functions.invoke('poll-marketing-video', { body: { job_id: it.meta.job_id } });
+          const { data } = await invokeFn('poll-marketing-video', { body: { job_id: it.meta.job_id } });
           const next = data as any;
           if (!next) continue;
           // 多段任务全部完成:触发客户端拼接

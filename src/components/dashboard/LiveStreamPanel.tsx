@@ -17,6 +17,7 @@ import { RecognitionProgress, type RecognitionPhase } from '@/components/recogni
 import { RecognitionFailure } from '@/components/recognition/RecognitionFailure';
 import { HintInputSheet } from '@/components/recognition/HintInputSheet';
 import { serializeTips, normalizeSellingPoints, normalizeTips } from '@/lib/script';
+import { invokeFn } from '@/lib/invokeFn';
 
 type CaptureMode = 'single' | 'multi';
 const MAX_MULTI_IMAGES = 5;
@@ -327,7 +328,7 @@ export function LiveStreamPanel() {
       const sp = Array.isArray(base.sellingPoints)
         ? base.sellingPoints.map((s: any) => typeof s === 'string' ? { tag: '场景', text: s } : s)
         : [];
-      const { data, error } = await supabase.functions.invoke('enrich-recognition', {
+      const { data, error } = await invokeFn('enrich-recognition', {
         body: {
           productId,
           name: base.name,

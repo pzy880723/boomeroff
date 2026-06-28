@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { Activity, ActivityField, VoucherTemplate } from '@/lib/voucher';
+import { invokeFn } from '@/lib/invokeFn';
 
 
 interface Props {
@@ -65,7 +66,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
     }
     setPolishing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('polish-activity-description', {
+      const { data, error } = await invokeFn('polish-activity-description', {
         body: { name: name.trim(), draft },
       });
       if (error) {

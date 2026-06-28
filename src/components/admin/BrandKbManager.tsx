@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Loader2, RefreshCw, Plus, Trash2, Database } from 'lucide-react';
+import { invokeFn } from '@/lib/invokeFn';
 
 type KbDoc = {
   id: string;
@@ -72,7 +73,7 @@ export function BrandKbManager() {
     toast.success('已添加，后台会自动嵌入向量');
     setNewTitle(''); setNewContent('');
     // 立刻触发一次 ingest 以补嵌入
-    supabase.functions.invoke('kb-ingest').catch(() => {});
+    invokeFn('kb-ingest').catch(() => {});
     loadDocs();
   }
 
@@ -92,7 +93,7 @@ export function BrandKbManager() {
   async function backfillAll() {
     if (!confirm('把所有源表重新入队、全量重建？')) return;
     setBusy(true);
-    const { data, error } = await supabase.functions.invoke('kb-ingest', { body: {}, method: 'POST' as any });
+    const { data, error } = await invokeFn('kb-ingest', { body: {}, method: 'POST' as any });
     // 也调一下 backfill
     try {
       const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/kb-ingest?backfill=1`;

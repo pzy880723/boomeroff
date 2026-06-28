@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Loader2, Save, FlaskConical, Sparkles, AlertCircle, CheckCircle2, Globe } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 type ModelId = 'google/gemini-2.5-flash-lite' | 'google/gemini-2.5-flash' | 'google/gemini-2.5-pro';
 
@@ -85,7 +86,7 @@ export function AISettingsPanel() {
     setTesting(true);
     setTestResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke('test-ai-model', {
+      const { data, error } = await invokeFn('test-ai-model', {
         body: { model: settings.model },
       });
       if (error) throw error;

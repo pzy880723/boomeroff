@@ -8,6 +8,7 @@ import { Camera, Sparkles, Upload, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { compressForUpload } from '@/lib/uploadImage';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Props {
   userId: string;
@@ -25,7 +26,7 @@ export function AvatarPicker({ userId, displayName, avatarUrl, onChanged, size =
     if (busy) return;
     setBusy('ai');
     try {
-      const { data, error } = await supabase.functions.invoke('generate-avatar', {
+      const { data, error } = await invokeFn('generate-avatar', {
         body: { display_name: displayName },
       });
       if (error) throw error;
