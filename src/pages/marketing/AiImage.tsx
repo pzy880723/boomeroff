@@ -40,6 +40,9 @@ export default function AiImage() {
   const [uploading, setUploading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [aspectOpen, setAspectOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [smartOpen, setSmartOpen] = useState(false);
   const [tplFieldsTemplate, setTplFieldsTemplate] = useState<AiImageTemplate | null>(null);
   const [pendingTemplate, setPendingTemplate] = useState<{ id: string; fields: Record<string, string>; name: string } | null>(null);
 
