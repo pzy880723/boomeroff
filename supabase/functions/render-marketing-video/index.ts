@@ -60,6 +60,7 @@ function buildOneShotPrompt(
   if (overrides?.opening) {
     lines.push(`【强制开场(0-2s · 不可省略)】${overrides.opening}`);
   }
+  lines.push(`【强制画面锁定】如果随请求附带了分镜静帧(reference images),必须优先照着这些静帧的场景、陈列、人物位置、构图和光影生成动态画面;禁止重新设计场景,禁止把店铺想象成别的空间。`);
   if (character?.name && !overrides?.persona_directive) {
     lines.push(`【主体1】参考图 1 中的 ${character.name}(${character.role_label || '主角'})为全片唯一主角。外观锁:${character.visual_signature || '以参考图为准'}。全程同一人,禁止换人/换装/分身/双胞胎。`);
   }
@@ -109,24 +110,24 @@ function resolveOneShotImages(
     if (!u || seen.has(u)) return;
     seen.add(u); refs.push(u);
   };
-  // 1) 角色身份板(认证 asset:// 优先)
-  if (character?.verified_asset_uri) push(character.verified_asset_uri);
-  else if (character?.cover_url) push(character.cover_url);
-  // 2) 角色额外参考
-  for (const u of character?.extra_reference_urls || []) push(u);
-  // 3) 每镜手动绑定的实景照(按出场顺序)
   const allScenes: any[] = [];
   if (script.hook) allScenes.push(script.hook);
   if (Array.isArray(script.scenes)) allScenes.push(...script.scenes);
   if (script.outro) allScenes.push(script.outro);
+  // 1) 每镜静帧最优先:它才是最终画面蓝图
+  for (const sc of allScenes) {
+    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) push(sc.storyboard_url);
+  }
+  // 2) 角色身份板(认证 asset:// 优先)
+  if (character?.verified_asset_uri) push(character.verified_asset_uri);
+  else if (character?.cover_url) push(character.cover_url);
+  // 3) 角色额外参考
+  for (const u of character?.extra_reference_urls || []) push(u);
+  // 4) 每镜手动绑定的实景照(按出场顺序)
   for (const sc of allScenes) {
     const idx = typeof sc?.image_index === 'number' ? sc.image_index
               : (typeof sc?.image_ref?.index === 'number' ? sc.image_ref.index : null);
     if (idx !== null && imageUrls[idx]) push(imageUrls[idx]);
-  }
-  // 4) 每镜静帧(若已合成)
-  for (const sc of allScenes) {
-    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) push(sc.storyboard_url);
   }
   // 5) 剩余实景照按顺序补
   for (const u of imageUrls) push(u);
@@ -156,6 +157,7 @@ function buildPrompt(
     }
   }
   if (segLabel) lines.push(`这是【${segLabel}】,后续会与其他段无缝拼接,请保持画面、光线、调色与人物连贯。`);
+  lines.push(`【最重要】本段随请求附带的分镜静帧是画面蓝图:必须严格参考静帧里的店内空间、商品陈列、人物位置、镜头景别、光线和构图来动起来;不要重新设计场景,不要凭空生成门框/街边/陌生店铺。`);
   lines.push(`整体风格:${styleEn}。品牌:BOOMER·OFF 中古二手杂货店,货架密集,室内暖色调。`);
   lines.push(STOREFRONT_CONSTRAINT_EN);
   if (shopBlock) lines.push(`店铺背景(中文,用于影响氛围与字幕):\n${shopBlock}`);
@@ -210,6 +212,30 @@ function normalizeRatio(aspect: any): string {
   const a = String(aspect || "9:16");
   if (["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"].includes(a)) return a;
   return "9:16";
+}
+
+function gatherClips(script: any): any[] {
+  const out: any[] = [];
+  if (script?.hook && (script.hook.scene || script.hook.action || script.hook.storyboard_url)) out.push(script.hook);
+  if (Array.isArray(script?.scenes)) script.scenes.forEach((sc: any) => {
+    if (sc && (sc.scene || sc.action || sc.storyboard_url)) out.push(sc);
+  });
+  if (script?.outro && (script.outro.scene || script.outro.action || script.outro.storyboard_url)) out.push(script.outro);
+  return out;
+}
+
+function storyboardRefsOf(script: any): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const sc of gatherClips(script)) {
+    const u = typeof sc?.storyboard_url === 'string' ? sc.storyboard_url : '';
+    if (u && !seen.has(u)) { seen.add(u); out.push(u); }
+  }
+  return out;
+}
+
+function missingStoryboardCount(script: any): number {
+  return gatherClips(script).filter((sc) => !sc?.storyboard_url).length;
 }
 
 // 多段切分:按 Seedance 2.0 参考图合法网格切段。
@@ -270,44 +296,53 @@ function snapOneShotDuration(d: number): number {
 function resolveSegmentImages(
   sub: ScriptLike,
   imageUrls: string[],
-  character: { cover_url?: string; extra_reference_urls?: string[] } | null,
+  character: { cover_url?: string; extra_reference_urls?: string[]; verified_asset_uri?: string } | null,
   fallbackFirst?: string,
-): { referenceImages: string[] } {
+): { referenceImages: string[]; storyboardRefs: string[]; rawRefs: string[]; characterRefs: string[] } {
   const seq: any[] = [];
   if (sub.hook && (sub.hook.scene || sub.hook.action || sub.hook.storyboard_url)) seq.push(sub.hook);
   if (Array.isArray(sub.scenes)) seq.push(...sub.scenes);
   if (sub.outro && (sub.outro.scene || sub.outro.action || sub.outro.storyboard_url)) seq.push(sub.outro);
 
   const refs: string[] = [];
+  const storyboardRefs: string[] = [];
+  const rawRefs: string[] = [];
+  const characterRefs: string[] = [];
   const seen = new Set<string>();
-  const push = (u?: string | null) => {
+  const push = (u?: string | null, bucket?: string[]) => {
     if (!u) return;
+    if (bucket && !bucket.includes(u)) bucket.push(u);
     if (seen.has(u)) return;
     seen.add(u);
     refs.push(u);
   };
 
-  // 1) 角色身份板(认证过的 asset:// 优先)。放最前面,既强化人物一致性,也避免软通过去处理每段不同的静帧。
-  const verifiedUri: string | undefined = (character as any)?.verified_asset_uri || undefined;
-  if (verifiedUri) push(verifiedUri);
-  else if (character?.cover_url) push(character.cover_url);
-  // 2) 角色额外参考
-  for (const u of character?.extra_reference_urls || []) push(u);
-  // 3) 本镜静帧
+  // 1) 本段分镜静帧最优先。它是最终画面蓝图,不能被角色板/原图挤出 9 张上限。
   for (const sc of seq) {
-    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) push(sc.storyboard_url);
+    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) push(sc.storyboard_url, storyboardRefs);
   }
+  // 2) 角色身份板(认证过的 asset:// 优先)。
+  const verifiedUri: string | undefined = (character as any)?.verified_asset_uri || undefined;
+  if (verifiedUri) push(verifiedUri, characterRefs);
+  else if (character?.cover_url) push(character.cover_url, characterRefs);
+  // 3) 角色额外参考
+  for (const u of character?.extra_reference_urls || []) push(u, characterRefs);
   // 4) 段内绑定的实景照(2.0 全部按 reference 通道收集)
   const picks = pickSegmentImages(sub);
-  for (const i of picks.refIndices) if (imageUrls[i]) push(imageUrls[i]);
+  for (const i of picks.refIndices) if (imageUrls[i]) push(imageUrls[i], rawRefs);
   for (const sc of seq) {
     const idx = typeof sc?.image_index === 'number' ? sc.image_index : null;
-    if (idx !== null && imageUrls[idx]) push(imageUrls[idx]);
+    if (idx !== null && imageUrls[idx]) push(imageUrls[idx], rawRefs);
   }
   // 5) 实在啥都没有 → 兜底封面
-  if (!refs.length && fallbackFirst) push(fallbackFirst);
+  if (!refs.length && fallbackFirst) push(fallbackFirst, rawRefs);
 
-  return { referenceImages: refs.slice(0, SEEDANCE_MAX_REFS) };
+  return {
+    referenceImages: refs.slice(0, SEEDANCE_MAX_REFS),
+    storyboardRefs,
+    rawRefs,
+    characterRefs,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -331,6 +366,7 @@ Deno.serve(async (req) => {
     // face_pipeline:character_sheet = 提交前就给参考图打 Character Sheet 软通过水印
     const disableStoryboard = !!body.disable_storyboard;
     const disableReferences = !!body.disable_references;
+    const requireStoryboard = !!body.require_storyboard && !disableStoryboard && !disableReferences;
     let facePipeline: 'auto' | 'character_sheet' | 'illustration' | 'faceless' =
       (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless')
         ? body.face_pipeline : 'auto';
@@ -345,6 +381,13 @@ Deno.serve(async (req) => {
       script = JSON.parse(JSON.stringify(script));
       strip(script.hook); strip(script.outro);
       if (Array.isArray(script.scenes)) script.scenes.forEach(strip);
+    }
+
+    if (requireStoryboard) {
+      const missing = missingStoryboardCount(script);
+      if (missing > 0) {
+        return json({ ok: false, error: `还有 ${missing} 个镜头没有分镜静帧,已停止渲染。请先补齐分镜静帧。` }, 400);
+      }
     }
 
 
@@ -408,6 +451,7 @@ Deno.serve(async (req) => {
       const oneShotDur = snapOneShotDuration(totalDur || MAX_SEG_DUR);
       const effectiveChar = disableReferences ? null : character;
       const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
+      const storyboardRefs = storyboardRefsOf(script);
       const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
       const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
       console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur} face_pipeline=${facePipeline}`);
@@ -419,6 +463,9 @@ Deno.serve(async (req) => {
           __render_payload: {
             prompt, duration: oneShotDur, ratio, model, resolution,
             reference_images: refImages,
+            storyboard_refs: storyboardRefs,
+            storyboard_ref_count: storyboardRefs.length,
+            raw_ref_count: Math.max(0, refImages.length - storyboardRefs.length),
             face_pipeline: facePipeline,
           },
         },
@@ -443,6 +490,7 @@ Deno.serve(async (req) => {
           render_strategy: "one_shot",
           auto_decision_reason: autoReason,
           one_shot_refs: refImages,
+          storyboard_ref_count: storyboardRefs.length,
           topic: script.topic || "", style: styleKey,
           style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
           warnings: [
@@ -513,7 +561,10 @@ Deno.serve(async (req) => {
       const effectiveCharacter = disableReferences ? null : character;
       const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
       if (disableReferences) imgs.referenceImages = [];
-      console.log(`[render queue] seg ${i + 1}/${segmentTotal} dur=${duration} ref=${imgs.referenceImages.length}`);
+      if (requireStoryboard && imgs.storyboardRefs.length === 0) {
+        throw new Error(`第 ${i + 1} 段没有绑定分镜静帧,已停止渲染`);
+      }
+      console.log(`[render queue] seg ${i + 1}/${segmentTotal} dur=${duration} ref=${imgs.referenceImages.length} storyboard=${imgs.storyboardRefs.length}`);
       return {
         user_id: u.user.id,
         script: {
@@ -521,6 +572,12 @@ Deno.serve(async (req) => {
           __render_payload: {
             prompt, duration, ratio, model, resolution,
             reference_images: imgs.referenceImages,
+            storyboard_refs: imgs.storyboardRefs,
+            raw_refs: imgs.rawRefs,
+            character_refs: imgs.characterRefs,
+            storyboard_ref_count: imgs.storyboardRefs.length,
+            raw_ref_count: imgs.rawRefs.length,
+            character_ref_count: imgs.characterRefs.length,
             face_pipeline: facePipeline,
           },
         },
