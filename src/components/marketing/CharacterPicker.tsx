@@ -1,7 +1,7 @@
 // 视频页"选择主角"组件：横滑选 + 新建 + 附加参考图(最多 6 张,搭配角色板共 7 张,留出脚本侧再带入 2 张实景到 Seedance 的 9 张参考上限)
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, User, X, Upload, FolderOpen, Loader2 } from 'lucide-react';
+import { Plus, User, X, Upload, FolderOpen, Loader2, ShieldCheck } from 'lucide-react';
 import { CharacterCreateDialog } from './CharacterCreateDialog';
 import { LibraryImagePickerDialog } from './LibraryImagePickerDialog';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,6 +20,7 @@ export type Character = {
   auto_anchor?: boolean;
   verified_asset_uri?: string | null;
   verified_at?: string | null;
+  meta?: { verify_kind?: string | null } | null;
   /** 仅在前端/本次视频中使用,不持久化到 marketing_characters 表 */
   extra_reference_urls?: string[];
 };
@@ -52,7 +53,7 @@ export function CharacterPicker({
     if (!shopId) { setItems([]); return; }
     const { data } = await supabase
       .from('marketing_characters' as any)
-      .select('id, name, role_label, cover_url, visual_signature, core_emotion, auto_anchor, verified_asset_uri, verified_at')
+      .select('id, name, role_label, cover_url, visual_signature, core_emotion, auto_anchor, verified_asset_uri, verified_at, meta')
       .eq('shop_id', shopId)
       .order('created_at', { ascending: false });
     setItems((data as any) || []);
