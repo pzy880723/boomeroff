@@ -254,113 +254,12 @@ function splitScript(script: any): any[] {
 }
 
 
-// Seedance 2.0 reference-to-video(r2v)通道:火山方舟只接受固定时长。
-// t2v(无参考图)按 clampDuration 范围放行;一旦带了 reference_image,duration 必须吸附到 5 或 10。
-const R2V_VALID_DURATIONS = [5, 10] as const;
-function snapR2vDuration(d: number): number {
-  const n = Math.round(Number(d) || 5);
-  if (n <= 7) return 5;
-  return 10;
-}
-
 // one_shot 时把"目标总时长"吸附到 r2v 网格(≤7→5, ≤12→10, >12→15)。
 function snapOneShotDuration(d: number): number {
   const n = Math.round(Number(d) || 10);
   if (n <= 7) return 5;
   if (n <= 12) return 10;
   return 15;
-}
-
-// 把切好的段按 r2v 合法网格 {5,10} 吸附,并合并相邻"两个 5s"为"一个 10s",
-// 让最终送给火山的每一段都是合法时长,总时长在用户目标附近浮动。
-function snapShotsToValidGrid(subScripts: any[]): any[] {
-  if (!subScripts.length) return subScripts;
-  // 先把每段 duration_s 吸附
-  const snapped = subScripts.map((s) => {
-    const d = snapR2vDuration(Number(s.total_duration_s) || 5);
-    const clip = (sc: any) => sc && (sc.scene || sc.action || sc.subtitle || sc.dialogue)
-      ? { ...sc, duration_s: d } : sc;
-    return {
-      ...s,
-      total_duration_s: d,
-      hook: clip(s.hook),
-      scenes: Array.isArray(s.scenes) ? s.scenes.map(clip) : s.scenes,
-      outro: clip(s.outro),
-    };
-  });
-  // 合并相邻 5s → 10s(同 role 才合并,避免 hook 和 outro 串)
-  const merged: any[] = [];
-  for (let i = 0; i < snapped.length; i++) {
-    const cur = snapped[i];
-    const nxt = snapped[i + 1];
-    if (
-      cur.total_duration_s === 5 &&
-      nxt && nxt.total_duration_s === 5 &&
-      cur.__shot_role === nxt.__shot_role &&
-      cur.__shot_role === 'mid'
-    ) {
-      // 合并:把后段的描述顺接到前段
-      const mergedScenes = [
-        ...(Array.isArray(cur.scenes) ? cur.scenes : []),
-        ...(Array.isArray(nxt.scenes) ? nxt.scenes : []),
-      ].map((sc) => ({ ...sc, duration_s: 5 }));
-      merged.push({
-        ...cur,
-        scenes: mergedScenes,
-        total_duration_s: 10,
-      });
-      i++; // 跳过下一段
-    } else {
-      merged.push(cur);
-    }
-  }
-  // 重新编 segment_index / total
-  return merged.map((s, i) => ({ ...s, __segment_index: i, __segment_total: merged.length }));
-}
-
-async function submitArkTask(opts: {
-  arkKey: string; model: string; prompt: string; ratio: string; duration: number;
-  resolution: string;
-  referenceImages?: string[];
-}): Promise<{ ok: true; id: string; mode: string; duration: number } | { ok: false; error: string; raw?: unknown }> {
-  const content: any[] = [{ type: "text", text: opts.prompt }];
-  // Seedance 2.0:全 reference 模式。first_frame / last_frame 与 reference_image 互斥,
-  // 我们这种「分镜独立表达」的内容不需要逐帧锁画面,统一走 reference_image 通道。
-  const refs = (opts.referenceImages || []).filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
-  for (const url of refs) {
-    content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
-  }
-  const mode = refs.length ? "reference2video" : "text2video";
-
-  // r2v 模式下把任意秒数吸附到 {5,10};t2v 不限。
-  const effectiveDuration = mode === "reference2video"
-    ? snapR2vDuration(opts.duration)
-    : opts.duration;
-
-  // 2.0 系列:不发送 seed / camera_fixed(2.0 不支持)
-  const arkBody: Record<string, unknown> = {
-    model: opts.model,
-    content,
-    resolution: opts.resolution,
-    ratio: opts.ratio,
-    duration: effectiveDuration,
-    watermark: false,
-    generate_audio: true,
-  };
-  const arkRes = await fetch(ARK_ENDPOINT, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${opts.arkKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(arkBody),
-  });
-  const arkJson: any = await arkRes.json().catch(() => ({}));
-  if (!arkRes.ok || !arkJson?.id) {
-    return {
-      ok: false,
-      error: arkJson?.error?.message || arkJson?.message || `Seedance 创建任务失败(${arkRes.status})`,
-      raw: arkJson,
-    };
-  }
-  return { ok: true, id: arkJson.id, mode, duration: effectiveDuration };
 }
 
 /** 组装某段的参考图集合(Seedance 2.0 全 reference 模式,上限 9 张,按权重排序):
