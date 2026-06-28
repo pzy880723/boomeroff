@@ -393,28 +393,43 @@ ${isExplore ? '七' : '六'}、最终解释权
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-[#6b3a18]">手机号 *</Label>
-              <Input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                onBlur={async () => {
-                  if (!/^1[3-9]\d{9}$/.test(phone)) return;
-                  if (feedbackCode) return;
-                  const { data } = await supabase.functions.invoke('activity-feedback', {
-                    body: { action: 'lookup_by_phone', share_token: shareToken, phone },
-                  });
-                  const d = data as any;
-                  if (d?.found && d?.short_code) {
-                    localStorage.setItem(`activity_claim:${shareToken}`, d.short_code);
-                    setFeedbackCode(d.short_code);
-                    toast.info('检测到您已报名，已为您切换到发布反馈');
-                  }
-                }}
-                inputMode="numeric"
-                maxLength={11}
-                className="bg-white border-[#e8d5b3] rounded-xl h-11"
-              />
-
+              <div className="flex gap-2">
+                <Input
+                  value={phone}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, '').slice(0, 11);
+                    setPhone(v);
+                    if (v !== otpVerifiedPhone) setOtpCode('');
+                  }}
+                  inputMode="numeric"
+                  maxLength={11}
+                  placeholder="请输入手机号"
+                  className="bg-white border-[#e8d5b3] rounded-xl h-11 flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={sendOtp}
+                  disabled={otpSending || otpCooldown > 0 || !/^1[3-9]\d{9}$/.test(phone)}
+                  className="h-11 px-3 rounded-xl text-[12px] font-medium text-white whitespace-nowrap disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #b3331d 0%, #8e1f10 100%)' }}
+                >
+                  {otpSending ? '发送中…' : otpCooldown > 0 ? `${otpCooldown}s 后重发` : '发送验证码'}
+                </button>
+              </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-[#6b3a18]">短信验证码 *</Label>
+              <Input
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="请输入 6 位验证码"
+                className="bg-white border-[#e8d5b3] rounded-xl h-11 tracking-[0.3em]"
+              />
+              <p className="text-[11px] text-[#6b3a18]/60">为保障活动公平，每个手机号仅可领取一次</p>
+            </div>
+
 
             {fields.map((f) => (
               <div key={f.key} className="space-y-1.5">
