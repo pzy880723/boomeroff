@@ -604,6 +604,7 @@ Deno.serve(async (req) => {
       return json({
         ok: true, success: true, job_id: parent.id, status: "running",
         segment_total: 1, render_strategy: "one_shot", auto_decision_reason: autoReason,
+        target_duration_s: totalDur, actual_duration_s: oneShotDur,
       });
     }
 
