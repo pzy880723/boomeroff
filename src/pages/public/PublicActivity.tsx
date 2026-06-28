@@ -70,12 +70,17 @@ export default function PublicActivity() {
   const [activity, setActivity] = useState<any | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [otpVerifiedPhone, setOtpVerifiedPhone] = useState<string>('');
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [agreementOpen, setAgreementOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
+
 
   // 反馈模式：已领过券，再次进入此页
   const [feedbackCode, setFeedbackCode] = useState<string | null>(null);
