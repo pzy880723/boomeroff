@@ -560,17 +560,34 @@ Deno.serve(async (req) => {
       if (disableReferences) imgs.referenceImages = [];
       console.log(`[render per-shot] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length}`);
       const fallbackNotes: string[] = [];
+      let effectiveRefs = imgs.referenceImages;
+      // 用户主动选择软通过 → 提交前就处理
+      if (facePipeline === 'character_sheet' && effectiveRefs.length) {
+        try {
+          effectiveRefs = await softPassReferences(effectiveRefs, { admin, userId: u.user.id });
+          fallbackNotes.push('face_soft_pass_applied');
+        } catch (e) { console.warn(`[soft-pass seg${i + 1} pre]`, (e as any)?.message); }
+      }
       // L0: 全量 reference
       let r = await submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-        referenceImages: imgs.referenceImages,
+        referenceImages: effectiveRefs,
       });
+      // L0.5: 被真人拦了 → 自动给所有参考图打 Character Sheet 软通过水印再试
+      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
+        try {
+          const marked = await softPassReferences(effectiveRefs, { admin, userId: u.user.id });
+          fallbackNotes.push('face_soft_pass_auto');
+          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: marked });
+          if (r.ok) effectiveRefs = marked;
+        } catch (e) { console.warn(`[soft-pass seg${i + 1} auto]`, (e as any)?.message); }
+      }
       // L1: 只留第一张参考(通常是 storyboard 静帧 / 角色板)
-      if (!r.ok && isSensitive(r.error, (r as any).raw) && imgs.referenceImages.length > 1) {
+      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length > 1) {
         fallbackNotes.push('references_trimmed_for_safety');
         r = await submitArkTask({
           arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-          referenceImages: imgs.referenceImages.slice(0, 1),
+          referenceImages: effectiveRefs.slice(0, 1),
         });
       }
       // L2: 纯文本
@@ -578,6 +595,7 @@ Deno.serve(async (req) => {
         fallbackNotes.push('references_dropped_for_safety');
         r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
       }
+
       return { i, r, sub, duration, imgs, fallbackNotes };
     }));
 
