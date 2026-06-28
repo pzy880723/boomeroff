@@ -279,6 +279,7 @@ Deno.serve(async (req) => {
     const styleKey = normalizeStyle(body.style);
     const realism: "photoreal" | "stylized" = body.realism === "stylized" ? "stylized" : "photoreal";
     const theme: string = (body.theme || "").toString().slice(0, 200);
+    const styleGrade: "documentary" | "cinematic" = body.style_grade === "cinematic" ? "cinematic" : "documentary";
     const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     if (!shopId) return json({ ok: false, error: "请先选择店铺" });
 
