@@ -8,8 +8,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { BookOpen, Loader2, Sparkles, ChevronDown } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { thumbUrl } from '@/lib/imageUrl';
-import {
 import { invokeFn } from '@/lib/invokeFn';
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 
