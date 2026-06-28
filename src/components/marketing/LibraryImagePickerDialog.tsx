@@ -264,6 +264,26 @@ export function LibraryImagePickerDialog({
           />
         </div>
 
+        {/* 来源分段 */}
+        <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px]">
+          {([
+            { v: 'upload', label: '我上传的', Icon: Camera },
+            { v: 'generated', label: 'AI 生成', Icon: Sparkles },
+            { v: 'all', label: '全部', Icon: null as any },
+          ] as { v: AssetSource | 'all'; label: string; Icon: any }[]).map((opt) => (
+            <button
+              key={opt.v}
+              onClick={() => setSource(opt.v)}
+              className={[
+                'inline-flex items-center gap-1 px-2.5 py-1 rounded-full transition-colors',
+                source === opt.v ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+              ].join(' ')}
+            >
+              {opt.Icon && <opt.Icon className="w-3 h-3" />}{opt.label}
+            </button>
+          ))}
+        </div>
+
         {/* tag 筛选 */}
         {tagOptions.length > 0 && (
           <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
