@@ -333,6 +333,51 @@ export default function MarketingLibrary() {
     }
   };
 
+  // 一次性:把历史素材按规则回填 meta.asset_class(base / upload / generated)
+  const [reclassing, setReclassing] = useState(false);
+  const runReclassify = async () => {
+    if (reclassing) return;
+    setReclassing(true);
+    try {
+      const { data, error } = await invokeFn('backfill-asset-class', { body: {} });
+      if (error || (data as any)?.ok === false) {
+        toast.error((data as any)?.error || error?.message || '重整失败');
+        return;
+      }
+      const d = data as any;
+      toast.success(`重整完成 · 基础 ${d.base} / 上传 ${d.upload} / AI ${d.generated}`);
+      fetchItems(true);
+    } catch (e: any) {
+      toast.error(e?.message || '重整失败');
+    } finally {
+      setReclassing(false);
+    }
+  };
+
+  // 一次性:批量清理无意义标签(场景1..场景11 / 英文情绪词 / AI智能广告 等)
+  const [cleaningTags, setCleaningTags] = useState(false);
+  const runCleanTags = async () => {
+    if (cleaningTags) return;
+    if (!confirm('将批量删除「场景1..场景11、elegant、AI智能广告」等噪声标签,确认继续吗?')) return;
+    setCleaningTags(true);
+    try {
+      const { data, error } = await invokeFn('cleanup-marketing-tags', { body: {} });
+      if (error || (data as any)?.ok === false) {
+        toast.error((data as any)?.error || error?.message || '清理失败');
+        return;
+      }
+      const d = data as any;
+      toast.success(`清理完成 · 移除 ${d.removed_tags} 个噪声 · 涉及 ${d.affected_rows} 条素材`);
+      fetchItems(true);
+    } catch (e: any) {
+      toast.error(e?.message || '清理失败');
+    } finally {
+      setCleaningTags(false);
+    }
+  };
+
+
+
 
 
   // 轮询未完成视频任务
