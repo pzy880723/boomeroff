@@ -69,13 +69,6 @@ Deno.serve(async (req) => {
       if (!uErr) updated += 1;
     }
 
-    // 视频/文案默认归为 upload
-    await admin
-      .from("marketing_assets")
-      .update({})  // touch noop is invalid; instead update via JSONB only if missing
-      .eq("kind", "photo")
-      .limit(0);
-
     return json({ ok: true, total: all.length, base, upload, generated, updated });
   } catch (e) {
     console.error("[backfill-asset-class]", e);
