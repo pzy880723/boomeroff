@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed, Copy, Ticket } from 'lucide-react';
+import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed, Copy, Ticket, ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
