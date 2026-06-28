@@ -1004,6 +1004,11 @@ export default function MarketingLibrary() {
           {!loading && hasMore && (
             <LoadMoreSentinel onVisible={loadMore} loading={loadingMore} />
           )}
+          {!loading && !hasMore && filtered.length > 0 && (
+            <p className="py-6 text-center text-[11px] text-muted-foreground">
+              已加载全部 · 共 {filtered.length} 条
+            </p>
+          )}
         </>)}
       </div>
 
