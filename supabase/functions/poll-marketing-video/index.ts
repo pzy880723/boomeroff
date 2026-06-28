@@ -46,8 +46,12 @@ function decodeSegmentUrl(req: Request): string | null {
 function isAllowedSegmentUrl(url: string): boolean {
   try {
     const u = new URL(url);
+    const allowedHosts = new Set([
+      "ark-content-generation-cn-beijing.tos-cn-beijing.volces.com",
+      "ark-acg-cn-beijing.tos-cn-beijing.volces.com",
+    ]);
     return u.protocol === "https:" &&
-      u.hostname === "ark-content-generation-cn-beijing.tos-cn-beijing.volces.com" &&
+      allowedHosts.has(u.hostname) &&
       u.pathname.endsWith(".mp4");
   } catch {
     return false;
