@@ -418,10 +418,26 @@ export default function MarketingLibrary() {
     return ({ queued: '排队中', running: '渲染中' } as Record<string, string>)[s || ''] || s || '排队中';
   };
 
+  // 标签噪声过滤:旧数据里有大量 "场景1..场景11"、英文情绪词、"AI智能广告" 等无意义标签
+  // 这里只过滤"筛选条/热门词典"的显示,数据库原样保留(由"清理标签"一次性按钮真正删除)
+  const isNoiseTag = (t: string) => {
+    if (!t) return true;
+    if (/^场景[一二三四五六七八九十\d]+$/.test(t)) return true;
+    if (/^图[一二三四五六七八九十\d]+$/.test(t)) return true;
+    if (/^分镜头[一二三四五六七八九十\d]+$/.test(t)) return true;
+    if (/^(elegant|energetic|lively|playful|steady|calm|moody|warm|cool)$/i.test(t)) return true;
+    if (/^AI[\s_-]?(智能广告|生成|图片?)$/.test(t)) return true;
+    return false;
+  };
+
   const tagOptions = useMemo(() => {
-    const set = new Set<string>(DEFAULT_TAGS);
-    items.forEach((it) => (Array.isArray(it.tags) ? it.tags : []).forEach((t: string) => set.add(t)));
-    return Array.from(set);
+    // 只用当前 items 里出现 ≥1 次的标签,且过滤噪声;白名单按出现频次排序
+    const freq = new Map<string, number>();
+    items.forEach((it) => (Array.isArray(it.tags) ? it.tags : []).forEach((t: string) => {
+      if (!t || isNoiseTag(t)) return;
+      freq.set(t, (freq.get(t) || 0) + 1);
+    }));
+    return Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).map(([t]) => t);
   }, [items]);
 
   const filtered = useMemo(() => {
