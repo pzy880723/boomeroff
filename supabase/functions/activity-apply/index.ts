@@ -13,12 +13,15 @@ Deno.serve(async (req) => {
     const share_token = body?.share_token;
     const applicant_name = String(body?.applicant_name || '').trim().slice(0, 50);
     const applicant_phone = String(body?.applicant_phone || '').trim();
+    const otp_code = String(body?.otp_code || '').trim();
     const form_data = body?.form_data || {};
 
     if (!share_token || !applicant_name || !applicant_phone) {
       return json({ error: '缺少必填字段' }, 400);
     }
     if (!/^1[3-9]\d{9}$/.test(applicant_phone)) return json({ error: '手机号格式不正确' }, 400);
+    if (!/^\d{6}$/.test(otp_code)) return json({ error: '请输入 6 位手机验证码' }, 400);
+
 
     const admin = createClient(
       Deno.env.get('SUPABASE_URL')!,
