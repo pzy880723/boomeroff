@@ -143,12 +143,22 @@ export function ImageLightbox({
 
       {/* 居中图片,留出空白便于"点空白关闭" */}
       <div className="absolute inset-0 flex items-center justify-center px-14 py-20">
-        <img
-          src={src}
-          alt=""
-          className="max-w-full max-h-full object-contain pointer-events-none"
-          draggable={false}
-        />
+        {!loaded && src && (
+          <Loader2 className="absolute w-8 h-8 text-white/80 animate-spin" />
+        )}
+        {src && (
+          <img
+            src={src}
+            alt=""
+            onLoad={() => setLoaded(true)}
+            onError={() => setLoaded(true)}
+            className={[
+              'max-w-full max-h-full object-contain pointer-events-none transition-opacity duration-200',
+              loaded ? 'opacity-100' : 'opacity-0',
+            ].join(' ')}
+            draggable={false}
+          />
+        )}
       </div>
 
       {/* 底部:圆点 + 关闭胶囊 */}
