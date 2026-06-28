@@ -223,8 +223,14 @@ Deno.serve(async (req) => {
         const overTimeout = ageMs > TIMEOUT_MIN * 60_000;
 
         if (!j.provider_task_id) {
-          if (j.parent_job_id && j.status === "queued") {
+          if (j.status === "queued" && (j.script || {}).__render_payload) {
             const sub = await submitQueuedChild(admin, ARK_KEY, j, j.user_id);
+            if (!j.parent_job_id && sub.submitted) {
+              await updateAssetMeta(admin, j.user_id, j.id, { status: "running", segment_done: 0, segment_total: j.segment_total || 1 });
+            }
+            if (!j.parent_job_id && sub.failed) {
+              await updateAssetMeta(admin, j.user_id, j.id, { status: "failed", error: sub.error, segment_done: 0 });
+            }
             results.push({ id: j.id, status: sub.failed ? "failed" : (sub.submitted ? "running" : j.status), submitted: sub.submitted, error: sub.error });
             continue;
           }
