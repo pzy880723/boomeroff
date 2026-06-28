@@ -7,6 +7,7 @@ import {
 } from "../_shared/video-styles.ts";
 import {
   STOREFRONT_CONSTRAINT_ZH,
+  STOREFRONT_CONSTRAINT_EN,
 } from "../_shared/storefront-constraints.ts";
 
 const corsHeaders = {
