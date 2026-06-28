@@ -316,9 +316,6 @@ Deno.serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const ARK_KEY = Deno.env.get("ARK_API_KEY");
-    if (!ARK_KEY) return json({ ok: false, error: "未配置 ARK_API_KEY" });
-
     const auth = req.headers.get("Authorization");
     if (!auth) return json({ ok: false, error: "未授权" }, 401);
     const userClient = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
