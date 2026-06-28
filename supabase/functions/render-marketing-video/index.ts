@@ -10,6 +10,7 @@ import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segment
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 import { STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
+import { softPassReferences } from "../_shared/face-gateway.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -370,14 +371,19 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "脚本格式不完整" });
     }
     // 一键修复开关:disable_storyboard = 扔掉分镜静帧首尾帧,disable_references = 连参考图也不要
+    // face_pipeline:character_sheet = 提交前就给参考图打 Character Sheet 软通过水印
     const disableStoryboard = !!body.disable_storyboard;
     const disableReferences = !!body.disable_references;
+    const facePipeline: 'auto' | 'character_sheet' | 'illustration' | 'faceless' =
+      (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless')
+        ? body.face_pipeline : 'auto';
     if (disableStoryboard) {
       const strip = (c: any) => { if (c && typeof c === 'object') c.storyboard_url = null; };
       script = JSON.parse(JSON.stringify(script));
       strip(script.hook); strip(script.outro);
       if (Array.isArray(script.scenes)) script.scenes.forEach(strip);
     }
+
 
     const styleKey = normalizeStyle(body.style || script.style);
     const realism = normalizeRealism(body.realism ?? script.realism);
@@ -448,20 +454,39 @@ Deno.serve(async (req) => {
       const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
       const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
       const fallbackNotes: string[] = [];
-      console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur}`);
+      console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur} face_pipeline=${facePipeline}`);
 
-      // L0: 全量参考(最多 9 张)
-      let r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: refImages });
+      // 用户主动选择软通过 → 提交前就处理
+      let effectiveRefs = refImages;
+      if (facePipeline === 'character_sheet' && refImages.length) {
+        try {
+          effectiveRefs = await softPassReferences(refImages, { admin, userId: u.user.id });
+          fallbackNotes.push('face_soft_pass_applied');
+        } catch (e) { console.warn('[soft-pass one_shot pre]', (e as any)?.message); }
+      }
+
+      // L0: 全量参考
+      let r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: effectiveRefs });
+      // L0.5: 被真人拦了 → 自动给所有参考图打 Character Sheet 软通过水印再试
+      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
+        try {
+          const marked = await softPassReferences(effectiveRefs, { admin, userId: u.user.id });
+          fallbackNotes.push('face_soft_pass_auto');
+          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: marked });
+          if (r.ok) effectiveRefs = marked;
+        } catch (e) { console.warn('[soft-pass one_shot auto]', (e as any)?.message); }
+      }
       // L1: 仅角色板 / 第一张
-      if (!r.ok && isSensitive(r.error, (r as any).raw) && refImages.length > 1) {
+      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length > 1) {
         fallbackNotes.push('references_trimmed_for_safety');
-        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: refImages.slice(0, 1) });
+        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: effectiveRefs.slice(0, 1) });
       }
       // L2: 纯文本
       if (!r.ok && isSensitive(r.error, (r as any).raw)) {
         fallbackNotes.push('references_dropped_for_safety');
         r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution });
       }
+
       if (!r.ok) {
         return json({ ok: false, error: r.error, raw: (r as any).raw });
       }
@@ -535,17 +560,34 @@ Deno.serve(async (req) => {
       if (disableReferences) imgs.referenceImages = [];
       console.log(`[render per-shot] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length}`);
       const fallbackNotes: string[] = [];
+      let effectiveRefs = imgs.referenceImages;
+      // 用户主动选择软通过 → 提交前就处理
+      if (facePipeline === 'character_sheet' && effectiveRefs.length) {
+        try {
+          effectiveRefs = await softPassReferences(effectiveRefs, { admin, userId: u.user.id });
+          fallbackNotes.push('face_soft_pass_applied');
+        } catch (e) { console.warn(`[soft-pass seg${i + 1} pre]`, (e as any)?.message); }
+      }
       // L0: 全量 reference
       let r = await submitArkTask({
         arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-        referenceImages: imgs.referenceImages,
+        referenceImages: effectiveRefs,
       });
+      // L0.5: 被真人拦了 → 自动给所有参考图打 Character Sheet 软通过水印再试
+      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
+        try {
+          const marked = await softPassReferences(effectiveRefs, { admin, userId: u.user.id });
+          fallbackNotes.push('face_soft_pass_auto');
+          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: marked });
+          if (r.ok) effectiveRefs = marked;
+        } catch (e) { console.warn(`[soft-pass seg${i + 1} auto]`, (e as any)?.message); }
+      }
       // L1: 只留第一张参考(通常是 storyboard 静帧 / 角色板)
-      if (!r.ok && isSensitive(r.error, (r as any).raw) && imgs.referenceImages.length > 1) {
+      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length > 1) {
         fallbackNotes.push('references_trimmed_for_safety');
         r = await submitArkTask({
           arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-          referenceImages: imgs.referenceImages.slice(0, 1),
+          referenceImages: effectiveRefs.slice(0, 1),
         });
       }
       // L2: 纯文本
@@ -553,6 +595,7 @@ Deno.serve(async (req) => {
         fallbackNotes.push('references_dropped_for_safety');
         r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
       }
+
       return { i, r, sub, duration, imgs, fallbackNotes };
     }));
 

@@ -137,6 +137,9 @@ Deno.serve(async (req) => {
       if (typeof body.resolution === 'string' && body.resolution) renderBody.resolution = body.resolution;
       if (body.realism === 'photoreal' || body.realism === 'stylized') renderBody.realism = body.realism;
       if (body.disable_references) renderBody.disable_references = true;
+      if (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless') {
+        renderBody.face_pipeline = body.face_pipeline;
+      }
       if (body.prompt_overrides && typeof body.prompt_overrides === 'object') {
         renderBody.prompt_overrides = body.prompt_overrides;
       }
