@@ -575,6 +575,9 @@ function AiBubble({ msg, onCopy, onVideo }: { msg: Extract<Msg, { role: 'ai' }>;
         )}
         {msg.status === 'done' && msg.outputUrl && (
           <div className="bg-card border border-border rounded-2xl rounded-tl-sm p-2 space-y-2 inline-block">
+            {msg.label && (
+              <div className="text-[10px] text-accent font-medium px-1">{msg.label}</div>
+            )}
             <img src={msg.outputUrl} alt="出图" className="max-w-full max-h-[60vh] rounded-lg" />
             <div className="flex flex-wrap gap-1.5 px-1">
               <Button variant="outline" size="sm" className="h-7 text-[11px]" asChild>
