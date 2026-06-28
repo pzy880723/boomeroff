@@ -1,7 +1,7 @@
 // 提交视频渲染任务到火山方舟 Seedance 2.0 API。
 // 渲染策略由 body.render_strategy 决定:
 //   - 'one_shot':整段脚本 + 最多 9 张参考图,单次 Seedance 调用直出 ≤15s(对齐小云雀的玩法)
-//   - 'per_shot':每个分镜 = 1 段,独立调用 Seedance,完成后由前端 ffmpeg-wasm 拼接(强一致性)
+//   - 'per_shot':按 5/10 秒合法网格分段,独立调用 Seedance,完成后由前端拼接
 //   - 'auto'(默认):≤15s 且分镜数 ≤4 → one_shot,否则 per_shot
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
@@ -646,7 +646,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ============ 逐镜渲染路径(每个分镜 = 1 段,完成后由前端拼接) ============
+    // ============ 分段渲染路径(按 5/10 秒合法网格分段,完成后由前端拼接) ============
 
     const rawSubScripts = splitScript(script);
     // r2v 路径(默认):按 {5,10} 网格吸附并合并相邻 5s → 一并送给火山,避免 11/13s 这种非法段。
