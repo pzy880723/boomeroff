@@ -565,7 +565,7 @@ Deno.serve(async (req) => {
       let effectiveRefs = refImages;
       if (facePipeline === 'character_sheet' && refImages.length) {
         try {
-          effectiveRefs = await softPassReferences(refImages, { admin, userId: u.user.id });
+          effectiveRefs = await softPassKeyReferences(refImages, { admin, userId: u.user.id, max: 3 });
           fallbackNotes.push('face_soft_pass_applied');
         } catch (e) { console.warn('[soft-pass one_shot pre]', (e as any)?.message); }
       }
@@ -575,7 +575,7 @@ Deno.serve(async (req) => {
       // L0.5: 被真人拦了 → 自动给所有参考图打 Character Sheet 软通过水印再试
       if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
         try {
-          const marked = await softPassReferences(effectiveRefs, { admin, userId: u.user.id });
+          const marked = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 3 });
           fallbackNotes.push('face_soft_pass_auto');
           r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: marked });
           if (r.ok) effectiveRefs = marked;
@@ -675,7 +675,7 @@ Deno.serve(async (req) => {
       // 用户主动选择软通过 → 提交前就处理
       if (facePipeline === 'character_sheet' && effectiveRefs.length) {
         try {
-          effectiveRefs = await softPassReferences(effectiveRefs, { admin, userId: u.user.id });
+          effectiveRefs = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2 });
           fallbackNotes.push('face_soft_pass_applied');
         } catch (e) { console.warn(`[soft-pass seg${i + 1} pre]`, (e as any)?.message); }
       }
@@ -687,7 +687,7 @@ Deno.serve(async (req) => {
       // L0.5: 被真人拦了 → 自动给所有参考图打 Character Sheet 软通过水印再试
       if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
         try {
-          const marked = await softPassReferences(effectiveRefs, { admin, userId: u.user.id });
+          const marked = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2 });
           fallbackNotes.push('face_soft_pass_auto');
           r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: marked });
           if (r.ok) effectiveRefs = marked;
