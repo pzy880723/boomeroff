@@ -12,6 +12,7 @@ import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { toast } from 'sonner';
 import { compressForUpload, UPLOAD_CACHE_OPTS } from '@/lib/uploadImage';
 import { thumbUrl } from '@/lib/imageUrl';
+import { invokeFn } from '@/lib/invokeFn';
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
 
@@ -176,7 +177,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
   // 联网搜索真实图（Firecrawl），失败返回空数组
   const webSearchImages = async (query: string, intent: 'gallery' | 'backstamp', limit: number): Promise<string[]> => {
     try {
-      const { data, error } = await supabase.functions.invoke('web-search-images', {
+      const { data, error } = await invokeFn('web-search-images', {
         body: { query, intent, limit, mirror: true, pathPrefix: intent === 'backstamp' ? 'web-backstamp' : 'web-gallery' },
       });
       if (error) throw error;
@@ -259,7 +260,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         }
       }
       if (!url) {
-        const invokeP = supabase.functions.invoke('generate-knowledge-cover', { body: { prompt } });
+        const invokeP = invokeFn('generate-knowledge-cover', { body: { prompt } });
         const { data, error } = await Promise.race([invokeP, timeoutPromise]) as any;
         if (error) throw error;
         url = (data && (data as any).url) || null;
@@ -311,7 +312,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
         const results = await Promise.all(
           angles.map(async (p) => {
             try {
-              const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: p } });
+              const { data, error } = await invokeFn('generate-knowledge-cover', { body: { prompt: p } });
               if (error) throw error;
               return (data?.url as string) || null;
             } catch (e) {
@@ -435,7 +436,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
     const wantCover = wantsCoverRedraw(text);
     setMessages(next); setInput(''); setPendingImage(null); setThinking(true);
     const callOnce = async () => {
-      const { data, error } = await supabase.functions.invoke('generate-official-knowledge', {
+      const { data, error } = await invokeFn('generate-official-knowledge', {
         body: { messages: next.filter((m) => m.role === 'user'), currentDraft: draft, forceCover: wantCover },
       });
       if (error) throw error;
@@ -543,7 +544,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       // ---- Step 1: core fields ----
       setEnrichStage('core');
       const coreData = await withRetry(async () => {
-        const { data, error } = await supabase.functions.invoke('enrich-knowledge-core', {
+        const { data, error } = await invokeFn('enrich-knowledge-core', {
           body: { currentDraft: baseDraft, needCover: !hasCover },
         });
         if (error) throw error;
@@ -591,7 +592,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
       let bodyText: string | null = null;
       try {
         const bodyData = await withRetry(async () => {
-          const { data, error } = await supabase.functions.invoke('enrich-knowledge-body', {
+          const { data, error } = await invokeFn('enrich-knowledge-body', {
             body: { coreDraft },
           });
           if (error) throw error;
@@ -630,7 +631,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
           if (!url) {
             try {
               const cd = await withRetry(async () => {
-                const { data, error } = await supabase.functions.invoke('generate-knowledge-cover', { body: { prompt: promptToUse } });
+                const { data, error } = await invokeFn('generate-knowledge-cover', { body: { prompt: promptToUse } });
                 if (error) throw error;
                 if (!data?.url) throw new Error('cover 返回为空');
                 return data;
@@ -699,7 +700,7 @@ export function AiKnowledgeDialog({ open, onOpenChange, onSaved, editingItem }: 
 
   const generateBody = async (): Promise<string | null> => {
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-knowledge-body', {
+      const { data, error } = await invokeFn('enrich-knowledge-body', {
         body: { coreDraft: draft },
       });
       if (error) throw error;

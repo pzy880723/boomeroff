@@ -90,6 +90,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { buildXhsViral, VIRAL_STYLE_LABELS, type ViralStyle } from '@/lib/shareCopy';
+import { invokeFn } from '@/lib/invokeFn';
 
 
 interface CopyCand {
@@ -147,7 +148,7 @@ export function AssetDetailDialog({
           mid: [],
         };
       }
-      const { data, error } = await supabase.functions.invoke('render-marketing-video', {
+      const { data, error } = await invokeFn('render-marketing-video', {
         body: {
           script,
           style: asset.meta?.style || 'realistic_storefront',
@@ -211,7 +212,7 @@ export function AssetDetailDialog({
     let c: CopyCand | null = null;
     try {
       const topic = asset.meta?.topic || asset.meta?.style_label || '';
-      const { data, error } = await supabase.functions.invoke('generate-marketing-copy', {
+      const { data, error } = await invokeFn('generate-marketing-copy', {
         body: {
           image_urls: [poster],
           platform: 'xhs',

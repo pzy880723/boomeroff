@@ -7,6 +7,7 @@ import {
 import { Sparkles, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Props {
   target: 'official' | 'personal';
@@ -25,7 +26,7 @@ export function AutoCategorizeButton({ target, onDone }: Props) {
   const run = async () => {
     setRunning(true);
     try {
-      const { data, error } = await supabase.functions.invoke('auto-categorize-knowledge', {
+      const { data, error } = await invokeFn('auto-categorize-knowledge', {
         body: { mode: 'batch', target },
       });
       if (error) throw error;

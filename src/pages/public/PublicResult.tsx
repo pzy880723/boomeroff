@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import type { GuestRecognitionResult } from '@/hooks/useGuestRecognition';
 import { makeThumbnail } from '@/lib/imageThumb';
 import {
+import { invokeFn } from '@/lib/invokeFn';
   buildLocalShareCopy,
   sanitizeShareCopy,
   STYLE_LABELS,
@@ -66,7 +67,7 @@ export default function PublicResult() {
     if (!useAI) return;
     setCaptionLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-share-copy', {
+      const { data, error } = await invokeFn('generate-share-copy', {
         body: {
           name: r.name,
           category: r.category,
@@ -154,7 +155,7 @@ export default function PublicResult() {
         const thumb = await makeThumbnail(image, 480, 0.78);
         if (thumb) body.thumbnailBase64 = thumb;
       }
-      const { data, error } = await supabase.functions.invoke('submit-public-post', { body });
+      const { data, error } = await invokeFn('submit-public-post', { body });
       if (error) throw new Error((error as any).message || '发布失败');
       if (data?.error) throw new Error(data.error);
       setShared(true);

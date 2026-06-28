@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { invokeFn } from '@/lib/invokeFn';
 
 export function ActivityReviewPanel() {
   const [list, setList] = useState<any[]>([]);
@@ -29,7 +30,7 @@ export function ActivityReviewPanel() {
 
   const review = async (id: string, decision: 'approve' | 'reject') => {
     setProcessing(id);
-    const { data, error } = await supabase.functions.invoke('activity-review', {
+    const { data, error } = await invokeFn('activity-review', {
       body: { application_id: id, decision },
     });
     setProcessing(null);

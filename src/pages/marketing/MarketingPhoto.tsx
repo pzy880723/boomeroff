@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ShopPicker } from '@/components/marketing/ShopPicker';
 import { useEffectiveShop } from '@/hooks/useShops';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Toggles { exposure: boolean; geometry: boolean; denoise: boolean; declutter: boolean; bg_clean: boolean; }
 
@@ -40,7 +41,7 @@ export default function MarketingPhoto() {
     if (!shopId) { toast.error('请先选择店铺'); return; }
     setBusy(true); setOutputUrl(null);
     try {
-      const { data, error } = await supabase.functions.invoke('beautify-image', { body: { image_url: origUrl, toggles, custom, shop_id: shopId } });
+      const { data, error } = await invokeFn('beautify-image', { body: { image_url: origUrl, toggles, custom, shop_id: shopId } });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       setOutputUrl((data as any).output_url);

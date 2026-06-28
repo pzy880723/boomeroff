@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { RecognitionResult, ProductCategory } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { computeImageHash } from '@/lib/imageHash';
+import { invokeFn } from '@/lib/invokeFn';
 
 export type RecognitionPhase = 'reading' | 'matching' | 'generating' | 'done';
 
@@ -43,7 +44,7 @@ export function useProductRecognition() {
       options.onPhase?.('matching');
 
       const tInvoke = Date.now();
-      const { data, error } = await supabase.functions.invoke('recognize-product', { body });
+      const { data, error } = await invokeFn('recognize-product', { body });
       console.log('[FE] edge invoke:', Date.now() - tInvoke, 'ms');
 
       if (error) throw new Error(error.message);

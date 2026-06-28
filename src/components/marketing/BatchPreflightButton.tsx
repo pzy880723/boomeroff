@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 type CharLite = { id: string; name?: string | null; verified_asset_uri?: string | null };
 type Fail = { id: string; name: string; error: string };
@@ -59,7 +60,7 @@ export function BatchPreflightButton({
     for (let off = 0; off < subset.length; off += BATCH) {
       const chunk = subset.slice(off, off + BATCH);
       try {
-        const { data, error } = await supabase.functions.invoke('character-preflight', {
+        const { data, error } = await invokeFn('character-preflight', {
           body: { character_ids: chunk.map((c) => c.id) },
         });
         if (error) throw error;

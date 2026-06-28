@@ -14,6 +14,7 @@ import { PlatformBadge, platformLabel } from '@/components/marketing/dispatch/Pl
 import type { PlatformSpec, SocialAccount } from '@/lib/dispatch';
 import { LibraryAssetPickerDialog, type PickedAsset } from './LibraryAssetPickerDialog';
 import { AiCopySheet } from './AiCopySheet';
+import { invokeFn } from '@/lib/invokeFn';
 
 type Kind = 'video' | 'image_text';
 
@@ -70,7 +71,7 @@ export default function Workbench() {
     if (!shopId) return;
     (async () => {
       setLoadingAccounts(true);
-      const { data } = await supabase.functions.invoke('dispatch-account-list', { body: { shop_id: shopId } });
+      const { data } = await invokeFn('dispatch-account-list', { body: { shop_id: shopId } });
       setAccounts((data?.accounts || []) as SocialAccount[]);
       setLoadingAccounts(false);
     })();
@@ -161,7 +162,7 @@ export default function Workbench() {
       };
       if (kind === 'video') payload.asset_id = asset?.id;
       else payload.images = images;
-      const { data, error } = await supabase.functions.invoke('dispatch-job-create', { body: payload });
+      const { data, error } = await invokeFn('dispatch-job-create', { body: payload });
       if (error) throw new Error((data as any)?.error || error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
       toast({ title: data?.scheduled ? '已加入定时' : '已提交,正在发布' });

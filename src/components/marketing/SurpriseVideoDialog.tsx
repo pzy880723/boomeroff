@@ -22,6 +22,7 @@ import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { toastVideoFailure } from '@/lib/toastVideoFailure';
 import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
+import { invokeFn } from '@/lib/invokeFn';
 
 // 惊喜一下固定真人写实,不暴露切换开关
 const SURPRISE_REALISM: Realism = 'photoreal';
@@ -126,7 +127,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     if (!shopId) return;
     setPicking(true); setPick(null);
     const existing = getInflightPick(shopId);
-    const promise = existing || setInflightPick(shopId, supabase.functions.invoke('surprise-marketing-video', {
+    const promise = existing || setInflightPick(shopId, invokeFn('surprise-marketing-video', {
       body: { shop_id: shopId, preview: true, exclude_asset_ids: exclude, realism },
     }));
     try {
@@ -179,7 +180,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     setSubmitting(true);
     setRenderError(null);
     try {
-      const { data, error } = await supabase.functions.invoke('surprise-marketing-video', {
+      const { data, error } = await invokeFn('surprise-marketing-video', {
         body: {
           shop_id: shopId, preview: false,
           script: pick.script, picked_assets: pick.assets,

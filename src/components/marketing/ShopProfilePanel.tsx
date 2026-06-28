@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Save, Store, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Profile {
   shop_id: string;
@@ -119,7 +120,7 @@ export function ShopProfilePanel({ shopId, shopName }: { shopId: string; shopNam
               if (hasContent && !confirm('当前已有店铺描述，AI 生成会覆盖现有内容（你仍可手动微调后再保存）。确定继续？')) return;
               setAiBusy(true);
               try {
-                const { data, error } = await supabase.functions.invoke('generate-shop-profile', {
+                const { data, error } = await invokeFn('generate-shop-profile', {
                   body: { text: nlText, shop_id: shopId },
                 });
                 if (error) throw error;

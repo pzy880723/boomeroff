@@ -1,6 +1,7 @@
 // 「惊喜一下」任务状态：A段(挑素材+写脚本)进程级去重，B段(渲染)持久化到 localStorage。
 // 关弹窗/切页面不丢任务，再次打开恢复进度。
 import { supabase } from '@/integrations/supabase/client';
+import { invokeFn } from '@/lib/invokeFn';
 
 const TTL_MS = 30 * 60 * 1000;
 const PICK_TTL_MS = 60 * 60 * 1000;
@@ -83,7 +84,7 @@ export async function pollRenderJob(jobId: string): Promise<{
   progress?: { done: number; total: number };
 }> {
   try {
-    const { data, error } = await supabase.functions.invoke('poll-marketing-video', { body: { job_id: jobId } });
+    const { data, error } = await invokeFn('poll-marketing-video', { body: { job_id: jobId } });
     if (error) return { phase: 'running', error: error.message };
     const d = data as any;
     const s: string = d?.status || 'running';

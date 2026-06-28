@@ -15,6 +15,7 @@ import {
 } from '@/lib/scheduleUtils';
 import { StaffProfileDialog } from './StaffProfileDialog';
 import { cn } from '@/lib/utils';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Shift { code: string; name: string; start_time: string; end_time: string; color: string | null; sort_order: number; shop_id?: string | null }
 interface Sched { id?: string; work_date: string; shift_code: string; user_id: string; source?: string; shop_id?: string | null }
@@ -213,7 +214,7 @@ export function ScheduleManager() {
     if (!shopId) { toast.error('请先选择门店'); return; }
     setAiBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-schedule', {
+      const { data, error } = await invokeFn('generate-schedule', {
         body: { week_start: weekStart, shop_id: shopId, overwrite: false },
       });
       if (error) throw error;

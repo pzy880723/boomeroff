@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { uploadMarketingImages } from '@/pages/marketing/uploadMarketingImages';
+import { invokeFn } from '@/lib/invokeFn';
 
 type Kind = 'photo' | 'copy' | 'video';
 
@@ -75,7 +76,7 @@ export function UploadAssetDialog({
         const ids = uploaded.map((r) => r.id).filter(Boolean);
         for (let i = 0; i < ids.length; i += 12) {
           const slice = ids.slice(i, i + 12);
-          supabase.functions.invoke('auto-tag-marketing-asset', { body: { asset_ids: slice } })
+          invokeFn('auto-tag-marketing-asset', { body: { asset_ids: slice } })
             .catch(() => { /* 静默失败,下次生成视频时会兜底 */ });
         }
 

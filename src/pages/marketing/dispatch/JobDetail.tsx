@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { PlatformBadge, platformLabel } from '@/components/marketing/dispatch/PlatformBadge';
 import { STATUS_COLOR, STATUS_LABEL, type PublishJob, type PublishTarget } from '@/lib/dispatch';
+import { invokeFn } from '@/lib/invokeFn';
 
 type OpResult = { type: 'success' | 'error'; text: string } | null;
 
@@ -25,7 +26,7 @@ export default function JobDetail() {
   const load = useCallback(async () => {
     if (!jobId) return;
     setLoading(true);
-    const { data, error } = await supabase.functions.invoke('dispatch-job-status', { body: { job_id: jobId } });
+    const { data, error } = await invokeFn('dispatch-job-status', { body: { job_id: jobId } });
     setLoading(false);
     if (error) { toast({ title: '加载失败', description: error.message, variant: 'destructive' }); return; }
     setJob(data?.job || null); setTargets(data?.targets || []);
@@ -57,7 +58,7 @@ export default function JobDetail() {
 
   const retry = async (targetId: string) => {
     setRetrying(targetId); setOpResult(null);
-    const { data, error } = await supabase.functions.invoke('dispatch-job-retry', { body: { target_id: targetId } });
+    const { data, error } = await invokeFn('dispatch-job-retry', { body: { target_id: targetId } });
     setRetrying(null);
     const errMsg = (data as any)?.error || error?.message;
     if (errMsg) {
@@ -75,7 +76,7 @@ export default function JobDetail() {
     setBulkBusy('retry'); setOpResult(null);
     let ok = 0; let fail = 0;
     for (const t of failedTargets) {
-      const { data, error } = await supabase.functions.invoke('dispatch-job-retry', { body: { target_id: t.id } });
+      const { data, error } = await invokeFn('dispatch-job-retry', { body: { target_id: t.id } });
       if ((data as any)?.error || error) fail++; else ok++;
     }
     setBulkBusy(null);
@@ -89,7 +90,7 @@ export default function JobDetail() {
     if (!jobId || !canCancel) return;
     if (!confirm('确定取消整个任务?未派单的目标会停止。')) return;
     setBulkBusy('cancel'); setOpResult(null);
-    const { data, error } = await supabase.functions.invoke('dispatch-job-cancel', { body: { job_id: jobId } });
+    const { data, error } = await invokeFn('dispatch-job-cancel', { body: { job_id: jobId } });
     setBulkBusy(null);
     const errMsg = (data as any)?.error || error?.message;
     if (errMsg) {

@@ -17,6 +17,7 @@ import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePic
 import { TEMPLATE_GROUPS, findTemplate, type AiImageTemplate } from './aiImageTemplates';
 import { SmartAdGenerateDialog, type SmartAdResultItem } from '@/components/marketing/SmartAdGenerateDialog';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
+import { invokeFn } from '@/lib/invokeFn';
 
 type Aspect = '1:1' | '3:4' | '9:16' | '16:9';
 const ASPECTS: Aspect[] = ['1:1', '3:4', '9:16', '16:9'];
@@ -178,7 +179,7 @@ export default function AiImage() {
     setBusy(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('ai-image-chat', {
+      const { data, error } = await invokeFn('ai-image-chat', {
         body: {
           shop_id: shopId,
           prompt: snapshot.text,

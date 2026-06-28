@@ -19,6 +19,7 @@ import { ShareToCommunityButton } from '@/components/community/ShareToCommunityB
 import { normalizeSellingPoints, normalizeTips, SELLING_TAG_STYLE } from '@/lib/script';
 import { KnowledgeCardSections } from '@/components/knowledge/KnowledgeCardSections';
 import { pickKnowledgeCard, type KnowledgeCard } from '@/lib/knowledgeCard';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Product {
   id: string;
@@ -82,7 +83,7 @@ export function ProductDetailDialog({
     if (!product || !isAdmin) return;
     setEnriching(true);
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-knowledge-core', {
+      const { data, error } = await invokeFn('enrich-knowledge-core', {
         body: {
           currentDraft: {
             name: product.name,

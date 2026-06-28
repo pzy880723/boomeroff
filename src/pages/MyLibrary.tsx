@@ -26,6 +26,7 @@ import { pickKnowledgeCard, officialRowToCard, type KnowledgeCard } from '@/lib/
 import { Wand2 } from 'lucide-react';
 import type { Json } from '@/integrations/supabase/types';
 import { thumbUrl } from '@/lib/imageUrl';
+import { invokeFn } from '@/lib/invokeFn';
 
 
 interface UnifiedItem {
@@ -315,7 +316,7 @@ export default function MyLibrary() {
           ? detail!.selling_points.map((s: any) => typeof s === 'string' ? s : s?.text).filter(Boolean)
           : [],
       };
-      const { data, error } = await supabase.functions.invoke('enrich-knowledge-core', {
+      const { data, error } = await invokeFn('enrich-knowledge-core', {
         body: { currentDraft, needCover: false },
       });
       if (error) throw error;

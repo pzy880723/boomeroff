@@ -11,6 +11,7 @@ import {
 import { Check, X, Inbox, MessageSquare, ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import { CATEGORY_LABELS } from '@/types';
 import { thumbUrl } from '@/lib/imageUrl';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface PendingItem {
   id: string;
@@ -52,7 +53,7 @@ export function CorrectionReviewPanel() {
   const review = async (id: string, action: 'approve' | 'reject') => {
     setBusyId(id);
     try {
-      const { data, error } = await supabase.functions.invoke('review-correction', {
+      const { data, error } = await invokeFn('review-correction', {
         body: { id, action },
       });
       if (error) throw error;

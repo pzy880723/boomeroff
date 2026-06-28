@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { fileSha256 } from '@/lib/fileSha256';
 import { supabase } from '@/integrations/supabase/client';
 import { UploadProgressBar, ItemTile, type UploadTileItem } from '@/components/marketing/UploadProgressTiles';
+import { invokeFn } from '@/lib/invokeFn';
 
 type Item = UploadTileItem & { file: File; url?: string; hash?: string };
 
@@ -178,7 +179,7 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
         if (!ids.length) return;
         for (let i = 0; i < ids.length; i += 8) {
           const slice = ids.slice(i, i + 8);
-          void supabase.functions.invoke('auto-tag-marketing-asset', { body: { asset_ids: slice } })
+          void invokeFn('auto-tag-marketing-asset', { body: { asset_ids: slice } })
             .catch((err) => console.warn('[upload-grid] auto-tag failed', err?.message));
         }
       }, 600);

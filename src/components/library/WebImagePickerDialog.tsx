@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, RefreshCw, Search, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { invokeFn } from '@/lib/invokeFn';
 
 interface Candidate { url: string; source?: string }
 
@@ -46,7 +47,7 @@ export function WebImagePickerDialog({
     if (!q.trim()) { toast.error('请输入搜索词'); return; }
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('web-search-images', {
+      const { data, error } = await invokeFn('web-search-images', {
         body: { mode: 'search', query: q, intent: 'gallery', limit: 20, exclude },
       });
       if (error) throw error;
@@ -89,7 +90,7 @@ export function WebImagePickerDialog({
     if (urls.length === 0) return;
     setConfirming(true);
     try {
-      const { data, error } = await supabase.functions.invoke('web-search-images', {
+      const { data, error } = await invokeFn('web-search-images', {
         body: { mode: 'mirror', urls, pathPrefix },
       });
       if (error) throw error;

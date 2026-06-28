@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeFn } from '@/lib/invokeFn';
 
 export interface SpiritMessage {
   id: string;
@@ -71,7 +72,7 @@ export function useSpiritChat() {
     setStatus('idle');
     setError(null);
     try {
-      const { data, error: e } = await supabase.functions.invoke('spirit-conversations', {
+      const { data, error: e } = await invokeFn('spirit-conversations', {
         body: { action: 'messages', conversationId: cid },
       });
       if (e) throw e;
@@ -234,24 +235,24 @@ export function useSpiritChat() {
 
 // ── 独立工具：会话列表 / 重命名 / 删除 ────────
 export async function listSpiritConversations(): Promise<SpiritConversationSummary[]> {
-  const { data, error } = await supabase.functions.invoke('spirit-conversations', { body: { action: 'list' } });
+  const { data, error } = await invokeFn('spirit-conversations', { body: { action: 'list' } });
   if (error) throw error;
   return (data?.items as SpiritConversationSummary[]) || [];
 }
 export async function renameSpiritConversation(id: string, title: string) {
-  const { error } = await supabase.functions.invoke('spirit-conversations', {
+  const { error } = await invokeFn('spirit-conversations', {
     body: { action: 'rename', conversationId: id, title },
   });
   if (error) throw error;
 }
 export async function deleteSpiritConversation(id: string) {
-  const { error } = await supabase.functions.invoke('spirit-conversations', {
+  const { error } = await invokeFn('spirit-conversations', {
     body: { action: 'delete', conversationId: id },
   });
   if (error) throw error;
 }
 export async function getSpiritUsage(): Promise<any[]> {
-  const { data, error } = await supabase.functions.invoke('spirit-conversations', { body: { action: 'usage' } });
+  const { data, error } = await invokeFn('spirit-conversations', { body: { action: 'usage' } });
   if (error) throw error;
   return (data?.items as any[]) || [];
 }

@@ -9,6 +9,7 @@ import { BookOpen, Loader2, Sparkles, ChevronDown } from 'lucide-react';
 import { CATEGORY_LABELS, ProductCategory } from '@/types';
 import { thumbUrl } from '@/lib/imageUrl';
 import {
+import { invokeFn } from '@/lib/invokeFn';
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 
@@ -83,7 +84,7 @@ export function DailyKnowledgeCard() {
     if (generating) return;
     setGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-daily-knowledge', { body: {} });
+      const { data, error } = await invokeFn('generate-daily-knowledge', { body: {} });
       if (error) throw error;
       if (data?.content) setTodayContent(data.content as DailyContent);
     } catch (e) {

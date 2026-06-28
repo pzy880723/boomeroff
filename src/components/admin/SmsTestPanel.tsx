@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, CheckCircle2, XCircle, Send, ShieldCheck, Info } from 'lucide-react';
+import { invokeFn } from '@/lib/invokeFn';
 
 type SendResult = {
   ok?: boolean;
@@ -43,7 +44,7 @@ export function SmsTestPanel() {
   }, [cooldown]);
 
   useEffect(() => {
-    supabase.functions.invoke('sms-test', { body: { action: 'diagnose' } })
+    invokeFn('sms-test', { body: { action: 'diagnose' } })
       .then(({ data }) => setConfig((data as SendResult)?.config || null))
       .catch(() => setConfig(null));
   }, []);
@@ -53,7 +54,7 @@ export function SmsTestPanel() {
     setVerifyResult(null);
     setSending(true);
     try {
-      const { data, error } = await supabase.functions.invoke('sms-test', {
+      const { data, error } = await invokeFn('sms-test', {
         body: { action: 'send', phone: phone.trim() },
       });
       if (error) {
@@ -81,7 +82,7 @@ export function SmsTestPanel() {
     setVerifyResult(null);
     setVerifying(true);
     try {
-      const { data, error } = await supabase.functions.invoke('sms-test', {
+      const { data, error } = await invokeFn('sms-test', {
         body: { action: 'verify', phone: phone.trim(), code: code.trim() },
       });
       if (error) setVerifyResult({ ok: false, error: error.message });
