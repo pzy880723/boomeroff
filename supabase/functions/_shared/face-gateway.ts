@@ -25,8 +25,8 @@ export async function buildCharacterSheet(sourceUrl: string): Promise<Uint8Array
     : (Array.isArray((decoded as any).frames) ? (decoded as any).frames[0] as Image : decoded as Image);
 
   // Edge Function CPU 很紧:上传的手机原图常见 3000px+,逐像素画红十字会直接打爆配额。
-  // 软通过只需要分类器看到“角色卡标记”,不需要保留原始分辨率,先压到 720px 长边。
-  const MAX_SIDE = 720;
+  // 软通过只需要分类器看到“角色卡标记”,不需要保留原始分辨率,先压到 512px 长边。
+  const MAX_SIDE = 512;
   const maxSide = Math.max(img.width, img.height);
   if (maxSide > MAX_SIDE) {
     const scale = MAX_SIDE / maxSide;
