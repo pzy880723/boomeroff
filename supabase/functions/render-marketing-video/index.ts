@@ -406,12 +406,6 @@ Deno.serve(async (req) => {
     }
     console.log(`[render] strategy=${strategy} (${autoReason})`);
 
-    const isSensitive = (err?: string, raw?: any) => {
-      const code = raw?.error?.code || '';
-      const msg = (err || '') + ' ' + (raw?.error?.message || '');
-      return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
-    };
-
     // ============ 一次成片(one_shot) ============
     if (strategy === 'one_shot') {
       const oneShotDur = snapOneShotDuration(totalDur || MAX_SEG_DUR);
