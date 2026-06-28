@@ -1,11 +1,11 @@
 // 渲染策略本地记忆:auto / one_shot / per_shot
-// - auto:由后端根据脚本特征自动判断(默认)
-// - one_shot:一次推理直出多镜(对齐小云雀,更快更自然,≤15s)
-// - per_shot:每个分镜单独渲染,前端拼接(每镜可控,长视频必选)
+// - auto:智能 = 默认走逐镜拼接(避免后端策略漂移导致整片与分镜无关)
+// - one_shot:一次推理直出多镜,仅 9 张分镜静帧作参考,≤15s
+// - per_shot:每个分镜单独渲染,前端 ffmpeg 拼接,时长不限
 export type RenderStrategy = 'auto' | 'one_shot' | 'per_shot';
 
 const KEY = 'mv:render_strategy';
-const DEFAULT: RenderStrategy = 'auto';
+const DEFAULT: RenderStrategy = 'per_shot';
 
 export function getRenderStrategy(): RenderStrategy {
   try {
@@ -19,6 +19,11 @@ export function setRenderStrategy(v: RenderStrategy) {
   try { localStorage.setItem(KEY, v); } catch {}
 }
 
+// 把"智能"解析为后端真正执行的策略(当前等同逐镜拼接)
+export function resolveRenderStrategy(v: RenderStrategy): 'one_shot' | 'per_shot' {
+  return v === 'one_shot' ? 'one_shot' : 'per_shot';
+}
+
 export const STRATEGY_LABEL: Record<RenderStrategy, string> = {
   auto: '智能',
   one_shot: '一次成片',
@@ -26,7 +31,7 @@ export const STRATEGY_LABEL: Record<RenderStrategy, string> = {
 };
 
 export const STRATEGY_HINT: Record<RenderStrategy, string> = {
-  auto: '后端自动判断,推荐',
-  one_shot: '更快·更自然(≤15s)',
-  per_shot: '每镜可控·更精准',
+  auto: '默认 · 等同逐镜拼接',
+  one_shot: '一次出片 · ≤15s · 最自然',
+  per_shot: '每镜单独渲染 · 时长不限',
 };

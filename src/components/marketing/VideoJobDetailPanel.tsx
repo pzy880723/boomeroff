@@ -90,6 +90,12 @@ export function VideoJobDetailPanel({ jobId, defaultExpanded = true }: { jobId: 
   const failed = segs.filter((s) => s.status === 'failed').length;
   const total = parent?.segment_total || segs.length || 1;
   const parentNotes = (parent?.fallback_notes || []) as string[];
+  const strategyLabel = useMemo(() => {
+    const s = parent?.script?.__render_payload?.render_strategy
+      || parent?.script?.render_strategy
+      || ((parent?.segment_total ?? 1) > 1 ? 'per_shot' : 'one_shot');
+    return s === 'one_shot' ? '一次成片' : '逐镜拼接';
+  }, [parent]);
 
   if (loading) return <div className="flex items-center gap-2 text-xs text-muted-foreground p-2"><Loader2 className="w-3 h-3 animate-spin" />加载段详情…</div>;
   if (!parent) return null;
@@ -103,6 +109,7 @@ export function VideoJobDetailPanel({ jobId, defaultExpanded = true }: { jobId: 
       >
         {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
         <span className="font-medium">分段进度</span>
+        <Badge variant="outline" className="h-4 px-1 text-[9px] font-normal">策略 · {strategyLabel}</Badge>
         <span className="text-muted-foreground">{done}/{total} 完成{failed ? ` · ${failed} 失败` : ''}</span>
         {parentNotes.length > 0 && (
           <span className="ml-auto flex items-center gap-1 flex-wrap justify-end">
