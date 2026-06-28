@@ -91,6 +91,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { buildXhsViral, VIRAL_STYLE_LABELS, type ViralStyle } from '@/lib/shareCopy';
 import { invokeFn } from '@/lib/invokeFn';
+import { completeMarketingVideoFromSegments } from '@/lib/completeMarketingVideo';
+import { useAuth } from '@/hooks/useAuth';
 
 
 interface CopyCand {
@@ -110,6 +112,7 @@ export function AssetDetailDialog({
   onUpdated?: (next: any) => void;
   onDelete?: (asset: any) => void;
 }) {
+  const { user } = useAuth();
   const [cands, setCands] = useState<CopyCand[]>([]);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<CopyCand>({});
@@ -119,6 +122,7 @@ export function AssetDetailDialog({
   const [genCopyLoading, setGenCopyLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [stitching, setStitching] = useState(false);
   
 
   const regenerateVideo = async () => {
@@ -166,6 +170,34 @@ export function AssetDetailDialog({
       toast.error(e?.message || '重新生成失败,请稍后再试');
     } finally {
       setRegenerating(false);
+    }
+  };
+
+  const continueStitching = async () => {
+    if (!asset || asset.kind !== 'video') return;
+    if (!user) { toast.error('请先登录'); return; }
+    const jobId = asset.meta?.job_id;
+    if (!jobId) { toast.error('找不到视频任务,请重新生成'); return; }
+    setStitching(true);
+    try {
+      let segUrls = Array.isArray(asset.meta?.segment_urls) ? asset.meta.segment_urls.filter(Boolean) : [];
+      const { data } = await invokeFn('poll-marketing-video', { body: { job_id: jobId } });
+      const d = data as any;
+      if (Array.isArray(d?.segment_urls) && d.segment_urls.filter(Boolean).length) {
+        segUrls = d.segment_urls.filter(Boolean);
+      }
+      const total = Number(d?.segment_total || asset.meta?.segment_total || segUrls.length || 0);
+      if (!segUrls.length || (total > 0 && segUrls.length < total)) {
+        throw new Error('分段还没有全部生成完成,请稍后再试');
+      }
+      toast.message('分段已找到,正在合成完整视频…');
+      const done = await completeMarketingVideoFromSegments({ userId: user.id, jobId, segmentUrls: segUrls });
+      onUpdated?.({ ...asset, output_url: done.url, meta: done.meta });
+      toast.success('视频已修复完成');
+    } catch (e: any) {
+      toast.error(e?.message || '继续拼接失败,请重新生成');
+    } finally {
+      setStitching(false);
     }
   };
 
@@ -468,6 +500,16 @@ export function AssetDetailDialog({
                     }
                   }}
                 />
+                {(asset.meta?.error || '').includes('超过') || Array.isArray(asset.meta?.segment_urls) ? (
+                  <Button
+                    className="w-full"
+                    onClick={continueStitching}
+                    disabled={stitching}
+                  >
+                    {stitching ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                    不重渲，继续合成已生成分段
+                  </Button>
+                ) : null}
                 <Button
                   variant="outline"
                   className="w-full"
