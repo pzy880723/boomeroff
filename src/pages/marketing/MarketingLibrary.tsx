@@ -16,6 +16,7 @@ import { CharacterCard } from '@/components/marketing/CharacterCard';
 import { CharacterDialog } from '@/components/marketing/CharacterDialog';
 import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
 import { IdentityVerifyDialog } from '@/components/marketing/IdentityVerifyDialog';
+import { BatchPreflightButton } from '@/components/marketing/BatchPreflightButton';
 
 import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
 import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
