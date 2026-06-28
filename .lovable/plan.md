@@ -1,60 +1,53 @@
-## 目标
+# 交付共享库接入所需的两样东西
 
-把"目标时长"当成**软目标**而非硬约束。最终视频时长允许在用户选择附近浮动(±几秒),只要每一段都吸附到火山合法值就行,不再因为"切出来 11s/13s"而反复报错。
+## 1. anon public key（公开可入仓）
 
-## 现状（已有但不够）
+替换 `src/integrations/shared-db/client.ts` 里的 `__REPLACE_WITH_ANON_KEY__`：
 
-`supabase/functions/render-marketing-video/index.ts`:
-- 已经有 `snapR2vDuration()`:r2v 模式下 ≤7s → 5s,>7s → 10s。
-- 已经有 `clampDuration()`:把每段限制在 3–15s。
-- 已经有 t2v(无参考图)模式不限制时长。
+```
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hcnF3Z3dwcWdsYXRod3R5ZXZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NDkwOTMsImV4cCI6MjA4MTAyNTA5M30.ZzkXVU8X0l1LOvT4wIMWwdarwDSdFm6GTaVhC4Xle2M
+```
 
-问题:
-1. 切段时仍按"严格凑够 30s"的思路出现 11/13s 这种奇数段,雪花式地走到 `submitArkTask` 才被吸附 → 总时长漂得很难看,而且偶尔遇到极端段(比如 1.5s 兜底成 3s,被 r2v snap 到 5s)又凑不上。
-2. 脚本生成端 (`generate-marketing-video-script`) 仍然强行把 `sum` 等比缩放回 `duration` 整数,导致每段秒数都是非 5/10 的奇怪值,后端再吸附就会"段段失真"。
-3. 前端 UI 没告诉用户"实际成片会比 30s 略多/少"。
+配套常量（确认无需改动）：
+- `VITE_SUPABASE_URL = https://narqwgwpqglathwtyevz.supabase.co`
+- `VITE_SUPABASE_PROJECT_ID = narqwgwpqglathwtyevz`
+- localStorage key：`sb-narqwgwpqglathwtyevz-auth-token`
 
-## 改动
+## 2. types.ts 同步（First Steps Agent 自取）
 
-### A. 后端 `supabase/functions/render-marketing-video/index.ts`
+本项目 `src/integrations/supabase/types.ts` 现有 **2959 行**，且每次 migration 后自动重新生成。**不**通过聊天搬运全文。
 
-1. **新增 `snapShotsToValidGrid(shots, hasRefs)`**:在 `splitScript` 之后调用。
-   - 如果 `hasRefs`(r2v):每段 `duration_s` 吸附到 {5, 10}(沿用现有 `snapR2vDuration`)。同时**合并相邻的小段**:连续两个被吸附成 5s 的段,如果加起来更接近 10s,合并为 1 段 10s(把后段的 scene/action/dialogue 顺接到前段的备注里;仅当合并后总段数 ≥1 且不让总时长偏离目标 >30%)。
-   - 如果 t2v:每段保持 `clampDuration`(3–15s),不做硬吸附。
-2. **`one_shot` 路径**:`oneShotDur` 改为"目标时长按 r2v 网格吸附"(≤7→5, ≤12→10, >12→15)。同样不再死磕用户选的具体秒数。
-3. **响应里多回传一个字段** `actual_duration_s`(各段 effectiveDuration 之和),便于前端展示"实际约 N 秒"。
-4. **日志**:打印 `[render] target=30 actual=30 segs=3×10` 这种摘要,方便排查。
+让 First Steps 项目里的 Agent 执行一次：
 
-### B. 后端 `supabase/functions/generate-marketing-video-script/index.ts`
+```
+cross_project--read_project_file({
+  project: "bef32724-503e-467a-af03-2062176cf921",
+  file_path: "src/integrations/supabase/types.ts",
+  lines: "1-3000"
+})
+```
 
-- 删掉最后的"等比缩放回 duration"那段(`if (Math.abs(sum - duration) > 0.5)`)。改为:对每个分镜的 `duration_s` 做"软建议"——只 `clamp` 到 [perClipMin, perClipMax] 内,不再强求总和精确等于 `duration`。
-- 在 system prompt 里把"所有镜头 duration_s 之和必须 ≈ ${duration} 秒"改成"≈ ${duration} 秒,允许 ±20% 浮动,最终以渲染端为准"。
+把结果整文件覆盖 `src/integrations/shared-db/types.ts`，然后把 `client.ts` 的泛型从 `any` 改成 `import type { Database } from "./types"`。
 
-### C. 前端 `src/pages/marketing/MarketingVideo.tsx`
+## 3. 后续同步约定
 
-- 时长选择器下方那行小灰字补一句:
-  > 实际成片会在所选时长附近浮动几秒(火山视频模型按 5/10 秒为单位渲染)。
-- 渲染任务返回 `actual_duration_s` 时,在任务卡上展示「目标 30s · 实际约 30s」。
+每当本项目跑过 migration（你会在我这边收到 schema 变更通知），First Steps Agent 重复上面那条 `cross_project--read_project_file` 即可，不需要我再走人工流程。
 
-### D. 前端 `src/lib/videoFailure.ts`
+## 4. 验证清单（First Steps 那边贴完之后跑）
 
-- 保留现有的 `duration ... not valid for ... r2v` 中文映射,但同时把"自动改 10 秒分段重试"的修复改成兜底——因为正常路径已经不再触发这条错误。
+```text
+□ client.ts 里 anon key 已替换，types 泛型已切到 Database
+□ 启动 dev，打开 /auth 用本项目已有账号登录
+□ DevTools → Application → Local Storage 出现 sb-narqwgwpqglathwtyevz-auth-token
+□ 进 /_authenticated 下任意页面不被踢回 /auth
+□ 浏览器 Console 执行 (await supabase.from('shops').select('id,name').limit(3)) 应返回非空数组
+```
 
-## 不动
+## 5. 等 First Steps 确认走通之后我下一步要做的（仅在你下达「开始」之后执行）
 
-- t2v(无参考图)的时长逻辑保持现状。
-- 角色板、Lightbox、风格选择、所有上游逻辑都不动。
-- 不改数据库 schema,只是新增 meta 字段写入。
+- 重写 `src/api/{assets,copy,aiImage,videoJobs,accounts,publishJobs,shops}.ts`：按 `docs/cross-project-shared-db.md` §3.2 映射到真实表，全部带 `shop_id` 过滤
+- 复制本项目 `src/hooks/useShops.ts`，在 First Steps 落地 `useEffectiveShop()`
+- 删 `src/mocks/` 整目录与 `src/api/client.ts` 的 mock 分支
+- 把 `marketing_video_jobs` / `marketing_assets` / `social_publish_jobs` / `social_publish_targets` 的 Realtime 订阅接到对应页面
 
-## 验证
-
-1. 选 30s + 带参考图 → 日志显示 `target=30 actual=30 segs=3×10`,无 duration 报错。
-2. 选 20s + 带参考图 → `segs=2×10`,实际 20s。
-3. 选 45s + 带参考图 → `segs=4×10 + 1×5` 或 `5×10`,实际 45–50s,前端展示"目标 45s · 实际约 50s"。
-4. 选 15s 无参考图 → t2v 单段直出,行为不变。
-
-涉及文件:
-- `supabase/functions/render-marketing-video/index.ts`
-- `supabase/functions/generate-marketing-video-script/index.ts`
-- `src/pages/marketing/MarketingVideo.tsx`
-- `src/lib/videoFailure.ts`
+**注意**：上述第 5 步必须在你贴完 anon key + types.ts、并确认验证清单全部通过后再启动 —— 否则前端会大面积白屏。
