@@ -149,7 +149,13 @@ export function LibraryAssetPickerDialog({
               ))}
             </div>
             {(() => {
-              const imgList = imgSource === 'all' ? images : images.filter((it) => assetSource(it) === imgSource);
+              const matchSrc = (it: any) => {
+                if (imgSource === 'all') return true;
+                const s = assetSource(it);
+                if (imgSource === 'upload') return s === 'upload' || s === 'base';
+                return s === imgSource;
+              };
+              const imgList = images.filter(matchSrc);
               if (loading) return (<div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-accent" /></div>);
               if (imgList.length === 0) return (<div className="py-8 text-center text-sm text-muted-foreground">暂无图片素材</div>);
               return (
@@ -196,8 +202,12 @@ export function LibraryAssetPickerDialog({
         <ImageLightbox
           open={lbIdx !== null}
           onClose={() => setLbIdx(null)}
-          images={(imgSource === 'all' ? images : images.filter((it) => assetSource(it) === imgSource))
-            .map((it) => it.output_url as string).filter(Boolean)}
+          images={images.filter((it) => {
+            if (imgSource === 'all') return true;
+            const s = assetSource(it);
+            if (imgSource === 'upload') return s === 'upload' || s === 'base';
+            return s === imgSource;
+          }).map((it) => it.output_url as string).filter(Boolean)}
           initialIndex={lbIdx ?? 0}
         />
 

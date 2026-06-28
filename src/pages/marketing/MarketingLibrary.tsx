@@ -17,7 +17,7 @@ import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDia
 import { IdentityVerifyDialog } from '@/components/marketing/IdentityVerifyDialog';
 import { BatchPreflightButton } from '@/components/marketing/BatchPreflightButton';
 
-import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
+import { AssetTagDialog } from '@/components/marketing/AssetTagDialog';
 import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
@@ -50,7 +50,12 @@ export default function MarketingLibrary() {
   const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
   const [imgSource, setImgSource] = useState<AssetSource | 'all'>(() => {
-    try { return (localStorage.getItem('lib.imgSource') as any) || 'upload'; } catch { return 'upload'; }
+    try {
+      const v = localStorage.getItem('lib.imgSource') as any;
+      // 旧默认是 'upload',全局升级到 'base'
+      if (v === 'base' || v === 'upload' || v === 'generated' || v === 'all') return v;
+      return 'base';
+    } catch { return 'base'; }
   });
   useEffect(() => { try { localStorage.setItem('lib.imgSource', imgSource); } catch {} }, [imgSource]);
 
@@ -328,6 +333,51 @@ export default function MarketingLibrary() {
     }
   };
 
+  // 一次性:把历史素材按规则回填 meta.asset_class(base / upload / generated)
+  const [reclassing, setReclassing] = useState(false);
+  const runReclassify = async () => {
+    if (reclassing) return;
+    setReclassing(true);
+    try {
+      const { data, error } = await invokeFn('backfill-asset-class', { body: {} });
+      if (error || (data as any)?.ok === false) {
+        toast.error((data as any)?.error || error?.message || '重整失败');
+        return;
+      }
+      const d = data as any;
+      toast.success(`重整完成 · 基础 ${d.base} / 上传 ${d.upload} / AI ${d.generated}`);
+      fetchItems(true);
+    } catch (e: any) {
+      toast.error(e?.message || '重整失败');
+    } finally {
+      setReclassing(false);
+    }
+  };
+
+  // 一次性:批量清理无意义标签(场景1..场景11 / 英文情绪词 / AI智能广告 等)
+  const [cleaningTags, setCleaningTags] = useState(false);
+  const runCleanTags = async () => {
+    if (cleaningTags) return;
+    if (!confirm('将批量删除「场景1..场景11、elegant、AI智能广告」等噪声标签,确认继续吗?')) return;
+    setCleaningTags(true);
+    try {
+      const { data, error } = await invokeFn('cleanup-marketing-tags', { body: {} });
+      if (error || (data as any)?.ok === false) {
+        toast.error((data as any)?.error || error?.message || '清理失败');
+        return;
+      }
+      const d = data as any;
+      toast.success(`清理完成 · 移除 ${d.removed_tags} 个噪声 · 涉及 ${d.affected_rows} 条素材`);
+      fetchItems(true);
+    } catch (e: any) {
+      toast.error(e?.message || '清理失败');
+    } finally {
+      setCleaningTags(false);
+    }
+  };
+
+
+
 
 
   // 轮询未完成视频任务
@@ -413,10 +463,26 @@ export default function MarketingLibrary() {
     return ({ queued: '排队中', running: '渲染中' } as Record<string, string>)[s || ''] || s || '排队中';
   };
 
+  // 标签噪声过滤:旧数据里有大量 "场景1..场景11"、英文情绪词、"AI智能广告" 等无意义标签
+  // 这里只过滤"筛选条/热门词典"的显示,数据库原样保留(由"清理标签"一次性按钮真正删除)
+  const isNoiseTag = (t: string) => {
+    if (!t) return true;
+    if (/^场景[一二三四五六七八九十\d]+$/.test(t)) return true;
+    if (/^图[一二三四五六七八九十\d]+$/.test(t)) return true;
+    if (/^分镜头[一二三四五六七八九十\d]+$/.test(t)) return true;
+    if (/^(elegant|energetic|lively|playful|steady|calm|moody|warm|cool)$/i.test(t)) return true;
+    if (/^AI[\s_-]?(智能广告|生成|图片?)$/.test(t)) return true;
+    return false;
+  };
+
   const tagOptions = useMemo(() => {
-    const set = new Set<string>(DEFAULT_TAGS);
-    items.forEach((it) => (Array.isArray(it.tags) ? it.tags : []).forEach((t: string) => set.add(t)));
-    return Array.from(set);
+    // 只用当前 items 里出现 ≥1 次的标签,且过滤噪声;白名单按出现频次排序
+    const freq = new Map<string, number>();
+    items.forEach((it) => (Array.isArray(it.tags) ? it.tags : []).forEach((t: string) => {
+      if (!t || isNoiseTag(t)) return;
+      freq.set(t, (freq.get(t) || 0) + 1);
+    }));
+    return Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).map(([t]) => t);
   }, [items]);
 
   const filtered = useMemo(() => {
@@ -615,6 +681,32 @@ export default function MarketingLibrary() {
                       补标签
                     </Button>
                   )}
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={runReclassify}
+                      disabled={reclassing}
+                      title="按规则把历史素材分到 基础/上传/AI 三类"
+                    >
+                      {reclassing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      重整来源
+                    </Button>
+                  )}
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={runCleanTags}
+                      disabled={cleaningTags}
+                      title="批量删除无意义标签(场景1..场景11、英文情绪词、AI智能广告 等)"
+                    >
+                      {cleaningTags ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      清理标签
+                    </Button>
+                  )}
+
+
 
                   {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
                     <Button
@@ -636,10 +728,11 @@ export default function MarketingLibrary() {
             )}
           </div>
 
-          {/* 来源分段:我上传的 / AI 生成 / 全部 */}
+          {/* 来源分段:基础素材 / 我上传的 / AI 生成 / 全部 */}
           {(tab === 'all' || tab === 'photo') && (
-            <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px]">
+            <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px] flex-wrap">
               {([
+                { v: 'base', label: '📌 基础素材', Icon: null as any },
                 { v: 'upload', label: '我上传的', Icon: Camera },
                 { v: 'generated', label: 'AI 生成', Icon: Sparkles },
                 { v: 'all', label: '全部', Icon: null as any },
@@ -770,17 +863,24 @@ export default function MarketingLibrary() {
                             </div>
                           )}
 
-                          {/* 来源角标:仅 photo,在「全部」视图下显示以区分 */}
-                          {it.kind === 'photo' && imgSource === 'all' && !manageMode && (
-                            <span
-                              className="absolute top-1 left-1 w-4 h-4 rounded-full bg-black/55 backdrop-blur text-white flex items-center justify-center"
-                              title={assetSource(it) === 'generated' ? 'AI 生成' : '我上传的'}
-                            >
-                              {assetSource(it) === 'generated'
-                                ? <Sparkles className="w-2.5 h-2.5" />
-                                : <Camera className="w-2.5 h-2.5" />}
-                            </span>
-                          )}
+                          {/* 来源角标:仅 photo,在「全部」视图下显示以区分三类来源 */}
+                          {it.kind === 'photo' && imgSource === 'all' && !manageMode && (() => {
+                            const cls = assetSource(it);
+                            const meta = cls === 'generated'
+                              ? { label: 'AI 生成', glyph: <Sparkles className="w-2.5 h-2.5" />, bg: 'bg-violet-500/85' }
+                              : cls === 'base'
+                                ? { label: '基础素材', glyph: <span className="text-[8px] leading-none">📌</span>, bg: 'bg-amber-500/85' }
+                                : { label: '我上传的', glyph: <Camera className="w-2.5 h-2.5" />, bg: 'bg-black/55' };
+                            return (
+                              <span
+                                className={`absolute top-1 left-1 w-4 h-4 rounded-full ${meta.bg} backdrop-blur text-white flex items-center justify-center`}
+                                title={meta.label}
+                              >
+                                {meta.glyph}
+                              </span>
+                            );
+                          })()}
+
 
 
 
@@ -903,6 +1003,11 @@ export default function MarketingLibrary() {
           })}
           {!loading && hasMore && (
             <LoadMoreSentinel onVisible={loadMore} loading={loadingMore} />
+          )}
+          {!loading && !hasMore && filtered.length > 0 && (
+            <p className="py-6 text-center text-[11px] text-muted-foreground">
+              已加载全部 · 共 {filtered.length} 条
+            </p>
           )}
         </>)}
       </div>

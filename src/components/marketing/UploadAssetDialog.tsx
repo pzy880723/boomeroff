@@ -32,9 +32,12 @@ export function UploadAssetDialog({
   // photo (multi)
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  // 默认作为「基础素材图」入库:门店/商品长期素材,后续会反复使用
+  const [asBase, setAsBase] = useState(true);
 
   const reset = () => {
     setTitle(''); setBodyText(''); setVideoFile(null); setPhotoFiles([]); setProgress({ done: 0, total: 0 });
+    setAsBase(true);
   };
 
   const insertAsset = async (row: any) => {
@@ -64,7 +67,11 @@ export function UploadAssetDialog({
             if (!url) continue;
             const row = await insertAsset({
               kind: 'photo', output_url: url, input_image_urls: [url],
-              meta: { source: 'manual_upload', filename: batch[j]?.name },
+              meta: {
+                source: 'manual_upload',
+                asset_class: asBase ? 'base' : 'upload',
+                filename: batch[j]?.name,
+              },
             });
             uploaded.push(row);
             onUploaded(row);
@@ -86,7 +93,7 @@ export function UploadAssetDialog({
         const row = await insertAsset({
           kind: 'copy',
           output_text: b,
-          meta: { source: 'manual_upload', candidates: [{ title: t, body: b, hashtags: [] }] },
+          meta: { source: 'manual_upload', asset_class: 'upload', candidates: [{ title: t, body: b, hashtags: [] }] },
         });
         onUploaded(row);
         toast.success('已加入素材库');
@@ -103,7 +110,7 @@ export function UploadAssetDialog({
         const url = signed?.signedUrl || '';
         const row = await insertAsset({
           kind: 'video', output_url: url,
-          meta: { source: 'manual_upload', status: 'succeeded', storage_path: path },
+          meta: { source: 'manual_upload', asset_class: 'upload', status: 'succeeded', storage_path: path },
         });
         onUploaded(row);
         toast.success('已加入素材库');
@@ -154,11 +161,27 @@ export function UploadAssetDialog({
                 onChange={(e) => {
                   const files = Array.from(e.target.files || []);
                   setPhotoFiles(files);
-                  // allow re-selecting the same files later
                   e.currentTarget.value = '';
                 }}
               />
             </label>
+
+            {/* 基础素材开关:门店实拍/商品原图建议打开,后续会反复使用 */}
+            <label className="flex items-start gap-2 p-2.5 rounded-lg border border-accent/20 bg-accent/[0.04] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={asBase}
+                onChange={(e) => setAsBase(e.target.checked)}
+                className="mt-0.5 accent-accent"
+              />
+              <div className="flex-1">
+                <p className="text-[12px] font-medium">📌 作为「基础素材图」入库</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  门头、店内、商品等长期素材建议勾选。会单独归类,不与 AI 生成图混在一起。
+                </p>
+              </div>
+            </label>
+
             {busy && progress.total > 0 && (
               <p className="text-[11px] text-muted-foreground text-center">
                 上传中 {progress.done}/{progress.total}…
