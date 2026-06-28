@@ -667,6 +667,8 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
     }
 
+    const softPassCache = new Map<string, Promise<string>>();
+
     // 2) 并行提交所有段(每段带 3 级真人内容降级链;isSensitive 复用上面声明的)
     const submissions = await Promise.all(subScripts.map(async (sub, i) => {
       const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
@@ -683,7 +685,7 @@ Deno.serve(async (req) => {
       // 用户主动选择软通过 → 提交前就处理
       if (facePipeline === 'character_sheet' && effectiveRefs.length) {
         try {
-          effectiveRefs = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2 });
+          effectiveRefs = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2, cache: softPassCache });
           fallbackNotes.push('face_soft_pass_applied');
         } catch (e) { console.warn(`[soft-pass seg${i + 1} pre]`, (e as any)?.message); }
       }
@@ -695,7 +697,7 @@ Deno.serve(async (req) => {
       // L0.5: 被真人拦了 → 自动给所有参考图打 Character Sheet 软通过水印再试
       if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
         try {
-          const marked = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2 });
+          const marked = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2, cache: softPassCache });
           fallbackNotes.push('face_soft_pass_auto');
           r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: marked });
           if (r.ok) effectiveRefs = marked;
