@@ -399,8 +399,9 @@ ${isExplore ? '七' : '六'}、最终解释权
                   onChange={(e) => {
                     const v = e.target.value.replace(/\D/g, '').slice(0, 11);
                     setPhone(v);
-                    if (v !== otpVerifiedPhone) setOtpCode('');
+                    setOtpCode('');
                   }}
+
                   inputMode="numeric"
                   maxLength={11}
                   placeholder="请输入手机号"
