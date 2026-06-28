@@ -3,12 +3,13 @@ import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, Check, Play, Maximize2 } from 'lucide-react';
+import { Loader2, Check, Play, Maximize2, Camera, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { thumbUrl, thumbSrcSet } from '@/lib/imageUrl';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
+import { assetSource, type AssetSource } from '@/lib/assetSource';
 
 export type PickedAsset =
   | { kind: 'video'; asset: any }
