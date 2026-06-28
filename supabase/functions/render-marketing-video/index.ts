@@ -634,6 +634,10 @@ Deno.serve(async (req) => {
     // 5) 占位 marketing_assets
     const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
     const fallbackWarnings = Array.from(new Set(submissions.flatMap((s) => s.fallbackNotes)));
+    // 父任务也聚合一份 fallback_notes(给详情面板顶部用)
+    try {
+      await admin.from("marketing_video_jobs").update({ fallback_notes: fallbackWarnings }).eq("id", parent.id);
+    } catch {}
     await admin.from("marketing_assets").insert({
       user_id: u.user.id, kind: "video", shop_id: shopId,
       input_image_urls: imageUrls, output_url: null,
