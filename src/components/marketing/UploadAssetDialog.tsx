@@ -32,9 +32,12 @@ export function UploadAssetDialog({
   // photo (multi)
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  // 默认作为「基础素材图」入库:门店/商品长期素材,后续会反复使用
+  const [asBase, setAsBase] = useState(true);
 
   const reset = () => {
     setTitle(''); setBodyText(''); setVideoFile(null); setPhotoFiles([]); setProgress({ done: 0, total: 0 });
+    setAsBase(true);
   };
 
   const insertAsset = async (row: any) => {
@@ -64,7 +67,11 @@ export function UploadAssetDialog({
             if (!url) continue;
             const row = await insertAsset({
               kind: 'photo', output_url: url, input_image_urls: [url],
-              meta: { source: 'manual_upload', filename: batch[j]?.name },
+              meta: {
+                source: 'manual_upload',
+                asset_class: asBase ? 'base' : 'upload',
+                filename: batch[j]?.name,
+              },
             });
             uploaded.push(row);
             onUploaded(row);
@@ -86,7 +93,7 @@ export function UploadAssetDialog({
         const row = await insertAsset({
           kind: 'copy',
           output_text: b,
-          meta: { source: 'manual_upload', candidates: [{ title: t, body: b, hashtags: [] }] },
+          meta: { source: 'manual_upload', asset_class: 'upload', candidates: [{ title: t, body: b, hashtags: [] }] },
         });
         onUploaded(row);
         toast.success('已加入素材库');
@@ -103,7 +110,7 @@ export function UploadAssetDialog({
         const url = signed?.signedUrl || '';
         const row = await insertAsset({
           kind: 'video', output_url: url,
-          meta: { source: 'manual_upload', status: 'succeeded', storage_path: path },
+          meta: { source: 'manual_upload', asset_class: 'upload', status: 'succeeded', storage_path: path },
         });
         onUploaded(row);
         toast.success('已加入素材库');
