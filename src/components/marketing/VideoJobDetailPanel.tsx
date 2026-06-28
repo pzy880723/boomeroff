@@ -13,6 +13,7 @@ type Job = {
   parent_job_id: string | null;
   fallback_notes: string[] | null;
   error: string | null;
+  script?: any;
 };
 
 const NOTE_LABEL: Record<string, { text: string; tone: 'ok' | 'info' | 'warn' | 'mute' }> = {
@@ -34,6 +35,15 @@ function NoteBadge({ note }: { note: string }) {
   return <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border ${cls}`}>{m.text}</span>;
 }
 
+function payloadInfo(job: Job) {
+  const p = job.script?.__render_payload || {};
+  const refs = Array.isArray(p.reference_images) ? p.reference_images.length : 0;
+  const sb = Number(p.storyboard_ref_count ?? (Array.isArray(p.storyboard_refs) ? p.storyboard_refs.length : 0)) || 0;
+  const raw = Number(p.raw_ref_count ?? (Array.isArray(p.raw_refs) ? p.raw_refs.length : 0)) || 0;
+  const role = Number(p.character_ref_count ?? (Array.isArray(p.character_refs) ? p.character_refs.length : 0)) || 0;
+  return { refs, sb, raw, role };
+}
+
 const STATUS_LABEL: Record<string, string> = {
   queued: '排队中', running: '生成中', succeeded: '已完成', failed: '失败', cancelled: '已取消',
 };
@@ -46,13 +56,13 @@ export function VideoJobDetailPanel({ jobId, defaultExpanded = true }: { jobId: 
 
   const load = useCallback(async () => {
     const { data: p } = await supabase.from('marketing_video_jobs' as any)
-      .select('id,status,segment_index,segment_total,parent_job_id,fallback_notes,error')
+      .select('id,status,segment_index,segment_total,parent_job_id,fallback_notes,error,script')
       .eq('id', jobId).maybeSingle();
     const pj = (p as unknown) as Job | null;
     setParent(pj);
     if (pj && (pj.segment_total ?? 0) > 1) {
       const { data: c } = await supabase.from('marketing_video_jobs' as any)
-        .select('id,status,segment_index,segment_total,parent_job_id,fallback_notes,error')
+        .select('id,status,segment_index,segment_total,parent_job_id,fallback_notes,error,script')
         .eq('parent_job_id', jobId).order('segment_index', { ascending: true });
       setChildren(((c as unknown) as Job[]) || []);
     } else {
@@ -103,6 +113,7 @@ export function VideoJobDetailPanel({ jobId, defaultExpanded = true }: { jobId: 
         <ul className="divide-y divide-border">
           {segs.map((s) => {
             const notes = (s.fallback_notes || []) as string[];
+            const info = payloadInfo(s);
             const icon = s.status === 'succeeded' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
               : s.status === 'failed' ? <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
               : <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />;
@@ -113,6 +124,21 @@ export function VideoJobDetailPanel({ jobId, defaultExpanded = true }: { jobId: 
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium">段 {(s.segment_index ?? 0) + 1}</span>
                     <Badge variant="outline" className="h-4 px-1 text-[9px] font-normal">{STATUS_LABEL[s.status] || s.status}</Badge>
+                    {info.refs > 0 && (
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border ${info.sb > 0 ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 border-emerald-500/30' : 'bg-rose-500/12 text-rose-700 dark:text-rose-300 border-rose-500/30'}`}>
+                        分镜静帧 {info.sb} / 参考 {info.refs}
+                      </span>
+                    )}
+                    {info.refs > 0 && info.raw > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border bg-muted text-muted-foreground border-border">
+                        原图 {info.raw}
+                      </span>
+                    )}
+                    {info.refs > 0 && info.role > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/30">
+                        主角 {info.role}
+                      </span>
+                    )}
                     {notes.map((n, i) => <NoteBadge key={i} note={n} />)}
                   </div>
                   {s.error && <p className="text-rose-600 mt-0.5 break-all">{s.error}</p>}
