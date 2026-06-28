@@ -6,7 +6,7 @@
 // - portal 到 body + 拦截 pointerdown 冒泡,避免 Radix Dialog 被一并关闭
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react';
 
 export function ImageLightbox({
   open, onClose, images, initialIndex = 0,
