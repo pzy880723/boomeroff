@@ -863,17 +863,24 @@ export default function MarketingLibrary() {
                             </div>
                           )}
 
-                          {/* 来源角标:仅 photo,在「全部」视图下显示以区分 */}
-                          {it.kind === 'photo' && imgSource === 'all' && !manageMode && (
-                            <span
-                              className="absolute top-1 left-1 w-4 h-4 rounded-full bg-black/55 backdrop-blur text-white flex items-center justify-center"
-                              title={assetSource(it) === 'generated' ? 'AI 生成' : '我上传的'}
-                            >
-                              {assetSource(it) === 'generated'
-                                ? <Sparkles className="w-2.5 h-2.5" />
-                                : <Camera className="w-2.5 h-2.5" />}
-                            </span>
-                          )}
+                          {/* 来源角标:仅 photo,在「全部」视图下显示以区分三类来源 */}
+                          {it.kind === 'photo' && imgSource === 'all' && !manageMode && (() => {
+                            const cls = assetSource(it);
+                            const meta = cls === 'generated'
+                              ? { label: 'AI 生成', glyph: <Sparkles className="w-2.5 h-2.5" />, bg: 'bg-violet-500/85' }
+                              : cls === 'base'
+                                ? { label: '基础素材', glyph: <span className="text-[8px] leading-none">📌</span>, bg: 'bg-amber-500/85' }
+                                : { label: '我上传的', glyph: <Camera className="w-2.5 h-2.5" />, bg: 'bg-black/55' };
+                            return (
+                              <span
+                                className={`absolute top-1 left-1 w-4 h-4 rounded-full ${meta.bg} backdrop-blur text-white flex items-center justify-center`}
+                                title={meta.label}
+                              >
+                                {meta.glyph}
+                              </span>
+                            );
+                          })()}
+
 
 
 
