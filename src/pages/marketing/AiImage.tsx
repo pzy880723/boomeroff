@@ -201,6 +201,25 @@ export default function AiImage() {
     }
   };
 
+  // ===== 智能广告图结果注入对话流 =====
+  const KIND_LABEL: Record<string, string> = { scene: '场景图', product: '商品特写', person: '人物图' };
+  const onSmartAdResults = (items: SmartAdResultItem[]) => {
+    if (!items?.length) return;
+    const userMsgId = uid();
+    setMessages((cur) => [
+      ...cur,
+      { id: userMsgId, role: 'user', text: `一键智能广告图 · ${items.length} 张`, refs: [], aspect, templateName: '智能广告' },
+      ...items.map<Msg>((it, i) => ({
+        id: uid(),
+        role: 'ai',
+        status: it.ok ? 'done' : 'error',
+        outputUrl: it.output_url,
+        error: it.error,
+        label: `智能广告 · ${KIND_LABEL[it.kind] || it.kind} ${i + 1}`,
+      })),
+    ]);
+  };
+
   // ===== 渲染 =====
   return (
     <>
