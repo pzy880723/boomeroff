@@ -470,6 +470,13 @@ export default function AiImage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <SmartAdGenerateDialog
+        open={smartOpen}
+        onOpenChange={setSmartOpen}
+        shopId={shopId}
+        onResults={onSmartAdResults}
+      />
     </>
   );
 }
