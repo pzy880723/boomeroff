@@ -260,11 +260,20 @@ function splitScript(script: any): any[] {
 }
 
 
+// Seedance 2.0 reference-to-video(r2v)通道:火山方舟只接受固定时长。
+// t2v(无参考图)按 clampDuration 范围放行;一旦带了 reference_image,duration 必须吸附到 5 或 10。
+const R2V_VALID_DURATIONS = [5, 10] as const;
+function snapR2vDuration(d: number): number {
+  const n = Math.round(Number(d) || 5);
+  if (n <= 7) return 5;
+  return 10;
+}
+
 async function submitArkTask(opts: {
   arkKey: string; model: string; prompt: string; ratio: string; duration: number;
   resolution: string;
   referenceImages?: string[];
-}): Promise<{ ok: true; id: string; mode: string } | { ok: false; error: string; raw?: unknown }> {
+}): Promise<{ ok: true; id: string; mode: string; duration: number } | { ok: false; error: string; raw?: unknown }> {
   const content: any[] = [{ type: "text", text: opts.prompt }];
   // Seedance 2.0:全 reference 模式。first_frame / last_frame 与 reference_image 互斥,
   // 我们这种「分镜独立表达」的内容不需要逐帧锁画面,统一走 reference_image 通道。
@@ -274,13 +283,18 @@ async function submitArkTask(opts: {
   }
   const mode = refs.length ? "reference2video" : "text2video";
 
+  // r2v 模式下把任意秒数吸附到 {5,10};t2v 不限。
+  const effectiveDuration = mode === "reference2video"
+    ? snapR2vDuration(opts.duration)
+    : opts.duration;
+
   // 2.0 系列:不发送 seed / camera_fixed(2.0 不支持)
   const arkBody: Record<string, unknown> = {
     model: opts.model,
     content,
     resolution: opts.resolution,
     ratio: opts.ratio,
-    duration: opts.duration,
+    duration: effectiveDuration,
     watermark: false,
     generate_audio: true,
   };
@@ -297,7 +311,7 @@ async function submitArkTask(opts: {
       raw: arkJson,
     };
   }
-  return { ok: true, id: arkJson.id, mode };
+  return { ok: true, id: arkJson.id, mode, duration: effectiveDuration };
 }
 
 /** 组装某段的参考图集合(Seedance 2.0 全 reference 模式,上限 9 张,按权重排序):
