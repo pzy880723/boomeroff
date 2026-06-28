@@ -293,6 +293,15 @@ export default function MarketingVideo() {
     } else if (patch.resolution) {
       setResolution(patch.resolution as SeedanceResolution);
     }
+    // 记住"软通过/插画化/无人化"选择到角色卡,下次自动套用
+    if (patch.face_pipeline && patch.face_pipeline !== 'auto' && (character as any)?.id) {
+      try {
+        await supabase.from('marketing_characters' as any)
+          .update({ face_pass_level: patch.face_pipeline })
+          .eq('id', (character as any).id);
+        (character as any).face_pass_level = patch.face_pipeline;
+      } catch (e) { console.warn('[face_pass_level persist]', e); }
+    }
     setJobId(null);
     await confirmRender({
       modelId: patch.modelId,
