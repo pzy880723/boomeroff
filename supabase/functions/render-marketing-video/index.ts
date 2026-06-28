@@ -523,7 +523,7 @@ Deno.serve(async (req) => {
 
     // ============ 一次成片(one_shot) ============
     if (strategy === 'one_shot') {
-      const oneShotDur = Math.max(4, Math.min(MAX_SEG_DUR, Math.round(totalDur || MAX_SEG_DUR)));
+      const oneShotDur = snapOneShotDuration(totalDur || MAX_SEG_DUR);
       const effectiveChar = disableReferences ? null : character;
       const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
       const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
