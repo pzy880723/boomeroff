@@ -17,7 +17,7 @@ import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDia
 import { IdentityVerifyDialog } from '@/components/marketing/IdentityVerifyDialog';
 import { BatchPreflightButton } from '@/components/marketing/BatchPreflightButton';
 
-import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
+import { AssetTagDialog } from '@/components/marketing/AssetTagDialog';
 import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
