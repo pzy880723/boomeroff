@@ -50,6 +50,10 @@ export function SmartAdGenerateDialog({ open, onOpenChange, shopId, onResults }:
   const [aspect, setAspect] = useState<Aspect>('3:4');
   const [style, setStyle] = useState<StyleKey>('steady');
   const [realism, setRealism] = useState<Realism>('photoreal');
+  const [styleGrade, setStyleGrade] = useState<'documentary' | 'cinematic'>(() => {
+    if (typeof window === 'undefined') return 'documentary';
+    return (localStorage.getItem('smart_ad_style_grade') as any) === 'cinematic' ? 'cinematic' : 'documentary';
+  });
   const [theme, setTheme] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -62,8 +66,9 @@ export function SmartAdGenerateDialog({ open, onOpenChange, shopId, onResults }:
     if (kinds.length === 0) { toast.error('至少选一种广告图类型'); return; }
     setBusy(true);
     try {
+      if (typeof window !== 'undefined') localStorage.setItem('smart_ad_style_grade', styleGrade);
       const { data, error } = await supabase.functions.invoke('ai-smart-ad-images', {
-        body: { shop_id: shopId, kinds, total, aspect, style, realism, theme: theme.trim() },
+        body: { shop_id: shopId, kinds, total, aspect, style, realism, theme: theme.trim(), style_grade: styleGrade },
       });
       if (error) throw error;
       if (!data?.ok) {
