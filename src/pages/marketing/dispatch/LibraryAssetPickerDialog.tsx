@@ -34,8 +34,9 @@ export function LibraryAssetPickerDialog({
   const [selImgs, setSelImgs] = useState<Map<string, string>>(new Map()); // assetId -> url
   const [lbIdx, setLbIdx] = useState<number | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
+  const [imgSource, setImgSource] = useState<AssetSource | 'all'>('upload');
 
-  useEffect(() => { if (open) { setTab(defaultTab); setSelVideo(null); setSelImgs(new Map()); setLbIdx(null); setLoadedImgs(new Set()); } }, [open, defaultTab]);
+  useEffect(() => { if (open) { setTab(defaultTab); setSelVideo(null); setSelImgs(new Map()); setLbIdx(null); setLoadedImgs(new Set()); setImgSource('upload'); } }, [open, defaultTab]);
 
   useEffect(() => {
     if (!open || !user) return;
