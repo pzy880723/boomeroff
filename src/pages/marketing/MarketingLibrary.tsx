@@ -15,6 +15,7 @@ import { stitchSegmentUrls } from '@/lib/stitchVideos';
 import { CharacterCard } from '@/components/marketing/CharacterCard';
 import { CharacterDialog } from '@/components/marketing/CharacterDialog';
 import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
+import { IdentityVerifyDialog } from '@/components/marketing/IdentityVerifyDialog';
 
 import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
 import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
@@ -42,6 +43,7 @@ export default function MarketingLibrary() {
   const [characterDetail, setCharacterDetail] = useState<any | null>(null);
   const [createCharOpen, setCreateCharOpen] = useState(false);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [verifyCharacter, setVerifyCharacter] = useState<any | null>(null);
   const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
 
@@ -918,8 +920,22 @@ export default function MarketingLibrary() {
         open={createCharOpen}
         onOpenChange={setCreateCharOpen}
         shopId={shopId}
-        onCreated={(c) => setCharacters((prev) => [c, ...prev])}
+        onCreated={(c, opts) => {
+          setCharacters((prev) => [c, ...prev]);
+          if (opts?.autoVerify) setVerifyCharacter(c);
+        }}
       />
+      <IdentityVerifyDialog
+        open={!!verifyCharacter}
+        onOpenChange={(o) => !o && setVerifyCharacter(null)}
+        character={verifyCharacter}
+        onVerified={({ asset_id, asset_uri }) => {
+          setCharacters((prev) => prev.map((x) => x.id === verifyCharacter?.id
+            ? { ...x, verified_asset_id: asset_id, verified_asset_uri: asset_uri, verified_at: new Date().toISOString() }
+            : x));
+        }}
+      />
+
       <CharacterDialog
         character={characterDetail}
         open={!!characterDetail}

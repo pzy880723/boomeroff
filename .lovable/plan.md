@@ -1,50 +1,53 @@
+# 真人快拍建角色 · 一键火山认证
+
+## 背景
+现在 AI 生成的形象板和你本人差距大，火山活体校验把人脸特征算到 AI 头像上，自然过不了。要让认证稳过，必须用**真实拍摄的本人正脸照**做素材，不能用 AI 生成图。
+
 ## 目标
-在公开活动报名页面强制走「手机号 + 短信验证码」校验，杜绝随意填写手机号领券，并在发送验证码前就拦截「已领取过」的手机号。
+在「新建角色」里加一个新模式 **「📸 真人快拍」**，三步走完成「拍照 → 入库 → 火山认证」：
+1. 调摄像头按引导拍 3 张真人照（正脸 / 左侧 45° / 右侧 45°）
+2. 自动把第 1 张设封面、3 张全部作为参考图保存为角色
+3. 创建成功后自动弹出现有的「真人认证」流程（H5 扫码活体），无需用户再点一次
 
-## 体验流程（PublicActivity 报名表单）
-
+## 用户流程
 ```
-[姓名]
-[手机号 ____________]  [发送验证码]  ← 60s 倒计时
-[验证码 ______]
-[其他自定义字段 / 截图]
-[✓ 同意协议]
-[报名领取] ← 仅"已通过验证"时可点
+新建角色 → 选「真人快拍」Tab
+  → 输入名称（必填）+ 角色定位（选填）
+  → 进入拍摄向导：
+      镜头 1 / 3  正脸平视，光线充足  [拍 / 重拍]
+      镜头 2 / 3  左转 45°            [拍 / 重拍]
+      镜头 3 / 3  右转 45°            [拍 / 重拍]
+  → 预览 3 张 → 点「保存并发起认证」
+  → 角色卡落库（source = 'live_capture'）
+  → 自动打开 IdentityVerifyDialog
+  → 手机扫码完成活体 → 点「我已完成，开始入库」→ ✅ 已认证
 ```
 
-- 点「发送验证码」：前端先校验手机号格式 → 调 `activity-apply-send-otp` → 后端检查"该活动 + 该手机号"是否已存在申请，若已存在直接返回 `already=true`，前端弹"您已领取过，是否查看我的券？"并跳到查券流程，不发送短信。
-- 验证码 6 位，5 分钟有效，同号 60 秒内不重发（沿用 voucher OTP 节流策略）。
-- 「报名领取」时把 `phone + code` 一起带去 `activity-apply`，服务端二次校验通过后才写入 `activity_applications` 并发券；校验失败不消耗申请名额。
-- 切换手机号会清空已通过的验证状态，需要重新发码。
+## 关键设计点
+- **同一台手机即可完成**：在 /me/marketing 页打开时，前置摄像头直接拍，无需切设备
+- **质量自检**：拍完用 canvas 检查最短边 ≥ 720px、亮度均值不过暗；不达标提示重拍
+- **统一走真实图通道**：上传到 `product-images` bucket，跟普通素材库一样，但在 `marketing_characters.source` 标记 `live_capture` 用于区分
+- **认证前置校验**：保存后立刻调 `volc-identity-create-session`，把生成的 H5 二维码直接展示在同一个弹窗里，省一次点击
+- **失败兜底**：若仍未通过（例如光线 / 戴口罩），在 `IdentityVerifyDialog` 报错卡片底部新增「重拍 3 张再试一次」按钮，跳回拍摄向导而不是从头建角色
 
-## 后端改造
+## 改动清单（技术细节）
+- `src/components/marketing/CharacterCreateDialog.tsx`
+  - 新增第三个 Tab `live`，复用 `name / roleLabel`
+  - 新组件 `<LiveCaptureWizard />`：用 `getUserMedia({ facingMode: 'user' })` + `<canvas>` 三步抓帧，输出 3 个 `File`
+  - 走 `uploadMarketingImages` 上传 → `marketing_characters.insert({ source: 'live_capture', ref_image_urls, cover_url })`
+  - 保存成功后 `setVerifyOpenFor(character)` 直接拉起认证弹窗
+- `src/pages/marketing/MarketingLibrary.tsx`（或承载角色卡的页面）
+  - 接住 `onCreated` 回调，若 `character.source === 'live_capture'` 自动 open `IdentityVerifyDialog`
+- `src/components/marketing/IdentityVerifyDialog.tsx`
+  - 失败态下新增「重拍照片」按钮，回调回到 `CharacterCreateDialog` 的 live 模式并预填角色 id（走 update 而非 insert）
+- 后端 / DB：**无需迁移**。沿用 `marketing_characters` / `marketing_character_assets` / 现有两个 volc-identity edge functions
 
-### 1) 新表 `activity_apply_otp`（迁移）
-字段：`id, activity_id, phone, code, expires_at, consumed_at, created_at`，索引 `(activity_id, phone, created_at desc)`。RLS：仅 `service_role` 可读写，匿名 `anon` 无策略（通过 edge function 访问）。
+## 不做的事
+- 不改火山的活体规则（那是平台侧）
+- 不动现有「AI 生成身份板」和「上传人物照」两个模式
+- 不引入新的存储桶 / 新的表
 
-### 2) 新 edge function `activity-apply-send-otp`
-- 入参：`share_token, phone`
-- 校验活动有效 + 手机号格式 + 60s 节流
-- 命中 `activity_applications.applicant_phone` 已存在 → 直接返回 `{ already:true, short_code }`，不发短信
-- 否则写 OTP 记录 + 调 `send-sms`（复用 `template:'otp'`）
-
-### 3) 修改 `activity-apply`
-- 新增必填入参 `otp_code`
-- 在原有"字段校验"之前查 `activity_apply_otp`：必须存在 (activity_id+phone+code) 且未过期未消费，否则返回 400「验证码错误或已过期」
-- 通过后把该 OTP 标记 `consumed_at=now()`
-- 已申请逻辑保持不变（兜底）
-
-## 前端改造（仅 `src/pages/public/PublicActivity.tsx`）
-
-- 新增状态：`otpCode, otpSending, otpCooldown, otpVerifiedPhone`
-- 手机号输入旁加「发送验证码」按钮 + 倒计时
-- 新增验证码输入框（数字、6 位）
-- `submit()` 改为：必须 `otpVerifiedPhone === phone` 且 `otpCode` 已填；把 `otp_code` 传给 `activity-apply`
-- 「发送验证码」收到 `already=true` 时，自动写入 `localStorage` 并跳到券详情页（沿用已有 `navigate('/u/c/<short_code>')` 路径）
-- 错误文案中文化：手机号已领取 / 验证码错误 / 验证码已过期 / 发送过于频繁
-
-## 不动的部分
-
-- `lookup_by_phone`（已领取查询入口）保持原样
-- 活动后台 / 我的活动 / 优惠券核销逻辑不变
-- 老的 `claim_otp` 表与 `voucher-claim-send-otp` 不动，避免影响现有"先建券后领取"的旧链路
+## 验收
+- 在手机预览页（/me/marketing/library）能用前置摄像头完成 3 连拍
+- 保存后角色卡出现「未认证」徽章 → 弹窗扫码 → 真机完成活体 → 徽章变「已认证」
+- 角色 `verified_asset_uri` 写入，后续生成视频时该角色自动走 `asset://` 通道，不再被「real person」拦截
