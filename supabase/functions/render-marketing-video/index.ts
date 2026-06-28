@@ -716,7 +716,7 @@ Deno.serve(async (req) => {
       input_image_urls: imageUrls, output_url: null,
       meta: {
         job_id: parent.id, video_type: script.video_type,
-        duration: totalDur, aspect: ratio,
+        duration: totalDur, target_duration_s: targetDur, actual_duration_s: plannedActual, aspect: ratio,
         // Seedance 2.0:有参考图 = reference2video,完全无图 = text2video。
         mode: totalRefImages > 0 ? "reference2video" : "text2video",
         render_mode: "per_shot",
