@@ -269,6 +269,61 @@ function snapR2vDuration(d: number): number {
   return 10;
 }
 
+// one_shot 时把"目标总时长"吸附到 r2v 网格(≤7→5, ≤12→10, >12→15)。
+function snapOneShotDuration(d: number): number {
+  const n = Math.round(Number(d) || 10);
+  if (n <= 7) return 5;
+  if (n <= 12) return 10;
+  return 15;
+}
+
+// 把切好的段按 r2v 合法网格 {5,10} 吸附,并合并相邻"两个 5s"为"一个 10s",
+// 让最终送给火山的每一段都是合法时长,总时长在用户目标附近浮动。
+function snapShotsToValidGrid(subScripts: any[]): any[] {
+  if (!subScripts.length) return subScripts;
+  // 先把每段 duration_s 吸附
+  const snapped = subScripts.map((s) => {
+    const d = snapR2vDuration(Number(s.total_duration_s) || 5);
+    const clip = (sc: any) => sc && (sc.scene || sc.action || sc.subtitle || sc.dialogue)
+      ? { ...sc, duration_s: d } : sc;
+    return {
+      ...s,
+      total_duration_s: d,
+      hook: clip(s.hook),
+      scenes: Array.isArray(s.scenes) ? s.scenes.map(clip) : s.scenes,
+      outro: clip(s.outro),
+    };
+  });
+  // 合并相邻 5s → 10s(同 role 才合并,避免 hook 和 outro 串)
+  const merged: any[] = [];
+  for (let i = 0; i < snapped.length; i++) {
+    const cur = snapped[i];
+    const nxt = snapped[i + 1];
+    if (
+      cur.total_duration_s === 5 &&
+      nxt && nxt.total_duration_s === 5 &&
+      cur.__shot_role === nxt.__shot_role &&
+      cur.__shot_role === 'mid'
+    ) {
+      // 合并:把后段的描述顺接到前段
+      const mergedScenes = [
+        ...(Array.isArray(cur.scenes) ? cur.scenes : []),
+        ...(Array.isArray(nxt.scenes) ? nxt.scenes : []),
+      ].map((sc) => ({ ...sc, duration_s: 5 }));
+      merged.push({
+        ...cur,
+        scenes: mergedScenes,
+        total_duration_s: 10,
+      });
+      i++; // 跳过下一段
+    } else {
+      merged.push(cur);
+    }
+  }
+  // 重新编 segment_index / total
+  return merged.map((s, i) => ({ ...s, __segment_index: i, __segment_total: merged.length }));
+}
+
 async function submitArkTask(opts: {
   arkKey: string; model: string; prompt: string; ratio: string; duration: number;
   resolution: string;
