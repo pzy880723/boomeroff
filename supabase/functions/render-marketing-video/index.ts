@@ -371,14 +371,19 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "脚本格式不完整" });
     }
     // 一键修复开关:disable_storyboard = 扔掉分镜静帧首尾帧,disable_references = 连参考图也不要
+    // face_pipeline:character_sheet = 提交前就给参考图打 Character Sheet 软通过水印
     const disableStoryboard = !!body.disable_storyboard;
     const disableReferences = !!body.disable_references;
+    const facePipeline: 'auto' | 'character_sheet' | 'illustration' | 'faceless' =
+      (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless')
+        ? body.face_pipeline : 'auto';
     if (disableStoryboard) {
       const strip = (c: any) => { if (c && typeof c === 'object') c.storyboard_url = null; };
       script = JSON.parse(JSON.stringify(script));
       strip(script.hook); strip(script.outro);
       if (Array.isArray(script.scenes)) script.scenes.forEach(strip);
     }
+
 
     const styleKey = normalizeStyle(body.style || script.style);
     const realism = normalizeRealism(body.realism ?? script.realism);
