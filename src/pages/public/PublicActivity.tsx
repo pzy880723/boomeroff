@@ -73,7 +73,7 @@ export default function PublicActivity() {
   const [otpCode, setOtpCode] = useState('');
   const [otpSending, setOtpSending] = useState(false);
   const [otpCooldown, setOtpCooldown] = useState(0);
-  const [otpVerifiedPhone, setOtpVerifiedPhone] = useState<string>('');
+
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
