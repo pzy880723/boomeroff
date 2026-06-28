@@ -1,17 +1,41 @@
 // 批量"角色软通过预检":为每个未认证的角色,把封面跑一遍 Character Sheet 处理,
-// 上传到 marketing-videos/_soft_pass/,把签名 URL 写回 marketing_characters.verified_asset_uri,
-// 并在 meta.verify_kind 写 'character_sheet',区别于"真人活体认证"。
+// 上传到 marketing-videos/_soft_pass/,把签名 URL 写回 marketing_characters.verified_asset_uri。
 //
-// 入参:  { character_ids: string[] }   (按当前用户所属 shop 校验)
+// 入参:  { character_ids: string[] }   (单次最多 50,前端按 50 一批分批调)
 // 出参:  { ok: true, results: [{ id, status: 'ok'|'skipped'|'failed', error?, verified_asset_uri? }] }
+//
+// 服务端策略:并发上限 5 + 每个角色 25s 软超时,绝不让一张图卡死整批。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { softPassFaceImage } from "../_shared/face-gateway.ts";
+
+type ResultRow = { id: string; status: "ok" | "skipped" | "failed"; error?: string; verified_asset_uri?: string };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} 超时 (>${Math.round(ms / 1000)}s)`)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+async function runPool<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      out[i] = await worker(items[i]);
+    }
+  });
+  await Promise.all(runners);
+  return out;
 }
 
 Deno.serve(async (req) => {
@@ -33,28 +57,26 @@ Deno.serve(async (req) => {
       : [];
     if (!ids.length) return json({ ok: false, error: "character_ids 不能为空" }, 400);
 
+    console.log("[character-preflight] start", { user: u.user.id, count: ids.length });
+
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
-    // 拉角色记录(注意:用 admin 读,但只处理用户能 SELECT 到的那些)
+    // 拉角色记录(用 userClient,RLS 保证只能动自己 shop 的角色)
     const { data: rows, error: selErr } = await userClient
       .from("marketing_characters")
       .select("id, cover_url, verified_asset_uri, meta")
       .in("id", ids);
     if (selErr) return json({ ok: false, error: selErr.message }, 400);
 
-    const results: Array<{ id: string; status: "ok" | "skipped" | "failed"; error?: string; verified_asset_uri?: string }> = [];
-
-    for (const r of rows || []) {
-      if (r.verified_asset_uri) {
-        results.push({ id: r.id, status: "skipped" });
-        continue;
-      }
-      if (!r.cover_url) {
-        results.push({ id: r.id, status: "failed", error: "没有封面图" });
-        continue;
-      }
+    const results = await runPool(rows || [], 5, async (r): Promise<ResultRow> => {
+      if (r.verified_asset_uri) return { id: r.id, status: "skipped" };
+      if (!r.cover_url) return { id: r.id, status: "failed", error: "没有封面图" };
       try {
-        const signed = await softPassFaceImage(r.cover_url, { admin, userId: u.user.id });
+        const signed = await withTimeout(
+          softPassFaceImage(r.cover_url, { admin, userId: u.user.id }),
+          25_000,
+          "软通过处理",
+        );
         const nextMeta = { ...(r.meta || {}), verify_kind: "character_sheet" };
         const { error: upErr } = await admin
           .from("marketing_characters")
@@ -64,15 +86,18 @@ Deno.serve(async (req) => {
             meta: nextMeta,
           })
           .eq("id", r.id);
-        if (upErr) {
-          results.push({ id: r.id, status: "failed", error: upErr.message });
-        } else {
-          results.push({ id: r.id, status: "ok", verified_asset_uri: signed });
-        }
+        if (upErr) return { id: r.id, status: "failed", error: upErr.message };
+        return { id: r.id, status: "ok", verified_asset_uri: signed };
       } catch (e) {
-        results.push({ id: r.id, status: "failed", error: (e as any)?.message || "preflight failed" });
+        const msg = (e as any)?.message || "preflight failed";
+        console.warn("[character-preflight] one failed", { id: r.id, msg });
+        return { id: r.id, status: "failed", error: msg };
       }
-    }
+    });
+
+    const ok = results.filter((r) => r.status === "ok").length;
+    const failed = results.filter((r) => r.status === "failed").length;
+    console.log("[character-preflight] done", { ok, failed, skipped: results.length - ok - failed });
 
     return json({ ok: true, results });
   } catch (e) {
