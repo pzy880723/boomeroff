@@ -1,93 +1,74 @@
 ## 目标
 
-1. 把之前「分镜静帧」里那套高质量出图 Prompt（真人级电影感 / 风格化海报）迁移到 AI 图片，做成「**一键智能广告图**」入口：自动从素材库挑原图 + 自动写 Prompt + 批量出图。
-2. 收窄底部输入区，让对话气泡区有更多视觉空间。
+修两件事(都在「一键智能广告图」`ai-smart-ad-images` 里):
+
+1. **场景图/人物图必须符合商场 B1 开放式店面物理约束** —— 复用视频那套 `storefront-constraints.ts`,禁止出现门框/卷帘门/玻璃门/街边/推门。
+2. **出图要有电影艺术感** —— 不要"普通人随手拍"的纪实感,要让人一眼觉得"这是专业团队拍的大片"。
 
 ---
 
-## 一、新功能：一键智能广告图
+## 一、门店物理约束:跟视频对齐
 
-### 入口
-- 在 `AiImage.tsx` 空状态 `EmptyState` 顶部 + 顶部模板行新增一个醒目按钮 **「✨ 一键智能广告图」**（金色/主色描边）。
-- 点击打开新弹窗 `SmartAdGenerateDialog.tsx`，三步走：
+当前 `ai-smart-ad-images/index.ts` 虽然 import 了 `STOREFRONT_CONSTRAINT_ZH`,但:
+- 只在 `scene`/`person` 里塞了 ZH 一段,**没有塞英文硬约束 + 负向词**(Gemini 对英文 NEGATIVE 词更敏感)。
+- 商品特写(`product`)没塞 —— 如果参考图带店面背景,模型会自由发挥成街边店。
+- 没有"开场镜头"那种位置硬指令(因为是单图,不需要),但需要补充"画面里如果出现店面,必须是商场走廊视角 + 开放式无门"。
 
-  **Step 1 选类型**（必选，可多选）
-  - **场景图** — 店内氛围/陈列/货架，不强调单个商品，无人。
-  - **商品特写** — 单个或一组商品居中，柔光、干净背景。
-  - **人物图** — 真人写实店员/顾客逛店瞬间，电影感。
+改动 `supabase/functions/ai-smart-ad-images/index.ts` 的 `buildPrompt`:
 
-  **Step 2 数量与比例**
-  - 张数：3 / 6 / 9 / 12（默认 9）。
-  - 比例：1:1 / 3:4 / 9:16 / 16:9（默认 3:4）。
-  - 风格：复用现有 `VIDEO_STYLE_LABELS`（治愈 / 高级 / 活力 …），默认「治愈日杂」。
-  - 真人模式开关（仅在选了「人物图」时显示）：写实 / 风格化。
+- 三种类型**全部注入** `STOREFRONT_CONSTRAINT_ZH` + `STOREFRONT_CONSTRAINT_EN`。
+- 末尾的"严禁"列表追加英文负向词:`door frame, glass door, door handle, roll-up shutter, door curtain, street view, sidewalk, road, traffic, outdoor sky, push door, pull door, store entrance with door, shop front gate`。
+- 场景图/人物图额外加一句:"如果画面出现店面,必须呈现商场 B1 室内走廊视角看向 8 米宽开放式店面,顶部门楣有 logo 灯箱,**不能出现任何门框/玻璃门/卷帘门/门把手/门帘**;背景必须是商场走廊/中庭/对面商铺/商场天花板灯,不能是街道/人行道/户外天空。"
+- 商品特写补一句:"若背景隐约可见店面环境,必须是商场室内开放式店面,无门、无门框。"
 
-  **Step 3 主题（可选）**
-  - 一句话主题，例如「周末新到货」「夏日清凉」。空着也行，由 AI 自由发挥。
-
-### 后端：新建 `supabase/functions/ai-smart-ad-images/index.ts`
-
-逻辑：
-
-1. 校验登录 / shop_id / 每日 50 张额度（沿用 `ai-image-chat` 的限额表）。
-2. **自动选图**：从 `marketing_assets` 拉该 shop_id 下 `kind='photo'` 且非 `category='分镜头'`、非 AI 合成（meta.source 非 `ai-image-chat` / `storyboard`）的真实素材，按 `tags` 与所选类型聚类：
-   - 场景图 → 标签含 `店内/陈列/货架/氛围/门头`。
-   - 商品特写 → 标签含 `商品/单品/服饰/杯子/玩具…`。
-   - 人物图 → 标签含 `人物/店员/顾客`。
-   - 没命中标签时退化为「最近 50 张里随机抽」，保证总能出图。
-3. **批量构 Prompt**：把 `storyboard-marketing-video` 里 `buildFramePrompt` 抽到 `_shared/ad-image-prompts.ts`，按「类型 + 风格 + 真人模式」生成。每张图：
-   - 场景图：复用 `realism='photoreal'` 分支（去掉「主角必须出现」段），refs = 1 张实景图。
-   - 商品特写：极简白底 / 自然光 + 单品锁定，refs = 1 张商品图。
-   - 人物图：复用 photoreal 全套约束 + character 卡（如果该 shop 选了默认角色），refs = 角色封面 + 1 张实景图。
-4. **并行 Gemini 3.1 Flash Image** 出图（同 storyboard，最多并发 4），上传到 `product-images` bucket，写 `marketing_assets`（kind=`photo`、category=类型名、tags=[`AI智能广告`, 风格, 类型]，sha256 去重）。
-5. 返回 `{ ok, items: [{ output_url, category, asset_id, source_asset_url }] }`，失败的单张只标记错误不影响其他。
-
-### 前端结果展示
-- 弹窗内进度条「正在生成 3 / 9 …」，已完成的图实时插入对话流（以 AI 气泡呈现，标签：「智能广告 · 场景图 1」）。
-- 全部完成后弹窗关闭，对话流自动滚到底。
-- 用户可以继续在输入框对话 `@img1` 改图（沿用现有 mention 逻辑）。
+不动 video 流程(已有约束)。
 
 ---
 
-## 二、输入区瘦身（仅视觉调整，逻辑不动）
+## 二、电影艺术感升级
 
-当前底部约 220px 高，目标压到 ~110px。改动都在 `src/pages/marketing/AiImage.tsx`：
+当前 `buildPrompt` 的 photoreal 分支偏"真实纪实"(35mm f/2.0 ISO 400 + 自然光 + "无滤镜无调色"),效果就是"店员手机随手拍升级版"。用户要的是"艺术品级"。
 
-1. **左侧两个图标按钮（📎 附件 / 🖼 素材库）下移合并**
-   - 删除左侧竖排两按钮列。
-   - 在 Textarea 内左下角放一个「**+**」按钮（`size="icon" h-7 w-7`），点击弹出 mini Popover：「📎 上传图片」「🖼 从素材库选」「✨ 一键智能广告图」。
+把 `buildPrompt` 改造成**三档可选** + **默认升档**:
 
-2. **比例选 → 单按钮 Popover**
-   - 顶部那行把 4 个 `AspectIcon` 按钮去掉，换成一个 `<Button variant="outline" size="sm">` 显示当前比例（如 `1:1 ▾`）。
-   - 点击弹 Popover，里头放原来的 4 个 `AspectIcon` 大按钮，选完即关。
+### 1. 新增「电影感强度」隐式提升
+photoreal 不再是单一档,而是默认走 **"cinematic-pro"** 档:
+- 器材:`Arri Alexa Mini LF / RED Komodo, anamorphic lens 40mm T2.0, 1.5x squeeze, subtle lens flare, organic film grain`(电影机 + 变形宽银幕)
+- 光线:`motivated three-point lighting, rim light separating subject from background, soft key from window/practical lamps, deep shadows with detail retention, Rembrandt or split lighting on faces, golden hour or blue hour color temperature when appropriate`
+- 色彩:`teal-and-orange cinematic color grade (subtle, not Instagram), high dynamic range, rich shadow detail, filmic highlight roll-off`(取消之前"无滤镜无调色"的硬规则 —— 那条让画面寡淡)
+- 构图:`rule of thirds, leading lines, foreground bokeh elements, layered depth (foreground / midground / background), shallow depth of field f/1.4-f/2.0, intentional negative space`
+- 氛围:`atmospheric haze, dust particles in light beam, practical light sources visible in frame (neon sign / shelf LED / pendant lamp), reflections on glossy surfaces`
+- 后期:`shot on film emulation (Kodak Portra 400 / Fuji 400H look), subtle halation around highlights, cinematic letterbox-friendly framing`
 
-3. **顶部行布局**
-   - 行高从 `gap-2 flex-wrap` 改成单行 `h-8`：左边「模板」按钮 + 当前模板 chip，右边「比例」按钮。
+### 2. 三种类型差异化电影手法
 
-4. **底部提示文案精简**
-   - `最多挂 4 张参考图 · 每日 50 张额度 · 历史不保存,出图自动进素材库` → `每日 50 张 · 自动入库`，字号 `text-[10px]`。
+- **场景图**:Wes Anderson 式对称构图 / Roger Deakins 式自然光大场景 二选一(随机),强调货架灯带、商品反光、暖色卤素灯 vs 冷色顶灯的色温对比。
+- **商品特写**:静物广告大片(Apple keynote / 无印良品 lookbook 质感),硬光 + 柔光混合,商品边缘有 rim light,背景虚化成柔和色块,可加一缕侧逆光打出体积感。
+- **人物图**:电影剧照感(《花样年华》/《重庆森林》/《一一》参考),人物不直视镜头,有"被偶遇"的故事感;面部一定要有 motivated light(从货架灯/窗外/招牌透出),禁止平光证件照。
 
-5. **附图条**
-   - 缩略图从 `w-14 h-14` 改 `w-10 h-10`，整条 padding 收紧。
+### 3. 风格 chip 仍然生效
+现有 `VIDEO_STYLE_LABELS` 继续作为"情绪基调"叠加在 cinematic-pro 之上(治愈 = 暖色低饱和 + 柔光;高级 = 冷色高对比 + 硬光;活力 = 高饱和 + 动感虚化),不再被 cinematic-pro 完全覆盖。
+
+### 4. 负向词补充
+追加:`amateur snapshot, phone photo, flat lighting, harsh on-camera flash, oversharpened, HDR halo, Instagram filter preset, washed out, overexposed sky, plastic AI skin, uncanny face, generic stock photo aesthetic`。
+
+### 5. stylized 档同步升级
+stylized 分支也升级为"电影海报级"(Mondo poster / Criterion Collection cover 质感),不再只是"略带插画"。
 
 ---
 
 ## 三、技术细节
 
-- 新文件：
-  - `src/components/marketing/SmartAdGenerateDialog.tsx`
-  - `supabase/functions/ai-smart-ad-images/index.ts`
-  - `supabase/functions/_shared/ad-image-prompts.ts`（抽自 `storyboard-marketing-video`，保留商场 B1 门头约束）
-- 修改：
-  - `src/pages/marketing/AiImage.tsx`（入口按钮 + 输入区重排）
-  - `supabase/functions/storyboard-marketing-video/index.ts` 改为从共享 prompts 引入（保证视频分镜效果不退化）
-- 复用：`uploadMarketingImages`、`marketing_assets` 表结构、`VIDEO_STYLE_*` 风格枚举、Gemini 3.1 Flash Image 模型
-- 复用现有商场 B1 / 门头 / 无门 物理约束（`storefront-constraints.ts`）注入到场景图与人物图 prompt。
+只改一个文件:`supabase/functions/ai-smart-ad-images/index.ts`
+
+- `buildPrompt(opts)` 整段重写,拆出内部 `buildCinematicBase()` / `buildSceneDirective()` / `buildProductDirective()` / `buildPersonDirective()` 几个小函数,便于后续调。
+- 中英文双语注入(中文给 Gemini 理解品牌/品类,英文给 Gemini 锁电影术语和负向词)。
+- 不改前端、不改对话框、不改额度、不改入库逻辑。
 
 ---
 
 ## 不做
 
-- 不做角色一致性面板（已有 CharacterPicker，本期不动）
-- 不动视频流程
-- 不改 `ai-image-chat` 单图对话接口
+- 不动「分镜静帧」(`storyboard-marketing-video`) —— 视频流程暂时保持不变。
+- 不加新 UI 开关(电影感是默认行为,不让用户选档,避免选择困难)。
+- 不改模型(继续 `google/gemini-3.1-flash-image-preview`)。
