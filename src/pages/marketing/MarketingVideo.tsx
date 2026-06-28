@@ -24,6 +24,8 @@ import { thumbUrl } from '@/lib/imageUrl';
 import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
 import { pollRenderJob, type RenderPhase } from '@/lib/surpriseJob';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
+import { toastVideoFailure } from '@/lib/toastVideoFailure';
+import type { VideoFix } from '@/lib/videoFailure';
 import { getModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 import { RealismToggle } from '@/components/marketing/RealismToggle';
 import { getRealismPref, setRealismPref } from '@/lib/realismPref';
