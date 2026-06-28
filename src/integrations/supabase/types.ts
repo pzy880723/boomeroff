@@ -918,6 +918,7 @@ export type Database = {
           cover_url: string
           created_at: string
           created_by: string
+          face_pass_level: string
           id: string
           meta: Json
           name: string
@@ -938,6 +939,7 @@ export type Database = {
           cover_url: string
           created_at?: string
           created_by: string
+          face_pass_level?: string
           id?: string
           meta?: Json
           name: string
@@ -958,6 +960,7 @@ export type Database = {
           cover_url?: string
           created_at?: string
           created_by?: string
+          face_pass_level?: string
           id?: string
           meta?: Json
           name?: string
@@ -1010,6 +1013,7 @@ export type Database = {
         Row: {
           created_at: string
           error: string | null
+          fallback_notes: Json
           finished_at: string | null
           id: string
           last_polled_at: string | null
@@ -1029,6 +1033,7 @@ export type Database = {
         Insert: {
           created_at?: string
           error?: string | null
+          fallback_notes?: Json
           finished_at?: string | null
           id?: string
           last_polled_at?: string | null
@@ -1048,6 +1053,7 @@ export type Database = {
         Update: {
           created_at?: string
           error?: string | null
+          fallback_notes?: Json
           finished_at?: string | null
           id?: string
           last_polled_at?: string | null

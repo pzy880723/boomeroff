@@ -1,41 +1,48 @@
 ## 目标
-把 AI 图片(`ai-smart-ad-images`)的生成风格统一到分镜头静帧(`storyboard-marketing-video` photoreal)那套"纪实 + 实景忠诚 + 无滤镜"的观感,消除目前 AI 图片"电影广告大片"的夸张感。
+把上一轮欠下的 3 件事补齐：批量预检角色、记住每个角色的"通过套路"、在视频详情里能看到每段走的是哪条降级链。
 
-## 现状对比(已和你讲清,见上方对话)
-- **分镜头静帧**:"真实店内自然光、白平衡准确、无滤镜、无暖黄/橙调色、严格参考实景照不要美化"。
-- **AI 图片**:"电影艺术大片级、Arri Alexa + 变形宽银幕、三点布光 + Rembrandt 阴影、teal-and-orange 调色、Wes Anderson / 王家卫 导演池、烟雾粒子、只能在光影构图上做电影化升级"。
-- 这就是 AI 图片显得夸张的根因 —— prompt 本身在主动要求戏剧化。
+## 1. 角色页"一键预检全部角色"
+- 在 `MarketingLibrary.tsx` 的角色 Tab 顶部新增按钮 **「一键预检全部未认证角色」**。
+- 点击后弹确认（"将依次为 N 个未认证角色生成 Character Sheet 软通过封面，约耗时 N × 2s"），开始顺序执行：
+  - 跳过已有 `verified_asset_uri` 的角色；
+  - 对每个角色调用新的 edge function `character-preflight`，内部复用 `softPassFaceImage(cover_url)` 生成软通过封面 → 上传 → 把签名 URL 写回 `marketing_characters.verified_asset_uri`（标记 `verified_at = now()`、`meta.verify_kind = 'character_sheet'`），区别于"真人活体认证"。
+  - UI 用 `UploadProgressTiles`-风格的进度条展示 `已完成 X / 共 Y`，失败的角色聚合成可重试列表。
+- 完成后刷新角色列表，每张卡上"未认证"徽章变成"已软通过"（绿色，区别于真人认证的「已认证」）。
 
-## 实施方案(选项 A:最小改动)
+## 2. `face_pass_level` 持久化
+- 新增数据库列 `marketing_characters.face_pass_level text default 'auto'`，取值 `auto | character_sheet | illustration | faceless`。
+- 渲染链路改造：
+  - `MarketingVideo.tsx` 和 `SurpriseVideoDialog.tsx` 在拼 render body 前，如果角色记录里 `face_pass_level !== 'auto'` 且本次 overrides 未指定，则把它带进 `face_pipeline` 字段。
+  - 用户在错误卡里点「一键软通过」/「插画化」/「无人化」后，除了 `reRender`，还把这个选择 `UPDATE` 到当前角色的 `face_pass_level`，下次自动套用，不再被拦。
+- `CharacterDialog.tsx` 增加只读展示 + 「重置为自动」按钮，方便用户回到默认。
 
-### 1. 在 `ai-smart-ad-images/index.ts` 增加 `style_grade` 参数
-- 类型:`'documentary' | 'cinematic'`,默认 `'documentary'`。
-- 从 request body 读取,透传到 `buildPrompt`。
+## 3. VideoJobDetailPanel：每段"软通过"标签
+- 新增数据库列 `marketing_video_jobs.fallback_notes jsonb default '[]'::jsonb`（每段一行，记录 `face_soft_pass_applied / face_soft_pass_auto / dropped_first_frame / text_only` 等）。
+- 修改 `render-marketing-video/index.ts`：现有 `fallbackNotes` 数组写回子任务和父任务的 `fallback_notes` 列。
+- 新建 `src/components/marketing/VideoJobDetailPanel.tsx`：
+  - props: `jobId`；订阅 `marketing_video_jobs` realtime + 5s 轮询；
+  - 顶部显示父任务进度（复用 `surpriseJob` 的 progress 字段）；
+  - 列表每段显示「段 N · 状态 · 模型 · 时长」，并把 `fallback_notes` 翻译成中文徽章：
+    - `face_soft_pass_applied` → 「软通过 ✓」（绿）
+    - `face_soft_pass_auto` → 「自动软通过」（蓝）
+    - `dropped_first_frame` → 「去首帧」（灰）
+    - `text_only` → 「纯文本兜底」（橙）
+- 接入位置：`MarketingVideo.tsx` / `SurpriseVideoDialog.tsx` 渲染中状态下，把当前进度条改成可点开的卡片，点击展开 `VideoJobDetailPanel`。
 
-### 2. 重写 `buildPrompt` 的 photoreal 分支
-- 当 `style_grade === 'documentary'`(新默认):
-  - 删除 `buildCinematicBaseEn()` 调用(器材池/三点布光/teal-orange/烟雾粒子全部不要)。
-  - 删除 `STYLE_MOOD_EN` overlay。
-  - 删除场景图的 Wes Anderson / Deakins / 杜可风 导演池。
-  - 删除人物图的 王家卫 / 杨德昌 / 是枝裕和 导演池。
-  - 改用分镜头静帧 photoreal 同款基底:`真实店内自然光、白平衡准确、色彩还原真实、无滤镜、无暖黄/复古/橙调色`。
-  - 把"参考图"那句改成分镜头同款强约束:`严格参考附带的实景照,颜色/陈列/光线还原实拍,不要美化、不要调色`。
-  - 三类(scene/product/person)只保留一句话差异化描述,不再叠戏剧化光影词。
-  - NEGATIVE 列表保留(门框/街道/AI 网红脸/塑料皮肤这些硬约束有用)。
-- 当 `style_grade === 'cinematic'`:走现在这套(给少数想要海报感的场合留口子)。
+## 技术细节
+- 迁移 SQL（两列 + 索引）：
+  ```sql
+  ALTER TABLE public.marketing_characters
+    ADD COLUMN IF NOT EXISTS face_pass_level text NOT NULL DEFAULT 'auto'
+    CHECK (face_pass_level IN ('auto','character_sheet','illustration','faceless'));
 
-### 3. 前端 `AiImage.tsx` 加风格切换
-- 在比例 Popover 旁边新增小开关:`纪实风(默认) / 电影海报感`,对应传 `style_grade: 'documentary' | 'cinematic'`。
-- `localStorage` 记住上次选择。
+  ALTER TABLE public.marketing_video_jobs
+    ADD COLUMN IF NOT EXISTS fallback_notes jsonb NOT NULL DEFAULT '[]'::jsonb;
+  ```
+  现有 RLS / GRANT 不变。
+- 新 edge function `character-preflight`：入参 `{ character_ids: string[] }`，按 shop 校验权限，逐个跑 `softPassFaceImage`，返回 `{ ok, results: [{id, status, error?}] }`。`verify_jwt = false`，内部用 `getUser` 校验。
+- 前端通过 `supabase.functions.invoke('character-preflight', { body: { character_ids: [...] } })` 顺序调用，避免一次请求超时。
 
-### 4. 不动的部分
-- ❌ 不动 `storyboard-marketing-video`(你明确说过不要动分镜头 prompt)。
-- ❌ 不动 stylized 分支(用户选画风时的逻辑独立)。
-- ❌ 不动聚类挑图/批量调度/UI 主结构。
-
-## 验证
-- 在 AI 图片页用同一张参考图分别跑 documentary / cinematic 各出 1 张场景图、1 张商品图、1 张人物图,肉眼对比统一度。
-- 默认 documentary 应该和分镜头静帧观感几乎一致。
-
-## 风险
-低 —— 这是 prompt 字符串重排,没碰数据库、没碰 API 协议,前端只新增一个开关。回滚就是把 `style_grade` 默认值改回 `'cinematic'`。
+## 不做
+- 不动 `IdentityVerifyDialog` / 真人活体认证流程。
+- 不改现有提示词或渲染策略选择逻辑。
