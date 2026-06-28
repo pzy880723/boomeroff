@@ -273,7 +273,37 @@ export default function MarketingVideo() {
     }
   };
 
-  const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean; render_strategy?: 'auto' | 'one_shot' | 'per_shot' }) => {
+  const applyVideoFix = async (fix: VideoFix) => {
+    if (fix.kind === 'delete') {
+      setJobId(null); setRenderError(null); setRenderPhase('queued');
+      toast.message('已清除失败任务');
+      return;
+    }
+    if (fix.kind === 'verify_identity') {
+      // 把用户带去角色页做活体认证(顶部 tab 已含角色管理入口)
+      toast.message('请到「我的角色」点击"活体认证"');
+      return;
+    }
+    if (fix.kind === 'topup') return; // helper 已经开了充值页
+    const patch = fix.patch || {};
+    if (patch.modelId) {
+      setModelId(patch.modelId);
+      setResolution((cur) => reconcileResolution(patch.modelId!, (patch.resolution as SeedanceResolution) || cur));
+    } else if (patch.resolution) {
+      setResolution(patch.resolution as SeedanceResolution);
+    }
+    setJobId(null);
+    await confirmRender({
+      modelId: patch.modelId,
+      resolution: (patch.resolution as SeedanceResolution) || undefined,
+      disable_storyboard: patch.disable_storyboard,
+      disable_references: patch.disable_references,
+      render_strategy: patch.render_strategy,
+      face_pipeline: patch.face_pipeline,
+    });
+  };
+
+  const confirmRender = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_storyboard?: boolean; disable_references?: boolean; render_strategy?: 'auto' | 'one_shot' | 'per_shot'; face_pipeline?: 'auto' | 'character_sheet' | 'illustration' | 'faceless' }) => {
     if (!script) return;
     if (!shopId) return toast.error('请先选择店铺');
     setRendering(true);
@@ -311,6 +341,7 @@ export default function MarketingVideo() {
           render_strategy: overrides?.render_strategy ?? renderStrategy,
           disable_storyboard: !!overrides?.disable_storyboard,
           disable_references: !!overrides?.disable_references,
+          face_pipeline: overrides?.face_pipeline,
         },
       });
       if (error) throw error;
@@ -328,11 +359,12 @@ export default function MarketingVideo() {
       setRenderError(null);
       toast.success(`已用 ${getSeedanceShortLabel(reqModel)} · ${reqRes} 入队渲染`);
     } catch (e: any) {
-      const msg = e?.message || e?.error?.message || '提交失败,请稍后重试';
-      toast.error(msg);
+      // 不再弹原始英文报错,翻译成"人话卡"+一键修复
+      toastVideoFailure(e, { onApplyFix: applyVideoFix });
     }
     finally { setRendering(false); }
   };
+
 
   // 轮询渲染进度
   useEffect(() => {
