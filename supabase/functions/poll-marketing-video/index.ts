@@ -143,6 +143,49 @@ async function submitQueuedChild(admin: any, arkKey: string, child: any, userId:
   return { submitted: true, provider_task_id: result.id, notes: result.fallbackNotes, mode: result.mode };
 }
 
+async function summarizeParentSegments(admin: any, parent: any) {
+  const { data: children } = await admin
+    .from("marketing_video_jobs")
+    .select("id,status,segment_index,segment_total,parent_job_id,error,video_url,segment_url")
+    .eq("parent_job_id", parent.id)
+    .order("segment_index", { ascending: true });
+
+  const segs = children || [];
+  const total = Number(parent.segment_total) || segs.length || 1;
+  const segUrls: (string | null)[] = new Array(total).fill(null);
+  let done = 0;
+  let failed: string | null = null;
+
+  for (const ch of segs) {
+    const idx = Number(ch.segment_index) || 0;
+    const url = ch.segment_url || ch.video_url || null;
+    if (ch.status === "succeeded" && url) {
+      segUrls[idx] = url;
+      done += 1;
+    } else if (ch.status === "failed") {
+      failed = ch.error || `第 ${idx + 1} 段失败`;
+    }
+  }
+
+  return { segs, total, done, failed, segUrls };
+}
+
+async function markParentReadyToStitch(admin: any, parent: any, segUrls: (string | null)[], done: number) {
+  await admin.from("marketing_video_jobs").update({
+    status: "ready_to_stitch",
+    error: null,
+    last_polled_at: new Date().toISOString(),
+  }).eq("id", parent.id);
+  await updateAssetMeta(admin, parent.user_id, parent.id, {
+    status: "stitching",
+    stage: "stitching",
+    error: null,
+    segment_done: done,
+    segment_total: parent.segment_total || segUrls.length,
+    segment_urls: segUrls,
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
