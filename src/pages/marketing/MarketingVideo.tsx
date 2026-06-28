@@ -270,12 +270,12 @@ export default function MarketingVideo() {
         setLastSbSig(computeStoryboardSig(d.script, realism));
       }
       const failed = (d.frames || []).filter((f: any) => !f.url).length;
-      if (failed) setSbWarn(`${failed} 张静帧生成失败,渲染时将回退到原素材图`);
+      if (failed) setSbWarn(`${failed} 张静帧生成失败,已禁止直接渲染,请先补齐`);
       toast.success(`分镜静帧已合成 ${d.succeeded}/${d.total}`);
       return d.script || target;
     } catch (e: any) {
       setSbWarn(e?.message || '分镜静帧生成失败');
-      toast.message('分镜静帧失败,渲染将直接用原素材', { duration: 3000 });
+      toast.message('分镜静帧失败,已停止渲染', { duration: 3000 });
       return null;
     } finally {
       setSbBusy(false);
@@ -1080,7 +1080,12 @@ function computeStoryboardSig(script: any, realism: string): string {
     .map(({ clip }) => {
       const ref = effectiveImageRef(clip);
       const idx = ref ? `${ref.index}:${ref.role}` : '_';
-      return `${idx}|${clip?.storyboard_url ? '1' : '0'}`;
+      const scene = (clip?.scene ?? clip?.video_prompt ?? '').toString().trim();
+      const action = (clip?.action ?? '').toString().trim();
+      const dialogue = (clip?.dialogue ?? '').toString().trim();
+      const subtitle = (clip?.subtitle ?? clip?.text ?? '').toString().trim();
+      const motion = (clip?.motion ?? '').toString().trim();
+      return `${idx}|${clip?.storyboard_url ? '1' : '0'}|${scene}|${action}|${dialogue}|${subtitle}|${motion}`;
     })
     .join(',') + `#${realism}`;
 }
