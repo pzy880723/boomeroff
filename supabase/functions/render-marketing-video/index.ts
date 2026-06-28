@@ -10,7 +10,6 @@ import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segment
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 import { STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
-import { softPassFaceImage } from "../_shared/face-gateway.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -443,6 +442,7 @@ async function softPassKeyReferences(
   const verified = urls.filter((u) => typeof u === 'string' && u.startsWith('asset://')).slice(0, 1);
   const httpRefs = urls.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u)).slice(0, max);
   const cache = opts.cache;
+  const { softPassFaceImage } = await import("../_shared/face-gateway.ts");
   const marked = await Promise.all(httpRefs.map(async (u) => {
     if (cache) {
       if (!cache.has(u)) cache.set(u, softPassFaceImage(u, { admin: opts.admin, userId: opts.userId }).catch(() => u));
