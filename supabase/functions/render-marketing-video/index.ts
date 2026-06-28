@@ -214,9 +214,8 @@ function normalizeRatio(aspect: any): string {
   return "9:16";
 }
 
-// 逐镜切段:每个非空分镜 = 1 段。
-// hook / scenes[*] / outro 各自成段,独立用自己的静帧 + 角色板作 reference_image 喂给 Seedance 2.0,
-// 最后由前端 ffmpeg-wasm 按 segment_index 升序拼接成成片。
+// 多段切分:不再把每个分镜都单独提交。
+// 目标是把 30/45/60 秒压到接近目标时长的 10s/5s 合法网格里,减少火山任务数、成本和函数 CPU 压力。
 function splitScript(script: any): any[] {
   type Shot = { sc: any; role: 'hook' | 'mid' | 'outro' };
   const shots: Shot[] = [];
@@ -240,21 +239,40 @@ function splitScript(script: any): any[] {
     shots.push({ sc: { duration_s: 5, scene: '', action: '', subtitle: '', dialogue: '' }, role: 'hook' });
   }
 
+  const target = Number(script.total_duration_s) || shots.reduce((s, x) => s + (Number(x.sc?.duration_s) || 3), 0) || 15;
+  const desiredCount = Math.max(1, Math.min(6, Math.round(Math.max(5, target) / 10)));
+  const segmentCount = Math.max(1, Math.min(desiredCount, shots.length));
+  const durations = Array.from({ length: segmentCount }, () => 10);
+  const sum = durations.reduce((a, b) => a + b, 0);
+  if (sum - target >= 3) durations[durations.length - 1] = 5;
+
   const empty = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
-  return shots.map((s, i) => {
-    const rawDur = Number(s.sc.duration_s);
-    // Seedance 2.0 单段最短 3s,最长 15s。
-    const dur = Math.max(3, Math.min(MAX_SEG_DUR, Number.isFinite(rawDur) && rawDur > 0 ? Math.round(rawDur) : 5));
-    const clip = { ...s.sc, duration_s: dur };
+  const distribute = (total: number, n: number) => {
+    const base = Math.max(1, Math.floor(total / Math.max(1, n)));
+    const arr = Array.from({ length: n }, () => base);
+    let rest = Math.max(0, total - base * n);
+    for (let i = 0; i < arr.length && rest > 0; i += 1, rest -= 1) arr[i] += 1;
+    return arr;
+  };
+
+  return durations.map((dur, i) => {
+    const start = Math.floor(i * shots.length / segmentCount);
+    const end = Math.floor((i + 1) * shots.length / segmentCount);
+    const group = shots.slice(start, Math.max(start + 1, end));
+    const perShotDur = distribute(dur, group.length);
+    const clips = group.map((s, idx) => ({ ...s, sc: { ...s.sc, duration_s: perShotDur[idx] || 1 } }));
+    const hook = clips.find((s) => s.role === 'hook')?.sc || { ...empty };
+    const outro = clips.find((s) => s.role === 'outro')?.sc || { ...empty };
+    const scenes = clips.filter((s) => s.role === 'mid').map((s) => s.sc);
     return {
       ...script,
-      hook: s.role === 'hook' ? clip : { ...empty },
-      scenes: s.role === 'mid' ? [clip] : [],
-      outro: s.role === 'outro' ? clip : { ...empty },
+      hook,
+      scenes,
+      outro,
       total_duration_s: dur,
       __segment_index: i,
-      __segment_total: shots.length,
-      __shot_role: s.role,
+      __segment_total: segmentCount,
+      __shot_role: clips.some((s) => s.role === 'hook') ? 'hook' : (clips.some((s) => s.role === 'outro') ? 'outro' : 'mid'),
     };
   });
 }
@@ -416,6 +434,18 @@ function resolveSegmentImages(
   if (!refs.length && fallbackFirst) push(fallbackFirst);
 
   return { referenceImages: refs.slice(0, SEEDANCE_MAX_REFS) };
+}
+
+async function softPassKeyReferences(
+  urls: string[],
+  opts: { admin: any; userId: string; max?: number },
+): Promise<string[]> {
+  const max = Math.max(1, Math.min(3, opts.max ?? 2));
+  const verified = urls.filter((u) => typeof u === 'string' && u.startsWith('asset://')).slice(0, 1);
+  const httpRefs = urls.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u)).slice(0, max);
+  const marked = httpRefs.length ? await softPassReferences(httpRefs, { admin: opts.admin, userId: opts.userId }) : [];
+  const out = [...verified, ...marked].filter(Boolean);
+  return (out.length ? out : urls.slice(0, 1)).slice(0, SEEDANCE_MAX_REFS);
 }
 
 
