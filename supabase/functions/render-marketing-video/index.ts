@@ -310,28 +310,6 @@ function resolveSegmentImages(
   return { referenceImages: refs.slice(0, SEEDANCE_MAX_REFS) };
 }
 
-async function softPassKeyReferences(
-  urls: string[],
-  opts: { admin: any; userId: string; max?: number; cache?: Map<string, Promise<string>> },
-): Promise<string[]> {
-  const max = Math.max(1, Math.min(3, opts.max ?? 2));
-  const verified = urls.filter((u) => typeof u === 'string' && u.startsWith('asset://')).slice(0, 1);
-  const httpRefs = urls.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u)).slice(0, max);
-  const cache = opts.cache;
-  const { softPassFaceImage } = await import("../_shared/face-gateway.ts");
-  const marked = await Promise.all(httpRefs.map(async (u) => {
-    if (cache) {
-      if (!cache.has(u)) cache.set(u, softPassFaceImage(u, { admin: opts.admin, userId: opts.userId }).catch(() => u));
-      return await cache.get(u)!;
-    }
-    try { return await softPassFaceImage(u, { admin: opts.admin, userId: opts.userId }); }
-    catch { return u; }
-  }));
-  const out = [...verified, ...marked].filter(Boolean);
-  return (out.length ? out : urls.slice(0, 1)).slice(0, SEEDANCE_MAX_REFS);
-}
-
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
