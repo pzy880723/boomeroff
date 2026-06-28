@@ -374,9 +374,15 @@ Deno.serve(async (req) => {
     // face_pipeline:character_sheet = 提交前就给参考图打 Character Sheet 软通过水印
     const disableStoryboard = !!body.disable_storyboard;
     const disableReferences = !!body.disable_references;
-    const facePipeline: 'auto' | 'character_sheet' | 'illustration' | 'faceless' =
+    let facePipeline: 'auto' | 'character_sheet' | 'illustration' | 'faceless' =
       (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless')
         ? body.face_pipeline : 'auto';
+    // 角色记忆:本次未指定 face_pipeline 时,沿用角色卡持久化的 face_pass_level
+    const charFacePass = (body.script?.character?.face_pass_level || '') as string;
+    if (facePipeline === 'auto' && (charFacePass === 'character_sheet' || charFacePass === 'illustration' || charFacePass === 'faceless')) {
+      facePipeline = charFacePass as any;
+      console.log(`[render] inherit face_pass_level=${facePipeline} from character`);
+    }
     if (disableStoryboard) {
       const strip = (c: any) => { if (c && typeof c === 'object') c.storyboard_url = null; };
       script = JSON.parse(JSON.stringify(script));
