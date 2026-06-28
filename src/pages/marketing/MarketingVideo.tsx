@@ -52,7 +52,7 @@ const STYLES = [
 ] as const;
 type SType = typeof STYLES[number]['v'];
 
-const DURATIONS = [15, 20, 30] as const;
+const DURATIONS = [15, 20, 30, 45, 60] as const;
 const ASPECTS = ['9:16', '1:1', '16:9'] as const;
 
 export default function MarketingVideo() {
@@ -61,7 +61,7 @@ export default function MarketingVideo() {
   const [urls, setUrls] = useState<string[]>((loc.state as any)?.image_urls || []);
   const [vtype, setVtype] = useState<VType>('store_tour');
   const [style, setStyle] = useState<SType>('steady');
-  const [duration, setDuration] = useState<15 | 20 | 30>(15);
+  const [duration, setDuration] = useState<number>(15);
   const [aspect, setAspect] = useState<typeof ASPECTS[number]>('9:16');
   const [highlight, setHighlight] = useState('');
   const [brief, setBrief] = useState<BriefMsg[]>([]);
@@ -561,11 +561,6 @@ export default function MarketingVideo() {
               <Chip key={d} active={duration === d} onClick={() => setDuration(d)}>{d} 秒</Chip>
             ))}
           </div>
-          {duration > MAX_SEG_DUR && (
-            <p className="-mt-1 text-[10px] text-muted-foreground leading-relaxed pl-1">
-              · {duration} 秒视频会拆成 <b>{targetSegmentCount(duration)} 段 × 约 {Math.round(duration / targetSegmentCount(duration))} 秒</b> 生成,完成后自动拼接成一支 MP4。Seedance 只调用 {targetSegmentCount(duration)} 次,省一半 token。整体约 {targetSegmentCount(duration) * 2}-{targetSegmentCount(duration) * 3} 分钟。
-            </p>
-          )}
 
           <SectionLabel num="04">画幅</SectionLabel>
           <div className="-mt-2">
@@ -635,7 +630,7 @@ export default function MarketingVideo() {
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-5 space-y-3">
           <SectionLabel num="06">主角(可选)</SectionLabel>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            选一个固定主角,所有镜头都用 TA,跨段不变脸。{duration > MAX_SEG_DUR && '多段视频如果不选,系统会自动先生成一张兜底角色身份板。'}
+            选一个固定主角,所有镜头都用 TA,跨段不变脸。
           </p>
           <CharacterPicker shopId={shopId} value={character} onChange={(c) => { setCharacter(c); setScript(null); }} />
         </section>
