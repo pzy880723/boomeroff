@@ -561,6 +561,11 @@ export default function MarketingVideo() {
               <Chip key={d} active={duration === d} onClick={() => setDuration(d)}>{d} 秒</Chip>
             ))}
           </div>
+          {duration >= 30 && character ? (
+            <p className="-mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              带主角参考图时,火山仅支持 5s / 10s 单段。系统会自动按 10 秒分段拼接,镜头之间会有切换感。
+            </p>
+          ) : null}
 
           <SectionLabel num="04">画幅</SectionLabel>
           <div className="-mt-2">
