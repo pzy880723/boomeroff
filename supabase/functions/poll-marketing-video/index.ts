@@ -214,6 +214,7 @@ Deno.serve(async (req) => {
       }
 
       const results: any[] = [];
+      let submittedInSweep = 0;
       for (const j of jobs || []) {
         const asset = assetByJob.get(j.id);
         const model = asset?.meta?.model as string | undefined;
@@ -224,7 +225,12 @@ Deno.serve(async (req) => {
 
         if (!j.provider_task_id) {
           if (j.status === "queued" && (j.script || {}).__render_payload) {
+            if (submittedInSweep >= 1) {
+              results.push({ id: j.id, status: j.status, skipped: "submit_limit" });
+              continue;
+            }
             const sub = await submitQueuedChild(admin, ARK_KEY, j, j.user_id);
+            if (sub.submitted) submittedInSweep += 1;
             if (!j.parent_job_id && sub.submitted) {
               await updateAssetMeta(admin, j.user_id, j.id, { status: "running", segment_done: 0, segment_total: j.segment_total || 1 });
             }
