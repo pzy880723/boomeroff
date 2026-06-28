@@ -345,6 +345,7 @@ Deno.serve(async (req) => {
           const prompt = buildPrompt({
             kind: t.kind, styleKey, realism, aspect, theme,
             refSummary: t.refSummary, index: t.idx, total: tasks.length,
+            styleGrade,
           });
           const dataUrl = await generateOneImage({
             apiKey: LOVABLE_API_KEY, prompt, refImageUrls: [t.refUrl],
