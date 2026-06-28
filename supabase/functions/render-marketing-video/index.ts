@@ -269,6 +269,61 @@ function snapR2vDuration(d: number): number {
   return 10;
 }
 
+// one_shot 时把"目标总时长"吸附到 r2v 网格(≤7→5, ≤12→10, >12→15)。
+function snapOneShotDuration(d: number): number {
+  const n = Math.round(Number(d) || 10);
+  if (n <= 7) return 5;
+  if (n <= 12) return 10;
+  return 15;
+}
+
+// 把切好的段按 r2v 合法网格 {5,10} 吸附,并合并相邻"两个 5s"为"一个 10s",
+// 让最终送给火山的每一段都是合法时长,总时长在用户目标附近浮动。
+function snapShotsToValidGrid(subScripts: any[]): any[] {
+  if (!subScripts.length) return subScripts;
+  // 先把每段 duration_s 吸附
+  const snapped = subScripts.map((s) => {
+    const d = snapR2vDuration(Number(s.total_duration_s) || 5);
+    const clip = (sc: any) => sc && (sc.scene || sc.action || sc.subtitle || sc.dialogue)
+      ? { ...sc, duration_s: d } : sc;
+    return {
+      ...s,
+      total_duration_s: d,
+      hook: clip(s.hook),
+      scenes: Array.isArray(s.scenes) ? s.scenes.map(clip) : s.scenes,
+      outro: clip(s.outro),
+    };
+  });
+  // 合并相邻 5s → 10s(同 role 才合并,避免 hook 和 outro 串)
+  const merged: any[] = [];
+  for (let i = 0; i < snapped.length; i++) {
+    const cur = snapped[i];
+    const nxt = snapped[i + 1];
+    if (
+      cur.total_duration_s === 5 &&
+      nxt && nxt.total_duration_s === 5 &&
+      cur.__shot_role === nxt.__shot_role &&
+      cur.__shot_role === 'mid'
+    ) {
+      // 合并:把后段的描述顺接到前段
+      const mergedScenes = [
+        ...(Array.isArray(cur.scenes) ? cur.scenes : []),
+        ...(Array.isArray(nxt.scenes) ? nxt.scenes : []),
+      ].map((sc) => ({ ...sc, duration_s: 5 }));
+      merged.push({
+        ...cur,
+        scenes: mergedScenes,
+        total_duration_s: 10,
+      });
+      i++; // 跳过下一段
+    } else {
+      merged.push(cur);
+    }
+  }
+  // 重新编 segment_index / total
+  return merged.map((s, i) => ({ ...s, __segment_index: i, __segment_total: merged.length }));
+}
+
 async function submitArkTask(opts: {
   arkKey: string; model: string; prompt: string; ratio: string; duration: number;
   resolution: string;
@@ -468,7 +523,7 @@ Deno.serve(async (req) => {
 
     // ============ 一次成片(one_shot) ============
     if (strategy === 'one_shot') {
-      const oneShotDur = Math.max(4, Math.min(MAX_SEG_DUR, Math.round(totalDur || MAX_SEG_DUR)));
+      const oneShotDur = snapOneShotDuration(totalDur || MAX_SEG_DUR);
       const effectiveChar = disableReferences ? null : character;
       const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
       const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
@@ -527,7 +582,7 @@ Deno.serve(async (req) => {
         input_image_urls: imageUrls, output_url: null,
         meta: {
           job_id: parent.id, video_type: script.video_type,
-          duration: oneShotDur, aspect: ratio,
+          duration: oneShotDur, target_duration_s: totalDur, actual_duration_s: oneShotDur, aspect: ratio,
           mode: refImages.length ? "reference2video" : "text2video",
           render_mode: "one_shot_reference",
           render_strategy: "one_shot",
@@ -549,14 +604,19 @@ Deno.serve(async (req) => {
       return json({
         ok: true, success: true, job_id: parent.id, status: "running",
         segment_total: 1, render_strategy: "one_shot", auto_decision_reason: autoReason,
+        target_duration_s: totalDur, actual_duration_s: oneShotDur,
       });
     }
 
     // ============ 逐镜渲染路径(每个分镜 = 1 段,完成后由前端拼接) ============
 
-    const subScripts = splitScript(script);
+    const rawSubScripts = splitScript(script);
+    // r2v 路径(默认):按 {5,10} 网格吸附并合并相邻 5s → 一并送给火山,避免 11/13s 这种非法段。
+    const subScripts = disableReferences ? rawSubScripts : snapShotsToValidGrid(rawSubScripts);
     const segmentTotal = subScripts.length;
-    console.log("[render multi] split into", segmentTotal, "segments, submitting in parallel");
+    const targetDur = totalDur;
+    const plannedActual = subScripts.reduce((a, s) => a + (Number(s.total_duration_s) || 0), 0);
+    console.log(`[render multi] target=${targetDur}s actual≈${plannedActual}s segs=${subScripts.map((s)=>s.total_duration_s).join('+')}`);
 
     // 1) 先建父任务
     const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
@@ -657,7 +717,7 @@ Deno.serve(async (req) => {
       input_image_urls: imageUrls, output_url: null,
       meta: {
         job_id: parent.id, video_type: script.video_type,
-        duration: totalDur, aspect: ratio,
+        duration: totalDur, target_duration_s: targetDur, actual_duration_s: plannedActual, aspect: ratio,
         // Seedance 2.0:有参考图 = reference2video,完全无图 = text2video。
         mode: totalRefImages > 0 ? "reference2video" : "text2video",
         render_mode: "per_shot",
@@ -688,6 +748,7 @@ Deno.serve(async (req) => {
       ok: true, success: true, job_id: parent.id, status: "running",
       segment_total: segmentTotal, child_task_ids: childTaskIds,
       render_strategy: "per_shot", auto_decision_reason: autoReason,
+      target_duration_s: targetDur, actual_duration_s: plannedActual,
     });
   } catch (e) {
     console.error("[render] error", e);
