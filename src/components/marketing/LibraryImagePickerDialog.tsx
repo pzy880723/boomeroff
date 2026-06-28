@@ -67,9 +67,10 @@ export function LibraryImagePickerDialog({
     if (!open || !user) return;
     setSel(new Set());
     setActiveTag(null);
+    setSource(defaultSource);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, user, shopId]);
+  }, [open, user, shopId, defaultSource]);
 
   // 实时订阅:同 shop 内 marketing_assets 变化触发刷新
   useEffect(() => {
@@ -82,16 +83,22 @@ export function LibraryImagePickerDialog({
     return () => { supabase.removeChannel(ch); };
   }, [open, user, shopId]);
 
+  const sourceFiltered = useMemo(() => {
+    if (source === 'all') return items;
+    return items.filter((it) => assetSource(it) === source);
+  }, [items, source]);
+
   const tagOptions = useMemo(() => {
     const set = new Set<string>(DEFAULT_TAGS);
-    items.forEach((it) => (it.tags || []).forEach((t: string) => set.add(t)));
+    sourceFiltered.forEach((it) => (it.tags || []).forEach((t: string) => set.add(t)));
     return Array.from(set);
-  }, [items]);
+  }, [sourceFiltered]);
 
   const filteredItems = useMemo(() => {
-    if (!activeTag) return items;
-    return items.filter((it) => Array.isArray(it.tags) && it.tags.includes(activeTag));
-  }, [items, activeTag]);
+    if (!activeTag) return sourceFiltered;
+    return sourceFiltered.filter((it) => Array.isArray(it.tags) && it.tags.includes(activeTag));
+  }, [sourceFiltered, activeTag]);
+
 
   const toggle = (url: string) => {
     const next = new Set(sel);
