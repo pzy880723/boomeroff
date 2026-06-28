@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { VideoJobDetailPanel } from '@/components/marketing/VideoJobDetailPanel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles, RefreshCw, ArrowRight, Wand2, Camera, MessageSquare, DoorOpen, PartyPopper } from 'lucide-react';
@@ -230,6 +231,15 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     } else if (patch.resolution) {
       setResolution(patch.resolution as SeedanceResolution);
     }
+    // 记住"软通过/插画化/无人化"到角色卡(惊喜路径取 pick.picked 上的角色 id)
+    const charId = (pick as any)?.picked?.character_id || (pick as any)?.picked?.character?.id;
+    if (patch.face_pipeline && patch.face_pipeline !== 'auto' && charId) {
+      try {
+        await supabase.from('marketing_characters' as any)
+          .update({ face_pass_level: patch.face_pipeline })
+          .eq('id', charId);
+      } catch (e) { console.warn('[face_pass_level persist]', e); }
+    }
     setRenderError(null);
     setActiveJob(null);
     clearActiveRenderJob(shopId);
@@ -415,6 +425,8 @@ function RenderingBody({
       {phase === 'failed' && (
         <VideoFailureCard error={error} onApplyFix={onApplyFix} busy={busy} />
       )}
+
+      <VideoJobDetailPanel jobId={job.jobId} defaultExpanded={phase === 'failed'} />
 
       <div className="flex gap-2">
         <Button variant="outline" className="flex-1" onClick={onClose}>

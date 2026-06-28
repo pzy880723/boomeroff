@@ -374,9 +374,15 @@ Deno.serve(async (req) => {
     // face_pipeline:character_sheet = 提交前就给参考图打 Character Sheet 软通过水印
     const disableStoryboard = !!body.disable_storyboard;
     const disableReferences = !!body.disable_references;
-    const facePipeline: 'auto' | 'character_sheet' | 'illustration' | 'faceless' =
+    let facePipeline: 'auto' | 'character_sheet' | 'illustration' | 'faceless' =
       (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless')
         ? body.face_pipeline : 'auto';
+    // 角色记忆:本次未指定 face_pipeline 时,沿用角色卡持久化的 face_pass_level
+    const charFacePass = (body.script?.character?.face_pass_level || '') as string;
+    if (facePipeline === 'auto' && (charFacePass === 'character_sheet' || charFacePass === 'illustration' || charFacePass === 'faceless')) {
+      facePipeline = charFacePass as any;
+      console.log(`[render] inherit face_pass_level=${facePipeline} from character`);
+    }
     if (disableStoryboard) {
       const strip = (c: any) => { if (c && typeof c === 'object') c.storyboard_url = null; };
       script = JSON.parse(JSON.stringify(script));
@@ -495,6 +501,7 @@ Deno.serve(async (req) => {
         user_id: u.user.id, script, status: "running", shop_id: shopId,
         provider: "volcengine_seedance", provider_task_id: r.id,
         segment_total: 1, segment_index: 0, parent_job_id: null,
+        fallback_notes: fallbackNotes,
       }).select().single();
       if (pErr || !parent) {
         console.error("[render one_shot] parent insert", pErr);
@@ -616,6 +623,7 @@ Deno.serve(async (req) => {
       user_id: u.user.id, script: s.sub, status: "queued", shop_id: shopId,
       provider: "volcengine_seedance", provider_task_id: (s.r as any).id,
       parent_job_id: parent.id, segment_index: s.i, segment_total: segmentTotal,
+      fallback_notes: s.fallbackNotes,
     }));
     const { error: childErr } = await admin.from("marketing_video_jobs").insert(childRows);
     if (childErr) {
@@ -626,6 +634,10 @@ Deno.serve(async (req) => {
     // 5) 占位 marketing_assets
     const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
     const fallbackWarnings = Array.from(new Set(submissions.flatMap((s) => s.fallbackNotes)));
+    // 父任务也聚合一份 fallback_notes(给详情面板顶部用)
+    try {
+      await admin.from("marketing_video_jobs").update({ fallback_notes: fallbackWarnings }).eq("id", parent.id);
+    } catch {}
     await admin.from("marketing_assets").insert({
       user_id: u.user.id, kind: "video", shop_id: shopId,
       input_image_urls: imageUrls, output_url: null,

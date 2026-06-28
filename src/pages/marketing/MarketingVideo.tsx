@@ -32,6 +32,7 @@ import { getRealismPref, setRealismPref } from '@/lib/realismPref';
 import type { Realism } from '@/lib/realism';
 import { RenderStrategyPicker } from '@/components/marketing/RenderStrategyPicker';
 import { getRenderStrategy, setRenderStrategy, type RenderStrategy } from '@/lib/renderStrategyPref';
+import { VideoJobDetailPanel } from '@/components/marketing/VideoJobDetailPanel';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -203,6 +204,7 @@ export default function MarketingVideo() {
         cover_url: character.cover_url,
         extra_reference_urls: character.extra_reference_urls || [],
         verified_asset_uri: (character as any).verified_asset_uri || null,
+        face_pass_level: (character as any).face_pass_level || 'auto',
       } : null;
       const { data, error } = await supabase.functions.invoke('generate-marketing-video-script', {
         body: {
@@ -291,6 +293,15 @@ export default function MarketingVideo() {
       setResolution((cur) => reconcileResolution(patch.modelId!, (patch.resolution as SeedanceResolution) || cur));
     } else if (patch.resolution) {
       setResolution(patch.resolution as SeedanceResolution);
+    }
+    // 记住"软通过/插画化/无人化"选择到角色卡,下次自动套用
+    if (patch.face_pipeline && patch.face_pipeline !== 'auto' && (character as any)?.id) {
+      try {
+        await supabase.from('marketing_characters' as any)
+          .update({ face_pass_level: patch.face_pipeline })
+          .eq('id', (character as any).id);
+        (character as any).face_pass_level = patch.face_pipeline;
+      } catch (e) { console.warn('[face_pass_level persist]', e); }
     }
     setJobId(null);
     await confirmRender({
@@ -1269,6 +1280,8 @@ function RenderProgressCard({
       {phase === 'failed' && (
         <VideoFailureCard error={error} onApplyFix={onApplyFix} busy={busy} compact />
       )}
+
+      <VideoJobDetailPanel jobId={jobId} defaultExpanded={phase === 'failed'} />
 
       <div className="text-[10px] text-muted-foreground flex items-center justify-between">
         <span>任务 ID · {jobId.slice(0, 8)}</span>
