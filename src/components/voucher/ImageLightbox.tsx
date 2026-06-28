@@ -17,11 +17,13 @@ export function ImageLightbox({
   initialIndex?: number;
 }) {
   const [idx, setIdx] = useState(initialIndex);
+  const [loaded, setLoaded] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
 
   useEffect(() => { if (open) setIdx(initialIndex); }, [open, initialIndex]);
+  useEffect(() => { setLoaded(false); }, [idx, open]);
 
   useEffect(() => {
     if (!open) return;
