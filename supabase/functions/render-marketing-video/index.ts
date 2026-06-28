@@ -609,9 +609,13 @@ Deno.serve(async (req) => {
 
     // ============ 逐镜渲染路径(每个分镜 = 1 段,完成后由前端拼接) ============
 
-    const subScripts = splitScript(script);
+    const rawSubScripts = splitScript(script);
+    // r2v 路径(默认):按 {5,10} 网格吸附并合并相邻 5s → 一并送给火山,避免 11/13s 这种非法段。
+    const subScripts = disableReferences ? rawSubScripts : snapShotsToValidGrid(rawSubScripts);
     const segmentTotal = subScripts.length;
-    console.log("[render multi] split into", segmentTotal, "segments, submitting in parallel");
+    const targetDur = totalDur;
+    const plannedActual = subScripts.reduce((a, s) => a + (Number(s.total_duration_s) || 0), 0);
+    console.log(`[render multi] target=${targetDur}s actual≈${plannedActual}s segs=${subScripts.map((s)=>s.total_duration_s).join('+')}`);
 
     // 1) 先建父任务
     const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
