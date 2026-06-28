@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed, Copy, Ticket } from 'lucide-react';
+import { Loader2, Share2, Pencil, Trash2, RefreshCw, Search, CheckCircle2, CircleDashed, Copy, Ticket, ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
@@ -307,10 +307,11 @@ export default function ActivityDetail() {
               </Card>;
             }
             return filtered.map((app) => (
-              <Card key={app.id} className="p-3 space-y-1">
+              <Card key={app.id} className="p-3 space-y-2">
+                {/* 顶部 meta:姓名 + 电话 + 发布状态 + 核销状态 */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-sm">{app.applicant_name}</span>
-                  <span className="text-xs text-muted-foreground">{app.applicant_phone}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{app.applicant_phone}</span>
                   {app.publish_confirmed ? (
                     <Badge className="text-[10px] bg-emerald-600 hover:bg-emerald-600">
                       <CheckCircle2 className="w-3 h-3 mr-0.5" />已发布
@@ -324,91 +325,106 @@ export default function ActivityDetail() {
                     {claimStatusLabel(app)}
                   </Badge>
                 </div>
-                {activity.form_fields.length > 0 && (
-                  <div className="text-xs space-y-1 border-t pt-2 mt-1">
-                    {activity.form_fields.map((f) => {
+
+                {/* 表单字段:上下结构,每行整宽 */}
+                {activity.form_fields.length > 0 && (() => {
+                  const rows = activity.form_fields
+                    .map((f) => {
                       const v = app.form_data?.[f.key];
                       if (v === null || v === undefined || v === '') return null;
-                      return (
-                        <div key={f.key} className="flex gap-2">
-                          <span className="text-muted-foreground shrink-0">{f.label}:</span>
+                      return { f, v };
+                    })
+                    .filter(Boolean) as Array<{ f: typeof activity.form_fields[number]; v: any }>;
+                  if (rows.length === 0) return null;
+                  return (
+                    <div className="border-t pt-2 grid grid-cols-1 gap-2">
+                      {rows.map(({ f, v }) => (
+                        <div key={f.key} className="flex flex-col gap-0.5">
+                          <span className="text-[11px] text-muted-foreground">{f.label}</span>
                           {f.type === 'image' && typeof v === 'string' ? (
                             <button
                               type="button"
                               onClick={() => openImage(String(v))}
-                              className="text-primary underline truncate"
-                            >查看截图</button>
+                              className="self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-primary/40 text-primary text-[11px] hover:bg-primary/5"
+                            >
+                              <ImageIcon className="w-3 h-3" />查看截图
+                            </button>
                           ) : f.type === 'url' && typeof v === 'string' ? (
-                            <a href={String(v)} target="_blank" rel="noreferrer" className="text-primary underline truncate">{String(v)}</a>
+                            <a
+                              href={String(v)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-primary underline break-all"
+                            >{String(v)}</a>
                           ) : (
-                            <span className="break-all">{String(v)}</span>
+                            <span className="text-xs break-all">{String(v)}</span>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <p className="text-[11px] text-muted-foreground">
-                    领取：{format(new Date(app.created_at), 'yyyy-MM-dd HH:mm')}
-                    {app.voucher_claim?.redeemed_at && (
-                      <> · 核销：{format(new Date(app.voucher_claim.redeemed_at), 'yyyy-MM-dd HH:mm')}</>
-                    )}
-                  </p>
-                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                    {app.publish_url && (
-                      <a
-                        href={app.publish_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-[11px] text-primary underline inline-flex items-center gap-0.5 max-w-[8rem] truncate"
-                        title={app.publish_url}
-                      >
-                        🔗 发布链接
-                      </a>
-                    )}
-                    {app.status === 'approved' && app.voucher_claim?.short_code && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[11px] px-2"
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(buildClaimShareUrl(app.voucher_claim!.short_code!));
-                              toast.success('领取链接已复制');
-                            } catch {
-                              toast.error('复制失败，请手动复制');
-                            }
-                          }}
-                        >
-                          <Copy className="w-3 h-3 mr-0.5" />复制券链接
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[11px] px-2"
-                          onClick={() => navigate(`/me/vouchers/share/${app.voucher_claim_id}`)}
-                        >
-                          <Ticket className="w-3 h-3 mr-0.5" />查看券
-                        </Button>
-                      </>
-                    )}
-                    {app.status === 'approved' && !app.voucher_claim_id && (
-                      <Badge variant="destructive" className="text-[10px]">券缺失·请联系管理员</Badge>
-                    )}
+                      ))}
+                    </div>
+                  );
+                })()}
 
-                    <Button
-                      size="sm"
-                      variant={app.publish_confirmed ? 'secondary' : 'outline'}
-                      className="h-7 text-[11px] px-2"
-                      onClick={() => setConfirmApp(app)}
+                {/* 时间行 */}
+                <p className="text-[11px] text-muted-foreground border-t pt-2">
+                  领取 {fmtDt(app.created_at)}
+                  {app.voucher_claim?.redeemed_at && (
+                    <> · 核销 {fmtDt(app.voucher_claim.redeemed_at)}</>
+                  )}
+                </p>
+
+                {/* 操作按钮:左对齐 + flex-wrap,窄屏自然换行 */}
+                <div className="flex flex-wrap gap-1.5">
+                  {app.publish_url && (
+                    <a
+                      href={app.publish_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[11px] text-primary underline inline-flex items-center gap-0.5 max-w-[10rem] truncate h-7 px-2"
+                      title={app.publish_url}
                     >
-                      {app.publish_confirmed ? '查看发布' : '发布确认'}
-                    </Button>
-                  </div>
-
+                      🔗 发布链接
+                    </a>
+                  )}
+                  {app.status === 'approved' && app.voucher_claim?.short_code && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] px-2"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(buildClaimShareUrl(app.voucher_claim!.short_code!));
+                            toast.success('领取链接已复制');
+                          } catch {
+                            toast.error('复制失败，请手动复制');
+                          }
+                        }}
+                      >
+                        <Copy className="w-3 h-3 mr-0.5" />复制券链接
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] px-2"
+                        onClick={() => navigate(`/me/vouchers/share/${app.voucher_claim_id}`)}
+                      >
+                        <Ticket className="w-3 h-3 mr-0.5" />查看券
+                      </Button>
+                    </>
+                  )}
+                  {app.status === 'approved' && !app.voucher_claim_id && (
+                    <Badge variant="destructive" className="text-[10px]">券缺失·请联系管理员</Badge>
+                  )}
+                  <Button
+                    size="sm"
+                    variant={app.publish_confirmed ? 'secondary' : 'outline'}
+                    className="h-7 text-[11px] px-2 ml-auto"
+                    onClick={() => setConfirmApp(app)}
+                  >
+                    {app.publish_confirmed ? '查看发布' : '发布确认'}
+                  </Button>
                 </div>
               </Card>
             ));

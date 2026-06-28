@@ -1,46 +1,52 @@
-## 问题诊断
+## 问题
 
-在 `src/pages/ActivityDetail.tsx` 第 45-50 行,点击「查看截图」时:
+申请卡片底部 `flex items-center justify-between` 把「领取/核销时间」和右侧四个按钮(发布链接 / 复制券链接 / 查看券 / 查看发布)塞在同一行。手机宽度下按钮组占满,时间被压缩成 1 字宽,变成竖排的"领\\取\\:\\2\\0\\2\\6…",非常难看。
 
-1. **要先 await `createSignedUrl` 才打开 Lightbox** — 国内访问 Supabase 签名接口一次往返通常 300-1000ms,期间按钮无任何反馈,看起来像「卡死」。
-2. **每次点击重新签名** — 同一张图反复点也要重新请求一次。
-3. **直接加载原图** — 实测库里多为 150-270KB JPEG,虽然不算大,但 Lightbox 打开后还要再走一次 TOS 下载,首屏没有占位/进度指示。
+「主页截图」一行也用了 `flex gap-2`,标签和内容并排,窄屏下没问题但和时间挤在一起观感凌乱。
 
-bucket 是 private,所以必须走 signed URL,但完全可以提前批量签好。
+## 改造方案(只动 `src/pages/ActivityDetail.tsx` 第 309-413 行的卡片渲染)
 
-## 改造方案(只动 `ActivityDetail.tsx`)
+### 1. 把时间和按钮拆成上下两行
 
-### 1. 一次性批量预签所有截图 URL
-
-`load()` 拿到 `apps` 后,扫描 `activity.form_fields` 中 `type === 'image'` 的字段,收集所有 path,用 `supabase.storage.from('voucher-screenshots').createSignedUrls(paths, 3600)` 一次性签 1 小时。结果存在 `signedUrlMap: Record<path, url>` state。
-
-### 2. 点击「查看截图」即时打开
-
-`openImage(path)` 改为:
-- 命中缓存 → 立即 `setLightbox`,0 延迟。
-- 未命中(极少数,新申请的兜底) → 立刻打开 Lightbox 显示 loading,再异步签名后回填。
-
-### 3. Lightbox 加载占位
-
-给 `ImageLightbox` 内部 `<img>` 增加 `onLoad`/`onError`,加载中显示一个小 spinner(改 `src/components/voucher/ImageLightbox.tsx`,只加占位层,不动手势/键盘逻辑)。
-
-### 4. 缩略图加速首屏(可选保险)
-
-在请求图片时拼接 Supabase storage `transform` 参数(`?width=800&quality=75`),把渲染体积降到 ~50KB。注意 `createSignedUrl` 第三参数支持 `transform`,改成:
-
-```ts
-createSignedUrls(paths, 3600, { transform: { width: 1080, quality: 80 } })
+```tsx
+<div className="pt-1 space-y-1.5">
+  <p className="text-[11px] text-muted-foreground">
+    领取 {fmtDt(app.created_at)}
+    {app.voucher_claim?.redeemed_at && ` · 核销 ${fmtDt(app.voucher_claim.redeemed_at)}`}
+  </p>
+  <div className="flex flex-wrap gap-1.5">
+    {/* 发布链接 / 复制券链接 / 查看券 / 查看发布 按钮 */}
+  </div>
+</div>
 ```
 
-(`createSignedUrls` 不支持 transform 时,降级为对每条 URL 追加 `&width=1080&quality=80`。)
+按钮组改成 **左对齐 + flex-wrap**,在窄屏自然换行,不再争夺水平空间。
+
+### 2. 顶部 meta 行轻微优化
+
+姓名 + 电话 + 已发布/待确认 + 状态徽章保持一行,但电话用 `tabular-nums`,徽章 `ml-auto` 让状态紧贴右侧。
+
+### 3. 表单字段排版改成上下结构
+
+`form_fields` 渲染从 `flex gap-2`(标签:值横排)改成上下两行:
+
+```tsx
+<div className="flex flex-col gap-0.5">
+  <span className="text-[11px] text-muted-foreground">{f.label}</span>
+  <span className="text-xs break-all">…</span>
+</div>
+```
+
+这样「主页截图 / 查看截图」「主页名称 / 长字符串」都能用整行宽度展示,不再被压缩。
+
+### 4. 「查看截图」按钮升级为 chip 样式
+
+`px-2 py-0.5 rounded-md border border-primary/40 text-primary text-[11px] inline-flex items-center gap-1`,移除 `truncate`,加 `ImageIcon`,点击区域更大,手指更好点。
 
 ## 涉及文件
 
-- `src/pages/ActivityDetail.tsx` — 新增 `signedUrlMap` state、预签逻辑、改写 `openImage`。
-- `src/components/voucher/ImageLightbox.tsx` — 增加图片加载中的 spinner 占位。
+- `src/pages/ActivityDetail.tsx` — 仅调整申请卡片(`filtered.map((app) => …)`)内部 JSX 与 className,不动数据、不动按钮回调。
 
 ## 预期效果
 
-- 首次进入页面后,点「查看截图」**0 延迟**打开。
-- 1 小时内重复查看不再请求签名接口。
-- 图片首屏体积下降 ~70%,Lightbox 内有明确加载反馈,不再有「点了没反应」的感觉。
+手机视图下卡片自上而下:**姓名行 → 表单字段(每行整宽)→ 领取时间行 → 操作按钮行(自动换行)**,信息一目了然,不再出现竖排单字时间。
