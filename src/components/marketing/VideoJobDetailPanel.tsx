@@ -21,6 +21,7 @@ const NOTE_LABEL: Record<string, { text: string; tone: 'ok' | 'info' | 'warn' | 
   face_soft_pass_auto: { text: '自动软通过', tone: 'info' },
   references_trimmed_for_safety: { text: '去多余参考图', tone: 'mute' },
   references_dropped_for_safety: { text: '纯文本兜底', tone: 'warn' },
+  storyboard_locked_stop: { text: '分镜保护', tone: 'warn' },
   dropped_first_frame: { text: '去首帧', tone: 'mute' },
   text_only: { text: '纯文本兜底', tone: 'warn' },
 };
