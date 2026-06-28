@@ -85,6 +85,11 @@ export function LibraryImagePickerDialog({
 
   const sourceFiltered = useMemo(() => {
     if (source === 'all') return items;
+    // "我上传的" 同时包含 base + upload(都是用户上传的真实素材)
+    if (source === 'upload') return items.filter((it) => {
+      const s = assetSource(it);
+      return s === 'upload' || s === 'base';
+    });
     return items.filter((it) => assetSource(it) === source);
   }, [items, source]);
 
