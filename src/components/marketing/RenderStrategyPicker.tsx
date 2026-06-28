@@ -44,14 +44,19 @@ export function RenderStrategyPicker({ value, onChange, className }: Props) {
           );
         })}
       </div>
+      {value === 'auto' && (
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          智能模式当前等同「逐镜拼接」:按分镜逐段渲染后由系统拼接成片,保证画面与分镜一致。
+        </p>
+      )}
       {value === 'one_shot' && (
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          模型自动安排镜头切换,参考图最多 9 张(角色板 + 关键实景按权重自动挑选)。仅支持 ≤15s。
+          仅生成 9 张分镜静帧作为参考图,丢给模型一次性出片,不再逐段拼接。仅支持 ≤15s,镜头切换由模型自行安排。
         </p>
       )}
       {value === 'per_shot' && (
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          每个分镜单独渲染,前端 ffmpeg 拼接成片,角色一致性最强,适合长视频或需要逐镜替换参考图。
+          每个分镜单独渲染,前端 ffmpeg 拼接成片,角色一致性最强,时长不限,适合长视频或需要逐镜替换参考图。
         </p>
       )}
     </div>

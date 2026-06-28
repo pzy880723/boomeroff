@@ -31,7 +31,7 @@ import { RealismToggle } from '@/components/marketing/RealismToggle';
 import { getRealismPref, setRealismPref } from '@/lib/realismPref';
 import type { Realism } from '@/lib/realism';
 import { RenderStrategyPicker } from '@/components/marketing/RenderStrategyPicker';
-import { getRenderStrategy, setRenderStrategy, type RenderStrategy } from '@/lib/renderStrategyPref';
+import { getRenderStrategy, setRenderStrategy, resolveRenderStrategy, type RenderStrategy } from '@/lib/renderStrategyPref';
 import { VideoJobDetailPanel } from '@/components/marketing/VideoJobDetailPanel';
 import { invokeFn } from '@/lib/invokeFn';
 import { completeMarketingVideoFromSegments } from '@/lib/completeMarketingVideo';
@@ -372,7 +372,7 @@ export default function MarketingVideo() {
           script: { ...finalScript, video_type: vtype }, style, shop_id: shopId,
           model: reqModel, resolution: reqRes,
           realism,
-          render_strategy: overrides?.render_strategy ?? renderStrategy,
+          render_strategy: resolveRenderStrategy((overrides?.render_strategy as RenderStrategy) ?? renderStrategy),
           disable_storyboard: !!overrides?.disable_storyboard,
           disable_references: !!overrides?.disable_references,
           require_storyboard: shouldLockStoryboard,
