@@ -89,8 +89,11 @@ async function softPassKeyReferences(
   urls: string[],
   opts: { admin: any; userId: string; max?: number },
 ): Promise<string[]> {
-  const max = Math.max(1, Math.min(2, opts.max ?? 2));
+  const max = Math.max(1, Math.min(1, opts.max ?? 1));
   const verified = urls.filter((u) => typeof u === 'string' && u.startsWith('asset://')).slice(0, 1);
+  // 已经有火山官方私域素材(asset://)时,不要再在 Edge Function 里处理真人照片。
+  // 这样既符合官方真人认证方案,也避免图片解码/重编码触发 WORKER_RESOURCE_LIMIT。
+  if (verified.length) return verified.slice(0, SEEDANCE_MAX_REFS);
   const httpRefs = urls.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u)).slice(0, max);
   if (!httpRefs.length) return (verified.length ? verified : urls.slice(0, 1)).slice(0, SEEDANCE_MAX_REFS);
 
@@ -109,7 +112,7 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
   let effectiveRefs = (opts.referenceImages || []).filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
 
   if (facePipeline === 'character_sheet' && effectiveRefs.length) {
-    effectiveRefs = await softPassKeyReferences(effectiveRefs, { admin: opts.admin, userId: opts.userId, max: 2 });
+    effectiveRefs = await softPassKeyReferences(effectiveRefs, { admin: opts.admin, userId: opts.userId, max: 1 });
     fallbackNotes.push('face_soft_pass_applied');
   } else if (facePipeline === 'faceless') {
     effectiveRefs = effectiveRefs.filter((u) => !/avatar|face|character|portrait/i.test(u)).slice(0, 2);
@@ -119,7 +122,7 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
   let r = await submitArkTask({ ...opts, referenceImages: effectiveRefs });
 
   if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
-    const marked = await softPassKeyReferences(effectiveRefs, { admin: opts.admin, userId: opts.userId, max: 2 });
+    const marked = await softPassKeyReferences(effectiveRefs, { admin: opts.admin, userId: opts.userId, max: 1 });
     fallbackNotes.push('face_soft_pass_auto');
     r = await submitArkTask({ ...opts, referenceImages: marked });
     if (r.ok) effectiveRefs = marked;
