@@ -1280,6 +1280,8 @@ function RenderProgressCard({
         <VideoFailureCard error={error} onApplyFix={onApplyFix} busy={busy} compact />
       )}
 
+      <VideoJobDetailPanel jobId={jobId} defaultExpanded={phase === 'failed'} />
+
       <div className="text-[10px] text-muted-foreground flex items-center justify-between">
         <span>任务 ID · {jobId.slice(0, 8)}</span>
         <span>关掉页面也会继续渲染</span>
