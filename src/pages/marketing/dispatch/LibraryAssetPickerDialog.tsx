@@ -188,7 +188,8 @@ export function LibraryAssetPickerDialog({
                   );
                 })}
               </div>
-            )}
+              );
+            })()}
           </TabsContent>
         </Tabs>
 
