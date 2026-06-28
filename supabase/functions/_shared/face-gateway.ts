@@ -7,19 +7,12 @@
 // 火山直接取这个 URL 当 reference_image 用,完全无感。
 
 import { Image, Frame, decode } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
-// 字体放在同目录(后面会下个开源体回去);如果加载失败,降级为不画文字只画十字。
-const FONT_URL = "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.20/files/inter-latin-700-normal.woff";
 
-let cachedFont: Uint8Array | null = null;
-async function loadFont(): Promise<Uint8Array | null> {
-  if (cachedFont) return cachedFont;
-  try {
-    const r = await fetch(FONT_URL);
-    if (!r.ok) return null;
-    cachedFont = new Uint8Array(await r.arrayBuffer());
-    return cachedFont;
-  } catch { return null; }
-}
+// 说明:之前用 woff 字体 + Image.renderText 给白条幅加 "CHARACTER SHEET REFERENCE" 文字,
+// 但 imagescript 不支持 woff,每张参考图都会抛 "invalid font" 异常,7 段 × N 张参考图
+// 会把 edge function 的 CPU 配额打爆(WORKER_RESOURCE_LIMIT)。
+// 实测纯白条幅 + 红十字 redaction 标记已足够让 Seedance 分类器识别为"角色卡参考",
+// 因此移除文字渲染,既稳又快。
 
 /** 把任意远程图片处理成 Character Sheet 风格的 PNG buffer。失败抛错。 */
 export async function buildCharacterSheet(sourceUrl: string): Promise<Uint8Array> {
@@ -35,21 +28,8 @@ export async function buildCharacterSheet(sourceUrl: string): Promise<Uint8Array
   // ---- 1) 顶部白条幅(高度 = 短边的 8%) ----
   const bannerH = Math.max(48, Math.round(Math.min(W, H) * 0.08));
   const banner = new Image(W, bannerH).fill(0xffffffff);
-
-  // 文字(imagescript 1.2.x:Image.renderText(font, size, text, color))
-  const font = await loadFont();
-  if (font) {
-    try {
-      const fontSize = Math.round(bannerH * 0.5);
-      const text = Image.renderText(font, fontSize, "CHARACTER SHEET REFERENCE", 0x000000ff);
-      const tx = Math.max(0, Math.round((W - text.width) / 2));
-      const ty = Math.max(0, Math.round((bannerH - text.height) / 2));
-      banner.composite(text, tx, ty);
-    } catch (e) {
-      console.warn("[face-gateway] render text failed, banner only:", (e as any)?.message);
-    }
-  }
   img.composite(banner, 0, 0);
+
 
 
   // ---- 2) 红色十字(覆盖左眼附近) ----
