@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Loader2, Check, Upload, Maximize2 } from 'lucide-react';
+import { Loader2, Check, Upload, Maximize2, Camera, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadMarketingImages, type UploadStage } from '@/pages/marketing/uploadMarketingImages';
 import { fileSha256 } from '@/lib/fileSha256';
@@ -16,6 +16,7 @@ import { UploadProgressBar, ItemTile, type UploadTileItem } from './UploadProgre
 import { DEFAULT_TAGS } from './AssetTagDialog';
 import { thumbUrl } from '@/lib/imageUrl';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
+import { assetSource, type AssetSource } from '@/lib/assetSource';
 
 type Pending = UploadTileItem & { file: File };
 
