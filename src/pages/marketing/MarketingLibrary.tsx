@@ -11,7 +11,6 @@ import { ShopFilterChips } from '@/components/marketing/ShopPicker';
 import { ShopProfilePanel } from '@/components/marketing/ShopProfilePanel';
 import { UploadAssetDialog } from '@/components/marketing/UploadAssetDialog';
 import { useEffectiveShop } from '@/hooks/useShops';
-import { stitchSegmentUrls } from '@/lib/stitchVideos';
 import { CharacterCard } from '@/components/marketing/CharacterCard';
 import { CharacterDialog } from '@/components/marketing/CharacterDialog';
 import { CharacterCreateDialog } from '@/components/marketing/CharacterCreateDialog';
@@ -21,11 +20,11 @@ import { BatchPreflightButton } from '@/components/marketing/BatchPreflightButto
 import { AssetTagDialog, DEFAULT_TAGS } from '@/components/marketing/AssetTagDialog';
 import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
 import { Skeleton } from '@/components/ui/skeleton';
-import { extractFirstFrame } from '@/lib/extractFirstFrame';
 import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
 import { assetSource, type AssetSource } from '@/lib/assetSource';
 import { Camera, Sparkles } from 'lucide-react';
 import { invokeFn } from '@/lib/invokeFn';
+import { completeMarketingVideoFromSegments, markMarketingVideoFailed } from '@/lib/completeMarketingVideo';
 
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
@@ -184,11 +183,12 @@ export default function MarketingLibrary() {
 
   // 标记单个视频任务为失败,并落库
   const markAssetFailed = async (assetId: string, currentMeta: any, error: string) => {
-    const nextMeta = { ...(currentMeta || {}), status: 'failed', error };
-    delete nextMeta.stitch_progress; delete nextMeta.stitch_stage;
-    setItems((prev) => prev.map((x) => x.id === assetId ? { ...x, meta: nextMeta } : x));
+    const optimisticMeta = { ...(currentMeta || {}), status: 'failed', error };
+    delete optimisticMeta.stitch_progress; delete optimisticMeta.stitch_stage;
+    setItems((prev) => prev.map((x) => x.id === assetId ? { ...x, meta: optimisticMeta } : x));
     try {
-      await supabase.from('marketing_assets' as any).update({ meta: nextMeta }).eq('id', assetId);
+      const nextMeta = await markMarketingVideoFailed(assetId, currentMeta, error);
+      setItems((prev) => prev.map((x) => x.id === assetId ? { ...x, meta: nextMeta } : x));
     } catch {}
   };
 
@@ -205,66 +205,21 @@ export default function MarketingLibrary() {
     }
 
     const parentJobId: string = asset.meta?.job_id;
-    const normalizeSegmentUrl = (url: string) => {
-      if (url.startsWith('/functions/v1/')) return `${import.meta.env.VITE_SUPABASE_URL}${url}`;
-      try {
-        const u = new URL(url);
-        if (u.hostname === 'ark-content-generation-cn-beijing.tos-cn-beijing.volces.com') {
-          return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/poll-marketing-video?segment=${encodeURIComponent(url)}`;
-        }
-      } catch {}
-      return url;
-    };
     try {
       setItems((prev) => prev.map((x) => x.id === asset.id ? {
         ...x, meta: { ...(x.meta || {}), status: 'stitching', stage: 'stitching', stitch_progress: 0 },
       } : x));
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      const authHeaders = accessToken ? {
-        Authorization: `Bearer ${accessToken}`,
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      } : undefined;
-      // 90 秒整体超时
-      const stitchPromise = stitchSegmentUrls(segmentUrls.map(normalizeSegmentUrl), (info) => {
-        const pct = Math.round(((info.segment - 1) / Math.max(1, info.total)) * 100);
-        setItems((prev) => prev.map((x) => x.id === asset.id ? {
-          ...x, meta: { ...(x.meta || {}), stitch_progress: pct, stitch_stage: info.stage },
-        } : x));
-      }, authHeaders ? { init: { headers: authHeaders } } : undefined);
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('拼接超时,请重新生成此视频')), 90_000);
+      const result = await completeMarketingVideoFromSegments({
+        userId: user.id,
+        jobId: parentJobId,
+        segmentUrls,
+        onProgress: (pct, info) => {
+          setItems((prev) => prev.map((x) => x.id === asset.id ? {
+            ...x, meta: { ...(x.meta || {}), stitch_progress: pct, stitch_stage: info?.stage },
+          } : x));
+        },
       });
-      const blob = await Promise.race([stitchPromise, timeoutPromise]);
-      const path = `${user.id}/${parentJobId}.mp4`;
-      const up = await supabase.storage.from('marketing-videos').upload(path, blob, {
-        contentType: 'video/mp4', upsert: true, cacheControl: '31536000',
-      });
-      if (up.error) throw up.error;
-      const signed = await supabase.storage.from('marketing-videos').createSignedUrl(path, 60 * 60 * 24 * 365);
-      const url = signed.data?.signedUrl;
-      if (!url) throw new Error('生成播放链接失败');
-      // 抽首帧做轻量 poster,加速详情页打开
-      let posterUrl: string | undefined;
-      try {
-        const posterBlob = await extractFirstFrame(blob);
-        if (posterBlob) {
-          const posterPath = `${user.id}/posters/${parentJobId}.jpg`;
-          const pu = await supabase.storage.from('marketing-videos').upload(posterPath, posterBlob, {
-            contentType: 'image/jpeg', upsert: true, cacheControl: '31536000',
-          });
-          if (!pu.error) {
-            const ps = await supabase.storage.from('marketing-videos').createSignedUrl(posterPath, 60 * 60 * 24 * 365);
-            posterUrl = ps.data?.signedUrl || undefined;
-          }
-        }
-      } catch (err) { console.warn('[poster] extract failed', err); }
-      const newMeta: any = { ...(asset.meta || {}), status: 'succeeded', stage: 'done', storage_path: path };
-      if (posterUrl) newMeta.poster_url = posterUrl;
-      delete newMeta.stitch_progress; delete newMeta.stitch_stage;
-      await supabase.from('marketing_assets' as any).update({ output_url: url, meta: newMeta }).eq('id', asset.id);
-      await supabase.from('marketing_video_jobs' as any).update({ status: 'succeeded', video_url: url }).eq('id', parentJobId);
-      setItems((prev) => prev.map((x) => x.id === asset.id ? { ...x, output_url: url, meta: newMeta } : x));
+      setItems((prev) => prev.map((x) => x.id === asset.id ? { ...x, output_url: result.url, meta: result.meta } : x));
       toast.success('视频拼接完成');
     } catch (e: any) {
       console.error('[stitch]', e);

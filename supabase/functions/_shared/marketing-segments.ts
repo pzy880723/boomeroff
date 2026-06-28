@@ -32,16 +32,61 @@ export interface ScriptLike {
 // 与 Seedance 单段物理上限保持一致(15s)。改这里务必同步 _shared/seedance-models.ts。
 export const MAX_SEG_DUR = 15;
 
-/**
- * 根据总时长决定目标段数,与 src/lib/marketingSegments.ts 完全一致。
- * ≤15s 单段直出;16-30s 两段;31-45s 三段;更长按 ceil(total/15) 兜底。
- */
+/** 参考图模式真实可提交的时长网格。30s=10+10+10,45s=10+10+10+10+5,60s=10×6。 */
+export function planR2vDurations(totalDur: number): number[] {
+  let remaining = Math.max(5, Math.round(Number(totalDur) || 15));
+  const out: number[] = [];
+  while (remaining > 0) {
+    if (remaining === 5) { out.push(5); break; }
+    if (remaining < 10) { out.push(5); break; }
+    out.push(10);
+    remaining -= 10;
+  }
+  return out.slice(0, 8);
+}
+
 export function targetSegmentCount(totalDur: number): number {
-  const t = Math.max(1, Math.round(totalDur || 0));
-  if (t <= MAX_SEG_DUR) return 1;
-  if (t <= 30) return 2;
-  if (t <= 45) return 3;
-  return Math.ceil(t / MAX_SEG_DUR);
+  return planR2vDurations(totalDur).length;
+}
+
+export interface SegmentPlan {
+  index: number;
+  total: number;
+  durationS: number;
+  sceneLabels: string[];
+  refIndices: number[];
+}
+
+export function planSegments(script: ScriptLike | null | undefined): SegmentPlan[] {
+  if (!script) return [];
+  const clips: Array<{ sc: SceneLike; label: string }> = [];
+  if (script.hook) clips.push({ sc: script.hook, label: '钩子' });
+  if (Array.isArray(script.scenes)) script.scenes.forEach((sc, i) => clips.push({ sc, label: `镜头${i + 1}` }));
+  if (script.outro) clips.push({ sc: script.outro, label: '收尾' });
+  if (!clips.length) return [];
+
+  const explicitTotal = Number((script as any).total_duration_s);
+  const fallbackTotal = clips.reduce((s, x) => s + (Number(x.sc.duration_s) || 3), 0);
+  const durations = planR2vDurations(explicitTotal || fallbackTotal || 15);
+  const total = durations.length;
+
+  return durations.map((durationS, i) => {
+    const start = Math.floor(i * clips.length / total);
+    const end = Math.floor((i + 1) * clips.length / total);
+    const group = clips.slice(start, Math.max(start + 1, end));
+    const refSet = new Set<number>();
+    group.forEach((g) => {
+      const ref = effectiveImageRef(g.sc);
+      if (ref) refSet.add(ref.index);
+    });
+    return {
+      index: i,
+      total,
+      durationS,
+      sceneLabels: group.map((g) => g.label),
+      refIndices: Array.from(refSet),
+    };
+  });
 }
 
 export function effectiveImageRef(sc: SceneLike | null | undefined): SceneImageRef | null {

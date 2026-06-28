@@ -6,7 +6,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
-import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segments.ts";
+import { pickSegmentImages, planSegments, type ScriptLike } from "../_shared/marketing-segments.ts";
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 import { STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
@@ -18,7 +18,6 @@ const corsHeaders = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
 const MAX_SEG_DUR = SEEDANCE_MAX_SINGLE_SHOT; // 单段渲染上限(秒)= 15
 
 type RenderStrategy = 'one_shot' | 'per_shot' | 'auto';
@@ -213,39 +212,20 @@ function normalizeRatio(aspect: any): string {
   return "9:16";
 }
 
-// 多段切分:不再把每个分镜都单独提交。
-// 目标是把 30/45/60 秒压到接近目标时长的 10s/5s 合法网格里,减少火山任务数、成本和函数 CPU 压力。
+// 多段切分:按 Seedance 2.0 参考图合法网格切段。
+// 30s=10+10+10,45s=10+10+10+10+5,60s=10×6;与前端 planSegments 完全一致。
 function splitScript(script: any): any[] {
-  type Shot = { sc: any; role: 'hook' | 'mid' | 'outro' };
-  const shots: Shot[] = [];
-  const isMeaningful = (sc: any) =>
-    sc && typeof sc === 'object' && (
-      (typeof sc.scene === 'string' && sc.scene.trim()) ||
-      (typeof sc.action === 'string' && sc.action.trim()) ||
-      (typeof sc.subtitle === 'string' && sc.subtitle.trim()) ||
-      (typeof sc.dialogue === 'string' && sc.dialogue.trim()) ||
-      (typeof sc.storyboard_url === 'string' && sc.storyboard_url) ||
-      (typeof sc.image_index === 'number')
-    );
-  if (isMeaningful(script.hook)) shots.push({ sc: script.hook, role: 'hook' });
-  if (Array.isArray(script.scenes)) {
-    for (const m of script.scenes) if (isMeaningful(m)) shots.push({ sc: m, role: 'mid' });
-  }
-  if (isMeaningful(script.outro)) shots.push({ sc: script.outro, role: 'outro' });
-
-  // 兜底:脚本完全为空时,造一个 5s 的空段,避免 Seedance 调用直接 0 个
-  if (!shots.length) {
-    shots.push({ sc: { duration_s: 5, scene: '', action: '', subtitle: '', dialogue: '' }, role: 'hook' });
-  }
-
-  const target = Number(script.total_duration_s) || shots.reduce((s, x) => s + (Number(x.sc?.duration_s) || 3), 0) || 15;
-  const desiredCount = Math.max(1, Math.min(6, Math.round(Math.max(5, target) / 10)));
-  const segmentCount = Math.max(1, Math.min(desiredCount, shots.length));
-  const durations = Array.from({ length: segmentCount }, () => 10);
-  const sum = durations.reduce((a, b) => a + b, 0);
-  if (sum - target >= 3) durations[durations.length - 1] = 5;
-
+  const plans = planSegments(script);
   const empty = { duration_s: 0, scene: '', action: '', dialogue: '', subtitle: '' };
+  const clips: Array<{ label: string; role: 'hook' | 'mid' | 'outro'; sc: any }> = [];
+  if (script.hook) clips.push({ label: '钩子', role: 'hook', sc: script.hook });
+  if (Array.isArray(script.scenes)) {
+    script.scenes.forEach((sc: any, i: number) => clips.push({ label: `镜头${i + 1}`, role: 'mid', sc }));
+  }
+  if (script.outro) clips.push({ label: '收尾', role: 'outro', sc: script.outro });
+  if (!plans.length) {
+    return [{ ...script, hook: { ...empty, duration_s: 5 }, scenes: [], outro: { ...empty }, total_duration_s: 5, __segment_index: 0, __segment_total: 1, __shot_role: 'hook' }];
+  }
   const distribute = (total: number, n: number) => {
     const base = Math.max(1, Math.floor(total / Math.max(1, n)));
     const arr = Array.from({ length: n }, () => base);
@@ -253,38 +233,26 @@ function splitScript(script: any): any[] {
     for (let i = 0; i < arr.length && rest > 0; i += 1, rest -= 1) arr[i] += 1;
     return arr;
   };
-
-  return durations.map((dur, i) => {
-    const start = Math.floor(i * shots.length / segmentCount);
-    const end = Math.floor((i + 1) * shots.length / segmentCount);
-    const group = shots.slice(start, Math.max(start + 1, end));
-    const perShotDur = distribute(dur, group.length);
-    const clips = group.map((s, idx) => ({ ...s, sc: { ...s.sc, duration_s: perShotDur[idx] || 1 } }));
-    const hook = clips.find((s) => s.role === 'hook')?.sc || { ...empty };
-    const outro = clips.find((s) => s.role === 'outro')?.sc || { ...empty };
-    const scenes = clips.filter((s) => s.role === 'mid').map((s) => s.sc);
+  return plans.map((plan) => {
+    const group = plan.sceneLabels
+      .map((label) => clips.find((c) => c.label === label))
+      .filter(Boolean) as Array<{ label: string; role: 'hook' | 'mid' | 'outro'; sc: any }>;
+    const actual = group.length ? group : clips.slice(0, 1);
+    const perShotDur = distribute(plan.durationS, actual.length);
+    const patched = actual.map((c, idx) => ({ ...c, sc: { ...c.sc, duration_s: perShotDur[idx] || 1 } }));
     return {
       ...script,
-      hook,
-      scenes,
-      outro,
-      total_duration_s: dur,
-      __segment_index: i,
-      __segment_total: segmentCount,
-      __shot_role: clips.some((s) => s.role === 'hook') ? 'hook' : (clips.some((s) => s.role === 'outro') ? 'outro' : 'mid'),
+      hook: patched.find((s) => s.role === 'hook')?.sc || { ...empty },
+      scenes: patched.filter((s) => s.role === 'mid').map((s) => s.sc),
+      outro: patched.find((s) => s.role === 'outro')?.sc || { ...empty },
+      total_duration_s: plan.durationS,
+      __segment_index: plan.index,
+      __segment_total: plan.total,
+      __shot_role: patched.some((s) => s.role === 'hook') ? 'hook' : (patched.some((s) => s.role === 'outro') ? 'outro' : 'mid'),
     };
   });
 }
 
-
-// Seedance 2.0 reference-to-video(r2v)通道:火山方舟只接受固定时长。
-// t2v(无参考图)按 clampDuration 范围放行;一旦带了 reference_image,duration 必须吸附到 5 或 10。
-const R2V_VALID_DURATIONS = [5, 10] as const;
-function snapR2vDuration(d: number): number {
-  const n = Math.round(Number(d) || 5);
-  if (n <= 7) return 5;
-  return 10;
-}
 
 // one_shot 时把"目标总时长"吸附到 r2v 网格(≤7→5, ≤12→10, >12→15)。
 function snapOneShotDuration(d: number): number {
@@ -292,98 +260,6 @@ function snapOneShotDuration(d: number): number {
   if (n <= 7) return 5;
   if (n <= 12) return 10;
   return 15;
-}
-
-// 把切好的段按 r2v 合法网格 {5,10} 吸附,并合并相邻"两个 5s"为"一个 10s",
-// 让最终送给火山的每一段都是合法时长,总时长在用户目标附近浮动。
-function snapShotsToValidGrid(subScripts: any[]): any[] {
-  if (!subScripts.length) return subScripts;
-  // 先把每段 duration_s 吸附
-  const snapped = subScripts.map((s) => {
-    const d = snapR2vDuration(Number(s.total_duration_s) || 5);
-    const clip = (sc: any) => sc && (sc.scene || sc.action || sc.subtitle || sc.dialogue)
-      ? { ...sc, duration_s: d } : sc;
-    return {
-      ...s,
-      total_duration_s: d,
-      hook: clip(s.hook),
-      scenes: Array.isArray(s.scenes) ? s.scenes.map(clip) : s.scenes,
-      outro: clip(s.outro),
-    };
-  });
-  // 合并相邻 5s → 10s(同 role 才合并,避免 hook 和 outro 串)
-  const merged: any[] = [];
-  for (let i = 0; i < snapped.length; i++) {
-    const cur = snapped[i];
-    const nxt = snapped[i + 1];
-    if (
-      cur.total_duration_s === 5 &&
-      nxt && nxt.total_duration_s === 5 &&
-      cur.__shot_role === nxt.__shot_role &&
-      cur.__shot_role === 'mid'
-    ) {
-      // 合并:把后段的描述顺接到前段
-      const mergedScenes = [
-        ...(Array.isArray(cur.scenes) ? cur.scenes : []),
-        ...(Array.isArray(nxt.scenes) ? nxt.scenes : []),
-      ].map((sc) => ({ ...sc, duration_s: 5 }));
-      merged.push({
-        ...cur,
-        scenes: mergedScenes,
-        total_duration_s: 10,
-      });
-      i++; // 跳过下一段
-    } else {
-      merged.push(cur);
-    }
-  }
-  // 重新编 segment_index / total
-  return merged.map((s, i) => ({ ...s, __segment_index: i, __segment_total: merged.length }));
-}
-
-async function submitArkTask(opts: {
-  arkKey: string; model: string; prompt: string; ratio: string; duration: number;
-  resolution: string;
-  referenceImages?: string[];
-}): Promise<{ ok: true; id: string; mode: string; duration: number } | { ok: false; error: string; raw?: unknown }> {
-  const content: any[] = [{ type: "text", text: opts.prompt }];
-  // Seedance 2.0:全 reference 模式。first_frame / last_frame 与 reference_image 互斥,
-  // 我们这种「分镜独立表达」的内容不需要逐帧锁画面,统一走 reference_image 通道。
-  const refs = (opts.referenceImages || []).filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
-  for (const url of refs) {
-    content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
-  }
-  const mode = refs.length ? "reference2video" : "text2video";
-
-  // r2v 模式下把任意秒数吸附到 {5,10};t2v 不限。
-  const effectiveDuration = mode === "reference2video"
-    ? snapR2vDuration(opts.duration)
-    : opts.duration;
-
-  // 2.0 系列:不发送 seed / camera_fixed(2.0 不支持)
-  const arkBody: Record<string, unknown> = {
-    model: opts.model,
-    content,
-    resolution: opts.resolution,
-    ratio: opts.ratio,
-    duration: effectiveDuration,
-    watermark: false,
-    generate_audio: true,
-  };
-  const arkRes = await fetch(ARK_ENDPOINT, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${opts.arkKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(arkBody),
-  });
-  const arkJson: any = await arkRes.json().catch(() => ({}));
-  if (!arkRes.ok || !arkJson?.id) {
-    return {
-      ok: false,
-      error: arkJson?.error?.message || arkJson?.message || `Seedance 创建任务失败(${arkRes.status})`,
-      raw: arkJson,
-    };
-  }
-  return { ok: true, id: arkJson.id, mode, duration: effectiveDuration };
 }
 
 /** 组装某段的参考图集合(Seedance 2.0 全 reference 模式,上限 9 张,按权重排序):
@@ -434,37 +310,12 @@ function resolveSegmentImages(
   return { referenceImages: refs.slice(0, SEEDANCE_MAX_REFS) };
 }
 
-async function softPassKeyReferences(
-  urls: string[],
-  opts: { admin: any; userId: string; max?: number; cache?: Map<string, Promise<string>> },
-): Promise<string[]> {
-  const max = Math.max(1, Math.min(3, opts.max ?? 2));
-  const verified = urls.filter((u) => typeof u === 'string' && u.startsWith('asset://')).slice(0, 1);
-  const httpRefs = urls.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u)).slice(0, max);
-  const cache = opts.cache;
-  const { softPassFaceImage } = await import("../_shared/face-gateway.ts");
-  const marked = await Promise.all(httpRefs.map(async (u) => {
-    if (cache) {
-      if (!cache.has(u)) cache.set(u, softPassFaceImage(u, { admin: opts.admin, userId: opts.userId }).catch(() => u));
-      return await cache.get(u)!;
-    }
-    try { return await softPassFaceImage(u, { admin: opts.admin, userId: opts.userId }); }
-    catch { return u; }
-  }));
-  const out = [...verified, ...marked].filter(Boolean);
-  return (out.length ? out : urls.slice(0, 1)).slice(0, SEEDANCE_MAX_REFS);
-}
-
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const ARK_KEY = Deno.env.get("ARK_API_KEY");
-    if (!ARK_KEY) return json({ ok: false, error: "未配置 ARK_API_KEY" });
-
     const auth = req.headers.get("Authorization");
     if (!auth) return json({ ok: false, error: "未授权" }, 401);
     const userClient = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
@@ -552,12 +403,6 @@ Deno.serve(async (req) => {
     }
     console.log(`[render] strategy=${strategy} (${autoReason})`);
 
-    const isSensitive = (err?: string, raw?: any) => {
-      const code = raw?.error?.code || '';
-      const msg = (err || '') + ' ' + (raw?.error?.message || '');
-      return /InputImageSensitiveContent|may contain real person|PrivacyInformation|sensitive/i.test(code + ' ' + msg);
-    };
-
     // ============ 一次成片(one_shot) ============
     if (strategy === 'one_shot') {
       const oneShotDur = snapOneShotDuration(totalDur || MAX_SEG_DUR);
@@ -565,49 +410,22 @@ Deno.serve(async (req) => {
       const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
       const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
       const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
-      const fallbackNotes: string[] = [];
       console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur} face_pipeline=${facePipeline}`);
 
-      // 用户主动选择软通过 → 提交前就处理
-      let effectiveRefs = refImages;
-      if (facePipeline === 'character_sheet' && refImages.length) {
-        try {
-          effectiveRefs = await softPassKeyReferences(refImages, { admin, userId: u.user.id, max: 3 });
-          fallbackNotes.push('face_soft_pass_applied');
-        } catch (e) { console.warn('[soft-pass one_shot pre]', (e as any)?.message); }
-      }
-
-      // L0: 全量参考
-      let r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: effectiveRefs });
-      // L0.5: 被真人拦了 → 自动给所有参考图打 Character Sheet 软通过水印再试
-      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
-        try {
-          const marked = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 3 });
-          fallbackNotes.push('face_soft_pass_auto');
-          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: marked });
-          if (r.ok) effectiveRefs = marked;
-        } catch (e) { console.warn('[soft-pass one_shot auto]', (e as any)?.message); }
-      }
-      // L1: 仅角色板 / 第一张
-      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length > 1) {
-        fallbackNotes.push('references_trimmed_for_safety');
-        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: effectiveRefs.slice(0, 1) });
-      }
-      // L2: 纯文本
-      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
-        fallbackNotes.push('references_dropped_for_safety');
-        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution });
-      }
-
-      if (!r.ok) {
-        return json({ ok: false, error: r.error, raw: (r as any).raw });
-      }
-
       const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
-        user_id: u.user.id, script, status: "running", shop_id: shopId,
-        provider: "volcengine_seedance", provider_task_id: r.id,
+        user_id: u.user.id,
+        script: {
+          ...script,
+          __render_payload: {
+            prompt, duration: oneShotDur, ratio, model, resolution,
+            reference_images: refImages,
+            face_pipeline: facePipeline,
+          },
+        },
+        status: "queued", shop_id: shopId,
+        provider: "volcengine_seedance", provider_task_id: null,
         segment_total: 1, segment_index: 0, parent_job_id: null,
-        fallback_notes: fallbackNotes,
+        fallback_notes: [],
       }).select().single();
       if (pErr || !parent) {
         console.error("[render one_shot] parent insert", pErr);
@@ -629,9 +447,8 @@ Deno.serve(async (req) => {
           style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
           warnings: [
             ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
-            ...fallbackNotes,
           ],
-          status: "running", segment_total: 1, segment_done: 0,
+          status: "queued", segment_total: 1, segment_done: 0,
           stage: "generating", character_id: character?.id || null,
           character_name: character?.name || null,
           cover_url: imageUrls[0] || character?.cover_url || null,
@@ -639,7 +456,7 @@ Deno.serve(async (req) => {
       });
 
       return json({
-        ok: true, success: true, job_id: parent.id, status: "running",
+        ok: true, success: true, job_id: parent.id, status: "queued",
         segment_total: 1, render_strategy: "one_shot", auto_decision_reason: autoReason,
         target_duration_s: totalDur, actual_duration_s: oneShotDur,
       });
@@ -647,9 +464,7 @@ Deno.serve(async (req) => {
 
     // ============ 分段渲染路径(按 5/10 秒合法网格分段,完成后由前端拼接) ============
 
-    const rawSubScripts = splitScript(script);
-    // r2v 路径(默认):按 {5,10} 网格吸附并合并相邻 5s → 一并送给火山,避免 11/13s 这种非法段。
-    const subScripts = disableReferences ? rawSubScripts : snapShotsToValidGrid(rawSubScripts);
+    const subScripts = splitScript(script);
     const segmentTotal = subScripts.length;
     const targetDur = totalDur;
     const plannedActual = subScripts.reduce((a, s) => a + (Number(s.total_duration_s) || 0), 0);
@@ -666,7 +481,8 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
     }
 
-    // 2) 先写素材占位并立刻返回。真正的分段提交放到后台,避免请求内同时做多段提交/图片软通过导致 WORKER_RESOURCE_LIMIT。
+    // 2) 先写素材占位。真正的火山提交由 poll-marketing-video 每次推进 1 段完成,
+    // 避免一个 Edge Function 内连续提交多段 + 图片处理导致 CPU 超限。
     await admin.from("marketing_assets").insert({
       user_id: u.user.id, kind: "video", shop_id: shopId,
       input_image_urls: imageUrls, output_url: null,
@@ -689,120 +505,41 @@ Deno.serve(async (req) => {
       },
     });
 
-    const submitSegmentsInBackground = async () => {
-      const softPassCache = new Map<string, Promise<string>>();
-      await admin.from("marketing_video_jobs").update({ status: "running" }).eq("id", parent.id);
-
-      const submissions = [] as any[];
-      for (let i = 0; i < subScripts.length; i += 1) {
-        const sub = subScripts[i];
-        const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
-        const prompt = buildPrompt(sub, styleKey, shopBlock, label, character, realism);
-        const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
-        const segFallback = i === 0 && !disableReferences ? fallbackFirst : undefined;
-        const effectiveCharacter = disableReferences ? null : character;
-        const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
-        if (disableReferences) imgs.referenceImages = [];
-        console.log(`[render per-shot] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length}`);
-        const fallbackNotes: string[] = [];
-        let effectiveRefs = imgs.referenceImages;
-        if (facePipeline === 'character_sheet' && effectiveRefs.length) {
-          try {
-            effectiveRefs = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2, cache: softPassCache });
-            fallbackNotes.push('face_soft_pass_applied');
-          } catch (e) { console.warn(`[soft-pass seg${i + 1} pre]`, (e as any)?.message); }
-        }
-        let r = await submitArkTask({
-          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-          referenceImages: effectiveRefs,
-        });
-        if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
-          try {
-            const marked = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2, cache: softPassCache });
-            fallbackNotes.push('face_soft_pass_auto');
-            r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: marked });
-            if (r.ok) effectiveRefs = marked;
-          } catch (e) { console.warn(`[soft-pass seg${i + 1} auto]`, (e as any)?.message); }
-        }
-        if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length > 1) {
-          fallbackNotes.push('references_trimmed_for_safety');
-          r = await submitArkTask({
-            arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-            referenceImages: effectiveRefs.slice(0, 1),
-          });
-        }
-        if (!r.ok && isSensitive(r.error, (r as any).raw)) {
-          fallbackNotes.push('references_dropped_for_safety');
-          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
-        }
-        submissions.push({ i, r, sub, duration, imgs, fallbackNotes });
-        if (!r.ok) {
-          const errMsg = `第 ${i + 1} 段创建失败: ${(r as any).error}`;
-          console.error("[render multi bg]", errMsg);
-          await admin.from("marketing_video_jobs").update({ status: "failed", error: errMsg }).eq("id", parent.id);
-          await admin.from("marketing_assets").update({
-            meta: {
-              job_id: parent.id, video_type: script.video_type,
-              duration: totalDur, target_duration_s: targetDur, actual_duration_s: plannedActual, aspect: ratio,
-              mode: "reference2video", render_mode: "per_shot", render_strategy: "per_shot",
-              auto_decision_reason: autoReason, topic: script.topic || "", style: styleKey,
-              style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
-              warnings: fallbackNotes, status: "failed", error: errMsg, segment_total: segmentTotal,
-              segment_done: submissions.filter((x) => x.r.ok).length, stage: "failed",
-              character_id: character?.id || null, character_name: character?.name || null,
-              cover_url: imageUrls[0] || character?.cover_url || null,
-            },
-          }).eq("kind", "video").filter("meta->>job_id", "eq", parent.id);
-          return;
-        }
-      }
-
-      const childRows = submissions.map((s) => ({
-        user_id: u.user.id, script: s.sub, status: "queued", shop_id: shopId,
-        provider: "volcengine_seedance", provider_task_id: (s.r as any).id,
-        parent_job_id: parent.id, segment_index: s.i, segment_total: segmentTotal,
-        fallback_notes: s.fallbackNotes,
-      }));
-      const { error: childErr } = await admin.from("marketing_video_jobs").insert(childRows);
-      if (childErr) {
-        console.error("[render multi bg] children insert", childErr);
-        await admin.from("marketing_video_jobs").update({ status: "failed", error: "子任务入库失败: " + childErr.message }).eq("id", parent.id);
-        return;
-      }
-
-      const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
-      const fallbackWarnings = Array.from(new Set(submissions.flatMap((s) => s.fallbackNotes)));
-      await admin.from("marketing_video_jobs").update({ fallback_notes: fallbackWarnings, status: "running" }).eq("id", parent.id);
-      const { data: asset } = await admin.from("marketing_assets").select("id, meta").eq("kind", "video").filter("meta->>job_id", "eq", parent.id).maybeSingle();
-      if (asset) {
-        await admin.from("marketing_assets").update({
-          meta: {
-            ...((asset.meta || {}) as any),
-            mode: totalRefImages > 0 ? "reference2video" : "text2video",
-            warnings: [
-              ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
-              ...fallbackWarnings,
-            ],
-            status: "running",
-            image_usage: {
-              per_segment: submissions.map((s) => ({
-                segment_index: s.i,
-                reference_count: s.imgs.referenceImages.length,
-              })),
-            },
+    const childRows = subScripts.map((sub, i) => {
+      const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
+      const prompt = buildPrompt(sub, styleKey, shopBlock, label, character, realism);
+      const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
+      const segFallback = i === 0 && !disableReferences ? fallbackFirst : undefined;
+      const effectiveCharacter = disableReferences ? null : character;
+      const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
+      if (disableReferences) imgs.referenceImages = [];
+      console.log(`[render queue] seg ${i + 1}/${segmentTotal} dur=${duration} ref=${imgs.referenceImages.length}`);
+      return {
+        user_id: u.user.id,
+        script: {
+          ...sub,
+          __render_payload: {
+            prompt, duration, ratio, model, resolution,
+            reference_images: imgs.referenceImages,
+            face_pipeline: facePipeline,
           },
-        }).eq("id", asset.id);
-      }
-    };
-
-    const bg = submitSegmentsInBackground().catch(async (e) => {
-      const msg = e instanceof Error ? e.message : "渲染排队失败";
-      console.error("[render multi bg]", e);
-      await admin.from("marketing_video_jobs").update({ status: "failed", error: msg }).eq("id", parent.id);
+        },
+        status: "queued",
+        shop_id: shopId,
+        provider: "volcengine_seedance",
+        provider_task_id: null,
+        parent_job_id: parent.id,
+        segment_index: i,
+        segment_total: segmentTotal,
+        fallback_notes: [],
+      };
     });
-    const waitUntil = (globalThis as any).EdgeRuntime?.waitUntil;
-    if (typeof waitUntil === 'function') waitUntil(bg);
-    else void bg;
+    const { error: childErr } = await admin.from("marketing_video_jobs").insert(childRows);
+    if (childErr) {
+      console.error("[render queue] children insert", childErr);
+      await admin.from("marketing_video_jobs").update({ status: "failed", error: "分段入队失败: " + childErr.message }).eq("id", parent.id);
+      return json({ ok: false, error: "分段入队失败: " + childErr.message });
+    }
 
 
     return json({

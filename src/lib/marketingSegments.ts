@@ -54,20 +54,24 @@ export interface SegmentPlan {
   refIndices: number[];      // 本段所有参考图下标(去重),Seedance 2.0 全 reference 模式
 }
 
-/**
- * 根据总时长决定目标段数。
- * ≤15s 单段直出;16-30s 两段;31-45s 三段;更长按 ceil(total/15) 兜底。
- * 与后端 _shared/marketing-segments.ts 的 targetSegmentCount 保持同步。
- */
-export function targetSegmentCount(totalDur: number): number {
-  const t = Math.max(1, Math.round(totalDur || 0));
-  if (t <= MAX_SEG_DUR) return 1;
-  if (t <= 30) return 2;
-  if (t <= 45) return 3;
-  return Math.ceil(t / MAX_SEG_DUR);
+/** 参考图模式真实可提交的时长网格。30s=10+10+10,45s=10+10+10+10+5,60s=10×6。 */
+export function planR2vDurations(totalDur: number): number[] {
+  let remaining = Math.max(5, Math.round(Number(totalDur) || 15));
+  const out: number[] = [];
+  while (remaining > 0) {
+    if (remaining === 5) { out.push(5); break; }
+    if (remaining < 10) { out.push(5); break; }
+    out.push(10);
+    remaining -= 10;
+  }
+  return out.slice(0, 8);
 }
 
-/** 按目标段数等分时长(而非贪心装箱),让 30s 始终切成 2x15。与后端 splitScript 同步。 */
+export function targetSegmentCount(totalDur: number): number {
+  return planR2vDurations(totalDur).length;
+}
+
+/** 按 Seedance 2.0 参考图合法网格分段,与后端 splitScript 同步。 */
 export function planSegments(script: ScriptLike | null | undefined): SegmentPlan[] {
   if (!script) return [];
   const hook = script.hook;
@@ -82,36 +86,15 @@ export function planSegments(script: ScriptLike | null | undefined): SegmentPlan
   if (outro) all.push({ sc: outro, label: '收尾', dur: Math.min(MAX_SEG_DUR, Number(outro.duration_s) || 2) });
   if (!all.length) return [];
 
-  const totalDur = all.reduce((s, x) => s + x.dur, 0);
-  const target = targetSegmentCount(totalDur);
-  const budget = totalDur / target;
+  const explicitTotal = Number((script as any).total_duration_s);
+  const fallbackTotal = all.reduce((s, x) => s + x.dur, 0);
+  const durations = planR2vDurations(explicitTotal || fallbackTotal || 15);
+  const total = durations.length;
 
-  const buckets: Array<Array<{ sc: SceneLike; label: string; dur: number }>> = [];
-  let cur: Array<{ sc: SceneLike; label: string; dur: number }> = [];
-  let curDur = 0;
-  for (let i = 0; i < all.length; i++) {
-    const item = all[i];
-    const remainingItems = all.length - i;
-    const remainingBuckets = target - buckets.length;
-    const mustCloseForBudget =
-      cur.length > 0 &&
-      buckets.length < target - 1 &&
-      curDur + item.dur > budget &&
-      remainingItems >= remainingBuckets;
-    const mustCloseForCap = cur.length > 0 && curDur + item.dur > MAX_SEG_DUR;
-    if (mustCloseForBudget || mustCloseForCap) {
-      buckets.push(cur);
-      cur = [];
-      curDur = 0;
-    }
-    cur.push(item);
-    curDur += item.dur;
-  }
-  if (cur.length) buckets.push(cur);
-  if (!buckets.length) return [];
-
-  return buckets.map((bucket, i) => {
-    const dur = bucket.reduce((s, x) => s + x.dur, 0);
+  return durations.map((durationS, i) => {
+    const start = Math.floor(i * all.length / total);
+    const end = Math.floor((i + 1) * all.length / total);
+    const bucket = all.slice(start, Math.max(start + 1, end));
     const refSet = new Set<number>();
     bucket.forEach((b) => {
       const ref = effectiveImageRef(b.sc);
@@ -121,8 +104,8 @@ export function planSegments(script: ScriptLike | null | undefined): SegmentPlan
     });
     return {
       index: i,
-      total: buckets.length,
-      durationS: Math.min(MAX_SEG_DUR, Math.round(dur)),
+      total,
+      durationS,
       sceneLabels: bucket.map((b) => b.label),
       refIndices: Array.from(refSet),
     };

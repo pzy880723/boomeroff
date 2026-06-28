@@ -34,6 +34,7 @@ import { RenderStrategyPicker } from '@/components/marketing/RenderStrategyPicke
 import { getRenderStrategy, setRenderStrategy, type RenderStrategy } from '@/lib/renderStrategyPref';
 import { VideoJobDetailPanel } from '@/components/marketing/VideoJobDetailPanel';
 import { invokeFn } from '@/lib/invokeFn';
+import { completeMarketingVideoFromSegments } from '@/lib/completeMarketingVideo';
 
 const VIDEO_TYPES = [
   { v: 'store_tour', label: '探店' },
@@ -59,6 +60,7 @@ const ASPECTS = ['9:16', '1:1', '16:9'] as const;
 export default function MarketingVideo() {
   const loc = useLocation();
   const { shopId, setShopId, isAdmin } = useEffectiveShop();
+  const { user } = useAuth();
   const [urls, setUrls] = useState<string[]>((loc.state as any)?.image_urls || []);
   const [vtype, setVtype] = useState<VType>('store_tour');
   const [style, setStyle] = useState<SType>('steady');
@@ -109,6 +111,7 @@ export default function MarketingVideo() {
   const [sbBusy, setSbBusy] = useState(false);
   const [sbWarn, setSbWarn] = useState<string | null>(null);
   const [lastSbSig, setLastSbSig] = useState<string>('');
+  const stitchingJobRef = useRef<Set<string>>(new Set());
 
   // 草稿本地保存 key
   const draftKey = shopId ? `mv:draft:${shopId}` : '';
@@ -390,12 +393,39 @@ export default function MarketingVideo() {
       if (r.progress) setRenderProgress(r.progress);
       if (r.video_url) setRenderVideoUrl(r.video_url);
       if (r.error && r.phase === 'failed') setRenderError(r.error);
+      if (r.ready_to_stitch && r.segment_urls?.length && user && !stitchingJobRef.current.has(jobId)) {
+        stitchingJobRef.current.add(jobId);
+        setRenderPhase('running');
+        toast.message('分段已生成，正在自动拼接成完整视频…');
+        try {
+          const done = await completeMarketingVideoFromSegments({
+            userId: user.id,
+            jobId,
+            segmentUrls: r.segment_urls,
+            onProgress: (pct) => {
+              setRenderProgress({ done: Math.max(r.progress?.done || 0, Math.round((pct / 100) * (r.progress?.total || 1))), total: r.progress?.total || 1 });
+            },
+          });
+          if (cancelled) return;
+          setRenderVideoUrl(done.url);
+          setRenderPhase('done');
+          toast.success('视频已生成完成');
+          return;
+        } catch (e: any) {
+          if (cancelled) return;
+          const msg = e?.message || '拼接失败，请重新生成';
+          setRenderError(msg);
+          setRenderPhase('failed');
+          toastVideoFailure(e, { onApplyFix: applyVideoFix });
+          return;
+        }
+      }
       if (r.phase === 'done' || r.phase === 'failed') return;
       timer = window.setTimeout(tick, 3000);
     };
     tick();
     return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
-  }, [jobId]);
+  }, [jobId, user?.id]);
 
   const updateScene = (key: 'hook' | 'outro', field: string, val: any) => {
     setScript({ ...script, [key]: { ...script[key], [field]: val } });
@@ -440,7 +470,6 @@ export default function MarketingVideo() {
 
   // —— 分镜行手动替换图:目标 + 入口 ——
   type SceneTarget = 'hook' | 'outro' | number;
-  const { user } = useAuth();
   const [sceneTarget, setSceneTarget] = useState<SceneTarget | null>(null);
   const [sceneLibraryOpen, setSceneLibraryOpen] = useState(false);
   const sceneFileRef = useRef<HTMLInputElement>(null);
