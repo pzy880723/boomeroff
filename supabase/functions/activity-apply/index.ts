@@ -40,6 +40,22 @@ Deno.serve(async (req) => {
       return json({ error: '活动已结束' }, 400);
     }
 
+    // 校验手机验证码（最近一条未消费、未过期的 OTP 必须匹配）
+    const { data: otpRow } = await admin
+      .from('activity_apply_otp')
+      .select('id, code, expires_at, consumed_at')
+      .eq('activity_id', activity.id)
+      .eq('phone', applicant_phone)
+      .is('consumed_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!otpRow) return json({ error: '请先获取手机验证码' }, 400);
+    if (new Date(otpRow.expires_at) < new Date()) return json({ error: '验证码已过期，请重新获取' }, 400);
+    if (otpRow.code !== otp_code) return json({ error: '验证码错误，请重新输入' }, 400);
+    await admin.from('activity_apply_otp').update({ consumed_at: new Date().toISOString() }).eq('id', otpRow.id);
+
+
     // 校验必填字段 + 处理图片字段
     const cleaned: Record<string, unknown> = {};
     for (const f of (activity.form_fields as Array<Record<string, unknown>>) || []) {
