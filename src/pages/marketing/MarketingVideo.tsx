@@ -239,21 +239,22 @@ export default function MarketingVideo() {
     finally { setGenerating(false); }
   };
 
-  const generateStoryboard = async (scriptArg?: any, onlyIndices?: number[]) => {
+  const generateStoryboard = async (scriptArg?: any, onlyIndices?: number[]): Promise<any | null> => {
     const target = scriptArg || script;
-    if (!target) return;
+    if (!target) return null;
     setSbBusy(true); setSbWarn(null);
     try {
       const assets = urls.map((u, i) => {
         const d = imageDescriptions.find((x) => x.index === i);
         return { asset_id: `idx-${i}`, index: i, url: u, summary: d?.summary || '', category: null };
       });
-      const charPayload = character ? {
-        id: character.id, name: character.name, role_label: character.role_label,
-        visual_signature: character.visual_signature, core_emotion: character.core_emotion,
-        cover_url: character.cover_url,
-        extra_reference_urls: character.extra_reference_urls || [],
-        verified_asset_uri: (character as any).verified_asset_uri || null,
+      const effectiveCharacter = character || target.character || null;
+      const charPayload = effectiveCharacter ? {
+        id: effectiveCharacter.id, name: effectiveCharacter.name, role_label: effectiveCharacter.role_label,
+        visual_signature: effectiveCharacter.visual_signature, core_emotion: effectiveCharacter.core_emotion,
+        cover_url: effectiveCharacter.cover_url,
+        extra_reference_urls: effectiveCharacter.extra_reference_urls || [],
+        verified_asset_uri: (effectiveCharacter as any).verified_asset_uri || null,
       } : null;
       const { data, error } = await invokeFn('storyboard-marketing-video', {
         body: {
@@ -271,9 +272,11 @@ export default function MarketingVideo() {
       const failed = (d.frames || []).filter((f: any) => !f.url).length;
       if (failed) setSbWarn(`${failed} 张静帧生成失败,渲染时将回退到原素材图`);
       toast.success(`分镜静帧已合成 ${d.succeeded}/${d.total}`);
+      return d.script || target;
     } catch (e: any) {
       setSbWarn(e?.message || '分镜静帧生成失败');
       toast.message('分镜静帧失败,渲染将直接用原素材', { duration: 3000 });
+      return null;
     } finally {
       setSbBusy(false);
     }
@@ -346,6 +349,22 @@ export default function MarketingVideo() {
           toast.message('兜底主角生成失败,跳过,继续提交渲染', { duration: 3000 });
         }
       }
+      const shouldLockStoryboard = !overrides?.disable_storyboard;
+      if (shouldLockStoryboard) {
+        const missing = collectMissingStoryboardIndices(finalScript);
+        const stale = !!lastSbSig && lastSbSig !== computeStoryboardSig(finalScript, realism);
+        if (missing.length > 0 || stale) {
+          toast.message(stale ? '分镜内容有修改,正在重新锁定静帧…' : '正在先锁定每个分镜静帧…');
+          const locked = await generateStoryboard(finalScript);
+          if (!locked) throw new Error('分镜静帧没有生成成功,已停止渲染。请先点「重做分镜静帧」补齐后再生成视频。');
+          finalScript = locked;
+        }
+        const stillMissing = collectMissingStoryboardIndices(finalScript);
+        if (stillMissing.length > 0) {
+          throw new Error(`还有 ${stillMissing.length} 个镜头没有分镜静帧,不能直接渲染。请先补齐分镜静帧,避免视频重新乱想画面。`);
+        }
+      }
+
       const reqModel = (overrides?.modelId) ?? modelId;
       const reqRes = (overrides?.resolution) ?? resolution;
       const { data, error } = await invokeFn('render-marketing-video', {
@@ -356,6 +375,7 @@ export default function MarketingVideo() {
           render_strategy: overrides?.render_strategy ?? renderStrategy,
           disable_storyboard: !!overrides?.disable_storyboard,
           disable_references: !!overrides?.disable_references,
+          require_storyboard: shouldLockStoryboard,
           face_pipeline: overrides?.face_pipeline,
         },
       });
@@ -728,7 +748,7 @@ export default function MarketingVideo() {
 
             {script && !sbBusy && !hasAnyStoryboard && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 leading-snug">
-                ⚠ 还没有分镜静帧。如果直接渲染会用原素材图,质量会差。点右上「重做分镜静帧」先合成每一镜的定格画面。
+                还没有分镜静帧。现在不会再直接渲染,点击生成视频时会先自动锁定每一镜,锁定失败就停止。
               </div>
             )}
 
@@ -782,9 +802,9 @@ export default function MarketingVideo() {
                     onResolutionChange={handleResolutionChange}
                   />
                 </div>
-                <Button onClick={() => confirmRender()} disabled={rendering} className="w-full h-11">
+                <Button onClick={() => confirmRender()} disabled={rendering || sbBusy} className="w-full h-11">
                   {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  用 {getSeedanceShortLabel(modelId)} · {resolution} 开始渲染
+                  {missingSbIndices.length > 0 || sbStale ? '锁定分镜并渲染' : `用 ${getSeedanceShortLabel(modelId)} · ${resolution} 开始渲染`}
                 </Button>
               </>
             ) : (
