@@ -6,7 +6,7 @@
 // 走 Storage:把处理后的 PNG 上传到 marketing-videos 的 _soft_pass/ 前缀下,返回签名 URL,
 // 火山直接取这个 URL 当 reference_image 用,完全无感。
 
-import { Image, TextLayout, Frame, decode } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
+import { Image, Frame, decode } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
 // 字体放在同目录(后面会下个开源体回去);如果加载失败,降级为不画文字只画十字。
 const FONT_URL = "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.20/files/inter-latin-700-normal.woff";
 
@@ -26,34 +26,31 @@ export async function buildCharacterSheet(sourceUrl: string): Promise<Uint8Array
   const res = await fetch(sourceUrl);
   if (!res.ok) throw new Error(`fetch source image failed: ${res.status}`);
   const buf = new Uint8Array(await res.arrayBuffer());
-  // decode 支持 PNG/JPEG/GIF/TIFF/BMP/WebP(部分)
   const decoded = await decode(buf);
-  const img = decoded instanceof Frame ? decoded : (Array.isArray((decoded as any).frames) ? (decoded as any).frames[0] as Image : decoded as Image);
+  const img: Image = decoded instanceof Frame
+    ? decoded as unknown as Image
+    : (Array.isArray((decoded as any).frames) ? (decoded as any).frames[0] as Image : decoded as Image);
 
   const W = img.width, H = img.height;
   // ---- 1) 顶部白条幅(高度 = 短边的 8%) ----
   const bannerH = Math.max(48, Math.round(Math.min(W, H) * 0.08));
   const banner = new Image(W, bannerH).fill(0xffffffff);
 
-  // 文字
+  // 文字(imagescript 1.2.x:Image.renderText(font, size, text, color))
   const font = await loadFont();
   if (font) {
     try {
       const fontSize = Math.round(bannerH * 0.5);
-      const layout = new TextLayout({
-        maxWidth: W - 16,
-        maxHeight: bannerH - 4,
-        wrapStyle: "word",
-        verticalAlign: "middle",
-        horizontalAlign: "middle",
-      });
-      const text = Image.renderText(font, fontSize, "CHARACTER SHEET REFERENCE", 0x000000ff, layout);
-      banner.composite(text, Math.max(0, Math.round((W - text.width) / 2)), Math.max(0, Math.round((bannerH - text.height) / 2)));
+      const text = Image.renderText(font, fontSize, "CHARACTER SHEET REFERENCE", 0x000000ff);
+      const tx = Math.max(0, Math.round((W - text.width) / 2));
+      const ty = Math.max(0, Math.round((bannerH - text.height) / 2));
+      banner.composite(text, tx, ty);
     } catch (e) {
-      console.warn("[face-gateway] render text failed, banner only:", e);
+      console.warn("[face-gateway] render text failed, banner only:", (e as any)?.message);
     }
   }
   img.composite(banner, 0, 0);
+
 
   // ---- 2) 红色十字(覆盖左眼附近) ----
   // 中心:水平 40%、垂直 30%(典型正面肖像的左眼位置);臂长 = 短边的 10%;线宽按 1024 基准 26 等比缩放
