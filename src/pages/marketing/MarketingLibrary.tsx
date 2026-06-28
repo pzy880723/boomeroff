@@ -814,6 +814,18 @@ export default function MarketingLibrary() {
                             </div>
                           )}
 
+                          {/* 来源角标:仅 photo,在「全部」视图下显示以区分 */}
+                          {it.kind === 'photo' && imgSource === 'all' && !manageMode && (
+                            <span
+                              className="absolute top-1 left-1 w-4 h-4 rounded-full bg-black/55 backdrop-blur text-white flex items-center justify-center"
+                              title={assetSource(it) === 'generated' ? 'AI 生成' : '我上传的'}
+                            >
+                              {assetSource(it) === 'generated'
+                                ? <Sparkles className="w-2.5 h-2.5" />
+                                : <Camera className="w-2.5 h-2.5" />}
+                            </span>
+                          )}
+
 
 
                           {it.kind === 'photo' && !manageMode && (
