@@ -6,7 +6,7 @@
 // - portal 到 body + 拦截 pointerdown 冒泡,避免 Radix Dialog 被一并关闭
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react';
 
 export function ImageLightbox({
   open, onClose, images, initialIndex = 0,
@@ -17,11 +17,13 @@ export function ImageLightbox({
   initialIndex?: number;
 }) {
   const [idx, setIdx] = useState(initialIndex);
+  const [loaded, setLoaded] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
 
   useEffect(() => { if (open) setIdx(initialIndex); }, [open, initialIndex]);
+  useEffect(() => { setLoaded(false); }, [idx, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -141,12 +143,22 @@ export function ImageLightbox({
 
       {/* 居中图片,留出空白便于"点空白关闭" */}
       <div className="absolute inset-0 flex items-center justify-center px-14 py-20">
-        <img
-          src={src}
-          alt=""
-          className="max-w-full max-h-full object-contain pointer-events-none"
-          draggable={false}
-        />
+        {!loaded && src && (
+          <Loader2 className="absolute w-8 h-8 text-white/80 animate-spin" />
+        )}
+        {src && (
+          <img
+            src={src}
+            alt=""
+            onLoad={() => setLoaded(true)}
+            onError={() => setLoaded(true)}
+            className={[
+              'max-w-full max-h-full object-contain pointer-events-none transition-opacity duration-200',
+              loaded ? 'opacity-100' : 'opacity-0',
+            ].join(' ')}
+            draggable={false}
+          />
+        )}
       </div>
 
       {/* 底部:圆点 + 关闭胶囊 */}

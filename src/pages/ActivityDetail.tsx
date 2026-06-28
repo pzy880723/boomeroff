@@ -41,12 +41,26 @@ export default function ActivityDetail() {
   const [search, setSearch] = useState('');
   const [confirmApp, setConfirmApp] = useState<AppWithClaim | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+  const [signedUrlMap, setSignedUrlMap] = useState<Record<string, string>>({});
 
   const openImage = async (path: string) => {
+    const cached = signedUrlMap[path];
+    if (cached) {
+      setLightbox({ images: [cached], index: 0 });
+      return;
+    }
+    // 兜底:缓存未命中(预签后新增的申请),立即打开 Lightbox 并显示 loading,后台签名
+    setLightbox({ images: [''], index: 0 });
     const { data } = await supabase.storage
       .from('voucher-screenshots')
-      .createSignedUrl(path, 600);
-    if (data?.signedUrl) setLightbox({ images: [data.signedUrl], index: 0 });
+      .createSignedUrl(path, 3600, { transform: { width: 1080, quality: 80 } } as any);
+    if (data?.signedUrl) {
+      setSignedUrlMap((m) => ({ ...m, [path]: data.signedUrl }));
+      setLightbox({ images: [data.signedUrl], index: 0 });
+    } else {
+      setLightbox(null);
+      toast.error('截图加载失败');
+    }
   };
 
   const load = useCallback(async (silent = false) => {
@@ -60,8 +74,35 @@ export default function ActivityDetail() {
         .order('created_at', { ascending: false }),
     ]);
     setActivity((a as any) || null);
-    setApps((ap || []) as unknown as AppWithClaim[]);
+    const list = ((ap || []) as unknown as AppWithClaim[]);
+    setApps(list);
     if (!silent) setLoading(false);
+
+    // 批量预签所有截图(image 类型字段),后续点击 0 延迟打开
+    try {
+      const fields = ((a as any)?.form_fields || []) as Array<{ key: string; type: string }>;
+      const imageKeys = fields.filter((f) => f.type === 'image').map((f) => f.key);
+      if (imageKeys.length === 0) return;
+      const paths = Array.from(new Set(
+        list.flatMap((app) => imageKeys
+          .map((k) => app.form_data?.[k])
+          .filter((v): v is string => typeof v === 'string' && v.length > 0)),
+      ));
+      const missing = paths.filter((p) => !signedUrlMap[p]);
+      if (missing.length === 0) return;
+      const { data: signed } = await supabase.storage
+        .from('voucher-screenshots')
+        .createSignedUrls(missing, 3600, { transform: { width: 1080, quality: 80 } } as any);
+      if (!signed) return;
+      setSignedUrlMap((m) => {
+        const next = { ...m };
+        for (const s of signed) {
+          if (s.signedUrl && s.path) next[s.path] = s.signedUrl;
+        }
+        return next;
+      });
+    } catch { /* 预签失败不影响主流程,点击时会兜底 */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
