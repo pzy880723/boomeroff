@@ -171,7 +171,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     doPick(newEx);
   };
 
-  const start = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_references?: boolean }) => {
+  const start = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_references?: boolean; face_pipeline?: 'auto' | 'character_sheet' | 'illustration' | 'faceless' }) => {
     if (!shopId || !pick) return;
     const useModel = overrides?.modelId || modelId;
     const useRes = overrides?.resolution || resolution;
@@ -187,6 +187,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           resolution: useRes,
           realism,
           disable_references: !!overrides?.disable_references,
+          face_pipeline: overrides?.face_pipeline,
           prompt_overrides: pick.prompt_overrides,
         },
       });
@@ -204,7 +205,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       startPolling(d.job_id, shopId);
       toast.success('已入队,关掉也会继续跑');
     } catch (e: any) {
-      toast.error(e?.message || '提交失败');
+      // 把英文报错翻译成中文卡片 + 一键修复
+      toastVideoFailure(e, { onApplyFix: handleFix });
     } finally { setSubmitting(false); }
   };
 
@@ -216,6 +218,11 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       toast.message('已清除失败任务');
       return;
     }
+    if (fix.kind === 'verify_identity') {
+      toast.message('请去「我的角色」点击该角色卡的"活体认证"');
+      return;
+    }
+    if (fix.kind === 'topup') return;
     const patch = fix.patch || {};
     if (patch.modelId) {
       setModelId(patch.modelId);
@@ -230,8 +237,10 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       modelId: patch.modelId,
       resolution: (patch.resolution as SeedanceResolution) || undefined,
       disable_references: patch.disable_references,
+      face_pipeline: patch.face_pipeline,
     });
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
