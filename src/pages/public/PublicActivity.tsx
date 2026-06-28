@@ -136,10 +136,47 @@ export default function PublicActivity() {
     setLookupPhone('');
   };
 
+  // 验证码倒计时
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const t = window.setTimeout(() => setOtpCooldown((c) => c - 1), 1000);
+    return () => window.clearTimeout(t);
+  }, [otpCooldown]);
+
+  const sendOtp = async () => {
+    if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
+    if (otpSending || otpCooldown > 0) return;
+    setOtpSending(true);
+    const { data, error: e } = await invokeFn<any>('activity-apply-send-otp', {
+      body: { share_token: shareToken, phone },
+    });
+    setOtpSending(false);
+    if (e) { toast.error(e.message || '验证码发送失败'); return; }
+    const d = data as any;
+    if (d?.already) {
+      const sc = d.short_code;
+      toast.info('该手机号已领取过本活动的优惠券');
+      if (sc) {
+        localStorage.setItem(`activity_claim:${shareToken}`, sc);
+        navigate(`/u/c/${sc}`, { replace: true });
+      } else {
+        // 兜底:打开找回券对话框
+        setLookupPhone(phone);
+        setLookupOpen(true);
+      }
+      return;
+    }
+    if (d?.error) { toast.error(d.error); return; }
+    toast.success('验证码已发送，5 分钟内有效');
+    setOtpCooldown(60);
+  };
+
   const submit = async () => {
     if (!name.trim()) { toast.error('请输入姓名'); return; }
     if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
+    if (!/^\d{6}$/.test(otpCode)) { toast.error('请输入 6 位手机验证码'); return; }
     if (!agreed) { toast.error('请先勾选并同意《活动参与确认协议》'); return; }
+
     setSubmitting(true);
     const hasImage = Object.values(formData).some((v) => typeof v === 'string' && v.startsWith('data:'));
     setSubmitPhase(hasImage ? 'uploading' : 'submitting');
