@@ -920,8 +920,22 @@ export default function MarketingLibrary() {
         open={createCharOpen}
         onOpenChange={setCreateCharOpen}
         shopId={shopId}
-        onCreated={(c) => setCharacters((prev) => [c, ...prev])}
+        onCreated={(c, opts) => {
+          setCharacters((prev) => [c, ...prev]);
+          if (opts?.autoVerify) setVerifyCharacter(c);
+        }}
       />
+      <IdentityVerifyDialog
+        open={!!verifyCharacter}
+        onOpenChange={(o) => !o && setVerifyCharacter(null)}
+        character={verifyCharacter}
+        onVerified={({ asset_id, asset_uri }) => {
+          setCharacters((prev) => prev.map((x) => x.id === verifyCharacter?.id
+            ? { ...x, verified_asset_id: asset_id, verified_asset_uri: asset_uri, verified_at: new Date().toISOString() }
+            : x));
+        }}
+      />
+
       <CharacterDialog
         character={characterDetail}
         open={!!characterDetail}
