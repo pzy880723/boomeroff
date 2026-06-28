@@ -267,6 +267,49 @@ Deno.serve(async (req) => {
         const overTimeout = ageMs > TIMEOUT_MIN * 60_000;
 
         if (!j.provider_task_id) {
+          const isParentJob = !j.parent_job_id && (Number(j.segment_total) || 0) > 1;
+          if (isParentJob) {
+            const summary = await summarizeParentSegments(admin, j);
+            if (summary.failed) {
+              await admin.from("marketing_video_jobs").update({
+                status: "failed", error: summary.failed, last_polled_at: new Date().toISOString(),
+              }).eq("id", j.id);
+              await updateAssetMeta(admin, j.user_id, j.id, { status: "failed", error: summary.failed, segment_done: summary.done });
+              results.push({ id: j.id, status: "failed", reason: "child_failed", error: summary.failed });
+              continue;
+            }
+            if (summary.done === summary.total && summary.segUrls.every(Boolean)) {
+              await markParentReadyToStitch(admin, j, summary.segUrls, summary.done);
+              results.push({ id: j.id, status: "ready_to_stitch", reason: "all_children_succeeded" });
+              continue;
+            }
+
+            const nextQueued = summary.segs.find((ch: any) => ch.status === "queued" && !ch.provider_task_id);
+            if (nextQueued && submittedInSweep < 1) {
+              const sub = await submitQueuedChild(admin, ARK_KEY, nextQueued, j.user_id);
+              if (sub.submitted) submittedInSweep += 1;
+              if (sub.failed) {
+                await admin.from("marketing_video_jobs").update({
+                  status: "failed", error: sub.error, last_polled_at: new Date().toISOString(),
+                }).eq("id", j.id);
+                await updateAssetMeta(admin, j.user_id, j.id, { status: "failed", error: sub.error, segment_done: summary.done });
+              } else {
+                await admin.from("marketing_video_jobs").update({
+                  status: "running", error: null, last_polled_at: new Date().toISOString(),
+                }).eq("id", j.id);
+                await updateAssetMeta(admin, j.user_id, j.id, { status: "running", stage: "generating", error: null, segment_done: summary.done, segment_total: summary.total });
+              }
+              results.push({ id: j.id, status: sub.failed ? "failed" : "running", submitted: sub.submitted, error: sub.error });
+              continue;
+            }
+
+            await admin.from("marketing_video_jobs").update({
+              status: "running", error: null, last_polled_at: new Date().toISOString(),
+            }).eq("id", j.id);
+            await updateAssetMeta(admin, j.user_id, j.id, { status: "running", stage: "generating", error: null, segment_done: summary.done, segment_total: summary.total });
+            results.push({ id: j.id, status: "running", reason: overTimeout ? "waiting_children_no_timeout" : "waiting_children", done: summary.done, total: summary.total });
+            continue;
+          }
           if (j.status === "queued" && (j.script || {}).__render_payload) {
             if (submittedInSweep >= 1) {
               results.push({ id: j.id, status: j.status, skipped: "submit_limit" });
