@@ -404,6 +404,17 @@ Deno.serve(async (req) => {
     if (isParent) {
       // 终态:已经拼好或失败
       if (job.status === "succeeded" || job.status === "failed") {
+        if (job.status === "failed") {
+          const summary = await summarizeParentSegments(admin, job);
+          if (!summary.failed && summary.done === summary.total && summary.segUrls.every(Boolean)) {
+            await markParentReadyToStitch(admin, job, summary.segUrls, summary.done);
+            return json({
+              status: "ready_to_stitch", is_parent: true,
+              segment_total: summary.total, segment_done: summary.done,
+              segment_urls: summary.segUrls.map((u) => u ? encodeSegmentUrl(u) : null), error: null,
+            });
+          }
+        }
         return json({
           status: job.status, is_parent: true, video_url: job.video_url, error: job.error,
           segment_total: job.segment_total,
