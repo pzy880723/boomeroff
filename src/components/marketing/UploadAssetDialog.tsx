@@ -161,11 +161,27 @@ export function UploadAssetDialog({
                 onChange={(e) => {
                   const files = Array.from(e.target.files || []);
                   setPhotoFiles(files);
-                  // allow re-selecting the same files later
                   e.currentTarget.value = '';
                 }}
               />
             </label>
+
+            {/* 基础素材开关:门店实拍/商品原图建议打开,后续会反复使用 */}
+            <label className="flex items-start gap-2 p-2.5 rounded-lg border border-accent/20 bg-accent/[0.04] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={asBase}
+                onChange={(e) => setAsBase(e.target.checked)}
+                className="mt-0.5 accent-accent"
+              />
+              <div className="flex-1">
+                <p className="text-[12px] font-medium">📌 作为「基础素材图」入库</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  门头、店内、商品等长期素材建议勾选。会单独归类,不与 AI 生成图混在一起。
+                </p>
+              </div>
+            </label>
+
             {busy && progress.total > 0 && (
               <p className="text-[11px] text-muted-foreground text-center">
                 上传中 {progress.done}/{progress.total}…
