@@ -543,49 +543,22 @@ Deno.serve(async (req) => {
       const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
       const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
       const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
-      const fallbackNotes: string[] = [];
       console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur} face_pipeline=${facePipeline}`);
 
-      // 用户主动选择软通过 → 提交前就处理
-      let effectiveRefs = refImages;
-      if (facePipeline === 'character_sheet' && refImages.length) {
-        try {
-          effectiveRefs = await softPassKeyReferences(refImages, { admin, userId: u.user.id, max: 3 });
-          fallbackNotes.push('face_soft_pass_applied');
-        } catch (e) { console.warn('[soft-pass one_shot pre]', (e as any)?.message); }
-      }
-
-      // L0: 全量参考
-      let r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: effectiveRefs });
-      // L0.5: 被真人拦了 → 自动给所有参考图打 Character Sheet 软通过水印再试
-      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
-        try {
-          const marked = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 3 });
-          fallbackNotes.push('face_soft_pass_auto');
-          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: marked });
-          if (r.ok) effectiveRefs = marked;
-        } catch (e) { console.warn('[soft-pass one_shot auto]', (e as any)?.message); }
-      }
-      // L1: 仅角色板 / 第一张
-      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length > 1) {
-        fallbackNotes.push('references_trimmed_for_safety');
-        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution, referenceImages: effectiveRefs.slice(0, 1) });
-      }
-      // L2: 纯文本
-      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
-        fallbackNotes.push('references_dropped_for_safety');
-        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration: oneShotDur, resolution });
-      }
-
-      if (!r.ok) {
-        return json({ ok: false, error: r.error, raw: (r as any).raw });
-      }
-
       const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
-        user_id: u.user.id, script, status: "running", shop_id: shopId,
-        provider: "volcengine_seedance", provider_task_id: r.id,
+        user_id: u.user.id,
+        script: {
+          ...script,
+          __render_payload: {
+            prompt, duration: oneShotDur, ratio, model, resolution,
+            reference_images: refImages,
+            face_pipeline: facePipeline,
+          },
+        },
+        status: "queued", shop_id: shopId,
+        provider: "volcengine_seedance", provider_task_id: null,
         segment_total: 1, segment_index: 0, parent_job_id: null,
-        fallback_notes: fallbackNotes,
+        fallback_notes: [],
       }).select().single();
       if (pErr || !parent) {
         console.error("[render one_shot] parent insert", pErr);
@@ -607,9 +580,8 @@ Deno.serve(async (req) => {
           style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
           warnings: [
             ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
-            ...fallbackNotes,
           ],
-          status: "running", segment_total: 1, segment_done: 0,
+          status: "queued", segment_total: 1, segment_done: 0,
           stage: "generating", character_id: character?.id || null,
           character_name: character?.name || null,
           cover_url: imageUrls[0] || character?.cover_url || null,
@@ -617,7 +589,7 @@ Deno.serve(async (req) => {
       });
 
       return json({
-        ok: true, success: true, job_id: parent.id, status: "running",
+        ok: true, success: true, job_id: parent.id, status: "queued",
         segment_total: 1, render_strategy: "one_shot", auto_decision_reason: autoReason,
         target_duration_s: totalDur, actual_duration_s: oneShotDur,
       });

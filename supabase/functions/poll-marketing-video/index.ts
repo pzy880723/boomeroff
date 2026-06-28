@@ -404,6 +404,17 @@ Deno.serve(async (req) => {
       return json({ status: job.status, video_url: job.video_url, error: job.error });
     }
     if (!job.provider_task_id) {
+      if (job.status === "queued" && (job.script || {}).__render_payload) {
+        const sub = await submitQueuedChild(admin, ARK_KEY, job, u.user.id);
+        if (sub.failed) {
+          await updateAssetMeta(admin, u.user.id, jobId, { status: "failed", error: sub.error, segment_done: 0 });
+          return json({ status: "failed", error: sub.error, segment_total: job.segment_total || 1, segment_done: 0 });
+        }
+        if (sub.submitted) {
+          await updateAssetMeta(admin, u.user.id, jobId, { status: "running", segment_done: 0, segment_total: job.segment_total || 1 });
+          return json({ status: "running", segment_total: job.segment_total || 1, segment_done: 0, submitted_segment: true });
+        }
+      }
       return json({ status: job.status });
     }
 
