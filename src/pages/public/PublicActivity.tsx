@@ -187,9 +187,11 @@ export default function PublicActivity() {
         share_token: shareToken,
         applicant_name: name.trim(),
         applicant_phone: phone,
+        otp_code: otpCode,
         form_data: formData,
       },
     });
+
     window.clearTimeout(phaseTimer);
     if (e) {
       setSubmitting(false);
