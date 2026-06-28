@@ -1,39 +1,93 @@
 ## 目标
-让「惊喜探店」生成的视频里，门头/开场镜头必须符合真实门店形态：
-- 位于**商场 B1 层室内**，周围是商场走廊/中庭，绝不能出现马路、街边、街铺、人行道、车流、店门、推门动作。
-- 我们是**8 米宽的开放式店面，没有门**，所以禁止"推门进店""拉门""门帘"等动作；进店方式应为"从商场走廊直接走进开放式店面"。
-- 这条约束需要在脚本生成 + 渲染 Prompt 两个层级都强制注入，确保 AI 不会自由发挥。
 
-## 改动范围（只动 Prompt 文案，不动业务逻辑）
+1. 把之前「分镜静帧」里那套高质量出图 Prompt（真人级电影感 / 风格化海报）迁移到 AI 图片，做成「**一键智能广告图**」入口：自动从素材库挑原图 + 自动写 Prompt + 批量出图。
+2. 收窄底部输入区，让对话气泡区有更多视觉空间。
 
-### 1. 新建共享门店物理形态约束
-新增 `supabase/functions/_shared/storefront-constraints.ts`：
-- 导出 `STOREFRONT_CONSTRAINT_ZH` 和 `STOREFRONT_CONSTRAINT_EN` 两段常量。
-- 中文版（喂给脚本 AI）：明确"商场 B1 层 / 开放式 8m 店面 / 无门 / 顾客从商场内走廊走进来 / 背景是商场中庭或对面商铺 / 禁止出现马路、街边、人行道、车水马龙、推门、拉门、玻璃门把手、门帘、招牌灯箱悬挂在街面"。
-- 英文版（喂给 Seedance）：`MALL INTERIOR B1 FLOOR, open-front 8m-wide shop with NO door, NO doorway frame, NO door handle; talent walks in directly from mall corridor; background must show mall corridor / atrium / opposite mall shops; NEGATIVE: street, sidewalk, road, traffic, car, outdoor sky, pushing door, pulling door, door curtain.`
-- 同时导出一段「门头镜头专属」补充：开场镜头必须是「商场走廊视角看向开放式店面 + 头顶 LOGO 招牌 + 博主从走廊侧走入」。
+---
 
-### 2. `generate-marketing-video-script/index.ts`
-- 在 `sys` Prompt 里追加 `STOREFRONT_CONSTRAINT_ZH` 块（在 `characterBlock` 之后）。
-- 在 `viralBlock` 里把现有「0-2s 必须为门口特写且主角推门进店」改为「0-2s 必须为商场走廊视角看向开放式店面，主角从走廊侧走入店内，**禁止出现门 / 推门 / 拉门**」。
-- 在 `clean()` 文本清洗里追加：把 dialogue / scene / action 中出现的「推门 / 拉门 / 街边 / 路边 / 马路 / 街口 / 门把手」等词软替换为合理表述（如「走进店里」「商场里」），保底防止 AI 漏网。
+## 一、新功能：一键智能广告图
 
-### 3. `render-marketing-video/index.ts`
-- 在 `buildOneShotPrompt` 和 `buildPrompt` 的英文 Prompt 头部强制注入 `STOREFRONT_CONSTRAINT_EN`。
-- 当识别到当前镜是门头镜（已有 hero/门头逻辑）时，再叠加「门头镜专属」英文补丁，并把 negative 词加进现有的 no-text 负向约束行里。
+### 入口
+- 在 `AiImage.tsx` 空状态 `EmptyState` 顶部 + 顶部模板行新增一个醒目按钮 **「✨ 一键智能广告图」**（金色/主色描边）。
+- 点击打开新弹窗 `SmartAdGenerateDialog.tsx`，三步走：
 
-### 4. `surprise-marketing-video/index.ts`
-- 在拼装 brief 时把 `STOREFRONT_CONSTRAINT_ZH` 透传给脚本 fn（已经会调 `generate-marketing-video-script`，所以只要在 brief 文案里再点一次即可，双保险）。
-- 门头素材缺失时的琥珀色提示文案微调：「未找到门头照，建议补拍**商场走廊视角**的开放式店面照片」。
+  **Step 1 选类型**（必选，可多选）
+  - **场景图** — 店内氛围/陈列/货架，不强调单个商品，无人。
+  - **商品特写** — 单个或一组商品居中，柔光、干净背景。
+  - **人物图** — 真人写实店员/顾客逛店瞬间，电影感。
 
-### 5. 前端轻量提示
-`src/components/marketing/SurpriseVideoDialog.tsx`：在「门头」徽标的 tooltip / 副标题改为「商场 B1 · 开放式店面（无门）」，让店员一眼知道系统已锁定该形态。
+  **Step 2 数量与比例**
+  - 张数：3 / 6 / 9 / 12（默认 9）。
+  - 比例：1:1 / 3:4 / 9:16 / 16:9（默认 3:4）。
+  - 风格：复用现有 `VIDEO_STYLE_LABELS`（治愈 / 高级 / 活力 …），默认「治愈日杂」。
+  - 真人模式开关（仅在选了「人物图」时显示）：写实 / 风格化。
 
-## 不动的部分
-- 不改人设生成、节奏锁、台词字数、参考图槽位等其他逻辑。
-- 不动数据库、RLS、表结构。
-- 纯 Prompt 文案 + 一处前端文案 tweak。
+  **Step 3 主题（可选）**
+  - 一句话主题，例如「周末新到货」「夏日清凉」。空着也行，由 AI 自由发挥。
 
-## 验证
-- 触发一次「惊喜一下」，在 edge function 日志里确认 Prompt 包含 MALL INTERIOR / NO door 文案。
-- 生成视频，肉眼检查开场镜头是否在商场走廊里、是否还出现推门动作或街景。如仍出现，进一步把负面词加到 Seedance Prompt 末尾的 NEGATIVE 段。
+### 后端：新建 `supabase/functions/ai-smart-ad-images/index.ts`
+
+逻辑：
+
+1. 校验登录 / shop_id / 每日 50 张额度（沿用 `ai-image-chat` 的限额表）。
+2. **自动选图**：从 `marketing_assets` 拉该 shop_id 下 `kind='photo'` 且非 `category='分镜头'`、非 AI 合成（meta.source 非 `ai-image-chat` / `storyboard`）的真实素材，按 `tags` 与所选类型聚类：
+   - 场景图 → 标签含 `店内/陈列/货架/氛围/门头`。
+   - 商品特写 → 标签含 `商品/单品/服饰/杯子/玩具…`。
+   - 人物图 → 标签含 `人物/店员/顾客`。
+   - 没命中标签时退化为「最近 50 张里随机抽」，保证总能出图。
+3. **批量构 Prompt**：把 `storyboard-marketing-video` 里 `buildFramePrompt` 抽到 `_shared/ad-image-prompts.ts`，按「类型 + 风格 + 真人模式」生成。每张图：
+   - 场景图：复用 `realism='photoreal'` 分支（去掉「主角必须出现」段），refs = 1 张实景图。
+   - 商品特写：极简白底 / 自然光 + 单品锁定，refs = 1 张商品图。
+   - 人物图：复用 photoreal 全套约束 + character 卡（如果该 shop 选了默认角色），refs = 角色封面 + 1 张实景图。
+4. **并行 Gemini 3.1 Flash Image** 出图（同 storyboard，最多并发 4），上传到 `product-images` bucket，写 `marketing_assets`（kind=`photo`、category=类型名、tags=[`AI智能广告`, 风格, 类型]，sha256 去重）。
+5. 返回 `{ ok, items: [{ output_url, category, asset_id, source_asset_url }] }`，失败的单张只标记错误不影响其他。
+
+### 前端结果展示
+- 弹窗内进度条「正在生成 3 / 9 …」，已完成的图实时插入对话流（以 AI 气泡呈现，标签：「智能广告 · 场景图 1」）。
+- 全部完成后弹窗关闭，对话流自动滚到底。
+- 用户可以继续在输入框对话 `@img1` 改图（沿用现有 mention 逻辑）。
+
+---
+
+## 二、输入区瘦身（仅视觉调整，逻辑不动）
+
+当前底部约 220px 高，目标压到 ~110px。改动都在 `src/pages/marketing/AiImage.tsx`：
+
+1. **左侧两个图标按钮（📎 附件 / 🖼 素材库）下移合并**
+   - 删除左侧竖排两按钮列。
+   - 在 Textarea 内左下角放一个「**+**」按钮（`size="icon" h-7 w-7`），点击弹出 mini Popover：「📎 上传图片」「🖼 从素材库选」「✨ 一键智能广告图」。
+
+2. **比例选 → 单按钮 Popover**
+   - 顶部那行把 4 个 `AspectIcon` 按钮去掉，换成一个 `<Button variant="outline" size="sm">` 显示当前比例（如 `1:1 ▾`）。
+   - 点击弹 Popover，里头放原来的 4 个 `AspectIcon` 大按钮，选完即关。
+
+3. **顶部行布局**
+   - 行高从 `gap-2 flex-wrap` 改成单行 `h-8`：左边「模板」按钮 + 当前模板 chip，右边「比例」按钮。
+
+4. **底部提示文案精简**
+   - `最多挂 4 张参考图 · 每日 50 张额度 · 历史不保存,出图自动进素材库` → `每日 50 张 · 自动入库`，字号 `text-[10px]`。
+
+5. **附图条**
+   - 缩略图从 `w-14 h-14` 改 `w-10 h-10`，整条 padding 收紧。
+
+---
+
+## 三、技术细节
+
+- 新文件：
+  - `src/components/marketing/SmartAdGenerateDialog.tsx`
+  - `supabase/functions/ai-smart-ad-images/index.ts`
+  - `supabase/functions/_shared/ad-image-prompts.ts`（抽自 `storyboard-marketing-video`，保留商场 B1 门头约束）
+- 修改：
+  - `src/pages/marketing/AiImage.tsx`（入口按钮 + 输入区重排）
+  - `supabase/functions/storyboard-marketing-video/index.ts` 改为从共享 prompts 引入（保证视频分镜效果不退化）
+- 复用：`uploadMarketingImages`、`marketing_assets` 表结构、`VIDEO_STYLE_*` 风格枚举、Gemini 3.1 Flash Image 模型
+- 复用现有商场 B1 / 门头 / 无门 物理约束（`storefront-constraints.ts`）注入到场景图与人物图 prompt。
+
+---
+
+## 不做
+
+- 不做角色一致性面板（已有 CharacterPicker，本期不动）
+- 不动视频流程
+- 不改 `ai-image-chat` 单图对话接口
