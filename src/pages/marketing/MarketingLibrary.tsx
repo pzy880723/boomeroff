@@ -49,6 +49,10 @@ export default function MarketingLibrary() {
   const [verifyCharacter, setVerifyCharacter] = useState<any | null>(null);
   const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
+  const [imgSource, setImgSource] = useState<AssetSource | 'all'>(() => {
+    try { return (localStorage.getItem('lib.imgSource') as any) || 'upload'; } catch { return 'upload'; }
+  });
+  useEffect(() => { try { localStorage.setItem('lib.imgSource', imgSource); } catch {} }, [imgSource]);
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
   const currentShop = shops.find((s) => s.id === shopId);
