@@ -666,99 +666,14 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "排队失败: " + (pErr?.message || '父任务创建失败') });
     }
 
-    const softPassCache = new Map<string, Promise<string>>();
-
-    // 2) 并行提交所有段(每段带 3 级真人内容降级链;isSensitive 复用上面声明的)
-    const submissions = await Promise.all(subScripts.map(async (sub, i) => {
-      const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
-      const prompt = buildPrompt(sub, styleKey, shopBlock, label, character, realism);
-      const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
-      // 只有第 1 段在完全无图时兜底用 image_urls[0],其他段不强塞
-      const segFallback = i === 0 && !disableReferences ? fallbackFirst : undefined;
-      const effectiveCharacter = disableReferences ? null : character;
-      const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
-      if (disableReferences) imgs.referenceImages = [];
-      console.log(`[render per-shot] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length}`);
-      const fallbackNotes: string[] = [];
-      let effectiveRefs = imgs.referenceImages;
-      // 用户主动选择软通过 → 提交前就处理
-      if (facePipeline === 'character_sheet' && effectiveRefs.length) {
-        try {
-          effectiveRefs = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2, cache: softPassCache });
-          fallbackNotes.push('face_soft_pass_applied');
-        } catch (e) { console.warn(`[soft-pass seg${i + 1} pre]`, (e as any)?.message); }
-      }
-      // L0: 全量 reference
-      let r = await submitArkTask({
-        arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-        referenceImages: effectiveRefs,
-      });
-      // L0.5: 被真人拦了 → 自动给所有参考图打 Character Sheet 软通过水印再试
-      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
-        try {
-          const marked = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2, cache: softPassCache });
-          fallbackNotes.push('face_soft_pass_auto');
-          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: marked });
-          if (r.ok) effectiveRefs = marked;
-        } catch (e) { console.warn(`[soft-pass seg${i + 1} auto]`, (e as any)?.message); }
-      }
-      // L1: 只留第一张参考(通常是 storyboard 静帧 / 角色板)
-      if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length > 1) {
-        fallbackNotes.push('references_trimmed_for_safety');
-        r = await submitArkTask({
-          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
-          referenceImages: effectiveRefs.slice(0, 1),
-        });
-      }
-      // L2: 纯文本
-      if (!r.ok && isSensitive(r.error, (r as any).raw)) {
-        fallbackNotes.push('references_dropped_for_safety');
-        r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
-      }
-
-      return { i, r, sub, duration, imgs, fallbackNotes };
-    }));
-
-
-
-    // 3) 检查失败
-    const failed = submissions.find((s) => !s.r.ok);
-    if (failed) {
-      const errMsg = `第 ${failed.i + 1} 段创建失败: ${(failed.r as any).error}`;
-      console.error("[render multi]", errMsg);
-      await admin.from("marketing_video_jobs").update({ status: "failed", error: errMsg }).eq("id", parent.id);
-      return json({ ok: false, error: errMsg, raw: (failed.r as any).raw });
-    }
-
-    // 4) 全部成功 → 写入子任务记录
-    const childTaskIds = submissions.map((s) => (s.r as any).id as string);
-    const childRows = submissions.map((s) => ({
-      user_id: u.user.id, script: s.sub, status: "queued", shop_id: shopId,
-      provider: "volcengine_seedance", provider_task_id: (s.r as any).id,
-      parent_job_id: parent.id, segment_index: s.i, segment_total: segmentTotal,
-      fallback_notes: s.fallbackNotes,
-    }));
-    const { error: childErr } = await admin.from("marketing_video_jobs").insert(childRows);
-    if (childErr) {
-      console.error("[render multi] children insert", childErr);
-      return json({ ok: false, error: "子任务入库失败: " + childErr.message });
-    }
-
-    // 5) 占位 marketing_assets
-    const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
-    const fallbackWarnings = Array.from(new Set(submissions.flatMap((s) => s.fallbackNotes)));
-    // 父任务也聚合一份 fallback_notes(给详情面板顶部用)
-    try {
-      await admin.from("marketing_video_jobs").update({ fallback_notes: fallbackWarnings }).eq("id", parent.id);
-    } catch {}
+    // 2) 先写素材占位并立刻返回。真正的分段提交放到后台,避免请求内同时做多段提交/图片软通过导致 WORKER_RESOURCE_LIMIT。
     await admin.from("marketing_assets").insert({
       user_id: u.user.id, kind: "video", shop_id: shopId,
       input_image_urls: imageUrls, output_url: null,
       meta: {
         job_id: parent.id, video_type: script.video_type,
         duration: totalDur, target_duration_s: targetDur, actual_duration_s: plannedActual, aspect: ratio,
-        // Seedance 2.0:有参考图 = reference2video,完全无图 = text2video。
-        mode: totalRefImages > 0 ? "reference2video" : "text2video",
+        mode: disableReferences || (!imageUrls.length && !character) ? "text2video" : "reference2video",
         render_mode: "per_shot",
         render_strategy: "per_shot",
         auto_decision_reason: autoReason,
@@ -766,26 +681,133 @@ Deno.serve(async (req) => {
         style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
         warnings: [
           ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
-          ...fallbackWarnings,
         ],
-        status: "running", segment_total: segmentTotal, segment_done: 0,
+        status: "queued", segment_total: segmentTotal, segment_done: 0,
         stage: "generating", character_id: character?.id || null,
         character_name: character?.name || null,
         cover_url: imageUrls[0] || character?.cover_url || null,
-        image_usage: {
-          per_segment: submissions.map((s) => ({
-            segment_index: s.i,
-            reference_count: s.imgs.referenceImages.length,
-          })),
-        },
       },
     });
 
+    const submitSegmentsInBackground = async () => {
+      const softPassCache = new Map<string, Promise<string>>();
+      await admin.from("marketing_video_jobs").update({ status: "running" }).eq("id", parent.id);
+
+      const submissions = [] as any[];
+      for (let i = 0; i < subScripts.length; i += 1) {
+        const sub = subScripts[i];
+        const label = `第 ${i + 1} 段 / 共 ${segmentTotal} 段`;
+        const prompt = buildPrompt(sub, styleKey, shopBlock, label, character, realism);
+        const duration = clampDuration(sub.total_duration_s || MAX_SEG_DUR);
+        const segFallback = i === 0 && !disableReferences ? fallbackFirst : undefined;
+        const effectiveCharacter = disableReferences ? null : character;
+        const imgs = resolveSegmentImages(sub, imageUrls, effectiveCharacter, segFallback);
+        if (disableReferences) imgs.referenceImages = [];
+        console.log(`[render per-shot] seg ${i + 1}/${segmentTotal} ref=${imgs.referenceImages.length}`);
+        const fallbackNotes: string[] = [];
+        let effectiveRefs = imgs.referenceImages;
+        if (facePipeline === 'character_sheet' && effectiveRefs.length) {
+          try {
+            effectiveRefs = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2, cache: softPassCache });
+            fallbackNotes.push('face_soft_pass_applied');
+          } catch (e) { console.warn(`[soft-pass seg${i + 1} pre]`, (e as any)?.message); }
+        }
+        let r = await submitArkTask({
+          arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
+          referenceImages: effectiveRefs,
+        });
+        if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
+          try {
+            const marked = await softPassKeyReferences(effectiveRefs, { admin, userId: u.user.id, max: 2, cache: softPassCache });
+            fallbackNotes.push('face_soft_pass_auto');
+            r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution, referenceImages: marked });
+            if (r.ok) effectiveRefs = marked;
+          } catch (e) { console.warn(`[soft-pass seg${i + 1} auto]`, (e as any)?.message); }
+        }
+        if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length > 1) {
+          fallbackNotes.push('references_trimmed_for_safety');
+          r = await submitArkTask({
+            arkKey: ARK_KEY, model, prompt, ratio, duration, resolution,
+            referenceImages: effectiveRefs.slice(0, 1),
+          });
+        }
+        if (!r.ok && isSensitive(r.error, (r as any).raw)) {
+          fallbackNotes.push('references_dropped_for_safety');
+          r = await submitArkTask({ arkKey: ARK_KEY, model, prompt, ratio, duration, resolution });
+        }
+        submissions.push({ i, r, sub, duration, imgs, fallbackNotes });
+        if (!r.ok) {
+          const errMsg = `第 ${i + 1} 段创建失败: ${(r as any).error}`;
+          console.error("[render multi bg]", errMsg);
+          await admin.from("marketing_video_jobs").update({ status: "failed", error: errMsg }).eq("id", parent.id);
+          await admin.from("marketing_assets").update({
+            meta: {
+              job_id: parent.id, video_type: script.video_type,
+              duration: totalDur, target_duration_s: targetDur, actual_duration_s: plannedActual, aspect: ratio,
+              mode: "reference2video", render_mode: "per_shot", render_strategy: "per_shot",
+              auto_decision_reason: autoReason, topic: script.topic || "", style: styleKey,
+              style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
+              warnings: fallbackNotes, status: "failed", error: errMsg, segment_total: segmentTotal,
+              segment_done: submissions.filter((x) => x.r.ok).length, stage: "failed",
+              character_id: character?.id || null, character_name: character?.name || null,
+              cover_url: imageUrls[0] || character?.cover_url || null,
+            },
+          }).eq("kind", "video").filter("meta->>job_id", "eq", parent.id);
+          return;
+        }
+      }
+
+      const childRows = submissions.map((s) => ({
+        user_id: u.user.id, script: s.sub, status: "queued", shop_id: shopId,
+        provider: "volcengine_seedance", provider_task_id: (s.r as any).id,
+        parent_job_id: parent.id, segment_index: s.i, segment_total: segmentTotal,
+        fallback_notes: s.fallbackNotes,
+      }));
+      const { error: childErr } = await admin.from("marketing_video_jobs").insert(childRows);
+      if (childErr) {
+        console.error("[render multi bg] children insert", childErr);
+        await admin.from("marketing_video_jobs").update({ status: "failed", error: "子任务入库失败: " + childErr.message }).eq("id", parent.id);
+        return;
+      }
+
+      const totalRefImages = submissions.reduce((s, x) => s + x.imgs.referenceImages.length, 0);
+      const fallbackWarnings = Array.from(new Set(submissions.flatMap((s) => s.fallbackNotes)));
+      await admin.from("marketing_video_jobs").update({ fallback_notes: fallbackWarnings, status: "running" }).eq("id", parent.id);
+      const { data: asset } = await admin.from("marketing_assets").select("id, meta").eq("kind", "video").filter("meta->>job_id", "eq", parent.id).maybeSingle();
+      if (asset) {
+        await admin.from("marketing_assets").update({
+          meta: {
+            ...((asset.meta || {}) as any),
+            mode: totalRefImages > 0 ? "reference2video" : "text2video",
+            warnings: [
+              ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
+              ...fallbackWarnings,
+            ],
+            status: "running",
+            image_usage: {
+              per_segment: submissions.map((s) => ({
+                segment_index: s.i,
+                reference_count: s.imgs.referenceImages.length,
+              })),
+            },
+          },
+        }).eq("id", asset.id);
+      }
+    };
+
+    const bg = submitSegmentsInBackground().catch(async (e) => {
+      const msg = e instanceof Error ? e.message : "渲染排队失败";
+      console.error("[render multi bg]", e);
+      await admin.from("marketing_video_jobs").update({ status: "failed", error: msg }).eq("id", parent.id);
+    });
+    const waitUntil = (globalThis as any).EdgeRuntime?.waitUntil;
+    if (typeof waitUntil === 'function') waitUntil(bg);
+    else void bg;
 
 
     return json({
       ok: true, success: true, job_id: parent.id, status: "running",
-      segment_total: segmentTotal, child_task_ids: childTaskIds,
+      segment_total: segmentTotal,
       render_strategy: "per_shot", auto_decision_reason: autoReason,
       target_duration_s: targetDur, actual_duration_s: plannedActual,
     });
