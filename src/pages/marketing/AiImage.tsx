@@ -235,7 +235,7 @@ export default function AiImage() {
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pb-4">
           <div className="container mx-auto max-w-screen-md w-full space-y-4">
             {messages.length === 0 && (
-              <EmptyState />
+              <EmptyState onSmart={() => setSmartOpen(true)} />
             )}
             {messages.map((m) =>
               m.role === 'user' ? (
