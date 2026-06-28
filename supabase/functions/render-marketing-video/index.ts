@@ -582,7 +582,7 @@ Deno.serve(async (req) => {
         input_image_urls: imageUrls, output_url: null,
         meta: {
           job_id: parent.id, video_type: script.video_type,
-          duration: oneShotDur, aspect: ratio,
+          duration: oneShotDur, target_duration_s: totalDur, actual_duration_s: oneShotDur, aspect: ratio,
           mode: refImages.length ? "reference2video" : "text2video",
           render_mode: "one_shot_reference",
           render_strategy: "one_shot",
