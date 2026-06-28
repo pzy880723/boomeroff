@@ -1,53 +1,50 @@
-# 交付共享库接入所需的两样东西
+## 问题
 
-## 1. anon public key（公开可入仓）
+你看到的 `Edge Function returned a non-2xx status code` 是 supabase-js 抛出的原生英文报错。我们其实早就写了一个翻译器 `src/lib/invokeFn.ts` 来把它转成中文（"服务暂时不可用，请稍后再试"），但**全项目 84 处 edge function 调用里只有 2 处走了这个翻译器**，剩下 82 处直接用了原生 `supabase.functions.invoke(...)`，于是英文就漏到你眼前了。
 
-替换 `src/integrations/shared-db/client.ts` 里的 `__REPLACE_WITH_ANON_KEY__`：
+视频生成这条链路 (`MarketingVideo.tsx` / `SurpriseVideoDialog.tsx` / `surpriseJob.ts` / 轮询) 就在这 82 处里，所以渲染失败时你看到的是原始英文，而不是上次给你做的 `videoFailure.ts` 中文映射。
 
+## 要做的事
+
+### 1. 强化翻译器 `src/lib/invokeFn.ts`
+- 在 `humanize()` 里追加视频/渲染场景常见英文：
+  - `WORKER_RESOURCE_LIMIT` → "渲染服务繁忙，请稍后重试（系统已自动降级）"
+  - `not having enough compute resources` → 同上
+  - `RUNTIME_ERROR` / `EarlyDrop` → "渲染任务异常，已记录，请重试"
+  - `Edge Function returned a non-2xx status code` → "服务暂时不可用，请稍后再试"（已有，但要确保兜底命中）
+- 同时调用 `mapVideoFailureToZh()`（已有的 `src/lib/videoFailure.ts`）做二次兜底，把火山引擎的英文错误码再翻一遍。
+
+### 2. 全量替换 82 处 `supabase.functions.invoke(...)` → `invokeFn(...)`
+两者签名一致，可机械替换：
+```ts
+// 旧
+const { data, error } = await supabase.functions.invoke('xxx', { body });
+
+// 新
+import { invokeFn } from '@/lib/invokeFn';
+const { data, error } = await invokeFn('xxx', { body });
 ```
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hcnF3Z3dwcWdsYXRod3R5ZXZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NDkwOTMsImV4cCI6MjA4MTAyNTA5M30.ZzkXVU8X0l1LOvT4wIMWwdarwDSdFm6GTaVhC4Xle2M
-```
+影响文件清单（共 50+ 个）：所有 `src/pages/marketing/*`、`src/components/marketing/*`、`src/components/admin/*`、`src/hooks/use*Recognition*`、`src/lib/surpriseJob.ts` 等。逐个文件加 import + 替换调用，不动业务逻辑。
 
-配套常量（确认无需改动）：
-- `VITE_SUPABASE_URL = https://narqwgwpqglathwtyevz.supabase.co`
-- `VITE_SUPABASE_PROJECT_ID = narqwgwpqglathwtyevz`
-- localStorage key：`sb-narqwgwpqglathwtyevz-auth-token`
+### 3. 重点链路加"看得懂的失败卡片"
+视频生成失败时（轮询发现 `status=failed`），不再只 toast 一行字，改为在 `MarketingVideo.tsx` / `SurpriseVideoDialog.tsx` 直接复用现成的 `VideoFailureCard.tsx`，把以下信息摊开给你看：
+- 第几段失败、失败原因中文化
+- 一句"我们已经做了什么"（例如：已自动去掉首帧/已自动降级到 Fast 模型）
+- 一个明显的"重试这一段"按钮 + 一个"换个策略重试"按钮
 
-## 2. types.ts 同步（First Steps Agent 自取）
+### 4. 顺手修后端的根因
+本次 `WORKER_RESOURCE_LIMIT` 真正的根因是 `render-marketing-video` 里 `face-gateway` 字体加载失败循环重试，上一轮已经改掉。这次只补一行兜底：当 face-gateway 整体失败时，跳过软通过、直接用原图（已有逻辑，但要保证抛出的错误是中文）。
 
-本项目 `src/integrations/supabase/types.ts` 现有 **2959 行**，且每次 migration 后自动重新生成。**不**通过聊天搬运全文。
+## 你最终看到的效果
 
-让 First Steps 项目里的 Agent 执行一次：
+之前：
+> Edge Function returned a non-2xx status code. WORKER_RESOURCE_LIMIT...
 
-```
-cross_project--read_project_file({
-  project: "bef32724-503e-467a-af03-2062176cf921",
-  file_path: "src/integrations/supabase/types.ts",
-  lines: "1-3000"
-})
-```
+之后：
+> 渲染服务暂时繁忙（第 3 段处理超时），系统已自动重试一次仍失败。建议：① 重试这一段；② 换"一镜到底"策略再试一次。
 
-把结果整文件覆盖 `src/integrations/shared-db/types.ts`，然后把 `client.ts` 的泛型从 `any` 改成 `import type { Database } from "./types"`。
+## 不在范围内
 
-## 3. 后续同步约定
-
-每当本项目跑过 migration（你会在我这边收到 schema 变更通知），First Steps Agent 重复上面那条 `cross_project--read_project_file` 即可，不需要我再走人工流程。
-
-## 4. 验证清单（First Steps 那边贴完之后跑）
-
-```text
-□ client.ts 里 anon key 已替换，types 泛型已切到 Database
-□ 启动 dev，打开 /auth 用本项目已有账号登录
-□ DevTools → Application → Local Storage 出现 sb-narqwgwpqglathwtyevz-auth-token
-□ 进 /_authenticated 下任意页面不被踢回 /auth
-□ 浏览器 Console 执行 (await supabase.from('shops').select('id,name').limit(3)) 应返回非空数组
-```
-
-## 5. 等 First Steps 确认走通之后我下一步要做的（仅在你下达「开始」之后执行）
-
-- 重写 `src/api/{assets,copy,aiImage,videoJobs,accounts,publishJobs,shops}.ts`：按 `docs/cross-project-shared-db.md` §3.2 映射到真实表，全部带 `shop_id` 过滤
-- 复制本项目 `src/hooks/useShops.ts`，在 First Steps 落地 `useEffectiveShop()`
-- 删 `src/mocks/` 整目录与 `src/api/client.ts` 的 mock 分支
-- 把 `marketing_video_jobs` / `marketing_assets` / `social_publish_jobs` / `social_publish_targets` 的 Realtime 订阅接到对应页面
-
-**注意**：上述第 5 步必须在你贴完 anon key + types.ts、并确认验证清单全部通过后再启动 —— 否则前端会大面积白屏。
+- 不动数据库结构
+- 不改视频生成本身的算法
+- 不动 i18n 框架（项目还是中文硬编码，全量上 i18n 太大）
