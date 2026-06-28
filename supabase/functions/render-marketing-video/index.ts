@@ -388,10 +388,9 @@ async function submitArkTask(opts: {
 }
 
 /** 组装某段的参考图集合(Seedance 2.0 全 reference 模式,上限 9 张,按权重排序):
- *  1) 本镜 storyboard 静帧(最强信号)
- *  2) 角色身份板(优先用火山真人认证的 asset:// URI)
- *  3) 角色额外参考图
- *  4) 段内绑定的实景照(锁商品/店铺)
+ *  1) 角色身份板(优先用火山真人认证的 asset:// URI)
+ *  2) 角色额外参考图
+ *  3) 本镜 storyboard 静帧/段内绑定实景照(锁商品/店铺)
  */
 function resolveSegmentImages(
   sub: ScriptLike,
@@ -413,16 +412,16 @@ function resolveSegmentImages(
     refs.push(u);
   };
 
-  // 1) 本镜静帧(最高优先级)
-  for (const sc of seq) {
-    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) push(sc.storyboard_url);
-  }
-  // 2) 角色身份板(认证过的 asset:// 优先)
+  // 1) 角色身份板(认证过的 asset:// 优先)。放最前面,既强化人物一致性,也避免软通过去处理每段不同的静帧。
   const verifiedUri: string | undefined = (character as any)?.verified_asset_uri || undefined;
   if (verifiedUri) push(verifiedUri);
   else if (character?.cover_url) push(character.cover_url);
-  // 3) 角色额外参考
+  // 2) 角色额外参考
   for (const u of character?.extra_reference_urls || []) push(u);
+  // 3) 本镜静帧
+  for (const sc of seq) {
+    if (sc && typeof sc.storyboard_url === 'string' && sc.storyboard_url) push(sc.storyboard_url);
+  }
   // 4) 段内绑定的实景照(2.0 全部按 reference 通道收集)
   const picks = pickSegmentImages(sub);
   for (const i of picks.refIndices) if (imageUrls[i]) push(imageUrls[i]);
