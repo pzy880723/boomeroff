@@ -230,6 +230,15 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     } else if (patch.resolution) {
       setResolution(patch.resolution as SeedanceResolution);
     }
+    // 记住"软通过/插画化/无人化"到角色卡(惊喜路径取 pick.picked 上的角色 id)
+    const charId = (pick as any)?.picked?.character_id || (pick as any)?.picked?.character?.id;
+    if (patch.face_pipeline && patch.face_pipeline !== 'auto' && charId) {
+      try {
+        await supabase.from('marketing_characters' as any)
+          .update({ face_pass_level: patch.face_pipeline })
+          .eq('id', charId);
+      } catch (e) { console.warn('[face_pass_level persist]', e); }
+    }
     setRenderError(null);
     setActiveJob(null);
     clearActiveRenderJob(shopId);
