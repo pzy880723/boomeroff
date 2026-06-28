@@ -48,13 +48,13 @@ export function VideoJobDetailPanel({ jobId, defaultExpanded = true }: { jobId: 
     const { data: p } = await supabase.from('marketing_video_jobs' as any)
       .select('id,status,segment_index,segment_total,parent_job_id,fallback_notes,error')
       .eq('id', jobId).maybeSingle();
-    const pj = p as Job | null;
+    const pj = (p as unknown) as Job | null;
     setParent(pj);
     if (pj && (pj.segment_total ?? 0) > 1) {
       const { data: c } = await supabase.from('marketing_video_jobs' as any)
         .select('id,status,segment_index,segment_total,parent_job_id,fallback_notes,error')
         .eq('parent_job_id', jobId).order('segment_index', { ascending: true });
-      setChildren((c as Job[]) || []);
+      setChildren(((c as unknown) as Job[]) || []);
     } else {
       setChildren([]);
     }
