@@ -469,9 +469,16 @@ export default function MarketingLibrary() {
     if (tab === 'photo') list = list.filter((it) => it.kind === 'photo');
     else if (tab === 'copy') list = list.filter((it) => it.kind === 'copy');
     else if (tab === 'video') list = list.filter((it) => it.kind === 'video');
+    if ((tab === 'all' || tab === 'photo') && imgSource !== 'all') {
+      list = list.filter((it) => {
+        // 视频/文案不受来源过滤影响,只过滤 photo
+        if (it.kind !== 'photo') return true;
+        return assetSource(it) === imgSource;
+      });
+    }
     if (activeTag) list = list.filter((it) => Array.isArray(it.tags) && it.tags.includes(activeTag));
     return list;
-  }, [items, shopId, tab, activeTag]);
+  }, [items, shopId, tab, activeTag, imgSource]);
 
   const groups = useMemo(() => {
     const map = new Map<string, any[]>();
