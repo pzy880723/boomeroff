@@ -3,6 +3,7 @@
 // - 父任务(segment_total>1 且无 provider_task_id): 轮询每个子段, 汇总状态;
 //   全部成功后把 segment_urls 返回给前端, 由前端用 mediabunny 拼接并回写。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,6 +88,61 @@ async function updateAssetMeta(
   await admin.from("marketing_assets").update(update).eq("id", asset.id);
 }
 
+async function submitQueuedChild(admin: any, arkKey: string, child: any, userId: string) {
+  if (!child?.id || child.status !== "queued" || child.provider_task_id) {
+    return { submitted: false, reason: "not_queued" };
+  }
+  // 乐观锁:避免前端轮询和 sweep 同时提交同一段。
+  const { data: locked, error: lockErr } = await admin
+    .from("marketing_video_jobs")
+    .update({ status: "running", last_polled_at: new Date().toISOString() })
+    .eq("id", child.id)
+    .eq("status", "queued")
+    .is("provider_task_id", null)
+    .select("*")
+    .maybeSingle();
+  if (lockErr || !locked) return { submitted: false, reason: "lock_failed" };
+
+  const payload = (locked.script || {}).__render_payload || {};
+  if (!payload?.prompt || !payload?.model) {
+    const msg = `第 ${(locked.segment_index ?? 0) + 1} 段参数不完整,请重新生成`;
+    await admin.from("marketing_video_jobs").update({ status: "failed", error: msg }).eq("id", locked.id);
+    return { submitted: false, failed: true, error: msg };
+  }
+
+  const result = await submitSeedanceSegment({
+    arkKey,
+    admin,
+    userId,
+    model: payload.model,
+    prompt: payload.prompt,
+    ratio: payload.ratio || "9:16",
+    duration: Number(payload.duration) || 10,
+    resolution: payload.resolution || "720p",
+    referenceImages: Array.isArray(payload.reference_images) ? payload.reference_images : [],
+    facePipeline: payload.face_pipeline || 'auto',
+  });
+
+  if (!result.ok) {
+    const msg = `第 ${(locked.segment_index ?? 0) + 1} 段创建失败: ${result.error || '火山没有接受请求'}`;
+    await admin.from("marketing_video_jobs").update({
+      status: "failed",
+      error: msg,
+      fallback_notes: result.fallbackNotes || [],
+      last_polled_at: new Date().toISOString(),
+    }).eq("id", locked.id);
+    return { submitted: false, failed: true, error: msg };
+  }
+
+  await admin.from("marketing_video_jobs").update({
+    status: "running",
+    provider_task_id: result.id,
+    fallback_notes: result.fallbackNotes || [],
+    last_polled_at: new Date().toISOString(),
+  }).eq("id", locked.id);
+  return { submitted: true, provider_task_id: result.id, notes: result.fallbackNotes, mode: result.mode };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -137,7 +193,7 @@ Deno.serve(async (req) => {
       const HARD_LOOKBACK_MIN = 60; // 只看最近 1 小时
       const { data: jobs } = await admin
         .from("marketing_video_jobs")
-        .select("id, user_id, status, provider_task_id, parent_job_id, created_at")
+          .select("id, user_id, status, provider_task_id, parent_job_id, created_at, script, segment_index, segment_total")
         .in("status", ["queued", "running"])
         .gt("created_at", new Date(Date.now() - HARD_LOOKBACK_MIN * 60_000).toISOString())
         .limit(30);
@@ -167,6 +223,11 @@ Deno.serve(async (req) => {
         const overTimeout = ageMs > TIMEOUT_MIN * 60_000;
 
         if (!j.provider_task_id) {
+          if (j.parent_job_id && j.status === "queued") {
+            const sub = await submitQueuedChild(admin, ARK_KEY, j, j.user_id);
+            results.push({ id: j.id, status: sub.failed ? "failed" : (sub.submitted ? "running" : j.status), submitted: sub.submitted, error: sub.error });
+            continue;
+          }
           // 没有 ark 任务 id,既无法核实又超时 → 失败
           if (overTimeout) {
             const msg = `渲染超过 ${TIMEOUT_MIN} 分钟未完成,已自动结束,请重试`;
@@ -261,6 +322,20 @@ Deno.serve(async (req) => {
       const segUrls: (string | null)[] = new Array(job.segment_total).fill(null);
       let done = 0;
       let anyFailed: string | null = null;
+      let submittedThisPoll: any = null;
+
+      // 推进器:每次轮询最多提交 1 个未提交的分段。
+      // 这样 render-marketing-video 只负责入队,不会再因为连续图片处理/多段请求被 CPU 杀掉。
+      const nextQueued = segs.find((ch: any) => ch.status === "queued" && !ch.provider_task_id);
+      if (nextQueued) {
+        submittedThisPoll = await submitQueuedChild(admin, ARK_KEY, nextQueued, u.user.id);
+        if (submittedThisPoll?.failed) anyFailed = submittedThisPoll.error;
+        if (submittedThisPoll?.submitted) {
+          nextQueued.status = "running";
+          nextQueued.provider_task_id = submittedThisPoll.provider_task_id;
+          nextQueued.fallback_notes = submittedThisPoll.notes || [];
+        }
+      }
 
       for (const ch of segs) {
         let chStatus = ch.status;
@@ -320,6 +395,7 @@ Deno.serve(async (req) => {
         status: parentStatus, is_parent: true,
           segment_total: job.segment_total, segment_done: done,
           segment_urls: segUrls.map((u) => u ? encodeSegmentUrl(u) : null), error: anyFailed,
+          submitted_segment: submittedThisPoll?.submitted ? true : undefined,
       });
     }
 

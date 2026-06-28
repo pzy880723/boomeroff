@@ -82,6 +82,8 @@ export type RenderPhase = 'queued' | 'running' | 'done' | 'failed';
 export async function pollRenderJob(jobId: string): Promise<{
   phase: RenderPhase; video_url?: string | null; error?: string;
   progress?: { done: number; total: number };
+  ready_to_stitch?: boolean;
+  segment_urls?: string[];
 }> {
   try {
     const { data, error } = await invokeFn('poll-marketing-video', { body: { job_id: jobId } });
@@ -93,6 +95,9 @@ export async function pollRenderJob(jobId: string): Promise<{
     const progress = total > 0 ? { done: Math.min(done, total), total } : undefined;
     if (s === 'succeeded') return { phase: 'done', video_url: d?.video_url || null, progress };
     if (s === 'failed') return { phase: 'failed', error: d?.error, progress };
+    if (s === 'ready_to_stitch' && Array.isArray(d?.segment_urls)) {
+      return { phase: 'running', progress, ready_to_stitch: true, segment_urls: d.segment_urls.filter(Boolean) };
+    }
     if (s === 'queued') return { phase: 'queued', progress };
     return { phase: 'running', progress };
   } catch (e: any) {

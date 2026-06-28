@@ -1,50 +1,56 @@
-## 问题
+我已经看了现有链路、最近任务数据和后端日志。结论很明确：不是你操作的问题，是当前实现还有架构级问题。
 
-你看到的 `Edge Function returned a non-2xx status code` 是 supabase-js 抛出的原生英文报错。我们其实早就写了一个翻译器 `src/lib/invokeFn.ts` 来把它转成中文（"服务暂时不可用，请稍后再试"），但**全项目 84 处 edge function 调用里只有 2 处走了这个翻译器**，剩下 82 处直接用了原生 `supabase.functions.invoke(...)`，于是英文就漏到你眼前了。
+**我确认的问题**
+- `render-marketing-video` 仍然在一个边缘函数里连续提交多段视频任务，还会处理多张参考图；日志里已经连续出现 `CPU Time exceeded`，所以后台提交到一半就被系统杀掉。
+- 最近 3 条 30 秒任务都停在 `running`，但父任务没有 `provider_task_id`，也没有子任务入库；这说明任务创建占位成功了，真正提交分段时函数崩了。
+- 30 秒任务被错误规划成了 `5+10+10+10+10+5+5 = 55 秒`，前后端“分段预览”和后端真实提交不一致。
+- 当前“多段完成后拼接”主要依赖素材库页面触发；如果用户一直停在 AI 视频页，可能不会完成最终合成。
+- `EdgeRuntime.waitUntil` 只能让后台任务继续跑，不能增加 CPU 配额；所以继续把多段提交塞进去，还是会反复失败。
 
-视频生成这条链路 (`MarketingVideo.tsx` / `SurpriseVideoDialog.tsx` / `surpriseJob.ts` / 轮询) 就在这 82 处里，所以渲染失败时你看到的是原始英文，而不是上次给你做的 `videoFailure.ts` 中文映射。
+**修复计划**
+1. **把渲染提交改成真正的任务队列**
+   - `render-marketing-video` 只做轻量事情：创建父任务、创建每个分段的待提交子任务、写入素材占位，然后立刻返回。
+   - 不再在这个函数里循环提交 7 段、处理软通过、调用火山多次。
 
-## 要做的事
+2. **新增单段提交函数**
+   - 新增 `submit-marketing-video-segment`，每次只处理 1 个待提交分段。
+   - 单段里再做：取参考图、必要时软通过、调用 Seedance、写入 `provider_task_id`。
+   - 失败时只标记对应分段失败，并给父任务写中文失败原因。
 
-### 1. 强化翻译器 `src/lib/invokeFn.ts`
-- 在 `humanize()` 里追加视频/渲染场景常见英文：
-  - `WORKER_RESOURCE_LIMIT` → "渲染服务繁忙，请稍后重试（系统已自动降级）"
-  - `not having enough compute resources` → 同上
-  - `RUNTIME_ERROR` / `EarlyDrop` → "渲染任务异常，已记录，请重试"
-  - `Edge Function returned a non-2xx status code` → "服务暂时不可用，请稍后再试"（已有，但要确保兜底命中）
-- 同时调用 `mapVideoFailureToZh()`（已有的 `src/lib/videoFailure.ts`）做二次兜底，把火山引擎的英文错误码再翻一遍。
+3. **改造轮询函数为“推进器”**
+   - `poll-marketing-video` 每次轮询时：
+     - 先提交 1 个还没提交的分段；
+     - 再查询已提交分段状态；
+     - 汇总父任务进度。
+   - 这样前端每 3 秒轮询就能稳定推进任务，不依赖一次后台长任务。
 
-### 2. 全量替换 82 处 `supabase.functions.invoke(...)` → `invokeFn(...)`
-两者签名一致，可机械替换：
-```ts
-// 旧
-const { data, error } = await supabase.functions.invoke('xxx', { body });
+4. **修正时长规划**
+   - 参考图模式统一按 Seedance 可接受的 5/10 秒网格规划。
+   - 30 秒固定规划为 `10+10+10`，不再变成 55 秒。
+   - 45 秒规划为 `10+10+10+10+5`，60 秒规划为 `10×6`。
+   - 前端“分段预览”和后端真实计划使用同一套算法。
 
-// 新
-import { invokeFn } from '@/lib/invokeFn';
-const { data, error } = await invokeFn('xxx', { body });
-```
-影响文件清单（共 50+ 个）：所有 `src/pages/marketing/*`、`src/components/marketing/*`、`src/components/admin/*`、`src/hooks/use*Recognition*`、`src/lib/surpriseJob.ts` 等。逐个文件加 import + 替换调用，不动业务逻辑。
+5. **修复完成后的拼接触发**
+   - AI 视频页看到父任务 `ready_to_stitch` 后，也能直接触发拼接并上传最终视频。
+   - 素材库仍保留拼接兜底，但不再要求用户必须跳去素材库。
 
-### 3. 重点链路加"看得懂的失败卡片"
-视频生成失败时（轮询发现 `status=failed`），不再只 toast 一行字，改为在 `MarketingVideo.tsx` / `SurpriseVideoDialog.tsx` 直接复用现成的 `VideoFailureCard.tsx`，把以下信息摊开给你看：
-- 第几段失败、失败原因中文化
-- 一句"我们已经做了什么"（例如：已自动去掉首帧/已自动降级到 Fast 模型）
-- 一个明显的"重试这一段"按钮 + 一个"换个策略重试"按钮
+6. **修复错误展示**
+   - 如果任务因为资源限制、提交失败、火山拒收、分段失败，会显示中文原因。
+   - 对“卡住但无子任务”的任务，显示“分段提交被中断，系统将重新推进”，而不是一直假装渲染中。
 
-### 4. 顺手修后端的根因
-本次 `WORKER_RESOURCE_LIMIT` 真正的根因是 `render-marketing-video` 里 `face-gateway` 字体加载失败循环重试，上一轮已经改掉。这次只补一行兜底：当 face-gateway 整体失败时，跳过软通过、直接用原图（已有逻辑，但要保证抛出的错误是中文）。
+7. **清理当前卡住任务**
+   - 把最近那些没有子任务、没有 `provider_task_id`、但一直 `running` 的父任务标成失败并写中文原因，避免页面一直卡住。
 
-## 你最终看到的效果
+**验证方式**
+- 用最近同样的 30 秒参考图任务重新提交。
+- 确认任务先入队，随后逐段出现子任务和火山任务 ID。
+- 确认进度条能从 0/3 到 3/3。
+- 确认 AI 视频页可完成拼接并出现“查看视频”。
 
-之前：
-> Edge Function returned a non-2xx status code. WORKER_RESOURCE_LIMIT...
+<presentation-actions>
+  <presentation-open-history>View History</presentation-open-history>
+</presentation-actions>
 
-之后：
-> 渲染服务暂时繁忙（第 3 段处理超时），系统已自动重试一次仍失败。建议：① 重试这一段；② 换"一镜到底"策略再试一次。
-
-## 不在范围内
-
-- 不动数据库结构
-- 不改视频生成本身的算法
-- 不动 i18n 框架（项目还是中文硬编码，全量上 i18n 太大）
+<presentation-actions>
+<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
+</presentation-actions>
