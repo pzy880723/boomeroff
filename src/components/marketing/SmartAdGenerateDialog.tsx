@@ -50,6 +50,10 @@ export function SmartAdGenerateDialog({ open, onOpenChange, shopId, onResults }:
   const [aspect, setAspect] = useState<Aspect>('3:4');
   const [style, setStyle] = useState<StyleKey>('steady');
   const [realism, setRealism] = useState<Realism>('photoreal');
+  const [styleGrade, setStyleGrade] = useState<'documentary' | 'cinematic'>(() => {
+    if (typeof window === 'undefined') return 'documentary';
+    return (localStorage.getItem('smart_ad_style_grade') as any) === 'cinematic' ? 'cinematic' : 'documentary';
+  });
   const [theme, setTheme] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -62,8 +66,9 @@ export function SmartAdGenerateDialog({ open, onOpenChange, shopId, onResults }:
     if (kinds.length === 0) { toast.error('至少选一种广告图类型'); return; }
     setBusy(true);
     try {
+      if (typeof window !== 'undefined') localStorage.setItem('smart_ad_style_grade', styleGrade);
       const { data, error } = await supabase.functions.invoke('ai-smart-ad-images', {
-        body: { shop_id: shopId, kinds, total, aspect, style, realism, theme: theme.trim() },
+        body: { shop_id: shopId, kinds, total, aspect, style, realism, theme: theme.trim(), style_grade: styleGrade },
       });
       if (error) throw error;
       if (!data?.ok) {
@@ -196,9 +201,32 @@ export function SmartAdGenerateDialog({ open, onOpenChange, shopId, onResults }:
             </section>
           )}
 
+          {/* 镜头风格 */}
+          <section className="space-y-2">
+            <p className="text-[12px] text-muted-foreground">⑥ 镜头风格</p>
+            <div className="flex gap-2">
+              {([
+                { key: 'documentary', label: '纪实风（推荐）', desc: '对齐分镜头，无滤镜、忠于实拍' },
+                { key: 'cinematic', label: '电影海报感', desc: '戏剧光影、调色明显' },
+              ] as const).map((g) => (
+                <button
+                  key={g.key}
+                  onClick={() => setStyleGrade(g.key)}
+                  className={[
+                    'flex-1 h-auto py-2 px-2 rounded-md border text-[12px] text-left transition-colors',
+                    styleGrade === g.key ? 'bg-primary/10 border-primary text-primary' : 'border-border hover:border-accent/40 text-foreground',
+                  ].join(' ')}
+                >
+                  <div className="font-medium">{g.label}</div>
+                  <div className="text-[10px] opacity-70 mt-0.5">{g.desc}</div>
+                </button>
+              ))}
+            </div>
+          </section>
+
           {/* 主题 */}
           <section className="space-y-2">
-            <p className="text-[12px] text-muted-foreground">⑥ 主题(可选)</p>
+            <p className="text-[12px] text-muted-foreground">⑦ 主题(可选)</p>
             <Input
               value={theme}
               onChange={(e) => setTheme(e.target.value)}
@@ -207,6 +235,7 @@ export function SmartAdGenerateDialog({ open, onOpenChange, shopId, onResults }:
             />
             <p className="text-[10px] text-muted-foreground">空着也可,由 BOOMER 自由发挥</p>
           </section>
+
 
           <div className="flex gap-2 pt-1">
             <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)} disabled={busy}>取消</Button>

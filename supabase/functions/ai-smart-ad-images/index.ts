@@ -105,14 +105,52 @@ function buildPrompt(opts: {
   refSummary?: string;
   index: number;
   total: number;
+  styleGrade?: "documentary" | "cinematic";
 }): string {
   const { kind, styleKey, realism, aspect, theme, refSummary, index, total } = opts;
+  const styleGrade = opts.styleGrade === "cinematic" ? "cinematic" : "documentary";
   const styleZh = VIDEO_STYLE_LABELS[styleKey];
   const styleEn = VIDEO_STYLE_EN[styleKey];
   const moodEn = STYLE_MOOD_EN[styleKey] || styleEn;
   const lines: string[] = [];
 
-  // 1) 总基调:中文先讲品牌,英文锁电影术语
+  // ============================================================
+  // 默认:documentary 路线 —— 对齐分镜头静帧 photoreal,
+  // 真实店内自然光、白平衡准确、无滤镜、无暖黄/橙调色,
+  // 严格忠诚于参考实景照,不做电影广告化美化。
+  // ============================================================
+  if (styleGrade === "documentary" && realism === "photoreal") {
+    lines.push(`生成一张单帧定格画面。整体观感:真人级写实电影摄影静帧(photorealistic still, shot on full-frame mirrorless, 35mm/50mm prime, f/2.0, ISO 400),自然肤质、真实瞳孔反光、真实景深与动态范围,让人无法分辨是 AI 生成。`);
+    lines.push(`画幅 ${ASPECT_TO_HINT[aspect]},品牌:BOOMER·OFF 中古二手杂货店,真实店内自然光,白平衡准确,色彩还原真实,无滤镜、无暖黄/复古/橙调色,货架密集真实质感。`);
+    lines.push(`风格基调:${styleZh}(${styleEn}) —— 只影响构图/节奏/情绪/光线方向,不改变真实感本身,不要做电影广告大片化处理。`);
+
+    if (kind === "scene") {
+      lines.push(`【场景图】这一张是店内全景/中景,展现真实陈列、货架密度、灯光氛围、空间结构;没有主角人脸特写,可有路过的模糊背影做点缀。构图自然,像真人逛店时随手抓拍的一帧,但要稳定不糊。`);
+    } else if (kind === "product") {
+      lines.push(`【商品特写】把参考图中的商品作为唯一主角,真实陈列环境里的近景特写。严格保留参考图中商品的真实形状、颜色、材质、Logo、印花、标签文字,绝对不要改造商品本体。光线沿用店内现有光,不要加摄影棚硬光、不要加 rim light、不要换干净桌面背景。可允许一只在自然光下的手轻轻托住或拿起商品。`);
+    } else {
+      lines.push(`【人物图】画面里 1 位真实店员或顾客自然出现在店内,与参考图中的真实店面/陈列融为一体;真实皮肤纹理、自然神态、衣着日常生活感(避免明星脸/T 台脸/AI 网红脸);严禁平光证件照、严禁直视镜头摆拍,严禁面部畸变、塑料皮肤、多余手指、双胞胎分身。`);
+    }
+
+    if (refSummary) {
+      lines.push(`画面中必须自然出现的实景元素:${refSummary} —— 请严格参考附带的实景照,把这家店真实的陈列、氛围、商品融入画面,颜色/陈列/光线还原实拍,不要美化、不要调色、不要重排货架、不要新增不存在的商品。`);
+    }
+    if (theme && theme.trim()) {
+      lines.push(`本张图的主题氛围:${theme.trim()}(只影响情绪暗示,不影响真实感)。`);
+    }
+
+    lines.push(STOREFRONT_CONSTRAINT_ZH);
+    lines.push(STOREFRONT_CONSTRAINT_EN);
+    lines.push(`第 ${index + 1} / ${total} 张图,与其它图保持品牌一致但机位、景别请刻意错开,避免雷同。`);
+    lines.push(`画质要求:高清,细节丰富,色彩自然,光影柔和,胶片颗粒微细。`);
+    lines.push(`风格约束:真人写实,非动漫,非卡通,非插画,非 3D 渲染,非 CG。`);
+    lines.push(`NEGATIVE — strictly forbid: any text, subtitle, watermark, logo text, UI, image border; door frame, glass door, door handle, roll-up shutter, door curtain, push door, pull door, street view, sidewalk, road, traffic, outdoor sky; teal-and-orange grade, heavy color grade, Instagram filter preset, vintage wash, warm amber overlay, atmospheric haze, smoke, dust beams, anamorphic lens flare, three-point studio lighting, Rembrandt portrait lighting, rim light, beauty-dish key, magazine cover retouching, oversharpened, HDR halo, plastic AI skin, uncanny face, AI-airbrushed skin, melted hands, extra fingers, twin/clone duplicate, generic stock photo aesthetic, passport-style frontal portrait, real celebrity face, amateur on-camera flash.`);
+    return lines.join("\n");
+  }
+
+  // ============================================================
+  // cinematic 路线(原电影海报感):仅当用户显式切换时使用
+  // ============================================================
   lines.push(`生成一张【电影艺术大片级】单帧画面,品牌:BOOMER·OFF 中古二手杂货店。最终观感必须是"专业团队 + 电影机 + 灯光师"才能拍出来的东西,绝对不能是普通人手机随手拍。`);
   if (realism === "photoreal") {
     lines.push(`真人级写实电影摄影静帧:真实皮肤纹理/真实瞳孔反光/真实景深/真实动态范围,让人无法分辨是 AI 生成。`);
@@ -124,7 +162,6 @@ function buildPrompt(opts: {
   lines.push(`Aspect: ${ASPECT_TO_HINT[aspect]}.`);
   lines.push(`Style mood overlay: ${styleZh} / ${moodEn} —— 叠加在电影基底之上,只影响色温/情绪/光线方向,不要把画面拉回到 Instagram 滤镜或日杂随拍。`);
 
-  // 2) 三种类型差异化
   if (kind === "scene") {
     const sceneDirector = pickOne([
       "Wes Anderson 式正面对称构图,中心透视,层层退到深景的货架,色彩成块分布,微缩感",
@@ -167,6 +204,7 @@ function buildPrompt(opts: {
   lines.push(`NEGATIVE — strictly forbid: any text, subtitle, watermark, logo text, UI, image border; door frame, glass door, door handle, roll-up shutter, door curtain, push door, pull door, store entrance with door, shop front gate, street view, sidewalk, road, traffic, outdoor sky, night street; amateur snapshot, phone photo, flat on-camera flash, harsh direct flash, oversharpened, HDR halo, Instagram filter preset, washed out, overexposed sky, plastic AI skin, uncanny face, AI-airbrushed skin, melted hands, extra fingers, twin/clone duplicate, generic stock photo aesthetic, passport-style frontal portrait, real celebrity face.`);
   return lines.join("\n");
 }
+
 
 
 async function generateOneImage(opts: {
@@ -241,6 +279,7 @@ Deno.serve(async (req) => {
     const styleKey = normalizeStyle(body.style);
     const realism: "photoreal" | "stylized" = body.realism === "stylized" ? "stylized" : "photoreal";
     const theme: string = (body.theme || "").toString().slice(0, 200);
+    const styleGrade: "documentary" | "cinematic" = body.style_grade === "cinematic" ? "cinematic" : "documentary";
     const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     if (!shopId) return json({ ok: false, error: "请先选择店铺" });
 
@@ -306,6 +345,7 @@ Deno.serve(async (req) => {
           const prompt = buildPrompt({
             kind: t.kind, styleKey, realism, aspect, theme,
             refSummary: t.refSummary, index: t.idx, total: tasks.length,
+            styleGrade,
           });
           const dataUrl = await generateOneImage({
             apiKey: LOVABLE_API_KEY, prompt, refImageUrls: [t.refUrl],
