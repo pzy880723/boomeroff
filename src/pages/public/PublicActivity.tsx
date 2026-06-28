@@ -70,12 +70,17 @@ export default function PublicActivity() {
   const [activity, setActivity] = useState<any | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [agreementOpen, setAgreementOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
+
 
   // 反馈模式：已领过券，再次进入此页
   const [feedbackCode, setFeedbackCode] = useState<string | null>(null);
@@ -131,10 +136,47 @@ export default function PublicActivity() {
     setLookupPhone('');
   };
 
+  // 验证码倒计时
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const t = window.setTimeout(() => setOtpCooldown((c) => c - 1), 1000);
+    return () => window.clearTimeout(t);
+  }, [otpCooldown]);
+
+  const sendOtp = async () => {
+    if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
+    if (otpSending || otpCooldown > 0) return;
+    setOtpSending(true);
+    const { data, error: e } = await invokeFn<any>('activity-apply-send-otp', {
+      body: { share_token: shareToken, phone },
+    });
+    setOtpSending(false);
+    if (e) { toast.error(e.message || '验证码发送失败'); return; }
+    const d = data as any;
+    if (d?.already) {
+      const sc = d.short_code;
+      toast.info('该手机号已领取过本活动的优惠券');
+      if (sc) {
+        localStorage.setItem(`activity_claim:${shareToken}`, sc);
+        navigate(`/u/c/${sc}`, { replace: true });
+      } else {
+        // 兜底:打开找回券对话框
+        setLookupPhone(phone);
+        setLookupOpen(true);
+      }
+      return;
+    }
+    if (d?.error) { toast.error(d.error); return; }
+    toast.success('验证码已发送，5 分钟内有效');
+    setOtpCooldown(60);
+  };
+
   const submit = async () => {
     if (!name.trim()) { toast.error('请输入姓名'); return; }
     if (!/^1[3-9]\d{9}$/.test(phone)) { toast.error('请输入正确的手机号'); return; }
+    if (!/^\d{6}$/.test(otpCode)) { toast.error('请输入 6 位手机验证码'); return; }
     if (!agreed) { toast.error('请先勾选并同意《活动参与确认协议》'); return; }
+
     setSubmitting(true);
     const hasImage = Object.values(formData).some((v) => typeof v === 'string' && v.startsWith('data:'));
     setSubmitPhase(hasImage ? 'uploading' : 'submitting');
@@ -145,9 +187,11 @@ export default function PublicActivity() {
         share_token: shareToken,
         applicant_name: name.trim(),
         applicant_phone: phone,
+        otp_code: otpCode,
         form_data: formData,
       },
     });
+
     window.clearTimeout(phaseTimer);
     if (e) {
       setSubmitting(false);
@@ -349,28 +393,44 @@ ${isExplore ? '七' : '六'}、最终解释权
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-[#6b3a18]">手机号 *</Label>
-              <Input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                onBlur={async () => {
-                  if (!/^1[3-9]\d{9}$/.test(phone)) return;
-                  if (feedbackCode) return;
-                  const { data } = await supabase.functions.invoke('activity-feedback', {
-                    body: { action: 'lookup_by_phone', share_token: shareToken, phone },
-                  });
-                  const d = data as any;
-                  if (d?.found && d?.short_code) {
-                    localStorage.setItem(`activity_claim:${shareToken}`, d.short_code);
-                    setFeedbackCode(d.short_code);
-                    toast.info('检测到您已报名，已为您切换到发布反馈');
-                  }
-                }}
-                inputMode="numeric"
-                maxLength={11}
-                className="bg-white border-[#e8d5b3] rounded-xl h-11"
-              />
+              <div className="flex gap-2">
+                <Input
+                  value={phone}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, '').slice(0, 11);
+                    setPhone(v);
+                    setOtpCode('');
+                  }}
 
+                  inputMode="numeric"
+                  maxLength={11}
+                  placeholder="请输入手机号"
+                  className="bg-white border-[#e8d5b3] rounded-xl h-11 flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={sendOtp}
+                  disabled={otpSending || otpCooldown > 0 || !/^1[3-9]\d{9}$/.test(phone)}
+                  className="h-11 px-3 rounded-xl text-[12px] font-medium text-white whitespace-nowrap disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #b3331d 0%, #8e1f10 100%)' }}
+                >
+                  {otpSending ? '发送中…' : otpCooldown > 0 ? `${otpCooldown}s 后重发` : '发送验证码'}
+                </button>
+              </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-[#6b3a18]">短信验证码 *</Label>
+              <Input
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="请输入 6 位验证码"
+                className="bg-white border-[#e8d5b3] rounded-xl h-11 tracking-[0.3em]"
+              />
+              <p className="text-[11px] text-[#6b3a18]/60">为保障活动公平，每个手机号仅可领取一次</p>
+            </div>
+
 
             {fields.map((f) => (
               <div key={f.key} className="space-y-1.5">
