@@ -203,6 +203,7 @@ export default function MarketingVideo() {
         cover_url: character.cover_url,
         extra_reference_urls: character.extra_reference_urls || [],
         verified_asset_uri: (character as any).verified_asset_uri || null,
+        face_pass_level: (character as any).face_pass_level || 'auto',
       } : null;
       const { data, error } = await supabase.functions.invoke('generate-marketing-video-script', {
         body: {
