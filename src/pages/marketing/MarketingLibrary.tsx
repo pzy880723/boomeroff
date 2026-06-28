@@ -681,6 +681,32 @@ export default function MarketingLibrary() {
                       补标签
                     </Button>
                   )}
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={runReclassify}
+                      disabled={reclassing}
+                      title="按规则把历史素材分到 基础/上传/AI 三类"
+                    >
+                      {reclassing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      重整来源
+                    </Button>
+                  )}
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={runCleanTags}
+                      disabled={cleaningTags}
+                      title="批量删除无意义标签(场景1..场景11、英文情绪词、AI智能广告 等)"
+                    >
+                      {cleaningTags ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      清理标签
+                    </Button>
+                  )}
+
+
 
                   {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
                     <Button
