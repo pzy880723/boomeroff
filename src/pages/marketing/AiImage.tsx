@@ -247,16 +247,15 @@ export default function AiImage() {
           </div>
         </div>
 
-        {/* 输入区 */}
+        {/* 输入区(瘦身版) */}
         <div className="border-t border-border bg-card shrink-0">
-          <div className="container mx-auto max-w-screen-md w-full px-4 py-3 space-y-2">
-            {/* 模板/比例 行 */}
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="container mx-auto max-w-screen-md w-full px-3 py-2 space-y-1.5">
+            {/* 顶部工具行:模板 + 智能广告 + 比例 */}
+            <div className="flex items-center gap-1.5 h-7">
               <Popover open={templateOpen} onOpenChange={setTemplateOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-7 text-[12px] gap-1">
-                    <LayoutGrid className="w-3.5 h-3.5" />
-                    模板
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] gap-1">
+                    <LayoutGrid className="w-3 h-3" />模板
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[320px] p-3" align="start">
@@ -264,89 +263,84 @@ export default function AiImage() {
                 </PopoverContent>
               </Popover>
 
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-[11px] gap-1 border-accent/40 text-accent hover:bg-accent/10"
+                onClick={() => setSmartOpen(true)}
+              >
+                <Wand2 className="w-3 h-3" />一键智能广告图
+              </Button>
+
               {pendingTemplate && (
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/30 flex items-center gap-1">
-                  模板:{pendingTemplate.name}
-                  <button onClick={() => setPendingTemplate(null)}><X className="w-3 h-3" /></button>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/30 flex items-center gap-1 truncate max-w-[120px]">
+                  {pendingTemplate.name}
+                  <button onClick={() => setPendingTemplate(null)}><X className="w-2.5 h-2.5" /></button>
                 </span>
               )}
 
-              <div className="ml-auto flex gap-1">
-                {ASPECTS.map((a) => (
-                  <button
-                    key={a}
-                    onClick={() => setAspect(a)}
-                    className={[
-                      'flex flex-col items-center justify-center gap-0.5 px-1.5 h-11 min-w-[40px] rounded-md border transition-colors',
-                      aspect === a ? 'bg-primary/10 border-primary text-primary' : 'bg-card border-border text-muted-foreground hover:border-accent/50',
-                    ].join(' ')}
-                    aria-label={`比例 ${a}`}
-                  >
-                    <AspectIcon ratio={a} active={aspect === a} />
-                    <span className="text-[10px] leading-none">{a}</span>
-                  </button>
-                ))}
+              <div className="ml-auto">
+                <Popover open={aspectOpen} onOpenChange={setAspectOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] gap-1">
+                      <AspectIcon ratio={aspect} active />
+                      {aspect}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-2" align="end">
+                    <div className="flex gap-1.5">
+                      {ASPECTS.map((a) => (
+                        <button
+                          key={a}
+                          onClick={() => { setAspect(a); setAspectOpen(false); }}
+                          className={[
+                            'flex flex-col items-center justify-center gap-0.5 px-1.5 h-11 min-w-[44px] rounded-md border transition-colors',
+                            aspect === a ? 'bg-primary/10 border-primary text-primary' : 'bg-card border-border text-muted-foreground hover:border-accent/50',
+                          ].join(' ')}
+                          aria-label={`比例 ${a}`}
+                        >
+                          <AspectIcon ratio={a} active={aspect === a} />
+                          <span className="text-[10px] leading-none">{a}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 
-            {/* 附图条 */}
+            {/* 附图条(瘦) */}
             {(refs.length > 0 || uploading) && (
-              <div className="flex gap-2 items-center overflow-x-auto py-1">
+              <div className="flex gap-1.5 items-center overflow-x-auto">
                 {refs.map((url, i) => (
                   <div key={url} className="relative shrink-0 group">
-                    <img src={url} alt="" className="w-14 h-14 rounded object-cover border border-border" />
+                    <img src={url} alt="" className="w-10 h-10 rounded object-cover border border-border" />
                     <button
                       onClick={() => insertMention(i)}
-                      className="absolute -bottom-1 -left-1 text-[10px] bg-primary text-primary-foreground rounded px-1 leading-tight"
+                      className="absolute -bottom-1 -left-1 text-[9px] bg-primary text-primary-foreground rounded px-1 leading-tight"
                     >@{i + 1}</button>
                     <button
                       onClick={() => removeRef(url)}
-                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-foreground text-background flex items-center justify-center"
-                    ><X className="w-2.5 h-2.5" /></button>
+                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-foreground text-background flex items-center justify-center"
+                    ><X className="w-2 h-2" /></button>
                   </div>
                 ))}
                 {uploading && (
-                  <div className="w-14 h-14 rounded border border-dashed border-border flex items-center justify-center">
-                    <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                  <div className="w-10 h-10 rounded border border-dashed border-border flex items-center justify-center">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
                   </div>
                 )}
               </div>
             )}
 
-            {/* @ 提及链:已被 @ 的图缩略图 */}
-            {mentionedIdxs.length > 0 && (
-              <div className="flex gap-1.5 items-center flex-wrap pt-0.5">
-                <span className="text-[10px] text-muted-foreground">已@:</span>
-                {mentionedIdxs.map((i) => (
-                  <div key={i} className="relative">
-                    <img src={refs[i]} alt="" className="w-8 h-8 rounded object-cover border border-primary/50" />
-                    <span className="absolute -bottom-0.5 -left-0.5 text-[9px] bg-primary text-primary-foreground rounded px-0.5 leading-tight">@{i + 1}</span>
-                    <button
-                      onClick={() => removeMention(i)}
-                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-foreground text-background flex items-center justify-center"
-                      aria-label={`移除 @${i + 1}`}
-                    ><X className="w-2 h-2" /></button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* 输入框 + 发送 */}
-            <div className="flex items-end gap-2">
-              <div className="flex flex-col gap-1">
-                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => fileInputRef.current?.click()} disabled={refs.length >= 4}>
-                  <Paperclip className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setPickerOpen(true)} disabled={refs.length >= 4}>
-                  <ImagePlus className="w-4 h-4" />
-                </Button>
-              </div>
+            {/* 输入框 + 内嵌「+」 + 发送 */}
+            <div className="flex items-end gap-1.5">
               <div className="relative flex-1">
                 {/* @ 弹层 */}
                 {mentionOpen && (
                   <div className="absolute left-0 right-0 bottom-full mb-1 z-20 bg-popover border border-border rounded-md shadow-lg p-2">
                     {refs.length === 0 ? (
-                      <div className="text-[11px] text-muted-foreground px-1 py-2">先点左侧 📎 或 🖼 加参考图,再用 @ 指定哪一张</div>
+                      <div className="text-[11px] text-muted-foreground px-1 py-2">先点输入框左侧 + 加参考图,再用 @ 指定哪一张</div>
                     ) : (
                       <div className="flex gap-2 overflow-x-auto">
                         {refs.map((url, i) => (
@@ -393,19 +387,63 @@ export default function AiImage() {
                       send();
                     }
                   }}
-                  placeholder={refs.length === 0 ? '描述你想要的画面…(回车发送)' : '怎么改这些参考图?输入 @ 选择哪一张'}
-                  rows={2}
-                  className="resize-none w-full min-h-[60px]"
+                  placeholder={refs.length === 0 ? '描述想要的画面…(回车发送)' : '怎么改?@ 指定参考图'}
+                  rows={1}
+                  className="resize-none w-full min-h-[40px] max-h-[88px] pl-9 text-[13px]"
                 />
+                {/* + 菜单按钮(放进 textarea 左下角) */}
+                <Popover open={plusOpen} onOpenChange={setPlusOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="absolute left-1.5 bottom-1.5 w-6 h-6 rounded-full bg-muted hover:bg-accent/15 flex items-center justify-center text-muted-foreground"
+                      aria-label="添加参考图或一键生成"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-44 p-1" align="start" side="top">
+                    <button
+                      className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-accent/10 disabled:opacity-40"
+                      disabled={refs.length >= 4}
+                      onClick={() => { setPlusOpen(false); fileInputRef.current?.click(); }}
+                    ><Paperclip className="w-3.5 h-3.5" />上传图片</button>
+                    <button
+                      className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-accent/10 disabled:opacity-40"
+                      disabled={refs.length >= 4}
+                      onClick={() => { setPlusOpen(false); setPickerOpen(true); }}
+                    ><ImagePlus className="w-3.5 h-3.5" />从素材库选</button>
+                    <button
+                      className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-accent/10 text-accent"
+                      onClick={() => { setPlusOpen(false); setSmartOpen(true); }}
+                    ><Wand2 className="w-3.5 h-3.5" />一键智能广告图</button>
+                  </PopoverContent>
+                </Popover>
               </div>
-              <Button onClick={send} disabled={busy || (!input.trim() && !pendingTemplate)} size="icon" className="h-9 w-9">
+              <Button onClick={send} disabled={busy || (!input.trim() && !pendingTemplate)} size="icon" className="h-9 w-9 shrink-0">
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </Button>
             </div>
-            <p className="text-[10px] text-muted-foreground text-center">最多挂 4 张参考图 · 每日 50 张额度 · 历史不保存,出图自动进素材库</p>
+            {/* @ 提及链 */}
+            {mentionedIdxs.length > 0 && (
+              <div className="flex gap-1 items-center flex-wrap">
+                <span className="text-[9px] text-muted-foreground">已@:</span>
+                {mentionedIdxs.map((i) => (
+                  <div key={i} className="relative">
+                    <img src={refs[i]} alt="" className="w-6 h-6 rounded object-cover border border-primary/50" />
+                    <button
+                      onClick={() => removeMention(i)}
+                      className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-foreground text-background flex items-center justify-center"
+                      aria-label={`移除 @${i + 1}`}
+                    ><X className="w-2 h-2" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
 
       <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => onPickFiles(e.target.files)} />
 
