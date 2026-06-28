@@ -623,6 +623,7 @@ Deno.serve(async (req) => {
       user_id: u.user.id, script: s.sub, status: "queued", shop_id: shopId,
       provider: "volcengine_seedance", provider_task_id: (s.r as any).id,
       parent_job_id: parent.id, segment_index: s.i, segment_total: segmentTotal,
+      fallback_notes: s.fallbackNotes,
     }));
     const { error: childErr } = await admin.from("marketing_video_jobs").insert(childRows);
     if (childErr) {
