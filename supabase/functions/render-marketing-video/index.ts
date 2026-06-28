@@ -501,6 +501,7 @@ Deno.serve(async (req) => {
         user_id: u.user.id, script, status: "running", shop_id: shopId,
         provider: "volcengine_seedance", provider_task_id: r.id,
         segment_total: 1, segment_index: 0, parent_job_id: null,
+        fallback_notes: fallbackNotes,
       }).select().single();
       if (pErr || !parent) {
         console.error("[render one_shot] parent insert", pErr);
