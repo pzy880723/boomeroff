@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Loader2, Check, Upload, Maximize2 } from 'lucide-react';
+import { Loader2, Check, Upload, Maximize2, Camera, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadMarketingImages, type UploadStage } from '@/pages/marketing/uploadMarketingImages';
 import { fileSha256 } from '@/lib/fileSha256';
@@ -16,17 +16,20 @@ import { UploadProgressBar, ItemTile, type UploadTileItem } from './UploadProgre
 import { DEFAULT_TAGS } from './AssetTagDialog';
 import { thumbUrl } from '@/lib/imageUrl';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
+import { assetSource, type AssetSource } from '@/lib/assetSource';
 
 type Pending = UploadTileItem & { file: File };
 
 export function LibraryImagePickerDialog({
-  open, onOpenChange, shopId, max = 20, onConfirm,
+  open, onOpenChange, shopId, max = 20, onConfirm, defaultSource = 'upload',
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   shopId: string | null;
   max?: number;
   onConfirm: (urls: string[]) => void;
+  /** 默认只显示「我上传的」素材;选视频参考图时建议保留默认 */
+  defaultSource?: AssetSource | 'all';
 }) {
   const { user } = useAuth();
   const [items, setItems] = useState<any[]>([]);
@@ -34,6 +37,7 @@ export function LibraryImagePickerDialog({
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Pending[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [source, setSource] = useState<AssetSource | 'all'>(defaultSource);
   const [lbIdx, setLbIdx] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const loadTimerRef = useRef<number | null>(null);
@@ -63,9 +67,10 @@ export function LibraryImagePickerDialog({
     if (!open || !user) return;
     setSel(new Set());
     setActiveTag(null);
+    setSource(defaultSource);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, user, shopId]);
+  }, [open, user, shopId, defaultSource]);
 
   // 实时订阅:同 shop 内 marketing_assets 变化触发刷新
   useEffect(() => {
@@ -78,16 +83,22 @@ export function LibraryImagePickerDialog({
     return () => { supabase.removeChannel(ch); };
   }, [open, user, shopId]);
 
+  const sourceFiltered = useMemo(() => {
+    if (source === 'all') return items;
+    return items.filter((it) => assetSource(it) === source);
+  }, [items, source]);
+
   const tagOptions = useMemo(() => {
     const set = new Set<string>(DEFAULT_TAGS);
-    items.forEach((it) => (it.tags || []).forEach((t: string) => set.add(t)));
+    sourceFiltered.forEach((it) => (it.tags || []).forEach((t: string) => set.add(t)));
     return Array.from(set);
-  }, [items]);
+  }, [sourceFiltered]);
 
   const filteredItems = useMemo(() => {
-    if (!activeTag) return items;
-    return items.filter((it) => Array.isArray(it.tags) && it.tags.includes(activeTag));
-  }, [items, activeTag]);
+    if (!activeTag) return sourceFiltered;
+    return sourceFiltered.filter((it) => Array.isArray(it.tags) && it.tags.includes(activeTag));
+  }, [sourceFiltered, activeTag]);
+
 
   const toggle = (url: string) => {
     const next = new Set(sel);
@@ -251,6 +262,26 @@ export function LibraryImagePickerDialog({
             ref={fileInput} type="file" accept="image/*" multiple className="hidden"
             onChange={(e) => { onUpload(e.target.files); e.target.value = ''; }}
           />
+        </div>
+
+        {/* 来源分段 */}
+        <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px]">
+          {([
+            { v: 'upload', label: '我上传的', Icon: Camera },
+            { v: 'generated', label: 'AI 生成', Icon: Sparkles },
+            { v: 'all', label: '全部', Icon: null as any },
+          ] as { v: AssetSource | 'all'; label: string; Icon: any }[]).map((opt) => (
+            <button
+              key={opt.v}
+              onClick={() => setSource(opt.v)}
+              className={[
+                'inline-flex items-center gap-1 px-2.5 py-1 rounded-full transition-colors',
+                source === opt.v ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+              ].join(' ')}
+            >
+              {opt.Icon && <opt.Icon className="w-3 h-3" />}{opt.label}
+            </button>
+          ))}
         </div>
 
         {/* tag 筛选 */}

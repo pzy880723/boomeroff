@@ -23,6 +23,8 @@ import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
 import { Skeleton } from '@/components/ui/skeleton';
 import { extractFirstFrame } from '@/lib/extractFirstFrame';
 import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
+import { assetSource, type AssetSource } from '@/lib/assetSource';
+import { Camera, Sparkles } from 'lucide-react';
 
 type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
@@ -47,6 +49,10 @@ export default function MarketingLibrary() {
   const [verifyCharacter, setVerifyCharacter] = useState<any | null>(null);
   const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
+  const [imgSource, setImgSource] = useState<AssetSource | 'all'>(() => {
+    try { return (localStorage.getItem('lib.imgSource') as any) || 'upload'; } catch { return 'upload'; }
+  });
+  useEffect(() => { try { localStorage.setItem('lib.imgSource', imgSource); } catch {} }, [imgSource]);
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
   const currentShop = shops.find((s) => s.id === shopId);
@@ -463,9 +469,16 @@ export default function MarketingLibrary() {
     if (tab === 'photo') list = list.filter((it) => it.kind === 'photo');
     else if (tab === 'copy') list = list.filter((it) => it.kind === 'copy');
     else if (tab === 'video') list = list.filter((it) => it.kind === 'video');
+    if ((tab === 'all' || tab === 'photo') && imgSource !== 'all') {
+      list = list.filter((it) => {
+        // 视频/文案不受来源过滤影响,只过滤 photo
+        if (it.kind !== 'photo') return true;
+        return assetSource(it) === imgSource;
+      });
+    }
     if (activeTag) list = list.filter((it) => Array.isArray(it.tags) && it.tags.includes(activeTag));
     return list;
-  }, [items, shopId, tab, activeTag]);
+  }, [items, shopId, tab, activeTag, imgSource]);
 
   const groups = useMemo(() => {
     const map = new Map<string, any[]>();
@@ -667,6 +680,28 @@ export default function MarketingLibrary() {
             )}
           </div>
 
+          {/* 来源分段:我上传的 / AI 生成 / 全部 */}
+          {(tab === 'all' || tab === 'photo') && (
+            <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px]">
+              {([
+                { v: 'upload', label: '我上传的', Icon: Camera },
+                { v: 'generated', label: 'AI 生成', Icon: Sparkles },
+                { v: 'all', label: '全部', Icon: null as any },
+              ] as { v: AssetSource | 'all'; label: string; Icon: any }[]).map((opt) => (
+                <button
+                  key={opt.v}
+                  onClick={() => setImgSource(opt.v)}
+                  className={[
+                    'inline-flex items-center gap-1 px-2.5 py-1 rounded-full transition-colors',
+                    imgSource === opt.v ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+                  ].join(' ')}
+                >
+                  {opt.Icon && <opt.Icon className="w-3 h-3" />}{opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* tag 筛选 */}
           {(tab === 'all' || tab === 'photo') && tagOptions.length > 0 && (
             <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5">
@@ -777,6 +812,18 @@ export default function MarketingLibrary() {
                                 ? <Video className="w-6 h-6 text-muted-foreground" />
                                 : <ImageIcon className="w-6 h-6 text-muted-foreground" />}
                             </div>
+                          )}
+
+                          {/* 来源角标:仅 photo,在「全部」视图下显示以区分 */}
+                          {it.kind === 'photo' && imgSource === 'all' && !manageMode && (
+                            <span
+                              className="absolute top-1 left-1 w-4 h-4 rounded-full bg-black/55 backdrop-blur text-white flex items-center justify-center"
+                              title={assetSource(it) === 'generated' ? 'AI 生成' : '我上传的'}
+                            >
+                              {assetSource(it) === 'generated'
+                                ? <Sparkles className="w-2.5 h-2.5" />
+                                : <Camera className="w-2.5 h-2.5" />}
+                            </span>
                           )}
 
 

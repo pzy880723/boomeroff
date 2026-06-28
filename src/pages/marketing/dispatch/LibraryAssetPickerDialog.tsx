@@ -3,12 +3,13 @@ import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, Check, Play, Maximize2 } from 'lucide-react';
+import { Loader2, Check, Play, Maximize2, Camera, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { thumbUrl, thumbSrcSet } from '@/lib/imageUrl';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
+import { assetSource, type AssetSource } from '@/lib/assetSource';
 
 export type PickedAsset =
   | { kind: 'video'; asset: any }
@@ -33,8 +34,9 @@ export function LibraryAssetPickerDialog({
   const [selImgs, setSelImgs] = useState<Map<string, string>>(new Map()); // assetId -> url
   const [lbIdx, setLbIdx] = useState<number | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
+  const [imgSource, setImgSource] = useState<AssetSource | 'all'>('upload');
 
-  useEffect(() => { if (open) { setTab(defaultTab); setSelVideo(null); setSelImgs(new Map()); setLbIdx(null); setLoadedImgs(new Set()); } }, [open, defaultTab]);
+  useEffect(() => { if (open) { setTab(defaultTab); setSelVideo(null); setSelImgs(new Map()); setLbIdx(null); setLoadedImgs(new Set()); setImgSource('upload'); } }, [open, defaultTab]);
 
   useEffect(() => {
     if (!open || !user) return;
@@ -127,14 +129,32 @@ export function LibraryAssetPickerDialog({
             )}
           </TabsContent>
 
-          <TabsContent value="image_text" className="mt-3">
-            {loading ? (
-              <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-accent" /></div>
-            ) : images.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">暂无图片素材</div>
-            ) : (
+          <TabsContent value="image_text" className="mt-3 space-y-2">
+            <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px]">
+              {([
+                { v: 'upload', label: '我上传的', Icon: Camera },
+                { v: 'generated', label: 'AI 生成', Icon: Sparkles },
+                { v: 'all', label: '全部', Icon: null as any },
+              ] as { v: AssetSource | 'all'; label: string; Icon: any }[]).map((opt) => (
+                <button
+                  key={opt.v}
+                  onClick={() => setImgSource(opt.v)}
+                  className={[
+                    'inline-flex items-center gap-1 px-2.5 py-1 rounded-full transition-colors',
+                    imgSource === opt.v ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+                  ].join(' ')}
+                >
+                  {opt.Icon && <opt.Icon className="w-3 h-3" />}{opt.label}
+                </button>
+              ))}
+            </div>
+            {(() => {
+              const imgList = imgSource === 'all' ? images : images.filter((it) => assetSource(it) === imgSource);
+              if (loading) return (<div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-accent" /></div>);
+              if (imgList.length === 0) return (<div className="py-8 text-center text-sm text-muted-foreground">暂无图片素材</div>);
+              return (
               <div className="grid grid-cols-3 gap-2">
-                {images.map((it, i) => {
+                {imgList.map((it, i) => {
                   const active = selImgs.has(it.id);
                   const thumb = thumbUrl(it.output_url, 240) || it.output_url;
                   const srcSet = thumbSrcSet(it.output_url, 120);
@@ -168,14 +188,16 @@ export function LibraryAssetPickerDialog({
                   );
                 })}
               </div>
-            )}
+              );
+            })()}
           </TabsContent>
         </Tabs>
 
         <ImageLightbox
           open={lbIdx !== null}
           onClose={() => setLbIdx(null)}
-          images={images.map((it) => it.output_url as string).filter(Boolean)}
+          images={(imgSource === 'all' ? images : images.filter((it) => assetSource(it) === imgSource))
+            .map((it) => it.output_url as string).filter(Boolean)}
           initialIndex={lbIdx ?? 0}
         />
 
