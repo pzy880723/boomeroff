@@ -503,15 +503,24 @@ function AspectIcon({ ratio, active }: { ratio: Aspect; active?: boolean }) {
 
 // ===== 子组件 =====
 
-function EmptyState() {
+function EmptyState({ onSmart }: { onSmart?: () => void }) {
   return (
     <div className="pt-10 flex flex-col items-center text-center">
       <img src={boomerIdle} alt="" className="w-20 h-20 object-contain opacity-90" draggable={false} />
       <h3 className="font-display text-lg mt-3">和 BOOMER 聊出一张图</h3>
       <p className="text-[12px] text-muted-foreground mt-2 max-w-[280px] leading-relaxed">
         告诉它你想要什么 —— 文生图、改图、多图融合都行。<br />
-        懒得想?点左下角"模板"挑一个直接发。
+        想批量出广告图?试试下面的「一键智能广告图」。
       </p>
+      {onSmart && (
+        <Button
+          onClick={onSmart}
+          className="mt-4 gap-1 bg-accent text-accent-foreground hover:bg-accent/90"
+          size="sm"
+        >
+          <Wand2 className="w-3.5 h-3.5" />一键智能广告图(自动选素材)
+        </Button>
+      )}
       <div className="mt-5 grid grid-cols-1 gap-2 max-w-[300px] w-full text-left">
         <Tip icon={<Sparkles className="w-3.5 h-3.5" />} title="文生图" desc='"一只手捧着米色复古马克杯,木质桌面,自然光"' />
         <Tip icon={<ImagePlus className="w-3.5 h-3.5" />} title="图生图" desc="挂 1 张图 + '换成黄昏暖光'" />
