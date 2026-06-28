@@ -23,7 +23,7 @@ const ASPECTS: Aspect[] = ['1:1', '3:4', '9:16', '16:9'];
 
 type Msg =
   | { id: string; role: 'user'; text: string; refs: string[]; aspect: Aspect; templateName?: string }
-  | { id: string; role: 'ai'; status: 'loading' | 'done' | 'error'; outputUrl?: string; error?: string };
+  | { id: string; role: 'ai'; status: 'loading' | 'done' | 'error'; outputUrl?: string; error?: string; label?: string };
 
 const uid = () => Math.random().toString(36).slice(2);
 
