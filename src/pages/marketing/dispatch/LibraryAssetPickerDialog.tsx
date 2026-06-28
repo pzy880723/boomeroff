@@ -202,8 +202,12 @@ export function LibraryAssetPickerDialog({
         <ImageLightbox
           open={lbIdx !== null}
           onClose={() => setLbIdx(null)}
-          images={(imgSource === 'all' ? images : images.filter((it) => assetSource(it) === imgSource))
-            .map((it) => it.output_url as string).filter(Boolean)}
+          images={images.filter((it) => {
+            if (imgSource === 'all') return true;
+            const s = assetSource(it);
+            if (imgSource === 'upload') return s === 'upload' || s === 'base';
+            return s === imgSource;
+          }).map((it) => it.output_url as string).filter(Boolean)}
           initialIndex={lbIdx ?? 0}
         />
 
