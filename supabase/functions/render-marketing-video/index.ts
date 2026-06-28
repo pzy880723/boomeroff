@@ -10,7 +10,7 @@ import { pickSegmentImages, type ScriptLike } from "../_shared/marketing-segment
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 import { STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
-import { softPassReferences } from "../_shared/face-gateway.ts";
+import { softPassFaceImage, softPassReferences } from "../_shared/face-gateway.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -438,12 +438,20 @@ function resolveSegmentImages(
 
 async function softPassKeyReferences(
   urls: string[],
-  opts: { admin: any; userId: string; max?: number },
+  opts: { admin: any; userId: string; max?: number; cache?: Map<string, Promise<string>> },
 ): Promise<string[]> {
   const max = Math.max(1, Math.min(3, opts.max ?? 2));
   const verified = urls.filter((u) => typeof u === 'string' && u.startsWith('asset://')).slice(0, 1);
   const httpRefs = urls.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u)).slice(0, max);
-  const marked = httpRefs.length ? await softPassReferences(httpRefs, { admin: opts.admin, userId: opts.userId }) : [];
+  const cache = opts.cache;
+  const marked = await Promise.all(httpRefs.map(async (u) => {
+    if (cache) {
+      if (!cache.has(u)) cache.set(u, softPassFaceImage(u, { admin: opts.admin, userId: opts.userId }).catch(() => u));
+      return await cache.get(u)!;
+    }
+    try { return await softPassFaceImage(u, { admin: opts.admin, userId: opts.userId }); }
+    catch { return u; }
+  }));
   const out = [...verified, ...marked].filter(Boolean);
   return (out.length ? out : urls.slice(0, 1)).slice(0, SEEDANCE_MAX_REFS);
 }
