@@ -1,33 +1,48 @@
 ## 目标
-点"进入后台"后立即看到后台页面，去除"登录框还停留一会"的卡顿感。
 
-## 改动点
+把当前 React + Vite 项目接入 Capacitor，让你可以导出到 GitHub 后在本地（或 Workbuddy 之类的工具）一键打包成 iOS / Android 原生 APP。Lovable 端只负责"集成 + 配置 + 文档"，不动业务代码、不动现有 UI。
 
-### 1. 预加载 Portal 路由 chunk（最关键）
-- 在 `src/pages/PortalGuard.tsx` 同目录暴露一个 `preloadPortal()` 帮助函数，内部就是触发 `import('./Portal')` 与 `import('./PortalGuard')`。
-- 在 `src/components/layout/Header.tsx`：
-  - 用户**单击 logo 第 1 下**就调用 `preloadPortal()`（5 次点击触发密码框，等用户输完密码时 chunk 多半已就绪）。
-  - 密码框 `onOpenChange(true)` 时再保险调用一次。
-  - 输入框 `onFocus` 也调用一次。
+## 要做的事
 
-### 2. 立即跳转 + 关闭框无动画停留
-- `handleVerify` 改为：先 `navigate('/portal')`，再 `setPwdOpen(false)`，让路由切换先发生，框跟随卸载，不再"先等动画再跳"。
-- 按钮加 `loading` 态（`Loader2` 转圈 + 禁用），点击瞬间给反馈，避免用户重复点。
+### 1. 安装 Capacitor 依赖
+- `@capacitor/core`
+- `@capacitor/cli`（dev 依赖）
+- `@capacitor/ios`
+- `@capacitor/android`
 
-### 3. 友好的路由 fallback
-- `App.tsx` 的 `RouteFallback` 改为带"正在进入后台…"文案的居中卡片（不只是一个孤零零的小转圈）。仅文案层面，不影响其他懒加载页。
-  - 如果不想全局变化，可以单独给 `/portal` 包一个带文案的 `Suspense`。倾向后者，影响面小。
+### 2. 创建 `capacitor.config.ts`
+配置如下：
+- `appId`: `app.lovable.bef32724503e467aaf032062176cf921`
+- `appName`: `boomeroff`
+- `webDir`: `dist`
+- `server.url`: 指向 Lovable 沙箱预览 URL，开启 **热重载**（你在 Lovable 里改 UI，手机 APP 实时刷新，不用重新打包）
+- `server.cleartext`: `true`
 
-### 4. PortalGuard 权限 loading 体验
-- `PortalGuard` 已有 `loading` 分支，把里面的小转圈换成同款"正在进入后台…"占位，保持视觉连贯（不闪两种 loading）。
-- 不改权限查询逻辑本身（`usePermissions` 在登录后通常已经预热完毕，无需重复查询）。
+### 3. 新建 `docs/capacitor-setup.md` 启动手册
+中文版操作清单，复制粘贴就能跑：
+- 导出到 GitHub → `git pull` → `npm install`
+- `npx cap add ios` / `npx cap add android`
+- `npm run build && npx cap sync`
+- `npx cap run ios` / `npx cap run android`
+- 常见坑：iOS 必须 Mac + Xcode + 苹果开发者账号 $99/年；Android 装 Android Studio + Google Play $25 一次性
+- 上架前要把 `server.url` 注释掉重新打包（不然 APP 永远从 Lovable 沙箱加载，沙箱关掉就白屏）
 
-## 不动的部分
-- 不改 `useAuth`、`usePermissions` 的数据查询逻辑。
-- 不改密码校验、`sessionStorage` 解锁逻辑。
-- 不改其他路由的懒加载策略。
+### 4. 暂不做的事（等你确认需求再加）
+- ❌ 不装相机 / 推送 / 相册插件 —— 等你说"我要做扫码 / 推送营销消息"再装对应 Capacitor 插件
+- ❌ 不改任何现有页面或业务逻辑
+- ❌ 不动 PWA manifest（如果你以后想 PWA + 原生双轨，再说）
 
-## 预期效果
-- 用户点 logo 时 Portal chunk 已经在后台下载。
-- 点"进入后台"瞬间路由切换，框直接消失（无动画停顿）。
-- 即便 chunk 尚未就绪，看到的也是"正在进入后台…"的明确提示，而不是"登录框还在 + 小转圈"的错觉。
+## 你拿到后要做什么
+
+1. 点右上角 **GitHub** 导出项目
+2. `git pull` 到本地
+3. 按 `docs/capacitor-setup.md` 一步步跑
+4. 第一次出包成功后回来告诉我，需要哪些原生能力（推送 / 相机 / 生物识别 / 分享…），我再加插件
+5. 同时建议读一遍官方博客把坑提前过一遍：https://lovable.dev/blog/2025-02-21-capacitor-guide
+
+## 技术细节
+
+- 不引入 `vite-plugin-pwa`、Workbox、Service Worker（与 Capacitor 冲突且当前不需要）
+- 不改 `vite.config.ts` 的 `base` —— Capacitor 走 `webDir: dist` + 服务端热重载 URL，不需要相对路径
+- `capacitor.config.ts` 用 TS 版本（项目本身就是 TS）
+- `package.json` 不加 `"main"` 字段（Capacitor 不需要，那个是 Electron 才需要的）
