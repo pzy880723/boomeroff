@@ -24,6 +24,9 @@ const Portal = lazy(() => import("./pages/Portal"));
 const PortalGuard = lazy(() =>
   import("./pages/PortalGuard").then((m) => ({ default: m.PortalGuard }))
 );
+const PortalLoadingLazy = lazy(() =>
+  import("./pages/PortalGuard").then((m) => ({ default: m.PortalLoading }))
+);
 const Invite = lazy(() => import("./pages/Invite"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CheckInHistory = lazy(() => import("./pages/CheckInHistory"));
@@ -95,9 +98,11 @@ const App = () => {
               <Route
                 path="/portal"
                 element={
-                  <PortalGuard>
-                    <Portal />
-                  </PortalGuard>
+                  <Suspense fallback={<PortalLoadingLazy />}>
+                    <PortalGuard>
+                      <Portal />
+                    </PortalGuard>
+                  </Suspense>
                 }
               />
               <Route path="/admin/users" element={<Navigate to="/portal" replace />} />

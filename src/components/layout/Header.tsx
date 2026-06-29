@@ -15,10 +15,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { LogOut, User, Shield } from 'lucide-react';
+import { LogOut, User, Shield, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ROLE_LABELS } from '@/types';
 import { useLogoTapCounter, verifyPortalPassword, unlockPortal } from '@/hooks/useAdminPortal';
+import { preloadPortal } from '@/pages/preloadPortal';
 import { toast } from 'sonner';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 
@@ -29,14 +30,19 @@ export function Header() {
   const [pwd, setPwd] = useState('');
   const [pwdError, setPwdError] = useState(false);
 
+  const [entering, setEntering] = useState(false);
+
   const { tap } = useLogoTapCounter(() => {
     setPwd('');
     setPwdError(false);
     setPwdOpen(true);
+    preloadPortal();
   });
 
   const handleLogoClick = (e: React.MouseEvent) => {
     e.preventDefault();
+    // 第一下点击就开始预热后台 chunk，等用户输完密码时多半已就绪
+    preloadPortal();
     tap();
     // 单击行为：回首页（仅在不在首页时跳转）
     if (window.location.pathname !== '/') {
@@ -46,11 +52,14 @@ export function Header() {
 
   const handleVerify = () => {
     if (verifyPortalPassword(pwd)) {
+      setEntering(true);
       unlockPortal();
+      preloadPortal();
+      // 先跳路由再关弹窗，避免"关闭动画"卡一拍
+      navigate('/portal');
       setPwdOpen(false);
       setPwd('');
       toast.success('已进入后台');
-      navigate('/portal');
     } else {
       setPwdError(true);
     }
@@ -127,7 +136,13 @@ export function Header() {
         </div>
       </div>
 
-      <Dialog open={pwdOpen} onOpenChange={setPwdOpen}>
+      <Dialog
+        open={pwdOpen}
+        onOpenChange={(o) => {
+          setPwdOpen(o);
+          if (o) preloadPortal();
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -144,6 +159,7 @@ export function Header() {
               placeholder="请输入密码"
               value={pwd}
               autoFocus
+              onFocus={() => preloadPortal()}
               onChange={(e) => {
                 setPwd(e.target.value);
                 if (pwdError) setPwdError(false);
@@ -156,8 +172,11 @@ export function Header() {
             {pwdError && <p className="text-xs text-destructive">密码不正确</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPwdOpen(false)}>取消</Button>
-            <Button onClick={handleVerify}>进入后台</Button>
+            <Button variant="outline" onClick={() => setPwdOpen(false)} disabled={entering}>取消</Button>
+            <Button onClick={handleVerify} disabled={entering}>
+              {entering && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              进入后台
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
