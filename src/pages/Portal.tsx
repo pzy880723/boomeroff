@@ -18,6 +18,7 @@ import { ActivityReviewPanel } from '@/components/admin/ActivityReviewPanel';
 import { SmsTestPanel } from '@/components/admin/SmsTestPanel';
 import { MarketingPresetsPanel } from '@/components/admin/MarketingPresetsPanel';
 import { BrandKbManager } from '@/components/admin/BrandKbManager';
+import { BackupPanel } from '@/components/admin/BackupPanel';
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -40,7 +41,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'brand_kb' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test' | 'marketing_presets';
+type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'brand_kb' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test' | 'marketing_presets' | 'backup';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -85,6 +86,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { key: 'marketing_presets', label: '营销预设', icon: Megaphone, perm: 'settings.ai' },
       { key: 'deploy', label: '部署域名', icon: Settings, perm: 'settings.ai' },
       { key: 'sms_test', label: '短信测试', icon: MessageSquare, perm: 'settings.ai' },
+      { key: 'backup', label: '数据备份', icon: Database, perm: 'settings.ai' },
     ],
   },
 ];
@@ -249,6 +251,7 @@ export default function Portal() {
             {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
             {effectiveTab === 'activity_review' && can('voucher.manage') && <ActivityReviewPanel />}
             {effectiveTab === 'sms_test' && can('settings.ai') && <SmsTestPanel />}
+            {effectiveTab === 'backup' && can('settings.ai') && <BackupPanel />}
           </Card>
         )}
       </main>
