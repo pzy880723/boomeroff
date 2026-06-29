@@ -76,6 +76,12 @@ function getProgress(run: BackupRun | undefined) {
   return 16;
 }
 
+function displayStep(run: BackupRun | undefined) {
+  if (!run) return '';
+  if (run.status === 'running') return '正在备份全部数据';
+  return run.metadata?.step || '';
+}
+
 export function BackupPanel() {
   const [runs, setRuns] = useState<BackupRun[]>([]);
   const [loading, setLoading] = useState(false);
@@ -197,7 +203,7 @@ export function BackupPanel() {
         {running ? (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{running.metadata?.step || '正在备份'}</span>
+              <span className="text-muted-foreground">{displayStep(running)}</span>
               <span className="font-medium">{progress}%</span>
             </div>
             <Progress value={progress} className="h-2" />
@@ -254,7 +260,7 @@ export function BackupPanel() {
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    {r.metadata?.step && r.status === 'running' ? `${r.metadata.step} · ` : ''}
+                    {r.status === 'running' ? `${displayStep(r)} · ` : ''}
                     共 {r.files_count} 个内容，约 {formatBytes(r.total_bytes)}
                   </div>
                   {r.metadata?.storage_reached_limit && r.status === 'success' && (
