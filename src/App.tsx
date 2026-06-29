@@ -98,7 +98,7 @@ const App = () => {
               <Route
                 path="/portal"
                 element={
-                  <Suspense fallback={<PortalLoadingFallback />}>
+                  <Suspense fallback={<PortalLoadingLazy />}>
                     <PortalGuard>
                       <Portal />
                     </PortalGuard>
