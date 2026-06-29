@@ -1,0 +1,2 @@
+ALTER TABLE public.backup_runs DROP CONSTRAINT IF EXISTS backup_runs_kind_check;
+ALTER TABLE public.backup_runs ADD CONSTRAINT backup_runs_kind_check CHECK (kind = ANY (ARRAY['database'::text, 'storage'::text, 'full'::text]));
