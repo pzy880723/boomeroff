@@ -1,117 +1,93 @@
-## 目标
-把 Lovable Cloud（后端数据库 + Storage 桶）里的全部数据，**定时增量同步一份到你自己的腾讯云**，作为独立的灾备副本。前端代码已在 GitHub，本方案只解决「数据」这一层。
+下面是给腾讯云 kiki 助手的「需求清单」，**整段复制粘贴**发给它即可。它给你回的东西你转给我，我就能直接开工。
 
 ---
 
-## 你需要在腾讯云准备的资源（一次性）
+# 给腾讯云 kiki：Lovable 项目数据灾备到腾讯云 · 需求清单
 
-| 资源 | 用途 | 规格建议 |
-|---|---|---|
-| **云数据库 PostgreSQL**（TencentDB for PostgreSQL）| 存放数据库镜像 | 与现有库同版本（PG 15+），2 核 4G 起步即可 |
-| **对象存储 COS**（1 个 Bucket）| 存放图片 / 视频 / 截图等文件副本 | 标准存储 + 生命周期规则转低频 |
-| **COS 访问密钥**（SecretId / SecretKey）| 给备份程序写入 COS 用 | 子账号 + 仅授权这一个 bucket |
-| 可选：**云函数 SCF + 定时触发器** | 跑备份脚本（不想自己开服务器时用）| Node.js / Python 运行时 |
+你好 kiki，我有一个跑在境外 Serverless Postgres + S3 兼容对象存储上的 Web 项目，想把**全部数据每天自动同步一份到我自己的腾讯云**做灾备。代码已在 GitHub，本次只解决数据。请帮我把下面这些资源开好、把参数发给我。
 
-> 全部费用按目前数据量估算约每月 30–80 元（PG 实例占大头，COS 几乎可忽略）。
+## 一、需要你帮我开通 / 创建的资源
 
----
+### 1. 对象存储 COS（必须，主备份载体）
+- **1 个 Bucket**，用于存数据库 dump 和 Storage 镜像文件。
+- 地域：**`ap-shanghai`**（如你建议别的请告诉我原因）。
+- 访问权限：**私有读写**。
+- 开启**版本控制**（防止误覆盖）。
+- 生命周期规则：
+  - `db-backups/` 前缀：30 天后转**低频存储**，180 天后转**归档**，365 天后删除；但每月 1 号那份永久保留。
+  - `storage-mirror/` 前缀：保留最新版本即可，旧版本 30 天后清理。
+- 估算容量：当前约 20–50 GB，后续每月增长 5–10 GB。
 
-## 备份架构
+### 2. CAM 子账号（必须，给我的备份程序用）
+- 新建一个**编程访问子账号**（不要主账号 key）。
+- 只授予以下最小权限，**Resource 锁死到上面这一个 bucket**：
+  - `cos:PutObject`
+  - `cos:GetObject`
+  - `cos:HeadObject`
+  - `cos:DeleteObject`
+  - `cos:ListParts` / `cos:InitiateMultipartUpload` / `cos:UploadPart` / `cos:CompleteMultipartUpload` / `cos:AbortMultipartUpload`（大文件分块上传需要）
+  - `cos:GetBucket`（列对象）
+- 给我这个子账号的 **SecretId / SecretKey**。
 
-```text
- Lovable Cloud (源)                  你的腾讯云 (灾备)
- ┌─────────────────┐                 ┌──────────────────────┐
- │  Postgres 数据库 │ ── 每日全量 ──► │ TencentDB PostgreSQL │
- │  57 张业务表     │ ── 每5分钟增量─►│  (同 schema, 只读)    │
- └─────────────────┘                 └──────────────────────┘
- ┌─────────────────┐                 ┌──────────────────────┐
- │  Storage 5个桶  │ ── 实时镜像  ──►│   COS Bucket         │
- │ product-images  │                 │  product-images/     │
- │ marketing-videos│                 │  marketing-videos/   │
- │ avatars / ...   │                 │  avatars/ ...        │
- └─────────────────┘                 └──────────────────────┘
-```
+### 3. 云数据库 PostgreSQL（可选，做"热备"才需要）
+- **TencentDB for PostgreSQL**，版本 **15 或以上**。
+- 规格：2 核 4 GB，100 GB SSD 起步即可。
+- 地域同 COS：`ap-shanghai`。
+- 开启**外网访问**（限我提供的 IP 白名单，下面第三部分会列）。
+- 给我：实例的外网连接地址、端口、初始 superuser 账号密码。
 
-两条管道独立运行，互不影响线上。
+> 如果暂时不想花这个钱，**只开 COS 也能用**——我会把全库 dump 成 `.sql.gz` 存到 COS，需要恢复时再临时开 PG 实例。请告诉我你的选择。
 
----
+## 二、请告诉我以下信息
 
-## 实施步骤
+请把下列内容**逐条回复**给我，我会原样转给我的开发 Agent：
 
-### 第一步：数据库备份（两种方式选一）
+1. COS Bucket 完整名（格式形如 `mybucket-1300000000`，**末尾的 APPID 数字不能漏**）。
+2. COS 所在地域代码（如 `ap-shanghai`）。
+3. COS 访问域名（默认应为 `https://<bucket>.cos.<region>.myqcloud.com`，请确认或给出自定义域名）。
+4. 子账号 **SecretId**。
+5. 子账号 **SecretKey**。
+6. （若开了 PG）实例外网地址 + 端口 + superuser 账号密码 + 默认数据库名。
+7. 你建议我在 CAM 里限制的源 IP 段（见下面第三部分），如果你有更安全的建议也请提出。
 
-**方式 A · 推荐：Lovable Cloud 一键导出 + 你这边定时导入**
-- Lovable Cloud 后台已经提供「Export data」功能（高级设置里），可以导出全库 SQL/CSV。
-- 我会新增一个 **Edge Function `backup-db-to-cos`**：
-  - 每天凌晨触发一次（cron）
-  - 用只读 service role 把所有业务表 `COPY ... TO STDOUT` 流式打包成一个 `.sql.gz` 文件
-  - 直接上传到你的 COS 的 `db-backups/YYYY-MM-DD.sql.gz`
-  - 保留 30 天，老文件自动删
-- 你在腾讯云 PG 上用 `psql < 文件` 一条命令即可整库还原；也可以让函数同时往腾讯云 PG 灌一份。
+## 三、关于 IP 白名单 / 网络
 
-**方式 B · 高保真：腾讯云 DTS 异构同步**
-- 适合你想要「秒级延迟、随时切换读」的场景。
-- 用腾讯云 DTS 配置「外部 PostgreSQL → TencentDB PostgreSQL」实时同步。
-- 需要 Lovable Cloud 数据库的 **直连地址 + 只读账号**——这部分需要先确认 Lovable Cloud 是否对外开放直连（如果不开放，只能走方式 A）。
+我的备份程序跑在境外 Serverless 平台上，**出口 IP 不固定**。请按以下方案二选一帮我配置：
 
-**默认按方式 A 实施。** 简单、稳、不依赖外部权限。
+- **方案 A**（更安全，推荐）：COS 用**临时密钥 STS**——但我这边发起方拿不到固定 IP，所以请确认子账号策略里**不要绑定 IP 限制**，只靠 SecretKey 鉴权 + bucket resource 锁死。
+- **方案 B**：如果你坚持要 IP 白名单，请告诉我 COS / TencentDB 是否支持 `0.0.0.0/0` 之外的"按地区"放通，或建议我加一台**香港轻量服务器**做中转。
 
-### 第二步：Storage 桶备份
+## 四、我会怎么用这些资源（让你心里有数）
 
-新增 Edge Function **`backup-storage-to-cos`**：
-- 列出 5 个桶（`product-images` / `avatars` / `marketing-videos` / `voucher-screenshots` / `activity-posters`）里的所有对象
-- 增量对比：用一张新表 `backup_object_log(bucket, path, etag, copied_at)` 记录已同步对象的 ETag
-- 只把「新增 / ETag 变化」的对象拉下来流式上传到 COS 对应路径
-- 每 30 分钟跑一次（cron），保证近实时
+- 每天凌晨 3 点（北京时间）：把全库 `COPY ... TO STDOUT` 导出，gzip 后用**分块上传**写到 `cos://<bucket>/db-backups/YYYY-MM-DD.sql.gz`。
+- 每 30 分钟：增量同步 5 个 Storage 桶里的新增 / 变化文件到 `cos://<bucket>/storage-mirror/<bucket-name>/<path>`，用 ETag 对比避免重复上传。
+- 每周一凌晨 4 点：从 COS 取最新 dump，做一次完整性校验（条数对比）。
+- 调用 COS 用官方 `cos-nodejs-sdk-v5`（npm 包），通过 SDK 的分块上传 API 处理大视频文件（单文件可能 200 MB+）。
 
-> 还可以配 Storage 的 Webhook（`object.created`）触发即时单文件同步，做到秒级；先用定时方案上线，确认稳定后再加 Webhook。
+## 五、费用预算确认
 
-### 第三步：在腾讯云侧做容灾演练
+请给我一个**月度预估账单**：
+- COS（按 50 GB 标准存储 + 每月 30 GB 写入 + 5 GB 读出估）
+- 若开 PG：2C4G + 100 GB SSD + 100 GB 外网下行流量
 
-- 每月手动跑一次「从 COS 取最新 SQL → 灌进 TencentDB → 抽 5 张关键表 count 对比」校验脚本，确保备份真的可用（避免「以为有备份，恢复时发现是空的」）。
-- 这一步也由一个 Edge Function `verify-backup-integrity` 自动做，把校验结果发到你的通知中心。
-
-### 第四步：密钥与权限
-
-- 在 Lovable Cloud 加 3 个 secret：`TENCENT_COS_SECRET_ID` / `TENCENT_COS_SECRET_KEY` / `TENCENT_COS_BUCKET`（外加 `TENCENT_COS_REGION`）。
-- 你在腾讯云访问管理 CAM 里**新建一个子账号**，只给 `cos:PutObject / cos:GetObject / cos:DeleteObject` 这三个权限，且 resource 锁死到这一个 bucket。**不要用主账号 key**。
-- 数据库方式 A 不需要任何腾讯云 PG 密钥；方式 B 才需要。
-
-### 第五步：前端入口（管理员可见）
-
-在 `/portal` 增加一个「数据备份」面板：
-- 上次全量备份时间、大小、文件名
-- 上次 Storage 增量同步时间、本次同步文件数
-- 「立即手动备份一次」按钮
-- 最近 7 次校验结果（成功 / 失败 / 数据条数差异）
+如果月度超过 **150 元**，请提示我并给出更省钱的替代方案。
 
 ---
 
-## 不在本方案内（避免你误以为做了）
+## 我的开发 Agent 拿到你的答复后会做什么（参考，不需要你执行）
 
-- 不会备份 Lovable Cloud 的 Auth 用户密码哈希（auth schema 不允许导出）。用户表里的 `auth.users.id` 会保留，密码本身需要用户在新环境走一次「忘记密码」重置。如需 100% Auth 复原，得走方式 B 的 DTS 直连方案。
-- Edge Functions 源代码、Secret 值不在备份范围——这些已经跟着 Lovable 项目走 Git，足够了。
-- 不动现有任何业务表、RLS、Storage 桶设置。
+1. 把你给的 4 个值（SecretId / SecretKey / Bucket / Region）注入我的后端 Secret。
+2. 在我的项目里新增 3 个备份任务 + 1 个管理面板（已有方案）。
+3. 当晚跑首次全量备份，第二天给你回滚演练结果截图，确认链路通。
 
----
-
-## 技术细节（给开发看）
-
-- 新增表：`public.backup_object_log(bucket text, path text, etag text, size bigint, copied_at timestamptz, primary key(bucket, path))`，启用 RLS，仅 service_role 可写、admin 可读。
-- 新增 Edge Functions：`backup-db-to-cos`、`backup-storage-to-cos`、`verify-backup-integrity`，均 `verify_jwt = true`（admin 才能手动触发），同时配 Supabase Scheduled Functions：
-  - `backup-db-to-cos`：每日 03:00 Asia/Shanghai
-  - `backup-storage-to-cos`：每 30 分钟
-  - `verify-backup-integrity`：每周一 04:00
-- 签名上传用腾讯云官方 `cos-nodejs-sdk-v5` 的 npm 包（Deno 通过 `npm:cos-nodejs-sdk-v5` 直接 import）。
-- 大文件（视频）走 COS 分块上传 + 流式 pipe，避免函数内存撑爆。
-- 前端面板：新增 `src/components/admin/BackupPanel.tsx`，挂到 `/portal` 的 Tabs 里。
+请直接按上面 5 部分逐条回我。谢谢 kiki 🙏
 
 ---
 
-## 你需要先回答 / 准备的事
+## 你（用户）需要做的事
 
-1. 腾讯云账号下的 **目标地域**（建议跟你常用机房一致，例如 `ap-shanghai` / `ap-guangzhou`）。
-2. 是先走**方式 A（每日全量 SQL 到 COS，简单稳）**，还是想直接上**方式 B（DTS 实时同步到 TencentDB）**？
-3. 备份保留多久（默认 30 天滚动 + 每月 1 号那一份永久保留）？
+1. 把上面整段（从 "你好 kiki" 到 "谢谢 kiki 🙏"）复制给腾讯云 kiki 助手。
+2. 把它的回复（特别是 SecretId / SecretKey / Bucket 名 / Region）发回来给我。
+3. 我会把这 4 个值通过 `add_secret` 安全存入后端（**绝不写进代码或 GitHub**），然后开始建表 + 写 3 个备份 Edge Functions + 在 `/portal` 加「数据备份」面板。
 
-确认后我就按上面分 5 步实施，预计一次提交完成所有 Edge Functions + 管理面板。
+要不要我现在就把后端表结构和管理面板先建好（不依赖 kiki 回复也可以做），等密钥拿到再直接接通？
