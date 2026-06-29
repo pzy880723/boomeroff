@@ -3,14 +3,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, FileText, ImageIcon, CheckCircle2, XCircle, Clock, RefreshCw } from 'lucide-react';
+import { Loader2, Archive, CheckCircle2, XCircle, Clock, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
 type BackupRun = {
   id: string;
-  kind: 'database' | 'storage';
+  kind: 'database' | 'storage' | 'full';
   status: 'running' | 'success' | 'failed';
   started_at: string;
   finished_at: string | null;
@@ -19,6 +20,16 @@ type BackupRun = {
   total_bytes: number;
   error_message: string | null;
   trigger_source: 'manual' | 'cron';
+  metadata?: {
+    step?: string;
+    phase?: 'database' | 'storage' | 'done';
+    table_index?: number;
+    database_rows?: number;
+    storage_uploaded?: number;
+    storage_skipped?: number;
+    storage_cursor?: number;
+    storage_reached_limit?: boolean;
+  } | null;
 };
 
 function formatBytes(n: number) {
@@ -28,13 +39,9 @@ function formatBytes(n: number) {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-const KIND_LABEL: Record<'database' | 'storage', string> = {
-  database: '文字数据',
-  storage: '图片视频',
-};
-
 /** 把后端的英文/技术报错翻译成"哪一步出问题 + 建议怎么办"。 */
-function humanizeError(msg: string): string {
+function humanizeError(msg: string | null): string {
+  if (!msg) return '';
   const m = msg.toLowerCase();
   if (m.includes('signature') || m.includes('403') || m.includes('accessdenied')) {
     return '腾讯云拒绝了这次写入，多半是密钥过期或权限被改了。建议重新生成腾讯云密钥后再试一次。';
@@ -48,13 +55,38 @@ function humanizeError(msg: string): string {
   if (m.includes('network') || m.includes('fetch')) {
     return '连接腾讯云时网络不通，稍等 1 分钟再试一次即可。';
   }
+  if (m.includes('worker') || m.includes('timeout') || m.includes('wall clock')) {
+    return '这次备份被系统中断了。系统已经记录下来，你可以直接再点一次“立即备份”。';
+  }
   return msg;
+}
+
+function getProgress(run: BackupRun | undefined) {
+  if (!run) return 0;
+  if (run.status === 'success') return 100;
+  if (run.status === 'failed') return 100;
+  if (run.metadata?.phase === 'database') {
+    const index = Math.min(run.metadata.table_index ?? 0, 58);
+    return Math.max(10, Math.round(10 + (index / 58) * 58));
+  }
+  if (run.metadata?.phase === 'storage') return 82;
+  const step = run.metadata?.step || '';
+  if (step.includes('图片') || step.includes('视频')) return 72;
+  if (step.includes('系统') || step.includes('记录')) return 38;
+  return 16;
+}
+
+function displayStep(run: BackupRun | undefined) {
+  if (!run) return '';
+  if (run.status === 'running') return '正在备份全部数据';
+  return run.metadata?.step || '';
 }
 
 export function BackupPanel() {
   const [runs, setRuns] = useState<BackupRun[]>([]);
   const [loading, setLoading] = useState(false);
-  const [triggering, setTriggering] = useState<null | 'database' | 'storage'>(null);
+  const [triggering, setTriggering] = useState(false);
+  const [continuing, setContinuing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,23 +111,51 @@ export function BackupPanel() {
     return () => clearInterval(t);
   }, [runs, load]);
 
-  const trigger = async (kind: 'database' | 'storage') => {
-    setTriggering(kind);
+  const fullRuns = runs.filter((r) => r.kind === 'full');
+  const visibleRuns = fullRuns.length ? fullRuns : runs;
+  const lastSuccess = visibleRuns.find((r) => r.status === 'success');
+  const running = visibleRuns.find((r) => r.status === 'running');
+  const latest = visibleRuns[0];
+  const progress = getProgress(running);
+
+  useEffect(() => {
+    if (!running || continuing) return;
+    const t = window.setTimeout(async () => {
+      setContinuing(true);
+      try {
+        await supabase.functions.invoke('backup-all-to-cos', {
+          body: { trigger_source: 'manual', continue_run: true },
+        });
+      } finally {
+        setContinuing(false);
+        load();
+      }
+    }, 2500);
+    return () => window.clearTimeout(t);
+  }, [running, continuing, load]);
+
+  const trigger = async () => {
+    setTriggering(true);
     try {
-      const fn = kind === 'database' ? 'backup-database-to-cos' : 'backup-storage-to-cos';
-      const { data, error } = await supabase.functions.invoke(fn, {
+      const { data, error } = await supabase.functions.invoke('backup-all-to-cos', {
         body: { trigger_source: 'manual' },
       });
       if (error) throw error;
       toast({
         title: '备份已开始',
-        description: kind === 'database' ? '正在打包文字数据…' : '正在上传图片视频…',
+        description: '系统会自动把所有数据保存到你的腾讯云。',
       });
       setTimeout(load, 500);
       if (data && (data as { ok?: boolean }).ok) {
-        const d = data as { files?: number; uploaded?: number; bytes?: number };
-        const count = d.files ?? d.uploaded ?? 0;
-        toast({ title: '备份完成', description: `共备份 ${count} 个文件，约 ${formatBytes(d.bytes ?? 0)}` });
+        const d = data as { files?: number; bytes?: number; has_more_files?: boolean; completed?: boolean; step?: string };
+        toast({
+          title: d.completed ? '备份完成' : '备份进行中',
+          description: !d.completed
+            ? (d.step || '系统正在分批备份，页面会自动继续。')
+            : d.has_more_files
+              ? `已先备份 ${d.files ?? 0} 个内容，约 ${formatBytes(d.bytes ?? 0)}，剩余图片视频会继续由每天自动备份补齐。`
+            : `共备份 ${d.files ?? 0} 个内容，约 ${formatBytes(d.bytes ?? 0)}`,
+        });
       }
     } catch (e) {
       toast({
@@ -104,13 +164,10 @@ export function BackupPanel() {
         variant: 'destructive',
       });
     } finally {
-      setTriggering(null);
+      setTriggering(false);
       load();
     }
   };
-
-  const lastBy = (kind: 'database' | 'storage') =>
-    runs.find((r) => r.kind === kind && r.status === 'success');
 
   return (
     <div className="space-y-5">
@@ -118,8 +175,7 @@ export function BackupPanel() {
         <div>
           <h2 className="text-base font-semibold">数据备份</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            所有备份都会保存到 <span className="font-medium text-foreground">你自己的腾讯云（上海）</span>，
-            就算这边出问题，数据也还在你手上。
+            系统每天凌晨会自动把全部数据保存到 <span className="font-medium text-foreground">你自己的腾讯云（上海）</span>。
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -128,45 +184,51 @@ export function BackupPanel() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {(['database', 'storage'] as const).map((kind) => {
-          const last = lastBy(kind);
-          const Icon = kind === 'database' ? FileText : ImageIcon;
-          const title = kind === 'database' ? '文字数据备份' : '图片视频备份';
-          const desc = kind === 'database'
-            ? '把店里所有账号、识别记录、知识库、活动报名等文字内容打包保存一份。体积很小，建议每天点一次。'
-            : '把大家上传到系统里的所有照片和视频复制一份到你的腾讯云。第一次会久一点，之后只传新增的，很快。';
-          return (
-            <Card key={kind} className="p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <Icon className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-semibold">{title}</h3>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
-              <div className="text-xs text-muted-foreground">
-                {last ? (
-                  <>上次成功：{formatDistanceToNow(new Date(last.started_at), { addSuffix: true, locale: zhCN })}
-                    {' · '}共 {last.files_count} 个文件，约 {formatBytes(last.total_bytes)}</>
-                ) : (
-                  <span className="text-amber-600">还没成功备份过，先手动点一次试试</span>
-                )}
-              </div>
-              <Button
-                size="sm"
-                onClick={() => trigger(kind)}
-                disabled={triggering !== null}
-                className="w-full"
-              >
-                {triggering === kind ? (
-                  <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />备份中，请稍等…</>
-                ) : (
-                  '立即备份'
-                )}
-              </Button>
-            </Card>
-          );
-        })}
-      </div>
+      <Card className="p-4 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <Archive className="w-4 h-4 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-semibold">数据自动备份</h3>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">每天自动</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed mt-1">
+              账号记录、活动、知识库、营销任务、上传图片和视频都会一起备份。你不用区分类型，后台会自己处理。
+            </p>
+          </div>
+        </div>
+
+        {running ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{displayStep(running)}</span>
+              <span className="font-medium">{progress}%</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+        ) : (
+          <div className="text-xs text-muted-foreground">
+            {lastSuccess ? (
+              <>上次成功：{formatDistanceToNow(new Date(lastSuccess.started_at), { addSuffix: true, locale: zhCN })}
+                {' · '}共 {lastSuccess.files_count} 个内容，约 {formatBytes(lastSuccess.total_bytes)}</>
+            ) : latest?.status === 'failed' ? (
+              <span className="text-destructive">上次备份没成功：{humanizeError(latest.error_message)}</span>
+            ) : (
+              <span className="text-amber-600">还没成功备份过，可以先点一次“立即备份”。</span>
+            )}
+          </div>
+        )}
+
+        <Button size="sm" onClick={trigger} disabled={triggering || Boolean(running)} className="w-full">
+          {triggering || running ? (
+            <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />备份中，请稍等…</>
+          ) : (
+            '立即备份'
+          )}
+        </Button>
+      </Card>
 
       <Card className="overflow-hidden">
         <div className="px-4 py-3 border-b border-border/60 text-sm font-medium">
@@ -176,7 +238,7 @@ export function BackupPanel() {
           {runs.length === 0 && !loading && (
             <div className="p-6 text-center text-sm text-muted-foreground">还没有备份记录</div>
           )}
-          {runs.map((r) => {
+          {visibleRuns.map((r) => {
             const StatusIcon = r.status === 'success' ? CheckCircle2
               : r.status === 'failed' ? XCircle : Clock;
             const statusColor = r.status === 'success' ? 'text-emerald-600'
@@ -188,7 +250,7 @@ export function BackupPanel() {
                 <StatusIcon className={`w-4 h-4 mt-0.5 shrink-0 ${statusColor} ${r.status === 'running' ? 'animate-spin' : ''}`} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap text-sm">
-                    <span className="font-medium">{KIND_LABEL[r.kind]}</span>
+                    <span className="font-medium">数据备份</span>
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                       {r.trigger_source === 'cron' ? '系统自动' : '手动触发'}
                     </Badge>
@@ -198,8 +260,14 @@ export function BackupPanel() {
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    共 {r.files_count} 个文件，约 {formatBytes(r.total_bytes)}
+                    {r.status === 'running' ? `${displayStep(r)} · ` : ''}
+                    共 {r.files_count} 个内容，约 {formatBytes(r.total_bytes)}
                   </div>
+                  {r.metadata?.storage_reached_limit && r.status === 'success' && (
+                    <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+                      图片视频很多，本次已先备份一部分；每天自动备份会继续补齐，已备份过的不会重复传。
+                    </p>
+                  )}
                   {r.error_message && (
                     <p className="mt-1 text-[11px] text-destructive leading-relaxed">
                       {humanizeError(r.error_message)}
