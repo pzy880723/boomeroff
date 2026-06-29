@@ -20,11 +20,7 @@ export function PortalGuard({ children }: { children: ReactNode }) {
     return <Navigate to="/" replace />;
   }
   if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PortalLoading />;
   }
   const hasAny = ANY_PORTAL_PERM.some((p) => can(p));
   if (!hasAny) {
@@ -32,6 +28,15 @@ export function PortalGuard({ children }: { children: ReactNode }) {
     return <DenyAndRedirect />;
   }
   return <>{children}</>;
+}
+
+export function PortalLoading() {
+  return (
+    <div className="flex h-screen flex-col items-center justify-center gap-3 text-muted-foreground">
+      <Loader2 className="h-6 w-6 animate-spin" />
+      <p className="text-sm">正在进入后台…</p>
+    </div>
+  );
 }
 
 function DenyAndRedirect() {
