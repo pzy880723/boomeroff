@@ -22,9 +22,12 @@ type BackupRun = {
   trigger_source: 'manual' | 'cron';
   metadata?: {
     step?: string;
+    phase?: 'database' | 'storage' | 'done';
+    table_index?: number;
     database_rows?: number;
     storage_uploaded?: number;
     storage_skipped?: number;
+    storage_cursor?: number;
     storage_reached_limit?: boolean;
   } | null;
 };
@@ -62,6 +65,11 @@ function getProgress(run: BackupRun | undefined) {
   if (!run) return 0;
   if (run.status === 'success') return 100;
   if (run.status === 'failed') return 100;
+  if (run.metadata?.phase === 'database') {
+    const index = Math.min(run.metadata.table_index ?? 0, 58);
+    return Math.max(10, Math.round(10 + (index / 58) * 58));
+  }
+  if (run.metadata?.phase === 'storage') return 82;
   const step = run.metadata?.step || '';
   if (step.includes('图片') || step.includes('视频')) return 72;
   if (step.includes('系统') || step.includes('记录')) return 38;
@@ -72,6 +80,7 @@ export function BackupPanel() {
   const [runs, setRuns] = useState<BackupRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
+  const [continuing, setContinuing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,6 +105,29 @@ export function BackupPanel() {
     return () => clearInterval(t);
   }, [runs, load]);
 
+  const fullRuns = runs.filter((r) => r.kind === 'full');
+  const visibleRuns = fullRuns.length ? fullRuns : runs;
+  const lastSuccess = visibleRuns.find((r) => r.status === 'success');
+  const running = visibleRuns.find((r) => r.status === 'running');
+  const latest = visibleRuns[0];
+  const progress = getProgress(running);
+
+  useEffect(() => {
+    if (!running || continuing) return;
+    const t = window.setTimeout(async () => {
+      setContinuing(true);
+      try {
+        await supabase.functions.invoke('backup-all-to-cos', {
+          body: { trigger_source: 'manual', continue_run: true },
+        });
+      } finally {
+        setContinuing(false);
+        load();
+      }
+    }, 2500);
+    return () => window.clearTimeout(t);
+  }, [running, continuing, load]);
+
   const trigger = async () => {
     setTriggering(true);
     try {
@@ -109,11 +141,13 @@ export function BackupPanel() {
       });
       setTimeout(load, 500);
       if (data && (data as { ok?: boolean }).ok) {
-        const d = data as { files?: number; bytes?: number; has_more_files?: boolean };
+        const d = data as { files?: number; bytes?: number; has_more_files?: boolean; completed?: boolean; step?: string };
         toast({
-          title: '备份完成',
-          description: d.has_more_files
-            ? `已先备份 ${d.files ?? 0} 个内容，约 ${formatBytes(d.bytes ?? 0)}，剩余图片视频会继续由每天自动备份补齐。`
+          title: d.completed ? '备份完成' : '备份进行中',
+          description: !d.completed
+            ? (d.step || '系统正在分批备份，页面会自动继续。')
+            : d.has_more_files
+              ? `已先备份 ${d.files ?? 0} 个内容，约 ${formatBytes(d.bytes ?? 0)}，剩余图片视频会继续由每天自动备份补齐。`
             : `共备份 ${d.files ?? 0} 个内容，约 ${formatBytes(d.bytes ?? 0)}`,
         });
       }
@@ -128,13 +162,6 @@ export function BackupPanel() {
       load();
     }
   };
-
-  const fullRuns = runs.filter((r) => r.kind === 'full');
-  const visibleRuns = fullRuns.length ? fullRuns : runs;
-  const lastSuccess = visibleRuns.find((r) => r.status === 'success');
-  const running = visibleRuns.find((r) => r.status === 'running');
-  const latest = visibleRuns[0];
-  const progress = getProgress(running);
 
   return (
     <div className="space-y-5">

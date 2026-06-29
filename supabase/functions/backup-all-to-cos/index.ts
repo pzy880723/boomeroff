@@ -1,5 +1,5 @@
 // One-button full backup -> Tencent COS.
-// Backs up app records as one gzip file, then mirrors uploaded files in small safe batches.
+// Runs in safe chunks so manual and scheduled backups do not get killed by Edge limits.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import {
@@ -40,8 +40,9 @@ const BUCKETS = [
   "marketing-videos",
 ];
 
-const PAGE_SIZE = 1000;
-const STORAGE_FILE_LIMIT = 350;
+const PAGE_SIZE = 200;
+const STORAGE_SCAN_PER_TICK = 80;
+const TICK_BUDGET_MS = 25_000;
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
 
 function json(data: unknown, status = 200) {
@@ -64,6 +65,15 @@ function todayShanghai() {
   return `${y}-${m}-${d}`;
 }
 
+function currentShanghaiHour() {
+  const value = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    hour: "2-digit",
+    hour12: false,
+  }).format(new Date());
+  return Number(value);
+}
+
 async function updateRun(
   admin: ReturnType<typeof createClient>,
   runId: string,
@@ -72,44 +82,127 @@ async function updateRun(
   await admin.from("backup_runs").update(patch).eq("id", runId);
 }
 
-async function dumpDatabase(
+async function dumpTable(
   admin: ReturnType<typeof createClient>,
-): Promise<{ bytes: Uint8Array; rows: number; tables: number; errors: string[] }> {
-  const output: Record<string, unknown[]> = {};
-  const errors: string[] = [];
-  let totalRows = 0;
-
-  for (const table of TABLES) {
-    const rows: unknown[] = [];
-    let from = 0;
-    try {
-      while (true) {
-        const { data, error } = await admin
-          .from(table)
-          .select("*")
-          .range(from, from + PAGE_SIZE - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        rows.push(...data);
-        totalRows += data.length;
-        if (data.length < PAGE_SIZE) break;
-        from += PAGE_SIZE;
-      }
-      output[table] = rows;
-    } catch (e) {
-      errors.push(`${table}: ${e instanceof Error ? e.message : String(e)}`);
-      output[table] = [];
-    }
-  }
+  table: string,
+  from: number,
+): Promise<{ bytes: Uint8Array; rows: number; hasMore: boolean }> {
+  const { data, error } = await admin
+    .from(table)
+    .select("*")
+    .range(from, from + PAGE_SIZE - 1);
+  if (error) throw error;
+  const rows = data ?? [];
 
   const payload = {
     backed_up_at: new Date().toISOString(),
-    format: "boomer-full-backup-v1",
-    tables: output,
-    table_errors: errors,
+    format: "boomer-table-backup-v1",
+    table,
+    from,
+    rows,
   };
   const raw = new TextEncoder().encode(JSON.stringify(payload));
-  return { bytes: await gzip(raw), rows: totalRows, tables: TABLES.length, errors };
+  return { bytes: await gzip(raw), rows: rows.length, hasMore: rows.length === PAGE_SIZE };
+}
+
+type RunMeta = {
+  step?: string;
+  phase?: "database" | "storage" | "done";
+  day?: string;
+  table_index?: number;
+  table_offset?: number;
+  database_rows?: number;
+  database_files?: number;
+  database_errors?: string[];
+  storage_uploaded?: number;
+  storage_skipped?: number;
+  storage_cursor?: number;
+  storage_errors?: string[];
+  storage_reached_limit?: boolean;
+};
+
+function normalizeMeta(raw: unknown, day: string): RunMeta {
+  const meta = raw && typeof raw === "object" ? raw as RunMeta : {};
+  return {
+    phase: meta.phase ?? "database",
+    day: meta.day ?? day,
+    table_index: meta.table_index ?? 0,
+    table_offset: meta.table_offset ?? 0,
+    database_rows: meta.database_rows ?? 0,
+    database_files: meta.database_files ?? 0,
+    database_errors: meta.database_errors ?? [],
+    storage_uploaded: meta.storage_uploaded ?? 0,
+    storage_skipped: meta.storage_skipped ?? 0,
+    storage_cursor: meta.storage_cursor ?? 0,
+    storage_errors: meta.storage_errors ?? [],
+    storage_reached_limit: meta.storage_reached_limit ?? false,
+    step: meta.step ?? "开始备份",
+  };
+}
+
+async function getActiveRun(
+  admin: ReturnType<typeof createClient>,
+  trigger: "manual" | "cron",
+  day: string,
+): Promise<{ id: string; files_count: number; total_bytes: number; metadata: RunMeta } | null> {
+  const { data: runningRows } = await admin
+    .from("backup_runs")
+    .select("id, started_at, files_count, total_bytes, metadata")
+    .eq("kind", "full")
+    .eq("status", "running")
+    .order("started_at", { ascending: false })
+    .limit(1);
+
+  const running = Array.isArray(runningRows) ? runningRows[0] : null;
+  if (running) {
+    const startedAt = new Date((running as { started_at: string }).started_at).getTime();
+    if (Date.now() - startedAt < 2 * 60 * 60 * 1000) {
+      const row = running as { id: string; files_count: number; total_bytes: number; metadata: unknown };
+      return {
+        id: row.id,
+        files_count: row.files_count ?? 0,
+        total_bytes: Number(row.total_bytes ?? 0),
+        metadata: normalizeMeta(row.metadata, day),
+      };
+    }
+    await admin.from("backup_runs").update({
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      error_message: "上一次备份跑得太久，已自动结束。系统会重新开始备份。",
+    }).eq("id", (running as { id: string }).id);
+  }
+
+  if (trigger === "cron") {
+    const { data: todaySuccess } = await admin
+      .from("backup_runs")
+      .select("id")
+      .eq("kind", "full")
+      .eq("status", "success")
+      .ilike("cos_key", `%${day}%`)
+      .limit(1);
+    if (Array.isArray(todaySuccess) && todaySuccess.length > 0) return null;
+    const hour = currentShanghaiHour();
+    if (hour < 3 || hour > 4) return null;
+  }
+
+  const { data: runRow, error } = await admin
+    .from("backup_runs")
+    .insert({
+      kind: "full",
+      status: "running",
+      trigger_source: trigger,
+      metadata: normalizeMeta({ step: "开始备份", day }, day),
+    })
+    .select("id, files_count, total_bytes, metadata")
+    .single();
+  if (error || !runRow) throw new Error("无法创建备份记录：" + (error?.message ?? "未知原因"));
+  const row = runRow as { id: string; files_count: number; total_bytes: number; metadata: unknown };
+  return {
+    id: row.id,
+    files_count: row.files_count ?? 0,
+    total_bytes: Number(row.total_bytes ?? 0),
+    metadata: normalizeMeta(row.metadata, day),
+  };
 }
 
 async function* walkStorage(
@@ -140,51 +233,70 @@ async function* walkStorage(
   }
 }
 
-async function mirrorStorage(
+async function mirrorStorageTick(
   admin: ReturnType<typeof createClient>,
   cfg: ReturnType<typeof readCosConfigFromEnv>,
-): Promise<{ uploaded: number; skipped: number; bytes: number; errors: string[]; reachedLimit: boolean }> {
+  cursor: number,
+  startedAt: number,
+): Promise<{ uploaded: number; skipped: number; bytes: number; errors: string[]; complete: boolean; nextCursor: number }> {
   let uploaded = 0;
   let skipped = 0;
   let bytes = 0;
   const errors: string[] = [];
-  let reachedLimit = false;
 
-  outer: for (const bucket of BUCKETS) {
-    for await (const file of walkStorage(admin, bucket)) {
-      if (uploaded + skipped >= STORAGE_FILE_LIMIT) {
-        reachedLimit = true;
-        break outer;
-      }
-      if (file.size > MAX_FILE_BYTES) {
+  const { data, error } = await admin
+    .schema("storage")
+    .from("objects")
+    .select("bucket_id,name,metadata")
+    .in("bucket_id", BUCKETS)
+    .order("bucket_id", { ascending: true })
+    .order("name", { ascending: true })
+    .range(cursor, cursor + STORAGE_SCAN_PER_TICK - 1);
+
+  if (error) throw new Error(`读取图片视频列表失败：${error.message}`);
+  const files = Array.isArray(data) ? data as Array<{ bucket_id: string; name: string; metadata?: { size?: number; mimetype?: string } }> : [];
+  if (files.length === 0) return { uploaded, skipped, bytes, errors, complete: true, nextCursor: cursor };
+
+  for (const file of files) {
+    if (Date.now() - startedAt > TICK_BUDGET_MS) {
+      return { uploaded, skipped, bytes, errors, complete: false, nextCursor: cursor + uploaded + skipped + errors.length };
+    }
+    const size = Number(file.metadata?.size ?? 0);
+    if (size > MAX_FILE_BYTES) {
+      skipped += 1;
+      continue;
+    }
+    const cosKey = `storage-mirror/${file.bucket_id}/${file.name}`;
+    try {
+      const head = await cosHeadObject({ cfg, key: cosKey });
+      if (head && head.size === size) {
         skipped += 1;
         continue;
       }
-      const cosKey = `storage-mirror/${file.bucket}/${file.path}`;
-      try {
-        const head = await cosHeadObject({ cfg, key: cosKey });
-        if (head && head.size === file.size) {
-          skipped += 1;
-          continue;
-        }
-        const { data: blob, error } = await admin.storage.from(file.bucket).download(file.path);
-        if (error || !blob) throw new Error(error?.message || "下载文件失败");
-        const buf = new Uint8Array(await blob.arrayBuffer());
-        const result = await cosPutObject({
-          cfg,
-          key: cosKey,
-          body: buf,
-          contentType: blob.type || "application/octet-stream",
-        });
-        uploaded += 1;
-        bytes += result.size;
-      } catch (e) {
-        errors.push(`${file.bucket}/${file.path}: ${e instanceof Error ? e.message : String(e)}`);
-      }
+      const { data: blob, error: downloadError } = await admin.storage.from(file.bucket_id).download(file.name);
+      if (downloadError || !blob) throw new Error(downloadError?.message || "下载文件失败");
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      const result = await cosPutObject({
+        cfg,
+        key: cosKey,
+        body: buf,
+        contentType: blob.type || file.metadata?.mimetype || "application/octet-stream",
+      });
+      uploaded += 1;
+      bytes += result.size;
+    } catch (e) {
+      errors.push(`${file.bucket_id}/${file.name}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
-  return { uploaded, skipped, bytes, errors, reachedLimit };
+  return {
+    uploaded,
+    skipped,
+    bytes,
+    errors,
+    complete: files.length < STORAGE_SCAN_PER_TICK,
+    nextCursor: cursor + files.length,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -201,105 +313,153 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { /* ignore */ }
   const trigger = body.trigger_source === "cron" ? "cron" : "manual";
 
-  await admin.from("backup_runs").update({
-    status: "failed",
-    finished_at: new Date().toISOString(),
-    error_message: "上一次备份被系统中断，已自动结束。请重新点“立即备份”。",
-  }).eq("status", "running").lt("started_at", new Date(Date.now() - 20 * 60 * 1000).toISOString());
-
-  const { data: runRow, error: insertError } = await admin
-    .from("backup_runs")
-    .insert({
-      kind: "full",
-      status: "running",
-      trigger_source: trigger,
-      metadata: { step: "开始备份" },
-    })
-    .select()
-    .single();
-
-  if (insertError || !runRow) {
-    return json({ error: "无法创建备份记录：" + (insertError?.message ?? "未知原因") }, 500);
-  }
-
-  const runId = (runRow as { id: string }).id;
-  const cfg = readCosConfigFromEnv();
   const day = todayShanghai();
-  const dbKey = `db-backups/daily/${day}/full-data.json.gz`;
-  const monthKey = day.endsWith("-01") ? `db-backups/monthly/${day}/full-data.json.gz` : null;
+  const cfg = readCosConfigFromEnv();
+  let currentRunId: string | null = null;
 
   try {
-    await updateRun(admin, runId, { metadata: { step: "正在备份系统记录" } });
-    const db = await dumpDatabase(admin);
-    const dbUpload = await cosPutObject({
-      cfg,
-      key: dbKey,
-      body: db.bytes,
-      contentType: "application/gzip",
-    });
-    if (monthKey) {
-      await cosPutObject({ cfg, key: monthKey, body: db.bytes, contentType: "application/gzip" });
+    const active = await getActiveRun(admin, trigger, day);
+    if (!active) return json({ ok: true, skipped: true, message: "今天已经备份过，或还没到自动备份时间。" });
+
+    const runId = active.id;
+    currentRunId = runId;
+    const meta = normalizeMeta(active.metadata, day);
+    let filesCount = active.files_count;
+    let totalBytes = active.total_bytes;
+
+    if (meta.phase === "database") {
+      const start = meta.table_index ?? 0;
+      const offset = meta.table_offset ?? 0;
+      const errors = [...(meta.database_errors ?? [])];
+      let rows = meta.database_rows ?? 0;
+      let dbFiles = meta.database_files ?? 0;
+
+      const table = TABLES[start];
+      let nextIndex = start;
+      let nextOffset = offset;
+
+      if (!table) {
+        nextIndex = TABLES.length;
+        nextOffset = 0;
+      } else {
+        const part = Math.floor(offset / PAGE_SIZE).toString().padStart(6, "0");
+        const key = `db-backups/daily/${day}/tables/${table}/part-${part}.json.gz`;
+        try {
+          const dumped = await dumpTable(admin, table, offset);
+          if (dumped.rows > 0 || offset === 0) {
+            const uploaded = await cosPutObject({ cfg, key, body: dumped.bytes, contentType: "application/gzip" });
+            if (day.endsWith("-01")) {
+              await cosPutObject({
+                cfg,
+                key: `db-backups/monthly/${day}/tables/${table}/part-${part}.json.gz`,
+                body: dumped.bytes,
+                contentType: "application/gzip",
+              });
+            }
+            dbFiles += 1;
+            filesCount += 1;
+            totalBytes += uploaded.size;
+          }
+          rows += dumped.rows;
+          if (dumped.hasMore) {
+            nextOffset = offset + PAGE_SIZE;
+          } else {
+            nextIndex = start + 1;
+            nextOffset = 0;
+          }
+        } catch (e) {
+          errors.push(`${table}: ${e instanceof Error ? e.message : String(e)}`);
+          nextIndex = start + 1;
+          nextOffset = 0;
+        }
+      }
+
+      const nextMeta: RunMeta = {
+        ...meta,
+        phase: nextIndex >= TABLES.length ? "storage" : "database",
+        step: nextIndex >= TABLES.length ? "正在备份图片视频" : `正在备份系统记录 ${nextIndex}/${TABLES.length}`,
+        table_index: nextIndex,
+        table_offset: nextOffset,
+        database_rows: rows,
+        database_files: dbFiles,
+        database_errors: errors.slice(-20),
+      };
+      await updateRun(admin, runId, {
+        files_count: filesCount,
+        total_bytes: totalBytes,
+        cos_key: `db-backups/daily/${day}/`,
+        error_message: errors.length ? errors.slice(0, 5).map((e) => `系统记录：${e}`).join("\n") : null,
+        metadata: nextMeta,
+      });
+
+      return json({
+        ok: true,
+        completed: false,
+        run_id: runId,
+        step: nextMeta.step,
+        files: filesCount,
+        bytes: totalBytes,
+      });
+    }
+
+    if (meta.phase === "storage") {
+      const storage = await mirrorStorageTick(admin, cfg, meta.storage_cursor ?? 0, Date.now());
+      const storageUploaded = (meta.storage_uploaded ?? 0) + storage.uploaded;
+      const storageSkipped = (meta.storage_skipped ?? 0) + storage.skipped;
+      const storageErrors = [...(meta.storage_errors ?? []), ...storage.errors].slice(-20);
+      filesCount += storage.uploaded;
+      totalBytes += storage.bytes;
+
+      const complete = storage.complete;
+      const nextMeta: RunMeta = {
+        ...meta,
+        phase: complete ? "done" : "storage",
+        step: complete ? "备份完成" : "正在备份图片视频",
+        storage_uploaded: storageUploaded,
+        storage_skipped: storageSkipped,
+        storage_cursor: storage.nextCursor,
+        storage_errors: storageErrors,
+        storage_reached_limit: !complete,
+      };
+
+      await updateRun(admin, runId, {
+        status: complete ? "success" : "running",
+        finished_at: complete ? new Date().toISOString() : null,
+        files_count: filesCount,
+        total_bytes: totalBytes,
+        error_message: storageErrors.length ? storageErrors.slice(0, 5).map((e) => `图片视频：${e}`).join("\n") : null,
+        metadata: nextMeta,
+      });
+
+      return json({
+        ok: true,
+        completed: complete,
+        run_id: runId,
+        step: nextMeta.step,
+        files: filesCount,
+        bytes: totalBytes,
+        storage_uploaded: storageUploaded,
+        storage_skipped: storageSkipped,
+        has_more_files: !complete,
+      });
     }
 
     await updateRun(admin, runId, {
-      files_count: 1,
-      total_bytes: dbUpload.size,
-      cos_key: dbKey,
-      metadata: {
-        step: "正在备份图片视频",
-        database_rows: db.rows,
-        database_tables: db.tables,
-        database_errors: db.errors.length,
-      },
-    });
-
-    const storage = await mirrorStorage(admin, cfg);
-    const filesCount = 1 + storage.uploaded;
-    const totalBytes = dbUpload.size + storage.bytes;
-    const warnings = [
-      ...db.errors.slice(0, 5).map((e) => `系统记录：${e}`),
-      ...storage.errors.slice(0, 5).map((e) => `图片视频：${e}`),
-    ];
-    if (storage.reachedLimit) {
-      warnings.push("图片视频很多，本次先备份一部分；系统会在后续自动备份里继续补齐。已上传过的不会重复上传。");
-    }
-
-    await updateRun(admin, runId, {
-      status: warnings.length && filesCount <= 1 ? "failed" : "success",
+      status: "success",
       finished_at: new Date().toISOString(),
-      files_count: filesCount,
-      total_bytes: totalBytes,
-      error_message: warnings.length ? warnings.join("\n") : null,
-      metadata: {
-        step: "备份完成",
-        database_key: dbKey,
-        database_rows: db.rows,
-        database_tables: db.tables,
-        storage_uploaded: storage.uploaded,
-        storage_skipped: storage.skipped,
-        storage_errors: storage.errors.length,
-        storage_reached_limit: storage.reachedLimit,
-      },
+      metadata: { ...meta, step: "备份完成", phase: "done", storage_reached_limit: false },
     });
-
-    return json({
-      ok: true,
-      run_id: runId,
-      files: filesCount,
-      bytes: totalBytes,
-      storage_uploaded: storage.uploaded,
-      storage_skipped: storage.skipped,
-      has_more_files: storage.reachedLimit,
-      warnings: warnings.length,
-    });
+    return json({ ok: true, completed: true, run_id: runId, files: filesCount, bytes: totalBytes });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await updateRun(admin, runId, {
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error_message: message,
-      metadata: { step: "备份失败" },
-    });
+    if (currentRunId) {
+      await updateRun(admin, currentRunId, {
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error_message: message,
+        metadata: { step: "备份失败" },
+      });
+    }
     return json({ ok: false, error: message }, 500);
   }
 });
