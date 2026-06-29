@@ -303,6 +303,51 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_runs: {
+        Row: {
+          cos_key: string | null
+          created_at: string
+          error_message: string | null
+          files_count: number
+          finished_at: string | null
+          id: string
+          kind: string
+          metadata: Json
+          started_at: string
+          status: string
+          total_bytes: number
+          trigger_source: string
+        }
+        Insert: {
+          cos_key?: string | null
+          created_at?: string
+          error_message?: string | null
+          files_count?: number
+          finished_at?: string | null
+          id?: string
+          kind: string
+          metadata?: Json
+          started_at?: string
+          status?: string
+          total_bytes?: number
+          trigger_source?: string
+        }
+        Update: {
+          cos_key?: string | null
+          created_at?: string
+          error_message?: string | null
+          files_count?: number
+          finished_at?: string | null
+          id?: string
+          kind?: string
+          metadata?: Json
+          started_at?: string
+          status?: string
+          total_bytes?: number
+          trigger_source?: string
+        }
+        Relationships: []
+      }
       claim_otp: {
         Row: {
           attempts: number
