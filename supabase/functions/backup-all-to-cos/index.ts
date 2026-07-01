@@ -169,7 +169,10 @@ type RunMeta = {
   storage_uploaded?: number;
   storage_skipped?: number;
   storage_cursor?: number;
+  storage_pass?: 1 | 2; // 1 = skip large videos, 2 = large only
+  storage_deferred?: number; // count of files punted to pass 2
   storage_errors?: string[];
+  last_tick_at?: string;
 };
 
 function normalizeMeta(raw: unknown, day: string): RunMeta {
@@ -188,8 +191,11 @@ function normalizeMeta(raw: unknown, day: string): RunMeta {
     storage_uploaded: meta.storage_uploaded ?? 0,
     storage_skipped: meta.storage_skipped ?? 0,
     storage_cursor: meta.storage_cursor ?? 0,
+    storage_pass: (meta.storage_pass === 2 ? 2 : 1),
+    storage_deferred: meta.storage_deferred ?? 0,
     storage_errors: meta.storage_errors ?? [],
     step: meta.step ?? "开始备份",
+    last_tick_at: meta.last_tick_at,
   };
 }
 
