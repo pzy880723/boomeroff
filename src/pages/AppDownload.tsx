@@ -2,6 +2,7 @@ import { ArrowRight, CheckCircle2, Download, ExternalLink, ShieldCheck, Smartpho
 
 const androidApkUrl = "/downloads/boomer-go-android.apk";
 const iosTestFlightUrl = "";
+const boomerGoLogoUrl = "/boomer-go-logo.png";
 
 function InstallCard({
   label,
@@ -58,8 +59,8 @@ export default function AppDownload() {
 
         <nav className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#EC0000] text-sm font-black shadow-[0_12px_36px_rgba(236,0,0,0.35)]">
-              GO
+            <div className="h-11 w-11 overflow-hidden rounded-2xl bg-[#EC0000] shadow-[0_12px_36px_rgba(236,0,0,0.35)]">
+              <img className="h-full w-full object-cover" src={boomerGoLogoUrl} alt="BOOMER GO" />
             </div>
             <div>
               <p className="text-sm font-black tracking-[-0.03em]">BOOMER GO</p>
@@ -96,11 +97,8 @@ export default function AppDownload() {
           <div className="relative mx-auto w-full max-w-[25rem]">
             <div className="absolute -inset-6 rounded-[3rem] bg-[#EC0000]/30 blur-3xl" />
             <div className="relative overflow-hidden rounded-[2.6rem] border border-white/15 bg-[#EC0000] p-7 shadow-[0_35px_90px_rgba(236,0,0,0.42)]">
-              <div className="aspect-square rounded-[2rem] bg-[#EC0000] p-7 ring-1 ring-white/20">
-                <div className="flex h-full flex-col items-center justify-center text-center text-white">
-                  <p className="text-[2.35rem] font-black leading-none tracking-[-0.08em] sm:text-[2.8rem]">BOOMER</p>
-                  <p className="mt-3 text-[5.8rem] font-black leading-[0.76] tracking-[-0.12em] sm:text-[7rem]">GO</p>
-                </div>
+              <div className="aspect-square overflow-hidden rounded-[2rem] bg-[#EC0000] ring-1 ring-white/20">
+                <img className="h-full w-full object-cover" src={boomerGoLogoUrl} alt="BOOMER GO logo" />
               </div>
               <div className="mt-5 flex items-center justify-between text-sm">
                 <span className="rounded-full bg-white px-4 py-2 font-bold text-[#EC0000]">Mobile Preview</span>
