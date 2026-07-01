@@ -353,24 +353,31 @@ export default function Community() {
           <div className="text-center text-muted-foreground py-16 text-sm">还没有动态，识别一件商品分享出来吧</div>
         ) : (
           <div className="columns-2 gap-3 [column-fill:_balance]">
-            {posts.map((p) => {
+            {posts.map((p, idx) => {
               const prof = profiles[p.user_id];
               const liked = likes.has(p.id);
               const faved = p.product_id ? favs.has(p.product_id) : false;
+              const cardSrc = p.thumbnail_url || thumbUrl(p.image_url, 240) || p.image_url || '';
+              const cardSrcSet = p.thumbnail_url ? undefined : thumbSrcSet(p.image_url, 180, 70);
               return (
                 <div key={p.id} className="mb-3 break-inside-avoid">
                   <div className="rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm cursor-pointer" onClick={() => openDetail(p)}>
                     {(p.thumbnail_url || p.image_url) ? (
                       <img
-                        src={p.thumbnail_url || thumbUrl(p.image_url, 480) || p.image_url || ''}
+                        src={cardSrc}
+                        srcSet={cardSrcSet}
+                        sizes="(max-width: 640px) 46vw, 220px"
                         alt={p.name}
-                        className="w-full h-auto"
-                        loading="lazy"
+                        className="w-full h-auto bg-muted"
+                        style={{ aspectRatio: '3 / 4' }}
+                        loading={idx < 4 ? 'eager' : 'lazy'}
+                        {...(idx < 2 ? ({ fetchpriority: 'high' } as any) : {})}
                         decoding="async"
                       />
                     ) : (
                       <div className="aspect-square bg-muted" />
                     )}
+
                     <div className="p-2.5 space-y-2">
                       <p className="text-sm font-medium leading-snug break-words">{p.name}</p>
                       <div className="flex items-center gap-1 flex-wrap">
