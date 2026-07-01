@@ -1,121 +1,83 @@
+# 官方知识库加载提速
 
-## 一、为什么之前的备份都失败了（我查过 `backup_runs` 记录）
+## 诊断（看代码看到的三个真慢点）
 
-看下最近 4 次跑：
+**1. 列表页 `select('*')` 拉了一堆列表根本不用的重字段**
+`src/pages/OfficialLibrary.tsx:112` 一次拉 120 条，`*` 里包含：
+- `body`（Markdown 长文，可能几 KB/条）
+- `content`（jsonb：一句话、速记卡、话术、对比…全塞进来）
+- `gallery`（图集 URL 数组）
+- `video_url`、`source_product_id` 等
 
-| 时间 | 结果 | 卡在哪里 |
-|---|---|---|
-| 6-29 11:57 | ❌ | `The schema must be one of the following: public, graphql_public` — 备份代码直接查 `storage.objects` 系统表，被 PostgREST 拒了 |
-| 6-29 19:00（自动） | ❌ | 只推进到 19/58 张表，被 2 小时超时判死 |
-| 6-30 19:00（自动） | ❌ | 只推进到 21/58 张表，同上 |
-| 7-01 09:00（手动） | ⏳ | 还卡在 11/58 张表，页面一关就不动了 |
+列表只用到 12 个字段（id/name/category/ip_name/summary/era/origin/cover_url/selling_points/tips/view_count/favorite_count/importance_score）。
+**估算：payload 至少能从 300 KB+ 压到 30 KB 级别。**
 
-**三个根因：**
+**2. 列表页两次查询串行等**
+先 `await` 拿 items 再 `await` 拿 favorites，用户主观感受 = 两段网络往返之和。改成 `Promise.all` 并行。
 
-1. **每次调用只处理 1 张表**就返回，58 张表要 58 次调用才走完 → cron 一晚只触发 1 次，永远备不完。
-2. **手动备份靠前端 setTimeout 续跑**，一旦你关掉 `/portal` 页面，循环立刻断，之前那条 "running" 就一直挂着，2 小时后被系统判死。
-3. **图片/视频阶段用 `admin.schema("storage").from("objects")` 查表** — Lovable Cloud 的 PostgREST 明确禁止访问 `storage` schema，所以每次跑到图片视频阶段都会立刻报 schema 错。
+**3. 图片按"最大可能尺寸"取，而不是按 CSS 实际尺寸**
+- 列表大图卡 `thumbUrl(cover, 480)`，手机 2 列每列 ≈ 180 CSS px × dpr 2 = **360 px 够用**；桌面 dpr 1 需要更小；现在统一按 480 拉。
+- 列表模式缩略图 `thumbUrl(cover, 160)` 尺寸只有 56×56 CSS px，其实 112 就够。
+- 详情 Hero `thumbUrl(cover, 1080)` 对手机没问题，但桌面用户拿 1080 也够，只是没上 `srcset`，会浪费一次判断。
 
-结论：**从 6-29 到现在，没有一次真正成功过**。腾讯云桶里目前只有一堆"半成品"数据库快照，图片/视频一个都没备。
+用 `srcSet + sizes` 让浏览器按 dpr/视口自动选，能少下 30–50% 的字节。
 
----
+**4. 详情页也在 `select('*')` 且串行查了 3 个请求**
+`OfficialDetail.tsx:78/84/90`：主数据 → 收藏状态 → 个人库状态，三段串行。合并为一次 `Promise.all`；主数据本身也拆成"首屏必备字段"，`body` 这种超长 Markdown 延后到用户点"展开完整介绍"时再拉。
 
-## 二、修复方案
-
-### 1. 一次 tick 尽量多推进（`backup-all-to-cos/index.ts`）
-- 数据库阶段：在 25 秒预算内循环 `dumpTable`，一次搞定所有小表 + 大表分页，直到超时或走完 58 张。
-- 图片阶段：**弃用** `admin.schema("storage")`，改回文件里已经写好但没用的 `walkStorage()`（走 `storage.from(bucket).list()` 官方 API，不受 schema 限制）。用 bucket 顺序游标记录进度（`{ bucketIndex, prefixCursor }`），一 tick 处理 80 个文件。
-
-### 2. 服务端自动续跑，不依赖前端
-- 每个 tick 结束时如果 `phase !== "done"`，用 `EdgeRuntime.waitUntil(fetch(self))` 立刻自触发下一次调用。
-- 前端页面关掉也不影响，函数自己一直跑到 done 或失败为止。
-- 前端 `BackupPanel.tsx` 的 setTimeout 续跑逻辑保留作为保底。
-
-### 3. 错误友好化
-- schema/权限类错误映射成"备份程序权限不足，请联系开发者更新"。
-- 单张表报错时继续跑下一张，最后汇总，不再一挂全挂。
-
-### 4. 一次性把历史 "running" 挂单标记 failed（迁移一条 SQL）
+**5. 详情页 `increment_official_view` RPC 走 `await` 前置**
+现在写的是 `void supabase.rpc(...)`，实际不阻塞，OK；但确认一下是否 fire-and-forget，不能挡首屏。
 
 ---
 
-## 三、你的备份存在腾讯云什么位置
+## 改法（只碰前端 + 一个可选索引，不动业务逻辑）
 
-**桶：** `lovable-backup-1257117127`　**地域：** `ap-shanghai`
-**访问域名：** `https://lovable-backup-1257117127.cos.ap-shanghai.myqcloud.com`
+### A. `src/pages/OfficialLibrary.tsx`
+1. `.select('*')` → `.select('id,name,category,ip_name,summary,era,origin,cover_url,selling_points,tips,view_count,favorite_count,importance_score')`。
+2. items 查询和 favorites 查询用 `Promise.all` 并行。
+3. 首屏先加载 **60 条**（`.limit(60)`），滚到底再加载下一段（简单 IntersectionObserver + `.range()`，或者干脆保留一个"加载更多"按钮）—— 首屏字节直接砍一半。
+4. 图片改用 `srcSet`：
+   - 大图卡：`srcSet="thumb(cover,240) 1x, thumb(cover,480) 2x, thumb(cover,720) 3x"` + `sizes="(max-width: 640px) 50vw, 240px"`
+   - 列表小缩略图：`srcSet="thumb(cover,112) 1x, thumb(cover,224) 2x"`。
+5. 给第 1 张封面加 `fetchpriority="high"`，其余保持 `loading="lazy"`。
 
-```
-桶根/
-├── db-backups/                     ← 数据库备份
-│   ├── daily/YYYY-MM-DD/tables/<表名>/part-000000.json.gz
-│   │   （每天一份，每张表一个文件夹，大表按 200 行分包）
-│   └── monthly/YYYY-MM-01/tables/…  ← 每月 1 号额外多存一份长期归档
-│
-└── storage-mirror/                 ← 图片 / 视频原文件
-    ├── product-images/…            商品识别图
-    ├── avatars/…                   用户头像
-    ├── voucher-screenshots/…       券使用截图
-    ├── activity-posters/…          活动海报
-    └── marketing-videos/…          营销视频
-```
+### B. `src/pages/OfficialDetail.tsx`
+1. 首屏 `select` 拆成两拨：
+   - **首屏（必备）**：`id,name,category,ip_name,summary,era,origin,cover_url,selling_points,tips,view_count,favorite_count,importance_score,video_url,gallery,content,source_product_id`（去掉 `body`）。
+   - **懒加载**：`body` 只在用户展开"完整介绍"那一刻按 id 再取一次。
+2. 主数据 + 两个 `user_favorites` 查询用 `Promise.all` 一次发出，串行 3 段 → 并行 1 段。
+3. 已存在的 `srcSet` 缺失同样补上（Hero、图集、底款）。
 
-**格式说明：** 每个 `.json.gz` 解压后是 UTF-8 JSON：
-
-```json
-{
-  "backed_up_at": "2026-07-01T09:00:17Z",
-  "format": "boomer-table-backup-v1",
-  "table": "products",
-  "from": 0,
-  "rows": [ { …一行行原表数据… } ]
+### C. `src/lib/imageUrl.ts`
+新增一个 helper：
+```ts
+export function thumbSrcSet(url, base = 240) {
+  return `${thumbUrl(url, base)} 1x, ${thumbUrl(url, base*2)} 2x, ${thumbUrl(url, base*3)} 3x`
 }
 ```
+（其实已经有 `thumbSrcSet`，直接用起来。）
 
-图片/视频文件是**原样存的**，扩展名 / MIME 不变，直接拿来能用。
-
----
-
-## 四、别的 APP 怎么读取（3 种方式，按推荐度）
-
-### 方式 A（推荐）：腾讯云 COS 官方 SDK
-在腾讯云控制台新建一个**只读**子账号（比现在的 `lovable-backup-bot` 权限更小，只给 `GetObject` + `GetBucket`），把 SecretId/Key 配到你的新 APP 里，用官方 SDK：
-
-- Node.js：`npm i cos-nodejs-sdk-v5`
-- Python：`pip install cos-python-sdk-v5`
-- Java/Go/PHP/iOS/Android/小程序 都有官方包 → https://cloud.tencent.com/document/product/436/6474
-
-示例（Node）：
-```js
-const COS = require('cos-nodejs-sdk-v5');
-const cos = new COS({ SecretId, SecretKey });
-cos.getObject({
-  Bucket: 'lovable-backup-1257117127',
-  Region: 'ap-shanghai',
-  Key: 'db-backups/daily/2026-07-01/tables/products/part-000000.json.gz',
-}, (err, data) => { /* data.Body 是 gzip 后的 buffer，用 zlib.gunzip 解开就是 JSON */ });
+### D. 可选：数据库索引
+如果 `official_knowledge` 表已经上百条，加一个复合索引可以显著加速列表：
+```sql
+CREATE INDEX IF NOT EXISTS official_knowledge_cat_updated_idx
+  ON public.official_knowledge (category, updated_at DESC);
 ```
-
-### 方式 B：S3 兼容接口
-COS 支持 AWS S3 协议，直接用 aws-sdk / boto3 也行：
-- Endpoint: `https://cos.ap-shanghai.myqcloud.com`
-- Region: `ap-shanghai`
-- AK/SK 用腾讯云的 SecretId/SecretKey
-
-### 方式 C：命令行 / 一次性下载
-- `coscli`（腾讯云官方 CLI）：`coscli sync cos://lovable-backup-1257117127/db-backups ./local-backup`
-- 或用图形化工具 **COSBrowser**（腾讯云出品，Mac/Windows/手机都有）直接浏览下载。
+排序页面（`ORDER BY updated_at DESC WHERE category = ?`）会直接命中索引。
 
 ---
 
-## 五、我会新增一份 `docs/backup-locations.md`
-把上面第三、四节内容永久沉淀下来，方便你转给外部 APP 开发者。
+## 预期效果
+- 列表首屏 payload：**约 -70%**（少了 body/content/gallery + 120→60 条）。
+- 列表图片字节：**-30% 到 -50%**（按 dpr 精准取图）。
+- 详情首屏 RTT：**3 段串行 → 1 段并行**，首屏可交互时间预计快 300–800ms（取决于网络）。
+- 加索引后，翻类目/换排序的数据库耗时基本可以忽略不计。
 
 ---
 
-**改动清单：**
-- ✏️ `supabase/functions/backup-all-to-cos/index.ts` — 循环推进 + 自续跑 + 换回 walkStorage
-- 🗄 一条迁移：把当前挂着的 running 记录标 failed 释放锁
-- 📄 新增 `docs/backup-locations.md`
-- （前端 `BackupPanel.tsx` 不动，保留兜底轮询）
+## 不做的事（避免误伤）
+- 不动 `official_knowledge` 的字段结构、不改 RLS。
+- 不动详情页的 UI 组件、不动排版和交互。
+- 不引入新的图片 CDN 或缓存层（`/render/image/public/` 已经在做转码 + 边缘缓存，够用）。
 
-要我按这个方案改吗？
+如果同意，我进 build 模式一次改完 A/B/C；数据库索引（D）你说要不要一起加。
