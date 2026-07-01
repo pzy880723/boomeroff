@@ -47,6 +47,7 @@ type BackupRun = {
     failures?: FailureItem[];
     manifest_key?: string;
     reconcile?: ReconcileMeta;
+    last_tick_at?: string;
   } | null;
 };
 
@@ -97,6 +98,7 @@ export function BackupPanel() {
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [nudging, setNudging] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [reconciling, setReconciling] = useState(false);
   const [showFailures, setShowFailures] = useState(false);
@@ -138,6 +140,22 @@ export function BackupPanel() {
   const running = visibleRuns.find((r) => r.status === 'running');
   const latest = visibleRuns[0];
   const focus = running ?? latest;
+
+  // Low-frequency safety nudge: backend normally continues itself; this only
+  // wakes a run that has not written progress for about a minute.
+  useEffect(() => {
+    if (!running || nudging) return;
+    const lastTick = running.metadata?.last_tick_at ?? running.started_at;
+    const staleMs = Date.now() - new Date(lastTick).getTime();
+    if (staleMs < 55_000) return;
+    const t = window.setTimeout(async () => {
+      setNudging(true);
+      try {
+        await supabase.functions.invoke('backup-all-to-cos', { body: { trigger_source: 'manual' } });
+      } finally { setNudging(false); load(); }
+    }, 10_000);
+    return () => window.clearTimeout(t);
+  }, [running, nudging, load]);
 
   const trigger = async () => {
     setTriggering(true);
