@@ -155,12 +155,16 @@ export async function cosHeadObject(opts: {
   const auth = await signCos({ cfg, method: "HEAD", pathname });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 8_000);
-  const resp = await fetch(`https://${cosHost(cfg)}${pathname}`, {
-    method: "HEAD",
-    headers: { Authorization: auth },
-    signal: controller.signal,
-  });
-  clearTimeout(timer);
+  let resp: Response;
+  try {
+    resp = await fetch(`https://${cosHost(cfg)}${pathname}`, {
+      method: "HEAD",
+      headers: { Authorization: auth },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (resp.status === 404) return null;
   if (!resp.ok) throw new Error(`COS HEAD 失败 (${resp.status})`);
   return {
