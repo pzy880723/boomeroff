@@ -1,72 +1,135 @@
-## 当前备份状况：**不正常，且没备份全**
 
-### 一、直接结论
+## 目标
 
-| 项 | 情况 |
-|---|---|
-| 数据库表（58 张） | ✅ 每次都能跑完，几秒钟；内容完整 |
-| 图片（product-images / avatars / voucher-screenshots / activity-posters）| ⚠️ 部分备份；每次只能跑一小段就超时 |
-| 视频（marketing-videos，711 MB / 314 个文件）| ❌ 基本没备成功——大文件 PUT 到腾讯云 COS 触发 Gateway Timeout |
-| 定时任务 | ❌ 最近 3 天的凌晨 cron 全部失败，报"跑得太久，自动结束" |
+围绕现有 `backup-all-to-cos` 流程补齐"看得见 / 校验得了 / 修得回"三件事：完成通知 + Manifest 清单 + 失败重试 + 对账 + 更细的进度面板。
 
-### 二、最近 10 次运行都在同一个坑
+## 一、后端改造 `supabase/functions/backup-all-to-cos/index.ts`
 
-- **今天 09:16** 手动触发：跑到 `marketing-videos/…/1777549950775-rjhtcf.jpg`（其实是大文件）时 **COS 返回 Gateway Timeout**，然后 status 一直卡在 running
-- **今天 09:00** 失败，同类错误
-- **6-30 / 6-29 凌晨 cron** 都被"看门狗"判定超时，标记 failed
-- 每次进度不同 → 说明是**逐批推进**，但**一直没能把 marketing-videos 全推完**
+### 1. 结构化 metadata（面板 + 通知 + 对账都靠它）
 
-### 三、根因
+在现有 `RunMeta` 上补：
 
-1. **单文件太大 + 一次性 PUT**：`cosPutObject` 是一次性把整个 Blob 塞给腾讯云，几十 MB 的视频在 Edge Function 网络上很容易触发 COS 侧的 504。目前没重试、没分片。
-2. **看门狗把正在跑的当成僵尸**：`backup-all-to-cos` 用"上次 started_at 超过 X 分钟就标记失败"来自愈，但大视频批次本来就慢，导致 cron 每次一开跑就被上一次的残影踢掉。
-3. **没有断点续跑指针**：每次重启都从头扫 bucket，永远先卡在同一个大视频上，后面的小文件根本轮不到。
+```
+pass_stats: {
+  database: { files_count, uploaded, failed, bytes, elapsed_ms }
+  storage_pass1: { files_count, uploaded, skipped, failed, bytes, elapsed_ms }  // 图片
+  storage_pass2: { files_count, uploaded, skipped, failed, bytes, elapsed_ms }  // 视频
+}
+failures: Array<{
+  kind: 'table' | 'storage'
+  bucket?: string
+  path?: string           // 或 table:offset
+  size?: number
+  error: string           // 已 humanize
+  attempts: number
+  first_failed_at: string
+  last_failed_at: string
+}>                        // 最多保留 500 条，同 key 去重后 attempts+1
+manifest_key?: string     // 全量 manifest 的 COS key
+reconcile?: {
+  ran_at: string
+  tables_expected: number, tables_present: number, tables_missing: string[]
+  storage_expected: number, storage_present: number, storage_missing: Array<{bucket,path}>
+  ok: boolean
+}
+notified?: boolean        // 完成通知是否已写
+```
 
-### 四、你问的两个问题的答案
+每次上传成功 / 失败都累加到对应 pass_stats 与 failures；耗时用 `Date.now() - phaseStartAt`。
 
-- **"备份速度正常吗？"** → 数据库正常（秒级）；图片视频**不正常**，Edge Function 单 tick 15 分钟根本推不完 700 MB 视频，加上没重试，实际吞吐几乎为 0。
-- **"包含所有数据了吗？"** → 数据库表全的（58 张都在 `db-backups/daily/YYYY-MM-DD/tables/`）。**Storage 只有一小部分**：product-images 应该大半都在，marketing-videos 大概率**只备了几个小的**，711 MB 的视频还没镜像到腾讯云。
-- 未包含：`auth.users`（Supabase 托管，导不出，用户 ID 保留在 `profiles`/`user_roles` 里）。
+### 2. Manifest 清单上传（run 完成时）
 
----
+`meta.phase === "done"` 那一 tick，聚合已 upload 成功的：
+- 遍历 `db-backups/daily/{day}/tables/` + `_manifest/` + 汇总 `storage_pass1/2` 上传成功的对象
+- 生成 `db-backups/daily/{day}/_run-manifest.json.gz`：
+  ```
+  { run_id, day, generated_at, tables: [{table, parts:[{key,size,etag}]}],
+    storage: [{bucket,path,cos_key,size,etag,pass}],
+    totals: { files, bytes }, failures: [...] }
+  ```
+- 记录到 `meta.manifest_key`，同时把上传返回的 `ETag`（改造 `cosPutObject` 返回 ETag，`_shared/tencentCos.ts` 里从 response headers 读取）存进 tables/storage 条目。
 
-## 修复计划
+### 3. 对账校验（自动跑一次）
 
-### A. 让大文件真正传得上去（`_shared/tencentCos.ts` + `backup-all-to-cos`）
+`done` 之后同一 tick 调 `runReconcile(meta, manifests)`：
+- tables 期望 = TABLES.length；实际 = 本次 upload 成功 + head 存在
+- storage 期望 = 各 bucket manifest 里 size ≤ MAX_FILE_BYTES 的总数；实际 = COS `HEAD` 逐个探测（对本次已 upload 过的直接算成功，剩余采样 head 抽检，避免超时）
+- 差集写入 `meta.reconcile.storage_missing / tables_missing`
+- 若 `missing.length > 0` 把这些补进 `meta.failures` 供"只重试失败文件"使用
 
-1. **给 `cosPutObject` 加自动重试**：504 / 网络错 → 指数退避重试 3 次；仍失败就跳过并记进 `error_message`，不阻塞后续文件。
-2. **> 20 MB 文件走 COS 分片上传**（Initiate / UploadPart / Complete）：8 MB 一片、并发 2 片，避免单请求超时。给 `_shared/tencentCos.ts` 加 `cosMultipartUpload`。
-3. **单 tick 内单文件预算**：任何一个文件超过 90 秒还没传完就跳过，塞回下一 tick 重试，防止一个坏文件卡死整轮。
+### 4. 完成通知（站内消息）
 
-### B. 断点续跑，别每次从头扫
+`done` 且 `!notified`：向 `notifications` 表插一条：
+- 收件人 = 触发 manual 的用户 / 或全部 super_admin（cron 情况）
+- 标题：`备份成功 ✓ / 备份完成但有失败 ⚠️`
+- 内容：`成功率 X% · 耗时 Ymin · 文件 N 个 · 失败 K 个（原因摘要 top3）`
+- `metadata.link = '/portal?tab=backup&run=<id>'`
 
-4. `backup_runs.metadata` 里记 `cursor = { bucket, last_key }`；每 tick 结束前写回，续跑时从 last_key 之后 `list()`，小文件很快就能跑完。
-5. **先按 size 升序处理**（其实 Storage list 已按 name，改成按 bucket 优先级 + skip-large-in-first-pass）：第一轮跳过 > 50 MB 文件先把大量小文件全备完，第二轮再啃视频，这样即使视频阶段挂了，"图片 100%"也已达成。
+### 5. 新入口：`action` 分派
 
-### C. 让 cron 不再自己踩自己
+请求 body 支持 `action`:
+- `run`（默认）：现有流程
+- `retry_failed`：读取指定 `run_id` 的 `meta.failures`，创建**新的** run（kind='retry'），metadata 里带 `retry_of: run_id + queue: [...failures]`；主循环里若 `meta.queue`，跳过全量扫描直接消费队列
+- `reconcile_only`：只跑对账（针对指定 run 补跑）
 
-6. 看门狗阈值从当前值调到 25 分钟；且 **只在 status='running' 且 last heartbeat 超时** 才踢——加一个 `heartbeat_at` 字段每 tick 更新，避免"正常跑但没心跳"被误杀。
-7. cron 触发前如果发现 15 分钟内有 running 的实例，直接跳过本次（而不是把它标 failed 再自己开一个）。
+## 二、`_shared/tencentCos.ts`
 
-### D. 可观测性
+- `cosPutObject` 返回 `{ size, etag }`
+- 新增 `cosListPrefix({cfg, prefix, marker?})`（分页 List Objects v2 用于对账 fallback）
 
-8. `BackupPanel`（/portal → 数据备份）显示：
-   - 每个 bucket 的"已镜像 / 总文件数"进度条（用 `metadata.per_bucket`）
-   - 最近失败文件列表 + 一键"只重试这些"按钮
-9. 一次性写个"补齐脚本"按钮：只跑 marketing-videos，把历史遗漏一次性补完。
+## 三、前端 `src/components/admin/BackupPanel.tsx`
 
-### 技术细节（可跳过）
+### 1. 顶部当前 run 进度面板（run.status === 'running' 或最近一条）
 
-- 腾讯云 COS 分片：`POST /?uploads` → `PUT ?partNumber=N&uploadId=…` → `POST ?uploadId=…` 带 XML；签名沿用现有 `signCos`，pathname 需要包含 query。
-- 心跳更新用轻量 `update backup_runs set metadata = jsonb_set(...) where id=$1`，别 select 全 row。
-- 分片并发用 `Promise.allSettled`，失败 part 单独重试。
+三行 pass 卡片（数据库 / 图片 / 视频），每行显示：
+```
+[数据库] 58/58 表 · 成功 58 失败 0 · 12.3s   ████████ 100%
+[图片]   1245/1400 · 成功 1240 失败 5 · 4m2s ██████░░ 89%
+[视频]   3/12   · 成功 3 失败 0 · 1m30s     ██░░░░░░ 25%
+```
+数据来自 `meta.pass_stats` + `storage_cursor / storage_total / storage_pass`。
 
-### 预期效果
+### 2. 完成后摘要卡片
 
-- 首次跑完后：**5 个 bucket 全量镜像**（≈ 1.17 GB），耗时约 8–15 分钟；之后每天增量只传新增文件，1–2 分钟结束。
-- cron 稳定成功；`backup_runs` 里不再出现"跑得太久，自动结束"。
-- `docs/backup-locations.md` 里的目录结构不变，外部读取方式不受影响。
+```
+✓ 备份成功 · 成功率 99.2% · 耗时 8 分 12 秒
+文件 1520 · 失败 12
+[下载 Manifest] [只重试失败文件] [重新对账]
+```
 
----
+- **下载 Manifest**：调 edge function 生成签名 URL（新增 `get-backup-manifest-url` 或复用已有签名逻辑），直接跳转 COS
+- **只重试失败文件**：`invoke('backup-all-to-cos', { action:'retry_failed', run_id })`，弹 toast，轮询新的 run
+- **重新对账**：`action:'reconcile_only'`
 
-要我按这个计划执行吗？（如果你只想先"补齐 marketing-videos"，也可以只做 A + D-9 的一次性补齐按钮。）
+### 3. 失败明细可折叠列表
+
+从 `meta.failures` 渲染，每项：`bucket/path` + 错误（已 humanize）+ 尝试次数 + `[跳过]`（把它从 failures 移除）。
+
+### 4. 对账结果面板
+
+如果 `meta.reconcile.ok === false`：红条 + "缺失 N 个（点击查看）" → 弹 Sheet 展示 `tables_missing / storage_missing`。
+
+### 5. 通知触发
+
+`toast` 由 realtime 订阅 `notifications` 表（新完成的 backup 消息）触发；面板挂载时 `channel('backup-notify')` 订阅当前用户新通知，type='backup' 时弹右下 toast。
+
+## 四、数据库 migration
+
+`notifications` 表已存在，无需新表。新增一列 `backup_runs.retry_of uuid null` 便于前端把 retry run 和原 run 关联展示。加索引 `(kind, started_at desc)`。
+
+## 五、验证方式
+
+1. 手动点"立即备份" → 面板出现三行 pass 进度
+2. 人为改一个 bucket 权限触发几条失败 → 完成后看到失败列表 + 站内消息 + 成功率
+3. 点"只重试失败文件" → 新 run 只处理 12 个失败对象，成功后失败列表清空
+4. 点"下载 Manifest" → 拿到 json.gz，用 `zcat` 校验 ETag/size 完整
+5. 手动删掉 COS 上某个对象后点"重新对账" → 缺失项出现在对账面板
+
+## 交付文件
+
+- 改：`supabase/functions/backup-all-to-cos/index.ts`
+- 改：`supabase/functions/_shared/tencentCos.ts`（ETag 返回 + list prefix）
+- 新：`supabase/functions/get-backup-manifest-url/index.ts`（签名下载 URL）
+- 改：`src/components/admin/BackupPanel.tsx`
+- 新：`src/components/admin/BackupPassProgress.tsx`、`BackupFailuresList.tsx`、`BackupReconcilePanel.tsx`
+- 新 migration：`backup_runs.retry_of` + 索引
