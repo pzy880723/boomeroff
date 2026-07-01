@@ -214,24 +214,30 @@ async function getActiveRun(
 
   const running = Array.isArray(runningRows) ? runningRows[0] : null;
   if (running) {
-    const startedAt = new Date((running as { started_at: string }).started_at).getTime();
-    if (Date.now() - startedAt < 2 * 60 * 60 * 1000) {
-      const row = running as { id: string; files_count: number; total_bytes: number; metadata: unknown };
+    const row = running as { id: string; started_at: string; files_count: number; total_bytes: number; metadata: unknown };
+    const meta = normalizeMeta(row.metadata, day);
+    const heartbeatAt = meta.last_tick_at ? new Date(meta.last_tick_at).getTime() : new Date(row.started_at).getTime();
+    const staleMs = Date.now() - heartbeatAt;
+    // A run is stale if it hasn't ticked in 20 minutes OR started > 6h ago overall.
+    const overallAgeMs = Date.now() - new Date(row.started_at).getTime();
+    if (staleMs < 20 * 60 * 1000 && overallAgeMs < 6 * 60 * 60 * 1000) {
       return {
         id: row.id,
         files_count: row.files_count ?? 0,
         total_bytes: Number(row.total_bytes ?? 0),
-        metadata: normalizeMeta(row.metadata, day),
+        metadata: meta,
       };
     }
     await admin.from("backup_runs").update({
       status: "failed",
       finished_at: new Date().toISOString(),
-      error_message: "上一次备份跑得太久，已自动结束。系统会重新开始备份。",
-    }).eq("id", (running as { id: string }).id);
+      error_message: "上一次备份长时间没有推进，已自动结束。系统会重新开始备份。",
+    }).eq("id", row.id);
   }
 
   if (trigger === "cron") {
+    // Cron only starts a new full run inside the 3–4am Shanghai window; but if a run
+    // is already running (handled above) it will continue it regardless of hour.
     const { data: todaySuccess } = await admin
       .from("backup_runs")
       .select("id")
