@@ -35,7 +35,8 @@ export function AvatarPicker({ userId, displayName, avatarUrl, onChanged, size =
       if ((data as any)?.error) throw new Error((data as any).error);
       const url = (data as any)?.avatar_url as string | undefined;
       if (!url) throw new Error('未返回头像');
-      onChanged(`${url}?v=${Date.now()}`);
+      onChanged(url);
+
       toast.success('AI 头像已生成');
     } catch (e: any) {
       toast.error(e?.message || 'AI 生成失败');
@@ -71,7 +72,7 @@ export function AvatarPicker({ userId, displayName, avatarUrl, onChanged, size =
         .update({ avatar_url: url })
         .eq('user_id', userId);
       if (profErr) throw profErr;
-      onChanged(`${url}?v=${Date.now()}`);
+      onChanged(url);
       toast.success('头像已更新');
     } catch (e: any) {
       toast.error(e?.message || '上传失败');
