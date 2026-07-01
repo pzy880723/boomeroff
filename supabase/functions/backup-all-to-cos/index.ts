@@ -1,6 +1,10 @@
-// One-button full backup -> Tencent COS.
-// Loops as much as possible within one Edge tick, then self-continues via
-// EdgeRuntime.waitUntil so the run finishes even if the browser tab is closed.
+// One-button full backup -> Tencent COS with:
+//  - per-pass stats (database / images / videos)
+//  - structured failure list
+//  - run-manifest.json.gz with ETag/size for external verification
+//  - automatic reconcile after done
+//  - "retry_failed" and "reconcile_only" actions
+//  - broadcast notification (public.notifications) on completion
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import {
@@ -8,6 +12,7 @@ import {
   cosPutObject,
   gzip,
   readCosConfigFromEnv,
+  signCos,
 } from "../_shared/tencentCos.ts";
 
 const TABLES = [
@@ -44,9 +49,9 @@ const BUCKETS = [
 const PAGE_SIZE = 200;
 const STORAGE_LIST_PAGE = 200;
 const TICK_BUDGET_MS = 45_000;
-// Files strictly larger than this are deferred to pass 2 so images finish first.
 const LARGE_FILE_THRESHOLD = 30 * 1024 * 1024;
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
+const MAX_FAILURES = 500;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -57,10 +62,7 @@ function json(data: unknown, status = 200) {
 
 function todayShanghai() {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
   }).formatToParts(new Date());
   const y = parts.find((p) => p.type === "year")?.value;
   const m = parts.find((p) => p.type === "month")?.value;
@@ -70,72 +72,169 @@ function todayShanghai() {
 
 function currentShanghaiHour() {
   const value = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Shanghai",
-    hour: "2-digit",
-    hour12: false,
+    timeZone: "Asia/Shanghai", hour: "2-digit", hour12: false,
   }).format(new Date());
   return Number(value);
 }
 
 function humanize(msg: string): string {
   const m = msg.toLowerCase();
-  if (m.includes("schema must be one of")) {
-    return "备份程序权限不足（无法访问 storage schema），请联系开发者更新。";
-  }
-  if (m.includes("signature") || m.includes("403") || m.includes("accessdenied")) {
-    return "腾讯云拒绝写入，密钥可能过期或权限被改。请重新生成腾讯云密钥。";
-  }
-  if (m.includes("nosuchbucket")) {
-    return "腾讯云存储桶不存在，请到腾讯云控制台确认。";
-  }
+  if (m.includes("schema must be one of")) return "备份程序权限不足（无法访问 storage schema），请联系开发者更新。";
+  if (m.includes("signature") || m.includes("403") || m.includes("accessdenied")) return "腾讯云拒绝写入，密钥可能过期或权限被改。请重新生成腾讯云密钥。";
+  if (m.includes("nosuchbucket")) return "腾讯云存储桶不存在，请到腾讯云控制台确认。";
+  if (m.includes("timeout") || m.includes("timed out") || m.includes("aborted")) return "上传腾讯云超时，稍后系统会自动重试。";
   return msg;
 }
 
-async function updateRun(
-  admin: ReturnType<typeof createClient>,
-  runId: string,
-  patch: Record<string, unknown>,
-) {
+type PassKey = "database" | "storage_pass1" | "storage_pass2";
+type PassStat = {
+  uploaded: number;
+  failed: number;
+  skipped: number;
+  bytes: number;
+  elapsed_ms: number;
+  total?: number;
+};
+type FailureItem = {
+  kind: "table" | "storage";
+  bucket?: string;
+  path?: string;
+  table?: string;
+  offset?: number;
+  size?: number;
+  error: string;
+  attempts: number;
+  first_failed_at: string;
+  last_failed_at: string;
+};
+
+type ManifestEntry = { kind: "table" | "storage"; key: string; size: number; etag: string; bucket?: string; path?: string; table?: string };
+
+type RunMeta = {
+  step?: string;
+  phase?: "database" | "storage_list" | "storage" | "finalize" | "done";
+  day?: string;
+  table_index?: number;
+  table_offset?: number;
+  database_rows?: number;
+  database_files?: number;
+  storage_bucket_index?: number;
+  storage_total?: number;
+  storage_uploaded?: number;
+  storage_skipped?: number;
+  storage_cursor?: number;
+  storage_pass?: 1 | 2;
+  storage_deferred?: number;
+  storage_reached_limit?: boolean;
+  last_tick_at?: string;
+  pass_stats?: Partial<Record<PassKey, PassStat>>;
+  failures?: FailureItem[];
+  manifest?: ManifestEntry[]; // running list of successfully uploaded objects
+  manifest_key?: string;
+  reconcile?: {
+    ran_at: string;
+    tables_expected: number;
+    tables_present: number;
+    tables_missing: string[];
+    storage_expected: number;
+    storage_present: number;
+    storage_missing: Array<{ bucket: string; path: string }>;
+    ok: boolean;
+  };
+  notified?: boolean;
+  retry_of?: string;
+  retry_queue?: Array<{ bucket: string; path: string; size?: number }>;
+  retry_cursor?: number;
+};
+
+function defaultStat(): PassStat { return { uploaded: 0, failed: 0, skipped: 0, bytes: 0, elapsed_ms: 0 }; }
+
+function normalizeMeta(raw: unknown, day: string): RunMeta {
+  const meta = raw && typeof raw === "object" ? raw as RunMeta : {};
+  return {
+    ...meta,
+    phase: meta.phase ?? "database",
+    day: meta.day ?? day,
+    table_index: meta.table_index ?? 0,
+    table_offset: meta.table_offset ?? 0,
+    database_rows: meta.database_rows ?? 0,
+    database_files: meta.database_files ?? 0,
+    storage_bucket_index: meta.storage_bucket_index ?? 0,
+    storage_total: meta.storage_total ?? 0,
+    storage_uploaded: meta.storage_uploaded ?? 0,
+    storage_skipped: meta.storage_skipped ?? 0,
+    storage_cursor: meta.storage_cursor ?? 0,
+    storage_pass: (meta.storage_pass === 2 ? 2 : 1),
+    storage_deferred: meta.storage_deferred ?? 0,
+    step: meta.step ?? "开始备份",
+    last_tick_at: meta.last_tick_at,
+    pass_stats: {
+      database: meta.pass_stats?.database ?? defaultStat(),
+      storage_pass1: meta.pass_stats?.storage_pass1 ?? defaultStat(),
+      storage_pass2: meta.pass_stats?.storage_pass2 ?? defaultStat(),
+    },
+    failures: Array.isArray(meta.failures) ? meta.failures : [],
+    manifest: Array.isArray(meta.manifest) ? meta.manifest : [],
+    manifest_key: meta.manifest_key,
+    reconcile: meta.reconcile,
+    notified: meta.notified ?? false,
+    retry_of: meta.retry_of,
+    retry_queue: meta.retry_queue,
+    retry_cursor: meta.retry_cursor,
+  };
+}
+
+function recordFailure(meta: RunMeta, item: Omit<FailureItem, "attempts" | "first_failed_at" | "last_failed_at">) {
+  const now = new Date().toISOString();
+  const key = item.kind === "table" ? `t:${item.table}:${item.offset}` : `s:${item.bucket}/${item.path}`;
+  const arr = meta.failures ?? [];
+  const idx = arr.findIndex((f) => (f.kind === "table" ? `t:${f.table}:${f.offset}` : `s:${f.bucket}/${f.path}`) === key);
+  if (idx >= 0) {
+    arr[idx] = { ...arr[idx], ...item, attempts: arr[idx].attempts + 1, last_failed_at: now, error: humanize(item.error) };
+  } else {
+    arr.push({ ...item, error: humanize(item.error), attempts: 1, first_failed_at: now, last_failed_at: now });
+  }
+  meta.failures = arr.slice(-MAX_FAILURES);
+}
+
+function removeFailure(meta: RunMeta, matcher: (f: FailureItem) => boolean) {
+  meta.failures = (meta.failures ?? []).filter((f) => !matcher(f));
+}
+
+function bumpPass(meta: RunMeta, key: PassKey, patch: Partial<PassStat>) {
+  const stats = meta.pass_stats ?? {};
+  const cur = stats[key] ?? defaultStat();
+  stats[key] = {
+    uploaded: cur.uploaded + (patch.uploaded ?? 0),
+    failed: cur.failed + (patch.failed ?? 0),
+    skipped: cur.skipped + (patch.skipped ?? 0),
+    bytes: cur.bytes + (patch.bytes ?? 0),
+    elapsed_ms: cur.elapsed_ms + (patch.elapsed_ms ?? 0),
+    total: patch.total ?? cur.total,
+  };
+  meta.pass_stats = stats;
+}
+
+async function updateRun(admin: ReturnType<typeof createClient>, runId: string, patch: Record<string, unknown>) {
   await admin.from("backup_runs").update(patch).eq("id", runId);
 }
 
-async function dumpTable(
-  admin: ReturnType<typeof createClient>,
-  table: string,
-  from: number,
-): Promise<{ bytes: Uint8Array; rows: number; hasMore: boolean }> {
-  const { data, error } = await admin
-    .from(table)
-    .select("*")
-    .range(from, from + PAGE_SIZE - 1);
+async function dumpTable(admin: ReturnType<typeof createClient>, table: string, from: number) {
+  const { data, error } = await admin.from(table).select("*").range(from, from + PAGE_SIZE - 1);
   if (error) throw error;
   const rows = data ?? [];
-
-  const payload = {
-    backed_up_at: new Date().toISOString(),
-    format: "boomer-table-backup-v1",
-    table,
-    from,
-    rows,
-  };
+  const payload = { backed_up_at: new Date().toISOString(), format: "boomer-table-backup-v1", table, from, rows };
   const raw = new TextEncoder().encode(JSON.stringify(payload));
   return { bytes: await gzip(raw), rows: rows.length, hasMore: rows.length === PAGE_SIZE };
 }
 
 type StorageFile = { bucket: string; path: string; size: number; mime?: string };
 
-async function listBucketRecursive(
-  admin: ReturnType<typeof createClient>,
-  bucket: string,
-  prefix = "",
-  out: StorageFile[] = [],
-): Promise<StorageFile[]> {
+async function listBucketRecursive(admin: ReturnType<typeof createClient>, bucket: string, prefix = "", out: StorageFile[] = []): Promise<StorageFile[]> {
   let offset = 0;
   while (true) {
     const { data, error } = await admin.storage.from(bucket).list(prefix, {
-      limit: STORAGE_LIST_PAGE,
-      offset,
-      sortBy: { column: "name", order: "asc" },
+      limit: STORAGE_LIST_PAGE, offset, sortBy: { column: "name", order: "asc" },
     });
     if (error) throw new Error(`读取 ${bucket}/${prefix || "根目录"} 失败：${error.message}`);
     if (!data || data.length === 0) break;
@@ -154,123 +253,158 @@ async function listBucketRecursive(
   return out;
 }
 
-type RunMeta = {
-  step?: string;
-  phase?: "database" | "storage_list" | "storage" | "done";
-  day?: string;
-  table_index?: number;
-  table_offset?: number;
-  database_rows?: number;
-  database_files?: number;
-  database_errors?: string[];
-  storage_bucket_index?: number;
-  storage_manifest_key?: string;
-  storage_total?: number;
-  storage_uploaded?: number;
-  storage_skipped?: number;
-  storage_cursor?: number;
-  storage_pass?: 1 | 2; // 1 = skip large videos, 2 = large only
-  storage_deferred?: number; // count of files punted to pass 2
-  storage_errors?: string[];
-  last_tick_at?: string;
-};
-
-function normalizeMeta(raw: unknown, day: string): RunMeta {
-  const meta = raw && typeof raw === "object" ? raw as RunMeta : {};
-  return {
-    phase: meta.phase ?? "database",
-    day: meta.day ?? day,
-    table_index: meta.table_index ?? 0,
-    table_offset: meta.table_offset ?? 0,
-    database_rows: meta.database_rows ?? 0,
-    database_files: meta.database_files ?? 0,
-    database_errors: meta.database_errors ?? [],
-    storage_bucket_index: meta.storage_bucket_index ?? 0,
-    storage_manifest_key: meta.storage_manifest_key,
-    storage_total: meta.storage_total ?? 0,
-    storage_uploaded: meta.storage_uploaded ?? 0,
-    storage_skipped: meta.storage_skipped ?? 0,
-    storage_cursor: meta.storage_cursor ?? 0,
-    storage_pass: (meta.storage_pass === 2 ? 2 : 1),
-    storage_deferred: meta.storage_deferred ?? 0,
-    storage_errors: meta.storage_errors ?? [],
-    step: meta.step ?? "开始备份",
-    last_tick_at: meta.last_tick_at,
-  };
+async function loadBucketManifests(cfg: ReturnType<typeof readCosConfigFromEnv>, day: string): Promise<StorageFile[]> {
+  const out: StorageFile[] = [];
+  for (let i = 0; i < BUCKETS.length; i++) {
+    try {
+      const bucket = BUCKETS[i];
+      const key = `db-backups/daily/${day}/_manifest/${String(i).padStart(2, "0")}-${bucket}.json.gz`;
+      const pathname = `/${encodeURI(key).replace(/%2F/g, "/")}`;
+      const auth = await signCos({ cfg, method: "GET", pathname });
+      const url = `https://${cfg.bucket}.cos.${cfg.region}.myqcloud.com${pathname}`;
+      const resp = await fetch(url, { headers: { Authorization: auth } });
+      if (!resp.ok) continue;
+      const gz = new Uint8Array(await resp.arrayBuffer());
+      const ds = new DecompressionStream("gzip");
+      const stream = new Blob([gz as unknown as BlobPart]).stream().pipeThrough(ds);
+      const buf = new Uint8Array(await new Response(stream).arrayBuffer());
+      out.push(...(JSON.parse(new TextDecoder().decode(buf)) as StorageFile[]));
+    } catch { /* ignore */ }
+  }
+  return out;
 }
 
-async function getActiveRun(
+async function finalizeManifestAndReconcile(
   admin: ReturnType<typeof createClient>,
-  trigger: "manual" | "cron",
+  cfg: ReturnType<typeof readCosConfigFromEnv>,
+  runId: string,
+  meta: RunMeta,
   day: string,
-): Promise<{ id: string; files_count: number; total_bytes: number; metadata: RunMeta } | null> {
-  const { data: runningRows } = await admin
-    .from("backup_runs")
-    .select("id, started_at, files_count, total_bytes, metadata")
-    .eq("kind", "full")
-    .eq("status", "running")
-    .order("started_at", { ascending: false })
-    .limit(1);
+) {
+  // 1) upload run-manifest
+  const manifestBody = {
+    format: "boomer-run-manifest-v1",
+    run_id: runId,
+    day,
+    generated_at: new Date().toISOString(),
+    totals: {
+      files: meta.manifest?.length ?? 0,
+      bytes: (meta.manifest ?? []).reduce((s, m) => s + (m.size || 0), 0),
+    },
+    pass_stats: meta.pass_stats,
+    entries: meta.manifest ?? [],
+    failures: meta.failures ?? [],
+  };
+  const key = `db-backups/daily/${day}/_run-manifest-${runId}.json.gz`;
+  try {
+    const raw = new TextEncoder().encode(JSON.stringify(manifestBody));
+    await cosPutObject({ cfg, key, body: await gzip(raw), contentType: "application/gzip" });
+    meta.manifest_key = key;
+  } catch (e) {
+    recordFailure(meta, { kind: "storage", bucket: "_manifest", path: key, error: e instanceof Error ? e.message : String(e) });
+  }
 
+  // 2) reconcile — cross-check against source manifests
+  try {
+    const src = await loadBucketManifests(cfg, day);
+    const eligible = src.filter((f) => (f.size ?? 0) <= MAX_FILE_BYTES);
+    const uploadedSet = new Set((meta.manifest ?? []).filter((m) => m.kind === "storage").map((m) => `${m.bucket}/${m.path}`));
+    const missing: Array<{ bucket: string; path: string }> = [];
+    for (const f of eligible) {
+      const id = `${f.bucket}/${f.path}`;
+      if (uploadedSet.has(id)) continue;
+      // If not in manifest, do a HEAD to see if a previous run put it there.
+      try {
+        const head = await cosHeadObject({ cfg, key: `storage-mirror/${f.bucket}/${f.path}` });
+        if (head && head.size === f.size) continue;
+      } catch { /* treat as missing */ }
+      missing.push({ bucket: f.bucket, path: f.path });
+      // seed failures for retry_failed
+      recordFailure(meta, { kind: "storage", bucket: f.bucket, path: f.path, size: f.size, error: "对账发现缺失" });
+    }
+    const tablesUploaded = new Set((meta.manifest ?? []).filter((m) => m.kind === "table").map((m) => m.table!));
+    const tablesMissing = TABLES.filter((t) => !tablesUploaded.has(t));
+    meta.reconcile = {
+      ran_at: new Date().toISOString(),
+      tables_expected: TABLES.length,
+      tables_present: TABLES.length - tablesMissing.length,
+      tables_missing: tablesMissing,
+      storage_expected: eligible.length,
+      storage_present: eligible.length - missing.length,
+      storage_missing: missing.slice(0, 200),
+      ok: missing.length === 0 && tablesMissing.length === 0,
+    };
+  } catch (e) {
+    meta.reconcile = {
+      ran_at: new Date().toISOString(),
+      tables_expected: TABLES.length, tables_present: 0, tables_missing: [],
+      storage_expected: 0, storage_present: 0, storage_missing: [],
+      ok: false,
+    };
+    recordFailure(meta, { kind: "storage", bucket: "_reconcile", path: "-", error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+async function sendCompletionNotification(admin: ReturnType<typeof createClient>, runId: string, meta: RunMeta, filesCount: number, elapsedMs: number, triggerBy?: string) {
+  if (meta.notified) return;
+  const failed = meta.failures?.length ?? 0;
+  const success = Math.max(0, filesCount - failed);
+  const rate = filesCount > 0 ? Math.round((success / (success + failed)) * 100) : 100;
+  const mins = Math.max(1, Math.round(elapsedMs / 60_000));
+  const okAll = meta.reconcile?.ok !== false && failed === 0;
+  const title = okAll ? `备份成功 ✓ 成功率 ${rate}%` : `备份完成但有失败 ⚠ 成功率 ${rate}%`;
+  const topErrors = (meta.failures ?? []).slice(0, 3).map((f) => `· ${(f.bucket ?? f.table) || ""}${f.path ? "/" + f.path : ""}：${f.error}`).join("\n");
+  const body = [
+    `文件 ${filesCount} · 失败 ${failed} · 耗时约 ${mins} 分钟`,
+    meta.reconcile ? `对账：表 ${meta.reconcile.tables_present}/${meta.reconcile.tables_expected}，文件 ${meta.reconcile.storage_present}/${meta.reconcile.storage_expected}` : "",
+    topErrors ? `失败原因：\n${topErrors}` : "",
+  ].filter(Boolean).join("\n");
+  try {
+    await admin.from("notifications").insert({
+      title, body, type: "backup",
+      created_by: triggerBy ?? null,
+      active: true,
+      expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+    });
+    meta.notified = true;
+  } catch { /* non-fatal */ }
+}
+
+async function getActiveRun(admin: ReturnType<typeof createClient>, trigger: "manual" | "cron", day: string) {
+  const { data: runningRows } = await admin
+    .from("backup_runs").select("id, started_at, files_count, total_bytes, metadata")
+    .eq("kind", "full").eq("status", "running")
+    .order("started_at", { ascending: false }).limit(1);
   const running = Array.isArray(runningRows) ? runningRows[0] : null;
   if (running) {
     const row = running as { id: string; started_at: string; files_count: number; total_bytes: number; metadata: unknown };
     const meta = normalizeMeta(row.metadata, day);
     const heartbeatAt = meta.last_tick_at ? new Date(meta.last_tick_at).getTime() : new Date(row.started_at).getTime();
     const staleMs = Date.now() - heartbeatAt;
-    // A run is stale if it hasn't ticked in 20 minutes OR started > 6h ago overall.
     const overallAgeMs = Date.now() - new Date(row.started_at).getTime();
     if (staleMs < 20 * 60 * 1000 && overallAgeMs < 6 * 60 * 60 * 1000) {
-      return {
-        id: row.id,
-        files_count: row.files_count ?? 0,
-        total_bytes: Number(row.total_bytes ?? 0),
-        metadata: meta,
-      };
+      return { id: row.id, files_count: row.files_count ?? 0, total_bytes: Number(row.total_bytes ?? 0), metadata: meta };
     }
     await admin.from("backup_runs").update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error_message: "上一次备份长时间没有推进，已自动结束。系统会重新开始备份。",
+      status: "failed", finished_at: new Date().toISOString(),
+      error_message: "上一次备份长时间没有推进，已自动结束。",
     }).eq("id", row.id);
   }
-
   if (trigger === "cron") {
-    // Cron only starts a new full run inside the 3–4am Shanghai window; but if a run
-    // is already running (handled above) it will continue it regardless of hour.
-    const { data: todaySuccess } = await admin
-      .from("backup_runs")
-      .select("id")
-      .eq("kind", "full")
-      .eq("status", "success")
-      .ilike("cos_key", `%${day}%`)
-      .limit(1);
+    const { data: todaySuccess } = await admin.from("backup_runs")
+      .select("id").eq("kind", "full").eq("status", "success").ilike("cos_key", `%${day}%`).limit(1);
     if (Array.isArray(todaySuccess) && todaySuccess.length > 0) return null;
     const hour = currentShanghaiHour();
     if (hour < 3 || hour > 4) return null;
   }
-
-  const { data: runRow, error } = await admin
-    .from("backup_runs")
-    .insert({
-      kind: "full",
-      status: "running",
-      trigger_source: trigger,
-      metadata: normalizeMeta({ step: "开始备份", day }, day),
-    })
-    .select("id, files_count, total_bytes, metadata")
-    .single();
+  const { data: runRow, error } = await admin.from("backup_runs")
+    .insert({ kind: "full", status: "running", trigger_source: trigger, metadata: normalizeMeta({ step: "开始备份", day }, day) })
+    .select("id, files_count, total_bytes, metadata").single();
   if (error || !runRow) throw new Error("无法创建备份记录：" + (error?.message ?? "未知原因"));
   const row = runRow as { id: string; files_count: number; total_bytes: number; metadata: unknown };
-  return {
-    id: row.id,
-    files_count: row.files_count ?? 0,
-    total_bytes: Number(row.total_bytes ?? 0),
-    metadata: normalizeMeta(row.metadata, day),
-  };
+  return { id: row.id, files_count: row.files_count ?? 0, total_bytes: Number(row.total_bytes ?? 0), metadata: normalizeMeta(row.metadata, day) };
 }
 
-// Trigger self next tick (best-effort). Won't throw.
 function scheduleContinuation(reqUrl: string) {
   try {
     const url = new URL(reqUrl);
@@ -279,11 +413,7 @@ function scheduleContinuation(reqUrl: string) {
     const rt = (globalThis as any).EdgeRuntime;
     const p = fetch(url.toString(), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: anonKey,
-        Authorization: `Bearer ${anonKey}`,
-      },
+      headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: `Bearer ${anonKey}` },
       body: JSON.stringify({ trigger_source: "self" }),
     }).catch(() => {});
     if (rt && typeof rt.waitUntil === "function") rt.waitUntil(p);
@@ -300,18 +430,64 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } },
   );
 
-  let body: { trigger_source?: string } = {};
+  let body: { trigger_source?: string; action?: string; run_id?: string } = {};
   try { body = await req.json(); } catch { /* ignore */ }
   const rawTrigger = body.trigger_source;
   const trigger: "manual" | "cron" = rawTrigger === "cron" ? "cron" : "manual";
-  // "self" continuations behave like manual for scheduling but never create a new run.
+  const action = body.action ?? "run";
 
   const day = todayShanghai();
   let cfg: ReturnType<typeof readCosConfigFromEnv>;
+  try { cfg = readCosConfigFromEnv(); }
+  catch (e) { return json({ ok: false, error: humanize(e instanceof Error ? e.message : String(e)) }, 500); }
+
+  // triggering user (best-effort — for created_by on the notification)
+  let triggerBy: string | undefined;
   try {
-    cfg = readCosConfigFromEnv();
-  } catch (e) {
-    return json({ ok: false, error: humanize(e instanceof Error ? e.message : String(e)) }, 500);
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (authHeader && rawTrigger !== "self" && rawTrigger !== "cron") {
+      const user = await admin.auth.getUser(authHeader.replace(/^Bearer\s+/i, ""));
+      triggerBy = user.data.user?.id;
+    }
+  } catch { /* ignore */ }
+
+  // ========== retry_failed / reconcile_only ==========
+  if (action === "retry_failed" && body.run_id) {
+    const { data: srcRow } = await admin.from("backup_runs").select("id, metadata").eq("id", body.run_id).maybeSingle();
+    if (!srcRow) return json({ ok: false, error: "找不到那次备份记录" }, 404);
+    const srcMeta = normalizeMeta((srcRow as { metadata: unknown }).metadata, day);
+    const queue = (srcMeta.failures ?? [])
+      .filter((f) => f.kind === "storage" && f.bucket && f.path)
+      .map((f) => ({ bucket: f.bucket!, path: f.path!, size: f.size }));
+    if (queue.length === 0) return json({ ok: false, error: "上一次没有失败的文件可以补" }, 400);
+    const newMeta: RunMeta = normalizeMeta({
+      step: `只重试失败文件（共 ${queue.length} 个）`,
+      day, phase: "storage",
+      retry_of: body.run_id, retry_queue: queue, retry_cursor: 0,
+      // Skip listing — retry mode consumes queue directly.
+      storage_bucket_index: BUCKETS.length,
+      storage_pass: 2, // treat as pass2 so both pass stats stay distinct
+    }, day);
+    // Also mark table_index at end so DB phase is skipped.
+    newMeta.table_index = TABLES.length;
+    newMeta.phase = "storage";
+    const { data: newRow, error } = await admin.from("backup_runs").insert({
+      kind: "full", status: "running", trigger_source: "manual",
+      metadata: newMeta, retry_of: body.run_id,
+    }).select("id").single();
+    if (error) return json({ ok: false, error: error.message }, 500);
+    scheduleContinuation(req.url);
+    return json({ ok: true, run_id: (newRow as { id: string }).id, queued: queue.length });
+  }
+
+  if (action === "reconcile_only" && body.run_id) {
+    const { data: srcRow } = await admin.from("backup_runs").select("id, metadata, started_at").eq("id", body.run_id).maybeSingle();
+    if (!srcRow) return json({ ok: false, error: "找不到那次备份记录" }, 404);
+    const runDay = (srcRow as { started_at: string }).started_at.slice(0, 10);
+    const meta = normalizeMeta((srcRow as { metadata: unknown }).metadata, runDay);
+    await finalizeManifestAndReconcile(admin, cfg, body.run_id, meta, runDay);
+    await updateRun(admin, body.run_id, { metadata: meta });
+    return json({ ok: true, reconcile: meta.reconcile });
   }
 
   let currentRunId: string | null = null;
@@ -327,14 +503,40 @@ Deno.serve(async (req) => {
     let filesCount = active.files_count;
     let totalBytes = active.total_bytes;
 
+    // ============= RETRY QUEUE PHASE (new) =============
+    if (meta.retry_queue && meta.phase === "storage") {
+      const queue = meta.retry_queue;
+      let cursor = meta.retry_cursor ?? 0;
+      const passStart = Date.now();
+      let uploaded = 0, failed = 0, bytes = 0;
+      while (cursor < queue.length && Date.now() - tickStart < TICK_BUDGET_MS) {
+        const f = queue[cursor++];
+        const cosKey = `storage-mirror/${f.bucket}/${f.path}`;
+        try {
+          const { data: blob, error: dlErr } = await admin.storage.from(f.bucket).download(f.path);
+          if (dlErr || !blob) throw new Error(dlErr?.message || "下载失败");
+          const buf = new Uint8Array(await blob.arrayBuffer());
+          const result = await cosPutObject({ cfg, key: cosKey, body: buf, contentType: blob.type || "application/octet-stream" });
+          uploaded++; bytes += result.size; filesCount++; totalBytes += result.size;
+          (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: result.size, etag: result.etag, bucket: f.bucket, path: f.path });
+          removeFailure(meta, (x) => x.kind === "storage" && x.bucket === f.bucket && x.path === f.path);
+        } catch (e) {
+          failed++;
+          recordFailure(meta, { kind: "storage", bucket: f.bucket, path: f.path, size: f.size, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      bumpPass(meta, "storage_pass2", { uploaded, failed, bytes, elapsed_ms: Date.now() - passStart, total: queue.length });
+      meta.retry_cursor = cursor;
+      meta.step = `补传失败文件 ${cursor}/${queue.length}`;
+      if (cursor >= queue.length) { meta.phase = "finalize"; meta.step = "生成清单和对账"; }
+    }
+
     // ============= DATABASE PHASE =============
+    const dbPassStart = Date.now();
+    let dbUploaded = 0, dbFailed = 0, dbBytes = 0;
     while (meta.phase === "database" && Date.now() - tickStart < TICK_BUDGET_MS) {
       const start = meta.table_index ?? 0;
-      if (start >= TABLES.length) {
-        meta.phase = "storage_list";
-        meta.step = "正在扫描图片和视频";
-        break;
-      }
+      if (start >= TABLES.length) { meta.phase = "storage_list"; meta.step = "正在扫描图片和视频"; break; }
       const table = TABLES[start];
       const offset = meta.table_offset ?? 0;
       const part = Math.floor(offset / PAGE_SIZE).toString().padStart(6, "0");
@@ -343,42 +545,29 @@ Deno.serve(async (req) => {
         const dumped = await dumpTable(admin, table, offset);
         if (dumped.rows > 0 || offset === 0) {
           const uploaded = await cosPutObject({ cfg, key, body: dumped.bytes, contentType: "application/gzip" });
-          if (day.endsWith("-01")) {
-            await cosPutObject({
-              cfg,
-              key: `db-backups/monthly/${day}/tables/${table}/part-${part}.json.gz`,
-              body: dumped.bytes,
-              contentType: "application/gzip",
-            });
-          }
           meta.database_files = (meta.database_files ?? 0) + 1;
-          filesCount += 1;
-          totalBytes += uploaded.size;
+          filesCount++; totalBytes += uploaded.size;
+          dbUploaded++; dbBytes += uploaded.size;
+          (meta.manifest ??= []).push({ kind: "table", key, size: uploaded.size, etag: uploaded.etag, table });
         }
         meta.database_rows = (meta.database_rows ?? 0) + dumped.rows;
-        if (dumped.hasMore) {
-          meta.table_offset = offset + PAGE_SIZE;
-        } else {
-          meta.table_index = start + 1;
-          meta.table_offset = 0;
-        }
+        if (dumped.hasMore) meta.table_offset = offset + PAGE_SIZE;
+        else { meta.table_index = start + 1; meta.table_offset = 0; }
         meta.step = `正在备份系统记录 ${meta.table_index}/${TABLES.length}`;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        meta.database_errors = [...(meta.database_errors ?? []), `${table}: ${msg}`].slice(-20);
-        meta.table_index = start + 1;
-        meta.table_offset = 0;
+        dbFailed++;
+        recordFailure(meta, { kind: "table", table, offset, error: e instanceof Error ? e.message : String(e) });
+        meta.table_index = start + 1; meta.table_offset = 0;
       }
     }
+    if (dbUploaded + dbFailed > 0) bumpPass(meta, "database", { uploaded: dbUploaded, failed: dbFailed, bytes: dbBytes, elapsed_ms: Date.now() - dbPassStart, total: TABLES.length });
 
     // ============= STORAGE LIST PHASE =============
     if (meta.phase === "storage_list" && Date.now() - tickStart < TICK_BUDGET_MS) {
       const bucketIdx = meta.storage_bucket_index ?? 0;
-      if (bucketIdx >= BUCKETS.length) {
-        meta.phase = "storage";
-      } else {
+      if (bucketIdx >= BUCKETS.length) { meta.phase = "storage"; }
+      else {
         try {
-          // Build/append a per-day manifest of files to upload.
           const bucket = BUCKETS[bucketIdx];
           const files = await listBucketRecursive(admin, bucket);
           const manifestKey = `db-backups/daily/${day}/_manifest/${String(bucketIdx).padStart(2, "0")}-${bucket}.json.gz`;
@@ -387,147 +576,123 @@ Deno.serve(async (req) => {
           meta.storage_total = (meta.storage_total ?? 0) + files.length;
           meta.storage_bucket_index = bucketIdx + 1;
           meta.step = `正在扫描图片和视频 (${meta.storage_bucket_index}/${BUCKETS.length})`;
-          if (meta.storage_bucket_index >= BUCKETS.length) {
-            meta.phase = "storage";
-            meta.storage_cursor = 0;
-            meta.step = "正在上传图片和视频";
-          }
+          if (meta.storage_bucket_index >= BUCKETS.length) { meta.phase = "storage"; meta.storage_cursor = 0; meta.step = "正在上传图片和视频"; }
         } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          meta.storage_errors = [...(meta.storage_errors ?? []), `扫描 ${BUCKETS[bucketIdx]}: ${msg}`].slice(-20);
+          recordFailure(meta, { kind: "storage", bucket: BUCKETS[bucketIdx], path: "_scan", error: e instanceof Error ? e.message : String(e) });
           meta.storage_bucket_index = bucketIdx + 1;
-          if (meta.storage_bucket_index >= BUCKETS.length) {
-            meta.phase = "storage";
-            meta.storage_cursor = 0;
-          }
+          if (meta.storage_bucket_index >= BUCKETS.length) { meta.phase = "storage"; meta.storage_cursor = 0; }
         }
       }
     }
 
     // ============= STORAGE UPLOAD PHASE =============
-    // Walk through per-bucket manifests we produced above, respecting the tick budget.
-    if (meta.phase === "storage" && Date.now() - tickStart < TICK_BUDGET_MS) {
-      // Load all manifests up-front once — they are small (~ path list).
-      const manifests: StorageFile[] = [];
-      for (let i = 0; i < BUCKETS.length; i++) {
-        try {
-          const bucket = BUCKETS[i];
-          const key = `db-backups/daily/${day}/_manifest/${String(i).padStart(2, "0")}-${bucket}.json.gz`;
-          const auth = await import("../_shared/tencentCos.ts").then((m) => m.signCos({
-            cfg, method: "GET", pathname: `/${encodeURI(key).replace(/%2F/g, "/")}`,
-          }));
-          const url = `https://${cfg.bucket}.cos.${cfg.region}.myqcloud.com/${encodeURI(key).replace(/%2F/g, "/")}`;
-          const resp = await fetch(url, { headers: { Authorization: auth } });
-          if (!resp.ok) continue;
-          const gz = new Uint8Array(await resp.arrayBuffer());
-          const ds = new DecompressionStream("gzip");
-          const stream = new Blob([gz as unknown as BlobPart]).stream().pipeThrough(ds);
-          const buf = new Uint8Array(await new Response(stream).arrayBuffer());
-          const arr = JSON.parse(new TextDecoder().decode(buf)) as StorageFile[];
-          manifests.push(...arr);
-        } catch { /* ignore missing/broken manifest — that bucket will just be skipped this run */ }
-      }
-
+    if (meta.phase === "storage" && !meta.retry_queue && Date.now() - tickStart < TICK_BUDGET_MS) {
+      const manifests = await loadBucketManifests(cfg, day);
       let cursor = meta.storage_cursor ?? 0;
       let uploaded = meta.storage_uploaded ?? 0;
       let skipped = meta.storage_skipped ?? 0;
       let deferred = meta.storage_deferred ?? 0;
       const pass = meta.storage_pass ?? 1;
-      const errors = [...(meta.storage_errors ?? [])];
+      const passStart = Date.now();
+      let passUploaded = 0, passFailed = 0, passSkipped = 0, passBytes = 0;
+      const passKey: PassKey = pass === 1 ? "storage_pass1" : "storage_pass2";
+      // Set totals for this pass
+      const passTotal = manifests.filter((f) => f.size <= MAX_FILE_BYTES && (pass === 1 ? f.size <= LARGE_FILE_THRESHOLD : f.size > LARGE_FILE_THRESHOLD)).length;
+      bumpPass(meta, passKey, { total: passTotal });
 
       while (cursor < manifests.length && Date.now() - tickStart < TICK_BUDGET_MS) {
-        const file = manifests[cursor];
-        cursor += 1;
-        if (!file || file.size > MAX_FILE_BYTES) { skipped += 1; continue; }
-        // Pass 1: skip large files so images finish first. Pass 2: only large files.
-        if (pass === 1 && file.size > LARGE_FILE_THRESHOLD) { deferred += 1; continue; }
+        const file = manifests[cursor++];
+        if (!file || file.size > MAX_FILE_BYTES) { skipped++; passSkipped++; continue; }
+        if (pass === 1 && file.size > LARGE_FILE_THRESHOLD) { deferred++; continue; }
         if (pass === 2 && file.size <= LARGE_FILE_THRESHOLD) { continue; }
         const cosKey = `storage-mirror/${file.bucket}/${file.path}`;
         try {
           const head = await cosHeadObject({ cfg, key: cosKey });
-          if (head && head.size === file.size) { skipped += 1; continue; }
+          if (head && head.size === file.size) {
+            skipped++; passSkipped++;
+            // Still record in manifest so reconcile sees it
+            (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: head.size, etag: head.etag, bucket: file.bucket, path: file.path });
+            continue;
+          }
           const { data: blob, error: dlErr } = await admin.storage.from(file.bucket).download(file.path);
           if (dlErr || !blob) throw new Error(dlErr?.message || "下载文件失败");
           const buf = new Uint8Array(await blob.arrayBuffer());
-          const result = await cosPutObject({
-            cfg, key: cosKey, body: buf,
-            contentType: blob.type || file.mime || "application/octet-stream",
-          });
-          uploaded += 1;
-          filesCount += 1;
-          totalBytes += result.size;
+          const result = await cosPutObject({ cfg, key: cosKey, body: buf, contentType: blob.type || file.mime || "application/octet-stream" });
+          uploaded++; passUploaded++; passBytes += result.size;
+          filesCount++; totalBytes += result.size;
+          (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: result.size, etag: result.etag, bucket: file.bucket, path: file.path });
+          removeFailure(meta, (x) => x.kind === "storage" && x.bucket === file.bucket && x.path === file.path);
         } catch (e) {
-          errors.push(`${file.bucket}/${file.path}: ${e instanceof Error ? e.message : String(e)}`);
+          passFailed++;
+          recordFailure(meta, { kind: "storage", bucket: file.bucket, path: file.path, size: file.size, error: e instanceof Error ? e.message : String(e) });
         }
       }
+      bumpPass(meta, passKey, { uploaded: passUploaded, failed: passFailed, skipped: passSkipped, bytes: passBytes, elapsed_ms: Date.now() - passStart });
 
       meta.storage_cursor = cursor;
       meta.storage_uploaded = uploaded;
       meta.storage_skipped = skipped;
       meta.storage_deferred = deferred;
-      meta.storage_errors = errors.slice(-20);
       const totalToWalk = manifests.length;
       if (cursor >= totalToWalk && totalToWalk > 0) {
         if (pass === 1 && deferred > 0) {
-          // Second pass: revisit only the large files we punted.
-          meta.storage_pass = 2;
-          meta.storage_cursor = 0;
+          meta.storage_pass = 2; meta.storage_cursor = 0;
           meta.step = `图片已完成，开始上传大视频（${deferred} 个）`;
         } else {
-          meta.phase = "done";
-          meta.step = "备份完成";
+          meta.phase = "finalize"; meta.step = "生成清单和对账";
         }
       } else {
         const label = pass === 1 ? "图片" : "视频";
         meta.step = `正在上传${label} ${cursor}/${totalToWalk || meta.storage_total}`;
       }
-      if (totalToWalk === 0 && (meta.storage_total ?? 0) === 0) {
-        // Nothing to mirror — done.
-        meta.phase = "done";
-        meta.step = "备份完成";
-      }
+      if (totalToWalk === 0 && (meta.storage_total ?? 0) === 0) { meta.phase = "finalize"; meta.step = "生成清单和对账"; }
     }
 
-    // Heartbeat — used by the stale-run watchdog.
-    meta.last_tick_at = new Date().toISOString();
+    // ============= FINALIZE PHASE =============
+    if (meta.phase === "finalize" && Date.now() - tickStart < TICK_BUDGET_MS) {
+      await finalizeManifestAndReconcile(admin, cfg, runId, meta, day);
+      meta.phase = "done";
+      meta.step = meta.reconcile?.ok ? "备份完成" : "备份完成（对账发现缺失）";
+    }
 
+    meta.last_tick_at = new Date().toISOString();
     const finished = meta.phase === "done";
+    const startedAt = new Date(active.metadata.last_tick_at ? active.metadata.last_tick_at : Date.now()).getTime();
+    void startedAt;
+
+    if (finished) {
+      const { data: rowNow } = await admin.from("backup_runs").select("started_at").eq("id", runId).single();
+      const elapsed = rowNow ? Date.now() - new Date((rowNow as { started_at: string }).started_at).getTime() : 0;
+      await sendCompletionNotification(admin, runId, meta, filesCount, elapsed, triggerBy);
+    }
+
     await updateRun(admin, runId, {
       status: finished ? "success" : "running",
       finished_at: finished ? new Date().toISOString() : null,
       files_count: filesCount,
       total_bytes: totalBytes,
       cos_key: `db-backups/daily/${day}/`,
-      error_message:
-        (meta.database_errors?.length || meta.storage_errors?.length)
-          ? [
-              ...(meta.database_errors ?? []).slice(0, 3).map((e) => `系统记录：${humanize(e)}`),
-              ...(meta.storage_errors ?? []).slice(0, 3).map((e) => `图片视频：${humanize(e)}`),
-            ].join("\n")
-          : null,
+      error_message: (meta.failures?.length ?? 0) > 0
+        ? (meta.failures ?? []).slice(0, 3).map((f) => `${f.bucket ?? f.table}${f.path ? "/" + f.path : ""}：${f.error}`).join("\n")
+        : null,
       metadata: meta,
     });
 
-    // Self-continue until done — page can be closed, function keeps running.
     if (!finished) scheduleContinuation(req.url);
 
     return json({
-      ok: true,
-      completed: finished,
-      run_id: runId,
-      step: meta.step,
-      files: filesCount,
-      bytes: totalBytes,
-      phase: meta.phase,
+      ok: true, completed: finished, run_id: runId, step: meta.step,
+      files: filesCount, bytes: totalBytes, phase: meta.phase,
+      failures: meta.failures?.length ?? 0,
+      reconcile: meta.reconcile,
+      manifest_key: meta.manifest_key,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     if (currentRunId) {
       await updateRun(admin, currentRunId, {
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error_message: humanize(message),
-        metadata: { step: "备份失败" },
+        status: "failed", finished_at: new Date().toISOString(),
+        error_message: humanize(message), metadata: { step: "备份失败" },
       });
     }
     return json({ ok: false, error: humanize(message) }, 500);
