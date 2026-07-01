@@ -1,135 +1,52 @@
+## 结论
 
-## 目标
+你不用先去腾讯云开按钮。现在更像是我们备份函数自己的上传策略有问题：它在一个 45 秒的小执行窗口里，对每个文件最多等到 20-90 秒，还会重试多次。结果是单个图片一旦网络慢，就把这一轮卡住，前端又继续触发下一轮，于是看起来一直是“上传腾讯云超时”。
 
-围绕现有 `backup-all-to-cos` 流程补齐"看得见 / 校验得了 / 修得回"三件事：完成通知 + Manifest 清单 + 失败重试 + 对账 + 更细的进度面板。
+从当前记录看：失败文件只有 0.5MB-1.8MB，不是大文件；数据库健康也正常；没有看到腾讯云明确的 403 权限拒绝。所以优先修代码，不是让你去腾讯云配置。
 
-## 一、后端改造 `supabase/functions/backup-all-to-cos/index.ts`
+## 修复计划
 
-### 1. 结构化 metadata（面板 + 通知 + 对账都靠它）
+1. **缩短小文件单次上传超时**
+   - 备份图片这类小文件不再等 20 秒起步。
+   - 小文件改成更快失败、更快进入下一轮，避免一个文件拖慢整批。
 
-在现有 `RunMeta` 上补：
+2. **让备份函数尊重每轮执行预算**
+   - 上传前先看本轮还剩多少时间。
+   - 如果时间不够，就保存进度并交给下一轮继续，而不是硬传到超时。
 
-```
-pass_stats: {
-  database: { files_count, uploaded, failed, bytes, elapsed_ms }
-  storage_pass1: { files_count, uploaded, skipped, failed, bytes, elapsed_ms }  // 图片
-  storage_pass2: { files_count, uploaded, skipped, failed, bytes, elapsed_ms }  // 视频
-}
-failures: Array<{
-  kind: 'table' | 'storage'
-  bucket?: string
-  path?: string           // 或 table:offset
-  size?: number
-  error: string           // 已 humanize
-  attempts: number
-  first_failed_at: string
-  last_failed_at: string
-}>                        // 最多保留 500 条，同 key 去重后 attempts+1
-manifest_key?: string     // 全量 manifest 的 COS key
-reconcile?: {
-  ran_at: string
-  tables_expected: number, tables_present: number, tables_missing: string[]
-  storage_expected: number, storage_present: number, storage_missing: Array<{bucket,path}>
-  ok: boolean
-}
-notified?: boolean        // 完成通知是否已写
-```
+3. **失败文件不在同一轮反复死磕**
+   - 普通扫描阶段遇到超时先记录失败并继续后面的文件。
+   - “只重试失败文件”时按队列逐个补传，避免重复备份已成功文件。
 
-每次上传成功 / 失败都累加到对应 pass_stats 与 failures；耗时用 `Date.now() - phaseStartAt`。
+4. **优化腾讯云上传底层错误判断**
+   - 区分：腾讯云权限错误、桶不存在、网络超时、函数预算不足。
+   - 面板里给出更准确的中文原因，而不是全部显示成“稍后自动重试”。
 
-### 2. Manifest 清单上传（run 完成时）
+5. **增加上传前 HEAD 快速跳过**
+   - 已经在腾讯云存在且大小一致的文件直接跳过。
+   - 这能让你多次点击备份时不会重复上传成功文件。
 
-`meta.phase === "done"` 那一 tick，聚合已 upload 成功的：
-- 遍历 `db-backups/daily/{day}/tables/` + `_manifest/` + 汇总 `storage_pass1/2` 上传成功的对象
-- 生成 `db-backups/daily/{day}/_run-manifest.json.gz`：
-  ```
-  { run_id, day, generated_at, tables: [{table, parts:[{key,size,etag}]}],
-    storage: [{bucket,path,cos_key,size,etag,pass}],
-    totals: { files, bytes }, failures: [...] }
-  ```
-- 记录到 `meta.manifest_key`，同时把上传返回的 `ETag`（改造 `cosPutObject` 返回 ETag，`_shared/tencentCos.ts` 里从 response headers 读取）存进 tables/storage 条目。
+6. **更新备份面板提示**
+   - 如果是网络慢/预算不足，提示“系统正在分批补传”。
+   - 如果是腾讯云权限或密钥问题，再明确提示你去腾讯云检查权限。
 
-### 3. 对账校验（自动跑一次）
+## 技术调整范围
 
-`done` 之后同一 tick 调 `runReconcile(meta, manifests)`：
-- tables 期望 = TABLES.length；实际 = 本次 upload 成功 + head 存在
-- storage 期望 = 各 bucket manifest 里 size ≤ MAX_FILE_BYTES 的总数；实际 = COS `HEAD` 逐个探测（对本次已 upload 过的直接算成功，剩余采样 head 抽检，避免超时）
-- 差集写入 `meta.reconcile.storage_missing / tables_missing`
-- 若 `missing.length > 0` 把这些补进 `meta.failures` 供"只重试失败文件"使用
+- 修改 `supabase/functions/_shared/tencentCos.ts`
+  - 支持按文件大小/调用方传入更短的超时。
+  - 保留重试，但不让一次 PUT 占满整个函数时间。
 
-### 4. 完成通知（站内消息）
+- 修改 `supabase/functions/backup-all-to-cos/index.ts`
+  - 上传前检查剩余执行时间。
+  - 图片 pass 使用短超时；视频/大文件 pass 使用长超时。
+  - 对超时文件记录为可补传失败，不阻塞后续文件。
 
-`done` 且 `!notified`：向 `notifications` 表插一条：
-- 收件人 = 触发 manual 的用户 / 或全部 super_admin（cron 情况）
-- 标题：`备份成功 ✓ / 备份完成但有失败 ⚠️`
-- 内容：`成功率 X% · 耗时 Ymin · 文件 N 个 · 失败 K 个（原因摘要 top3）`
-- `metadata.link = '/portal?tab=backup&run=<id>'`
+- 修改 `src/components/admin/BackupPanel.tsx`
+  - 优化中文错误说明。
+  - 在失败列表里说明“无需去腾讯云开按钮”的场景。
 
-### 5. 新入口：`action` 分派
+## 验证方式
 
-请求 body 支持 `action`:
-- `run`（默认）：现有流程
-- `retry_failed`：读取指定 `run_id` 的 `meta.failures`，创建**新的** run（kind='retry'），metadata 里带 `retry_of: run_id + queue: [...failures]`；主循环里若 `meta.queue`，跳过全量扫描直接消费队列
-- `reconcile_only`：只跑对账（针对指定 run 补跑）
-
-## 二、`_shared/tencentCos.ts`
-
-- `cosPutObject` 返回 `{ size, etag }`
-- 新增 `cosListPrefix({cfg, prefix, marker?})`（分页 List Objects v2 用于对账 fallback）
-
-## 三、前端 `src/components/admin/BackupPanel.tsx`
-
-### 1. 顶部当前 run 进度面板（run.status === 'running' 或最近一条）
-
-三行 pass 卡片（数据库 / 图片 / 视频），每行显示：
-```
-[数据库] 58/58 表 · 成功 58 失败 0 · 12.3s   ████████ 100%
-[图片]   1245/1400 · 成功 1240 失败 5 · 4m2s ██████░░ 89%
-[视频]   3/12   · 成功 3 失败 0 · 1m30s     ██░░░░░░ 25%
-```
-数据来自 `meta.pass_stats` + `storage_cursor / storage_total / storage_pass`。
-
-### 2. 完成后摘要卡片
-
-```
-✓ 备份成功 · 成功率 99.2% · 耗时 8 分 12 秒
-文件 1520 · 失败 12
-[下载 Manifest] [只重试失败文件] [重新对账]
-```
-
-- **下载 Manifest**：调 edge function 生成签名 URL（新增 `get-backup-manifest-url` 或复用已有签名逻辑），直接跳转 COS
-- **只重试失败文件**：`invoke('backup-all-to-cos', { action:'retry_failed', run_id })`，弹 toast，轮询新的 run
-- **重新对账**：`action:'reconcile_only'`
-
-### 3. 失败明细可折叠列表
-
-从 `meta.failures` 渲染，每项：`bucket/path` + 错误（已 humanize）+ 尝试次数 + `[跳过]`（把它从 failures 移除）。
-
-### 4. 对账结果面板
-
-如果 `meta.reconcile.ok === false`：红条 + "缺失 N 个（点击查看）" → 弹 Sheet 展示 `tables_missing / storage_missing`。
-
-### 5. 通知触发
-
-`toast` 由 realtime 订阅 `notifications` 表（新完成的 backup 消息）触发；面板挂载时 `channel('backup-notify')` 订阅当前用户新通知，type='backup' 时弹右下 toast。
-
-## 四、数据库 migration
-
-`notifications` 表已存在，无需新表。新增一列 `backup_runs.retry_of uuid null` 便于前端把 retry run 和原 run 关联展示。加索引 `(kind, started_at desc)`。
-
-## 五、验证方式
-
-1. 手动点"立即备份" → 面板出现三行 pass 进度
-2. 人为改一个 bucket 权限触发几条失败 → 完成后看到失败列表 + 站内消息 + 成功率
-3. 点"只重试失败文件" → 新 run 只处理 12 个失败对象，成功后失败列表清空
-4. 点"下载 Manifest" → 拿到 json.gz，用 `zcat` 校验 ETag/size 完整
-5. 手动删掉 COS 上某个对象后点"重新对账" → 缺失项出现在对账面板
-
-## 交付文件
-
-- 改：`supabase/functions/backup-all-to-cos/index.ts`
-- 改：`supabase/functions/_shared/tencentCos.ts`（ETag 返回 + list prefix）
-- 新：`supabase/functions/get-backup-manifest-url/index.ts`（签名下载 URL）
-- 改：`src/components/admin/BackupPanel.tsx`
-- 新：`src/components/admin/BackupPassProgress.tsx`、`BackupFailuresList.tsx`、`BackupReconcilePanel.tsx`
-- 新 migration：`backup_runs.retry_of` + 索引
+1. 部署后在 `/portal → 数据备份` 点“只重试失败文件”。
+2. 观察这 3-5 个失败图片是否能快速补传或快速跳过。
+3. 若仍失败，再看错误是否变成明确的“腾讯云权限/密钥/桶”问题。
