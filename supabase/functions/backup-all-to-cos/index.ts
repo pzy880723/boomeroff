@@ -473,7 +473,27 @@ Deno.serve(async (req) => {
     }
   } catch { /* ignore */ }
 
-  // ========== retry_failed / reconcile_only ==========
+  // ========== cancel / restart / retry / reconcile ==========
+  if (action === "cancel_running" || action === "start_fresh") {
+    const stoppedAt = new Date().toISOString();
+    await admin.from("backup_runs").update({
+      status: "failed",
+      finished_at: stoppedAt,
+      error_message: action === "start_fresh"
+        ? "已停止旧备份，并重新开始一轮干净备份。"
+        : "已手动停止备份。",
+      metadata: {
+        step: action === "start_fresh" ? "已停止旧备份，准备重新开始" : "已手动停止",
+        phase: "done",
+        stopped_at: stoppedAt,
+      },
+    }).eq("kind", "full").eq("status", "running");
+
+    if (action === "cancel_running") {
+      return json({ ok: true, stopped: true });
+    }
+  }
+
   if (action === "retry_failed" && body.run_id) {
     const { data: srcRow } = await admin.from("backup_runs").select("id, metadata").eq("id", body.run_id).maybeSingle();
     if (!srcRow) return json({ ok: false, error: "找不到那次备份记录" }, 404);
@@ -725,7 +745,7 @@ Deno.serve(async (req) => {
       metadata: meta,
     });
 
-    if (!finished) scheduleContinuation(req.url);
+    if (!finished && rawTrigger !== "manual") scheduleContinuation(req.url);
 
     return json({
       ok: true, completed: finished, run_id: runId, step: meta.step,
