@@ -745,7 +745,7 @@ Deno.serve(async (req) => {
       metadata: meta,
     });
 
-    if (!finished && rawTrigger !== "manual") scheduleContinuation(req.url);
+    if (!finished) scheduleContinuation(req.url);
 
     return json({
       ok: true, completed: finished, run_id: runId, step: meta.step,
