@@ -128,7 +128,7 @@ export default function Community() {
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [cat, profiles]);
+  }, []);
 
   const toggleLike = async (post: Post) => {
     if (!user) return;
