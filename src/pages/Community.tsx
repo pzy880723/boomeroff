@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { thumbUrl } from '@/lib/imageUrl';
+import { thumbUrl, thumbSrcSet } from '@/lib/imageUrl';
 
 interface Post {
   id: string;
@@ -74,6 +74,11 @@ export default function Community() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
 
+  const profilesRef = useRef<Record<string, ProfileLite>>({});
+  profilesRef.current = profiles;
+  const catRef = useRef(cat);
+  catRef.current = cat;
+
   const loadPosts = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('community_posts').select('*').eq('is_public', true).eq('is_guest', false).order('created_at', { ascending: false });
@@ -81,43 +86,45 @@ export default function Community() {
     const { data: postsData } = await q.limit(60);
     const list = (postsData || []) as Post[];
     setPosts(list);
-
-    const userIds = Array.from(new Set(list.map((p) => p.user_id)));
-    if (userIds.length) {
-      const { data: profs } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
-      const map: Record<string, ProfileLite> = {};
-      (profs || []).forEach((p) => { map[p.user_id] = p as ProfileLite; });
-      setProfiles(map);
-    }
-
-    if (user) {
-      const ids = list.map((p) => p.id);
-      if (ids.length) {
-        const { data: myLikes } = await supabase.from('community_likes')
-          .select('post_id').eq('user_id', user.id).in('post_id', ids);
-        setLikes(new Set((myLikes || []).map((l) => l.post_id)));
-      }
-      const { data: myFavs } = await supabase.from('user_favorites')
-        .select('source_id').eq('user_id', user.id).eq('source_type', 'recognition');
-      setFavs(new Set((myFavs || []).map((f) => f.source_id)));
-    }
     setLoading(false);
+
+    // profiles + likes + favs 并发,不阻塞卡片渲染
+    const userIds = Array.from(new Set(list.map((p) => p.user_id)));
+    const ids = list.map((p) => p.id);
+    const [profsRes, likesRes, favsRes] = await Promise.all([
+      userIds.length
+        ? supabase.from('profiles').select('user_id, display_name').in('user_id', userIds)
+        : Promise.resolve({ data: [] } as any),
+      user && ids.length
+        ? supabase.from('community_likes').select('post_id').eq('user_id', user.id).in('post_id', ids)
+        : Promise.resolve({ data: [] } as any),
+      user
+        ? supabase.from('user_favorites').select('source_id').eq('user_id', user.id).eq('source_type', 'recognition')
+        : Promise.resolve({ data: [] } as any),
+    ]);
+    const map: Record<string, ProfileLite> = {};
+    ((profsRes as any).data || []).forEach((p: ProfileLite) => { map[p.user_id] = p; });
+    setProfiles(map);
+    setLikes(new Set(((likesRes as any).data || []).map((l: any) => l.post_id)));
+    setFavs(new Set(((favsRes as any).data || []).map((f: any) => f.source_id)));
   }, [cat, user]);
 
   useEffect(() => { if (user) loadPosts(); }, [user, loadPosts]);
 
-  // realtime
+  // realtime — 只依赖 cat 挂载一次,profiles 用 ref 读,避免每收一条就重订阅
   useEffect(() => {
     const ch = supabase.channel('community-posts-feed')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_posts' }, (payload) => {
         const np = payload.new as Post;
-        if (np.is_public && !np.is_guest && (cat === 'all' || np.category === cat)) {
+        const activeCat = catRef.current;
+        if (np.is_public && !np.is_guest && (activeCat === 'all' || np.category === activeCat)) {
           setPosts((p) => [np, ...p]);
-          if (!profiles[np.user_id]) {
+          if (!profilesRef.current[np.user_id]) {
             supabase.from('profiles').select('user_id, display_name').eq('user_id', np.user_id).single()
               .then(({ data }) => data && setProfiles((m) => ({ ...m, [np.user_id]: data as ProfileLite })));
           }
         }
+
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
