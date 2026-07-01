@@ -703,11 +703,12 @@ Deno.serve(async (req) => {
         if (pass === 2 && file.size <= LARGE_FILE_THRESHOLD) { continue; }
         const cosKey = `storage-mirror/${file.bucket}/${file.path}`;
         try {
-          const head = await cosHeadObject({ cfg, key: cosKey, timeoutMs: 4_000 }).catch(() => null);
-          if (head && head.size === file.size) {
+          const idx = await getMirrorIndex(file.bucket);
+          const existing = idx.get(cosKey);
+          if (existing && existing.size === file.size) {
             skipped++; passSkipped++;
-            // Still record in manifest so reconcile sees it
-            (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: head.size, etag: head.etag, bucket: file.bucket, path: file.path });
+            // Record in manifest so reconcile sees it; no network round-trip needed.
+            (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: existing.size, etag: existing.etag, bucket: file.bucket, path: file.path });
             continue;
           }
           if (!hasUploadWindow(tickStart)) { cursor--; break; }
@@ -722,6 +723,8 @@ Deno.serve(async (req) => {
           uploaded++; passUploaded++; passBytes += result.size;
           filesCount++; totalBytes += result.size;
           (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: result.size, etag: result.etag, bucket: file.bucket, path: file.path });
+          // Populate the cache so a size-only change later this tick still hits.
+          idx.set(cosKey, { size: result.size, etag: result.etag });
           removeFailure(meta, (x) => x.kind === "storage" && x.bucket === file.bucket && x.path === file.path);
         } catch (e) {
           passFailed++;
