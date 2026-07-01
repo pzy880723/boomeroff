@@ -1,13 +1,25 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Archive, CheckCircle2, XCircle, Clock, RefreshCw } from 'lucide-react';
+import { Loader2, Archive, CheckCircle2, XCircle, Clock, RefreshCw, Download, RotateCw, FileCheck2, ChevronDown, ChevronRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+
+type PassStat = { uploaded: number; failed: number; skipped: number; bytes: number; elapsed_ms: number; total?: number };
+type FailureItem = {
+  kind: 'table' | 'storage';
+  bucket?: string; path?: string; table?: string; offset?: number; size?: number;
+  error: string; attempts: number; first_failed_at: string; last_failed_at: string;
+};
+type ReconcileMeta = {
+  ran_at: string; tables_expected: number; tables_present: number; tables_missing: string[];
+  storage_expected: number; storage_present: number; storage_missing: Array<{ bucket: string; path: string }>;
+  ok: boolean;
+};
 
 type BackupRun = {
   id: string;
@@ -20,66 +32,63 @@ type BackupRun = {
   total_bytes: number;
   error_message: string | null;
   trigger_source: 'manual' | 'cron';
+  retry_of?: string | null;
   metadata?: {
     step?: string;
-    phase?: 'database' | 'storage' | 'done';
-    table_index?: number;
-    database_rows?: number;
-    storage_uploaded?: number;
-    storage_skipped?: number;
+    phase?: 'database' | 'storage_list' | 'storage' | 'finalize' | 'done';
+    storage_pass?: 1 | 2;
     storage_cursor?: number;
-    storage_reached_limit?: boolean;
+    storage_total?: number;
+    pass_stats?: {
+      database?: PassStat;
+      storage_pass1?: PassStat;
+      storage_pass2?: PassStat;
+    };
+    failures?: FailureItem[];
+    manifest_key?: string;
+    reconcile?: ReconcileMeta;
   } | null;
 };
 
 function formatBytes(n: number) {
+  if (!n) return '0 B';
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
-
-/** 把后端的英文/技术报错翻译成"哪一步出问题 + 建议怎么办"。 */
+function formatMs(ms: number) {
+  if (!ms) return '—';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60); const rest = s - m * 60;
+  return `${m}m${rest ? ` ${rest}s` : ''}`;
+}
 function humanizeError(msg: string | null): string {
   if (!msg) return '';
   const m = msg.toLowerCase();
-  if (m.includes('signature') || m.includes('403') || m.includes('accessdenied')) {
-    return '腾讯云拒绝了这次写入，多半是密钥过期或权限被改了。建议重新生成腾讯云密钥后再试一次。';
-  }
-  if (m.includes('timeout') || m.includes('timed out')) {
-    return '这次备份跑得太久被中断了。可以直接再点一次"立即备份"，系统会从未完成的地方继续。';
-  }
-  if (m.includes('nosuchbucket') || m.includes('bucket')) {
-    return '找不到腾讯云上对应的存储空间。请确认腾讯云那边的存储桶还在。';
-  }
-  if (m.includes('network') || m.includes('fetch')) {
-    return '连接腾讯云时网络不通，稍等 1 分钟再试一次即可。';
-  }
-  if (m.includes('worker') || m.includes('timeout') || m.includes('wall clock')) {
-    return '这次备份被系统中断了。系统已经记录下来，你可以直接再点一次“立即备份”。';
-  }
+  if (m.includes('signature') || m.includes('403') || m.includes('accessdenied')) return '腾讯云拒绝写入，密钥可能过期或权限被改。请重新生成腾讯云密钥。';
+  if (m.includes('timeout') || m.includes('timed out')) return '这次备份跑得太久被中断了，可以直接再点一次“立即备份”，系统会从未完成的地方继续。';
+  if (m.includes('nosuchbucket') || m.includes('bucket')) return '找不到腾讯云上对应的存储空间。';
+  if (m.includes('network') || m.includes('fetch')) return '连接腾讯云时网络不通，稍等 1 分钟再试即可。';
   return msg;
 }
 
-function getProgress(run: BackupRun | undefined) {
-  if (!run) return 0;
-  if (run.status === 'success') return 100;
-  if (run.status === 'failed') return 100;
-  if (run.metadata?.phase === 'database') {
-    const index = Math.min(run.metadata.table_index ?? 0, 58);
-    return Math.max(10, Math.round(10 + (index / 58) * 58));
-  }
-  if (run.metadata?.phase === 'storage') return 82;
-  const step = run.metadata?.step || '';
-  if (step.includes('图片') || step.includes('视频')) return 72;
-  if (step.includes('系统') || step.includes('记录')) return 38;
-  return 16;
-}
-
-function displayStep(run: BackupRun | undefined) {
-  if (!run) return '';
-  if (run.status === 'running') return '正在备份全部数据';
-  return run.metadata?.step || '';
+function PassRow({ label, stat, active }: { label: string; stat?: PassStat; active?: boolean }) {
+  const total = stat?.total ?? 0;
+  const done = (stat?.uploaded ?? 0) + (stat?.skipped ?? 0);
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : (stat?.uploaded ? 100 : 0);
+  return (
+    <div className={`space-y-1 ${active ? '' : 'opacity-80'}`}>
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium">{label}</span>
+        <span className="text-muted-foreground tabular-nums">
+          {done}/{total || '—'} · 成功 {stat?.uploaded ?? 0} · 失败 <span className={stat?.failed ? 'text-destructive font-medium' : ''}>{stat?.failed ?? 0}</span> · {formatMs(stat?.elapsed_ms ?? 0)}
+        </span>
+      </div>
+      <Progress value={pct} className="h-1.5" />
+    </div>
+  );
 }
 
 export function BackupPanel() {
@@ -87,6 +96,10 @@ export function BackupPanel() {
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [continuing, setContinuing] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
+  const [showFailures, setShowFailures] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,40 +109,43 @@ export function BackupPanel() {
       .order('started_at', { ascending: false })
       .limit(40);
     setLoading(false);
-    if (error) {
-      toast({ title: '加载失败', description: error.message, variant: 'destructive' });
-      return;
-    }
+    if (error) { toast({ title: '加载失败', description: error.message, variant: 'destructive' }); return; }
     setRuns((data ?? []) as BackupRun[]);
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
   useEffect(() => {
     if (!runs.some((r) => r.status === 'running')) return;
     const t = setInterval(load, 4000);
     return () => clearInterval(t);
   }, [runs, load]);
 
-  const fullRuns = runs.filter((r) => r.kind === 'full');
+  // Realtime toast on new backup notifications
+  useEffect(() => {
+    const ch = supabase.channel('backup-notify')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'type=eq.backup' }, (payload) => {
+        const row = payload.new as { title?: string; body?: string };
+        toast({ title: row.title ?? '备份消息', description: row.body ?? '' });
+        load();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [load]);
+
+  const fullRuns = useMemo(() => runs.filter((r) => r.kind === 'full'), [runs]);
   const visibleRuns = fullRuns.length ? fullRuns : runs;
-  const lastSuccess = visibleRuns.find((r) => r.status === 'success');
   const running = visibleRuns.find((r) => r.status === 'running');
   const latest = visibleRuns[0];
-  const progress = getProgress(running);
+  const focus = running ?? latest;
 
+  // Self-continue running run
   useEffect(() => {
     if (!running || continuing) return;
     const t = window.setTimeout(async () => {
       setContinuing(true);
       try {
-        await supabase.functions.invoke('backup-all-to-cos', {
-          body: { trigger_source: 'manual', continue_run: true },
-        });
-      } finally {
-        setContinuing(false);
-        load();
-      }
+        await supabase.functions.invoke('backup-all-to-cos', { body: { trigger_source: 'manual', continue_run: true } });
+      } finally { setContinuing(false); load(); }
     }, 2500);
     return () => window.clearTimeout(t);
   }, [running, continuing, load]);
@@ -137,37 +153,67 @@ export function BackupPanel() {
   const trigger = async () => {
     setTriggering(true);
     try {
+      const { error } = await supabase.functions.invoke('backup-all-to-cos', { body: { trigger_source: 'manual' } });
+      if (error) throw error;
+      toast({ title: '备份已开始', description: '系统会自动把所有数据保存到你的腾讯云。' });
+      setTimeout(load, 500);
+    } catch (e) {
+      toast({ title: '备份没成功', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
+    } finally { setTriggering(false); load(); }
+  };
+
+  const retryFailed = async () => {
+    if (!focus) return;
+    setRetrying(true);
+    try {
       const { data, error } = await supabase.functions.invoke('backup-all-to-cos', {
-        body: { trigger_source: 'manual' },
+        body: { action: 'retry_failed', run_id: focus.id },
       });
       if (error) throw error;
-      toast({
-        title: '备份已开始',
-        description: '系统会自动把所有数据保存到你的腾讯云。',
-      });
-      setTimeout(load, 500);
-      if (data && (data as { ok?: boolean }).ok) {
-        const d = data as { files?: number; bytes?: number; has_more_files?: boolean; completed?: boolean; step?: string };
-        toast({
-          title: d.completed ? '备份完成' : '备份进行中',
-          description: !d.completed
-            ? (d.step || '系统正在分批备份，页面会自动继续。')
-            : d.has_more_files
-              ? `已先备份 ${d.files ?? 0} 个内容，约 ${formatBytes(d.bytes ?? 0)}，剩余图片视频会继续由每天自动备份补齐。`
-            : `共备份 ${d.files ?? 0} 个内容，约 ${formatBytes(d.bytes ?? 0)}`,
-        });
-      }
+      const d = data as { queued?: number };
+      toast({ title: '已开始补传', description: `准备重传 ${d?.queued ?? 0} 个失败的文件。` });
     } catch (e) {
-      toast({
-        title: '备份没成功',
-        description: humanizeError(e instanceof Error ? e.message : String(e)),
-        variant: 'destructive',
+      toast({ title: '补传失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
+    } finally { setRetrying(false); load(); }
+  };
+
+  const reconcile = async () => {
+    if (!focus) return;
+    setReconciling(true);
+    try {
+      const { error } = await supabase.functions.invoke('backup-all-to-cos', {
+        body: { action: 'reconcile_only', run_id: focus.id },
       });
-    } finally {
-      setTriggering(false);
-      load();
+      if (error) throw error;
+      toast({ title: '对账完成', description: '已重新核对文件清单。' });
+    } catch (e) {
+      toast({ title: '对账失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
+    } finally { setReconciling(false); load(); }
+  };
+
+  const downloadManifest = async () => {
+    if (!focus) return;
+    try {
+      const { data, error } = await supabase.functions.invoke('get-backup-manifest-url', { body: { run_id: focus.id } });
+      if (error) throw error;
+      const d = data as { url?: string; error?: string };
+      if (d.url) { window.open(d.url, '_blank'); }
+      else { throw new Error(d.error || '没有清单文件'); }
+    } catch (e) {
+      toast({ title: '拿不到清单', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
     }
   };
+
+  const meta = focus?.metadata ?? undefined;
+  const stats = meta?.pass_stats;
+  const failures = meta?.failures ?? [];
+  const reconcileInfo = meta?.reconcile;
+  const successRate = focus && focus.files_count > 0
+    ? Math.round(((focus.files_count - failures.length) / (focus.files_count + failures.length)) * 100)
+    : null;
+  const elapsedMs = focus?.finished_at
+    ? new Date(focus.finished_at).getTime() - new Date(focus.started_at).getTime()
+    : focus ? Date.now() - new Date(focus.started_at).getTime() : 0;
 
   return (
     <div className="space-y-5">
@@ -184,52 +230,121 @@ export function BackupPanel() {
         </Button>
       </div>
 
-      <Card className="p-4 space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <Archive className="w-4 h-4 text-primary" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm font-semibold">数据自动备份</h3>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">每天自动</Badge>
+      {/* Focus card: current run or last run */}
+      {focus && (
+        <Card className="p-4 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <Archive className="w-4 h-4 text-primary" />
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed mt-1">
-              账号记录、活动、知识库、营销任务、上传图片和视频都会一起备份。你不用区分类型，后台会自己处理。
-            </p>
-          </div>
-        </div>
-
-        {running ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{displayStep(running)}</span>
-              <span className="font-medium">{progress}%</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-semibold">
+                  {focus.status === 'running' ? '本次备份进行中' : focus.status === 'success' ? '上次备份' : '上次备份未完成'}
+                </h3>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                  {focus.trigger_source === 'cron' ? '系统自动' : '手动触发'}
+                </Badge>
+                {focus.retry_of && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">补传</Badge>}
+                <span className="text-xs text-muted-foreground">
+                  {formatDistanceToNow(new Date(focus.started_at), { addSuffix: true, locale: zhCN })}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {meta?.step ?? '—'} · 共 {focus.files_count} 个 · {formatBytes(focus.total_bytes)} · 耗时 {formatMs(elapsedMs)}
+                {successRate !== null && <> · 成功率 <span className="font-medium text-foreground">{successRate}%</span></>}
+              </p>
             </div>
-            <Progress value={progress} className="h-2" />
           </div>
-        ) : (
-          <div className="text-xs text-muted-foreground">
-            {lastSuccess ? (
-              <>上次成功：{formatDistanceToNow(new Date(lastSuccess.started_at), { addSuffix: true, locale: zhCN })}
-                {' · '}共 {lastSuccess.files_count} 个内容，约 {formatBytes(lastSuccess.total_bytes)}</>
-            ) : latest?.status === 'failed' ? (
-              <span className="text-destructive">上次备份没成功：{humanizeError(latest.error_message)}</span>
-            ) : (
-              <span className="text-amber-600">还没成功备份过，可以先点一次“立即备份”。</span>
-            )}
-          </div>
-        )}
 
-        <Button size="sm" onClick={trigger} disabled={triggering || Boolean(running)} className="w-full">
-          {triggering || running ? (
-            <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />备份中，请稍等…</>
-          ) : (
-            '立即备份'
+          {/* Three-pass progress */}
+          <div className="space-y-3">
+            <PassRow label="数据库表" stat={stats?.database} active={meta?.phase === 'database'} />
+            <PassRow label="图片" stat={stats?.storage_pass1} active={meta?.phase === 'storage' && meta?.storage_pass !== 2} />
+            <PassRow label="视频" stat={stats?.storage_pass2} active={meta?.phase === 'storage' && meta?.storage_pass === 2} />
+          </div>
+
+          {/* Reconcile */}
+          {reconcileInfo && (
+            <div className={`rounded-md border px-3 py-2 text-xs ${reconcileInfo.ok ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900' : 'bg-destructive/10 border-destructive/30'}`}>
+              <div className="flex items-center gap-2">
+                <FileCheck2 className="w-3.5 h-3.5" />
+                {reconcileInfo.ok ? (
+                  <span>对账通过：表 {reconcileInfo.tables_present}/{reconcileInfo.tables_expected} · 文件 {reconcileInfo.storage_present}/{reconcileInfo.storage_expected}</span>
+                ) : (
+                  <span className="text-destructive font-medium">
+                    对账发现缺失：表少 {reconcileInfo.tables_missing.length} 个，文件少 {reconcileInfo.storage_missing.length} 个
+                  </span>
+                )}
+                {(!reconcileInfo.ok && (reconcileInfo.tables_missing.length + reconcileInfo.storage_missing.length > 0)) && (
+                  <button className="ml-auto underline" onClick={() => setShowMissing((v) => !v)}>
+                    {showMissing ? '收起' : '查看缺失'}
+                  </button>
+                )}
+              </div>
+              {showMissing && !reconcileInfo.ok && (
+                <div className="mt-2 space-y-1 max-h-40 overflow-auto">
+                  {reconcileInfo.tables_missing.map((t) => (
+                    <div key={t} className="text-[11px] font-mono">表：{t}</div>
+                  ))}
+                  {reconcileInfo.storage_missing.map((f) => (
+                    <div key={f.bucket + f.path} className="text-[11px] font-mono truncate">{f.bucket}/{f.path}</div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
-        </Button>
-      </Card>
 
+          {/* Failures */}
+          {failures.length > 0 && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5">
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-destructive font-medium"
+                onClick={() => setShowFailures((v) => !v)}
+              >
+                {showFailures ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                失败 {failures.length} 个 · 点击展开
+              </button>
+              {showFailures && (
+                <div className="max-h-64 overflow-auto divide-y divide-destructive/20">
+                  {failures.slice(0, 100).map((f, i) => (
+                    <div key={i} className="px-3 py-1.5 text-[11px]">
+                      <div className="font-mono truncate">
+                        {f.kind === 'table' ? `表 ${f.table}${f.offset ? `@${f.offset}` : ''}` : `${f.bucket}/${f.path}`}
+                      </div>
+                      <div className="text-destructive/80">{f.error} · 尝试 {f.attempts} 次</div>
+                    </div>
+                  ))}
+                  {failures.length > 100 && (
+                    <div className="px-3 py-1.5 text-[11px] text-muted-foreground">仅显示前 100 条，共 {failures.length} 条。清单会导出全部。</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={trigger} disabled={triggering || Boolean(running)}>
+              {triggering || running ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />备份中…</> : '立即备份'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={retryFailed} disabled={retrying || Boolean(running) || failures.length === 0}>
+              <RotateCw className={`w-4 h-4 mr-1.5 ${retrying ? 'animate-spin' : ''}`} />
+              只重试失败文件{failures.length > 0 ? `（${failures.length}）` : ''}
+            </Button>
+            <Button size="sm" variant="outline" onClick={reconcile} disabled={reconciling || Boolean(running)}>
+              <FileCheck2 className={`w-4 h-4 mr-1.5 ${reconciling ? 'animate-spin' : ''}`} />
+              重新对账
+            </Button>
+            <Button size="sm" variant="outline" onClick={downloadManifest} disabled={!meta?.manifest_key || Boolean(running)}>
+              <Download className="w-4 h-4 mr-1.5" />
+              下载清单
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Recent runs history */}
       <Card className="overflow-hidden">
         <div className="px-4 py-3 border-b border-border/60 text-sm font-medium">
           最近 40 次备份记录
@@ -239,12 +354,10 @@ export function BackupPanel() {
             <div className="p-6 text-center text-sm text-muted-foreground">还没有备份记录</div>
           )}
           {visibleRuns.map((r) => {
-            const StatusIcon = r.status === 'success' ? CheckCircle2
-              : r.status === 'failed' ? XCircle : Clock;
-            const statusColor = r.status === 'success' ? 'text-emerald-600'
-              : r.status === 'failed' ? 'text-destructive' : 'text-amber-600';
-            const statusLabel = r.status === 'success' ? '成功'
-              : r.status === 'failed' ? '失败' : '进行中';
+            const StatusIcon = r.status === 'success' ? CheckCircle2 : r.status === 'failed' ? XCircle : Clock;
+            const statusColor = r.status === 'success' ? 'text-emerald-600' : r.status === 'failed' ? 'text-destructive' : 'text-amber-600';
+            const statusLabel = r.status === 'success' ? '成功' : r.status === 'failed' ? '失败' : '进行中';
+            const rf = r.metadata?.failures?.length ?? 0;
             return (
               <div key={r.id} className="p-3 flex items-start gap-3">
                 <StatusIcon className={`w-4 h-4 mt-0.5 shrink-0 ${statusColor} ${r.status === 'running' ? 'animate-spin' : ''}`} />
@@ -254,20 +367,21 @@ export function BackupPanel() {
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                       {r.trigger_source === 'cron' ? '系统自动' : '手动触发'}
                     </Badge>
+                    {r.retry_of && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">补传</Badge>}
                     <span className={`text-[11px] ${statusColor}`}>{statusLabel}</span>
                     <span className="text-xs text-muted-foreground">
                       {formatDistanceToNow(new Date(r.started_at), { addSuffix: true, locale: zhCN })}
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    {r.status === 'running' ? `${displayStep(r)} · ` : ''}
-                    共 {r.files_count} 个内容，约 {formatBytes(r.total_bytes)}
+                    共 {r.files_count} 个 · {formatBytes(r.total_bytes)}
+                    {rf > 0 && <span className="text-destructive"> · 失败 {rf}</span>}
+                    {r.metadata?.reconcile && (
+                      <span className={r.metadata.reconcile.ok ? '' : 'text-destructive'}>
+                        {' '}· 对账 {r.metadata.reconcile.ok ? '通过' : '有缺失'}
+                      </span>
+                    )}
                   </div>
-                  {r.metadata?.storage_reached_limit && r.status === 'success' && (
-                    <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-                      图片视频很多，本次已先备份一部分；每天自动备份会继续补齐，已备份过的不会重复传。
-                    </p>
-                  )}
                   {r.error_message && (
                     <p className="mt-1 text-[11px] text-destructive leading-relaxed">
                       {humanizeError(r.error_message)}
