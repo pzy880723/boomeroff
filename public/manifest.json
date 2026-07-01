@@ -1,6 +1,6 @@
 {
-  "name": "门店运营辅助系统",
-  "short_name": "门店助手",
+  "name": "BOOMER GO",
+  "short_name": "BOOMER GO",
   "description": "AI 识物 · 知识共享 · 排班管理 · 销售辅助,门店日常运营一个工具搞定。",
   "start_url": "/scan",
   "scope": "/",

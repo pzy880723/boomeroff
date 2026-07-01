@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">门店助手</string>
-    <string name="title_activity_main">门店助手</string>
-    <string name="package_name">com.boomeroff.vintage</string>
-    <string name="custom_url_scheme">com.boomeroff.vintage</string>
+    <string name="app_name">BOOMER GO</string>
+    <string name="title_activity_main">BOOMER GO</string>
+    <string name="package_name">com.boomeroff.go</string>
+    <string name="custom_url_scheme">com.boomeroff.go</string>
 </resources>

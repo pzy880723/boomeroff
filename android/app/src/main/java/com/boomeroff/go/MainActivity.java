@@ -1,4 +1,4 @@
-package com.boomeroff.vintage;
+package com.boomeroff.go;
 
 import com.getcapacitor.BridgeActivity;
 
