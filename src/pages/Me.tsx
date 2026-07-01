@@ -106,6 +106,7 @@ export default function Me() {
     const { error } = await supabase.from('profiles').update({ display_name: draftName.trim() }).eq('user_id', user.id);
     if (error) { toast.error('保存失败'); return; }
     setDisplayName(draftName.trim());
+    writeMeCache(user.id, { displayName: draftName.trim() });
     setEditOpen(false);
     toast.success('已保存');
   };
