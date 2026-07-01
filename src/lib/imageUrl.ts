@@ -28,3 +28,16 @@ export function thumbSrcSet(
   if (!u1 || !u2 || !u3) return undefined;
   return `${u1} 1x, ${u2} 2x, ${u3} 3x`;
 }
+
+// 头像专用：走 CDN cover 裁剪，保证圆形头像不变形，默认 144 适配 72px @ dpr2。
+export function avatarUrl(
+  url: string | null | undefined,
+  size = 144,
+  quality = 75,
+): string | null {
+  if (!url) return null;
+  if (!url.includes('/storage/v1/object/public/')) return url;
+  const base = url.replace('/object/public/', '/render/image/public/');
+  return `${base}?width=${size}&height=${size}&quality=${quality}&resize=cover`;
+}
+
