@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { thumbUrl } from '@/lib/imageUrl';
+import { thumbUrl, thumbSrcSet } from '@/lib/imageUrl';
 
 interface Post {
   id: string;
@@ -74,6 +74,11 @@ export default function Community() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
 
+  const profilesRef = useRef<Record<string, ProfileLite>>({});
+  profilesRef.current = profiles;
+  const catRef = useRef(cat);
+  catRef.current = cat;
+
   const loadPosts = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('community_posts').select('*').eq('is_public', true).eq('is_guest', false).order('created_at', { ascending: false });
@@ -81,47 +86,49 @@ export default function Community() {
     const { data: postsData } = await q.limit(60);
     const list = (postsData || []) as Post[];
     setPosts(list);
-
-    const userIds = Array.from(new Set(list.map((p) => p.user_id)));
-    if (userIds.length) {
-      const { data: profs } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
-      const map: Record<string, ProfileLite> = {};
-      (profs || []).forEach((p) => { map[p.user_id] = p as ProfileLite; });
-      setProfiles(map);
-    }
-
-    if (user) {
-      const ids = list.map((p) => p.id);
-      if (ids.length) {
-        const { data: myLikes } = await supabase.from('community_likes')
-          .select('post_id').eq('user_id', user.id).in('post_id', ids);
-        setLikes(new Set((myLikes || []).map((l) => l.post_id)));
-      }
-      const { data: myFavs } = await supabase.from('user_favorites')
-        .select('source_id').eq('user_id', user.id).eq('source_type', 'recognition');
-      setFavs(new Set((myFavs || []).map((f) => f.source_id)));
-    }
     setLoading(false);
+
+    // profiles + likes + favs 并发,不阻塞卡片渲染
+    const userIds = Array.from(new Set(list.map((p) => p.user_id)));
+    const ids = list.map((p) => p.id);
+    const [profsRes, likesRes, favsRes] = await Promise.all([
+      userIds.length
+        ? supabase.from('profiles').select('user_id, display_name').in('user_id', userIds)
+        : Promise.resolve({ data: [] } as any),
+      user && ids.length
+        ? supabase.from('community_likes').select('post_id').eq('user_id', user.id).in('post_id', ids)
+        : Promise.resolve({ data: [] } as any),
+      user
+        ? supabase.from('user_favorites').select('source_id').eq('user_id', user.id).eq('source_type', 'recognition')
+        : Promise.resolve({ data: [] } as any),
+    ]);
+    const map: Record<string, ProfileLite> = {};
+    ((profsRes as any).data || []).forEach((p: ProfileLite) => { map[p.user_id] = p; });
+    setProfiles(map);
+    setLikes(new Set(((likesRes as any).data || []).map((l: any) => l.post_id)));
+    setFavs(new Set(((favsRes as any).data || []).map((f: any) => f.source_id)));
   }, [cat, user]);
 
   useEffect(() => { if (user) loadPosts(); }, [user, loadPosts]);
 
-  // realtime
+  // realtime — 只依赖 cat 挂载一次,profiles 用 ref 读,避免每收一条就重订阅
   useEffect(() => {
     const ch = supabase.channel('community-posts-feed')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_posts' }, (payload) => {
         const np = payload.new as Post;
-        if (np.is_public && !np.is_guest && (cat === 'all' || np.category === cat)) {
+        const activeCat = catRef.current;
+        if (np.is_public && !np.is_guest && (activeCat === 'all' || np.category === activeCat)) {
           setPosts((p) => [np, ...p]);
-          if (!profiles[np.user_id]) {
+          if (!profilesRef.current[np.user_id]) {
             supabase.from('profiles').select('user_id, display_name').eq('user_id', np.user_id).single()
               .then(({ data }) => data && setProfiles((m) => ({ ...m, [np.user_id]: data as ProfileLite })));
           }
         }
+
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [cat, profiles]);
+  }, []);
 
   const toggleLike = async (post: Post) => {
     if (!user) return;
@@ -346,24 +353,31 @@ export default function Community() {
           <div className="text-center text-muted-foreground py-16 text-sm">还没有动态，识别一件商品分享出来吧</div>
         ) : (
           <div className="columns-2 gap-3 [column-fill:_balance]">
-            {posts.map((p) => {
+            {posts.map((p, idx) => {
               const prof = profiles[p.user_id];
               const liked = likes.has(p.id);
               const faved = p.product_id ? favs.has(p.product_id) : false;
+              const cardSrc = p.thumbnail_url || thumbUrl(p.image_url, 240) || p.image_url || '';
+              const cardSrcSet = p.thumbnail_url ? undefined : thumbSrcSet(p.image_url, 180, 70);
               return (
                 <div key={p.id} className="mb-3 break-inside-avoid">
                   <div className="rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm cursor-pointer" onClick={() => openDetail(p)}>
                     {(p.thumbnail_url || p.image_url) ? (
                       <img
-                        src={p.thumbnail_url || thumbUrl(p.image_url, 480) || p.image_url || ''}
+                        src={cardSrc}
+                        srcSet={cardSrcSet}
+                        sizes="(max-width: 640px) 46vw, 220px"
                         alt={p.name}
-                        className="w-full h-auto"
-                        loading="lazy"
+                        className="w-full h-auto bg-muted"
+                        style={{ aspectRatio: '3 / 4' }}
+                        loading={idx < 4 ? 'eager' : 'lazy'}
+                        {...(idx < 2 ? ({ fetchpriority: 'high' } as any) : {})}
                         decoding="async"
                       />
                     ) : (
                       <div className="aspect-square bg-muted" />
                     )}
+
                     <div className="p-2.5 space-y-2">
                       <p className="text-sm font-medium leading-snug break-words">{p.name}</p>
                       <div className="flex items-center gap-1 flex-wrap">
@@ -400,7 +414,7 @@ export default function Community() {
                 <SheetTitle className="text-left text-base leading-snug break-words">{active.name}</SheetTitle>
               </SheetHeader>
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {active.image_url && <img src={thumbUrl(active.image_url, 1080) || active.image_url} className="w-full rounded-lg" alt={active.name} loading="eager" decoding="async" fetchPriority="high" />}
+                {active.image_url && <img src={thumbUrl(active.image_url, 720) || active.image_url} className="w-full rounded-lg bg-muted" alt={active.name} loading="eager" decoding="async" fetchPriority="high" />}
 
                 <div className="flex flex-wrap gap-1.5">
                   <Badge variant="secondary">{CATEGORY_LABELS[active.category]}</Badge>

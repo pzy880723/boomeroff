@@ -313,6 +313,7 @@ export type Database = {
           id: string
           kind: string
           metadata: Json
+          retry_of: string | null
           started_at: string
           status: string
           total_bytes: number
@@ -327,6 +328,7 @@ export type Database = {
           id?: string
           kind: string
           metadata?: Json
+          retry_of?: string | null
           started_at?: string
           status?: string
           total_bytes?: number
@@ -341,12 +343,21 @@ export type Database = {
           id?: string
           kind?: string
           metadata?: Json
+          retry_of?: string | null
           started_at?: string
           status?: string
           total_bytes?: number
           trigger_source?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "backup_runs_retry_of_fkey"
+            columns: ["retry_of"]
+            isOneToOne: false
+            referencedRelation: "backup_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       claim_otp: {
         Row: {

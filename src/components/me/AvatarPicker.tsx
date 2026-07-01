@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { compressForUpload } from '@/lib/uploadImage';
 import { invokeFn } from '@/lib/invokeFn';
+import { avatarUrl as toAvatarUrl } from '@/lib/imageUrl';
+
 
 interface Props {
   userId: string;
@@ -33,7 +35,8 @@ export function AvatarPicker({ userId, displayName, avatarUrl, onChanged, size =
       if ((data as any)?.error) throw new Error((data as any).error);
       const url = (data as any)?.avatar_url as string | undefined;
       if (!url) throw new Error('未返回头像');
-      onChanged(`${url}?v=${Date.now()}`);
+      onChanged(url);
+
       toast.success('AI 头像已生成');
     } catch (e: any) {
       toast.error(e?.message || 'AI 生成失败');
@@ -69,7 +72,7 @@ export function AvatarPicker({ userId, displayName, avatarUrl, onChanged, size =
         .update({ avatar_url: url })
         .eq('user_id', userId);
       if (profErr) throw profErr;
-      onChanged(`${url}?v=${Date.now()}`);
+      onChanged(url);
       toast.success('头像已更新');
     } catch (e: any) {
       toast.error(e?.message || '上传失败');
@@ -88,7 +91,16 @@ export function AvatarPicker({ userId, displayName, avatarUrl, onChanged, size =
             disabled={!!busy}
           >
             <Avatar className="w-full h-full">
-              {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
+              {avatarUrl ? (
+                <AvatarImage
+                  src={toAvatarUrl(avatarUrl, Math.max(144, size * 2)) || avatarUrl}
+                  alt={displayName}
+                  width={size}
+                  height={size}
+                  {...({ fetchpriority: 'high' } as any)}
+                  decoding="async"
+                />
+              ) : null}
               <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xl">
                 {displayName.charAt(0).toUpperCase() || '店'}
               </AvatarFallback>

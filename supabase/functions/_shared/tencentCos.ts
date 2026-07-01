@@ -81,46 +81,90 @@ export async function signCos(opts: {
   ].join("&");
 }
 
-/** PUT a blob/buffer to COS. Returns ETag on success. */
+/** PUT a blob/buffer to COS. Returns ETag on success. Retries on 5xx / network errors. */
 export async function cosPutObject(opts: {
   cfg: CosConfig;
   key: string; // object key WITHOUT leading slash
   body: Uint8Array | Blob;
   contentType?: string;
+  maxAttempts?: number;
+  perAttemptTimeoutMs?: number;
 }): Promise<{ etag: string; size: number }> {
   const { cfg, key, body } = opts;
   const pathname = `/${encodeURI(key).replace(/%2F/g, "/")}`;
-  const auth = await signCos({ cfg, method: "PUT", pathname });
   const url = `https://${cosHost(cfg)}${pathname}`;
   const payload = body instanceof Blob ? new Uint8Array(await body.arrayBuffer()) : body;
-  const resp = await fetch(url, {
-    method: "PUT",
-    headers: {
-      Authorization: auth,
-      "Content-Type": opts.contentType ?? "application/octet-stream",
-      "Content-Length": String(payload.byteLength),
-    },
-    body: payload,
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`COS PUT 失败 (${resp.status}): ${text.slice(0, 200)}`);
+  const maxAttempts = opts.maxAttempts ?? 4;
+  // Scale timeout with payload size. Callers may pass a tighter budget when
+  // running inside a short Edge Function tick; default remains conservative.
+  const derived = 8_000 + Math.round(payload.byteLength / (500 * 1024)) * 1000;
+  const perAttemptTimeoutMs = opts.perAttemptTimeoutMs ?? Math.min(90_000, Math.max(10_000, derived));
+
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const auth = await signCos({ cfg, method: "PUT", pathname });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
+    try {
+      const resp = await fetch(url, {
+        method: "PUT",
+        headers: {
+          Authorization: auth,
+          "Content-Type": opts.contentType ?? "application/octet-stream",
+          "Content-Length": String(payload.byteLength),
+        },
+        body: payload,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (resp.ok) {
+        return { etag: resp.headers.get("etag") ?? "", size: payload.byteLength };
+      }
+      const text = await resp.text().catch(() => "");
+      // 4xx (except 408/429) are permanent — don't retry.
+      if (resp.status < 500 && resp.status !== 408 && resp.status !== 429) {
+        throw new Error(`COS PUT 失败 (${resp.status}): ${text.slice(0, 200)}`);
+      }
+      lastErr = new Error(`COS PUT ${resp.status}: ${text.slice(0, 120)}`);
+    } catch (e) {
+      clearTimeout(timer);
+      lastErr = e instanceof DOMException && e.name === "AbortError"
+        ? new Error(`本次上传等待超过 ${Math.round(perAttemptTimeoutMs / 1000)} 秒`)
+        : e;
+      const msg = e instanceof Error ? e.message : String(e);
+      // Permanent error already surfaced above — rethrow.
+      if (msg.startsWith("COS PUT 失败 (4")) throw e;
+    }
+    if (attempt < maxAttempts) {
+      // Exponential backoff: 500ms, 1500ms, 4500ms.
+      await new Promise((r) => setTimeout(r, 500 * Math.pow(3, attempt - 1)));
+    }
   }
-  return { etag: resp.headers.get("etag") ?? "", size: payload.byteLength };
+  const msg = lastErr instanceof Error ? lastErr.message : String(lastErr ?? "unknown");
+  throw new Error(`COS PUT 反复失败 (${maxAttempts} 次): ${msg}`);
 }
 
 /** HEAD object — returns ETag/size if exists, null if 404. */
 export async function cosHeadObject(opts: {
   cfg: CosConfig;
   key: string;
+  timeoutMs?: number;
 }): Promise<{ etag: string; size: number } | null> {
   const { cfg, key } = opts;
   const pathname = `/${encodeURI(key).replace(/%2F/g, "/")}`;
   const auth = await signCos({ cfg, method: "HEAD", pathname });
-  const resp = await fetch(`https://${cosHost(cfg)}${pathname}`, {
-    method: "HEAD",
-    headers: { Authorization: auth },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 8_000);
+  let resp: Response;
+  try {
+    resp = await fetch(`https://${cosHost(cfg)}${pathname}`, {
+      method: "HEAD",
+      headers: { Authorization: auth },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (resp.status === 404) return null;
   if (!resp.ok) throw new Error(`COS HEAD 失败 (${resp.status})`);
   return {

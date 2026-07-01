@@ -1,121 +1,52 @@
+## 结论
 
-## 一、为什么之前的备份都失败了（我查过 `backup_runs` 记录）
+你不用先去腾讯云开按钮。现在更像是我们备份函数自己的上传策略有问题：它在一个 45 秒的小执行窗口里，对每个文件最多等到 20-90 秒，还会重试多次。结果是单个图片一旦网络慢，就把这一轮卡住，前端又继续触发下一轮，于是看起来一直是“上传腾讯云超时”。
 
-看下最近 4 次跑：
+从当前记录看：失败文件只有 0.5MB-1.8MB，不是大文件；数据库健康也正常；没有看到腾讯云明确的 403 权限拒绝。所以优先修代码，不是让你去腾讯云配置。
 
-| 时间 | 结果 | 卡在哪里 |
-|---|---|---|
-| 6-29 11:57 | ❌ | `The schema must be one of the following: public, graphql_public` — 备份代码直接查 `storage.objects` 系统表，被 PostgREST 拒了 |
-| 6-29 19:00（自动） | ❌ | 只推进到 19/58 张表，被 2 小时超时判死 |
-| 6-30 19:00（自动） | ❌ | 只推进到 21/58 张表，同上 |
-| 7-01 09:00（手动） | ⏳ | 还卡在 11/58 张表，页面一关就不动了 |
+## 修复计划
 
-**三个根因：**
+1. **缩短小文件单次上传超时**
+   - 备份图片这类小文件不再等 20 秒起步。
+   - 小文件改成更快失败、更快进入下一轮，避免一个文件拖慢整批。
 
-1. **每次调用只处理 1 张表**就返回，58 张表要 58 次调用才走完 → cron 一晚只触发 1 次，永远备不完。
-2. **手动备份靠前端 setTimeout 续跑**，一旦你关掉 `/portal` 页面，循环立刻断，之前那条 "running" 就一直挂着，2 小时后被系统判死。
-3. **图片/视频阶段用 `admin.schema("storage").from("objects")` 查表** — Lovable Cloud 的 PostgREST 明确禁止访问 `storage` schema，所以每次跑到图片视频阶段都会立刻报 schema 错。
+2. **让备份函数尊重每轮执行预算**
+   - 上传前先看本轮还剩多少时间。
+   - 如果时间不够，就保存进度并交给下一轮继续，而不是硬传到超时。
 
-结论：**从 6-29 到现在，没有一次真正成功过**。腾讯云桶里目前只有一堆"半成品"数据库快照，图片/视频一个都没备。
+3. **失败文件不在同一轮反复死磕**
+   - 普通扫描阶段遇到超时先记录失败并继续后面的文件。
+   - “只重试失败文件”时按队列逐个补传，避免重复备份已成功文件。
 
----
+4. **优化腾讯云上传底层错误判断**
+   - 区分：腾讯云权限错误、桶不存在、网络超时、函数预算不足。
+   - 面板里给出更准确的中文原因，而不是全部显示成“稍后自动重试”。
 
-## 二、修复方案
+5. **增加上传前 HEAD 快速跳过**
+   - 已经在腾讯云存在且大小一致的文件直接跳过。
+   - 这能让你多次点击备份时不会重复上传成功文件。
 
-### 1. 一次 tick 尽量多推进（`backup-all-to-cos/index.ts`）
-- 数据库阶段：在 25 秒预算内循环 `dumpTable`，一次搞定所有小表 + 大表分页，直到超时或走完 58 张。
-- 图片阶段：**弃用** `admin.schema("storage")`，改回文件里已经写好但没用的 `walkStorage()`（走 `storage.from(bucket).list()` 官方 API，不受 schema 限制）。用 bucket 顺序游标记录进度（`{ bucketIndex, prefixCursor }`），一 tick 处理 80 个文件。
+6. **更新备份面板提示**
+   - 如果是网络慢/预算不足，提示“系统正在分批补传”。
+   - 如果是腾讯云权限或密钥问题，再明确提示你去腾讯云检查权限。
 
-### 2. 服务端自动续跑，不依赖前端
-- 每个 tick 结束时如果 `phase !== "done"`，用 `EdgeRuntime.waitUntil(fetch(self))` 立刻自触发下一次调用。
-- 前端页面关掉也不影响，函数自己一直跑到 done 或失败为止。
-- 前端 `BackupPanel.tsx` 的 setTimeout 续跑逻辑保留作为保底。
+## 技术调整范围
 
-### 3. 错误友好化
-- schema/权限类错误映射成"备份程序权限不足，请联系开发者更新"。
-- 单张表报错时继续跑下一张，最后汇总，不再一挂全挂。
+- 修改 `supabase/functions/_shared/tencentCos.ts`
+  - 支持按文件大小/调用方传入更短的超时。
+  - 保留重试，但不让一次 PUT 占满整个函数时间。
 
-### 4. 一次性把历史 "running" 挂单标记 failed（迁移一条 SQL）
+- 修改 `supabase/functions/backup-all-to-cos/index.ts`
+  - 上传前检查剩余执行时间。
+  - 图片 pass 使用短超时；视频/大文件 pass 使用长超时。
+  - 对超时文件记录为可补传失败，不阻塞后续文件。
 
----
+- 修改 `src/components/admin/BackupPanel.tsx`
+  - 优化中文错误说明。
+  - 在失败列表里说明“无需去腾讯云开按钮”的场景。
 
-## 三、你的备份存在腾讯云什么位置
+## 验证方式
 
-**桶：** `lovable-backup-1257117127`　**地域：** `ap-shanghai`
-**访问域名：** `https://lovable-backup-1257117127.cos.ap-shanghai.myqcloud.com`
-
-```
-桶根/
-├── db-backups/                     ← 数据库备份
-│   ├── daily/YYYY-MM-DD/tables/<表名>/part-000000.json.gz
-│   │   （每天一份，每张表一个文件夹，大表按 200 行分包）
-│   └── monthly/YYYY-MM-01/tables/…  ← 每月 1 号额外多存一份长期归档
-│
-└── storage-mirror/                 ← 图片 / 视频原文件
-    ├── product-images/…            商品识别图
-    ├── avatars/…                   用户头像
-    ├── voucher-screenshots/…       券使用截图
-    ├── activity-posters/…          活动海报
-    └── marketing-videos/…          营销视频
-```
-
-**格式说明：** 每个 `.json.gz` 解压后是 UTF-8 JSON：
-
-```json
-{
-  "backed_up_at": "2026-07-01T09:00:17Z",
-  "format": "boomer-table-backup-v1",
-  "table": "products",
-  "from": 0,
-  "rows": [ { …一行行原表数据… } ]
-}
-```
-
-图片/视频文件是**原样存的**，扩展名 / MIME 不变，直接拿来能用。
-
----
-
-## 四、别的 APP 怎么读取（3 种方式，按推荐度）
-
-### 方式 A（推荐）：腾讯云 COS 官方 SDK
-在腾讯云控制台新建一个**只读**子账号（比现在的 `lovable-backup-bot` 权限更小，只给 `GetObject` + `GetBucket`），把 SecretId/Key 配到你的新 APP 里，用官方 SDK：
-
-- Node.js：`npm i cos-nodejs-sdk-v5`
-- Python：`pip install cos-python-sdk-v5`
-- Java/Go/PHP/iOS/Android/小程序 都有官方包 → https://cloud.tencent.com/document/product/436/6474
-
-示例（Node）：
-```js
-const COS = require('cos-nodejs-sdk-v5');
-const cos = new COS({ SecretId, SecretKey });
-cos.getObject({
-  Bucket: 'lovable-backup-1257117127',
-  Region: 'ap-shanghai',
-  Key: 'db-backups/daily/2026-07-01/tables/products/part-000000.json.gz',
-}, (err, data) => { /* data.Body 是 gzip 后的 buffer，用 zlib.gunzip 解开就是 JSON */ });
-```
-
-### 方式 B：S3 兼容接口
-COS 支持 AWS S3 协议，直接用 aws-sdk / boto3 也行：
-- Endpoint: `https://cos.ap-shanghai.myqcloud.com`
-- Region: `ap-shanghai`
-- AK/SK 用腾讯云的 SecretId/SecretKey
-
-### 方式 C：命令行 / 一次性下载
-- `coscli`（腾讯云官方 CLI）：`coscli sync cos://lovable-backup-1257117127/db-backups ./local-backup`
-- 或用图形化工具 **COSBrowser**（腾讯云出品，Mac/Windows/手机都有）直接浏览下载。
-
----
-
-## 五、我会新增一份 `docs/backup-locations.md`
-把上面第三、四节内容永久沉淀下来，方便你转给外部 APP 开发者。
-
----
-
-**改动清单：**
-- ✏️ `supabase/functions/backup-all-to-cos/index.ts` — 循环推进 + 自续跑 + 换回 walkStorage
-- 🗄 一条迁移：把当前挂着的 running 记录标 failed 释放锁
-- 📄 新增 `docs/backup-locations.md`
-- （前端 `BackupPanel.tsx` 不动，保留兜底轮询）
-
-要我按这个方案改吗？
+1. 部署后在 `/portal → 数据备份` 点“只重试失败文件”。
+2. 观察这 3-5 个失败图片是否能快速补传或快速跳过。
+3. 若仍失败，再看错误是否变成明确的“腾讯云权限/密钥/桶”问题。
