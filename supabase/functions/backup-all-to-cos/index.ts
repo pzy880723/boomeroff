@@ -399,6 +399,13 @@ async function getActiveRun(admin: ReturnType<typeof createClient>, trigger: "ma
     .order("started_at", { ascending: false }).limit(1);
   const running = Array.isArray(runningRows) ? runningRows[0] : null;
   if (running) {
+    await admin.from("backup_runs").update({
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      error_message: "已停止重复备份任务：系统只保留最新一轮继续运行。",
+    }).eq("kind", "full").eq("status", "running").neq("id", (running as { id: string }).id);
+  }
+  if (running) {
     const row = running as { id: string; started_at: string; files_count: number; total_bytes: number; metadata: unknown };
     const meta = normalizeMeta(row.metadata, day);
     const heartbeatAt = meta.last_tick_at ? new Date(meta.last_tick_at).getTime() : new Date(row.started_at).getTime();
@@ -473,7 +480,34 @@ Deno.serve(async (req) => {
     }
   } catch { /* ignore */ }
 
-  // ========== retry_failed / reconcile_only ==========
+  // ========== cancel / restart / retry / reconcile ==========
+  if (action === "cancel_running" || action === "start_fresh") {
+    const stoppedAt = new Date().toISOString();
+    await admin.from("backup_runs").update({
+      status: "failed",
+      finished_at: stoppedAt,
+      error_message: action === "start_fresh"
+        ? "已停止旧备份，并重新开始一轮干净备份。"
+        : "已手动停止备份。",
+      metadata: {
+        step: action === "start_fresh" ? "已停止旧备份，准备重新开始" : "已手动停止",
+        phase: "done",
+        stopped_at: stoppedAt,
+      },
+    }).eq("kind", "full").eq("status", "running");
+
+    if (action === "cancel_running") {
+      return json({ ok: true, stopped: true });
+    }
+
+    const { data: runRow, error } = await admin.from("backup_runs")
+      .insert({ kind: "full", status: "running", trigger_source: trigger, metadata: normalizeMeta({ step: "开始备份", day }, day) })
+      .select("id").single();
+    if (error || !runRow) return json({ ok: false, error: "无法创建新的备份记录：" + (error?.message ?? "未知原因") }, 500);
+    scheduleContinuation(req.url);
+    return json({ ok: true, restarted: true, run_id: (runRow as { id: string }).id }, 202);
+  }
+
   if (action === "retry_failed" && body.run_id) {
     const { data: srcRow } = await admin.from("backup_runs").select("id, metadata").eq("id", body.run_id).maybeSingle();
     if (!srcRow) return json({ ok: false, error: "找不到那次备份记录" }, 404);

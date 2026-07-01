@@ -47,6 +47,7 @@ type BackupRun = {
     failures?: FailureItem[];
     manifest_key?: string;
     reconcile?: ReconcileMeta;
+    last_tick_at?: string;
   } | null;
 };
 
@@ -96,7 +97,8 @@ export function BackupPanel() {
   const [runs, setRuns] = useState<BackupRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
-  const [continuing, setContinuing] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [nudging, setNudging] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [reconciling, setReconciling] = useState(false);
   const [showFailures, setShowFailures] = useState(false);
@@ -139,17 +141,21 @@ export function BackupPanel() {
   const latest = visibleRuns[0];
   const focus = running ?? latest;
 
-  // Self-continue running run
+  // Low-frequency safety nudge: backend normally continues itself; this only
+  // wakes a run that has not written progress for about a minute.
   useEffect(() => {
-    if (!running || continuing) return;
+    if (!running || nudging) return;
+    const lastTick = running.metadata?.last_tick_at ?? running.started_at;
+    const staleMs = Date.now() - new Date(lastTick).getTime();
+    if (staleMs < 55_000) return;
     const t = window.setTimeout(async () => {
-      setContinuing(true);
+      setNudging(true);
       try {
-        await supabase.functions.invoke('backup-all-to-cos', { body: { trigger_source: 'manual', continue_run: true } });
-      } finally { setContinuing(false); load(); }
-    }, 2500);
+        await supabase.functions.invoke('backup-all-to-cos', { body: { trigger_source: 'manual' } });
+      } finally { setNudging(false); load(); }
+    }, 10_000);
     return () => window.clearTimeout(t);
-  }, [running, continuing, load]);
+  }, [running, nudging, load]);
 
   const trigger = async () => {
     setTriggering(true);
@@ -160,6 +166,29 @@ export function BackupPanel() {
       setTimeout(load, 500);
     } catch (e) {
       toast({ title: '备份没成功', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
+    } finally { setTriggering(false); load(); }
+  };
+
+  const stopRunning = async () => {
+    setStopping(true);
+    try {
+      const { error } = await supabase.functions.invoke('backup-all-to-cos', { body: { action: 'cancel_running' } });
+      if (error) throw error;
+      toast({ title: '已停止备份', description: '当前卡住的备份已结束，可以重新开始。' });
+    } catch (e) {
+      toast({ title: '停止失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
+    } finally { setStopping(false); load(); }
+  };
+
+  const restartFresh = async () => {
+    setTriggering(true);
+    try {
+      const { error } = await supabase.functions.invoke('backup-all-to-cos', { body: { action: 'start_fresh', trigger_source: 'manual' } });
+      if (error) throw error;
+      toast({ title: '已重新开始', description: '旧备份已停止，新备份会从头检查并继续跑。' });
+      setTimeout(load, 500);
+    } catch (e) {
+      toast({ title: '重新开始失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
     } finally { setTriggering(false); load(); }
   };
 
@@ -331,6 +360,16 @@ export function BackupPanel() {
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={trigger} disabled={triggering || Boolean(running)}>
               {triggering || running ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />备份中…</> : '立即备份'}
+            </Button>
+            {running && (
+              <Button size="sm" variant="destructive" onClick={stopRunning} disabled={stopping}>
+                {stopping ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <XCircle className="w-4 h-4 mr-1.5" />}
+                停止当前备份
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={restartFresh} disabled={triggering || stopping}>
+              <RefreshCw className={`w-4 h-4 mr-1.5 ${triggering ? 'animate-spin' : ''}`} />
+              停止并重新开始
             </Button>
             <Button size="sm" variant="outline" onClick={retryFailed} disabled={retrying || Boolean(running) || failures.length === 0}>
               <RotateCw className={`w-4 h-4 mr-1.5 ${retrying ? 'animate-spin' : ''}`} />
