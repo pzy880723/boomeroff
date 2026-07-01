@@ -1,0 +1,1 @@
+UPDATE public.backup_runs SET status = 'failed', finished_at = now(), error_message = COALESCE(error_message, '') || ' (旧版本备份程序，已被新版接管)' WHERE status = 'running';
