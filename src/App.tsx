@@ -59,6 +59,7 @@ const MarketingLibrary = lazy(() => import("./pages/marketing/MarketingLibrary")
 const DispatchHome = lazy(() => import("./pages/marketing/dispatch/DispatchHome"));
 const DispatchWorkbench = lazy(() => import("./pages/marketing/dispatch/Workbench"));
 const DispatchJobDetail = lazy(() => import("./pages/marketing/dispatch/JobDetail"));
+const AppDownload = lazy(() => import("./pages/AppDownload"));
 
 const queryClient = new QueryClient();
 
@@ -132,6 +133,9 @@ const App = () => {
 
               {/* 火山真人认证 H5 回跳页(免登录) */}
               <Route path="/verify-callback" element={<VerifyCallback />} />
+
+              {/* 员工移动端安装入口 */}
+              <Route path="/app" element={<AppDownload />} />
 
               {/* 游客版（免登录）—— 用静默 ErrorBoundary,顾客永远不会看到错误卡片 */}
               <Route
