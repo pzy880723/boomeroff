@@ -43,7 +43,9 @@ const BUCKETS = [
 
 const PAGE_SIZE = 200;
 const STORAGE_LIST_PAGE = 200;
-const TICK_BUDGET_MS = 40_000;
+const TICK_BUDGET_MS = 45_000;
+// Files strictly larger than this are deferred to pass 2 so images finish first.
+const LARGE_FILE_THRESHOLD = 30 * 1024 * 1024;
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
 
 function json(data: unknown, status = 200) {
@@ -167,7 +169,10 @@ type RunMeta = {
   storage_uploaded?: number;
   storage_skipped?: number;
   storage_cursor?: number;
+  storage_pass?: 1 | 2; // 1 = skip large videos, 2 = large only
+  storage_deferred?: number; // count of files punted to pass 2
   storage_errors?: string[];
+  last_tick_at?: string;
 };
 
 function normalizeMeta(raw: unknown, day: string): RunMeta {
@@ -186,8 +191,11 @@ function normalizeMeta(raw: unknown, day: string): RunMeta {
     storage_uploaded: meta.storage_uploaded ?? 0,
     storage_skipped: meta.storage_skipped ?? 0,
     storage_cursor: meta.storage_cursor ?? 0,
+    storage_pass: (meta.storage_pass === 2 ? 2 : 1),
+    storage_deferred: meta.storage_deferred ?? 0,
     storage_errors: meta.storage_errors ?? [],
     step: meta.step ?? "开始备份",
+    last_tick_at: meta.last_tick_at,
   };
 }
 
@@ -206,24 +214,30 @@ async function getActiveRun(
 
   const running = Array.isArray(runningRows) ? runningRows[0] : null;
   if (running) {
-    const startedAt = new Date((running as { started_at: string }).started_at).getTime();
-    if (Date.now() - startedAt < 2 * 60 * 60 * 1000) {
-      const row = running as { id: string; files_count: number; total_bytes: number; metadata: unknown };
+    const row = running as { id: string; started_at: string; files_count: number; total_bytes: number; metadata: unknown };
+    const meta = normalizeMeta(row.metadata, day);
+    const heartbeatAt = meta.last_tick_at ? new Date(meta.last_tick_at).getTime() : new Date(row.started_at).getTime();
+    const staleMs = Date.now() - heartbeatAt;
+    // A run is stale if it hasn't ticked in 20 minutes OR started > 6h ago overall.
+    const overallAgeMs = Date.now() - new Date(row.started_at).getTime();
+    if (staleMs < 20 * 60 * 1000 && overallAgeMs < 6 * 60 * 60 * 1000) {
       return {
         id: row.id,
         files_count: row.files_count ?? 0,
         total_bytes: Number(row.total_bytes ?? 0),
-        metadata: normalizeMeta(row.metadata, day),
+        metadata: meta,
       };
     }
     await admin.from("backup_runs").update({
       status: "failed",
       finished_at: new Date().toISOString(),
-      error_message: "上一次备份跑得太久，已自动结束。系统会重新开始备份。",
-    }).eq("id", (running as { id: string }).id);
+      error_message: "上一次备份长时间没有推进，已自动结束。系统会重新开始备份。",
+    }).eq("id", row.id);
   }
 
   if (trigger === "cron") {
+    // Cron only starts a new full run inside the 3–4am Shanghai window; but if a run
+    // is already running (handled above) it will continue it regardless of hour.
     const { data: todaySuccess } = await admin
       .from("backup_runs")
       .select("id")
@@ -417,12 +431,17 @@ Deno.serve(async (req) => {
       let cursor = meta.storage_cursor ?? 0;
       let uploaded = meta.storage_uploaded ?? 0;
       let skipped = meta.storage_skipped ?? 0;
+      let deferred = meta.storage_deferred ?? 0;
+      const pass = meta.storage_pass ?? 1;
       const errors = [...(meta.storage_errors ?? [])];
 
       while (cursor < manifests.length && Date.now() - tickStart < TICK_BUDGET_MS) {
         const file = manifests[cursor];
         cursor += 1;
         if (!file || file.size > MAX_FILE_BYTES) { skipped += 1; continue; }
+        // Pass 1: skip large files so images finish first. Pass 2: only large files.
+        if (pass === 1 && file.size > LARGE_FILE_THRESHOLD) { deferred += 1; continue; }
+        if (pass === 2 && file.size <= LARGE_FILE_THRESHOLD) { continue; }
         const cosKey = `storage-mirror/${file.bucket}/${file.path}`;
         try {
           const head = await cosHeadObject({ cfg, key: cosKey });
@@ -445,19 +464,32 @@ Deno.serve(async (req) => {
       meta.storage_cursor = cursor;
       meta.storage_uploaded = uploaded;
       meta.storage_skipped = skipped;
+      meta.storage_deferred = deferred;
       meta.storage_errors = errors.slice(-20);
-      if (cursor >= manifests.length && manifests.length > 0) {
-        meta.phase = "done";
-        meta.step = "备份完成";
+      const totalToWalk = manifests.length;
+      if (cursor >= totalToWalk && totalToWalk > 0) {
+        if (pass === 1 && deferred > 0) {
+          // Second pass: revisit only the large files we punted.
+          meta.storage_pass = 2;
+          meta.storage_cursor = 0;
+          meta.step = `图片已完成，开始上传大视频（${deferred} 个）`;
+        } else {
+          meta.phase = "done";
+          meta.step = "备份完成";
+        }
       } else {
-        meta.step = `正在上传图片和视频 ${cursor}/${manifests.length || meta.storage_total}`;
+        const label = pass === 1 ? "图片" : "视频";
+        meta.step = `正在上传${label} ${cursor}/${totalToWalk || meta.storage_total}`;
       }
-      if (manifests.length === 0 && (meta.storage_total ?? 0) === 0) {
+      if (totalToWalk === 0 && (meta.storage_total ?? 0) === 0) {
         // Nothing to mirror — done.
         meta.phase = "done";
         meta.step = "备份完成";
       }
     }
+
+    // Heartbeat — used by the stale-run watchdog.
+    meta.last_tick_at = new Date().toISOString();
 
     const finished = meta.phase === "done";
     await updateRun(admin, runId, {

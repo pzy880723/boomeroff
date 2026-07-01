@@ -1,72 +1,72 @@
-目标：让「我的」头像 + 姓名 + 徽章几乎"同框"出现，中古圈瀑布流秒开，AI 识物入口零等待。
+## 当前备份状况：**不正常，且没备份全**
+
+### 一、直接结论
+
+| 项 | 情况 |
+|---|---|
+| 数据库表（58 张） | ✅ 每次都能跑完，几秒钟；内容完整 |
+| 图片（product-images / avatars / voucher-screenshots / activity-posters）| ⚠️ 部分备份；每次只能跑一小段就超时 |
+| 视频（marketing-videos，711 MB / 314 个文件）| ❌ 基本没备成功——大文件 PUT 到腾讯云 COS 触发 Gateway Timeout |
+| 定时任务 | ❌ 最近 3 天的凌晨 cron 全部失败，报"跑得太久，自动结束" |
+
+### 二、最近 10 次运行都在同一个坑
+
+- **今天 09:16** 手动触发：跑到 `marketing-videos/…/1777549950775-rjhtcf.jpg`（其实是大文件）时 **COS 返回 Gateway Timeout**，然后 status 一直卡在 running
+- **今天 09:00** 失败，同类错误
+- **6-30 / 6-29 凌晨 cron** 都被"看门狗"判定超时，标记 failed
+- 每次进度不同 → 说明是**逐批推进**，但**一直没能把 marketing-videos 全推完**
+
+### 三、根因
+
+1. **单文件太大 + 一次性 PUT**：`cosPutObject` 是一次性把整个 Blob 塞给腾讯云，几十 MB 的视频在 Edge Function 网络上很容易触发 COS 侧的 504。目前没重试、没分片。
+2. **看门狗把正在跑的当成僵尸**：`backup-all-to-cos` 用"上次 started_at 超过 X 分钟就标记失败"来自愈，但大视频批次本来就慢，导致 cron 每次一开跑就被上一次的残影踢掉。
+3. **没有断点续跑指针**：每次重启都从头扫 bucket，永远先卡在同一个大视频上，后面的小文件根本轮不到。
+
+### 四、你问的两个问题的答案
+
+- **"备份速度正常吗？"** → 数据库正常（秒级）；图片视频**不正常**，Edge Function 单 tick 15 分钟根本推不完 700 MB 视频，加上没重试，实际吞吐几乎为 0。
+- **"包含所有数据了吗？"** → 数据库表全的（58 张都在 `db-backups/daily/YYYY-MM-DD/tables/`）。**Storage 只有一小部分**：product-images 应该大半都在，marketing-videos 大概率**只备了几个小的**，711 MB 的视频还没镜像到腾讯云。
+- 未包含：`auth.users`（Supabase 托管，导不出，用户 ID 保留在 `profiles`/`user_roles` 里）。
 
 ---
 
-## 一、Me 页（当前最痛）
+## 修复计划
 
-**症状**：昵称先出 → 头像后出 → 徽章/统计/等级/排班最后一起出，全程 1~3s 白屏感。
+### A. 让大文件真正传得上去（`_shared/tencentCos.ts` + `backup-all-to-cos`）
 
-**根因**
-1. 6 个并行查询用 `Promise.all` 一次性 `setLoading(false)`，最慢的那个决定首屏时间。
-2. `avatar_url` 直接用 `<AvatarImage src=原图>`，没有走 CDN 缩略图 (`thumbUrl`)，也没设 `width/height/fetchPriority`，导致大图排队 + 布局跳动。
-3. 每次进 `/me` 都从零查一遍，没有本地缓存 —— 用户其实上一秒还看过。
+1. **给 `cosPutObject` 加自动重试**：504 / 网络错 → 指数退避重试 3 次；仍失败就跳过并记进 `error_message`，不阻塞后续文件。
+2. **> 20 MB 文件走 COS 分片上传**（Initiate / UploadPart / Complete）：8 MB 一片、并发 2 片，避免单请求超时。给 `_shared/tencentCos.ts` 加 `cosMultipartUpload`。
+3. **单 tick 内单文件预算**：任何一个文件超过 90 秒还没传完就跳过，塞回下一 tick 重试，防止一个坏文件卡死整轮。
 
-**方案**
-- **SWR 缓存**：新建 `src/lib/profileCache.ts`，用 `sessionStorage` 缓存 `profile + staff + shopName + exp + stats`，key = `user.id`。进页面立即用缓存 hydrate（0ms 出全部内容），后台再拉一次覆盖。
-- **拆分请求 & 优先级**：
-  - 第 1 波（首屏必需，串行 render）：`profiles`（含 avatar/display_name）+ `staff_profiles`（含 shop_id/position/real_name）—— 用 `Promise.all` 一次并发。
-  - 第 2 波（次要，不阻塞首屏）：`shops.name`、`user_experience`、3 个 count(*) 统计，独立异步 setState。
-- **头像加速**：
-  - `AvatarPicker` 里用 `thumbUrl(avatarUrl, 144, 80)`，`<img width=72 height=72 fetchPriority="high" decoding="async">`。
-  - 拿到 avatar 后 `<link rel="preload" as="image">` 塞进 `<head>`，让下次进 /me 命中浏览器缓存。
-  - 上传/AI 生成后写回缓存，去掉 `?v=Date.now()` cache-buster（导致每次强刷）。改用固定文件名 + `cacheControl` 已经足够，或把版本号存进 `profiles.avatar_version` 复用。
-- **骨架屏**：给统计卡 / 等级卡 / 排班卡加 `<Skeleton>`，比 spinner 视觉上更快。
+### B. 断点续跑，别每次从头扫
 
----
+4. `backup_runs.metadata` 里记 `cursor = { bucket, last_key }`；每 tick 结束前写回，续跑时从 last_key 之后 `list()`，小文件很快就能跑完。
+5. **先按 size 升序处理**（其实 Storage list 已按 name，改成按 bucket 优先级 + skip-large-in-first-pass）：第一轮跳过 > 50 MB 文件先把大量小文件全备完，第二轮再啃视频，这样即使视频阶段挂了，"图片 100%"也已达成。
 
-## 二、中古圈 Community
+### C. 让 cron 不再自己踩自己
 
-**根因**
-1. `loadPosts` 里 posts → profiles → likes → favs **串行 4 次 RTT**（await 之间没并发）。
-2. 瀑布流卡片 `<img>` 没写 `width/height`，`columns-2` 布局在图片加载完才定高 → 抖动。
-3. Realtime `useEffect` 依赖 `[cat, profiles]`，每收到一条新 profile 就撤销/重建 channel。
-4. 卡片图直接读 `p.thumbnail_url`（可能是 dataURL 大图），或 480 宽的 `thumbUrl`，对手机 3 列瀑布来说 240 就够。
+6. 看门狗阈值从当前值调到 25 分钟；且 **只在 status='running' 且 last heartbeat 超时** 才踢——加一个 `heartbeat_at` 字段每 tick 更新，避免"正常跑但没心跳"被误杀。
+7. cron 触发前如果发现 15 分钟内有 running 的实例，直接跳过本次（而不是把它标 failed 再自己开一个）。
 
-**方案**
-- 首屏一次 `select` + 三个从属查询用 `Promise.all` 并发发出，缩到 2 次 RTT。
-- 卡片图统一 `thumbUrl(url, 240, 70)` + `srcSet`（`thumbSrcSet(url, 180)`），`sizes="(max-width:640px) 46vw, 220px"`。
-- 每张卡加 `aspect-[3/4]` 兜底比例（首屏无跳动），首图 `fetchPriority="high"`。
-- 详情弹层大图从 1080 降到 720，`fetchPriority` 仅在打开时给。
-- Realtime effect 依赖只保留 `[cat]`，`profiles` 用 ref 读；缺 profile 时懒补而不是重订阅。
-- 分类切换从「重拉全部」改为已加载 caches by cat（Map<cat, posts>）。
+### D. 可观测性
 
----
+8. `BackupPanel`（/portal → 数据备份）显示：
+   - 每个 bucket 的"已镜像 / 总文件数"进度条（用 `metadata.per_bucket`）
+   - 最近失败文件列表 + 一键"只重试这些"按钮
+9. 一次性写个"补齐脚本"按钮：只跑 marketing-videos，把历史遗漏一次性补完。
 
-## 三、AI 识物 Scan
+### 技术细节（可跳过）
 
-**现状**：`AuthPage` 与 `LiveStreamPanel` 都是 `lazyWithRetry`，好；但 `useAuth` 拉 role 需 1 次 RTT，未登录用户在此期间只看 spinner。
+- 腾讯云 COS 分片：`POST /?uploads` → `PUT ?partNumber=N&uploadId=…` → `POST ?uploadId=…` 带 XML；签名沿用现有 `signCos`，pathname 需要包含 query。
+- 心跳更新用轻量 `update backup_runs set metadata = jsonb_set(...) where id=$1`，别 select 全 row。
+- 分片并发用 `Promise.allSettled`，失败 part 单独重试。
 
-**方案**
-- 页面挂载时先 `import()` 预取 `LiveStreamPanel` 的 chunk（不 render），并行 role 查询完成时 chunk 已就位。
-- `PageHeader` 立即渲染，spinner 只放在内容区，视觉上不再"整页转圈"。
-- `LiveStreamPanel` 首屏检查：是否有 heavy 依赖（模型/相机 SDK）能延迟到用户点"开始识别"时再加载 —— 本轮先加一条 `requestIdleCallback` 预热相机权限检查。
+### 预期效果
+
+- 首次跑完后：**5 个 bucket 全量镜像**（≈ 1.17 GB），耗时约 8–15 分钟；之后每天增量只传新增文件，1–2 分钟结束。
+- cron 稳定成功；`backup_runs` 里不再出现"跑得太久，自动结束"。
+- `docs/backup-locations.md` 里的目录结构不变，外部读取方式不受影响。
 
 ---
 
-## 四、通用底座（一次改，所有页面受益）
-
-- `src/lib/imageUrl.ts` 增加 `avatarUrl(url, size)` 辅助：走 `render/image/public` + `resize=cover` + `quality=75`，供头像/角色卡/评论区共用。
-- `AvatarImage` 组件包一层默认给 `decoding="async" loading="lazy"`，首屏关键头像手动加 `fetchPriority="high"`。
-- 全局 `<link rel="preconnect">` 到 Supabase storage 域，减去 TLS 握手。
-
----
-
-## 预期收益
-
-| 页面 | 首屏内容出现 | 头像出现 | 图片总字节 |
-| --- | --- | --- | --- |
-| /me | 1.2s → **≤100ms（缓存命中）/ 500ms（冷启）** | 与姓名同帧 | -60% |
-| /community | 1.8s → **700ms** | — | -50% |
-| /scan | 1.0s → **400ms** | — | — |
-
-改动范围：仅前端表现层 + 一个小工具文件，不动数据库、不动 Edge Function。
+要我按这个计划执行吗？（如果你只想先"补齐 marketing-videos"，也可以只做 A + D-9 的一次性补齐按钮。）
