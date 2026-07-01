@@ -63,6 +63,7 @@
 
     /* Motion */
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --app-statusbar-height: 0px;
 
     --sidebar-background: 35 25% 96%;
     --sidebar-foreground: 25 20% 22%;
@@ -139,10 +140,18 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  html.capacitor-native {
+    --app-statusbar-height: max(env(safe-area-inset-top), 24px);
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  html.capacitor-native body {
+    padding-top: var(--app-statusbar-height);
   }
 
   /* Editorial display font for hero/product names */
@@ -157,6 +166,9 @@
   }
   .safe-top {
     padding-top: max(env(safe-area-inset-top), 0.5rem);
+  }
+  html.capacitor-native .safe-top {
+    padding-top: max(env(safe-area-inset-top), var(--app-statusbar-height), 1.5rem);
   }
 }
 
