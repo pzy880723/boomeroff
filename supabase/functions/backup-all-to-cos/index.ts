@@ -499,6 +499,13 @@ Deno.serve(async (req) => {
     if (action === "cancel_running") {
       return json({ ok: true, stopped: true });
     }
+
+    const { data: runRow, error } = await admin.from("backup_runs")
+      .insert({ kind: "full", status: "running", trigger_source: trigger, metadata: normalizeMeta({ step: "开始备份", day }, day) })
+      .select("id").single();
+    if (error || !runRow) return json({ ok: false, error: "无法创建新的备份记录：" + (error?.message ?? "未知原因") }, 500);
+    scheduleContinuation(req.url);
+    return json({ ok: true, restarted: true, run_id: (runRow as { id: string }).id }, 202);
   }
 
   if (action === "retry_failed" && body.run_id) {
