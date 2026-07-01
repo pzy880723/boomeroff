@@ -22,6 +22,7 @@ import { CheckInCard } from '@/components/me/CheckInCard';
 import { LevelCard } from '@/components/me/LevelCard';
 import { AvatarPicker } from '@/components/me/AvatarPicker';
 import { SchedulePanel } from '@/components/me/SchedulePanel';
+import { readMeCache, writeMeCache, preloadAvatar } from '@/lib/profileCache';
 
 export default function Me() {
   const { user, role, signOut, loading: authLoading } = useAuth();
@@ -39,32 +40,66 @@ export default function Me() {
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
+
+    // 1) 命中缓存立刻 hydrate,首屏 0ms
+    const cached = readMeCache(user.id);
+    if (cached) {
+      if (cached.displayName) setDisplayName(cached.displayName);
+      if (cached.avatarUrl !== undefined) setAvatarUrl(cached.avatarUrl ?? null);
+      if (cached.realName !== undefined) setRealName(cached.realName ?? null);
+      if (cached.position !== undefined) setPosition((cached.position as StaffPosition) ?? null);
+      if (cached.shopName !== undefined) setShopName(cached.shopName ?? null);
+      if (typeof cached.totalExp === 'number') setTotalExp(cached.totalExp);
+      if (cached.stats) setStats(cached.stats);
+      setLoading(false);
+      if (cached.avatarUrl) preloadAvatar(cached.avatarUrl);
+    }
+
+    // 2) 首屏必需字段(profile + staff)先出
     (async () => {
-      setLoading(true);
-      const [{ data: profile }, scansC, favsC, postsC, { data: exp }, { data: sp }] = await Promise.all([
+      const [{ data: profile }, { data: sp }] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url').eq('user_id', user.id).maybeSingle(),
+        supabase.from('staff_profiles' as any).select('shop_id, real_name, position').eq('user_id', user.id).maybeSingle(),
+      ]);
+      if (cancelled) return;
+      const name = profile?.display_name || user.email?.split('@')[0] || '店员';
+      const av = (profile as any)?.avatar_url || null;
+      const rn = (sp as any)?.real_name || null;
+      const pos = ((sp as any)?.position as StaffPosition) || null;
+      setDisplayName(name);
+      setAvatarUrl(av);
+      setRealName(rn);
+      setPosition(pos);
+      setLoading(false);
+      if (av) preloadAvatar(av);
+      writeMeCache(user.id, { displayName: name, avatarUrl: av, realName: rn, position: pos });
+
+      // 3) 次要数据,并发拉取,不阻塞首屏
+      const sid = (sp as any)?.shop_id;
+      Promise.all([
         supabase.from('products').select('id', { count: 'exact', head: true }).eq('created_by', user.id),
         supabase.from('user_favorites').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('community_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('user_experience').select('total_exp').eq('user_id', user.id).maybeSingle(),
-        supabase.from('staff_profiles' as any).select('shop_id, real_name, position').eq('user_id', user.id).maybeSingle(),
-      ]);
-      setDisplayName(profile?.display_name || user.email?.split('@')[0] || '店员');
-      setAvatarUrl((profile as any)?.avatar_url || null);
-      setStats({ scans: scansC.count || 0, favs: favsC.count || 0, posts: postsC.count || 0 });
-      setTotalExp(exp?.total_exp || 0);
-      setRealName((sp as any)?.real_name || null);
-      setPosition(((sp as any)?.position as StaffPosition) || null);
-      const sid = (sp as any)?.shop_id;
-      if (sid) {
-        const { data: shop } = await supabase.from('shops' as any).select('name').eq('id', sid).maybeSingle();
-        setShopName((shop as any)?.name || null);
-      } else {
-        setShopName(null);
-      }
-      setLoading(false);
+        sid
+          ? supabase.from('shops' as any).select('name').eq('id', sid).maybeSingle()
+          : Promise.resolve({ data: null } as any),
+      ]).then(([scansC, favsC, postsC, expRes, shopRes]) => {
+        if (cancelled) return;
+        const nextStats = { scans: scansC.count || 0, favs: favsC.count || 0, posts: postsC.count || 0 };
+        const nextExp = (expRes as any)?.data?.total_exp || 0;
+        const nextShop = (shopRes as any)?.data?.name || null;
+        setStats(nextStats);
+        setTotalExp(nextExp);
+        setShopName(nextShop);
+        writeMeCache(user.id, { stats: nextStats, totalExp: nextExp, shopName: nextShop });
+      });
     })();
+
+    return () => { cancelled = true; };
   }, [user, expRefreshKey]);
+
 
   const saveName = async () => {
     if (!user || !draftName.trim()) return;
