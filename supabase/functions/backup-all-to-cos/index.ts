@@ -399,6 +399,13 @@ async function getActiveRun(admin: ReturnType<typeof createClient>, trigger: "ma
     .order("started_at", { ascending: false }).limit(1);
   const running = Array.isArray(runningRows) ? runningRows[0] : null;
   if (running) {
+    await admin.from("backup_runs").update({
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      error_message: "已停止重复备份任务：系统只保留最新一轮继续运行。",
+    }).eq("kind", "full").eq("status", "running").neq("id", (running as { id: string }).id);
+  }
+  if (running) {
     const row = running as { id: string; started_at: string; files_count: number; total_bytes: number; metadata: unknown };
     const meta = normalizeMeta(row.metadata, day);
     const heartbeatAt = meta.last_tick_at ? new Date(meta.last_tick_at).getTime() : new Date(row.started_at).getTime();
