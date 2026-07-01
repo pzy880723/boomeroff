@@ -253,6 +253,9 @@ export function BackupPanel() {
           <p className="text-xs text-muted-foreground mt-1">
             系统每天凌晨会自动把全部数据保存到 <span className="font-medium text-foreground">你自己的腾讯云（上海）</span>。
           </p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            已启用腾讯云 <span className="font-medium text-foreground">全球加速</span> 上传通道，跨境延迟已优化。
+          </p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
           <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
