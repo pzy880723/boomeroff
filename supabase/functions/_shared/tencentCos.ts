@@ -42,6 +42,14 @@ export function readCosConfigFromEnv(): CosConfig {
 }
 
 export function cosHost(cfg: CosConfig): string {
+  // Opt-in global acceleration: set TENCENT_COS_ACCELERATE=true to route
+  // cross-border uploads through Tencent's global backbone instead of
+  // hitting the Shanghai region directly. Signing is unaffected — the
+  // v5 signature only depends on pathname, not host.
+  const accel = (Deno.env.get("TENCENT_COS_ACCELERATE") ?? "").toLowerCase();
+  if (accel === "true" || accel === "1" || accel === "yes") {
+    return `${cfg.bucket}.cos.accelerate.myqcloud.com`;
+  }
   return `${cfg.bucket}.cos.${cfg.region}.myqcloud.com`;
 }
 
