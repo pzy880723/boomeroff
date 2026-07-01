@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -23,7 +23,21 @@ function CenterSpinner() {
 export default function Scan() {
   const { user, loading } = useAuth();
 
-  if (loading) return <CenterSpinner />;
+  // 认证还在跑时,后台预取相机面板的 chunk,拿到 user 时几乎已就位
+  useEffect(() => {
+    const idle = (cb: () => void) =>
+      (window as any).requestIdleCallback ? (window as any).requestIdleCallback(cb) : setTimeout(cb, 0);
+    idle(() => { import('@/components/dashboard/LiveStreamPanel'); });
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col">
+        <PageHeader title="AI 识物" />
+        <CenterSpinner />
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -42,3 +56,4 @@ export default function Scan() {
     </div>
   );
 }
+
