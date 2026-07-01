@@ -43,7 +43,9 @@ const BUCKETS = [
 
 const PAGE_SIZE = 200;
 const STORAGE_LIST_PAGE = 200;
-const TICK_BUDGET_MS = 40_000;
+const TICK_BUDGET_MS = 45_000;
+// Files strictly larger than this are deferred to pass 2 so images finish first.
+const LARGE_FILE_THRESHOLD = 30 * 1024 * 1024;
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
 
 function json(data: unknown, status = 200) {
