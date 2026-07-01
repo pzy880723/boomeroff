@@ -431,12 +431,17 @@ Deno.serve(async (req) => {
       let cursor = meta.storage_cursor ?? 0;
       let uploaded = meta.storage_uploaded ?? 0;
       let skipped = meta.storage_skipped ?? 0;
+      let deferred = meta.storage_deferred ?? 0;
+      const pass = meta.storage_pass ?? 1;
       const errors = [...(meta.storage_errors ?? [])];
 
       while (cursor < manifests.length && Date.now() - tickStart < TICK_BUDGET_MS) {
         const file = manifests[cursor];
         cursor += 1;
         if (!file || file.size > MAX_FILE_BYTES) { skipped += 1; continue; }
+        // Pass 1: skip large files so images finish first. Pass 2: only large files.
+        if (pass === 1 && file.size > LARGE_FILE_THRESHOLD) { deferred += 1; continue; }
+        if (pass === 2 && file.size <= LARGE_FILE_THRESHOLD) { continue; }
         const cosKey = `storage-mirror/${file.bucket}/${file.path}`;
         try {
           const head = await cosHeadObject({ cfg, key: cosKey });
@@ -459,19 +464,32 @@ Deno.serve(async (req) => {
       meta.storage_cursor = cursor;
       meta.storage_uploaded = uploaded;
       meta.storage_skipped = skipped;
+      meta.storage_deferred = deferred;
       meta.storage_errors = errors.slice(-20);
-      if (cursor >= manifests.length && manifests.length > 0) {
-        meta.phase = "done";
-        meta.step = "备份完成";
+      const totalToWalk = manifests.length;
+      if (cursor >= totalToWalk && totalToWalk > 0) {
+        if (pass === 1 && deferred > 0) {
+          // Second pass: revisit only the large files we punted.
+          meta.storage_pass = 2;
+          meta.storage_cursor = 0;
+          meta.step = `图片已完成，开始上传大视频（${deferred} 个）`;
+        } else {
+          meta.phase = "done";
+          meta.step = "备份完成";
+        }
       } else {
-        meta.step = `正在上传图片和视频 ${cursor}/${manifests.length || meta.storage_total}`;
+        const label = pass === 1 ? "图片" : "视频";
+        meta.step = `正在上传${label} ${cursor}/${totalToWalk || meta.storage_total}`;
       }
-      if (manifests.length === 0 && (meta.storage_total ?? 0) === 0) {
+      if (totalToWalk === 0 && (meta.storage_total ?? 0) === 0) {
         // Nothing to mirror — done.
         meta.phase = "done";
         meta.step = "备份完成";
       }
     }
+
+    // Heartbeat — used by the stale-run watchdog.
+    meta.last_tick_at = new Date().toISOString();
 
     const finished = meta.phase === "done";
     await updateRun(admin, runId, {
