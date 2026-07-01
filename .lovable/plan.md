@@ -1,83 +1,72 @@
-# 官方知识库加载提速
-
-## 诊断（看代码看到的三个真慢点）
-
-**1. 列表页 `select('*')` 拉了一堆列表根本不用的重字段**
-`src/pages/OfficialLibrary.tsx:112` 一次拉 120 条，`*` 里包含：
-- `body`（Markdown 长文，可能几 KB/条）
-- `content`（jsonb：一句话、速记卡、话术、对比…全塞进来）
-- `gallery`（图集 URL 数组）
-- `video_url`、`source_product_id` 等
-
-列表只用到 12 个字段（id/name/category/ip_name/summary/era/origin/cover_url/selling_points/tips/view_count/favorite_count/importance_score）。
-**估算：payload 至少能从 300 KB+ 压到 30 KB 级别。**
-
-**2. 列表页两次查询串行等**
-先 `await` 拿 items 再 `await` 拿 favorites，用户主观感受 = 两段网络往返之和。改成 `Promise.all` 并行。
-
-**3. 图片按"最大可能尺寸"取，而不是按 CSS 实际尺寸**
-- 列表大图卡 `thumbUrl(cover, 480)`，手机 2 列每列 ≈ 180 CSS px × dpr 2 = **360 px 够用**；桌面 dpr 1 需要更小；现在统一按 480 拉。
-- 列表模式缩略图 `thumbUrl(cover, 160)` 尺寸只有 56×56 CSS px，其实 112 就够。
-- 详情 Hero `thumbUrl(cover, 1080)` 对手机没问题，但桌面用户拿 1080 也够，只是没上 `srcset`，会浪费一次判断。
-
-用 `srcSet + sizes` 让浏览器按 dpr/视口自动选，能少下 30–50% 的字节。
-
-**4. 详情页也在 `select('*')` 且串行查了 3 个请求**
-`OfficialDetail.tsx:78/84/90`：主数据 → 收藏状态 → 个人库状态，三段串行。合并为一次 `Promise.all`；主数据本身也拆成"首屏必备字段"，`body` 这种超长 Markdown 延后到用户点"展开完整介绍"时再拉。
-
-**5. 详情页 `increment_official_view` RPC 走 `await` 前置**
-现在写的是 `void supabase.rpc(...)`，实际不阻塞，OK；但确认一下是否 fire-and-forget，不能挡首屏。
+目标：让「我的」头像 + 姓名 + 徽章几乎"同框"出现，中古圈瀑布流秒开，AI 识物入口零等待。
 
 ---
 
-## 改法（只碰前端 + 一个可选索引，不动业务逻辑）
+## 一、Me 页（当前最痛）
 
-### A. `src/pages/OfficialLibrary.tsx`
-1. `.select('*')` → `.select('id,name,category,ip_name,summary,era,origin,cover_url,selling_points,tips,view_count,favorite_count,importance_score')`。
-2. items 查询和 favorites 查询用 `Promise.all` 并行。
-3. 首屏先加载 **60 条**（`.limit(60)`），滚到底再加载下一段（简单 IntersectionObserver + `.range()`，或者干脆保留一个"加载更多"按钮）—— 首屏字节直接砍一半。
-4. 图片改用 `srcSet`：
-   - 大图卡：`srcSet="thumb(cover,240) 1x, thumb(cover,480) 2x, thumb(cover,720) 3x"` + `sizes="(max-width: 640px) 50vw, 240px"`
-   - 列表小缩略图：`srcSet="thumb(cover,112) 1x, thumb(cover,224) 2x"`。
-5. 给第 1 张封面加 `fetchpriority="high"`，其余保持 `loading="lazy"`。
+**症状**：昵称先出 → 头像后出 → 徽章/统计/等级/排班最后一起出，全程 1~3s 白屏感。
 
-### B. `src/pages/OfficialDetail.tsx`
-1. 首屏 `select` 拆成两拨：
-   - **首屏（必备）**：`id,name,category,ip_name,summary,era,origin,cover_url,selling_points,tips,view_count,favorite_count,importance_score,video_url,gallery,content,source_product_id`（去掉 `body`）。
-   - **懒加载**：`body` 只在用户展开"完整介绍"那一刻按 id 再取一次。
-2. 主数据 + 两个 `user_favorites` 查询用 `Promise.all` 一次发出，串行 3 段 → 并行 1 段。
-3. 已存在的 `srcSet` 缺失同样补上（Hero、图集、底款）。
+**根因**
+1. 6 个并行查询用 `Promise.all` 一次性 `setLoading(false)`，最慢的那个决定首屏时间。
+2. `avatar_url` 直接用 `<AvatarImage src=原图>`，没有走 CDN 缩略图 (`thumbUrl`)，也没设 `width/height/fetchPriority`，导致大图排队 + 布局跳动。
+3. 每次进 `/me` 都从零查一遍，没有本地缓存 —— 用户其实上一秒还看过。
 
-### C. `src/lib/imageUrl.ts`
-新增一个 helper：
-```ts
-export function thumbSrcSet(url, base = 240) {
-  return `${thumbUrl(url, base)} 1x, ${thumbUrl(url, base*2)} 2x, ${thumbUrl(url, base*3)} 3x`
-}
-```
-（其实已经有 `thumbSrcSet`，直接用起来。）
-
-### D. 可选：数据库索引
-如果 `official_knowledge` 表已经上百条，加一个复合索引可以显著加速列表：
-```sql
-CREATE INDEX IF NOT EXISTS official_knowledge_cat_updated_idx
-  ON public.official_knowledge (category, updated_at DESC);
-```
-排序页面（`ORDER BY updated_at DESC WHERE category = ?`）会直接命中索引。
+**方案**
+- **SWR 缓存**：新建 `src/lib/profileCache.ts`，用 `sessionStorage` 缓存 `profile + staff + shopName + exp + stats`，key = `user.id`。进页面立即用缓存 hydrate（0ms 出全部内容），后台再拉一次覆盖。
+- **拆分请求 & 优先级**：
+  - 第 1 波（首屏必需，串行 render）：`profiles`（含 avatar/display_name）+ `staff_profiles`（含 shop_id/position/real_name）—— 用 `Promise.all` 一次并发。
+  - 第 2 波（次要，不阻塞首屏）：`shops.name`、`user_experience`、3 个 count(*) 统计，独立异步 setState。
+- **头像加速**：
+  - `AvatarPicker` 里用 `thumbUrl(avatarUrl, 144, 80)`，`<img width=72 height=72 fetchPriority="high" decoding="async">`。
+  - 拿到 avatar 后 `<link rel="preload" as="image">` 塞进 `<head>`，让下次进 /me 命中浏览器缓存。
+  - 上传/AI 生成后写回缓存，去掉 `?v=Date.now()` cache-buster（导致每次强刷）。改用固定文件名 + `cacheControl` 已经足够，或把版本号存进 `profiles.avatar_version` 复用。
+- **骨架屏**：给统计卡 / 等级卡 / 排班卡加 `<Skeleton>`，比 spinner 视觉上更快。
 
 ---
 
-## 预期效果
-- 列表首屏 payload：**约 -70%**（少了 body/content/gallery + 120→60 条）。
-- 列表图片字节：**-30% 到 -50%**（按 dpr 精准取图）。
-- 详情首屏 RTT：**3 段串行 → 1 段并行**，首屏可交互时间预计快 300–800ms（取决于网络）。
-- 加索引后，翻类目/换排序的数据库耗时基本可以忽略不计。
+## 二、中古圈 Community
+
+**根因**
+1. `loadPosts` 里 posts → profiles → likes → favs **串行 4 次 RTT**（await 之间没并发）。
+2. 瀑布流卡片 `<img>` 没写 `width/height`，`columns-2` 布局在图片加载完才定高 → 抖动。
+3. Realtime `useEffect` 依赖 `[cat, profiles]`，每收到一条新 profile 就撤销/重建 channel。
+4. 卡片图直接读 `p.thumbnail_url`（可能是 dataURL 大图），或 480 宽的 `thumbUrl`，对手机 3 列瀑布来说 240 就够。
+
+**方案**
+- 首屏一次 `select` + 三个从属查询用 `Promise.all` 并发发出，缩到 2 次 RTT。
+- 卡片图统一 `thumbUrl(url, 240, 70)` + `srcSet`（`thumbSrcSet(url, 180)`），`sizes="(max-width:640px) 46vw, 220px"`。
+- 每张卡加 `aspect-[3/4]` 兜底比例（首屏无跳动），首图 `fetchPriority="high"`。
+- 详情弹层大图从 1080 降到 720，`fetchPriority` 仅在打开时给。
+- Realtime effect 依赖只保留 `[cat]`，`profiles` 用 ref 读；缺 profile 时懒补而不是重订阅。
+- 分类切换从「重拉全部」改为已加载 caches by cat（Map<cat, posts>）。
 
 ---
 
-## 不做的事（避免误伤）
-- 不动 `official_knowledge` 的字段结构、不改 RLS。
-- 不动详情页的 UI 组件、不动排版和交互。
-- 不引入新的图片 CDN 或缓存层（`/render/image/public/` 已经在做转码 + 边缘缓存，够用）。
+## 三、AI 识物 Scan
 
-如果同意，我进 build 模式一次改完 A/B/C；数据库索引（D）你说要不要一起加。
+**现状**：`AuthPage` 与 `LiveStreamPanel` 都是 `lazyWithRetry`，好；但 `useAuth` 拉 role 需 1 次 RTT，未登录用户在此期间只看 spinner。
+
+**方案**
+- 页面挂载时先 `import()` 预取 `LiveStreamPanel` 的 chunk（不 render），并行 role 查询完成时 chunk 已就位。
+- `PageHeader` 立即渲染，spinner 只放在内容区，视觉上不再"整页转圈"。
+- `LiveStreamPanel` 首屏检查：是否有 heavy 依赖（模型/相机 SDK）能延迟到用户点"开始识别"时再加载 —— 本轮先加一条 `requestIdleCallback` 预热相机权限检查。
+
+---
+
+## 四、通用底座（一次改，所有页面受益）
+
+- `src/lib/imageUrl.ts` 增加 `avatarUrl(url, size)` 辅助：走 `render/image/public` + `resize=cover` + `quality=75`，供头像/角色卡/评论区共用。
+- `AvatarImage` 组件包一层默认给 `decoding="async" loading="lazy"`，首屏关键头像手动加 `fetchPriority="high"`。
+- 全局 `<link rel="preconnect">` 到 Supabase storage 域，减去 TLS 握手。
+
+---
+
+## 预期收益
+
+| 页面 | 首屏内容出现 | 头像出现 | 图片总字节 |
+| --- | --- | --- | --- |
+| /me | 1.2s → **≤100ms（缓存命中）/ 500ms（冷启）** | 与姓名同帧 | -60% |
+| /community | 1.8s → **700ms** | — | -50% |
+| /scan | 1.0s → **400ms** | — | — |
+
+改动范围：仅前端表现层 + 一个小工具文件，不动数据库、不动 Edge Function。
