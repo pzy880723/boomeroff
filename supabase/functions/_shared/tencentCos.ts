@@ -173,6 +173,60 @@ export async function cosHeadObject(opts: {
   };
 }
 
+/**
+ * List all objects under a prefix. Returns a Map keyed by object key with size/etag.
+ * Uses COS ListObjects V2 (GET / with list-type=2). Paginates up to `maxKeys` total.
+ */
+export async function cosListPrefix(opts: {
+  cfg: CosConfig;
+  prefix: string;
+  maxKeys?: number;
+  timeoutMs?: number;
+}): Promise<Map<string, { size: number; etag: string }>> {
+  const { cfg } = opts;
+  const maxKeys = opts.maxKeys ?? 50_000;
+  const perPage = 1000;
+  const out = new Map<string, { size: number; etag: string }>();
+  let marker = "";
+  while (out.size < maxKeys) {
+    const params = new URLSearchParams();
+    params.set("prefix", opts.prefix);
+    params.set("max-keys", String(perPage));
+    if (marker) params.set("marker", marker);
+    const pathname = "/";
+    // Signature for ListObjects can use empty header/param list; COS accepts it for GET root.
+    const auth = await signCos({ cfg, method: "GET", pathname });
+    const url = `https://${cosHost(cfg)}${pathname}?${params.toString()}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 20_000);
+    let resp: Response;
+    try {
+      resp = await fetch(url, { method: "GET", headers: { Authorization: auth }, signal: controller.signal });
+    } finally { clearTimeout(timer); }
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      throw new Error(`COS LIST 失败 (${resp.status}): ${t.slice(0, 200)}`);
+    }
+    const xml = await resp.text();
+    // Cheap XML parse: iterate <Contents>…</Contents>
+    let lastKey = "";
+    const re = /<Contents>([\s\S]*?)<\/Contents>/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(xml)) !== null) {
+      const block = m[1];
+      const key = /<Key>([\s\S]*?)<\/Key>/.exec(block)?.[1] ?? "";
+      const size = Number(/<Size>(\d+)<\/Size>/.exec(block)?.[1] ?? "0");
+      const etag = (/<ETag>"?([^<"]*)"?<\/ETag>/.exec(block)?.[1] ?? "").replaceAll('"', "");
+      if (key) { out.set(key, { size, etag }); lastKey = key; }
+    }
+    const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
+    const nextMarker = /<NextMarker>([\s\S]*?)<\/NextMarker>/.exec(xml)?.[1] ?? lastKey;
+    if (!truncated || !nextMarker) break;
+    marker = nextMarker;
+  }
+  return out;
+}
+
 /** gzip a Uint8Array via the platform CompressionStream. */
 export async function gzip(input: Uint8Array): Promise<Uint8Array> {
   const cs = new CompressionStream("gzip");
