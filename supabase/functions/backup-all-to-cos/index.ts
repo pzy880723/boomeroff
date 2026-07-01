@@ -49,6 +49,8 @@ const BUCKETS = [
 const PAGE_SIZE = 200;
 const STORAGE_LIST_PAGE = 200;
 const TICK_BUDGET_MS = 45_000;
+const TICK_SAFETY_MS = 5_000;
+const MIN_UPLOAD_WINDOW_MS = 4_000;
 const LARGE_FILE_THRESHOLD = 30 * 1024 * 1024;
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
 const MAX_FAILURES = 500;
@@ -82,7 +84,8 @@ function humanize(msg: string): string {
   if (m.includes("schema must be one of")) return "备份程序权限不足（无法访问 storage schema），请联系开发者更新。";
   if (m.includes("signature") || m.includes("403") || m.includes("accessdenied")) return "腾讯云拒绝写入，密钥可能过期或权限被改。请重新生成腾讯云密钥。";
   if (m.includes("nosuchbucket")) return "腾讯云存储桶不存在，请到腾讯云控制台确认。";
-  if (m.includes("timeout") || m.includes("timed out") || m.includes("aborted")) return "上传腾讯云超时，稍后系统会自动重试。";
+  if (m.includes("本轮执行时间不够") || m.includes("等待超过")) return "上传腾讯云等待过久，系统正在分批补传；通常不用去腾讯云开按钮。";
+  if (m.includes("timeout") || m.includes("timed out") || m.includes("aborted")) return "上传腾讯云超时，系统会分批补传；如果连续多次失败，再检查腾讯云密钥和桶权限。";
   return msg;
 }
 
@@ -213,6 +216,25 @@ function bumpPass(meta: RunMeta, key: PassKey, patch: Partial<PassStat>) {
     total: patch.total ?? cur.total,
   };
   meta.pass_stats = stats;
+}
+
+function remainingTickMs(tickStart: number) {
+  return TICK_BUDGET_MS - (Date.now() - tickStart) - TICK_SAFETY_MS;
+}
+
+function hasUploadWindow(tickStart: number) {
+  return remainingTickMs(tickStart) >= MIN_UPLOAD_WINDOW_MS;
+}
+
+function cosPutBudget(tickStart: number, size = 0, large = false) {
+  const remaining = Math.max(MIN_UPLOAD_WINDOW_MS, remainingTickMs(tickStart));
+  const desired = large
+    ? Math.min(70_000, Math.max(20_000, Math.round(size / (1024 * 1024)) * 2_000))
+    : Math.min(12_000, Math.max(6_000, 5_000 + Math.round(size / (512 * 1024)) * 1_000));
+  return {
+    maxAttempts: large ? 2 : 1,
+    perAttemptTimeoutMs: Math.max(MIN_UPLOAD_WINDOW_MS, Math.min(desired, remaining)),
+  };
 }
 
 async function updateRun(admin: ReturnType<typeof createClient>, runId: string, patch: Record<string, unknown>) {
@@ -509,14 +531,26 @@ Deno.serve(async (req) => {
       let cursor = meta.retry_cursor ?? 0;
       const passStart = Date.now();
       let uploaded = 0, failed = 0, bytes = 0;
-      while (cursor < queue.length && Date.now() - tickStart < TICK_BUDGET_MS) {
+      while (cursor < queue.length && hasUploadWindow(tickStart)) {
         const f = queue[cursor++];
         const cosKey = `storage-mirror/${f.bucket}/${f.path}`;
         try {
+          const head = await cosHeadObject({ cfg, key: cosKey, timeoutMs: 4_000 }).catch(() => null);
+          if (head && (!f.size || head.size === f.size)) {
+            uploaded++; bytes += 0;
+            (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: head.size, etag: head.etag, bucket: f.bucket, path: f.path });
+            removeFailure(meta, (x) => x.kind === "storage" && x.bucket === f.bucket && x.path === f.path);
+            continue;
+          }
+          if (!hasUploadWindow(tickStart)) { cursor--; break; }
           const { data: blob, error: dlErr } = await admin.storage.from(f.bucket).download(f.path);
           if (dlErr || !blob) throw new Error(dlErr?.message || "下载失败");
           const buf = new Uint8Array(await blob.arrayBuffer());
-          const result = await cosPutObject({ cfg, key: cosKey, body: buf, contentType: blob.type || "application/octet-stream" });
+          const result = await cosPutObject({
+            cfg, key: cosKey, body: buf,
+            contentType: blob.type || "application/octet-stream",
+            ...cosPutBudget(tickStart, buf.byteLength, (f.size ?? buf.byteLength) > LARGE_FILE_THRESHOLD),
+          });
           uploaded++; bytes += result.size; filesCount++; totalBytes += result.size;
           (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: result.size, etag: result.etag, bucket: f.bucket, path: f.path });
           removeFailure(meta, (x) => x.kind === "storage" && x.bucket === f.bucket && x.path === f.path);
@@ -544,7 +578,11 @@ Deno.serve(async (req) => {
       try {
         const dumped = await dumpTable(admin, table, offset);
         if (dumped.rows > 0 || offset === 0) {
-          const uploaded = await cosPutObject({ cfg, key, body: dumped.bytes, contentType: "application/gzip" });
+          if (!hasUploadWindow(tickStart)) break;
+          const uploaded = await cosPutObject({
+            cfg, key, body: dumped.bytes, contentType: "application/gzip",
+            ...cosPutBudget(tickStart, dumped.bytes.byteLength, false),
+          });
           meta.database_files = (meta.database_files ?? 0) + 1;
           filesCount++; totalBytes += uploaded.size;
           dbUploaded++; dbBytes += uploaded.size;
@@ -572,7 +610,11 @@ Deno.serve(async (req) => {
           const files = await listBucketRecursive(admin, bucket);
           const manifestKey = `db-backups/daily/${day}/_manifest/${String(bucketIdx).padStart(2, "0")}-${bucket}.json.gz`;
           const raw = new TextEncoder().encode(JSON.stringify(files));
-          await cosPutObject({ cfg, key: manifestKey, body: await gzip(raw), contentType: "application/gzip" });
+          const gz = await gzip(raw);
+          await cosPutObject({
+            cfg, key: manifestKey, body: gz, contentType: "application/gzip",
+            ...cosPutBudget(tickStart, gz.byteLength, false),
+          });
           meta.storage_total = (meta.storage_total ?? 0) + files.length;
           meta.storage_bucket_index = bucketIdx + 1;
           meta.step = `正在扫描图片和视频 (${meta.storage_bucket_index}/${BUCKETS.length})`;
@@ -600,24 +642,29 @@ Deno.serve(async (req) => {
       const passTotal = manifests.filter((f) => f.size <= MAX_FILE_BYTES && (pass === 1 ? f.size <= LARGE_FILE_THRESHOLD : f.size > LARGE_FILE_THRESHOLD)).length;
       bumpPass(meta, passKey, { total: passTotal });
 
-      while (cursor < manifests.length && Date.now() - tickStart < TICK_BUDGET_MS) {
+      while (cursor < manifests.length && hasUploadWindow(tickStart)) {
         const file = manifests[cursor++];
         if (!file || file.size > MAX_FILE_BYTES) { skipped++; passSkipped++; continue; }
         if (pass === 1 && file.size > LARGE_FILE_THRESHOLD) { deferred++; continue; }
         if (pass === 2 && file.size <= LARGE_FILE_THRESHOLD) { continue; }
         const cosKey = `storage-mirror/${file.bucket}/${file.path}`;
         try {
-          const head = await cosHeadObject({ cfg, key: cosKey });
+          const head = await cosHeadObject({ cfg, key: cosKey, timeoutMs: 4_000 }).catch(() => null);
           if (head && head.size === file.size) {
             skipped++; passSkipped++;
             // Still record in manifest so reconcile sees it
             (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: head.size, etag: head.etag, bucket: file.bucket, path: file.path });
             continue;
           }
+          if (!hasUploadWindow(tickStart)) { cursor--; break; }
           const { data: blob, error: dlErr } = await admin.storage.from(file.bucket).download(file.path);
           if (dlErr || !blob) throw new Error(dlErr?.message || "下载文件失败");
           const buf = new Uint8Array(await blob.arrayBuffer());
-          const result = await cosPutObject({ cfg, key: cosKey, body: buf, contentType: blob.type || file.mime || "application/octet-stream" });
+          const result = await cosPutObject({
+            cfg, key: cosKey, body: buf,
+            contentType: blob.type || file.mime || "application/octet-stream",
+            ...cosPutBudget(tickStart, file.size || buf.byteLength, pass === 2),
+          });
           uploaded++; passUploaded++; passBytes += result.size;
           filesCount++; totalBytes += result.size;
           (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: result.size, etag: result.etag, bucket: file.bucket, path: file.path });

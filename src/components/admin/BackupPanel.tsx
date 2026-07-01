@@ -68,7 +68,8 @@ function humanizeError(msg: string | null): string {
   if (!msg) return '';
   const m = msg.toLowerCase();
   if (m.includes('signature') || m.includes('403') || m.includes('accessdenied')) return '腾讯云拒绝写入，密钥可能过期或权限被改。请重新生成腾讯云密钥。';
-  if (m.includes('timeout') || m.includes('timed out')) return '这次备份跑得太久被中断了，可以直接再点一次“立即备份”，系统会从未完成的地方继续。';
+  if (m.includes('等待过久') || m.includes('分批补传')) return '腾讯云连接慢，系统会分批补传；这种情况通常不用去腾讯云开按钮。';
+  if (m.includes('timeout') || m.includes('timed out')) return '腾讯云连接超时，系统会从未完成的地方继续；如果连续多次失败，再检查腾讯云密钥和桶权限。';
   if (m.includes('nosuchbucket') || m.includes('bucket')) return '找不到腾讯云上对应的存储空间。';
   if (m.includes('network') || m.includes('fetch')) return '连接腾讯云时网络不通，稍等 1 分钟再试即可。';
   return msg;
@@ -307,6 +308,9 @@ export function BackupPanel() {
               </button>
               {showFailures && (
                 <div className="max-h-64 overflow-auto divide-y divide-destructive/20">
+                  <div className="px-3 py-2 text-[11px] text-muted-foreground bg-background/60">
+                    小图片超时通常是腾讯云链路慢，系统会分批补传；只有出现“拒绝写入/桶不存在”才需要去腾讯云检查权限。
+                  </div>
                   {failures.slice(0, 100).map((f, i) => (
                     <div key={i} className="px-3 py-1.5 text-[11px]">
                       <div className="font-mono truncate">
