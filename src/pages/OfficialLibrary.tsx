@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AddOfficialFab } from '@/components/library/AddOfficialFab';
-import { thumbUrl } from '@/lib/imageUrl';
+import { thumbUrl, thumbSrcSet } from '@/lib/imageUrl';
 
 interface OfficialItem {
   id: string;
@@ -109,17 +109,15 @@ export default function OfficialLibrary() {
     if (!user) return;
     (async () => {
       setLoading(true);
-      let q = supabase.from('official_knowledge').select('*');
+      // 只取列表需要的列，body/content/gallery/video_url 等重字段留给详情页
+      let q = supabase
+        .from('official_knowledge')
+        .select(
+          'id,name,category,ip_name,summary,era,origin,cover_url,selling_points,tips,view_count,favorite_count,importance_score',
+        );
       // 仅在「全部」类目下应用排序切换；具体类目固定按更新时间倒序
-      if (cat === 'all') {
-        if (sort === 'important') {
-          q = q.order('importance_score', { ascending: false }).order('updated_at', { ascending: false });
-        } else if (sort === 'hot') {
-          // 数据库无法直接 order by 表达式，前端再排；先按更新时间初排
-          q = q.order('updated_at', { ascending: false });
-        } else {
-          q = q.order('updated_at', { ascending: false });
-        }
+      if (cat === 'all' && sort === 'important') {
+        q = q.order('importance_score', { ascending: false }).order('updated_at', { ascending: false });
       } else {
         q = q.order('updated_at', { ascending: false });
       }
@@ -128,7 +126,16 @@ export default function OfficialLibrary() {
       if (era) q = q.eq('era', era);
       if (origin) q = q.eq('origin', origin);
       if (keyword.trim()) q = q.or(`name.ilike.%${keyword}%,ip_name.ilike.%${keyword}%,summary.ilike.%${keyword}%`);
-      const { data } = await q.limit(120);
+
+      // 列表主数据 + 收藏并行拉，减少一段串行 RTT
+      const [{ data }, { data: fav }] = await Promise.all([
+        q.limit(60),
+        supabase
+          .from('user_favorites')
+          .select('source_id')
+          .eq('user_id', user.id)
+          .eq('source_type', 'official'),
+      ]);
       let list = (data || []) as OfficialItem[];
       if (cat === 'all' && sort === 'hot') {
         list = [...list].sort(
@@ -137,14 +144,8 @@ export default function OfficialLibrary() {
         );
       }
       setItems(list);
-      setLoading(false);
-
-      const { data: fav } = await supabase
-        .from('user_favorites')
-        .select('source_id')
-        .eq('user_id', user.id)
-        .eq('source_type', 'official');
       setFavoritedIds(new Set((fav || []).map((f) => f.source_id)));
+      setLoading(false);
     })();
   }, [user, cat, sub, era, origin, keyword, sort, reloadKey]);
 
@@ -330,11 +331,20 @@ export default function OfficialLibrary() {
           </div>
         ) : view === 'grid' ? (
           <div className="grid grid-cols-2 gap-3">
-            {items.map((it) => (
+            {items.map((it, idx) => (
               <Card key={it.id} className="overflow-hidden cursor-pointer group" onClick={() => openDetail(it)}>
                 <div className="aspect-square bg-muted relative">
                   {it.cover_url ? (
-                    <img src={thumbUrl(it.cover_url, 480) || it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                    <img
+                      src={thumbUrl(it.cover_url, 240) || it.cover_url}
+                      srcSet={thumbSrcSet(it.cover_url, 240)}
+                      sizes="(max-width: 640px) 50vw, 240px"
+                      alt={it.name}
+                      className="w-full h-full object-cover"
+                      loading={idx < 4 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      fetchPriority={idx === 0 ? 'high' : undefined}
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">无图</div>
                   )}
@@ -366,7 +376,15 @@ export default function OfficialLibrary() {
               >
                 <div className="w-14 h-14 rounded-md bg-muted shrink-0 overflow-hidden flex items-center justify-center">
                   {it.cover_url ? (
-                    <img src={thumbUrl(it.cover_url, 160) || it.cover_url} alt={it.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                    <img
+                      src={thumbUrl(it.cover_url, 112) || it.cover_url}
+                      srcSet={thumbSrcSet(it.cover_url, 112)}
+                      sizes="56px"
+                      alt={it.name}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      decoding="async"
+                    />
                   ) : (
                     <ImageOff className="w-4 h-4 text-muted-foreground" />
                   )}
