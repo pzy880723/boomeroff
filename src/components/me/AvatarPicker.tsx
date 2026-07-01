@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { compressForUpload } from '@/lib/uploadImage';
 import { invokeFn } from '@/lib/invokeFn';
+import { avatarUrl as toAvatarUrl } from '@/lib/imageUrl';
+
 
 interface Props {
   userId: string;
@@ -88,7 +90,16 @@ export function AvatarPicker({ userId, displayName, avatarUrl, onChanged, size =
             disabled={!!busy}
           >
             <Avatar className="w-full h-full">
-              {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
+              {avatarUrl ? (
+                <AvatarImage
+                  src={toAvatarUrl(avatarUrl, Math.max(144, size * 2)) || avatarUrl}
+                  alt={displayName}
+                  width={size}
+                  height={size}
+                  {...({ fetchpriority: 'high' } as any)}
+                  decoding="async"
+                />
+              ) : null}
               <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xl">
                 {displayName.charAt(0).toUpperCase() || '店'}
               </AvatarFallback>
