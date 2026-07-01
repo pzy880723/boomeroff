@@ -132,7 +132,7 @@ export default function Me() {
             userId={user.id}
             displayName={displayName}
             avatarUrl={avatarUrl}
-            onChanged={setAvatarUrl}
+            onChanged={(url) => { setAvatarUrl(url); writeMeCache(user.id, { avatarUrl: url }); preloadAvatar(url); }}
             size={72}
           />
           <div className="flex-1 min-w-0 space-y-1.5">
