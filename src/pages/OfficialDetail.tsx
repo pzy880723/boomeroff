@@ -75,22 +75,32 @@ export default function OfficialDetail() {
   const load = async () => {
     if (!id || !user) return;
     setLoading(true);
-    const { data } = await supabase.from('official_knowledge').select('*').eq('id', id).maybeSingle();
-    setItem(data as unknown as Item | null);
-    if (data) {
+    // 首屏不拉重字段 body（Markdown 长文），等用户展开时再补
+    const mainSel =
+      'id,name,category,ip_name,summary,era,origin,cover_url,selling_points,tips,view_count,favorite_count,importance_score,video_url,gallery,content,source_product_id,backstamp_url';
+    const [{ data }, { data: fav }] = await Promise.all([
+      supabase.from('official_knowledge').select(mainSel).eq('id', id).maybeSingle(),
+      supabase
+        .from('user_favorites').select('id,source_id,source_type')
+        .eq('user_id', user.id)
+        .in('source_type', ['official', 'recognition'])
+        .in('source_id', [id]),
+    ]);
+    const rec = data as any;
+    setItem(rec ? ({ ...rec, body: null } as Item) : null);
+    if (rec) {
       void (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<unknown>)(
         'increment_official_view', { _id: id },
       );
-      const { data: fav } = await supabase
-        .from('user_favorites').select('id')
-        .eq('user_id', user.id).eq('source_type', 'official').eq('source_id', id).maybeSingle();
-      setFavored(!!fav);
-      const sourceProductId = (data as any).source_product_id as string | null;
+      const favs = (fav || []) as Array<{ source_id: string; source_type: string }>;
+      setFavored(favs.some((f) => f.source_type === 'official' && f.source_id === id));
+      const sourceProductId = rec.source_product_id as string | null;
       if (sourceProductId) {
-        const { data: rec } = await supabase
+        // 单独查一次 recognition 收藏（source_id 是 product_id，与官方 id 不同）
+        const { data: rec2 } = await supabase
           .from('user_favorites').select('id')
           .eq('user_id', user.id).eq('source_type', 'recognition').eq('source_id', sourceProductId).maybeSingle();
-        setAlreadyInPersonal(!!rec);
+        setAlreadyInPersonal(!!rec2);
       } else {
         setAlreadyInPersonal(false);
       }
@@ -99,6 +109,18 @@ export default function OfficialDetail() {
   };
 
   useEffect(() => { void load(); }, [id, user]);
+
+  // 展开正文或打开编辑弹窗时，按需拉 body
+  const [bodyLoaded, setBodyLoaded] = useState(false);
+  useEffect(() => {
+    if (!item?.id || bodyLoaded) return;
+    if (!showFullBody && !editOpen && !aiEditOpen) return;
+    (async () => {
+      const { data } = await supabase.from('official_knowledge').select('body').eq('id', item.id).maybeSingle();
+      setItem((prev) => (prev ? { ...prev, body: (data as any)?.body ?? null } : prev));
+      setBodyLoaded(true);
+    })();
+  }, [showFullBody, editOpen, aiEditOpen, item?.id, bodyLoaded]);
 
   const toggleFav = async () => {
     if (!user || !item) return;
