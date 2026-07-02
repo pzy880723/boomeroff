@@ -694,6 +694,32 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ============= LEDGER (persistent "已成功" 台账) =============
+    // Loaded once per bucket per tick. Truth source across runs, so we never
+    // re-upload a file that has already been successfully mirrored — even if
+    // that success happened in a previous run days ago.
+    const ledgerCache = new Map<string, Map<string, LedgerEntry>>();
+    async function getLedger(sourceBucket: string) {
+      const cached = ledgerCache.get(sourceBucket);
+      if (cached) return cached;
+      const idx = await loadLedger(admin, sourceBucket);
+      ledgerCache.set(sourceBucket, idx);
+      return idx;
+    }
+    const pendingLedger: Array<{ cos_key: string; source_bucket: string; source_path: string; size: number; etag?: string }> = [];
+    async function flushLedger(force = false) {
+      if (pendingLedger.length === 0) return;
+      if (!force && pendingLedger.length < 40) return;
+      const batch = pendingLedger.splice(0, pendingLedger.length);
+      await ledgerUpsertBatch(admin, batch);
+    }
+    function noteLedger(row: { cos_key: string; source_bucket: string; source_path: string; size: number; etag?: string }) {
+      pendingLedger.push(row);
+      const idx = ledgerCache.get(row.source_bucket);
+      if (idx) idx.set(row.source_path, { size: row.size, cos_key: row.cos_key, etag: row.etag });
+    }
+
+
     // ============= RETRY QUEUE PHASE (new) =============
     if (meta.retry_queue && meta.phase === "storage") {
       const queue = meta.retry_queue;
