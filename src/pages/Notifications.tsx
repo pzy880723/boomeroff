@@ -18,7 +18,9 @@ import { toast } from 'sonner';
 import {
   MessageCircle, PencilLine, CheckCheck, Loader2, Sparkles, Send,
   ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil, Bell, Search, Filter,
+  Eye, MessageSquare, History, Wand2,
 } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
 import { MarkdownArticle } from '@/components/notifications/MarkdownArticle';
@@ -157,7 +159,23 @@ export default function Notifications() {
   const [input, setInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chat, aiLoading]);
+
+  // 视图 & 版本历史
+  const [view, setView] = useState<'chat' | 'preview'>('chat');
+  const [versions, setVersions] = useState<{ title: string; body: string; type: string; at: string }[]>([]);
+  const touchStartX = useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 60) return;
+    if (dx < 0 && view === 'chat') setView('preview');
+    else if (dx > 0 && view === 'preview') setView('chat');
+  };
+  const hasDraft = !!(title.trim() || body.trim());
 
   useEffect(() => {
     if (!user) return;
@@ -172,16 +190,43 @@ export default function Notifications() {
   const resetCompose = (defaultCat: TabKey = 'notice') => {
     setChat([]); setInput(''); setTitle(''); setBody('');
     setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
+    setVersions([]); setView('chat');
   };
-  const openCompose = () => { resetCompose(tab === 'message' ? 'notice' : tab); setOpen(true); };
+  const openCompose = () => {
+    resetCompose(tab === 'message' ? 'notice' : tab);
+    setOpen(true);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
 
 
-  const sendToAI = async () => {
-    const q = input.trim();
+  // 更宽松的 JSON 提取：优先 ```json fenced，然后严格匹配含 title/body 的对象
+  const extractDraftJson = (raw: string): { title?: string; body?: string; type?: string; reply?: string } | null => {
+    if (!raw) return null;
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const candidates: string[] = [];
+    if (fenced?.[1]) candidates.push(fenced[1].trim());
+    // 找从第一个 { 到最后一个 } 的所有前缀
+    const first = raw.indexOf('{');
+    const last = raw.lastIndexOf('}');
+    if (first >= 0 && last > first) candidates.push(raw.slice(first, last + 1));
+    for (const c of candidates) {
+      try {
+        const obj = JSON.parse(c);
+        if (obj && typeof obj === 'object' && (obj.title || obj.body)) return obj;
+      } catch { /* try next */ }
+    }
+    return null;
+  };
+
+  const sendToAI = async (override?: string) => {
+    const q = (override ?? input).trim();
     if (!q || aiLoading) return;
     const next: ChatTurn[] = [...chat, { role: 'user', content: q }];
-    setChat(next); setInput(''); setAiLoading(true);
+    setChat(next);
+    if (!override) setInput('');
+    setAiLoading(true);
     try {
+      const currentDraft = hasDraft ? `\n\n【当前草稿】\n标题：${title}\n正文：\n${body}` : '';
       const { data, error } = await supabase.functions.invoke('spirit-chat', {
         body: {
           purpose: 'notification_compose',
@@ -189,12 +234,14 @@ export default function Notifications() {
             {
               role: 'system',
               content:
-                '你是门店运营助手，与管理员共同撰写店铺资讯长文。规则：\n' +
-                '1) 首轮如果用户描述太简单，先追问 2-3 个补充问题（受众、时间、重点信息、语气），不要立刻出稿。\n' +
-                '2) 当用户明确说"生成"、"写吧"、"OK"等确认词后，才输出 JSON。\n' +
-                '3) 出稿时严格用 JSON：{"title":"...","body":"...","type":"announcement|policy|activity|urgent","reply":"简短回复"}。\n' +
-                '4) title ≤ 30 字，body 支持 Markdown（## 小标题、- 列表、**加粗**），可分段，2-6 段。\n' +
-                '5) 未确认时正常自然语言回复，不要输出 JSON。',
+                '你是门店运营助手，帮管理员一次性写好一条门店通知/资讯。核心原则：\n' +
+                '1) 默认「直接出稿」，不要连续追问。用户给的信息只要能拼一段话，就立刻出稿。\n' +
+                '2) 只有在信息严重不足（不足 6 个字且没有主题）时，才追问一个最关键的问题。\n' +
+                '3) 出稿时严格输出 JSON（可用 ```json 包裹）：{"title":"...","body":"...","type":"announcement|policy|activity|urgent","reply":"一句话说明"}\n' +
+                '4) title ≤ 24 字、开门见山；body 用 Markdown（## 小标题、- 列表、**加粗**），2-5 段，每段简短、可读，避免空话套话。\n' +
+                '5) 用户后续说「更短/更正式/更活泼/加数据/换个角度」等，就基于当前草稿改写并再次输出 JSON。\n' +
+                '6) 语气：专业但亲和，符合门店对店员的日常沟通，不要客服模板。' +
+                currentDraft,
             },
             ...next.map(t => ({ role: t.role, content: t.content })),
           ],
@@ -202,18 +249,21 @@ export default function Notifications() {
       });
       if (error) throw error;
       const raw = (data as any)?.text || (data as any)?.reply || (data as any)?.content || '';
-      let parsed: any = null;
-      try {
-        const jsonMatch = String(raw).match(/\{[\s\S]*\}/);
-        if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
-      } catch { /* ignore */ }
+      const parsed = extractDraftJson(String(raw));
       if (parsed && (parsed.title || parsed.body)) {
-        setTitle(parsed.title || '');
-        setBody(parsed.body || '');
-        if (parsed.type) setType(parsed.type);
-        setChat([...next, { role: 'assistant', content: parsed.reply || '草稿已生成，请查看上方预览' }]);
+        const nt = parsed.title || title;
+        const nb = parsed.body || body;
+        const ntype = parsed.type || type;
+        setTitle(nt); setBody(nb); if (parsed.type) setType(parsed.type);
+        setVersions(v => [...v, { title: nt, body: nb, type: ntype, at: new Date().toISOString() }]);
+        setChat([...next, { role: 'assistant', content: parsed.reply || '草稿已生成，点右上角「预览」查看 →' }]);
+        toast.success('草稿已生成', {
+          action: { label: '查看预览', onClick: () => setView('preview') },
+        });
       } else {
-        setChat([...next, { role: 'assistant', content: String(raw) || '（AI 无返回，请再描述一下）' }]);
+        // 去掉 JSON 尾巴，只显示自然语言
+        const cleaned = String(raw).replace(/```[\s\S]*?```/g, '').trim() || '（AI 无返回，请再描述一下）';
+        setChat([...next, { role: 'assistant', content: cleaned }]);
       }
     } catch (e: any) {
       setChat([...next, { role: 'assistant', content: '生成失败：' + (e?.message || '未知错误') }]);
@@ -221,6 +271,20 @@ export default function Notifications() {
       setAiLoading(false);
     }
   };
+
+  const applyVersion = (idx: number) => {
+    const v = versions[idx];
+    if (!v) return;
+    setTitle(v.title); setBody(v.body); setType(v.type);
+  };
+
+  const CHIPS: { label: string; prompt: string }[] = [
+    { label: '📢 发公告', prompt: '发一条公告，主题是：' },
+    { label: '📋 发制度', prompt: '发一条制度说明，内容是：' },
+    { label: '🎉 发活动', prompt: '发一条门店活动通知，活动是：' },
+    { label: '🚨 紧急通知', prompt: '发一条紧急通知：' },
+  ];
+  const REFINE_CHIPS = ['更短一些', '更正式一些', '更活泼一些', '加点数据', '换个角度再写一版'];
 
   const pickCoverFile = (file: File | null) => {
     if (!file) return;
@@ -463,174 +527,293 @@ export default function Notifications() {
       )}
 
 
-      {/* 撰稿弹窗：预览在上、工具栏在中、对话在底部 */}
+      {/* 撰稿弹窗：对话为主，预览可切换/侧滑 */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetCompose(); }}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[92vh] flex flex-col">
-          <DialogHeader className="px-4 pt-4 shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="w-4 h-4 text-primary" /> AI 撰稿 · 对话生成
-            </DialogTitle>
+        <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[92vh] h-[92vh] flex flex-col gap-0">
+          <DialogHeader className="px-4 pt-4 pb-2 shrink-0 border-b border-border/50">
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="w-4 h-4 text-primary" /> AI 撰稿
+              </DialogTitle>
+              <Tabs value={view} onValueChange={(v) => setView(v as 'chat' | 'preview')}>
+                <TabsList className="h-8">
+                  <TabsTrigger value="chat" className="h-6 px-3 text-xs gap-1">
+                    <MessageSquare className="w-3.5 h-3.5" />对话
+                  </TabsTrigger>
+                  <TabsTrigger value="preview" className="h-6 px-3 text-xs gap-1 relative">
+                    <Eye className="w-3.5 h-3.5" />预览
+                    {hasDraft && view !== 'preview' && (
+                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </DialogHeader>
 
-          {/* 顶部：分类 & 标题 */}
-          <div className="px-4 pt-2 pb-3 shrink-0 border-b border-border/50 space-y-2">
-            <div className="flex gap-2">
-              <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
-                <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="notice">通知</SelectItem>
-                  <SelectItem value="news">资讯</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="announcement">公告</SelectItem>
-                  <SelectItem value="policy">制度</SelectItem>
-                  <SelectItem value="activity">活动</SelectItem>
-                  <SelectItem value="urgent">紧急</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="标题（可让 AI 生成，也可手输）"
-                maxLength={60}
-                className="flex-1 h-8 text-sm font-semibold"
-              />
-            </div>
-          </div>
+          {/* 主体：左右滑动切换 */}
+          <div
+            className="flex-1 min-h-0 flex flex-col overflow-hidden"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {view === 'chat' ? (
+              <>
+                {/* 快捷模板 chip */}
+                <div className="px-4 pt-3 pb-2 flex flex-wrap gap-2 shrink-0">
+                  {CHIPS.map(c => (
+                    <button
+                      key={c.label}
+                      type="button"
+                      onClick={() => { setInput(c.prompt); setTimeout(() => inputRef.current?.focus(), 20); }}
+                      className="h-7 px-3 rounded-full text-xs bg-muted hover:bg-muted/70 border border-border/50"
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
 
-          {/* 中区：实时预览 */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 bg-muted/30">
-            <div className="rounded-xl border border-border/60 bg-background overflow-hidden shadow-sm">
-              {coverUrl ? (
-                <div className="relative">
-                  <img src={coverUrl} alt="banner" className="w-full aspect-[16/6] object-cover block" />
+                {/* 对话消息流 */}
+                <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3 bg-muted/20">
+                  {chat.length === 0 && (
+                    <div className="text-center py-10 text-muted-foreground">
+                      <Wand2 className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                      <p className="text-xs">告诉我要发什么，我会直接帮你出稿</p>
+                      <p className="text-[11px] mt-1 opacity-70">例：明天早上 9 点全员参加培训</p>
+                    </div>
+                  )}
+                  {chat.map((t, i) => {
+                    const isUser = t.role === 'user';
+                    const isLastAssistant = !isUser && i === chat.length - 1;
+                    return (
+                      <div key={i} className={isUser ? 'flex justify-end' : 'flex flex-col items-start gap-2'}>
+                        <span className={cn(
+                          'inline-block max-w-[85%] px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words',
+                          isUser
+                            ? 'bg-primary text-primary-foreground rounded-br-md'
+                            : 'bg-background border border-border/60 rounded-bl-md',
+                        )}>{t.content}</span>
+                        {isLastAssistant && hasDraft && (
+                          <div className="flex flex-wrap gap-1.5 max-w-[85%]">
+                            <button
+                              type="button"
+                              onClick={() => setView('preview')}
+                              className="inline-flex items-center gap-1 h-7 px-3 rounded-full text-xs bg-primary text-primary-foreground"
+                            >
+                              <Eye className="w-3 h-3" />查看预览
+                            </button>
+                            {REFINE_CHIPS.map(r => (
+                              <button
+                                key={r}
+                                type="button"
+                                disabled={aiLoading}
+                                onClick={() => void sendToAI(r)}
+                                className="h-7 px-3 rounded-full text-xs bg-muted hover:bg-muted/70 border border-border/50 disabled:opacity-50"
+                              >
+                                {r}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {aiLoading && (
+                    <div className="flex">
+                      <span className="inline-flex items-center gap-1 px-3 py-2 rounded-2xl text-xs bg-background border border-border/60">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> 正在写…
+                      </span>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* 底部输入区 */}
+                <div className="shrink-0 border-t border-border/50 px-3 py-2 flex items-end gap-2 bg-background">
                   <button
                     type="button"
-                    onClick={() => setCoverUrl('')}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"
-                    aria-label="移除封面"
+                    onClick={() => setView('preview')}
+                    disabled={!hasDraft}
+                    className={cn(
+                      'shrink-0 w-9 h-9 rounded-full flex items-center justify-center relative transition',
+                      hasDraft ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'bg-muted text-muted-foreground/60',
+                    )}
+                    aria-label="查看预览"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <Eye className="w-4 h-4" />
+                    {hasDraft && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary" />}
                   </button>
+                  <Textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendToAI(); }
+                    }}
+                    placeholder="和 AI 聊聊你要发什么…（Enter 发送，Shift+Enter 换行）"
+                    rows={1}
+                    className="flex-1 min-h-9 max-h-32 resize-none text-sm py-2"
+                    disabled={aiLoading}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => void sendToAI()}
+                    disabled={aiLoading || !input.trim()}
+                    className="h-9 w-9 p-0 shrink-0"
+                  >
+                    {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  </Button>
                 </div>
-              ) : (
-                <div className="w-full aspect-[16/6] bg-muted/50 flex items-center justify-center text-xs text-muted-foreground gap-2">
-                  <ImageIcon className="w-5 h-5" /> 尚未添加 Banner
-                </div>
-              )}
-              <div className="p-4">
-                <h2 className="text-base font-bold mb-2">{title || '（未命名标题）'}</h2>
-                {body ? (
-                  editingBody ? (
-                    <Textarea
-                      ref={bodyRef}
-                      value={body}
-                      onChange={e => setBody(e.target.value)}
-                      rows={12}
-                      className="text-sm font-mono"
-                      onBlur={() => setEditingBody(false)}
+              </>
+            ) : (
+              <>
+                {/* 预览页顶部：分类/类型/标题 + 版本切换 */}
+                <div className="px-4 pt-3 pb-2 shrink-0 border-b border-border/50 space-y-2">
+                  <div className="flex gap-2">
+                    <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
+                      <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="notice">通知</SelectItem>
+                        <SelectItem value="news">资讯</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={type} onValueChange={setType}>
+                      <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="announcement">公告</SelectItem>
+                        <SelectItem value="policy">制度</SelectItem>
+                        <SelectItem value="activity">活动</SelectItem>
+                        <SelectItem value="urgent">紧急</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      placeholder="标题"
+                      maxLength={60}
+                      className="flex-1 h-8 text-sm font-semibold"
                     />
-                  ) : (
-                    <div
-                      onClick={() => setEditingBody(true)}
-                      className="cursor-text hover:bg-muted/40 rounded p-1 -m-1"
-                      title="点击编辑正文"
-                    >
-                      <MarkdownArticle content={body} />
+                  </div>
+                  {versions.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <History className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-[11px] text-muted-foreground">历史版本：</span>
+                      <div className="flex-1 flex flex-wrap gap-1">
+                        {versions.map((v, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => applyVersion(i)}
+                            className={cn(
+                              'h-6 px-2 rounded-full text-[11px] border',
+                              title === v.title && body === v.body
+                                ? 'bg-primary/15 text-primary border-primary/40'
+                                : 'bg-muted hover:bg-muted/70 border-border/50',
+                            )}
+                          >
+                            v{i + 1}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  )
-                ) : (
-                  <p className="text-xs text-muted-foreground">与下方 AI 对话生成正文，或手动填写</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* 工具栏 */}
-          <div className="px-4 py-2 shrink-0 border-t border-border/50 flex flex-wrap gap-2">
-            <label className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70 cursor-pointer">
-              {uploadingCover ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              上传 Banner
-              <input
-                type="file" accept="image/*" className="hidden"
-                disabled={uploadingCover}
-                onChange={e => { pickCoverFile(e.target.files?.[0] || null); e.currentTarget.value = ''; }}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={generateBannerByAI}
-              disabled={genBannerBusy}
-              className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50"
-            >
-              {genBannerBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-              AI 生成 Banner
-            </button>
-            <label className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70 cursor-pointer">
-              {insertingImg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5" />}
-              插入正文图
-              <input
-                type="file" accept="image/*" className="hidden"
-                disabled={insertingImg}
-                onChange={e => { const f = e.target.files?.[0]; if (f) void insertBodyImage(f); e.currentTarget.value = ''; }}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => setEditingBody(v => !v)}
-              className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70"
-            >
-              <Pencil className="w-3.5 h-3.5" />{editingBody ? '结束编辑' : '编辑正文'}
-            </button>
-            <div className="flex-1" />
-            <Button size="sm" onClick={publish} disabled={submitting || !title.trim() || !body.trim()} className="h-8">
-              {submitting && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}发布
-            </Button>
-          </div>
-
-          {/* 底部：AI 对话（自然语言入口） */}
-          <div className="shrink-0 border-t border-border/50 bg-background">
-            <div className="max-h-[180px] overflow-y-auto px-4 py-2 space-y-2 bg-muted/20">
-              {chat.length === 0 && (
-                <p className="text-[11px] text-muted-foreground text-center py-2">
-                  告诉我要发什么，我会先追问再帮你写稿；说"生成"即可出稿。
-                </p>
-              )}
-              {chat.map((t, i) => (
-                <div key={i} className={t.role === 'user' ? 'text-right' : 'text-left'}>
-                  <span className={`inline-block max-w-[85%] px-3 py-2 rounded-2xl text-xs ${
-                    t.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-background border border-border/60'
-                  }`}>{t.content}</span>
+                  )}
                 </div>
-              ))}
-              {aiLoading && (
-                <div className="text-left">
-                  <span className="inline-flex items-center gap-1 px-3 py-2 rounded-2xl text-xs bg-background border border-border/60">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> 生成中…
-                  </span>
+
+                {/* 预览卡片 */}
+                <div className="flex-1 overflow-y-auto px-4 py-3 bg-muted/30">
+                  <div className="rounded-xl border border-border/60 bg-background overflow-hidden shadow-sm">
+                    {coverUrl ? (
+                      <div className="relative">
+                        <img src={coverUrl} alt="banner" className="w-full aspect-[16/6] object-cover block" />
+                        <button
+                          type="button"
+                          onClick={() => setCoverUrl('')}
+                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"
+                          aria-label="移除封面"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-[16/6] bg-muted/50 flex items-center justify-center text-xs text-muted-foreground gap-2">
+                        <ImageIcon className="w-5 h-5" /> 尚未添加 Banner
+                      </div>
+                    )}
+                    <div className="p-4">
+                      <h2 className="text-base font-bold mb-2">{title || '（未命名标题）'}</h2>
+                      {body ? (
+                        editingBody ? (
+                          <Textarea
+                            ref={bodyRef}
+                            value={body}
+                            onChange={e => setBody(e.target.value)}
+                            rows={12}
+                            className="text-sm font-mono"
+                            onBlur={() => setEditingBody(false)}
+                          />
+                        ) : (
+                          <div
+                            onClick={() => setEditingBody(true)}
+                            className="cursor-text hover:bg-muted/40 rounded p-1 -m-1"
+                            title="点击编辑正文"
+                          >
+                            <MarkdownArticle content={body} />
+                          </div>
+                        )
+                      ) : (
+                        <p className="text-xs text-muted-foreground">回到「对话」让 AI 帮你写正文</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-            <div className="px-4 py-2 flex gap-2 border-t border-border/50">
-              <Input
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void sendToAI(); } }}
-                placeholder="和 AI 聊聊你要发什么…"
-                className="flex-1 h-9"
-                disabled={aiLoading}
-              />
-              <Button size="sm" onClick={sendToAI} disabled={aiLoading || !input.trim()} className="h-9">
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
+
+                {/* 工具栏 */}
+                <div className="px-4 py-2 shrink-0 border-t border-border/50 flex flex-wrap gap-2">
+                  <label className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70 cursor-pointer">
+                    {uploadingCover ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                    上传 Banner
+                    <input
+                      type="file" accept="image/*" className="hidden"
+                      disabled={uploadingCover}
+                      onChange={e => { pickCoverFile(e.target.files?.[0] || null); e.currentTarget.value = ''; }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={generateBannerByAI}
+                    disabled={genBannerBusy}
+                    className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50"
+                  >
+                    {genBannerBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    AI 画封面
+                  </button>
+                  <label className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70 cursor-pointer">
+                    {insertingImg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5" />}
+                    插图
+                    <input
+                      type="file" accept="image/*" className="hidden"
+                      disabled={insertingImg}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) void insertBodyImage(f); e.currentTarget.value = ''; }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setEditingBody(v => !v)}
+                    className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />{editingBody ? '完成' : '手改'}
+                  </button>
+                  <div className="flex-1" />
+                  <Button size="sm" onClick={publish} disabled={submitting || !title.trim() || !body.trim()} className="h-8">
+                    {submitting && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}发布
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
+
 
       {/* Banner 裁剪器 */}
       <NotificationBannerCropper
