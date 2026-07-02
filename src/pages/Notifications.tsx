@@ -818,6 +818,11 @@ export default function Notifications() {
                     )}
                     <div className="p-4">
                       <h2 className="text-base font-bold mb-2">{title || '（未命名标题）'}</h2>
+                      {summary && (
+                        <p className="text-sm text-muted-foreground leading-relaxed mb-3 pb-3 border-b border-border/50">
+                          {summary}
+                        </p>
+                      )}
                       {body ? (
                         editingBody ? (
                           <Textarea
