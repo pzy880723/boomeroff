@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  DndContext, PointerSensor, useSensor, useSensors, closestCenter,
-  DragOverlay, type DragEndEvent, type DragStartEvent,
+  DndContext, PointerSensor, TouchSensor, useSensor, useSensors, closestCorners,
+  type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext, useSortable, arrayMove, rectSortingStrategy,
@@ -28,7 +28,7 @@ function useLongPress(cb: () => void, ms = 450) {
   };
 }
 
-/** 品牌红瓷 squircle tile —— 扁平纯色,无高光/描边渐变。 */
+/** 品牌红瓷 squircle tile —— 扁平纯色。 */
 function TileFace({ meta, dragging }: { meta: AppIconMeta; dragging?: boolean }) {
   const { Icon } = meta;
   return (
@@ -37,7 +37,7 @@ function TileFace({ meta, dragging }: { meta: AppIconMeta; dragging?: boolean })
         'relative w-[54px] h-[54px] rounded-[26%] flex items-center justify-center',
         'bg-primary shadow-[0_4px_10px_-6px_rgba(0,0,0,0.25)]',
         'transition-transform duration-150',
-        dragging && 'scale-110 shadow-[0_18px_28px_-10px_rgba(0,0,0,0.35)]',
+        dragging && 'scale-[1.08] shadow-[0_20px_30px_-12px_rgba(0,0,0,0.4)]',
       )}
     >
       <Icon className="relative w-[24px] h-[24px] text-white" strokeWidth={2.2} />
@@ -57,12 +57,18 @@ function SortableTile({ id, editing, onHide, onEnterEdit }: TileProps) {
   const meta = APP_ICON_REGISTRY[id];
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
-  } = useSortable({ id, disabled: !editing });
+  } = useSortable({
+    id,
+    disabled: !editing,
+    animateLayoutChanges: () => true,
+  });
 
-  const style = {
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    // 让位滑动挤压 —— 明确覆盖默认 transition
+    // 空闲时也保留过渡,让邻居"让位/回位"都有动画
     transition: transition ?? 'transform 220ms cubic-bezier(0.2, 0, 0, 1)',
+    willChange: 'transform',
+    zIndex: isDragging ? 30 : undefined,
   };
   const longPress = useLongPress(onEnterEdit);
   if (!meta) return null;
@@ -70,7 +76,7 @@ function SortableTile({ id, editing, onHide, onEnterEdit }: TileProps) {
 
   const content = (
     <>
-      <TileFace meta={meta} />
+      <TileFace meta={meta} dragging={isDragging} />
       <span className="text-[11px] font-medium text-foreground text-center leading-tight mt-1.5">{label}</span>
     </>
   );
@@ -82,7 +88,6 @@ function SortableTile({ id, editing, onHide, onEnterEdit }: TileProps) {
       className={cn(
         'relative flex flex-col items-center py-1 select-none touch-none',
         editing && !isDragging && 'wiggle-edit',
-        isDragging && 'opacity-30',
       )}
       {...attributes}
       {...(editing ? listeners : {})}
@@ -110,9 +115,10 @@ export function AppGrid() {
   const [pref, setPref] = useState(() => readAppPref());
   const [editing, setEditing] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
   );
 
   useEffect(() => { writeAppPref(pref); }, [pref]);
@@ -146,8 +152,6 @@ export function AppGrid() {
     setPref({ hidden, order });
   };
 
-  const activeMeta = activeId ? APP_ICON_REGISTRY[activeId] : null;
-
   return (
     <section>
       <div className="flex items-center justify-between px-1 mb-1.5 min-h-[28px]">
@@ -172,13 +176,13 @@ export function AppGrid() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={closestCorners}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
         onDragCancel={onDragCancel}
       >
         <SortableContext items={visible} strategy={rectSortingStrategy}>
-          <div className="grid grid-cols-4 gap-y-3 gap-x-2">
+          <div className="grid grid-cols-4 gap-y-3 gap-x-2 overscroll-contain">
             {visible.map((id) => (
               <SortableTile
                 key={id}
@@ -224,15 +228,6 @@ export function AppGrid() {
             )}
           </div>
         </SortableContext>
-
-        <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.2,0,0,1)' }}>
-          {activeMeta ? (
-            <div className="flex flex-col items-center py-1 pointer-events-none">
-              <TileFace meta={activeMeta} dragging />
-              <span className="text-[11px] font-medium text-foreground text-center leading-tight mt-1.5">{activeMeta.label}</span>
-            </div>
-          ) : null}
-        </DragOverlay>
       </DndContext>
     </section>
   );
