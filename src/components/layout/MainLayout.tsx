@@ -32,7 +32,7 @@ export function MainLayout() {
               content="仪表盘 · AI 识物 · 知识共享 · 排班打卡 · 通知中心,门店日常运营一个工具搞定。"
             />
           </Helmet>
-          <main className="flex-1 pb-24">
+          <main className="flex-1 pb-28">
             <ErrorBoundary scope="page">
               <Outlet />
             </ErrorBoundary>
