@@ -182,29 +182,50 @@ export default function Notifications() {
   if (authLoading) return null;
   if (!user) return <AuthPage />;
 
+  const markAllReadInTab = async () => {
+    // 只把当前分栏内的未读标为已读
+    for (const n of filteredItems) if (!n.read) await markRead(n.id);
+  };
+
   return (
     <div className="min-h-screen">
       <PageHeader
-        title="通知"
+        title={TAB_META[tab].title}
         right={
-          unreadCount > 0 ? (
-            <Button size="sm" variant="ghost" onClick={markAllRead}>
+          tabUnread > 0 ? (
+            <Button size="sm" variant="ghost" onClick={markAllReadInTab}>
               <CheckCheck className="w-4 h-4 mr-1" />全部已读
             </Button>
           ) : null
         }
       />
 
-      <main className="mx-auto max-w-screen-md px-4 py-4 space-y-3">
-        {loading && items.length === 0 ? (
+      <main className="mx-auto max-w-screen-md px-4 py-3 space-y-3">
+        {/* 分栏切换 */}
+        <div className="inline-flex rounded-full bg-muted p-0.5 text-xs w-full max-w-xs">
+          {(['notice', 'news', 'message'] as TabKey[]).map(k => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={cn(
+                'flex-1 h-7 rounded-full font-medium transition-colors',
+                tab === k ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {TAB_META[k].label}
+            </button>
+          ))}
+        </div>
+
+        {loading && filteredItems.length === 0 ? (
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-        ) : items.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
-            <Bell className="w-10 h-10 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">暂无通知</p>
+            <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
+            <p className="text-sm">暂无{TAB_META[tab].label}</p>
           </div>
         ) : (
-          items.map(n => {
+          filteredItems.map(n => {
             const meta = typeMeta(n.type);
             return (
               <Card
@@ -230,6 +251,7 @@ export default function Notifications() {
           })
         )}
       </main>
+
 
       {/* 管理员：AI 撰稿浮标（避开 BOOMER 浮标位置） */}
       {isAdmin && (
