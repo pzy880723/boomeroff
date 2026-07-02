@@ -86,7 +86,9 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <ScrollRestoration />
           <Suspense fallback={<RouteFallback />}>
+
             <Routes>
               {/* Tabbed pages with bottom navigation */}
               <Route element={<MainLayout />}>
