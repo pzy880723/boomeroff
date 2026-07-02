@@ -390,6 +390,7 @@ export default function Notifications() {
     const { error } = await supabase.from('notifications' as any).insert({
       title: title.trim(),
       body: body.trim(),
+      summary: summary.trim() || null,
       type,
       category,
       image_url: coverUrl || null,
