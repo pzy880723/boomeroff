@@ -230,8 +230,9 @@ export default function Notifications() {
   }, [user, refresh]);
 
   const resetCompose = (defaultCat: TabKey = 'notice') => {
+    const cat: 'notice' | 'news' = defaultCat === 'news' ? 'news' : 'notice';
     setChat([]); setInput(''); setTitle(''); setSummary(''); setBody('');
-    setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
+    setType(DEFAULT_TYPE_FOR[cat]); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
     setVersions([]); setView('chat'); setCurrentDraftId(null); setEditingId(null);
   };
   const openCompose = () => {
