@@ -40,7 +40,7 @@ function TileFace({ meta, dragging }: { meta: AppIconMeta; dragging?: boolean })
         dragging && 'scale-[1.08] shadow-[0_20px_30px_-12px_rgba(0,0,0,0.4)]',
       )}
     >
-      <Icon className="relative w-[24px] h-[24px] text-white" strokeWidth={2.2} />
+      <Icon className="relative w-[26px] h-[26px] text-white" />
     </span>
   );
 }
