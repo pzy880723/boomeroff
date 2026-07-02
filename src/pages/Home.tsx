@@ -174,7 +174,7 @@ export default function Home() {
         <SectionCard
           title="我的排班"
           icon={<CalendarDays className="w-4 h-4 text-primary" />}
-          action={<Link to="/me/schedule" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>}
+          action={<Link to="/me" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>}
         >
           {nextShift ? (
             <div className="flex items-center justify-between">

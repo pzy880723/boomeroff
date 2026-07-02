@@ -20,7 +20,7 @@ export const APP_ICON_REGISTRY: Record<string, AppIconMeta> = {
   marketing: { id: 'marketing', label: '营销中心',  to: '/me/marketing',    Icon: Clapperboard,   tint: 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400' },
   community: { id: 'community', label: '中古圈',    to: '/community',       Icon: MessagesSquare, tint: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
   'my-kb':   { id: 'my-kb',     label: '我的知识',  to: '/my-library',      Icon: BookMarked,     tint: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' },
-  schedule:  { id: 'schedule',  label: '排班表',    to: '/me/schedule',     Icon: CalendarDays,   tint: 'bg-sky-500/10 text-sky-600 dark:text-sky-400' },
+  schedule:  { id: 'schedule',  label: '排班表',    to: '/me',              Icon: CalendarDays,   tint: 'bg-sky-500/10 text-sky-600 dark:text-sky-400' },
   checkins:  { id: 'checkins',  label: '打卡记录',  to: '/me/check-ins',    Icon: CalendarCheck,  tint: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
   sop:       { id: 'sop',       label: '员工手册',  to: '/me/sop',          Icon: FileText,       tint: 'bg-slate-500/10 text-slate-600 dark:text-slate-300' },
   qa:        { id: 'qa',        label: '门店问答',  to: '/me/qa',           Icon: FileText,       tint: 'bg-teal-500/10 text-teal-600 dark:text-teal-400' },
