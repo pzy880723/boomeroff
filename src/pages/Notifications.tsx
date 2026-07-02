@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   MessageCircle, PencilLine, CheckCheck, Loader2, Sparkles, Send,
-  ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil,
+  ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil, Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
@@ -25,8 +25,9 @@ import { MarkdownArticle } from '@/components/notifications/MarkdownArticle';
 import { NotificationDetailSheet } from '@/components/notifications/NotificationDetailSheet';
 import { NotificationBannerCropper } from '@/components/notifications/NotificationBannerCropper';
 
-type TabKey = 'news' | 'message';
+type TabKey = 'notice' | 'news' | 'message';
 const TAB_META: Record<TabKey, { label: string }> = {
+  notice: { label: '通知' },
   news: { label: '资讯' },
   message: { label: '消息' },
 };
@@ -37,9 +38,19 @@ const TYPE_LABEL: Record<string, { label: string; tone: string }> = {
   policy: { label: '制度', tone: 'bg-foreground/10 text-foreground' },
   activity: { label: '活动', tone: 'bg-accent/50 text-accent-foreground' },
   urgent: { label: '紧急', tone: 'bg-destructive/10 text-destructive' },
+  system: { label: '系统', tone: 'bg-muted text-muted-foreground' },
+  shift: { label: '排班', tone: 'bg-accent/50 text-accent-foreground' },
+  notice: { label: '通知', tone: 'bg-primary/10 text-primary' },
 };
 function typeMeta(t: string) {
-  return TYPE_LABEL[t] ?? { label: t || '资讯', tone: 'bg-muted text-muted-foreground' };
+  return TYPE_LABEL[t] ?? { label: t || '通知', tone: 'bg-muted text-muted-foreground' };
+}
+
+function bucketOf(cat: string | null | undefined): TabKey {
+  const c = (cat || '').toLowerCase();
+  if (c === 'news') return 'news';
+  if (c === 'message') return 'message';
+  return 'notice';
 }
 
 type ChatTurn = { role: 'user' | 'assistant'; content: string };
@@ -55,19 +66,18 @@ interface StaffPeer {
 
 export default function Notifications() {
   const { user, role, loading: authLoading } = useAuth();
-  const { items, loading, markRead, refresh } = useNotifications();
+  const { items, loading, markRead, refresh, noticeUnread, newsUnread } = useNotifications();
   const isAdmin = role === 'admin';
 
   const [sp, setSp] = useSearchParams();
   const initialTab = (() => {
     const q = sp.get('tab');
-    if (q === 'news' || q === 'message') return q as TabKey;
-    if (q === 'notice') return 'news' as TabKey; // 兼容旧链接
+    if (q === 'notice' || q === 'news' || q === 'message') return q as TabKey;
     try {
       const v = localStorage.getItem(TAB_PREF);
-      if (v === 'news' || v === 'message') return v as TabKey;
+      if (v === 'notice' || v === 'news' || v === 'message') return v as TabKey;
     } catch { /* ignore */ }
-    return 'news';
+    return 'notice';
   })();
   const [tab, setTab] = useState<TabKey>(initialTab);
   useEffect(() => {
@@ -79,11 +89,17 @@ export default function Notifications() {
     }
   }, [tab, sp, setSp]);
 
-  const newsItems = useMemo(
-    () => items.filter(n => (n.category || '').toLowerCase() === 'news'),
+  const noticeItems = useMemo(
+    () => items.filter(n => bucketOf(n.category) === 'notice'),
     [items],
   );
-  const newsUnread = newsItems.filter(n => !n.read).length;
+  const newsItems = useMemo(
+    () => items.filter(n => bucketOf(n.category) === 'news'),
+    [items],
+  );
+  const currentListItems = tab === 'notice' ? noticeItems : tab === 'news' ? newsItems : [];
+  const currentUnread = tab === 'notice' ? noticeUnread : tab === 'news' ? newsUnread : 0;
+
 
   // 打开详情
   const [detailItem, setDetailItem] = useState<NotificationItem | null>(null);
