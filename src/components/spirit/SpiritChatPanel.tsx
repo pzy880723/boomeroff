@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState, useLayoutEffect } from 'react';
+import { useEffect, useRef, useState, useLayoutEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Sparkles, Camera, ImagePlus, X, Square, Shuffle } from 'lucide-react';
+import {
+  Send, Sparkles, Camera, ImagePlus, X, Square, Shuffle,
+  CalendarDays, Trophy, HeartHandshake, BookOpenText, Store, PenLine, MessageSquareHeart,
+} from 'lucide-react';
 import { useSpiritChat } from '@/hooks/useSpiritChat';
 import { SpiritMascot } from './SpiritMascot';
 import { Button } from '@/components/ui/button';
@@ -188,6 +191,26 @@ function pickChips(n = 4): Chip[] {
   return result;
 }
 
+function pickChipsByCategory(cat: ChipCategory, n = 4): Chip[] {
+  const pool = QUICK_CHIPS.filter((c) => c.cat === cat).slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, n);
+}
+
+const TOPIC_TABS: { id: ChipCategory | 'all'; label: string; Icon: typeof CalendarDays }[] = [
+  { id: 'all', label: '全部', Icon: Sparkles },
+  { id: 'shift', label: '排班', Icon: CalendarDays },
+  { id: 'level', label: '打卡', Icon: Trophy },
+  { id: 'helper', label: '顾客', Icon: HeartHandshake },
+  { id: 'trivia', label: '中古知识', Icon: BookOpenText },
+  { id: 'today', label: '今日主推', Icon: Store },
+  { id: 'copywriting', label: '写文案', Icon: PenLine },
+  { id: 'mood', label: '打气', Icon: MessageSquareHeart },
+];
+
 const MAX_IMAGES = 4;
 const MAX_FILE_MB = 10;
 
@@ -203,10 +226,17 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  const [topicFilter, setTopicFilter] = useState<ChipCategory | 'all'>('all');
   const [displayChips, setDisplayChips] = useState(() => pickChips(4));
-  // 每次回到空对话（新会话/清空）就重新抽 4 条
+  // 切换主题 / 回到空对话时,重新抽 chips
   useEffect(() => {
-    if (messages.length === 0) setDisplayChips(pickChips(4));
+    if (topicFilter === 'all') setDisplayChips(pickChips(4));
+    else setDisplayChips(pickChipsByCategory(topicFilter, 4));
+  }, [topicFilter]);
+  useEffect(() => {
+    if (messages.length === 0) setDisplayChips(
+      topicFilter === 'all' ? pickChips(4) : pickChipsByCategory(topicFilter, 4)
+    );
   }, [messages.length === 0]);
 
   useLayoutEffect(() => {
@@ -273,7 +303,7 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
       {/* 消息流 */}
       <div ref={scrollerRef} className="relative flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-2">
         {messages.length === 0 ? (
-          <EmptyState />
+          <EmptyState onPickTopic={(t) => { setTopicFilter(t); }} onQuickAsk={(p) => handleChip(p)} />
         ) : (
           <div className="flex flex-col gap-3 py-2">
             {messages.map((m, i) => {
@@ -297,11 +327,38 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
         )}
       </div>
 
+      {/* 主题分类 tabs — 全店问答入口 */}
+      <div className="shrink-0 px-4 pt-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {TOPIC_TABS.map(({ id, label, Icon }) => {
+          const active = topicFilter === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTopicFilter(id)}
+              disabled={busy}
+              className={cn(
+                'shrink-0 flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all',
+                active
+                  ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] shadow-[0_2px_6px_-2px_hsl(var(--accent)/0.6)]'
+                  : 'bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--primary-foreground)/0.7)] hover:bg-[hsl(var(--accent)/0.2)]',
+                busy && 'opacity-50 cursor-not-allowed',
+              )}
+            >
+              <Icon className="w-3 h-3" strokeWidth={2.4} />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* 快捷指令 chips */}
-      <div className="shrink-0 px-4 pt-2 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="shrink-0 px-4 pt-1.5 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
-          onClick={() => setDisplayChips(pickChips(4))}
+          onClick={() =>
+            setDisplayChips(topicFilter === 'all' ? pickChips(4) : pickChipsByCategory(topicFilter, 4))
+          }
           disabled={busy}
           aria-label="换一批"
           className={cn(
@@ -438,23 +495,69 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
   );
 }
 
-function EmptyState() {
+const TOPIC_CARDS: {
+  id: ChipCategory;
+  Icon: typeof CalendarDays;
+  title: string;
+  hint: string;
+  prompt: string;
+}[] = [
+  { id: 'shift',       Icon: CalendarDays,        title: '今日排班', hint: '几点到岗、跟谁一班', prompt: '我今天的班次是什么？跟谁一起上班？' },
+  { id: 'level',       Icon: Trophy,              title: '打卡等级', hint: '积分、连击、下一级', prompt: '我现在多少经验？连续打卡几天了？下一级还差多少？' },
+  { id: 'helper',      Icon: HeartHandshake,      title: '顾客搞不定', hint: '砍价 · 嫌贵 · 退换', prompt: '顾客说太贵想砍价，我怎么回既留住人又守住价？' },
+  { id: 'trivia',      Icon: BookOpenText,        title: '中古知识',  hint: '真假 · 保养 · 年代', prompt: '给我讲一个今天可以立刻用得上的中古冷知识' },
+  { id: 'today',       Icon: Store,               title: '今日主推',  hint: '风格 · 品类 · 价位', prompt: '今天店里主推什么风格和品类比较好卖？' },
+  { id: 'copywriting', Icon: PenLine,             title: '写文案',   hint: '朋友圈 · 小红书',    prompt: '帮我写一条有点感觉的中古朋友圈文案' },
+];
+
+function EmptyState({
+  onPickTopic,
+  onQuickAsk,
+}: {
+  onPickTopic: (t: ChipCategory) => void;
+  onQuickAsk: (prompt: string) => void;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center text-center px-6 min-h-full -translate-y-[6%]">
-      <div className="relative overflow-visible" style={{ width: 260, height: 260 }}>
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ transform: 'scale(1.15) translateY(-2%)', transformOrigin: '50% 50%' }}
-        >
-          <SpiritMascot size={260} state="idle" />
-        </div>
+    <div className="flex flex-col items-center text-center px-4 pt-4 pb-6 min-h-full">
+      {/* 海獭 */}
+      <div className="relative overflow-visible shrink-0" style={{ width: 180, height: 180 }}>
+        <SpiritMascot size={180} state="idle" />
       </div>
-      <div className="mt-2 text-[hsl(var(--primary-foreground))] text-sm font-semibold flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5" />
+      <div className="mt-1 text-[hsl(var(--primary-foreground))] text-base font-bold flex items-center gap-1.5">
+        <Sparkles className="w-4 h-4" />
         你好呀～我是 BOOMER
       </div>
-      <div className="mt-2 text-[12px] leading-relaxed text-[hsl(var(--primary-foreground)/0.65)] max-w-[280px]">
-        中古门店里的修行搭子。问排班、聊知识、想打气，或拍张照片让我帮你看看～
+      <div className="mt-1.5 text-[12px] leading-relaxed text-[hsl(var(--primary-foreground)/0.65)] max-w-[300px]">
+        全店问答小百科 · 排班 / 打卡 / 顾客 / 知识 / 文案 / 情绪,都可以直接问我
+      </div>
+
+      {/* 主题入口 2x3 */}
+      <div className="mt-4 grid grid-cols-2 gap-2 w-full max-w-[340px]">
+        {TOPIC_CARDS.map(({ id, Icon, title, hint, prompt }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => { onPickTopic(id); onQuickAsk(prompt); }}
+            className={cn(
+              'group flex items-center gap-2.5 rounded-2xl p-2.5 text-left transition-all active:scale-[0.98]',
+              'bg-[hsl(var(--accent)/0.08)] border border-[hsl(var(--accent)/0.22)]',
+              'hover:bg-[hsl(var(--accent)/0.16)] hover:border-[hsl(var(--accent)/0.4)]',
+            )}
+          >
+            <span className="shrink-0 w-9 h-9 rounded-xl bg-[hsl(var(--accent)/0.22)] text-[hsl(var(--accent))] flex items-center justify-center group-hover:bg-[hsl(var(--accent))] group-hover:text-[hsl(var(--accent-foreground))] transition-colors">
+              <Icon className="w-4 h-4" strokeWidth={2.4} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12px] font-bold text-[hsl(var(--primary-foreground))] truncate">{title}</span>
+              <span className="block text-[10px] text-[hsl(var(--primary-foreground)/0.55)] truncate">{hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 flex items-center gap-1.5 text-[10.5px] text-[hsl(var(--primary-foreground)/0.5)]">
+        <Camera className="w-3 h-3" />
+        也可以直接拍照/发图,我来帮你看看这件是什么
       </div>
     </div>
   );
