@@ -981,8 +981,76 @@ export default function Notifications() {
   );
 }
 
-/* ---------- 消息 Tab：店员列表 ---------- */
-function StaffMessagesList({ userId }: { userId: string }) {
+/* ---------- 资讯大卡(公众号风格) ---------- */
+function formatRelativeCn(iso: string): string {
+  const d = new Date(iso).getTime();
+  const now = Date.now();
+  const diff = Math.max(0, now - d);
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return '刚刚';
+  if (min < 60) return `${min}分钟前`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}小时前`;
+  const day = Math.floor(hr / 24);
+  if (day === 1) return '昨天';
+  if (day < 7) return `${day}天前`;
+  return new Date(iso).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+}
+
+function NewsBigCard({ item, onOpen }: { item: NotificationItem; onOpen: () => void }) {
+  const meta = typeMeta(item.type);
+  const summary = (item.summary || item.body.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ')).trim();
+  const authorName = item.author?.name || '官方';
+  const authorInitial = (authorName[0] || 'O').toUpperCase();
+  return (
+    <article
+      onClick={onOpen}
+      className={cn(
+        'rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm cursor-pointer active:scale-[0.995] transition',
+        item.read && 'opacity-80',
+      )}
+    >
+      {item.image_url ? (
+        <img
+          src={item.image_url}
+          alt={item.title}
+          loading="lazy"
+          className="w-full aspect-[16/6] object-cover block"
+        />
+      ) : (
+        <div className="w-full aspect-[16/6] bg-muted flex items-center justify-center text-muted-foreground">
+          <ImageIcon className="w-8 h-8 opacity-40" />
+        </div>
+      )}
+      <div className="p-4">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-2">
+          <Badge className={`${meta.tone} border-0 text-[10px] px-1.5 py-0`}>{meta.label}</Badge>
+          <span>·</span>
+          <span>{formatRelativeCn(item.created_at)}</span>
+        </div>
+        <h3 className="text-base font-bold leading-snug line-clamp-2 text-foreground">{item.title}</h3>
+        {summary && (
+          <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1.5">{summary}</p>
+        )}
+        <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            {item.author?.avatar ? (
+              <img src={item.author.avatar} alt={authorName} className="w-6 h-6 rounded-full object-cover" />
+            ) : (
+              <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-semibold flex items-center justify-center">
+                {authorInitial}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground truncate">{authorName}</span>
+          </div>
+          {!item.read && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+
   const [loading, setLoading] = useState(true);
   const [peers, setPeers] = useState<StaffPeer[]>([]);
 
