@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
 import { HomeFeedTabs } from '@/components/home/HomeFeedTabs';
 import bannerDefault from '@/assets/banner-default.jpg';
-import brandLogo from '@/assets/boomer-go-logo-transparent.png';
+import brandWordmark from '@/assets/boomer-go-wordmark.png.asset.json';
 import xhsIcon from '@/assets/icon-xhs-activity.png';
 
 interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null; voucher_id?: string | null }
