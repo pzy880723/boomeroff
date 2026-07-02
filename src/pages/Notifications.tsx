@@ -201,7 +201,7 @@ export default function Notifications() {
   }, [user, refresh]);
 
   const resetCompose = (defaultCat: TabKey = 'notice') => {
-    setChat([]); setInput(''); setTitle(''); setBody('');
+    setChat([]); setInput(''); setTitle(''); setSummary(''); setBody('');
     setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
     setVersions([]); setView('chat'); setCurrentDraftId(null);
   };
@@ -218,7 +218,7 @@ export default function Notifications() {
     }
     const saved = saveDraft({
       id: currentDraftId ?? undefined,
-      title, body, type, category, coverUrl,
+      title, summary, body, type, category, coverUrl,
     });
     setCurrentDraftId(saved.id);
     refreshDrafts();
@@ -227,7 +227,7 @@ export default function Notifications() {
 
   const loadDraft = (d: NotificationDraft) => {
     setCurrentDraftId(d.id);
-    setTitle(d.title); setBody(d.body); setType(d.type);
+    setTitle(d.title); setSummary(d.summary || ''); setBody(d.body); setType(d.type);
     setCategory(d.category as TabKey); setCoverUrl(d.coverUrl);
     setChat([]); setInput(''); setVersions([]); setView('preview');
     setDraftBoxOpen(false);
