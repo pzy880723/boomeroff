@@ -420,8 +420,8 @@ export default function Notifications() {
               <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
                 <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="notice">通知</SelectItem>
                   <SelectItem value="news">资讯</SelectItem>
-                  <SelectItem value="message">消息</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={type} onValueChange={setType}>
