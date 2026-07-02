@@ -190,8 +190,13 @@ export default function Notifications() {
   const resetCompose = (defaultCat: TabKey = 'notice') => {
     setChat([]); setInput(''); setTitle(''); setBody('');
     setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
+    setVersions([]); setView('chat');
   };
-  const openCompose = () => { resetCompose(tab === 'message' ? 'notice' : tab); setOpen(true); };
+  const openCompose = () => {
+    resetCompose(tab === 'message' ? 'notice' : tab);
+    setOpen(true);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
 
 
   const sendToAI = async () => {
