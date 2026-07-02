@@ -2,6 +2,7 @@
 export interface NotificationDraft {
   id: string;
   title: string;
+  summary: string;
   body: string;
   type: string;
   category: 'notice' | 'news' | 'message';
