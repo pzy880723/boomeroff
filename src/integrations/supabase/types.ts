@@ -706,6 +706,39 @@ export type Database = {
         }
         Relationships: []
       }
+      direct_messages: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          image_url: string | null
+          read_at: string | null
+          receiver_id: string
+          sender_id: string
+          shop_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          read_at?: string | null
+          receiver_id: string
+          sender_id: string
+          shop_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          read_at?: string | null
+          receiver_id?: string
+          sender_id?: string
+          shop_id?: string | null
+        }
+        Relationships: []
+      }
       exp_pending: {
         Row: {
           amount: number
