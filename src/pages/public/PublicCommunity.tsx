@@ -20,7 +20,7 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('zh-CN');
 }
 
-interface Post {
+export interface Post {
   id: string;
   image_url: string | null;
   thumbnail_url: string | null;
@@ -220,7 +220,7 @@ export default function PublicCommunity() {
   );
 }
 
-function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void }) {
+export function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void }) {
   const cardData = {
     name: post.name,
     category: post.category,

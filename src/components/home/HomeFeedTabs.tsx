@@ -3,19 +3,30 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { GraduationCap, Camera, ImageOff, ChevronRight, Loader2 } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  GraduationCap, Camera, ImageOff, ChevronRight, Loader2,
+  Heart, MessageCircle,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { thumbUrl } from '@/lib/imageUrl';
 import { CATEGORY_LABELS, type ProductCategory } from '@/types';
+import { PostDetailSheet, type Post as CommunityPost } from '@/pages/public/PublicCommunity';
+import { ProductDetailDialog } from '@/components/history/ProductDetailDialog';
 
 type TabKey = 'my-kb' | 'community';
 
-interface FeedCard {
-  id: string;
-  to: string;
+interface KbCard {
+  key: string;
+  source_type: 'official' | 'product' | string;
+  source_id: string | null;
   name: string;
   cover: string | null;
   meta?: string | null;
+  officialRow?: any;
+  productRow?: any;
 }
 
 const PREF_KEY = 'home-feed-tab';
@@ -29,7 +40,10 @@ export function HomeFeedTabs() {
     } catch { return 'my-kb'; }
   });
   const [loading, setLoading] = useState(false);
-  const [cards, setCards] = useState<FeedCard[]>([]);
+  const [kbCards, setKbCards] = useState<KbCard[]>([]);
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [activePost, setActivePost] = useState<CommunityPost | null>(null);
+  const [activeKb, setActiveKb] = useState<KbCard | null>(null);
 
   useEffect(() => {
     try { localStorage.setItem(PREF_KEY, tab); } catch { /* ignore */ }
@@ -53,45 +67,40 @@ export function HomeFeedTabs() {
           const productIds = rows.filter(r => r.source_type === 'product').map(r => r.source_id).filter(Boolean);
           const [officialFresh, productFresh] = await Promise.all([
             officialIds.length
-              ? supabase.from('official_knowledge').select('id, name, cover_url, category').in('id', officialIds)
+              ? supabase.from('official_knowledge').select('*').in('id', officialIds)
               : Promise.resolve({ data: [] as any[] }),
             productIds.length
-              ? supabase.from('products').select('id, name, image_url, category').in('id', productIds)
+              ? supabase.from('products').select('*').in('id', productIds)
               : Promise.resolve({ data: [] as any[] }),
           ]);
           const om = new Map<string, any>((officialFresh.data || []).map((r: any) => [r.id, r]));
           const pm = new Map<string, any>((productFresh.data || []).map((r: any) => [r.id, r]));
-          const list: FeedCard[] = rows.map((f: any) => {
+          const list: KbCard[] = rows.map((f: any) => {
             const snap = f.snapshot || {};
             const src = f.source_type === 'official' ? om.get(f.source_id) : f.source_type === 'product' ? pm.get(f.source_id) : null;
             const name = src?.name || snap?.name || '未命名';
             const cover = (src?.cover_url || src?.image_url || snap?.cover_url || snap?.image_url) as string | null;
             const cat = (src?.category || snap?.category) as ProductCategory | undefined;
             return {
-              id: f.id,
-              to: '/my-library',
+              key: f.id,
+              source_type: f.source_type,
+              source_id: f.source_id,
               name,
               cover,
               meta: cat ? CATEGORY_LABELS[cat] : null,
+              officialRow: f.source_type === 'official' ? src : undefined,
+              productRow: f.source_type === 'product' ? src : undefined,
             };
           });
-          if (!cancelled) setCards(list);
+          if (!cancelled) setKbCards(list);
         } else {
-          const { data: posts } = await supabase
+          const { data } = await supabase
             .from('community_posts')
-            .select('id, name, image_url, thumbnail_url, category')
+            .select('id,image_url,thumbnail_url,name,category,era,origin,selling_points,tips,story,appreciation,description,care_tips,material,craft,dimensions,condition,confidence,rarity,collection_value,market_value,buy_reason,created_at,likes_count,comments_count,is_guest,guest_name,user_id')
             .eq('is_public', true)
-            .eq('is_guest', false)
             .order('created_at', { ascending: false })
             .limit(10);
-          const list: FeedCard[] = ((posts as any[]) || []).map((p) => ({
-            id: p.id,
-            to: '/community',
-            name: p.name || '未命名',
-            cover: p.thumbnail_url || p.image_url || null,
-            meta: p.category ? CATEGORY_LABELS[p.category as ProductCategory] : null,
-          }));
-          if (!cancelled) setCards(list);
+          if (!cancelled) setPosts((data as any as CommunityPost[]) || []);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -119,6 +128,8 @@ export function HomeFeedTabs() {
     );
   }, [tab]);
 
+  const isEmpty = tab === 'my-kb' ? kbCards.length === 0 : posts.length === 0;
+
   return (
     <section>
       <div className="flex items-center justify-between mb-2 px-1">
@@ -143,7 +154,7 @@ export function HomeFeedTabs() {
 
       {loading ? (
         <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
-      ) : cards.length === 0 ? (
+      ) : isEmpty ? (
         <div className="rounded-2xl border border-dashed border-border/60 py-10 text-center text-xs text-muted-foreground">
           {tab === 'my-kb' ? '还没收藏，去知识库星标你想学的' : '还没人发帖，识别一件商品分享出来吧'}
           <div className="mt-2">
@@ -152,20 +163,19 @@ export function HomeFeedTabs() {
             </Link>
           </div>
         </div>
-      ) : (
+      ) : tab === 'my-kb' ? (
         <div className="columns-2 gap-2 [column-fill:_balance]">
-          {cards.map((c) => (
-            <Link
-              key={c.id}
-              to={c.to}
-              className="mb-2 break-inside-avoid block rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
+          {kbCards.map((c) => (
+            <button
+              key={c.key}
+              onClick={() => setActiveKb(c)}
+              className="mb-2 break-inside-avoid block w-full text-left rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
             >
               {c.cover ? (
                 <img
-                  src={thumbUrl(c.cover, 240) || c.cover}
+                  src={thumbUrl(c.cover, 320) || c.cover}
                   alt={c.name}
-                  className="w-full h-auto bg-muted"
-                  style={{ aspectRatio: '3 / 4' }}
+                  className="w-full h-auto bg-muted block"
                   loading="lazy"
                   decoding="async"
                 />
@@ -178,10 +188,91 @@ export function HomeFeedTabs() {
                 <p className="text-[12.5px] font-medium leading-snug line-clamp-2">{c.name}</p>
                 {c.meta && <p className="text-[10.5px] text-muted-foreground mt-0.5">{c.meta}</p>}
               </div>
-            </Link>
+            </button>
           ))}
         </div>
+      ) : (
+        <div className="columns-2 gap-2 [column-fill:_balance]">
+          {posts.map((p) => {
+            const cover = p.thumbnail_url || thumbUrl(p.image_url, 320) || p.image_url;
+            return (
+              <button
+                key={p.id}
+                onClick={() => setActivePost(p)}
+                className="mb-2 break-inside-avoid block w-full text-left rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
+              >
+                {cover ? (
+                  <img
+                    src={cover}
+                    alt={p.name}
+                    className="w-full h-auto bg-muted block"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : (
+                  <div className="w-full bg-muted flex items-center justify-center text-muted-foreground" style={{ aspectRatio: '3 / 4' }}>
+                    <ImageOff className="w-5 h-5" />
+                  </div>
+                )}
+                <div className="p-2 space-y-1">
+                  <p className="text-[12.5px] font-medium leading-snug line-clamp-2">{p.name}</p>
+                  <div className="flex items-center justify-between text-[10.5px] text-muted-foreground">
+                    <span className="truncate">{p.guest_name || '游客'}</span>
+                    <span className="inline-flex items-center gap-2 shrink-0">
+                      <span className="inline-flex items-center gap-0.5"><Heart className="w-3 h-3" />{p.likes_count ?? 0}</span>
+                      <span className="inline-flex items-center gap-0.5"><MessageCircle className="w-3 h-3" />{p.comments_count ?? 0}</span>
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       )}
+
+      {/* BOOMER 圈 弹窗 (复用公开版详情) */}
+      {activePost && <PostDetailSheet post={activePost} onClose={() => setActivePost(null)} />}
+
+      {/* 我的知识 弹窗 */}
+      {activeKb && activeKb.source_type === 'product' && activeKb.productRow ? (
+        <ProductDetailDialog
+          product={activeKb.productRow}
+          open
+          onOpenChange={(o) => !o && setActiveKb(null)}
+        />
+      ) : null}
+
+      {activeKb && activeKb.source_type !== 'product' ? (
+        <Dialog open onOpenChange={(o) => !o && setActiveKb(null)}>
+          <DialogContent className="max-w-md p-0 overflow-hidden max-h-[90vh] flex flex-col">
+            <DialogHeader className="px-4 pt-4 pb-2 shrink-0">
+              <DialogTitle className="text-base">{activeKb.name}</DialogTitle>
+            </DialogHeader>
+            <div className="overflow-y-auto px-4 pb-4 space-y-3">
+              {activeKb.cover && (
+                <img src={activeKb.cover} alt={activeKb.name} className="w-full h-auto rounded-xl bg-muted" />
+              )}
+              {activeKb.meta && (
+                <div className="text-xs text-muted-foreground">{activeKb.meta}</div>
+              )}
+              {activeKb.officialRow?.description && (
+                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+                  {activeKb.officialRow.description}
+                </p>
+              )}
+              {activeKb.source_id && (
+                <Link
+                  to={`/library/${activeKb.source_id}`}
+                  onClick={() => setActiveKb(null)}
+                  className="inline-flex items-center gap-1 text-xs text-primary"
+                >
+                  查看完整详情 <ChevronRight className="w-3 h-3" />
+                </Link>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </section>
   );
 }
