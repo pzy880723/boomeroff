@@ -97,8 +97,21 @@ export default function Notifications() {
     () => items.filter(n => bucketOf(n.category) === 'news'),
     [items],
   );
-  const currentListItems = tab === 'notice' ? noticeItems : tab === 'news' ? newsItems : [];
+  const baseListItems = tab === 'notice' ? noticeItems : tab === 'news' ? newsItems : [];
   const currentUnread = tab === 'notice' ? noticeUnread : tab === 'news' ? newsUnread : 0;
+
+  // 搜索 & 类型筛选
+  const [keyword, setKeyword] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const currentListItems = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    return baseListItems.filter(n => {
+      if (typeFilter !== 'all' && (n.type || '') !== typeFilter) return false;
+      if (!kw) return true;
+      return (n.title || '').toLowerCase().includes(kw) || (n.body || '').toLowerCase().includes(kw);
+    });
+  }, [baseListItems, keyword, typeFilter]);
+  const hasFilter = keyword.trim() !== '' || typeFilter !== 'all';
 
 
   // 打开详情
