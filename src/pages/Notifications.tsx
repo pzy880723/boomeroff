@@ -943,23 +943,6 @@ export default function Notifications() {
                     {genBannerBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                     AI 画封面
                   </button>
-                  <label className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70 cursor-pointer">
-                    {insertingImg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5" />}
-                    插图
-                    <input
-                      type="file" accept="image/*" className="hidden"
-                      disabled={insertingImg}
-                      onChange={e => { const f = e.target.files?.[0]; if (f) void insertBodyImage(f); e.currentTarget.value = ''; }}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setEditingBody(v => !v)}
-                    className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />{editingBody ? '完成' : '手改'}
-                  </button>
-                </div>
 
                 {/* 主按钮行 */}
                 <div className="px-4 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shrink-0 border-t border-border/50 flex items-center gap-2 bg-background">
