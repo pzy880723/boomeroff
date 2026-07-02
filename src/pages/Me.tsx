@@ -277,7 +277,7 @@ export default function Me() {
           </button>
         </Card>
 
-        <div className="flex flex-col items-center gap-2 pt-6 pb-4 opacity-80">
+        <div className="flex flex-col items-center gap-2 pt-6 pb-4">
           <img src={APP_BRAND_LOGO} alt={APP_BRAND_NAME} className="h-24 w-24 rounded-2xl object-contain shadow-hard" draggable={false} />
           <p className="text-sm font-bold tracking-wide">{APP_BRAND_NAME}</p>
           <p className="text-xs text-muted-foreground">{APP_BRAND_TAGLINE} · {APP_VERSION}</p>
