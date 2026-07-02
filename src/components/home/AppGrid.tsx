@@ -8,7 +8,7 @@ import {
   SortableContext, useSortable, arrayMove, rectSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, Plus, X, Pencil } from 'lucide-react';
+import { Check, Plus, X, Pencil, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APP_ICON_REGISTRY, ALL_APP_IDS } from './appIconRegistry';
 import { readAppPref, writeAppPref } from '@/lib/homeAppsPref';
