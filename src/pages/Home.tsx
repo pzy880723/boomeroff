@@ -303,6 +303,33 @@ export default function Home() {
             </Card>
           </section>
         )}
+
+        {/* 门店手册 */}
+        {sopCats.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h2 className="text-sm font-bold flex items-center gap-1.5">
+                <BookOpen className="w-4 h-4 text-primary" /> 门店手册
+              </h2>
+              <Link to="/me/sop" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>
+            </div>
+            <Card className="divide-y divide-border/60 border-border/60 overflow-hidden">
+              {sopCats.map((c) => (
+                <Link
+                  key={c.id}
+                  to={`/me/sop?cat=${c.id}`}
+                  className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors"
+                >
+                  <span className="w-8 h-8 rounded-lg bg-muted text-foreground/70 flex items-center justify-center shrink-0">
+                    <BookOpen className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  </span>
+                  <span className="flex-1 text-sm truncate">{c.name}</span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </Link>
+              ))}
+            </Card>
+          </section>
+        )}
       </main>
     </div>
   );
