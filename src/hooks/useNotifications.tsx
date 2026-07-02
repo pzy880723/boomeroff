@@ -8,12 +8,15 @@ export interface NotificationItem {
   id: string;
   title: string;
   body: string;
+  summary: string | null;
   type: string;
   category: string | null;
   image_url: string | null;
   created_at: string;
   expires_at: string | null;
   read: boolean;
+  created_by: string | null;
+  author?: { name: string | null; avatar: string | null } | null;
 }
 
 interface Ctx {
