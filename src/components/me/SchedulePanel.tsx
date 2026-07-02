@@ -218,11 +218,11 @@ function TicketRow({ item, index, peersByCode }: {
   const stubBg = isTomorrow
     ? 'bg-gradient-primary'
     : !isWorking
-      ? 'bg-secondary'
-      : 'bg-accent-soft';
+      ? 'bg-muted'
+      : 'bg-muted';
 
-  const stubFg = isTomorrow ? 'text-primary-foreground' : 'text-primary';
-  const stubAccent = isTomorrow ? 'text-primary-foreground/70' : 'text-muted-foreground';
+  const stubFg = isTomorrow ? 'text-primary-foreground' : 'text-foreground';
+  const stubAccent = isTomorrow ? 'text-primary-foreground/75' : 'text-muted-foreground';
 
 
   const [, m, d] = date.split('-');
@@ -230,9 +230,9 @@ function TicketRow({ item, index, peersByCode }: {
   const wd = weekdayLabel(date);
 
   const codeColor = (c: string) =>
-    c === 'A' ? 'text-accent' :
-    c === 'B' ? 'text-accent' :
-    c === 'C' ? 'text-destructive' :
+    c === 'A' ? 'text-foreground' :
+    c === 'B' ? 'text-foreground' :
+    c === 'C' ? 'text-foreground' :
     'text-muted-foreground';
 
   return (
