@@ -154,21 +154,15 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border/50">
-        <div className="mx-auto max-w-screen-md px-4 h-14 flex items-center justify-between">
-          <BrandLogo size={22} />
-          <Link
-            to="/notifications"
-            className="relative w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted"
-            aria-label="通知"
-          >
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </Link>
+      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border/50 safe-top">
+        <div className="mx-auto max-w-screen-md px-4 h-12 flex items-center justify-between">
+          <h1 className="text-base font-semibold tracking-tight">仪表盘</h1>
+          <img
+            src={brandLogo}
+            alt="BOOMER-OFF"
+            draggable={false}
+            className="h-8 w-auto object-contain select-none"
+          />
         </div>
       </header>
 
