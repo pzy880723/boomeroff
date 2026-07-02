@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { useLogoTapCounter, verifyPortalPassword, unlockPortal } from '@/hooks/useAdminPortal';
 import { toast } from 'sonner';
-import logo from '@/assets/boomer-off-vintage-logo.png';
+import logo from '@/assets/boomer-go-wordmark.png.asset.json';
 
 interface PageHeaderProps {
   title: string;
@@ -71,14 +71,14 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
         <button
           type="button"
           onClick={tap}
-          aria-label="BOOMER-OFF"
+          aria-label="BOOMER GO"
           className="shrink-0 select-none focus:outline-none ml-1 flex items-center"
         >
           <img
-            src={logo}
-            alt="门店运营辅助系统"
+            src={logo.url}
+            alt="BOOMER GO"
             draggable={false}
-            className="h-8 w-auto object-contain"
+            className="h-5 w-auto object-contain"
           />
         </button>
       </div>
