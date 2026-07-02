@@ -57,12 +57,12 @@ export function NotificationBannerCropper({ open, imageSrc, aspect = 16 / 6, onC
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v && !busy) onCancel(); }}>
-      <DialogContent className="max-w-md p-0 overflow-hidden">
+      <DialogContent className="max-w-lg p-0 overflow-hidden">
         <DialogHeader className="px-4 pt-4">
           <DialogTitle className="text-base">裁剪 Banner</DialogTitle>
-          <p className="text-xs text-muted-foreground mt-1">拖动或缩放选择显示区域（不会压缩变形）</p>
+          <p className="text-xs text-muted-foreground mt-1">拖动图片调整位置,双指或滑块缩放,虚线框内即为 Banner 展示区</p>
         </DialogHeader>
-        <div className="relative w-full bg-black" style={{ aspectRatio: String(aspect) }}>
+        <div className="relative w-full bg-black h-[60vh] max-h-[520px] min-h-[320px]">
           {imageSrc && (
             <Cropper
               image={imageSrc}
@@ -72,15 +72,19 @@ export function NotificationBannerCropper({ open, imageSrc, aspect = 16 / 6, onC
               onCropChange={setCrop}
               onZoomChange={setZoom}
               onCropComplete={onCropComplete}
-              objectFit="contain"
+              objectFit="horizontal-cover"
+              minZoom={0.5}
+              maxZoom={5}
+              restrictPosition={false}
+              showGrid
             />
           )}
         </div>
         <div className="px-4 py-3">
           <p className="text-[11px] text-muted-foreground mb-1">缩放</p>
-          <Slider value={[zoom]} min={1} max={3} step={0.05} onValueChange={(v) => setZoom(v[0])} />
+          <Slider value={[zoom]} min={0.5} max={5} step={0.05} onValueChange={(v) => setZoom(v[0])} />
         </div>
-        <DialogFooter className="px-4 pb-4">
+        <DialogFooter className="px-4 pb-4 gap-2">
           <Button variant="outline" onClick={onCancel} disabled={busy}>取消</Button>
           <Button onClick={handleConfirm} disabled={busy || !area}>
             {busy && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}使用此裁剪
