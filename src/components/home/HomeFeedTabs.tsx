@@ -237,47 +237,7 @@ export function HomeFeedTabs() {
 
       {/* BOOMER 圈 弹窗 (复用公开版详情) */}
       {activePost && <PostDetailSheet post={activePost} onClose={() => setActivePost(null)} />}
-
-      {/* 我的知识 弹窗 */}
-      {activeKb && activeKb.source_type === 'product' && activeKb.productRow ? (
-        <ProductDetailDialog
-          product={activeKb.productRow}
-          open
-          onOpenChange={(o) => !o && setActiveKb(null)}
-        />
-      ) : null}
-
-      {activeKb && activeKb.source_type !== 'product' ? (
-        <Dialog open onOpenChange={(o) => !o && setActiveKb(null)}>
-          <DialogContent className="max-w-md p-0 overflow-hidden max-h-[90vh] flex flex-col">
-            <DialogHeader className="px-4 pt-4 pb-2 shrink-0">
-              <DialogTitle className="text-base">{activeKb.name}</DialogTitle>
-            </DialogHeader>
-            <div className="overflow-y-auto px-4 pb-4 space-y-3">
-              {activeKb.cover && (
-                <img src={activeKb.cover} alt={activeKb.name} className="w-full h-auto rounded-xl bg-muted" />
-              )}
-              {activeKb.meta && (
-                <div className="text-xs text-muted-foreground">{activeKb.meta}</div>
-              )}
-              {activeKb.officialRow?.description && (
-                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
-                  {activeKb.officialRow.description}
-                </p>
-              )}
-              {activeKb.source_id && (
-                <Link
-                  to={`/library/${activeKb.source_id}`}
-                  onClick={() => setActiveKb(null)}
-                  className="inline-flex items-center gap-1 text-xs text-primary"
-                >
-                  查看完整详情 <ChevronRight className="w-3 h-3" />
-                </Link>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      ) : null}
     </section>
   );
 }
+
