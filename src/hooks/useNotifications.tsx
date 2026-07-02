@@ -28,6 +28,8 @@ interface Ctx {
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
   refresh: () => Promise<void>;
+  removeItem: (id: string) => Promise<void>;
+  updateItem: (id: string, patch: Partial<Pick<NotificationItem, 'title' | 'body' | 'summary' | 'type' | 'category' | 'image_url'>>) => Promise<void>;
 }
 
 const NotificationsContext = createContext<Ctx | undefined>(undefined);
