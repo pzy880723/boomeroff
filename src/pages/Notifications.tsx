@@ -913,6 +913,58 @@ export default function Notifications() {
         onCancel={() => setCropSrc(null)}
         onConfirm={applyCroppedBanner}
       />
+
+      {/* 草稿箱 Sheet */}
+      <Sheet open={draftBoxOpen} onOpenChange={setDraftBoxOpen}>
+        <SheetContent side="bottom" className="max-h-[80vh] flex flex-col p-0">
+          <SheetHeader className="px-4 pt-4 pb-2 text-left">
+            <SheetTitle className="text-base flex items-center gap-2">
+              <Inbox className="w-4 h-4" />草稿箱
+              <span className="text-xs font-normal text-muted-foreground">({drafts.length})</span>
+            </SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2">
+            {drafts.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground text-sm">
+                <Inbox className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                暂无草稿
+              </div>
+            ) : drafts.map(d => (
+              <div
+                key={d.id}
+                className={cn(
+                  'flex items-start gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/40 transition',
+                  currentDraftId === d.id ? 'border-primary/60 bg-primary/5' : 'border-border/60',
+                )}
+                onClick={() => loadDraft(d)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge className={`${typeMeta(d.type).tone} border-0 text-[10px] px-1.5 py-0`}>
+                      {typeMeta(d.type).label}
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground">
+                      {new Date(d.updatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-semibold truncate">{d.title || '（未命名）'}</h4>
+                  <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                    {(d.body || '').replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ').trim() || '（无正文）'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); deleteDraft(d.id); }}
+                  className="shrink-0 w-8 h-8 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center"
+                  aria-label="删除草稿"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
