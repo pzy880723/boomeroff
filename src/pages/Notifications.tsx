@@ -156,6 +156,15 @@ export default function Notifications() {
 
   // 裁剪状态
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const replaceCoverInputRef = useRef<HTMLInputElement>(null);
+
+  // 草稿箱
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<NotificationDraft[]>([]);
+  const [draftBoxOpen, setDraftBoxOpen] = useState(false);
+  const refreshDrafts = () => setDrafts(listDrafts());
+  useEffect(() => { refreshDrafts(); }, []);
+
 
   // AI 对话
   const [chat, setChat] = useState<ChatTurn[]>([]);
