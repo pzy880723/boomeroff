@@ -20,6 +20,7 @@ interface StoreOkr {
   id: string; title: string; objective: string | null;
   key_results: any; tags: string[] | null;
 }
+interface SopCategory { id: string; name: string }
 
 function todayShanghai(): string {
   return new Intl.DateTimeFormat('en-CA', {
