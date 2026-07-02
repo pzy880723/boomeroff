@@ -161,6 +161,7 @@ export default function Notifications() {
 
   // 草稿箱
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<NotificationDraft[]>([]);
   const [draftBoxOpen, setDraftBoxOpen] = useState(false);
   const refreshDrafts = () => setDrafts(listDrafts());
