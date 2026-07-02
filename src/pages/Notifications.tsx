@@ -159,7 +159,23 @@ export default function Notifications() {
   const [input, setInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chat, aiLoading]);
+
+  // 视图 & 版本历史
+  const [view, setView] = useState<'chat' | 'preview'>('chat');
+  const [versions, setVersions] = useState<{ title: string; body: string; type: string; at: string }[]>([]);
+  const touchStartX = useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 60) return;
+    if (dx < 0 && view === 'chat') setView('preview');
+    else if (dx > 0 && view === 'preview') setView('chat');
+  };
+  const hasDraft = !!(title.trim() || body.trim());
 
   useEffect(() => {
     if (!user) return;
