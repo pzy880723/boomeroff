@@ -8,7 +8,7 @@ import {
   SortableContext, useSortable, arrayMove, rectSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, Plus, X, Pencil } from 'lucide-react';
+import { Check, Plus, X, Pencil, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APP_ICON_REGISTRY, ALL_APP_IDS } from './appIconRegistry';
 import { readAppPref, writeAppPref } from '@/lib/homeAppsPref';
@@ -122,7 +122,10 @@ export function AppGrid() {
 
   return (
     <section>
-      <div className="flex items-center justify-end px-1 mb-1.5 min-h-[24px]">
+      <div className="flex items-center justify-between px-1 mb-1.5 min-h-[28px]">
+        <h2 className="text-sm font-bold flex items-center gap-1.5">
+          <LayoutGrid className="w-4 h-4 text-primary" /> 我的应用
+        </h2>
         {editing ? (
           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-primary" onClick={() => setEditing(false)}>
             <Check className="w-3.5 h-3.5 mr-1" />完成

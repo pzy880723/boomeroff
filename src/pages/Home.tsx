@@ -2,18 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
-import { BrandLogo } from '@/components/brand/BrandLogo';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
-  Bell, ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target,
+  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
 import bannerDefault from '@/assets/banner-default.jpg';
+import brandLogo from '@/assets/boomer-off-vintage-logo.png';
 
 interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null }
 interface StoreOkr {
@@ -44,7 +44,7 @@ function okrProgress(kr: any): number {
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
-  const { items: notes, unreadCount } = useNotifications();
+  const { items: notes } = useNotifications();
 
   const [name, setName] = useState<string>('店员');
   const [encouragement, setEncouragement] = useState<string>('今天也把每一位进店的客人当作朋友。');
@@ -154,21 +154,15 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border/50">
-        <div className="mx-auto max-w-screen-md px-4 h-14 flex items-center justify-between">
-          <BrandLogo size={22} />
-          <Link
-            to="/notifications"
-            className="relative w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted"
-            aria-label="通知"
-          >
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </Link>
+      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border/50 safe-top">
+        <div className="mx-auto max-w-screen-md px-4 h-12 flex items-center justify-between">
+          <h1 className="text-base font-semibold tracking-tight">仪表盘</h1>
+          <img
+            src={brandLogo}
+            alt="BOOMER-OFF"
+            draggable={false}
+            className="h-8 w-auto object-contain select-none"
+          />
         </div>
       </header>
 
@@ -193,9 +187,9 @@ export default function Home() {
               )}
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground mt-1.5 flex items-start gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 mt-0.5 text-primary shrink-0" />
-            <span className="flex-1">{encouragement}</span>
+          <p className="text-sm text-muted-foreground mt-2 text-left leading-relaxed">
+            <Sparkles className="inline w-3.5 h-3.5 mr-1 -mt-0.5 text-primary" />
+            {encouragement}
           </p>
         </section>
 
@@ -266,7 +260,7 @@ export default function Home() {
           </section>
         )}
 
-        {/* 应用图标网格 */}
+        {/* 我的应用 */}
         <AppGrid />
 
         {/* 门店管理 / OKR */}
