@@ -1,75 +1,58 @@
-# 首页 & 消息中心整理
+# 让「我的应用」拖拽像 iOS 一样丝滑
 
-## 1. 「我的应用」图标全部统一红瓷扁平
+## 根因
 
-`src/components/home/AppGrid.tsx` → `TileFace`：
+当前 `AppGrid.tsx` 用 dnd-kit 的 `DragOverlay` + `isDragging ? opacity-30` 组合：
+- **重影 / 阴影**：`DragOverlay` 会在指针下渲染一个"漂浮副本"（带 `scale-110` + 大阴影），同时原位的 tile 变半透明 —— 用户同时看到两个 tile，就是所谓"重影"。
+- **无法插入间隙、邻居不让位**：
+  - 用了 `closestCenter` + `rectSortingStrategy`：只有指针"越过某个 tile 的中心线"才会触发换位，指到两个图标之间的**间隙**时没有目标被识别，邻居就不动。
+  - `PointerSensor(distance:5)` 在触屏上偶尔被浏览器滚动抢占，导致拖动一半神经中断。
+  - `SortableTile` 的 `style.transition` 只在 dnd-kit 主动派发 shift 时有值，没派发时 = 无过渡 → 邻居看起来"瞬移"或"完全不动"。
 
-- 移除顶部 `bg-gradient-to-b from-white/25 …` 高光层。
-- 移除 `ring-1 ring-primary/40` 与 `shadow-[inset_0_1px_0_rgba(255,255,255,0.35),…]` 的内描边阴影。
-- 保留 squircle 圆角 + 品牌红底 (`bg-primary`) + 白色图标；仅保留一层非常淡的落地投影用于层次感（`shadow-[0_4px_10px_-6px_rgba(0,0,0,0.25)]`）。
-- 拖拽时的 `scale-110` 保留。
-- `appIconRegistry.ts` 保持全部 `tone: 'red'`，`AppIconTone` 白瓷分支不再产出（保留代码以便将来使用）。
+## 修法
 
-## 2. 右上角 BOOMER GO wordmark 缩小
+改用 dnd-kit 原生的"就地拖拽 + 邻居让位"模式，不用 DragOverlay。
 
-- `src/pages/Home.tsx` 顶栏 `<img>` 由 `h-5` 改为 `h-4`。
-- `src/components/layout/PageHeader.tsx` 顶栏同款 `<img>` 由 `h-5` 改为 `h-4`。
+### 1. 干掉重影
+- 删除 `<DragOverlay>` 及其分支渲染。
+- `SortableTile` 上不再把 `isDragging` 时降为 `opacity-30`；改为"被拖动 tile 微微放大 + 抬起阴影"，且**仍然占据自己那一格**（dnd-kit 的 `transform` 会让它跟着指针走）：
+  ```
+  isDragging && 'z-30 scale-[1.08] shadow-[0_20px_30px_-12px_rgba(0,0,0,0.35)]'
+  ```
+- 结果：屏幕上只有一个 tile 在动，即所见即所得。
 
-## 3. 消息中心：通知 / 资讯 / 消息 三分栏
+### 2. 邻居真正让位
+- 碰撞检测 `closestCenter` → `closestCorners`（对网格更宽容，指到间隙也能命中最近角）。
+- `SortableContext` 策略保持 `rectSortingStrategy`。
+- `SortableTile` 的 style 显式补齐**空闲过渡**，让每次 order 变化都插值到位：
+  ```ts
+  style = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition ?? 'transform 220ms cubic-bezier(0.2, 0, 0, 1)',
+  }
+  ```
+  （现在已经写了 `??`，但没有 transition 时是 undefined —— 保留兜底，同时把 dnd-kit `useSortable` 的 `animateLayoutChanges` 显式打开：`useSortable({ id, animateLayoutChanges: () => true })`。这一步是让"被移开又移回"也会补动画。）
 
-### 底部导航（`BottomTabBar.tsx`）
-- 「通知」→ 「消息」。
-- 图标由 `Bell` 改为 `MessageCircle`（Lucide）。
-- 路由仍为 `/notifications`（不动 URL，避免旧收藏失效）。
+### 3. 触屏顺滑度
+- 在 `useSensors` 里把 `PointerSensor` 换成 `PointerSensor + TouchSensor` 组合：
+  ```ts
+  useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
+  ```
+  - `delay:120` + edit 模式下才启用 → 短按不会误触，长按后一直贴着手指。
+  - `tolerance:6` 允许 6px 抖动，防止手指微抖被判定为 scroll。
+- Tile 外层保持 `touch-none`（已存在），并给 `SortableContext` 外层容器加 `overscroll-contain`，避免拖到边缘时页面被拉动。
 
-### 通知页（`src/pages/Notifications.tsx`）
-- 顶部新增一行 pill segmented control：`通知 / 资讯 / 消息`，默认选中「通知」，选择态存 `localStorage`。
-- 三个分栏基于 `notifications.category` 字段过滤（复用现有字段，无需 DB 迁移）：
-  - **通知**：`category IS NULL` 或 `category IN ('notice','announcement','policy','urgent')` — 保留原来的公告类。
-  - **资讯**：`category = 'news'` — 新增的资讯（长图/头条式内容），首页 Banner 就取这一类的最新一条。
-  - **消息**：`category = 'message'` — 系统消息 / 个人提醒（升级、审核结果、班表变更等，将来接入）。
-- 管理员「AI 撰稿浮标」在弹窗内新增「分类」下拉（通知 / 资讯 / 消息），写入 `notifications.category`。
-- `PageHeader` 标题跟随当前分栏（"通知" / "资讯" / "消息"）。
-- 「全部已读」按当前分栏范围操作。
-
-### 首页 Banner (`Home.tsx`)
-- Banner 现在取 `category = 'banner'` 或最新一条；改为**只取** `category = 'news'` 的最新一条（`useNotifications` 已带 `category` 字段，无需 refetch）。
-- 无资讯时保留 `bannerDefault` 占位，点击仍跳 `/notifications?tab=news`（跳过去自动切到「资讯」分栏）。
-
-### `useNotifications` 计数
-- `unreadCount` 保持全量口径不变（底部小红点仍反映所有未读）。
-
-## 4. 首页「我的知识」瀑布流 → 跳详情 + 返回定位
-
-现在瀑布流点击弹 `Dialog`；改为跳详情页，浏览器返回时保留首页滚动位置。
-
-### 跳转
-`src/components/home/HomeFeedTabs.tsx`：
-- 我的知识分栏卡片由 `<button onClick={setActiveKb}>` 改为 `<Link>`：
-  - `source_type === 'official'` → `to={"/library/" + source_id}`（已存在 `OfficialDetail` 路由）。
-  - `source_type === 'product'` → `to={"/my-library?product=" + source_id}` 或直接复用 `MyLibrary` 页内已有的详情打开逻辑（读取 query param 自动打开 `ProductDetailDialog`）。
-- 移除该分栏原来的 `activeKb` state 与内置 Dialog（BOOMER 圈的 `PostDetailSheet` 仍保留，圈子帖子继续弹窗）。
-
-### 返回时定位
-- 在 `main.tsx` / 根 `App.tsx` 挂载一个轻量的 **ScrollRestoration**：
-  - 用 `useLocation()` + `history.state.key` 作为 key。
-  - `beforeunload` / route change 前，把 `window.scrollY` 存进 `sessionStorage`（key = 路由 pathname + history key）。
-  - `POP` 导航（浏览器返回）时读取并 `window.scrollTo`。
-- 只挂一处即可对首页 & 所有子页生效；`PUSH` 导航仍走顶部（符合直觉）。
-
-## 技术细节
-
-- 不新增数据库迁移；`notifications.category` 字段已存在，只是取值扩展 `news / message`。
-- `MyLibrary.tsx` 若尚未支持 `?product=<id>` auto-open，需要在其 `useEffect` 里加一段：读 query → 根据 id 从 `products` 拉一次 → 打开现有的 `ProductDetailDialog`。
-- ScrollRestoration 只处理 `document.scrollingElement`；如果 `Home` 未来改为内部 scroll 容器，需要 hook 到那个容器。
+### 4. 视觉细节
+- Wiggle 抖动：拖动中的 tile 停止抖动（原来只对 `!isDragging` 生效，保留）。
+- 邻居让位曲线：全局给 tile 一层 `will-change: transform`，防止移动端 GPU 掉帧。
 
 ## 影响文件
 
-- `src/components/home/AppGrid.tsx`（图标扁平化）
-- `src/pages/Home.tsx`（wordmark h-4；Banner 只取 news；跳转带 `?tab=news`）
-- `src/components/layout/PageHeader.tsx`（wordmark h-4）
-- `src/components/layout/BottomTabBar.tsx`（"消息" + MessageCircle 图标）
-- `src/pages/Notifications.tsx`（三分栏、按 category 过滤、AI 撰稿加分类字段、支持 `?tab=` 参数）
-- `src/components/home/HomeFeedTabs.tsx`（我的知识改 Link 跳转，移除 Dialog）
-- `src/pages/MyLibrary.tsx`（支持 `?product=<id>` 自动打开详情）
-- `src/App.tsx` 或 `src/main.tsx`（挂 ScrollRestoration）
+- `src/components/home/AppGrid.tsx`（唯一文件）
+
+## 不动的部分
+
+- 长按 450ms 进入编辑态的手感
+- 编辑态点 X 删除 / + 添加、`localStorage` 排序持久化
+- 图标外观本身（上一轮的扁平红瓷 squircle）
