@@ -50,7 +50,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     const [{ data: notes }, { data: reads }] = await Promise.all([
       supabase.from('notifications' as any)
-        .select('id, title, body, type, created_at, expires_at, image_url, category')
+        .select('id, title, body, summary, type, created_at, expires_at, image_url, category, created_by')
         .order('created_at', { ascending: false })
         .limit(60),
       supabase.from('notification_reads' as any)
@@ -58,7 +58,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         .eq('user_id', user.id),
     ]);
     const readSet = new Set(((reads as any[]) || []).map(r => r.notification_id));
-    setItems(((notes as any[]) || []).map(n => ({ ...n, read: readSet.has(n.id) })));
+    const rawNotes = ((notes as any[]) || []);
+    const authorIds = Array.from(new Set(rawNotes.map(n => n.created_by).filter(Boolean)));
+    let authorMap: Record<string, { name: string | null; avatar: string | null }> = {};
+    if (authorIds.length) {
+      const { data: profs } = await supabase.from('profiles' as any)
+        .select('user_id, display_name, avatar_url')
+        .in('user_id', authorIds);
+      for (const p of ((profs as any[]) || [])) {
+        authorMap[p.user_id] = { name: p.display_name, avatar: p.avatar_url };
+      }
+    }
+    setItems(rawNotes.map(n => ({
+      ...n,
+      read: readSet.has(n.id),
+      author: n.created_by ? (authorMap[n.created_by] ?? null) : null,
+    })));
     setLoading(false);
   }, [user]);
 
