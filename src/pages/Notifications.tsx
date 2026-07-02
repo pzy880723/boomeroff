@@ -825,13 +825,6 @@ export default function Notifications() {
                     maxLength={60}
                     className="w-full h-10 text-base font-semibold"
                   />
-                  <Textarea
-                    value={summary}
-                    onChange={e => setSummary(e.target.value.slice(0, 80))}
-                    placeholder="一句话导语(公众号卡片摘要,20-40 字)"
-                    rows={2}
-                    className="w-full text-sm resize-none"
-                  />
                   {versions.length > 1 && (
                     <div className="flex items-center gap-2">
                       <History className="w-3.5 h-3.5 text-muted-foreground" />
