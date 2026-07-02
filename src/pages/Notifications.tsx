@@ -629,12 +629,9 @@ export default function Notifications() {
                     ref={inputRef}
                     value={input}
                     onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendToAI(); }
-                    }}
-                    placeholder="和 AI 聊聊你要发什么…（Enter 发送，Shift+Enter 换行）"
-                    rows={1}
-                    className="flex-1 min-h-9 max-h-32 resize-none text-sm py-2"
+                    placeholder={chat.length === 0 ? '发一条通知…' : '继续补充…'}
+                    rows={2}
+                    className="flex-1 min-h-[44px] max-h-32 resize-none text-sm py-2"
                     disabled={aiLoading}
                   />
                   <Button
