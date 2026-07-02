@@ -1084,20 +1084,9 @@ function NewsBigCard({ item, onOpen }: { item: NotificationItem; onOpen: () => v
           <span>{formatRelativeCn(item.created_at)}</span>
         </div>
         <h3 className="text-base font-bold leading-snug line-clamp-2 text-foreground">{item.title}</h3>
-        <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            {item.author?.avatar ? (
-              <img src={item.author.avatar} alt={authorName} className="w-6 h-6 rounded-full object-cover" />
-            ) : (
-              <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-semibold flex items-center justify-center">
-                {authorInitial}
-              </span>
-            )}
-            <span className="text-xs text-muted-foreground truncate">{authorName}</span>
-          </div>
-          {!item.read && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
-        </div>
+        {!item.read && <span className="absolute top-3 right-3 w-2 h-2 rounded-full bg-primary" />}
       </div>
+
     </article>
   );
 }
