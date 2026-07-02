@@ -52,6 +52,7 @@ export default function Home() {
   const [nextShift, setNextShift] = useState<{ work_date: string; shift_code: string } | null>(null);
   const [act, setAct] = useState<ActiveActivity | null>(null);
   const [okrs, setOkrs] = useState<StoreOkr[]>([]);
+  const [sopCats, setSopCats] = useState<SopCategory[]>([]);
   const [checkedToday, setCheckedToday] = useState(false);
   const [checking, setChecking] = useState(false);
   const [bannerNote, setBannerNote] = useState<{ id: string; title: string; image_url?: string | null } | null>(null);
