@@ -87,8 +87,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
 
   const value = useMemo<Ctx>(
-    () => ({ items, loading, unreadCount, markRead, markAllRead, refresh: load }),
-    [items, loading, unreadCount, markRead, markAllRead, load],
+    () => ({ items, loading, unreadCount, noticeUnread, newsUnread, markRead, markAllRead, refresh: load }),
+    [items, loading, unreadCount, noticeUnread, newsUnread, markRead, markAllRead, load],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
@@ -99,7 +99,7 @@ export function useNotifications(): Ctx {
   if (!ctx) {
     // 兜底：未挂 Provider 时返回空，避免崩溃
     return {
-      items: [], loading: false, unreadCount: 0,
+      items: [], loading: false, unreadCount: 0, noticeUnread: 0, newsUnread: 0,
       markRead: async () => {}, markAllRead: async () => {}, refresh: async () => {},
     };
   }
