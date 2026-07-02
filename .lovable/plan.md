@@ -1,59 +1,30 @@
-## 1. 首页"我的排班"展示逻辑
+## 目标
+1. **Me 页最底部**（"门店运营系统"上方）：使用新的红底白字方形 BOOMER GO 图（图 1）。
+2. **顶部栏右侧 Logo**：全部改成图 2 的红字 BOOMER GO 横向文字，并去掉图片上下大量的白边。
 
-现状：无排班时展示 `近期暂无排班` 占位卡（不是自动隐藏）。
+## 具体改动
 
-改动：**当自己未来 30 天没有任何排班时，整个"我的排班"卡片不再展示**，避免占位噪音。当天/次日有班时才出现。
+### 1. 素材处理
+- 用图 1（`user-uploads://image-85.png`）**覆盖** `src/assets/boomer-go-logo.png`。这样 Me 页底部（`src/pages/Me.tsx` 第 281 行，通过 `APP_BRAND_LOGO`）和 AuthPage 引导页会自动跟着更新，无需改代码。
+- 图 2（`user-uploads://image-86.png`）用 Python/Pillow **自动裁剪四周白色空白**后另存为新资产 `src/assets/boomer-go-wordmark.png`（横向文字 mark，专门给顶栏用）。
 
-> 疑问：您也可以选择"永远保留占位、仅文案改成更友好的一句话"。默认按"直接隐藏"实现，若您想保留提示卡请告诉我。
+### 2. 顶部栏右侧 Logo 替换
+下列文件将现有的 `boomer-off-vintage-logo` 或 `APP_BRAND_LOGO` 图片引用改为新的 `boomer-go-wordmark.png`：
 
-## 2. 活动条幅补"去核销"按钮
+- `src/pages/Home.tsx`：仪表盘顶栏右上角（当前 `brandLogo` 导入）
+- `src/components/layout/PageHeader.tsx`：全站二级页顶栏右上角
+- `src/components/layout/Header.tsx`：桌面/兜底 Header 的品牌位
 
-首页 `正在进行的活动` 与 `我的活动`（`ActivitiesMine`）列表，右侧统一新增一枚小按钮：
+同步把 `<img>` 的 `className` 从 `h-8 w-auto object-contain` 调整为适配文字 mark 的高度（约 `h-6 w-auto`），保证顶栏视觉高度与之前接近，不会因为文字更宽而顶破 12px header。
 
-- **有券**（`activity.voucher_id` 非空，目前所有活动都属于这种）→ 显示 **"去核销"**，跳转 `/me/vouchers`（该页含扫码核销入口，仅 `voucher.redeem` 权限可见按钮，无权限自动隐藏）。
-- **无券**（未来若出现）→ 显示 **"去核销"**（不再显示"绑定"字样）。
+### 3. 不动的地方
+- 公众端 / 分享卡 / 邀请页 / 密码重置页仍使用旧的 `boomer-off-vintage-logo.png`（属于对外顾客品牌 BOOMER-OFF，用户没要求改）。
+- `src/assets/brand.ts` 的 `APP_BRAND_LOGO` 指向不变，只是文件内容被替换。
 
-同时，小红书探店活动左侧封面：若 `cover_url` 为空，用 AI 生成一枚小红书风格图标（红底白字 REDNOTE 风格 App icon，圆角方块），落在 `src/assets/icon-xhs-activity.png`，作为默认封面回退。其它活动继续使用现有 `bg-gradient-primary` 兜底。
+## 技术要点（供参考）
+- 白边裁剪：`PIL.Image.open(...).convert("RGBA")` → `getbbox()` 基于非白像素得到裁剪框；对纯红字图上下留 ~2% padding 后 crop。
+- 顶栏 h-12 容器中，方图适合 `h-8`，横向文字 mark 更适合 `h-5~h-6`（宽度自适应），否则文字太小或超出。
 
-## 3. "我的应用" 图标高级化（Apple 风）
-
-在 `AppGrid.tsx` 的 Tile 图标容器上叠加更接近 iOS 26 App icon 的观感：
-
-- 圆角由 `rounded-2xl` 换成 `rounded-[22%]`（squircle 观感）。
-- 双层高光：顶部斜向 45° 白色高光 + 底部 5% 内投影，形成"液态玻璃"面。
-- 图标颜色从 `currentColor` 改为白色，容器 tint 改为半径色轮渐变（如 `bg-[linear-gradient(160deg,#FF3B30,#FF6A5A)]`）。
-- 增加 `shadow-[0_6px_14px_-6px_rgba(0,0,0,0.35)]` 立体投影。
-- Registry (`appIconRegistry.ts`) 中每个 app 提供 `gradient` 配色（红/蓝/绿/紫/橙…），代替现在的浅 tint。
-
-## 4. 首页去掉"门店手册"→ 换成"我的知识 / BOOMER 圈"切换瀑布流
-
-删除 `Home.tsx` 中 `sopCats` 相关的加载与渲染。新增组件 `HomeFeedTabs.tsx`：
-
-- 顶部 tab（分段控件）：**我的知识** | **BOOMER 圈**，默认"我的知识"，选择记忆到 `localStorage`。
-- **我的知识 tab**：查 `user_favorites` + 收藏对应的 `official_knowledge` / `product_knowledge` 生成缩略图卡（沿用 MyLibrary 的取数逻辑），2 列瀑布流展示最近 10 条；右上角按钮 **"测试一下"** 跳 `/knowledge/test`（若无此路由则跳 `/me/library?test=1`，我实现时会先检查）。
-- **BOOMER 圈 tab**：查 `community_posts`（按最新 10 条），2 列瀑布流；右上角按钮 **"发帖"** 跳 `/community?new=1`（Community 页已有 ShareToCommunityButton，我会加 query 支持自动打开）。
-- 卡片点击进入对应详情页。空态给一句友好提示 + 直达"更多"链接。
-
-## 5. 全局 "中古圈" → "BOOMER 圈"
-
-在下述文件中把用户可见的 `中古圈` 替换为 `BOOMER 圈`（保留 DB 枚举、tag、内部 slug 不动）：
-
-- `src/pages/Community.tsx`、`src/pages/public/PublicCommunity.tsx`、`src/pages/public/PublicScan.tsx`、`src/pages/public/PublicResult.tsx`、`src/pages/public/PublicAbout.tsx`
-- `src/pages/Portal.tsx`
-- `src/hooks/useTasks.tsx`（每日任务文案）
-- `src/components/community/ShareToCommunityButton.tsx`、`src/components/dashboard/LiveStreamPanel.tsx`、`src/components/recognition/GuestProductCard.tsx`、`src/components/layout/PublicLayout.tsx`、`src/components/home/appIconRegistry.ts`
-- `src/lib/level.ts`、`src/lib/imageThumb.ts`
-- BottomTabBar / SEO title、meta description
-
-## 技术细节
-
-- 排班隐藏：在 Home 顶部 useEffect 拉取 `shift_schedules` 后置 `hasAnyShift` 标志，条件渲染整卡。
-- 活动按钮：`VouchersMine` 已提供扫码核销入口；用户如无 `voucher.redeem` 权限，按钮直接不渲染（前端 `usePermissions().can`）。
-- 图标 registry 类型扩展 `gradient?: string`，未提供时回落现在的 `tint`。
-- 首页 feed 2 列瀑布流：`columns-2 gap-2` + 每卡 `break-inside-avoid`，避免上下断裂。
-- "中古圈" → "BOOMER 圈" 通过 codemod 逐文件替换字符串字面量，代码 identifier（`community` / `circle`）保持不变。
-
-## 待您确认
-
-- **排班无排班时**：完全隐藏卡片（默认方案）还是保留友好提示？
-- 首页 feed 卡片高度：**首屏只放 6 条**（3 行 × 2 列）够吗？多了会让页面很长。
+## 验收
+- 打开"我的"页拉到最底部：看到新红底方块 BOOMER GO，下面接"门店运营系统 v0.2.0"。
+- 打开首页 / 任意二级页：右上角显示红色 BOOMER GO 横向文字，上下无明显白边。
