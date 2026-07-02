@@ -263,7 +263,7 @@ export default function Notifications() {
       const { data, error } = await supabase.functions.invoke('compose-notification', {
         body: {
           messages: next.map(t => ({ role: t.role, content: t.content })),
-          current_draft: hasDraft ? { title, body, type } : null,
+          current_draft: hasDraft ? { title, summary, body, type } : null,
         },
       });
       if (error) throw error;
@@ -272,16 +272,18 @@ export default function Notifications() {
         need_more?: boolean;
         reply?: string;
         title?: string;
+        summary?: string;
         body?: string;
         type?: string;
       };
       if (d.error) throw new Error(d.error);
       if (!d.need_more && (d.title || d.body)) {
         const nt = d.title || title;
+        const ns = d.summary ?? summary;
         const nb = d.body || body;
         const ntype = d.type || type;
-        setTitle(nt); setBody(nb); if (d.type) setType(d.type);
-        setVersions(v => [...v, { title: nt, body: nb, type: ntype, at: new Date().toISOString() }]);
+        setTitle(nt); setSummary(ns); setBody(nb); if (d.type) setType(d.type);
+        setVersions(v => [...v, { title: nt, summary: ns, body: nb, type: ntype, at: new Date().toISOString() }]);
         setChat([...next, { role: 'assistant', content: d.reply || '草稿已生成 ✅ 点「查看预览」看看效果' }]);
         toast.success('草稿已生成', {
           action: { label: '查看预览', onClick: () => setView('preview') },
@@ -299,7 +301,7 @@ export default function Notifications() {
   const applyVersion = (idx: number) => {
     const v = versions[idx];
     if (!v) return;
-    setTitle(v.title); setBody(v.body); setType(v.type);
+    setTitle(v.title); setSummary(v.summary || ''); setBody(v.body); setType(v.type);
   };
 
   const CHIPS: { label: string; prompt: string }[] = [
