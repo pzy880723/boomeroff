@@ -177,7 +177,7 @@ export default function Notifications() {
 
   // 视图 & 版本历史
   const [view, setView] = useState<'chat' | 'preview'>('chat');
-  const [versions, setVersions] = useState<{ title: string; body: string; type: string; at: string }[]>([]);
+  const [versions, setVersions] = useState<{ title: string; summary: string; body: string; type: string; at: string }[]>([]);
   const touchStartX = useRef<number | null>(null);
   const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e: React.TouchEvent) => {
