@@ -25,8 +25,11 @@ Deno.serve(async (req) => {
     if (!userData?.user) {
       return new Response(JSON.stringify({ error: "未登录" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const { notification_id, title, body } = await req.json();
-    if (!notification_id || !title) {
+    const { notification_id, title, body, preview_only } = await req.json();
+    if (!title) {
+      return new Response(JSON.stringify({ error: "缺少标题" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!preview_only && !notification_id) {
       return new Response(JSON.stringify({ error: "缺少参数" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
