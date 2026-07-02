@@ -327,11 +327,38 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
         )}
       </div>
 
+      {/* 主题分类 tabs — 全店问答入口 */}
+      <div className="shrink-0 px-4 pt-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {TOPIC_TABS.map(({ id, label, Icon }) => {
+          const active = topicFilter === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTopicFilter(id)}
+              disabled={busy}
+              className={cn(
+                'shrink-0 flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all',
+                active
+                  ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] shadow-[0_2px_6px_-2px_hsl(var(--accent)/0.6)]'
+                  : 'bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--primary-foreground)/0.7)] hover:bg-[hsl(var(--accent)/0.2)]',
+                busy && 'opacity-50 cursor-not-allowed',
+              )}
+            >
+              <Icon className="w-3 h-3" strokeWidth={2.4} />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* 快捷指令 chips */}
-      <div className="shrink-0 px-4 pt-2 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="shrink-0 px-4 pt-1.5 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
-          onClick={() => setDisplayChips(pickChips(4))}
+          onClick={() =>
+            setDisplayChips(topicFilter === 'all' ? pickChips(4) : pickChipsByCategory(topicFilter, 4))
+          }
           disabled={busy}
           aria-label="换一批"
           className={cn(
