@@ -52,11 +52,40 @@ export default function Notifications() {
   const { items, loading, unreadCount, markRead, markAllRead, refresh } = useNotifications();
   const isAdmin = role === 'admin';
 
+  // 分栏
+  const [sp, setSp] = useSearchParams();
+  const initialTab = (() => {
+    const q = sp.get('tab');
+    if (q === 'news' || q === 'message' || q === 'notice') return q as TabKey;
+    try {
+      const v = localStorage.getItem(TAB_PREF);
+      if (v === 'news' || v === 'message' || v === 'notice') return v as TabKey;
+    } catch { /* ignore */ }
+    return 'notice';
+  })();
+  const [tab, setTab] = useState<TabKey>(initialTab);
+  useEffect(() => {
+    try { localStorage.setItem(TAB_PREF, tab); } catch { /* ignore */ }
+    if (sp.get('tab') !== tab) {
+      const next = new URLSearchParams(sp);
+      next.set('tab', tab);
+      setSp(next, { replace: true });
+    }
+  }, [tab, sp, setSp]);
+
+  const filteredItems = useMemo(
+    () => items.filter(n => matchesTab((n as any).category, tab)),
+    [items, tab],
+  );
+  const tabUnread = useMemo(() => filteredItems.filter(n => !n.read).length, [filteredItems]);
+
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [type, setType] = useState('announcement');
+  const [category, setCategory] = useState<TabKey>('notice');
   const [submitting, setSubmitting] = useState(false);
+
 
   // AI 对话式撰稿
   const [chat, setChat] = useState<ChatTurn[]>([]);
