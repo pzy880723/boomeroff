@@ -1,4 +1,4 @@
-// 把任意 dataURL / 远程 URL 缩成小尺寸 JPEG，用于中古圈瀑布流缩略图。
+// 把任意 dataURL / 远程 URL 缩成小尺寸 JPEG，用于BOOMER 圈瀑布流缩略图。
 // 默认 480px 宽，质量 0.78，约 30~80KB。
 export async function makeThumbnail(
   src: string,

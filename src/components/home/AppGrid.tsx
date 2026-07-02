@@ -41,18 +41,19 @@ function Tile({ id, editing, onHide, onEnterEdit }: TileProps) {
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : 'auto' as const };
   const longPress = useLongPress(onEnterEdit);
   if (!meta) return null;
-  const { Icon, label, to, tint } = meta;
+  const { Icon, label, to, gradient } = meta;
 
   const content = (
     <>
       <span
-        className={cn(
-          'relative w-[52px] h-[52px] rounded-2xl flex items-center justify-center border border-border/50 overflow-hidden',
-          tint,
-        )}
+        className="relative w-[54px] h-[54px] rounded-[26%] flex items-center justify-center overflow-hidden shadow-[0_6px_14px_-6px_rgba(0,0,0,0.35)] ring-1 ring-black/[0.04]"
+        style={{ backgroundImage: gradient }}
       >
-        <span aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/45 to-transparent dark:from-white/10" />
-        <Icon className="relative w-[22px] h-[22px]" strokeWidth={1.75} />
+        {/* Top glossy highlight */}
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/45 via-white/10 to-transparent" />
+        {/* Inner top ring for a subtle "glass" edge */}
+        <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[26%] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_0_rgba(0,0,0,0.08)]" />
+        <Icon className="relative w-[24px] h-[24px] text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" strokeWidth={2} />
       </span>
       <span className="text-[11px] font-medium text-foreground text-center leading-tight mt-1.5">{label}</span>
     </>
@@ -170,16 +171,20 @@ export function AppGrid() {
                     {hiddenIds.map((id) => {
                       const meta = APP_ICON_REGISTRY[id];
                       if (!meta) return null;
-                      const { Icon, label, tint } = meta;
+                      const { Icon, label, gradient } = meta;
                       return (
                         <button
                           key={id}
                           className="flex flex-col items-center py-2"
                           onClick={() => { showBack(id); }}
                         >
-                          <span className={cn('relative w-[52px] h-[52px] rounded-2xl flex items-center justify-center border border-border/50 overflow-hidden', tint)}>
-                            <span aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/45 to-transparent dark:from-white/10" />
-                            <Icon className="relative w-[22px] h-[22px]" strokeWidth={1.75} />
+                          <span
+                            className="relative w-[54px] h-[54px] rounded-[26%] flex items-center justify-center overflow-hidden shadow-[0_6px_14px_-6px_rgba(0,0,0,0.35)] ring-1 ring-black/[0.04]"
+                            style={{ backgroundImage: gradient }}
+                          >
+                            <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/45 via-white/10 to-transparent" />
+                            <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[26%] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_0_rgba(0,0,0,0.08)]" />
+                            <Icon className="relative w-[24px] h-[24px] text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" strokeWidth={2} />
                           </span>
                           <span className="text-[11px] mt-1.5">{label}</span>
                         </button>

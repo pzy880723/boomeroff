@@ -98,7 +98,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       { key: 'daily_first_scan', label: '完成 1 次识别', amount: 5,  progress: Math.min(sc, 1), target: 1, completed: sc >= 1, claimed: claimedSet.has('daily_first_scan') },
       { key: 'daily_3_scans',    label: '完成 3 次识别', amount: 10, progress: Math.min(sc, 3), target: 3, completed: sc >= 3, claimed: claimedSet.has('daily_3_scans') },
       { key: 'daily_quiz',       label: '通过一次知识测试', amount: 15, progress: Math.min(qz, 1), target: 1, completed: qz >= 1, claimed: claimedSet.has('daily_quiz') },
-      { key: 'daily_post',       label: '发一条中古圈帖子', amount: 5,  progress: Math.min(ps, 1), target: 1, completed: ps >= 1, claimed: claimedSet.has('daily_post') },
+      { key: 'daily_post',       label: '发一条BOOMER 圈帖子', amount: 5,  progress: Math.min(ps, 1), target: 1, completed: ps >= 1, claimed: claimedSet.has('daily_post') },
     ];
 
     setPending(((pend as any[]) || []) as PendingEvent[]);

@@ -1,59 +1,59 @@
-## 一、明确修复项（先执行确定的调整）
+## 1. 首页"我的排班"展示逻辑
 
-### 1. 底部导航栏 `BottomTabBar.tsx`
-- 文字换行原因：`min-w-[48px]` 太窄 + 三字标签 → 收窄标签为 2 字：
-  - 「仪表盘」→「首页」
-  - 「知识库」→「知识」
-  - 「通知」保留
-  - 「我的」保留
-  - 中间相机按钮下方加回「AI 识图」小字标签（不换行）
-- 图标 + 文字垂直居中：调整 `py`、去掉 `items-end`，改为 `items-center`，整体胶囊高度略降。
-- 相机主按钮：进一步凸起（`-mt-6`），保留红色 + 呼吸光晕，下方留出「AI 识图」小字位置，避免"下方空"。
+现状：无排班时展示 `近期暂无排班` 占位卡（不是自动隐藏）。
 
-### 2. 首页顶栏 & 排版 `Home.tsx`
-- 顶栏改为标准 `PageHeader` 布局：左「仪表盘」标题，右侧红色 BOOMER-OFF logo。
-- 「你好，陆哥」下方鼓励语左对齐（当前 `text-center` 改为 `text-left`）。
-- 应用网格上方补回「我的应用」小标题（与其他 section 一致的 h2 样式），铅笔编辑按钮移到标题最右侧同一行。
+改动：**当自己未来 30 天没有任何排班时，整个"我的排班"卡片不再展示**，避免占位噪音。当天/次日有班时才出现。
 
-### 3. 门店手册 / OKR 罗列到首页
-- 在「我的应用」区块下方新增 Section「门店手册」：从 `store_okrs`（或 `okrs`）读该门店记录，纵向 list 排列（图标 + 标题 + 进度条 + 右侧箭头），点击进 `OkrDetail`。查看更多跳 `/okrs`。
+> 疑问：您也可以选择"永远保留占位、仅文案改成更友好的一句话"。默认按"直接隐藏"实现，若您想保留提示卡请告诉我。
 
-### 4. 二级页面顶栏统一
-- 巡检 `PageHeader.tsx` 使用点：确保右上角挂 `BrandLogoRed`（新的红色 BOOMER-OFF logo），删除残留 vintage logo 引用。
+## 2. 活动条幅补"去核销"按钮
 
-### 5. 发通知入口迁移
-- 从 `Notifications.tsx` 顶栏移除「发布通知」按钮。
-- 改为管理员可见的 FAB 浮标（右下方，避开 BOOMER 浮标），点击打开一个 **AI 对话式撰稿弹窗**：
-  - 输入需求 → 调用 Lovable AI 生成 title/body/category 草稿 → 用户可继续对话细化 → 确认发布。
-  - 发布后走既有 `generate-notification-banner` 流程。
-- 使用 usePermissions().can('notifications.manage') 判定可见性。
+首页 `正在进行的活动` 与 `我的活动`（`ActivitiesMine`）列表，右侧统一新增一枚小按钮：
 
-### 6. 字体升级
-- 换掉当前 `Noto Sans SC` 主导的字体栈，改用更"高级"的组合：
-  - 中文：`HarmonyOS Sans SC` / `PingFang SC` / `思源黑体` 系（本地系统字体优先）；
-  - 数字/西文：`Inter Tight` 或 `Geist` 作为 display，配 `Inter` 作为 body；
-  - `.font-display` 权重从 900 降到 700 + 加大 tracking 收紧，避免"厚重廉价感"。
+- **有券**（`activity.voucher_id` 非空，目前所有活动都属于这种）→ 显示 **"去核销"**，跳转 `/me/vouchers`（该页含扫码核销入口，仅 `voucher.redeem` 权限可见按钮，无权限自动隐藏）。
+- **无券**（未来若出现）→ 显示 **"去核销"**（不再显示"绑定"字样）。
 
----
+同时，小红书探店活动左侧封面：若 `cover_url` 为空，用 AI 生成一枚小红书风格图标（红底白字 REDNOTE 风格 App icon，圆角方块），落在 `src/assets/icon-xhs-activity.png`，作为默认封面回退。其它活动继续使用现有 `bg-gradient-primary` 兜底。
 
-## 二、液态玻璃风 UI 设计稿（需要你先选方向）
+## 3. "我的应用" 图标高级化（Apple 风）
 
-你提到「苹果 iOS 26 Liquid Glass 光影玻璃」+ 红色主调 + 更高级感。这类视觉需要先看效果稿再实现，不能直接改。
+在 `AppGrid.tsx` 的 Tile 图标容器上叠加更接近 iOS 26 App icon 的观感：
 
-**下一步我会做的事：**
-1. 用 Playwright 截当前 `/` 首页真实效果作为参照；
-2. 调用 `design--create_directions` 生成 3 个 **液态玻璃 + 朱红主色** 的首页方向稿：
-   - 例如 A) 全透玻璃卡片 + 红色高光边；B) 深色玻璃暗底 + 红色霓虹反射；C) 白瓷 + 红色液态高光。
-3. 用 `questions--ask_questions`（type: prototype）把 3 个稿子摆给你选；
-4. 你选中后再落地到 `index.css` + Home/卡片组件。
+- 圆角由 `rounded-2xl` 换成 `rounded-[22%]`（squircle 观感）。
+- 双层高光：顶部斜向 45° 白色高光 + 底部 5% 内投影，形成"液态玻璃"面。
+- 图标颜色从 `currentColor` 改为白色，容器 tint 改为半径色轮渐变（如 `bg-[linear-gradient(160deg,#FF3B30,#FF6A5A)]`）。
+- 增加 `shadow-[0_6px_14px_-6px_rgba(0,0,0,0.35)]` 立体投影。
+- Registry (`appIconRegistry.ts`) 中每个 app 提供 `gradient` 配色（红/蓝/绿/紫/橙…），代替现在的浅 tint。
 
-液态玻璃需要 `backdrop-filter`、多层高光渐变、半透边框、镜面反射。技术上都可行（tailwind + CSS 变量），关键是先定视觉方向。
+## 4. 首页去掉"门店手册"→ 换成"我的知识 / BOOMER 圈"切换瀑布流
 
----
+删除 `Home.tsx` 中 `sopCats` 相关的加载与渲染。新增组件 `HomeFeedTabs.tsx`：
 
-## 三、执行顺序
+- 顶部 tab（分段控件）：**我的知识** | **BOOMER 圈**，默认"我的知识"，选择记忆到 `localStorage`。
+- **我的知识 tab**：查 `user_favorites` + 收藏对应的 `official_knowledge` / `product_knowledge` 生成缩略图卡（沿用 MyLibrary 的取数逻辑），2 列瀑布流展示最近 10 条；右上角按钮 **"测试一下"** 跳 `/knowledge/test`（若无此路由则跳 `/me/library?test=1`，我实现时会先检查）。
+- **BOOMER 圈 tab**：查 `community_posts`（按最新 10 条），2 列瀑布流；右上角按钮 **"发帖"** 跳 `/community?new=1`（Community 页已有 ShareToCommunityButton，我会加 query 支持自动打开）。
+- 卡片点击进入对应详情页。空态给一句友好提示 + 直达"更多"链接。
 
-1. 先落地「一」里的 6 项确定修复（不涉及视觉大改）；
-2. 再进入「二」的 UI 设计稿流程 → 你确认方向 → 全站视觉升级。
+## 5. 全局 "中古圈" → "BOOMER 圈"
 
-确认这个计划后我就开工，先做第一批修复，然后马上截图 + 生成 3 个液态玻璃方向让你选。
+在下述文件中把用户可见的 `中古圈` 替换为 `BOOMER 圈`（保留 DB 枚举、tag、内部 slug 不动）：
+
+- `src/pages/Community.tsx`、`src/pages/public/PublicCommunity.tsx`、`src/pages/public/PublicScan.tsx`、`src/pages/public/PublicResult.tsx`、`src/pages/public/PublicAbout.tsx`
+- `src/pages/Portal.tsx`
+- `src/hooks/useTasks.tsx`（每日任务文案）
+- `src/components/community/ShareToCommunityButton.tsx`、`src/components/dashboard/LiveStreamPanel.tsx`、`src/components/recognition/GuestProductCard.tsx`、`src/components/layout/PublicLayout.tsx`、`src/components/home/appIconRegistry.ts`
+- `src/lib/level.ts`、`src/lib/imageThumb.ts`
+- BottomTabBar / SEO title、meta description
+
+## 技术细节
+
+- 排班隐藏：在 Home 顶部 useEffect 拉取 `shift_schedules` 后置 `hasAnyShift` 标志，条件渲染整卡。
+- 活动按钮：`VouchersMine` 已提供扫码核销入口；用户如无 `voucher.redeem` 权限，按钮直接不渲染（前端 `usePermissions().can`）。
+- 图标 registry 类型扩展 `gradient?: string`，未提供时回落现在的 `tint`。
+- 首页 feed 2 列瀑布流：`columns-2 gap-2` + 每卡 `break-inside-avoid`，避免上下断裂。
+- "中古圈" → "BOOMER 圈" 通过 codemod 逐文件替换字符串字面量，代码 identifier（`community` / `circle`）保持不变。
+
+## 待您确认
+
+- **排班无排班时**：完全隐藏卡片（默认方案）还是保留友好提示？
+- 首页 feed 卡片高度：**首屏只放 6 条**（3 行 × 2 列）够吗？多了会让页面很长。

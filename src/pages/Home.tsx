@@ -8,19 +8,21 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
-  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target, BookOpen,
+  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target, QrCode,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
+import { HomeFeedTabs } from '@/components/home/HomeFeedTabs';
 import bannerDefault from '@/assets/banner-default.jpg';
 import brandLogo from '@/assets/boomer-off-vintage-logo.png';
+import xhsIcon from '@/assets/icon-xhs-activity.png';
 
-interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null }
+interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null; voucher_id?: string | null }
 interface StoreOkr {
   id: string; title: string; objective: string | null;
   key_results: any; tags: string[] | null;
 }
-interface SopCategory { id: string; name: string }
+
 
 function todayShanghai(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -52,7 +54,7 @@ export default function Home() {
   const [nextShift, setNextShift] = useState<{ work_date: string; shift_code: string } | null>(null);
   const [act, setAct] = useState<ActiveActivity | null>(null);
   const [okrs, setOkrs] = useState<StoreOkr[]>([]);
-  const [sopCats, setSopCats] = useState<SopCategory[]>([]);
+  
   const [checkedToday, setCheckedToday] = useState(false);
   const [checking, setChecking] = useState(false);
   const [bannerNote, setBannerNote] = useState<{ id: string; title: string; image_url?: string | null } | null>(null);
@@ -84,7 +86,7 @@ export default function Home() {
 
       // 活动：只显示本店店员创建的（activities 无 shop_id 字段，按 created_by 交集过滤）
       let activityQuery = supabase.from('activities' as any)
-        .select('id, name, cover_url, ends_at, created_by')
+        .select('id, name, cover_url, ends_at, voucher_id, created_by')
         .eq('status', 'active')
         .order('starts_at', { ascending: false })
         .limit(6);
@@ -113,12 +115,6 @@ export default function Home() {
         setOkrs(((ok as any[]) || []) as StoreOkr[]);
       }
 
-      // 门店手册分类
-      const { data: cats } = await supabase.from('shop_kb_categories' as any)
-        .select('id, name')
-        .order('sort_order', { ascending: true })
-        .limit(20);
-      setSopCats(((cats as any[]) || []) as SopCategory[]);
     })();
 
     // 每日鼓励
@@ -220,13 +216,13 @@ export default function Home() {
           )}
         </Link>
 
-        {/* 我的排班 */}
-        <SectionCard
-          title="我的排班"
-          icon={<CalendarDays className="w-4 h-4 text-primary" />}
-          action={<Link to="/me" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>}
-        >
-          {nextShift ? (
+        {/* 我的排班（无排班则整卡隐藏） */}
+        {nextShift && (
+          <SectionCard
+            title="我的排班"
+            icon={<CalendarDays className="w-4 h-4 text-primary" />}
+            action={<Link to="/me" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold">{nextShift.work_date}</p>
@@ -234,10 +230,8 @@ export default function Home() {
               </div>
               <Badge variant="secondary" className="text-sm px-3 py-1">{nextShift.shift_code}</Badge>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">近期暂无排班</p>
-          )}
-        </SectionCard>
+          </SectionCard>
+        )}
 
         {/* 正在进行的活动（横向条幅） */}
         {act && (
@@ -248,24 +242,27 @@ export default function Home() {
               </h2>
               <Link to="/me/activities" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>
             </div>
-            <Link to={`/me/activities/${act.id}`}>
-              <Card className="flex items-center gap-3 p-2.5 border-border/60 hover:border-primary/40 transition-colors">
-                <div className="w-14 h-14 rounded-xl overflow-hidden bg-muted shrink-0">
-                  {act.cover_url ? (
-                    <img src={act.cover_url} alt={act.name} loading="lazy" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-primary" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold line-clamp-1">{act.name}</p>
-                  {daysLeft(act.ends_at) && (
-                    <p className="text-xs text-muted-foreground mt-1">{daysLeft(act.ends_at)}</p>
-                  )}
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-              </Card>
-            </Link>
+            <Card className="flex items-center gap-3 p-2.5 border-border/60 hover:border-primary/40 transition-colors">
+              <Link to={`/me/activities/${act.id}`} className="w-14 h-14 rounded-xl overflow-hidden bg-muted shrink-0 block">
+                <img
+                  src={act.cover_url || xhsIcon}
+                  alt={act.name}
+                  loading="lazy"
+                  className="w-full h-full object-cover"
+                />
+              </Link>
+              <Link to={`/me/activities/${act.id}`} className="flex-1 min-w-0 block">
+                <p className="text-sm font-semibold line-clamp-1">{act.name}</p>
+                {daysLeft(act.ends_at) && (
+                  <p className="text-xs text-muted-foreground mt-1">{daysLeft(act.ends_at)}</p>
+                )}
+              </Link>
+              <Link to={act.voucher_id ? `/me/vouchers?activity=${act.id}` : `/me/activities/${act.id}?tab=redeem`}>
+                <Button size="sm" className="h-8 px-3 rounded-full text-xs shrink-0">
+                  <QrCode className="w-3.5 h-3.5 mr-1" />去核销
+                </Button>
+              </Link>
+            </Card>
           </section>
         )}
 
@@ -304,32 +301,8 @@ export default function Home() {
           </section>
         )}
 
-        {/* 门店手册 */}
-        {sopCats.length > 0 && (
-          <section>
-            <div className="flex items-center justify-between mb-2 px-1">
-              <h2 className="text-sm font-bold flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-primary" /> 门店手册
-              </h2>
-              <Link to="/me/sop" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>
-            </div>
-            <Card className="divide-y divide-border/60 border-border/60 overflow-hidden">
-              {sopCats.map((c) => (
-                <Link
-                  key={c.id}
-                  to={`/me/sop?cat=${c.id}`}
-                  className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors"
-                >
-                  <span className="w-8 h-8 rounded-lg bg-muted text-foreground/70 flex items-center justify-center shrink-0">
-                    <BookOpen className="w-3.5 h-3.5" strokeWidth={1.75} />
-                  </span>
-                  <span className="flex-1 text-sm truncate">{c.name}</span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                </Link>
-              ))}
-            </Card>
-          </section>
-        )}
+        {/* 我的知识 / BOOMER 圈 双 Tab 瀑布流 */}
+        <HomeFeedTabs />
       </main>
     </div>
   );

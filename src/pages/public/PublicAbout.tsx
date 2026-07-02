@@ -25,16 +25,16 @@ export default function PublicAbout() {
         <ol className="space-y-3">
           <Step n="01" title="对准物件拍一张" desc="光线充足、主体居中，让物件占满画面 2/3。" />
           <Step n="02" title="等 1-3 秒" desc="AI 给出名称、年代、产地，以及背后的小故事。" />
-          <Step n="03" title="分享或继续" desc="喜欢的话一键匿名发到中古圈，或者继续拍下一件。" />
+          <Step n="03" title="分享或继续" desc="喜欢的话一键匿名发到BOOMER 圈，或者继续拍下一件。" />
         </ol>
       </section>
 
       <div className="h-px bg-border/60" />
 
-      {/* 中古圈 */}
+      {/* BOOMER 圈 */}
       <section className="space-y-2">
         <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">Community</div>
-        <h2 className="font-display text-[20px] tracking-tight">关于「中古圈」</h2>
+        <h2 className="font-display text-[20px] tracking-tight">关于「BOOMER 圈」</h2>
         <p className="text-[13px] text-foreground/75 leading-relaxed">
           这里汇集了顾客和店主一起拍下的中古好物，像逛市集一样滑动浏览，
           说不定你的下一件心头好就藏在其中。
