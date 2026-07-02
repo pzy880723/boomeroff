@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState, useLayoutEffect } from 'react';
+import { useEffect, useRef, useState, useLayoutEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Sparkles, Camera, ImagePlus, X, Square, Shuffle } from 'lucide-react';
+import {
+  Send, Sparkles, Camera, ImagePlus, X, Square, Shuffle,
+  CalendarDays, Trophy, HeartHandshake, BookOpenText, Store, PenLine, MessageSquareHeart,
+} from 'lucide-react';
 import { useSpiritChat } from '@/hooks/useSpiritChat';
 import { SpiritMascot } from './SpiritMascot';
 import { Button } from '@/components/ui/button';
