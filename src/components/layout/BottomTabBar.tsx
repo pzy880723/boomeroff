@@ -6,7 +6,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 type Tab = { to: string; label: string; Icon: typeof Home; primary?: boolean };
 const tabs: Tab[] = [
   { to: '/', label: '仪表盘', Icon: Home },
-  { to: '/library', label: '官方知识', Icon: BookOpen },
+  { to: '/library', label: '知识库', Icon: BookOpen },
   { to: '/scan', label: 'AI 识物', Icon: Camera, primary: true },
   { to: '/notifications', label: '通知', Icon: Bell },
   { to: '/me', label: '我的', Icon: User },
