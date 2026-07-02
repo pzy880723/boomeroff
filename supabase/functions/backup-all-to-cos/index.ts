@@ -600,33 +600,58 @@ Deno.serve(async (req) => {
     return json({ ok: true, restarted: true, run_id: (runRow as { id: string }).id }, 202);
   }
 
-  if (action === "retry_failed" && body.run_id) {
-    const { data: srcRow } = await admin.from("backup_runs").select("id, metadata").eq("id", body.run_id).maybeSingle();
-    if (!srcRow) return json({ ok: false, error: "找不到那次备份记录" }, 404);
-    const srcMeta = normalizeMeta((srcRow as { metadata: unknown }).metadata, day);
-    const queue = (srcMeta.failures ?? [])
-      .filter((f) => f.kind === "storage" && f.bucket && f.path)
-      .map((f) => ({ bucket: f.bucket!, path: f.path!, size: f.size }));
-    if (queue.length === 0) return json({ ok: false, error: "上一次没有失败的文件可以补" }, 400);
+  if (action === "retry_failed") {
+    const { data } = await admin.from("backup_file_failures")
+      .select("source_bucket, source_path, cos_key, size")
+      .is("resolved_at", null)
+      .like("source_bucket", "storage:%")
+      .limit(2000);
+    const rows = (data ?? []) as Array<{ source_bucket: string; source_path: string; cos_key: string; size: number }>;
+    if (rows.length === 0) return json({ ok: false, error: "没有待重试的失败文件" }, 400);
+    const queue = rows.map((r) => ({
+      bucket: r.source_bucket.replace(/^storage:/, ""),
+      path: r.source_path,
+      size: Number(r.size ?? 0),
+    }));
     const newMeta: RunMeta = normalizeMeta({
       step: `只重试失败文件（共 ${queue.length} 个）`,
       day, phase: "storage",
-      retry_of: body.run_id, retry_queue: queue, retry_cursor: 0,
-      // Skip listing — retry mode consumes queue directly.
+      retry_of: body.run_id ?? null,
+      retry_queue: queue, retry_cursor: 0,
       storage_bucket_index: BUCKETS.length,
-      storage_pass: 2, // treat as pass2 so both pass stats stay distinct
+      storage_pass: 2,
     }, day);
-    // Also mark table_index at end so DB phase is skipped.
     newMeta.table_index = TABLES.length;
     newMeta.phase = "storage";
     const { data: newRow, error } = await admin.from("backup_runs").insert({
       kind: "full", status: "running", trigger_source: "manual",
-      metadata: newMeta, retry_of: body.run_id,
+      metadata: newMeta, retry_of: body.run_id ?? null,
     }).select("id").single();
     if (error) return json({ ok: false, error: error.message }, 500);
     scheduleContinuation(req.url);
     return json({ ok: true, run_id: (newRow as { id: string }).id, queued: queue.length });
   }
+
+  // Bootstrap ledger — one-time backfill from COS ListObjects so existing
+  // files stop being re-uploaded. Runs synchronously per bucket.
+  if (action === "bootstrap_ledger") {
+    let inserted = 0;
+    for (const bucket of BUCKETS) {
+      try {
+        const idx = await cosListPrefix({ cfg, prefix: `storage-mirror/${bucket}/`, timeoutMs: 30_000 });
+        const rows: Array<{ cos_key: string; source_bucket: string; source_path: string; size: number; etag?: string }> = [];
+        for (const [key, v] of idx.entries()) {
+          const path = key.replace(`storage-mirror/${bucket}/`, "");
+          if (!path) continue;
+          rows.push({ cos_key: key, source_bucket: `storage:${bucket}`, source_path: path, size: v.size, etag: v.etag });
+          if (rows.length >= 500) { await ledgerUpsertBatch(admin, rows); inserted += rows.length; rows.length = 0; }
+        }
+        if (rows.length) { await ledgerUpsertBatch(admin, rows); inserted += rows.length; }
+      } catch { /* skip bucket */ }
+    }
+    return json({ ok: true, ledger_rows: inserted });
+  }
+
 
   if (action === "reconcile_only" && body.run_id) {
     const { data: srcRow } = await admin.from("backup_runs").select("id, metadata, started_at").eq("id", body.run_id).maybeSingle();
