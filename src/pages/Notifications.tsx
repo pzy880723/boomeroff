@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
@@ -14,7 +15,24 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Bell, PencilLine, CheckCheck, Loader2, Sparkles, Send } from 'lucide-react';
+import { MessageCircle, PencilLine, CheckCheck, Loader2, Sparkles, Send } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+type TabKey = 'notice' | 'news' | 'message';
+const TAB_META: Record<TabKey, { label: string; title: string }> = {
+  notice: { label: '通知', title: '通知' },
+  news: { label: '资讯', title: '资讯' },
+  message: { label: '消息', title: '消息' },
+};
+const TAB_PREF = 'notifications-tab';
+function matchesTab(cat: string | null | undefined, tab: TabKey) {
+  const c = (cat || '').toLowerCase();
+  if (tab === 'news') return c === 'news';
+  if (tab === 'message') return c === 'message';
+  // notice: 缺省 / 公告类
+  return !c || c === 'notice' || c === 'announcement' || c === 'policy' || c === 'urgent' || c === 'banner';
+}
+
 
 const TYPE_LABEL: Record<string, { label: string; tone: string }> = {
   announcement: { label: '公告', tone: 'bg-primary/10 text-primary' },
