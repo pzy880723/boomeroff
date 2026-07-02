@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, BookOpen, Camera, Bell, User } from 'lucide-react';
+import { Home, BookOpen, Camera, MessageCircle, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNotifications } from '@/hooks/useNotifications';
 
@@ -8,9 +8,10 @@ const tabs: Tab[] = [
   { to: '/', label: '首页', Icon: Home },
   { to: '/library', label: '知识', Icon: BookOpen },
   { to: '/scan', label: 'AI 识图', Icon: Camera, primary: true },
-  { to: '/notifications', label: '通知', Icon: Bell },
+  { to: '/notifications', label: '消息', Icon: MessageCircle },
   { to: '/me', label: '我的', Icon: User },
 ];
+
 
 export function BottomTabBar() {
   const location = useLocation();
