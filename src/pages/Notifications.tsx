@@ -334,12 +334,19 @@ export default function Notifications() {
     setTitle(v.title); setSummary(v.summary || ''); setBody(v.body); setType(v.type);
   };
 
-  const CHIPS: { label: string; prompt: string }[] = [
+  const NOTICE_CHIPS: { label: string; prompt: string }[] = [
     { label: '📢 发公告', prompt: '发一条公告，主题是：' },
     { label: '📋 发制度', prompt: '发一条制度说明，内容是：' },
     { label: '🎉 发活动', prompt: '发一条门店活动通知，活动是：' },
     { label: '🚨 紧急通知', prompt: '发一条紧急通知：' },
   ];
+  const NEWS_CHIPS: { label: string; prompt: string }[] = [
+    { label: '🏪 新店开业', prompt: '写一条新店开业资讯，门店信息：' },
+    { label: '📈 爆款情报', prompt: '写一条爆款商品情报，商品/趋势：' },
+    { label: '🎯 官方活动', prompt: '写一条官方活动预告，活动内容：' },
+    { label: '📖 店员故事', prompt: '写一条店员故事分享，故事主题：' },
+  ];
+  const CHIPS = category === 'news' ? NEWS_CHIPS : NOTICE_CHIPS;
   const REFINE_CHIPS = ['更短一些', '更正式一些', '更活泼一些', '加点数据', '换个角度再写一版'];
 
   const pickCoverFile = (file: File | null) => {
