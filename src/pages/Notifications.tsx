@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   MessageCircle, PencilLine, CheckCheck, Loader2, Sparkles, Send,
-  ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil,
+  ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil, Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
@@ -25,8 +25,9 @@ import { MarkdownArticle } from '@/components/notifications/MarkdownArticle';
 import { NotificationDetailSheet } from '@/components/notifications/NotificationDetailSheet';
 import { NotificationBannerCropper } from '@/components/notifications/NotificationBannerCropper';
 
-type TabKey = 'news' | 'message';
+type TabKey = 'notice' | 'news' | 'message';
 const TAB_META: Record<TabKey, { label: string }> = {
+  notice: { label: '通知' },
   news: { label: '资讯' },
   message: { label: '消息' },
 };
@@ -37,9 +38,19 @@ const TYPE_LABEL: Record<string, { label: string; tone: string }> = {
   policy: { label: '制度', tone: 'bg-foreground/10 text-foreground' },
   activity: { label: '活动', tone: 'bg-accent/50 text-accent-foreground' },
   urgent: { label: '紧急', tone: 'bg-destructive/10 text-destructive' },
+  system: { label: '系统', tone: 'bg-muted text-muted-foreground' },
+  shift: { label: '排班', tone: 'bg-accent/50 text-accent-foreground' },
+  notice: { label: '通知', tone: 'bg-primary/10 text-primary' },
 };
 function typeMeta(t: string) {
-  return TYPE_LABEL[t] ?? { label: t || '资讯', tone: 'bg-muted text-muted-foreground' };
+  return TYPE_LABEL[t] ?? { label: t || '通知', tone: 'bg-muted text-muted-foreground' };
+}
+
+function bucketOf(cat: string | null | undefined): TabKey {
+  const c = (cat || '').toLowerCase();
+  if (c === 'news') return 'news';
+  if (c === 'message') return 'message';
+  return 'notice';
 }
 
 type ChatTurn = { role: 'user' | 'assistant'; content: string };
@@ -55,19 +66,18 @@ interface StaffPeer {
 
 export default function Notifications() {
   const { user, role, loading: authLoading } = useAuth();
-  const { items, loading, markRead, refresh } = useNotifications();
+  const { items, loading, markRead, refresh, noticeUnread, newsUnread } = useNotifications();
   const isAdmin = role === 'admin';
 
   const [sp, setSp] = useSearchParams();
   const initialTab = (() => {
     const q = sp.get('tab');
-    if (q === 'news' || q === 'message') return q as TabKey;
-    if (q === 'notice') return 'news' as TabKey; // 兼容旧链接
+    if (q === 'notice' || q === 'news' || q === 'message') return q as TabKey;
     try {
       const v = localStorage.getItem(TAB_PREF);
-      if (v === 'news' || v === 'message') return v as TabKey;
+      if (v === 'notice' || v === 'news' || v === 'message') return v as TabKey;
     } catch { /* ignore */ }
-    return 'news';
+    return 'notice';
   })();
   const [tab, setTab] = useState<TabKey>(initialTab);
   useEffect(() => {
@@ -79,11 +89,17 @@ export default function Notifications() {
     }
   }, [tab, sp, setSp]);
 
-  const newsItems = useMemo(
-    () => items.filter(n => (n.category || '').toLowerCase() === 'news'),
+  const noticeItems = useMemo(
+    () => items.filter(n => bucketOf(n.category) === 'notice'),
     [items],
   );
-  const newsUnread = newsItems.filter(n => !n.read).length;
+  const newsItems = useMemo(
+    () => items.filter(n => bucketOf(n.category) === 'news'),
+    [items],
+  );
+  const currentListItems = tab === 'notice' ? noticeItems : tab === 'news' ? newsItems : [];
+  const currentUnread = tab === 'notice' ? noticeUnread : tab === 'news' ? newsUnread : 0;
+
 
   // 打开详情
   const [detailItem, setDetailItem] = useState<NotificationItem | null>(null);
@@ -140,11 +156,12 @@ export default function Notifications() {
     return () => { void supabase.removeChannel(ch); };
   }, [user, refresh]);
 
-  const resetCompose = () => {
+  const resetCompose = (defaultCat: TabKey = 'notice') => {
     setChat([]); setInput(''); setTitle(''); setBody('');
-    setType('announcement'); setCategory('news'); setCoverUrl(''); setEditingBody(false);
+    setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
   };
-  const openCompose = () => { resetCompose(); setOpen(true); };
+  const openCompose = () => { resetCompose(tab === 'message' ? 'notice' : tab); setOpen(true); };
+
 
   const sendToAI = async () => {
     const q = input.trim();
@@ -285,7 +302,11 @@ export default function Notifications() {
   if (!user) return <AuthPage />;
 
   const markAllReadInTab = async () => {
-    for (const n of newsItems) if (!n.read) await markRead(n.id);
+    for (const n of currentListItems) if (!n.read) await markRead(n.id);
+  };
+
+  const TAB_UNREAD: Record<TabKey, number> = {
+    notice: noticeUnread, news: newsUnread, message: 0,
   };
 
   return (
@@ -293,7 +314,7 @@ export default function Notifications() {
       <PageHeader
         title="消息"
         right={
-          tab === 'news' && newsUnread > 0 ? (
+          tab !== 'message' && currentUnread > 0 ? (
             <Button size="sm" variant="ghost" onClick={markAllReadInTab}>
               <CheckCheck className="w-4 h-4 mr-1" />全部已读
             </Button>
@@ -302,9 +323,9 @@ export default function Notifications() {
       />
 
       <main className="mx-auto max-w-screen-md px-4 py-3 space-y-3">
-        {/* 2 分栏切换 */}
-        <div className="inline-flex rounded-full bg-muted p-0.5 text-xs w-full max-w-[240px]">
-          {(['news', 'message'] as TabKey[]).map(k => (
+        {/* 3 分栏切换 */}
+        <div className="inline-flex rounded-full bg-muted p-0.5 text-xs w-full max-w-[320px]">
+          {(['notice', 'news', 'message'] as TabKey[]).map(k => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -314,76 +335,75 @@ export default function Notifications() {
               )}
             >
               {TAB_META[k].label}
-              {k === 'news' && newsUnread > 0 && (
+              {TAB_UNREAD[k] > 0 && (
                 <span className="absolute -top-1 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 font-semibold">
-                  {newsUnread > 99 ? '99+' : newsUnread}
+                  {TAB_UNREAD[k] > 99 ? '99+' : TAB_UNREAD[k]}
                 </span>
               )}
             </button>
           ))}
         </div>
 
-        {tab === 'news' ? (
-          loading && newsItems.length === 0 ? (
-            <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-          ) : newsItems.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">暂无资讯</p>
-            </div>
-          ) : newsItems.map(n => {
-            const meta = typeMeta(n.type);
-            return (
-              <Card
-                key={n.id}
-                className={`p-4 shadow-hard cursor-pointer transition ${n.read ? 'opacity-70' : 'border-primary/40'}`}
-                onClick={() => openDetail(n)}
-              >
-                <div className="flex items-start gap-3">
-                  {!n.read && <span className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge className={`${meta.tone} border-0 text-[10px] px-1.5 py-0`}>{meta.label}</Badge>
-                      <span className="text-[11px] text-muted-foreground">
-                        {new Date(n.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-bold mb-1 line-clamp-2">{n.title}</h3>
-                    {n.image_url && (
-                      <img
-                        src={n.image_url}
-                        alt={n.title}
-                        loading="lazy"
-                        className="mt-2 w-full aspect-[16/6] object-cover rounded-md"
-                      />
-                    )}
-                    <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1">
-                      {n.body.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ').trim()}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            );
-          })
-        ) : (
+        {tab === 'message' ? (
           <StaffMessagesList userId={user.id} />
-        )}
+        ) : loading && currentListItems.length === 0 ? (
+          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : currentListItems.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            {tab === 'notice' ? <Bell className="w-10 h-10 mx-auto mb-3 opacity-50" /> : <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />}
+            <p className="text-sm">暂无{TAB_META[tab].label}</p>
+          </div>
+        ) : currentListItems.map(n => {
+          const meta = typeMeta(n.type);
+          return (
+            <Card
+              key={n.id}
+              className={`p-4 shadow-hard cursor-pointer transition ${n.read ? 'opacity-70' : 'border-primary/40'}`}
+              onClick={() => openDetail(n)}
+            >
+              <div className="flex items-start gap-3">
+                {!n.read && <span className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge className={`${meta.tone} border-0 text-[10px] px-1.5 py-0`}>{meta.label}</Badge>
+                    <span className="text-[11px] text-muted-foreground">
+                      {new Date(n.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold mb-1 line-clamp-2">{n.title}</h3>
+                  {n.image_url && tab === 'news' && (
+                    <img
+                      src={n.image_url}
+                      alt={n.title}
+                      loading="lazy"
+                      className="mt-2 w-full aspect-[16/6] object-cover rounded-md"
+                    />
+                  )}
+                  <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1">
+                    {n.body.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ').trim()}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
       </main>
 
       {/* 详情 Sheet */}
       <NotificationDetailSheet item={detailItem} onOpenChange={(v) => !v && setDetailItem(null)} />
 
-      {/* 管理员：AI 撰稿浮标 */}
-      {isAdmin && tab === 'news' && (
+      {/* 管理员：AI 撰稿浮标（通知/资讯 都可发） */}
+      {isAdmin && tab !== 'message' && (
         <button
           type="button"
-          aria-label="AI 撰稿发资讯"
+          aria-label={`发${TAB_META[tab].label}`}
           onClick={openCompose}
           className="fixed right-4 bottom-40 z-40 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-95 transition"
         >
           <PencilLine className="w-5 h-5" />
         </button>
       )}
+
 
       {/* 撰稿弹窗：预览在上、工具栏在中、对话在底部 */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetCompose(); }}>
@@ -400,8 +420,8 @@ export default function Notifications() {
               <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
                 <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="notice">通知</SelectItem>
                   <SelectItem value="news">资讯</SelectItem>
-                  <SelectItem value="message">消息</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={type} onValueChange={setType}>

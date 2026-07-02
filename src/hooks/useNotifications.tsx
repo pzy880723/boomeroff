@@ -20,12 +20,22 @@ interface Ctx {
   items: NotificationItem[];
   loading: boolean;
   unreadCount: number;
+  noticeUnread: number;
+  newsUnread: number;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
 const NotificationsContext = createContext<Ctx | undefined>(undefined);
+
+// news / message 之外的一切归为 notice（含历史 null 数据）
+function bucketOf(cat: string | null | undefined): 'news' | 'message' | 'notice' {
+  const c = (cat || '').toLowerCase();
+  if (c === 'news') return 'news';
+  if (c === 'message') return 'message';
+  return 'notice';
+}
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -38,9 +48,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     const [{ data: notes }, { data: reads }] = await Promise.all([
       supabase.from('notifications' as any)
         .select('id, title, body, type, created_at, expires_at, image_url, category')
-        .in('category', ['news', 'message'])
         .order('created_at', { ascending: false })
-        .limit(30),
+        .limit(60),
       supabase.from('notification_reads' as any)
         .select('notification_id')
         .eq('user_id', user.id),
@@ -73,10 +82,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [user, items]);
 
   const unreadCount = items.filter(n => !n.read).length;
+  const noticeUnread = items.filter(n => !n.read && bucketOf(n.category) === 'notice').length;
+  const newsUnread = items.filter(n => !n.read && bucketOf(n.category) === 'news').length;
+
 
   const value = useMemo<Ctx>(
-    () => ({ items, loading, unreadCount, markRead, markAllRead, refresh: load }),
-    [items, loading, unreadCount, markRead, markAllRead, load],
+    () => ({ items, loading, unreadCount, noticeUnread, newsUnread, markRead, markAllRead, refresh: load }),
+    [items, loading, unreadCount, noticeUnread, newsUnread, markRead, markAllRead, load],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
@@ -87,7 +99,7 @@ export function useNotifications(): Ctx {
   if (!ctx) {
     // 兜底：未挂 Provider 时返回空，避免崩溃
     return {
-      items: [], loading: false, unreadCount: 0,
+      items: [], loading: false, unreadCount: 0, noticeUnread: 0, newsUnread: 0,
       markRead: async () => {}, markAllRead: async () => {}, refresh: async () => {},
     };
   }
