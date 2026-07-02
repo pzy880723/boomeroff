@@ -393,6 +393,7 @@ export default function Notifications() {
     setSubmitting(false);
     if (error) { toast.error('发布失败：' + error.message); return; }
     toast.success(`${TAB_META[category].label}已发布`);
+    if (currentDraftId) { removeDraft(currentDraftId); refreshDrafts(); }
     resetCompose();
     setOpen(false);
     void refresh();
