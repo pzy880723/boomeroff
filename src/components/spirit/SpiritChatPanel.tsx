@@ -495,23 +495,69 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
   );
 }
 
-function EmptyState() {
+const TOPIC_CARDS: {
+  id: ChipCategory;
+  Icon: typeof CalendarDays;
+  title: string;
+  hint: string;
+  prompt: string;
+}[] = [
+  { id: 'shift',       Icon: CalendarDays,        title: '今日排班', hint: '几点到岗、跟谁一班', prompt: '我今天的班次是什么？跟谁一起上班？' },
+  { id: 'level',       Icon: Trophy,              title: '打卡等级', hint: '积分、连击、下一级', prompt: '我现在多少经验？连续打卡几天了？下一级还差多少？' },
+  { id: 'helper',      Icon: HeartHandshake,      title: '顾客搞不定', hint: '砍价 · 嫌贵 · 退换', prompt: '顾客说太贵想砍价，我怎么回既留住人又守住价？' },
+  { id: 'trivia',      Icon: BookOpenText,        title: '中古知识',  hint: '真假 · 保养 · 年代', prompt: '给我讲一个今天可以立刻用得上的中古冷知识' },
+  { id: 'today',       Icon: Store,               title: '今日主推',  hint: '风格 · 品类 · 价位', prompt: '今天店里主推什么风格和品类比较好卖？' },
+  { id: 'copywriting', Icon: PenLine,             title: '写文案',   hint: '朋友圈 · 小红书',    prompt: '帮我写一条有点感觉的中古朋友圈文案' },
+];
+
+function EmptyState({
+  onPickTopic,
+  onQuickAsk,
+}: {
+  onPickTopic: (t: ChipCategory) => void;
+  onQuickAsk: (prompt: string) => void;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center text-center px-6 min-h-full -translate-y-[6%]">
-      <div className="relative overflow-visible" style={{ width: 260, height: 260 }}>
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ transform: 'scale(1.15) translateY(-2%)', transformOrigin: '50% 50%' }}
-        >
-          <SpiritMascot size={260} state="idle" />
-        </div>
+    <div className="flex flex-col items-center text-center px-4 pt-4 pb-6 min-h-full">
+      {/* 海獭 */}
+      <div className="relative overflow-visible shrink-0" style={{ width: 180, height: 180 }}>
+        <SpiritMascot size={180} state="idle" />
       </div>
-      <div className="mt-2 text-[hsl(var(--primary-foreground))] text-sm font-semibold flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5" />
+      <div className="mt-1 text-[hsl(var(--primary-foreground))] text-base font-bold flex items-center gap-1.5">
+        <Sparkles className="w-4 h-4" />
         你好呀～我是 BOOMER
       </div>
-      <div className="mt-2 text-[12px] leading-relaxed text-[hsl(var(--primary-foreground)/0.65)] max-w-[280px]">
-        中古门店里的修行搭子。问排班、聊知识、想打气，或拍张照片让我帮你看看～
+      <div className="mt-1.5 text-[12px] leading-relaxed text-[hsl(var(--primary-foreground)/0.65)] max-w-[300px]">
+        全店问答小百科 · 排班 / 打卡 / 顾客 / 知识 / 文案 / 情绪,都可以直接问我
+      </div>
+
+      {/* 主题入口 2x3 */}
+      <div className="mt-4 grid grid-cols-2 gap-2 w-full max-w-[340px]">
+        {TOPIC_CARDS.map(({ id, Icon, title, hint, prompt }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => { onPickTopic(id); onQuickAsk(prompt); }}
+            className={cn(
+              'group flex items-center gap-2.5 rounded-2xl p-2.5 text-left transition-all active:scale-[0.98]',
+              'bg-[hsl(var(--accent)/0.08)] border border-[hsl(var(--accent)/0.22)]',
+              'hover:bg-[hsl(var(--accent)/0.16)] hover:border-[hsl(var(--accent)/0.4)]',
+            )}
+          >
+            <span className="shrink-0 w-9 h-9 rounded-xl bg-[hsl(var(--accent)/0.22)] text-[hsl(var(--accent))] flex items-center justify-center group-hover:bg-[hsl(var(--accent))] group-hover:text-[hsl(var(--accent-foreground))] transition-colors">
+              <Icon className="w-4 h-4" strokeWidth={2.4} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12px] font-bold text-[hsl(var(--primary-foreground))] truncate">{title}</span>
+              <span className="block text-[10px] text-[hsl(var(--primary-foreground)/0.55)] truncate">{hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 flex items-center gap-1.5 text-[10.5px] text-[hsl(var(--primary-foreground)/0.5)]">
+        <Camera className="w-3 h-3" />
+        也可以直接拍照/发图,我来帮你看看这件是什么
       </div>
     </div>
   );
