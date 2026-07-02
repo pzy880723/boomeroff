@@ -161,21 +161,23 @@ export default function Notifications() {
       title: title.trim(),
       body: body.trim(),
       type,
+      category,
       active: true,
       created_by: user!.id,
     }).select('id').single();
     setSubmitting(false);
     if (error) { toast.error('发布失败：' + error.message); return; }
-    toast.success('通知已发布');
+    toast.success(`${TAB_META[category].label}已发布`);
     resetCompose();
     setOpen(false);
     void refresh();
-    if ((inserted as any)?.id) {
+    if ((inserted as any)?.id && category === 'news') {
       void supabase.functions.invoke('generate-notification-banner', {
         body: { notification_id: (inserted as any).id, title: title.trim(), body: body.trim() },
       }).then(() => refresh()).catch(() => {});
     }
   };
+
 
   if (authLoading) return null;
   if (!user) return <AuthPage />;
