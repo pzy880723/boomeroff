@@ -172,9 +172,19 @@ export default function Home() {
         {/* 问候 + 快速打卡 */}
         <section>
           <div className="flex items-center justify-between gap-3">
-            <h1 className="text-xl font-bold tracking-tight truncate">
-              你好，{name}
-            </h1>
+            <div className="flex items-baseline gap-2 min-w-0">
+              <h1 className="text-xl font-bold tracking-tight truncate">
+                你好，{name}
+              </h1>
+              <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                {new Intl.DateTimeFormat('zh-CN', {
+                  timeZone: 'Asia/Shanghai',
+                  weekday: 'short',
+                  month: 'numeric',
+                  day: 'numeric',
+                }).format(new Date())}
+              </span>
+            </div>
             <Button
               size="sm"
               onClick={handleCheckIn}
@@ -189,7 +199,7 @@ export default function Home() {
               )}
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground mt-2 text-left leading-relaxed">
+          <p className="text-sm text-muted-foreground mt-2 text-left truncate whitespace-nowrap overflow-hidden">
             <Sparkles className="inline w-3.5 h-3.5 mr-1 -mt-0.5 text-primary" />
             {encouragement}
           </p>
@@ -215,13 +225,13 @@ export default function Home() {
           )}
         </Link>
 
-        {/* 我的排班（无排班则整卡隐藏） */}
-        {nextShift && (
-          <SectionCard
-            title="我的排班"
-            icon={<CalendarDays className="w-4 h-4 text-primary" />}
-            action={<Link to="/me" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>}
-          >
+        {/* 我的排班 */}
+        <SectionCard
+          title="我的排班"
+          icon={<CalendarDays className="w-4 h-4 text-primary" />}
+          action={<Link to="/me" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>}
+        >
+          {nextShift ? (
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold">{nextShift.work_date}</p>
@@ -229,8 +239,14 @@ export default function Home() {
               </div>
               <Badge variant="secondary" className="text-sm px-3 py-1">{nextShift.shift_code}</Badge>
             </div>
-          </SectionCard>
-        )}
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">近期暂无排班</p>
+              <Link to="/me" className="text-xs text-primary flex items-center">去查看 <ChevronRight className="w-3 h-3" /></Link>
+            </div>
+          )}
+        </SectionCard>
+
 
         {/* 正在进行的活动（横向条幅） */}
         {act && (
