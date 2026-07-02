@@ -801,6 +801,7 @@ Deno.serve(async (req) => {
           filesCount++; totalBytes += uploaded.size;
           dbUploaded++; dbBytes += uploaded.size;
           (meta.manifest ??= []).push({ kind: "table", key, size: uploaded.size, etag: uploaded.etag, table });
+          noteLedger({ cos_key: key, source_bucket: `db:${table}`, source_path: `part-${part}`, size: uploaded.size, etag: uploaded.etag });
         }
         meta.database_rows = (meta.database_rows ?? 0) + dumped.rows;
         if (dumped.hasMore) meta.table_offset = offset + PAGE_SIZE;
@@ -808,11 +809,14 @@ Deno.serve(async (req) => {
         meta.step = `正在备份系统记录 ${meta.table_index}/${TABLES.length}`;
       } catch (e) {
         dbFailed++;
-        recordFailure(meta, { kind: "table", table, offset, error: e instanceof Error ? e.message : String(e) });
+        const errMsg = e instanceof Error ? e.message : String(e);
+        recordFailure(meta, { kind: "table", table, offset, error: errMsg });
+        await markFailure(admin, { source_bucket: `db:${table}`, source_path: `part-${part}`, cos_key: key, size: 0, error: errMsg });
         meta.table_index = start + 1; meta.table_offset = 0;
       }
     }
     if (dbUploaded + dbFailed > 0) bumpPass(meta, "database", { uploaded: dbUploaded, failed: dbFailed, bytes: dbBytes, elapsed_ms: Date.now() - dbPassStart, total: TABLES.length });
+
 
     // ============= STORAGE LIST PHASE =============
     if (meta.phase === "storage_list" && Date.now() - tickStart < TICK_BUDGET_MS) {
