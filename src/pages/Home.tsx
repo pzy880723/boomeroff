@@ -187,9 +187,9 @@ export default function Home() {
               )}
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground mt-1.5 flex items-start gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 mt-0.5 text-primary shrink-0" />
-            <span className="flex-1">{encouragement}</span>
+          <p className="text-sm text-muted-foreground mt-2 text-left leading-relaxed">
+            <Sparkles className="inline w-3.5 h-3.5 mr-1 -mt-0.5 text-primary" />
+            {encouragement}
           </p>
         </section>
 
