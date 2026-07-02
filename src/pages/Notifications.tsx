@@ -371,6 +371,9 @@ export default function Notifications() {
       } else {
         setBody(body + snippet);
       }
+      // 切到预览 tab,让用户立刻看到插入效果
+      setView('preview');
+      toast.success('已插入图片');
     } catch (e: any) {
       toast.error(e?.message || '图片上传失败');
     } finally {
