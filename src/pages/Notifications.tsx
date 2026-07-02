@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   MessageCircle, PencilLine, CheckCheck, Loader2, Sparkles, Send,
-  ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil, Bell,
+  ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil, Bell, Search, Filter,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
