@@ -93,7 +93,7 @@ const App = () => {
                 <Route path="/library" element={<OfficialLibrary />} />
                 <Route path="/my-library" element={<MyLibrary />} />
                 <Route path="/notifications" element={<Notifications />} />
-                <Route path="/community" element={<Navigate to="/notifications" replace />} />
+                <Route path="/community" element={<Community />} />
                 <Route path="/me" element={<Me />} />
               </Route>
 
