@@ -28,51 +28,23 @@ function useLongPress(cb: () => void, ms = 450) {
   };
 }
 
-/** 品牌红/白瓷 squircle tile。 */
+/** 品牌红瓷 squircle tile —— 扁平纯色,无高光/描边渐变。 */
 function TileFace({ meta, dragging }: { meta: AppIconMeta; dragging?: boolean }) {
-  const { Icon, tone } = meta;
-  const isRed = tone === 'red';
+  const { Icon } = meta;
   return (
     <span
       className={cn(
-        'relative w-[54px] h-[54px] rounded-[26%] flex items-center justify-center overflow-hidden',
+        'relative w-[54px] h-[54px] rounded-[26%] flex items-center justify-center',
+        'bg-primary shadow-[0_4px_10px_-6px_rgba(0,0,0,0.25)]',
         'transition-transform duration-150',
-        isRed
-          ? 'bg-primary shadow-[0_8px_18px_-8px_hsl(var(--primary)/0.55)] ring-1 ring-primary/40'
-          : 'bg-white shadow-[0_6px_14px_-8px_rgba(0,0,0,0.18)] ring-1 ring-primary/15',
         dragging && 'scale-110 shadow-[0_18px_28px_-10px_rgba(0,0,0,0.35)]',
       )}
     >
-      {/* 顶部高光 */}
-      <span
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b',
-          isRed ? 'from-white/25 via-white/5 to-transparent' : 'from-white to-white/0',
-        )}
-      />
-      {/* 内描边 */}
-      <span
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute inset-0 rounded-[26%]',
-          isRed
-            ? 'shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(0,0,0,0.15)]'
-            : 'shadow-[inset_0_1px_0_rgba(255,255,255,0.9),inset_0_-1px_0_rgba(0,0,0,0.05)]',
-        )}
-      />
-      <Icon
-        className={cn(
-          'relative w-[24px] h-[24px]',
-          isRed
-            ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]'
-            : 'text-primary',
-        )}
-        strokeWidth={2.2}
-      />
+      <Icon className="relative w-[24px] h-[24px] text-white" strokeWidth={2.2} />
     </span>
   );
 }
+
 
 interface TileProps {
   id: string;

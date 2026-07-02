@@ -4,9 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import {
   GraduationCap, Camera, ImageOff, ChevronRight, Loader2,
   Heart, MessageCircle,
 } from 'lucide-react';
@@ -14,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { thumbUrl } from '@/lib/imageUrl';
 import { CATEGORY_LABELS, type ProductCategory } from '@/types';
 import { PostDetailSheet, type Post as CommunityPost } from '@/pages/public/PublicCommunity';
-import { ProductDetailDialog } from '@/components/history/ProductDetailDialog';
+
 
 type TabKey = 'my-kb' | 'community';
 
@@ -43,7 +40,7 @@ export function HomeFeedTabs() {
   const [kbCards, setKbCards] = useState<KbCard[]>([]);
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [activePost, setActivePost] = useState<CommunityPost | null>(null);
-  const [activeKb, setActiveKb] = useState<KbCard | null>(null);
+
 
   useEffect(() => {
     try { localStorage.setItem(PREF_KEY, tab); } catch { /* ignore */ }
@@ -165,32 +162,40 @@ export function HomeFeedTabs() {
         </div>
       ) : tab === 'my-kb' ? (
         <div className="columns-2 gap-2 [column-fill:_balance]">
-          {kbCards.map((c) => (
-            <button
-              key={c.key}
-              onClick={() => setActiveKb(c)}
-              className="mb-2 break-inside-avoid block w-full text-left rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
-            >
-              {c.cover ? (
-                <img
-                  src={thumbUrl(c.cover, 320) || c.cover}
-                  alt={c.name}
-                  className="w-full h-auto bg-muted block"
-                  loading="lazy"
-                  decoding="async"
-                />
-              ) : (
-                <div className="w-full bg-muted flex items-center justify-center text-muted-foreground" style={{ aspectRatio: '3 / 4' }}>
-                  <ImageOff className="w-5 h-5" />
+          {kbCards.map((c) => {
+            const to = c.source_type === 'official'
+              ? `/library/${c.source_id}`
+              : c.source_type === 'product'
+                ? `/my-library?product=${c.source_id}`
+                : '/my-library';
+            return (
+              <Link
+                key={c.key}
+                to={to}
+                className="mb-2 break-inside-avoid block w-full text-left rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
+              >
+                {c.cover ? (
+                  <img
+                    src={thumbUrl(c.cover, 320) || c.cover}
+                    alt={c.name}
+                    className="w-full h-auto bg-muted block"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : (
+                  <div className="w-full bg-muted flex items-center justify-center text-muted-foreground" style={{ aspectRatio: '3 / 4' }}>
+                    <ImageOff className="w-5 h-5" />
+                  </div>
+                )}
+                <div className="p-2">
+                  <p className="text-[12.5px] font-medium leading-snug line-clamp-2">{c.name}</p>
+                  {c.meta && <p className="text-[10.5px] text-muted-foreground mt-0.5">{c.meta}</p>}
                 </div>
-              )}
-              <div className="p-2">
-                <p className="text-[12.5px] font-medium leading-snug line-clamp-2">{c.name}</p>
-                {c.meta && <p className="text-[10.5px] text-muted-foreground mt-0.5">{c.meta}</p>}
-              </div>
-            </button>
-          ))}
+              </Link>
+            );
+          })}
         </div>
+
       ) : (
         <div className="columns-2 gap-2 [column-fill:_balance]">
           {posts.map((p) => {
@@ -232,47 +237,7 @@ export function HomeFeedTabs() {
 
       {/* BOOMER 圈 弹窗 (复用公开版详情) */}
       {activePost && <PostDetailSheet post={activePost} onClose={() => setActivePost(null)} />}
-
-      {/* 我的知识 弹窗 */}
-      {activeKb && activeKb.source_type === 'product' && activeKb.productRow ? (
-        <ProductDetailDialog
-          product={activeKb.productRow}
-          open
-          onOpenChange={(o) => !o && setActiveKb(null)}
-        />
-      ) : null}
-
-      {activeKb && activeKb.source_type !== 'product' ? (
-        <Dialog open onOpenChange={(o) => !o && setActiveKb(null)}>
-          <DialogContent className="max-w-md p-0 overflow-hidden max-h-[90vh] flex flex-col">
-            <DialogHeader className="px-4 pt-4 pb-2 shrink-0">
-              <DialogTitle className="text-base">{activeKb.name}</DialogTitle>
-            </DialogHeader>
-            <div className="overflow-y-auto px-4 pb-4 space-y-3">
-              {activeKb.cover && (
-                <img src={activeKb.cover} alt={activeKb.name} className="w-full h-auto rounded-xl bg-muted" />
-              )}
-              {activeKb.meta && (
-                <div className="text-xs text-muted-foreground">{activeKb.meta}</div>
-              )}
-              {activeKb.officialRow?.description && (
-                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
-                  {activeKb.officialRow.description}
-                </p>
-              )}
-              {activeKb.source_id && (
-                <Link
-                  to={`/library/${activeKb.source_id}`}
-                  onClick={() => setActiveKb(null)}
-                  className="inline-flex items-center gap-1 text-xs text-primary"
-                >
-                  查看完整详情 <ChevronRight className="w-3 h-3" />
-                </Link>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      ) : null}
     </section>
   );
 }
+

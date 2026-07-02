@@ -135,12 +135,14 @@ export default function Home() {
     })();
   }, [user]);
 
-  // Banner：取最新一条 category='banner' 或最新通知
+  // Banner：只取「资讯」分类最新一条
   useEffect(() => {
-    if (!notes.length) return;
-    const b = notes.find((n) => (n as any).category === 'banner') || notes[0];
+    if (!notes.length) { setBannerNote(null); return; }
+    const b = notes.find((n) => (n as any).category === 'news');
     if (b) setBannerNote({ id: b.id, title: b.title, image_url: (b as any).image_url });
+    else setBannerNote(null);
   }, [notes]);
+
 
   const handleCheckIn = async () => {
     if (checkedToday || checking) return;
@@ -162,7 +164,7 @@ export default function Home() {
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border/50 safe-top">
         <div className="mx-auto max-w-screen-md px-4 h-12 flex items-center justify-between">
           <h1 className="text-base font-semibold tracking-tight">仪表盘</h1>
-          <img src={brandWordmark.url} alt="BOOMER GO" className="h-5 w-auto object-contain select-none" draggable={false} />
+          <img src={brandWordmark.url} alt="BOOMER GO" className="h-4 w-auto object-contain select-none" draggable={false} />
         </div>
       </header>
 
@@ -195,7 +197,7 @@ export default function Home() {
 
         {/* Banner */}
         <Link
-          to="/notifications"
+          to="/notifications?tab=news"
           className="block relative rounded-2xl overflow-hidden border border-border/60 aspect-[16/6] bg-muted"
         >
           <img

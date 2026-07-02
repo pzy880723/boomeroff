@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
@@ -14,7 +15,24 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Bell, PencilLine, CheckCheck, Loader2, Sparkles, Send } from 'lucide-react';
+import { MessageCircle, PencilLine, CheckCheck, Loader2, Sparkles, Send } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+type TabKey = 'notice' | 'news' | 'message';
+const TAB_META: Record<TabKey, { label: string; title: string }> = {
+  notice: { label: '通知', title: '通知' },
+  news: { label: '资讯', title: '资讯' },
+  message: { label: '消息', title: '消息' },
+};
+const TAB_PREF = 'notifications-tab';
+function matchesTab(cat: string | null | undefined, tab: TabKey) {
+  const c = (cat || '').toLowerCase();
+  if (tab === 'news') return c === 'news';
+  if (tab === 'message') return c === 'message';
+  // notice: 缺省 / 公告类
+  return !c || c === 'notice' || c === 'announcement' || c === 'policy' || c === 'urgent' || c === 'banner';
+}
+
 
 const TYPE_LABEL: Record<string, { label: string; tone: string }> = {
   announcement: { label: '公告', tone: 'bg-primary/10 text-primary' },
@@ -31,14 +49,43 @@ type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
 export default function Notifications() {
   const { user, role, loading: authLoading } = useAuth();
-  const { items, loading, unreadCount, markRead, markAllRead, refresh } = useNotifications();
+  const { items, loading, markRead, refresh } = useNotifications();
   const isAdmin = role === 'admin';
+
+  // 分栏
+  const [sp, setSp] = useSearchParams();
+  const initialTab = (() => {
+    const q = sp.get('tab');
+    if (q === 'news' || q === 'message' || q === 'notice') return q as TabKey;
+    try {
+      const v = localStorage.getItem(TAB_PREF);
+      if (v === 'news' || v === 'message' || v === 'notice') return v as TabKey;
+    } catch { /* ignore */ }
+    return 'notice';
+  })();
+  const [tab, setTab] = useState<TabKey>(initialTab);
+  useEffect(() => {
+    try { localStorage.setItem(TAB_PREF, tab); } catch { /* ignore */ }
+    if (sp.get('tab') !== tab) {
+      const next = new URLSearchParams(sp);
+      next.set('tab', tab);
+      setSp(next, { replace: true });
+    }
+  }, [tab, sp, setSp]);
+
+  const filteredItems = useMemo(
+    () => items.filter(n => matchesTab((n as any).category, tab)),
+    [items, tab],
+  );
+  const tabUnread = useMemo(() => filteredItems.filter(n => !n.read).length, [filteredItems]);
 
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [type, setType] = useState('announcement');
+  const [category, setCategory] = useState<TabKey>('notice');
   const [submitting, setSubmitting] = useState(false);
+
 
   // AI 对话式撰稿
   const [chat, setChat] = useState<ChatTurn[]>([]);
@@ -61,13 +108,14 @@ export default function Notifications() {
   }, [user, refresh]);
 
   const resetCompose = () => {
-    setChat([]); setInput(''); setTitle(''); setBody(''); setType('announcement');
+    setChat([]); setInput(''); setTitle(''); setBody(''); setType('announcement'); setCategory(tab);
   };
 
   const openCompose = () => {
     resetCompose();
     setOpen(true);
   };
+
 
   const sendToAI = async () => {
     const q = input.trim();
@@ -113,48 +161,71 @@ export default function Notifications() {
       title: title.trim(),
       body: body.trim(),
       type,
+      category,
       active: true,
       created_by: user!.id,
     }).select('id').single();
     setSubmitting(false);
     if (error) { toast.error('发布失败：' + error.message); return; }
-    toast.success('通知已发布');
+    toast.success(`${TAB_META[category].label}已发布`);
     resetCompose();
     setOpen(false);
     void refresh();
-    if ((inserted as any)?.id) {
+    if ((inserted as any)?.id && category === 'news') {
       void supabase.functions.invoke('generate-notification-banner', {
         body: { notification_id: (inserted as any).id, title: title.trim(), body: body.trim() },
       }).then(() => refresh()).catch(() => {});
     }
   };
 
+
   if (authLoading) return null;
   if (!user) return <AuthPage />;
+
+  const markAllReadInTab = async () => {
+    // 只把当前分栏内的未读标为已读
+    for (const n of filteredItems) if (!n.read) await markRead(n.id);
+  };
 
   return (
     <div className="min-h-screen">
       <PageHeader
-        title="通知"
+        title={TAB_META[tab].title}
         right={
-          unreadCount > 0 ? (
-            <Button size="sm" variant="ghost" onClick={markAllRead}>
+          tabUnread > 0 ? (
+            <Button size="sm" variant="ghost" onClick={markAllReadInTab}>
               <CheckCheck className="w-4 h-4 mr-1" />全部已读
             </Button>
           ) : null
         }
       />
 
-      <main className="mx-auto max-w-screen-md px-4 py-4 space-y-3">
-        {loading && items.length === 0 ? (
+      <main className="mx-auto max-w-screen-md px-4 py-3 space-y-3">
+        {/* 分栏切换 */}
+        <div className="inline-flex rounded-full bg-muted p-0.5 text-xs w-full max-w-xs">
+          {(['notice', 'news', 'message'] as TabKey[]).map(k => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={cn(
+                'flex-1 h-7 rounded-full font-medium transition-colors',
+                tab === k ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {TAB_META[k].label}
+            </button>
+          ))}
+        </div>
+
+        {loading && filteredItems.length === 0 ? (
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-        ) : items.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
-            <Bell className="w-10 h-10 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">暂无通知</p>
+            <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
+            <p className="text-sm">暂无{TAB_META[tab].label}</p>
           </div>
         ) : (
-          items.map(n => {
+          filteredItems.map(n => {
             const meta = typeMeta(n.type);
             return (
               <Card
@@ -180,6 +251,7 @@ export default function Notifications() {
           })
         )}
       </main>
+
 
       {/* 管理员：AI 撰稿浮标（避开 BOOMER 浮标位置） */}
       {isAdmin && (
@@ -244,8 +316,16 @@ export default function Notifications() {
           {/* 草稿预览 & 微调 */}
           <div className="px-4 py-3 space-y-2">
             <div className="flex gap-2">
+              <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
+                <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="notice">通知</SelectItem>
+                  <SelectItem value="news">资讯</SelectItem>
+                  <SelectItem value="message">消息</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="announcement">公告</SelectItem>
                   <SelectItem value="policy">制度</SelectItem>
@@ -253,6 +333,7 @@ export default function Notifications() {
                   <SelectItem value="urgent">紧急</SelectItem>
                 </SelectContent>
               </Select>
+
               <Input
                 value={title}
                 onChange={e => setTitle(e.target.value)}
