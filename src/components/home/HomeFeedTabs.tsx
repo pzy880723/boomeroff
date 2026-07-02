@@ -162,32 +162,40 @@ export function HomeFeedTabs() {
         </div>
       ) : tab === 'my-kb' ? (
         <div className="columns-2 gap-2 [column-fill:_balance]">
-          {kbCards.map((c) => (
-            <button
-              key={c.key}
-              onClick={() => setActiveKb(c)}
-              className="mb-2 break-inside-avoid block w-full text-left rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
-            >
-              {c.cover ? (
-                <img
-                  src={thumbUrl(c.cover, 320) || c.cover}
-                  alt={c.name}
-                  className="w-full h-auto bg-muted block"
-                  loading="lazy"
-                  decoding="async"
-                />
-              ) : (
-                <div className="w-full bg-muted flex items-center justify-center text-muted-foreground" style={{ aspectRatio: '3 / 4' }}>
-                  <ImageOff className="w-5 h-5" />
+          {kbCards.map((c) => {
+            const to = c.source_type === 'official'
+              ? `/library/${c.source_id}`
+              : c.source_type === 'product'
+                ? `/my-library?product=${c.source_id}`
+                : '/my-library';
+            return (
+              <Link
+                key={c.key}
+                to={to}
+                className="mb-2 break-inside-avoid block w-full text-left rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
+              >
+                {c.cover ? (
+                  <img
+                    src={thumbUrl(c.cover, 320) || c.cover}
+                    alt={c.name}
+                    className="w-full h-auto bg-muted block"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : (
+                  <div className="w-full bg-muted flex items-center justify-center text-muted-foreground" style={{ aspectRatio: '3 / 4' }}>
+                    <ImageOff className="w-5 h-5" />
+                  </div>
+                )}
+                <div className="p-2">
+                  <p className="text-[12.5px] font-medium leading-snug line-clamp-2">{c.name}</p>
+                  {c.meta && <p className="text-[10.5px] text-muted-foreground mt-0.5">{c.meta}</p>}
                 </div>
-              )}
-              <div className="p-2">
-                <p className="text-[12.5px] font-medium leading-snug line-clamp-2">{c.name}</p>
-                {c.meta && <p className="text-[10.5px] text-muted-foreground mt-0.5">{c.meta}</p>}
-              </div>
-            </button>
-          ))}
+              </Link>
+            );
+          })}
         </div>
+
       ) : (
         <div className="columns-2 gap-2 [column-fill:_balance]">
           {posts.map((p) => {
