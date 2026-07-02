@@ -135,12 +135,14 @@ export default function Home() {
     })();
   }, [user]);
 
-  // Banner：取最新一条 category='banner' 或最新通知
+  // Banner：只取「资讯」分类最新一条
   useEffect(() => {
-    if (!notes.length) return;
-    const b = notes.find((n) => (n as any).category === 'banner') || notes[0];
+    if (!notes.length) { setBannerNote(null); return; }
+    const b = notes.find((n) => (n as any).category === 'news');
     if (b) setBannerNote({ id: b.id, title: b.title, image_url: (b as any).image_url });
+    else setBannerNote(null);
   }, [notes]);
+
 
   const handleCheckIn = async () => {
     if (checkedToday || checking) return;
