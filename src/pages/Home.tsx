@@ -260,8 +260,15 @@ export default function Home() {
           </section>
         )}
 
-        {/* 应用图标网格 */}
-        <AppGrid />
+        {/* 我的应用 */}
+        <section>
+          <div className="flex items-center justify-between mb-1 px-1">
+            <h2 className="text-sm font-bold flex items-center gap-1.5">
+              <LayoutGrid className="w-4 h-4 text-primary" /> 我的应用
+            </h2>
+          </div>
+          <AppGrid />
+        </section>
 
         {/* 门店管理 / OKR */}
         {okrs.length > 0 && (
