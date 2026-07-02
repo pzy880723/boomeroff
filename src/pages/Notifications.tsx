@@ -1050,7 +1050,8 @@ function NewsBigCard({ item, onOpen }: { item: NotificationItem; onOpen: () => v
   );
 }
 
-
+/* ---------- 消息 Tab：店员列表 ---------- */
+function StaffMessagesList({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
   const [peers, setPeers] = useState<StaffPeer[]>([]);
 
