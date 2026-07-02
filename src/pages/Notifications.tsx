@@ -316,8 +316,16 @@ export default function Notifications() {
           {/* 草稿预览 & 微调 */}
           <div className="px-4 py-3 space-y-2">
             <div className="flex gap-2">
+              <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
+                <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="notice">通知</SelectItem>
+                  <SelectItem value="news">资讯</SelectItem>
+                  <SelectItem value="message">消息</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="announcement">公告</SelectItem>
                   <SelectItem value="policy">制度</SelectItem>
@@ -325,6 +333,7 @@ export default function Notifications() {
                   <SelectItem value="urgent">紧急</SelectItem>
                 </SelectContent>
               </Select>
+
               <Input
                 value={title}
                 onChange={e => setTitle(e.target.value)}
