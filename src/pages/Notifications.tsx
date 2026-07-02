@@ -71,7 +71,7 @@ interface StaffPeer {
 
 export default function Notifications() {
   const { user, role, loading: authLoading } = useAuth();
-  const { items, loading, markRead, refresh, noticeUnread, newsUnread } = useNotifications();
+  const { items, loading, markRead, refresh, noticeUnread, newsUnread, removeItem, updateItem } = useNotifications();
   const isAdmin = role === 'admin';
 
   const [sp, setSp] = useSearchParams();
@@ -161,6 +161,7 @@ export default function Notifications() {
 
   // 草稿箱
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<NotificationDraft[]>([]);
   const [draftBoxOpen, setDraftBoxOpen] = useState(false);
   const refreshDrafts = () => setDrafts(listDrafts());
@@ -203,7 +204,7 @@ export default function Notifications() {
   const resetCompose = (defaultCat: TabKey = 'notice') => {
     setChat([]); setInput(''); setTitle(''); setSummary(''); setBody('');
     setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
-    setVersions([]); setView('chat'); setCurrentDraftId(null);
+    setVersions([]); setView('chat'); setCurrentDraftId(null); setEditingId(null);
   };
   const openCompose = () => {
     resetCompose(tab === 'message' ? 'notice' : tab);
@@ -387,23 +388,63 @@ export default function Notifications() {
   const publish = async () => {
     if (!title.trim() || !body.trim()) { toast.error('标题和内容不能为空'); return; }
     setSubmitting(true);
-    const { error } = await supabase.from('notifications' as any).insert({
-      title: title.trim(),
-      body: body.trim(),
-      summary: summary.trim() || null,
-      type,
-      category,
-      image_url: coverUrl || null,
-      active: true,
-      created_by: user!.id,
-    });
-    setSubmitting(false);
-    if (error) { toast.error('发布失败：' + error.message); return; }
-    toast.success(`${TAB_META[category].label}已发布`);
-    if (currentDraftId) { removeDraft(currentDraftId); refreshDrafts(); }
-    resetCompose();
-    setOpen(false);
-    void refresh();
+    try {
+      if (editingId) {
+        await updateItem(editingId, {
+          title: title.trim(),
+          body: body.trim(),
+          summary: summary.trim() || null,
+          type,
+          category,
+          image_url: coverUrl || null,
+        });
+        toast.success('已更新');
+      } else {
+        const { error } = await supabase.from('notifications' as any).insert({
+          title: title.trim(),
+          body: body.trim(),
+          summary: summary.trim() || null,
+          type,
+          category,
+          image_url: coverUrl || null,
+          active: true,
+          created_by: user!.id,
+        });
+        if (error) { toast.error('发布失败：' + error.message); return; }
+        toast.success(`${TAB_META[category].label}已发布`);
+      }
+      if (currentDraftId) { removeDraft(currentDraftId); refreshDrafts(); }
+      resetCompose();
+      setOpen(false);
+      void refresh();
+    } catch (e: any) {
+      toast.error((editingId ? '更新失败：' : '发布失败：') + (e?.message || ''));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openEditFromDetail = (n: NotificationItem) => {
+    resetCompose(bucketOf(n.category) === 'news' ? 'news' : 'notice');
+    setEditingId(n.id);
+    setTitle(n.title);
+    setSummary(n.summary || '');
+    setBody(n.body || '');
+    setType(n.type || 'announcement');
+    setCategory((bucketOf(n.category) === 'news' ? 'news' : 'notice') as TabKey);
+    setCoverUrl(n.image_url || '');
+    setView('preview');
+    setDetailItem(null);
+    setOpen(true);
+  };
+
+  const handleDeleteFromDetail = async (id: string) => {
+    try {
+      await removeItem(id);
+      toast.success('已删除');
+    } catch (e: any) {
+      toast.error('删除失败：' + (e?.message || ''));
+    }
   };
 
   if (authLoading) return null;
@@ -539,7 +580,13 @@ export default function Notifications() {
       </main>
 
       {/* 详情 Sheet */}
-      <NotificationDetailSheet item={detailItem} onOpenChange={(v) => !v && setDetailItem(null)} />
+      <NotificationDetailSheet
+        item={detailItem}
+        onOpenChange={(v) => !v && setDetailItem(null)}
+        isAdmin={isAdmin}
+        onEdit={openEditFromDetail}
+        onDelete={handleDeleteFromDetail}
+      />
 
       {/* 管理员：AI 撰稿浮标（通知/资讯 都可发） */}
       {isAdmin && tab !== 'message' && (
@@ -907,7 +954,7 @@ export default function Notifications() {
                     )}
                   </Button>
                   <Button size="sm" onClick={publish} disabled={submitting || !title.trim() || !body.trim()} className="h-9 flex-1">
-                    {submitting && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}发布
+                    {submitting && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}{editingId ? '保存修改' : '发布'}
                   </Button>
                 </div>
               </>
