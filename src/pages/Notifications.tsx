@@ -1061,9 +1061,10 @@ function NewsBigCard({ item, onOpen }: { item: NotificationItem; onOpen: () => v
     <article
       onClick={onOpen}
       className={cn(
-        'rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm cursor-pointer active:scale-[0.995] transition',
+        'relative rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm cursor-pointer active:scale-[0.995] transition',
         item.read && 'opacity-80',
       )}
+
     >
       {item.image_url ? (
         <img
