@@ -206,10 +206,17 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  const [topicFilter, setTopicFilter] = useState<ChipCategory | 'all'>('all');
   const [displayChips, setDisplayChips] = useState(() => pickChips(4));
-  // 每次回到空对话（新会话/清空）就重新抽 4 条
+  // 切换主题 / 回到空对话时,重新抽 chips
   useEffect(() => {
-    if (messages.length === 0) setDisplayChips(pickChips(4));
+    if (topicFilter === 'all') setDisplayChips(pickChips(4));
+    else setDisplayChips(pickChipsByCategory(topicFilter, 4));
+  }, [topicFilter]);
+  useEffect(() => {
+    if (messages.length === 0) setDisplayChips(
+      topicFilter === 'all' ? pickChips(4) : pickChipsByCategory(topicFilter, 4)
+    );
   }, [messages.length === 0]);
 
   useLayoutEffect(() => {
