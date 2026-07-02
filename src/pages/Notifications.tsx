@@ -26,6 +26,7 @@ import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
 import { MarkdownArticle } from '@/components/notifications/MarkdownArticle';
 import { NotificationDetailSheet } from '@/components/notifications/NotificationDetailSheet';
 import { NotificationBannerCropper } from '@/components/notifications/NotificationBannerCropper';
+import { RichBodyEditor } from '@/components/notifications/RichBodyEditor';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { listDrafts, saveDraft, removeDraft, type NotificationDraft } from '@/lib/notificationDrafts';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
