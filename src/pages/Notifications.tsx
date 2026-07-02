@@ -199,12 +199,34 @@ export default function Notifications() {
   };
 
 
-  const sendToAI = async () => {
-    const q = input.trim();
+  // 更宽松的 JSON 提取：优先 ```json fenced，然后严格匹配含 title/body 的对象
+  const extractDraftJson = (raw: string): { title?: string; body?: string; type?: string; reply?: string } | null => {
+    if (!raw) return null;
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const candidates: string[] = [];
+    if (fenced?.[1]) candidates.push(fenced[1].trim());
+    // 找从第一个 { 到最后一个 } 的所有前缀
+    const first = raw.indexOf('{');
+    const last = raw.lastIndexOf('}');
+    if (first >= 0 && last > first) candidates.push(raw.slice(first, last + 1));
+    for (const c of candidates) {
+      try {
+        const obj = JSON.parse(c);
+        if (obj && typeof obj === 'object' && (obj.title || obj.body)) return obj;
+      } catch { /* try next */ }
+    }
+    return null;
+  };
+
+  const sendToAI = async (override?: string) => {
+    const q = (override ?? input).trim();
     if (!q || aiLoading) return;
     const next: ChatTurn[] = [...chat, { role: 'user', content: q }];
-    setChat(next); setInput(''); setAiLoading(true);
+    setChat(next);
+    if (!override) setInput('');
+    setAiLoading(true);
     try {
+      const currentDraft = hasDraft ? `\n\n【当前草稿】\n标题：${title}\n正文：\n${body}` : '';
       const { data, error } = await supabase.functions.invoke('spirit-chat', {
         body: {
           purpose: 'notification_compose',
@@ -212,12 +234,14 @@ export default function Notifications() {
             {
               role: 'system',
               content:
-                '你是门店运营助手，与管理员共同撰写店铺资讯长文。规则：\n' +
-                '1) 首轮如果用户描述太简单，先追问 2-3 个补充问题（受众、时间、重点信息、语气），不要立刻出稿。\n' +
-                '2) 当用户明确说"生成"、"写吧"、"OK"等确认词后，才输出 JSON。\n' +
-                '3) 出稿时严格用 JSON：{"title":"...","body":"...","type":"announcement|policy|activity|urgent","reply":"简短回复"}。\n' +
-                '4) title ≤ 30 字，body 支持 Markdown（## 小标题、- 列表、**加粗**），可分段，2-6 段。\n' +
-                '5) 未确认时正常自然语言回复，不要输出 JSON。',
+                '你是门店运营助手，帮管理员一次性写好一条门店通知/资讯。核心原则：\n' +
+                '1) 默认「直接出稿」，不要连续追问。用户给的信息只要能拼一段话，就立刻出稿。\n' +
+                '2) 只有在信息严重不足（不足 6 个字且没有主题）时，才追问一个最关键的问题。\n' +
+                '3) 出稿时严格输出 JSON（可用 ```json 包裹）：{"title":"...","body":"...","type":"announcement|policy|activity|urgent","reply":"一句话说明"}\n' +
+                '4) title ≤ 24 字、开门见山；body 用 Markdown（## 小标题、- 列表、**加粗**），2-5 段，每段简短、可读，避免空话套话。\n' +
+                '5) 用户后续说「更短/更正式/更活泼/加数据/换个角度」等，就基于当前草稿改写并再次输出 JSON。\n' +
+                '6) 语气：专业但亲和，符合门店对店员的日常沟通，不要客服模板。' +
+                currentDraft,
             },
             ...next.map(t => ({ role: t.role, content: t.content })),
           ],
@@ -225,18 +249,21 @@ export default function Notifications() {
       });
       if (error) throw error;
       const raw = (data as any)?.text || (data as any)?.reply || (data as any)?.content || '';
-      let parsed: any = null;
-      try {
-        const jsonMatch = String(raw).match(/\{[\s\S]*\}/);
-        if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
-      } catch { /* ignore */ }
+      const parsed = extractDraftJson(String(raw));
       if (parsed && (parsed.title || parsed.body)) {
-        setTitle(parsed.title || '');
-        setBody(parsed.body || '');
-        if (parsed.type) setType(parsed.type);
-        setChat([...next, { role: 'assistant', content: parsed.reply || '草稿已生成，请查看上方预览' }]);
+        const nt = parsed.title || title;
+        const nb = parsed.body || body;
+        const ntype = parsed.type || type;
+        setTitle(nt); setBody(nb); if (parsed.type) setType(parsed.type);
+        setVersions(v => [...v, { title: nt, body: nb, type: ntype, at: new Date().toISOString() }]);
+        setChat([...next, { role: 'assistant', content: parsed.reply || '草稿已生成，点右上角「预览」查看 →' }]);
+        toast.success('草稿已生成', {
+          action: { label: '查看预览', onClick: () => setView('preview') },
+        });
       } else {
-        setChat([...next, { role: 'assistant', content: String(raw) || '（AI 无返回，请再描述一下）' }]);
+        // 去掉 JSON 尾巴，只显示自然语言
+        const cleaned = String(raw).replace(/```[\s\S]*?```/g, '').trim() || '（AI 无返回，请再描述一下）';
+        setChat([...next, { role: 'assistant', content: cleaned }]);
       }
     } catch (e: any) {
       setChat([...next, { role: 'assistant', content: '生成失败：' + (e?.message || '未知错误') }]);
@@ -244,6 +271,20 @@ export default function Notifications() {
       setAiLoading(false);
     }
   };
+
+  const applyVersion = (idx: number) => {
+    const v = versions[idx];
+    if (!v) return;
+    setTitle(v.title); setBody(v.body); setType(v.type);
+  };
+
+  const CHIPS: { label: string; prompt: string }[] = [
+    { label: '📢 发公告', prompt: '发一条公告，主题是：' },
+    { label: '📋 发制度', prompt: '发一条制度说明，内容是：' },
+    { label: '🎉 发活动', prompt: '发一条门店活动通知，活动是：' },
+    { label: '🚨 紧急通知', prompt: '发一条紧急通知：' },
+  ];
+  const REFINE_CHIPS = ['更短一些', '更正式一些', '更活泼一些', '加点数据', '换个角度再写一版'];
 
   const pickCoverFile = (file: File | null) => {
     if (!file) return;
