@@ -156,11 +156,12 @@ export default function Notifications() {
     return () => { void supabase.removeChannel(ch); };
   }, [user, refresh]);
 
-  const resetCompose = () => {
+  const resetCompose = (defaultCat: TabKey = 'notice') => {
     setChat([]); setInput(''); setTitle(''); setBody('');
-    setType('announcement'); setCategory('news'); setCoverUrl(''); setEditingBody(false);
+    setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
   };
-  const openCompose = () => { resetCompose(); setOpen(true); };
+  const openCompose = () => { resetCompose(tab === 'message' ? 'notice' : tab); setOpen(true); };
+
 
   const sendToAI = async () => {
     const q = input.trim();
