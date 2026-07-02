@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
-  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target,
+  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target, BookOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
