@@ -28,6 +28,8 @@
 
     /* 深字黑作为强调 / 硬阴影 */
     --accent: 0 0% 10%;
+    --accent-warm: 45 92% 58%;
+
     --accent-foreground: 0 0% 100%;
     --accent-soft: 0 0% 96%;
 
