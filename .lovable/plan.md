@@ -1,72 +1,73 @@
-# 应用图标 v3 —— 活泼版（参考「落至晚樱」风格）
+# 通知/资讯/消息 编辑与消费升级
 
-## 参考解读
+## 目标
 
-用户附图 icon 风格三个关键动作：
-1. **圆形浅色底** —— 不再是硬朗的 squircle 方块，而是柔和的正圆，底色偏淡。
-2. **粗描边线条图标** —— 端点浑圆、内部留白大、像玩具轮廓。
-3. **一处黄色实心小重点** —— 打破单色的呆板（磁带的黄标、光盘的黄唱针、收音机的黄按钮）。视觉活力全靠这一抹黄。
+把管理员的「AI 撰稿」弹窗从"标题+一段文本"升级成能真正发一篇带图文章;读者能看到富文本预览;三个分栏各自有未读角标;首页 banner 继续只吃「资讯」。
 
-保留 BOOMER 红色主调，把上一版"红瓷方块 + 白色线条"改成"淡红圆底 + 品牌红粗线 + 一抹柠檬黄"。
+## 数据 / 存储
 
-## 视觉规范
+- `notifications.image_url` **复用为封面 banner**(已存在字段)。
+- **正文以 Markdown 存 `body`**:插入的段落图用 `![](url)` 内联 —— 不动 schema,兼容旧数据。
+- 新建 **public bucket `notification-images`**(公开读,认证用户可写):
+  - 用 `supabase--storage_create_bucket` 建桶
+  - 单独一条迁移写 RLS:`INSERT/UPDATE/DELETE` 仅 admin (`has_role(auth.uid(),'admin')`),`SELECT` 完全公开
 
-- **Tile 容器**：从 `rounded-[26%]` squircle 改为 `rounded-full` 正圆；尺寸保持 54x54。
-- **底色**：`bg-primary/10`（品牌红 10% 淡红），暗色模式下自动柔和；不再用实心红。
-- **图标主色**：`text-primary`（品牌红），`stroke-width` 保持 2.6 圆头。
-- **黄色重点**：新增 CSS token `--accent-warm`（#F5C43C 柠檬金），Tailwind 加 `accent-warm` 颜色。每枚图标预留一颗/一段 `fill="hsl(var(--accent-warm))"` 的实心小元素（圆点/一小段/一小块）。
-- **阴影**：极轻 `shadow-[0_2px_6px_-4px_rgba(0,0,0,0.15)]`，比方块版更漂浮。
-- **拖拽/编辑抖动/长按**：完全沿用现有 `AppGrid` 逻辑，不改动。
+## 编辑弹窗 (`Notifications.tsx` 里的 `<Dialog>`)
 
-## 16 枚图标的"黄色重点"分配
+改造后布局(三段):
 
-| id | 图标 | 黄色小重点 |
-|---|---|---|
-| scan | 相机 | 中心镜头圆点 |
-| marketing | 场记板 | 顶部拍板铰链圆点 |
-| activities | 喇叭 | 喇叭口一颗音符点 |
-| community | 四芒星 | 中心圆点 |
-| library | 打开的书 | 中缝上一颗小书签点 |
-| my-kb | 书+书签 | 书签末端小圆 |
-| vouchers | 票 | 中间星星 |
-| schedule | 日历 | 今日格子（右上一枚小方块） |
-| checkins | 日历+勾 | 对勾本身（描边红 + 一颗黄圆点） |
-| sop | 文档 | 卷角三角 |
-| qa | 问号 | 下方问号圆点 |
-| okr | 靶心 | 中心圆点 |
-| notifications | 铃铛 | 铃铛底部小圆珠 |
-| me | 人像 | 头顶一颗高光点 |
-| more | 三点 | 中间一颗改黄 |
+1. **AI 对话区**(保留,用于生成/改写草稿)。
+2. **草稿编辑区**(新)—— 内部 tab `编辑 / 预览`:
+   - **编辑** tab:
+     - 顶栏:分类下拉、类型下拉、标题输入 (已有)。
+     - **封面 Banner** 上传:拖拽/点击上传一张,缩略图 + 更换/删除按钮 → 写入 `image_url`。
+     - **正文** Textarea + 上方"插入图片"按钮:上传后在光标处插入 `![](url)\n`。
+     - 支持粘贴图片 (Ctrl+V) → 同一上传函数。
+   - **预览** tab:
+     - Banner 图 → 标题 → 分类/时间胶囊 → Markdown 渲染的正文,与首页/详情页视觉一致。
+3. **底部**:取消 / 发布。
 
-## 落地
+新依赖:`react-markdown` + `remark-gfm`(体积小,`bun add`)。
 
-1. `src/index.css` 加 `--accent-warm: 45 90% 60%;`（柠檬金 HSL），`tailwind.config.ts` 的 `theme.extend.colors` 加 `'accent-warm': 'hsl(var(--accent-warm))'`。
-2. 改 `src/components/home/BoomerAppIcons.tsx`：每枚 SVG 里把黄色重点从 `fill="currentColor"` 换成 `fill="hsl(var(--accent-warm))"` 并加 `stroke="none"`，其余描边继续 `stroke="currentColor"`（= red）。
-3. 改 `src/components/home/AppGrid.tsx` 的 `TileFace`：
-   - `rounded-[26%]` → `rounded-full`
-   - `bg-primary` → `bg-primary/10`
-   - `text-white` → `text-primary`
-   - 阴影降级为极轻款
-   - 拖动放大动效保留
-4. `appIconRegistry.ts` 的 `tone` 字段本轮**保持不动**（继续声明为 `'red'`），但语义变了——不再决定色相反差，仅作为未来扩展预留。可以顺手把注释更新，说明"当前所有 tile 统一使用淡红圆底 + 红粗线 + 黄色小重点"。
+上传封装 `src/lib/uploadNotificationImage.ts`:
+- `(file: File) => Promise<string>` 返回 public URL。
+- 校验:≤5MB、`image/*`;路径 `${userId}/${crypto.randomUUID()}.${ext}`。
+
+## 阅读端(列表 + 详情)
+
+- 列表卡片:若 `image_url` 存在,加 16:9 缩略图 (`w-full h-24 rounded-md object-cover`)。
+- **点击卡片打开** `NotificationDetailSheet`(新组件,移动 Sheet + 桌面居中 Dialog):
+  - Banner + 标题 + 分类徽章 + 时间 + Markdown 正文
+  - 打开即 `markRead`
+- 复用 `MarkdownArticle.tsx`(`prose prose-sm max-w-none prose-img:rounded-lg`),预览和详情共用。
+
+## 三个 tab 的语义 + 未读角标
+
+- **通知** `category='notice'` = 系统/店铺内部通知
+- **资讯** `category='news'` = 文章,首页 banner 同步这一类
+- **消息** `category='message'` = 预留跨设备聊天(本轮只保留分栏 + 角标,不接实时聊天通道)
+
+Tab 按钮角标:
+- 三个分栏按钮右上角显示各自未读数(过滤 `matchesTab`),小胶囊 `bg-primary text-[10px] px-1 rounded-full`,无未读则不显示。
+- 底部 `BottomTabBar` 的「消息」总徽章保持全量 `unreadCount`(已实现,不改)。
+
+## 首页 banner
+
+`Home.tsx:141` 已经只取 `category='news'`,行为不变。补一处:banner 点击跳 `/notifications?tab=news&open=<id>`;`Notifications.tsx` 读到 `open` 参数就自动弹出对应详情 Sheet。
 
 ## 影响文件
 
-- `src/index.css`（加 1 个 CSS 变量）
-- `tailwind.config.ts`（加 1 个颜色 token）
-- `src/components/home/BoomerAppIcons.tsx`（16 处黄色小重点着色）
-- `src/components/home/AppGrid.tsx`（`TileFace` 4 行样式）
-- `src/components/home/appIconRegistry.ts`（仅注释）
+- 新增 `src/lib/uploadNotificationImage.ts`
+- 新增 `src/components/notifications/MarkdownArticle.tsx`
+- 新增 `src/components/notifications/NotificationDetailSheet.tsx`
+- 改 `src/pages/Notifications.tsx`(弹窗编辑/预览 tab、列表点击、tab 角标、`?open=` 处理)
+- 改 `src/hooks/useNotifications.tsx`(select 增加 `image_url, category`,`NotificationItem` 类型补齐)—— 目前 hook 已 select 这两列,但 type 缺,只补类型
+- 改 `src/pages/Home.tsx`(banner 点击带 `?open=`)
+- 新 storage bucket `notification-images` + RLS 迁移
+- `bun add react-markdown remark-gfm`
 
 ## 不动
 
-- 拖拽/编辑/长按/添加/隐藏
-- 顶栏 wordmark、底部胶囊、Boomer 主形象
-- 图标之外的任何页面
-
-## 视觉自检
-
-生成后我会用 Playwright 截首页 `AppGrid` 区域，确认：
-- 圆形底 vs 图标粗细比例协调
-- 每枚黄色重点都可见但不喧宾夺主
-- 与顶栏 red wordmark、Boomer 头像放在一起风格连贯
+- `notifications` 表 schema
+- 底部 tab 徽章逻辑、BOOMER 浮标
+- 「消息」聊天功能本轮不做(只做分栏和角标占位,防止范围膨胀)
