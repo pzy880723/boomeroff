@@ -40,7 +40,7 @@ export function HomeFeedTabs() {
   const [kbCards, setKbCards] = useState<KbCard[]>([]);
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [activePost, setActivePost] = useState<CommunityPost | null>(null);
-  const [activeKb, setActiveKb] = useState<KbCard | null>(null);
+
 
   useEffect(() => {
     try { localStorage.setItem(PREF_KEY, tab); } catch { /* ignore */ }
