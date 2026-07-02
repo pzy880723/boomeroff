@@ -388,23 +388,63 @@ export default function Notifications() {
   const publish = async () => {
     if (!title.trim() || !body.trim()) { toast.error('标题和内容不能为空'); return; }
     setSubmitting(true);
-    const { error } = await supabase.from('notifications' as any).insert({
-      title: title.trim(),
-      body: body.trim(),
-      summary: summary.trim() || null,
-      type,
-      category,
-      image_url: coverUrl || null,
-      active: true,
-      created_by: user!.id,
-    });
-    setSubmitting(false);
-    if (error) { toast.error('发布失败：' + error.message); return; }
-    toast.success(`${TAB_META[category].label}已发布`);
-    if (currentDraftId) { removeDraft(currentDraftId); refreshDrafts(); }
-    resetCompose();
-    setOpen(false);
-    void refresh();
+    try {
+      if (editingId) {
+        await updateItem(editingId, {
+          title: title.trim(),
+          body: body.trim(),
+          summary: summary.trim() || null,
+          type,
+          category,
+          image_url: coverUrl || null,
+        });
+        toast.success('已更新');
+      } else {
+        const { error } = await supabase.from('notifications' as any).insert({
+          title: title.trim(),
+          body: body.trim(),
+          summary: summary.trim() || null,
+          type,
+          category,
+          image_url: coverUrl || null,
+          active: true,
+          created_by: user!.id,
+        });
+        if (error) { toast.error('发布失败：' + error.message); return; }
+        toast.success(`${TAB_META[category].label}已发布`);
+      }
+      if (currentDraftId) { removeDraft(currentDraftId); refreshDrafts(); }
+      resetCompose();
+      setOpen(false);
+      void refresh();
+    } catch (e: any) {
+      toast.error((editingId ? '更新失败：' : '发布失败：') + (e?.message || ''));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openEditFromDetail = (n: NotificationItem) => {
+    resetCompose(bucketOf(n.category) === 'news' ? 'news' : 'notice');
+    setEditingId(n.id);
+    setTitle(n.title);
+    setSummary(n.summary || '');
+    setBody(n.body || '');
+    setType(n.type || 'announcement');
+    setCategory((bucketOf(n.category) === 'news' ? 'news' : 'notice') as TabKey);
+    setCoverUrl(n.image_url || '');
+    setView('preview');
+    setDetailItem(null);
+    setOpen(true);
+  };
+
+  const handleDeleteFromDetail = async (id: string) => {
+    try {
+      await removeItem(id);
+      toast.success('已删除');
+    } catch (e: any) {
+      toast.error('删除失败：' + (e?.message || ''));
+    }
   };
 
   if (authLoading) return null;
