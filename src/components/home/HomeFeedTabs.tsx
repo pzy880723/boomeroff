@@ -4,9 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import {
   GraduationCap, Camera, ImageOff, ChevronRight, Loader2,
   Heart, MessageCircle,
 } from 'lucide-react';
@@ -14,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { thumbUrl } from '@/lib/imageUrl';
 import { CATEGORY_LABELS, type ProductCategory } from '@/types';
 import { PostDetailSheet, type Post as CommunityPost } from '@/pages/public/PublicCommunity';
-import { ProductDetailDialog } from '@/components/history/ProductDetailDialog';
+
 
 type TabKey = 'my-kb' | 'community';
 
