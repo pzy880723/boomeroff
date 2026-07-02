@@ -52,6 +52,8 @@ import PublicResult from "./pages/public/PublicResult";
 import PublicCommunity from "./pages/public/PublicCommunity";
 import PublicAbout from "./pages/public/PublicAbout";
 import { PublicErrorBoundary } from "./components/system/PublicErrorBoundary";
+import { ScrollRestoration } from "./components/system/ScrollRestoration";
+
 
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
