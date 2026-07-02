@@ -101,8 +101,20 @@ export function BackupPanel() {
   const [nudging, setNudging] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(false);
   const [showFailures, setShowFailures] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
+  const [ledgerCount, setLedgerCount] = useState<number | null>(null);
+  const [pendingFailures, setPendingFailures] = useState<number>(0);
+
+  const loadLedgerStats = useCallback(async () => {
+    const [{ count: lc }, { count: fc }] = await Promise.all([
+      supabase.from('backup_file_ledger').select('*', { count: 'exact', head: true }),
+      supabase.from('backup_file_failures').select('*', { count: 'exact', head: true }).is('resolved_at', null),
+    ]);
+    setLedgerCount(lc ?? 0);
+    setPendingFailures(fc ?? 0);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,7 +126,8 @@ export function BackupPanel() {
     setLoading(false);
     if (error) { toast({ title: '加载失败', description: error.message, variant: 'destructive' }); return; }
     setRuns((data ?? []) as BackupRun[]);
-  }, []);
+    loadLedgerStats();
+  }, [loadLedgerStats]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -122,6 +135,7 @@ export function BackupPanel() {
     const t = setInterval(load, 4000);
     return () => clearInterval(t);
   }, [runs, load]);
+
 
   // Realtime toast on new backup notifications
   useEffect(() => {
