@@ -71,7 +71,7 @@ interface StaffPeer {
 
 export default function Notifications() {
   const { user, role, loading: authLoading } = useAuth();
-  const { items, loading, markRead, refresh, noticeUnread, newsUnread } = useNotifications();
+  const { items, loading, markRead, refresh, noticeUnread, newsUnread, removeItem, updateItem } = useNotifications();
   const isAdmin = role === 'admin';
 
   const [sp, setSp] = useSearchParams();
