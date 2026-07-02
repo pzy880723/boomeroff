@@ -98,7 +98,6 @@ const App = () => {
                 <Route path="/library" element={<OfficialLibrary />} />
                 <Route path="/my-library" element={<MyLibrary />} />
                 <Route path="/notifications" element={<Notifications />} />
-                <Route path="/messages/:peerId" element={<MessagesConversation />} />
                 <Route path="/community" element={<Community />} />
                 <Route path="/me" element={<Me />} />
               </Route>
