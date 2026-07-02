@@ -1,67 +1,72 @@
-# 「我的应用」图标改造 —— 与 BOOMER GO logo 一致的粗线圆润风
+# 应用图标 v3 —— 活泼版（参考「落至晚樱」风格）
 
 ## 参考解读
 
-用户上传的是 BOOMER GO 主 logo：红色 squircle 上一枚白色**粗线条、端头浑圆**的相机/靶心图标。当前 `AppGrid` 用的是 Lucide 默认线宽（2.2px），偏纤细，跟 logo 视觉重量不匹配。
+用户附图 icon 风格三个关键动作：
+1. **圆形浅色底** —— 不再是硬朗的 squircle 方块，而是柔和的正圆，底色偏淡。
+2. **粗描边线条图标** —— 端点浑圆、内部留白大、像玩具轮廓。
+3. **一处黄色实心小重点** —— 打破单色的呆板（磁带的黄标、光盘的黄唱针、收音机的黄按钮）。视觉活力全靠这一抹黄。
 
-目标：让 16 个应用图标看起来像"logo 的一家人"——同样的线粗、同样的圆头圆脚、同样的白瓷在红瓷上的比重。
+保留 BOOMER 红色主调，把上一版"红瓷方块 + 白色线条"改成"淡红圆底 + 品牌红粗线 + 一抹柠檬黄"。
 
-## 方案
+## 视觉规范
 
-新建一套自绘 SVG 图标集 `src/components/home/BoomerAppIcons.tsx`，替换 `appIconRegistry.ts` 里的 lucide 引用。理由：
-- Lucide 即便调 `strokeWidth={3}` 也只是"变粗"，端点半径和内部空间比是固定的，跟 logo 主体（明显更胖、更空灵）对不齐。
-- 自绘一套可以复用同一组绘制常量，保证 16 枚图标视觉密度完全一致。
+- **Tile 容器**：从 `rounded-[26%]` squircle 改为 `rounded-full` 正圆；尺寸保持 54x54。
+- **底色**：`bg-primary/10`（品牌红 10% 淡红），暗色模式下自动柔和；不再用实心红。
+- **图标主色**：`text-primary`（品牌红），`stroke-width` 保持 2.6 圆头。
+- **黄色重点**：新增 CSS token `--accent-warm`（#F5C43C 柠檬金），Tailwind 加 `accent-warm` 颜色。每枚图标预留一颗/一段 `fill="hsl(var(--accent-warm))"` 的实心小元素（圆点/一小段/一小块）。
+- **阴影**：极轻 `shadow-[0_2px_6px_-4px_rgba(0,0,0,0.15)]`，比方块版更漂浮。
+- **拖拽/编辑抖动/长按**：完全沿用现有 `AppGrid` 逻辑，不改动。
 
-### 绘制规范（每一枚都严格遵守）
+## 16 枚图标的"黄色重点"分配
 
-- `viewBox="0 0 24 24"`
-- `stroke-width="2.6"`，`stroke-linecap="round"`，`stroke-linejoin="round"`
-- `fill="none"`；主体控制在 3–20 的安全区内，四周留 3px 呼吸
-- 关键实心点（如相机镜头中心圆点、图钉钉帽）用 `fill` + 无描边，保持"logo 里那颗白点"的语言
-- 所有图标都是单一 `currentColor` —— 在红 tile 上就是白色，在白 tile 上就是红色，`TileFace` 已就位
-
-### 图标对照表（16 枚）
-
-| id | 现在 (lucide) | 新图标 (自绘) |
+| id | 图标 | 黄色小重点 |
 |---|---|---|
-| scan | Camera | 相机机身 + 中心镜头圆点（**直接呼应 logo**，稍作缩小） |
-| marketing | Clapperboard | 场记板，斜条 + 圆角机身 |
-| activities | Megaphone | 圆嘴喇叭 + 三道声波弧 |
-| community | Sparkles | 四芒星 + 两颗小圆点 |
-| library | BookOpen | 打开的书，中缝圆润 |
-| my-kb | BookMarked | 书 + 圆头书签带 |
-| vouchers | Ticket | 圆齿票根，中间断点 |
-| schedule | CalendarDays | 日历格 + 顶部两个圆头挂钩 |
-| checkins | CalendarCheck | 日历 + 粗对勾 |
-| sop | FileText | 卷角文档 + 三条圆头横线 |
-| qa | HelpCircle | 圆 + 粗问号（下面圆点实心） |
-| okr | Target | 三层同心圆（**与 logo 靶心呼应**） |
-| notifications | Bell | 圆顶钟 + 底部小圆珠 |
-| me | User | 圆头 + 肩线，头部实心 |
-| more | MoreHorizontal | 三颗**实心圆点**，胖一些 |
+| scan | 相机 | 中心镜头圆点 |
+| marketing | 场记板 | 顶部拍板铰链圆点 |
+| activities | 喇叭 | 喇叭口一颗音符点 |
+| community | 四芒星 | 中心圆点 |
+| library | 打开的书 | 中缝上一颗小书签点 |
+| my-kb | 书+书签 | 书签末端小圆 |
+| vouchers | 票 | 中间星星 |
+| schedule | 日历 | 今日格子（右上一枚小方块） |
+| checkins | 日历+勾 | 对勾本身（描边红 + 一颗黄圆点） |
+| sop | 文档 | 卷角三角 |
+| qa | 问号 | 下方问号圆点 |
+| okr | 靶心 | 中心圆点 |
+| notifications | 铃铛 | 铃铛底部小圆珠 |
+| me | 人像 | 头顶一颗高光点 |
+| more | 三点 | 中间一颗改黄 |
 
-### 落地步骤
+## 落地
 
-1. 新建 `src/components/home/BoomerAppIcons.tsx`，导出 16 个组件（`ScanIcon`, `MarketingIcon`, ...），签名与 lucide 兼容：`(props: SVGProps<SVGSVGElement>) => JSX.Element`。
-2. `appIconRegistry.ts` 的 `Icon` 字段全部换成新组件；`AppIconMeta.Icon` 类型放宽为 `React.ComponentType<React.SVGProps<SVGSVGElement>>`。
-3. `AppGrid.tsx` 里 `TileFace` 中的 `<Icon>` 稍微放大到 `w-[26px] h-[26px]`（比原来 24 大一点，跟 logo 里图标占比对齐），`strokeWidth` 由组件自己写在 SVG 上（外部覆盖也行）。
-4. 「消息」底部 tab 的 `Bell/MessageCircle` 与「资讯」头部图标保持 lucide —— 那些不属于"我的应用"网格，先不动，避免误伤。
-5. 「添加」+ 号占位保持 lucide `Plus`，不属于品牌图标序列。
-
-### 视觉验收
-
-自检清单：
-- 16 枚并排看，线粗、圆角、端点观感一致
-- 与顶栏 wordmark、Boomer 头像、主 logo 放在一起没有"字重打架"
-- 白 tile 变体（如果未来切回）自动继承 `currentColor` = 红色
+1. `src/index.css` 加 `--accent-warm: 45 90% 60%;`（柠檬金 HSL），`tailwind.config.ts` 的 `theme.extend.colors` 加 `'accent-warm': 'hsl(var(--accent-warm))'`。
+2. 改 `src/components/home/BoomerAppIcons.tsx`：每枚 SVG 里把黄色重点从 `fill="currentColor"` 换成 `fill="hsl(var(--accent-warm))"` 并加 `stroke="none"`，其余描边继续 `stroke="currentColor"`（= red）。
+3. 改 `src/components/home/AppGrid.tsx` 的 `TileFace`：
+   - `rounded-[26%]` → `rounded-full`
+   - `bg-primary` → `bg-primary/10`
+   - `text-white` → `text-primary`
+   - 阴影降级为极轻款
+   - 拖动放大动效保留
+4. `appIconRegistry.ts` 的 `tone` 字段本轮**保持不动**（继续声明为 `'red'`），但语义变了——不再决定色相反差，仅作为未来扩展预留。可以顺手把注释更新，说明"当前所有 tile 统一使用淡红圆底 + 红粗线 + 黄色小重点"。
 
 ## 影响文件
 
-- 新增 `src/components/home/BoomerAppIcons.tsx`
-- 修改 `src/components/home/appIconRegistry.ts`
-- 微调 `src/components/home/AppGrid.tsx`（图标尺寸 24→26）
+- `src/index.css`（加 1 个 CSS 变量）
+- `tailwind.config.ts`（加 1 个颜色 token）
+- `src/components/home/BoomerAppIcons.tsx`（16 处黄色小重点着色）
+- `src/components/home/AppGrid.tsx`（`TileFace` 4 行样式）
+- `src/components/home/appIconRegistry.ts`（仅注释）
 
 ## 不动
 
-- 图标底色/形状/拖拽/长按/编辑态逻辑
-- 顶栏 wordmark、底部 tab、AI 识物相机页里的图标
+- 拖拽/编辑/长按/添加/隐藏
+- 顶栏 wordmark、底部胶囊、Boomer 主形象
+- 图标之外的任何页面
+
+## 视觉自检
+
+生成后我会用 Playwright 截首页 `AppGrid` 区域，确认：
+- 圆形底 vs 图标粗细比例协调
+- 每枚黄色重点都可见但不喧宾夺主
+- 与顶栏 red wordmark、Boomer 头像放在一起风格连贯
