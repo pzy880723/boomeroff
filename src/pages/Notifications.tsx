@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   MessageCircle, PencilLine, CheckCheck, Loader2, Sparkles, Send,
-  ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil, Bell,
+  ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil, Bell, Search, Filter,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
@@ -97,8 +97,21 @@ export default function Notifications() {
     () => items.filter(n => bucketOf(n.category) === 'news'),
     [items],
   );
-  const currentListItems = tab === 'notice' ? noticeItems : tab === 'news' ? newsItems : [];
+  const baseListItems = tab === 'notice' ? noticeItems : tab === 'news' ? newsItems : [];
   const currentUnread = tab === 'notice' ? noticeUnread : tab === 'news' ? newsUnread : 0;
+
+  // 搜索 & 类型筛选
+  const [keyword, setKeyword] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const currentListItems = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    return baseListItems.filter(n => {
+      if (typeFilter !== 'all' && (n.type || '') !== typeFilter) return false;
+      if (!kw) return true;
+      return (n.title || '').toLowerCase().includes(kw) || (n.body || '').toLowerCase().includes(kw);
+    });
+  }, [baseListItems, keyword, typeFilter]);
+  const hasFilter = keyword.trim() !== '' || typeFilter !== 'all';
 
 
   // 打开详情
@@ -344,6 +357,46 @@ export default function Notifications() {
           ))}
         </div>
 
+        {tab !== 'message' && (
+          <div className="flex gap-2 items-center">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={keyword}
+                onChange={e => setKeyword(e.target.value)}
+                placeholder={`搜索${TAB_META[tab].label}标题或内容`}
+                className="h-8 pl-8 pr-8 text-xs"
+              />
+              {keyword && (
+                <button
+                  type="button"
+                  onClick={() => setKeyword('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="清除搜索"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-24 h-8 text-xs">
+                <Filter className="w-3.5 h-3.5 mr-1" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部类型</SelectItem>
+                <SelectItem value="announcement">公告</SelectItem>
+                <SelectItem value="policy">制度</SelectItem>
+                <SelectItem value="activity">活动</SelectItem>
+                <SelectItem value="urgent">紧急</SelectItem>
+                <SelectItem value="system">系统</SelectItem>
+                <SelectItem value="shift">排班</SelectItem>
+                <SelectItem value="notice">通知</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {tab === 'message' ? (
           <StaffMessagesList userId={user.id} />
         ) : loading && currentListItems.length === 0 ? (
@@ -351,7 +404,12 @@ export default function Notifications() {
         ) : currentListItems.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             {tab === 'notice' ? <Bell className="w-10 h-10 mx-auto mb-3 opacity-50" /> : <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />}
-            <p className="text-sm">暂无{TAB_META[tab].label}</p>
+            <p className="text-sm">{hasFilter ? '没有匹配的' + TAB_META[tab].label : '暂无' + TAB_META[tab].label}</p>
+            {hasFilter && (
+              <Button variant="ghost" size="sm" className="mt-2 text-xs" onClick={() => { setKeyword(''); setTypeFilter('all'); }}>
+                清除筛选
+              </Button>
+            )}
           </div>
         ) : currentListItems.map(n => {
           const meta = typeMeta(n.type);

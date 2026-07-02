@@ -51,7 +51,8 @@ export function BottomTabBar() {
                 </li>
               );
             }
-            const showBadge = to === '/notifications' && unreadCount > 0;
+            const showCountBadge = to === '/notifications' && unreadCount > 0;
+            const showDot = to !== '/notifications' && to !== '/scan' && unreadCount > 0 && !active;
             return (
               <li key={to}>
                 <NavLink
@@ -64,10 +65,16 @@ export function BottomTabBar() {
                 >
                   <Icon className="w-[18px] h-[18px]" strokeWidth={active ? 2.4 : 2} />
                   <span className="text-[10px] font-medium leading-none whitespace-nowrap">{label}</span>
-                  {showBadge && (
+                  {showCountBadge && (
                     <span className="absolute top-0 right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center border-2 border-foreground/95">
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
+                  )}
+                  {showDot && (
+                    <span
+                      aria-label={`有 ${unreadCount} 条未读通知`}
+                      className="absolute top-1 right-2 w-2 h-2 rounded-full bg-primary border border-foreground/95"
+                    />
                   )}
                 </NavLink>
               </li>
