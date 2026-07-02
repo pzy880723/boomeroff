@@ -291,6 +291,32 @@ export function BackupPanel() {
         </Button>
       </div>
 
+      {/* Persistent ledger stats — the truth source of "已成功备份" */}
+      <Card className="p-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-xs">
+          <span className="text-muted-foreground">累计已备份文件：</span>
+          <span className="font-semibold text-foreground tabular-nums">{ledgerCount ?? '—'}</span>
+          <span className="mx-2 text-muted-foreground/60">·</span>
+          <span className="text-muted-foreground">待重试失败：</span>
+          <span className={`font-semibold tabular-nums ${pendingFailures > 0 ? 'text-destructive' : 'text-foreground'}`}>{pendingFailures}</span>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            台账会记录每个已成功上传到腾讯云的文件，下次备份会直接跳过；只有台账里没有或大小对不上的文件才会重新上传。
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={retryFailed} disabled={retrying || pendingFailures === 0}>
+            <RotateCw className={`w-4 h-4 mr-1.5 ${retrying ? 'animate-spin' : ''}`} />
+            重试全部失败{pendingFailures > 0 ? `（${pendingFailures}）` : ''}
+          </Button>
+          <Button size="sm" variant="outline" onClick={bootstrapLedger} disabled={bootstrapping}>
+            <FileCheck2 className={`w-4 h-4 mr-1.5 ${bootstrapping ? 'animate-spin' : ''}`} />
+            同步已备份清单
+          </Button>
+        </div>
+      </Card>
+
+
+
       {/* Focus card: current run or last run */}
       {focus && (
         <Card className="p-4 space-y-4">
