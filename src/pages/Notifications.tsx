@@ -555,7 +555,7 @@ export default function Notifications() {
 
 
       {/* 撰稿弹窗：对话为主，预览可切换/侧滑 */}
-      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetCompose(); }}>
+      <Dialog open={open} onOpenChange={(v) => { if (!v) handleCloseCompose(); else setOpen(true); }}>
         <DialogContent className="max-w-none w-screen h-[100dvh] sm:rounded-none rounded-none p-0 gap-0 border-0 flex flex-col overflow-hidden [&>button.absolute]:hidden">
           <DialogHeader className="px-3 pt-[max(env(safe-area-inset-top),0.5rem)] pb-2 shrink-0 border-b border-border/50 space-y-0">
             <div className="flex items-center gap-2 h-11">
