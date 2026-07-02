@@ -501,25 +501,35 @@ export default function Notifications() {
 
       {/* 撰稿弹窗：对话为主，预览可切换/侧滑 */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetCompose(); }}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[92vh] h-[92vh] flex flex-col gap-0">
-          <DialogHeader className="px-4 pt-4 pb-2 shrink-0 border-b border-border/50">
-            <div className="flex items-center justify-between gap-3">
-              <DialogTitle className="flex items-center gap-2 text-base">
+        <DialogContent className="max-w-none w-screen h-[100dvh] sm:rounded-none rounded-none p-0 gap-0 border-0 flex flex-col overflow-hidden [&>button.absolute]:hidden">
+          <DialogHeader className="px-3 pt-[max(env(safe-area-inset-top),0.5rem)] pb-2 shrink-0 border-b border-border/50 space-y-0">
+            <div className="flex items-center gap-2 h-11">
+              <DialogTitle className="flex items-center gap-1.5 text-sm shrink-0">
                 <Sparkles className="w-4 h-4 text-primary" /> AI 撰稿
               </DialogTitle>
-              <Tabs value={view} onValueChange={(v) => setView(v as 'chat' | 'preview')}>
-                <TabsList className="h-8">
-                  <TabsTrigger value="chat" className="h-6 px-3 text-xs gap-1">
-                    <MessageSquare className="w-3.5 h-3.5" />对话
-                  </TabsTrigger>
-                  <TabsTrigger value="preview" className="h-6 px-3 text-xs gap-1 relative">
-                    <Eye className="w-3.5 h-3.5" />预览
-                    {hasDraft && view !== 'preview' && (
-                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />
-                    )}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <div className="flex-1 flex justify-center">
+                <Tabs value={view} onValueChange={(v) => setView(v as 'chat' | 'preview')}>
+                  <TabsList className="h-8">
+                    <TabsTrigger value="chat" className="h-6 px-3 text-xs gap-1">
+                      <MessageSquare className="w-3.5 h-3.5" />对话
+                    </TabsTrigger>
+                    <TabsTrigger value="preview" className="h-6 px-3 text-xs gap-1 relative">
+                      <Eye className="w-3.5 h-3.5" />预览
+                      {hasDraft && view !== 'preview' && (
+                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />
+                      )}
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setOpen(false); resetCompose(); }}
+                className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition"
+                aria-label="关闭"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </DialogHeader>
 
