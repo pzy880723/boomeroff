@@ -220,7 +220,7 @@ export default function PublicCommunity() {
   );
 }
 
-function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void }) {
+export function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void }) {
   const cardData = {
     name: post.name,
     category: post.category,
