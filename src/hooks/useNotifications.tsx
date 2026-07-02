@@ -101,14 +101,26 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     );
   }, [user, items]);
 
+  const removeItem = useCallback(async (id: string) => {
+    const { error } = await supabase.from('notifications' as any).delete().eq('id', id);
+    if (error) throw error;
+    setItems(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  const updateItem = useCallback(async (id, patch) => {
+    const { error } = await supabase.from('notifications' as any).update(patch).eq('id', id);
+    if (error) throw error;
+    setItems(prev => prev.map(n => n.id === id ? { ...n, ...patch } as NotificationItem : n));
+  }, []) as Ctx['updateItem'];
+
   const unreadCount = items.filter(n => !n.read).length;
   const noticeUnread = items.filter(n => !n.read && bucketOf(n.category) === 'notice').length;
   const newsUnread = items.filter(n => !n.read && bucketOf(n.category) === 'news').length;
 
 
   const value = useMemo<Ctx>(
-    () => ({ items, loading, unreadCount, noticeUnread, newsUnread, markRead, markAllRead, refresh: load }),
-    [items, loading, unreadCount, noticeUnread, newsUnread, markRead, markAllRead, load],
+    () => ({ items, loading, unreadCount, noticeUnread, newsUnread, markRead, markAllRead, refresh: load, removeItem, updateItem }),
+    [items, loading, unreadCount, noticeUnread, newsUnread, markRead, markAllRead, load, removeItem, updateItem],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
@@ -121,6 +133,7 @@ export function useNotifications(): Ctx {
     return {
       items: [], loading: false, unreadCount: 0, noticeUnread: 0, newsUnread: 0,
       markRead: async () => {}, markAllRead: async () => {}, refresh: async () => {},
+      removeItem: async () => {}, updateItem: async () => {},
     };
   }
   return ctx;
