@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     const { messages = [], current_draft } = await req.json();
 
     const draftBlock = current_draft && (current_draft.title || current_draft.body)
-      ? `\n\n【当前草稿】\n标题：${current_draft.title || ''}\n类型：${current_draft.type || ''}\n正文：\n${current_draft.body || ''}`
+      ? `\n\n【当前草稿】\n标题：${current_draft.title || ''}\n导语：${current_draft.summary || ''}\n类型：${current_draft.type || ''}\n正文：\n${current_draft.body || ''}`
       : '';
 
     const system = `你是 BOOMER GO 门店运营助手，帮管理员写门店通知/资讯。返回**必须是纯 JSON 对象**（不要 markdown、不要围栏、不要多余文字），schema：
@@ -38,14 +38,16 @@ Deno.serve(async (req) => {
   "need_more": boolean,        // true 表示信息严重不足需追问；否则 false 且必须给出稿件
   "reply": string,             // 一句话简短说明（追问或说明）
   "title": string,             // ≤ 24 字，开门见山
+  "summary": string,           // 20-40 字的公众号式导语：一句话说清"这条讲的是什么、跟店员有什么关系"；不重复标题、不用感叹号堆砌
   "body": string,              // Markdown，2-5 段，使用 ## 小标题 / - 列表 / **加粗**
   "type": "announcement"|"policy"|"activity"|"urgent"
 }
 核心原则：
 1) 默认「直接出稿」，能拼一段就出稿；只有输入不足 6 字且完全没有主题时才 need_more=true。
-2) 用户后续说「更短/更正式/更活泼/加数据/换个角度」等，基于【当前草稿】改写并再出稿。
-3) 语气：专业但亲和，符合门店对店员的日常沟通，不要客服模板。
-4) 严禁输出除 JSON 之外的任何字符。${draftBlock}`;
+2) summary 必填，用作列表卡片摘要；不要照抄标题，也不要照抄正文首句。
+3) 用户后续说「更短/更正式/更活泼/加数据/换个角度」等，基于【当前草稿】改写并再出稿（含 summary）。
+4) 语气：专业但亲和，符合门店对店员的日常沟通，不要客服模板。
+5) 严禁输出除 JSON 之外的任何字符。${draftBlock}`;
 
     const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
