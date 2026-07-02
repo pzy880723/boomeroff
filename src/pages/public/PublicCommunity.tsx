@@ -20,7 +20,7 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('zh-CN');
 }
 
-interface Post {
+export interface Post {
   id: string;
   image_url: string | null;
   thumbnail_url: string | null;
