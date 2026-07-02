@@ -729,13 +729,25 @@ Deno.serve(async (req) => {
       while (cursor < queue.length && hasUploadWindow(tickStart)) {
         const f = queue[cursor++];
         const cosKey = `storage-mirror/${f.bucket}/${f.path}`;
+        const sourceBucket = `storage:${f.bucket}`;
         try {
+          const ledger = await getLedger(sourceBucket);
+          const ledgerHit = ledger.get(f.path);
+          if (ledgerHit && (!f.size || ledgerHit.size === f.size)) {
+            uploaded++;
+            (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: ledgerHit.size, etag: ledgerHit.etag ?? "", bucket: f.bucket, path: f.path });
+            removeFailure(meta, (x) => x.kind === "storage" && x.bucket === f.bucket && x.path === f.path);
+            await markResolved(admin, sourceBucket, f.path);
+            continue;
+          }
           const idx = await getMirrorIndex(f.bucket);
           const existing = idx.get(cosKey);
           if (existing && (!f.size || existing.size === f.size)) {
             uploaded++;
             (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: existing.size, etag: existing.etag, bucket: f.bucket, path: f.path });
             removeFailure(meta, (x) => x.kind === "storage" && x.bucket === f.bucket && x.path === f.path);
+            noteLedger({ cos_key: cosKey, source_bucket: sourceBucket, source_path: f.path, size: existing.size, etag: existing.etag });
+            await markResolved(admin, sourceBucket, f.path);
             continue;
           }
           if (!hasUploadWindow(tickStart)) { cursor--; break; }
@@ -750,11 +762,17 @@ Deno.serve(async (req) => {
           uploaded++; bytes += result.size; filesCount++; totalBytes += result.size;
           (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: result.size, etag: result.etag, bucket: f.bucket, path: f.path });
           removeFailure(meta, (x) => x.kind === "storage" && x.bucket === f.bucket && x.path === f.path);
+          noteLedger({ cos_key: cosKey, source_bucket: sourceBucket, source_path: f.path, size: result.size, etag: result.etag });
+          await markResolved(admin, sourceBucket, f.path);
+          await flushLedger();
         } catch (e) {
           failed++;
-          recordFailure(meta, { kind: "storage", bucket: f.bucket, path: f.path, size: f.size, error: e instanceof Error ? e.message : String(e) });
+          const errMsg = e instanceof Error ? e.message : String(e);
+          recordFailure(meta, { kind: "storage", bucket: f.bucket, path: f.path, size: f.size, error: errMsg });
+          await markFailure(admin, { source_bucket: sourceBucket, source_path: f.path, cos_key: cosKey, size: f.size ?? 0, error: errMsg });
         }
       }
+
       bumpPass(meta, "storage_pass2", { uploaded, failed, bytes, elapsed_ms: Date.now() - passStart, total: queue.length });
       meta.retry_cursor = cursor;
       meta.step = `补传失败文件 ${cursor}/${queue.length}`;
