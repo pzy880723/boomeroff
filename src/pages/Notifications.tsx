@@ -579,7 +579,7 @@ export default function Notifications() {
               </div>
               <button
                 type="button"
-                onClick={() => { setOpen(false); resetCompose(); }}
+                onClick={handleCloseCompose}
                 className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition"
                 aria-label="关闭"
               >
