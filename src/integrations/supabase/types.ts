@@ -667,6 +667,24 @@ export type Database = {
           },
         ]
       }
+      daily_encouragement: {
+        Row: {
+          created_at: string
+          date: string
+          text: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          text: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          text?: string
+        }
+        Relationships: []
+      }
       daily_knowledge: {
         Row: {
           content: Json

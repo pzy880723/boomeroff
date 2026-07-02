@@ -61,10 +61,10 @@
     --shadow-lg: 0 12px 30px -8px hsl(0 0% 0% / 0.18), 0 4px 8px -2px hsl(0 0% 0% / 0.06);
     --shadow-glow: 0 0 0 3px hsl(355 100% 45% / 0.15), 0 8px 24px -6px hsl(355 100% 45% / 0.35);
 
-    /* 硬阴影 · 品牌招牌感 */
-    --shadow-hard: 4px 4px 0 0 hsl(0 0% 10%);
-    --shadow-hard-red: 4px 4px 0 0 hsl(355 100% 45%);
-    --shadow-hard-sm: 2px 2px 0 0 hsl(0 0% 10%);
+    /* 硬阴影 — 已收敛为轻描边阴影（保留 token 兼容旧代码） */
+    --shadow-hard: 0 1px 2px hsl(0 0% 0% / 0.05);
+    --shadow-hard-red: 0 0 0 1px hsl(355 100% 45% / 0.35);
+    --shadow-hard-sm: 0 1px 2px hsl(0 0% 0% / 0.04);
 
     /* Motion */
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -103,9 +103,9 @@
     --border: 0 0% 20%;
     --input: 0 0% 20%;
     --ring: 355 100% 55%;
-    --shadow-hard: 4px 4px 0 0 hsl(0 0% 96%);
-    --shadow-hard-red: 4px 4px 0 0 hsl(355 100% 55%);
-    --shadow-hard-sm: 2px 2px 0 0 hsl(0 0% 96%);
+    --shadow-hard: 0 1px 2px hsl(0 0% 0% / 0.35);
+    --shadow-hard-red: 0 0 0 1px hsl(355 100% 55% / 0.4);
+    --shadow-hard-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
     --sidebar-background: 0 0% 8%;
     --sidebar-foreground: 0 0% 96%;
   }
