@@ -149,21 +149,21 @@ export function SchedulePanel() {
       {/* Header */}
       <div className="px-5 pt-5 pb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-accent-soft flex items-center justify-center shrink-0">
-            <CalendarDays className="w-5 h-5 text-primary" />
+          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+            <CalendarDays className="w-5 h-5 text-foreground/70" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-primary font-bold text-lg leading-tight">我的排班</h2>
+            <h2 className="text-foreground font-bold text-lg leading-tight">我的排班</h2>
             <p className="text-muted-foreground text-xs mt-0.5">
-              未来 30 天上班 <span className="text-primary font-bold">{workDays}</span> 天
+              未来 30 天上班 <span className="text-foreground font-bold">{workDays}</span> 天
             </p>
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[10px] text-accent font-bold tracking-widest" style={{ fontFamily: 'Oswald, sans-serif' }}>
+          <p className="text-[10px] text-muted-foreground font-bold tracking-widest">
             OFFICIAL SCHEDULE
           </p>
-          <p className="text-muted-foreground text-[10px] italic">VINTAGE ARCHIVE</p>
+          <p className="text-muted-foreground/70 text-[10px] italic">VINTAGE ARCHIVE</p>
         </div>
       </div>
 
