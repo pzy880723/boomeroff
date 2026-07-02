@@ -2916,6 +2916,20 @@ export type Database = {
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
       gen_short_code: { Args: never; Returns: string }
       gen_voucher_code: { Args: never; Returns: string }
+      get_claim_for_redeem: {
+        Args: { _code: string }
+        Returns: {
+          claimed_at: string
+          code: string
+          expires_at: string
+          id: string
+          recipient_name: string
+          recipient_phone: string
+          redeemed_at: string
+          status: string
+          voucher_id: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
