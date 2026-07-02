@@ -25,8 +25,11 @@ Deno.serve(async (req) => {
     if (!userData?.user) {
       return new Response(JSON.stringify({ error: "未登录" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const { notification_id, title, body } = await req.json();
-    if (!notification_id || !title) {
+    const { notification_id, title, body, preview_only } = await req.json();
+    if (!title) {
+      return new Response(JSON.stringify({ error: "缺少标题" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!preview_only && !notification_id) {
       return new Response(JSON.stringify({ error: "缺少参数" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -86,7 +89,8 @@ Deno.serve(async (req) => {
     const mime = meta.match(/data:(image\/[a-zA-Z+]+)/)?.[1] ?? "image/png";
     const ext = mime.includes("png") ? "png" : "jpg";
     const bytes = b64ToBytes(b64);
-    const path = `notification-banners/${notification_id}.${ext}`;
+    const idPart = notification_id || `preview-${userData.user.id}-${Date.now()}`;
+    const path = `notification-banners/${idPart}.${ext}`;
     const up = await supabase.storage.from("product-images").upload(path, bytes, {
       contentType: mime, upsert: true,
     });
@@ -94,8 +98,10 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "上传失败" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path);
-    await supabase.from("notifications").update({ image_url: pub.publicUrl, category: "banner" }).eq("id", notification_id);
-    return new Response(JSON.stringify({ url: pub.publicUrl }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (notification_id && !preview_only) {
+      await supabase.from("notifications").update({ image_url: pub.publicUrl, category: "banner" }).eq("id", notification_id);
+    }
+    return new Response(JSON.stringify({ url: pub.publicUrl, image_url: pub.publicUrl }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error(e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "未知错误" }), {
