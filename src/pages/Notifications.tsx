@@ -199,24 +199,6 @@ export default function Notifications() {
   };
 
 
-  // 更宽松的 JSON 提取：优先 ```json fenced，然后严格匹配含 title/body 的对象
-  const extractDraftJson = (raw: string): { title?: string; body?: string; type?: string; reply?: string } | null => {
-    if (!raw) return null;
-    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const candidates: string[] = [];
-    if (fenced?.[1]) candidates.push(fenced[1].trim());
-    // 找从第一个 { 到最后一个 } 的所有前缀
-    const first = raw.indexOf('{');
-    const last = raw.lastIndexOf('}');
-    if (first >= 0 && last > first) candidates.push(raw.slice(first, last + 1));
-    for (const c of candidates) {
-      try {
-        const obj = JSON.parse(c);
-        if (obj && typeof obj === 'object' && (obj.title || obj.body)) return obj;
-      } catch { /* try next */ }
-    }
-    return null;
-  };
 
   const sendToAI = async (override?: string) => {
     const q = (override ?? input).trim();
