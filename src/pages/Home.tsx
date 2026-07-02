@@ -197,7 +197,7 @@ export default function Home() {
 
         {/* Banner */}
         <Link
-          to="/notifications?tab=news"
+          to={bannerNote?.id ? `/notifications?tab=news&open=${bannerNote.id}` : '/notifications?tab=news'}
           className="block relative rounded-2xl overflow-hidden border border-border/60 aspect-[16/6] bg-muted"
         >
           <img
