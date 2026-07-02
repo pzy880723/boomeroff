@@ -17,6 +17,8 @@ const PROSE = [
   'prose-img:rounded-lg prose-img:my-3',
   'prose-strong:text-foreground',
   'prose-ul:my-2 prose-ol:my-2',
+  // 兜底:确保段落有可见间距、空段落也占位一行、软换行 <br> 生效
+  '[&_p]:my-3 [&_p:empty]:min-h-[1em] [&_br]:block',
 ];
 
 export function MarkdownArticle({ content, className }: Props) {

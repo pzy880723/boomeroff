@@ -11,10 +11,21 @@ import { MarkdownArticle } from './MarkdownArticle';
 import type { NotificationItem } from '@/hooks/useNotifications';
 
 const TYPE_LABEL: Record<string, { label: string; tone: string }> = {
+  // 通知类
   announcement: { label: '公告', tone: 'bg-primary/10 text-primary' },
   policy: { label: '制度', tone: 'bg-foreground/10 text-foreground' },
   activity: { label: '活动', tone: 'bg-accent/50 text-accent-foreground' },
   urgent: { label: '紧急', tone: 'bg-destructive/10 text-destructive' },
+  system: { label: '系统', tone: 'bg-muted text-muted-foreground' },
+  shift: { label: '排班', tone: 'bg-accent/50 text-accent-foreground' },
+  notice: { label: '通知', tone: 'bg-primary/10 text-primary' },
+  // 资讯类(门店经营向)
+  store_open: { label: '新店开业', tone: 'bg-primary/10 text-primary' },
+  store_update: { label: '门店动态', tone: 'bg-accent/50 text-accent-foreground' },
+  hot_item: { label: '爆款情报', tone: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
+  official_event: { label: '官方活动', tone: 'bg-primary/10 text-primary' },
+  industry: { label: '中古行业', tone: 'bg-foreground/10 text-foreground' },
+  staff_story: { label: '店员故事', tone: 'bg-accent/50 text-accent-foreground' },
 };
 
 interface Props {
