@@ -580,7 +580,13 @@ export default function Notifications() {
       </main>
 
       {/* 详情 Sheet */}
-      <NotificationDetailSheet item={detailItem} onOpenChange={(v) => !v && setDetailItem(null)} />
+      <NotificationDetailSheet
+        item={detailItem}
+        onOpenChange={(v) => !v && setDetailItem(null)}
+        isAdmin={isAdmin}
+        onEdit={openEditFromDetail}
+        onDelete={handleDeleteFromDetail}
+      />
 
       {/* 管理员：AI 撰稿浮标（通知/资讯 都可发） */}
       {isAdmin && tab !== 'message' && (
