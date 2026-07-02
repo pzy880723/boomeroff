@@ -20,12 +20,22 @@ interface Ctx {
   items: NotificationItem[];
   loading: boolean;
   unreadCount: number;
+  noticeUnread: number;
+  newsUnread: number;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
 const NotificationsContext = createContext<Ctx | undefined>(undefined);
+
+// news / message 之外的一切归为 notice（含历史 null 数据）
+function bucketOf(cat: string | null | undefined): 'news' | 'message' | 'notice' {
+  const c = (cat || '').toLowerCase();
+  if (c === 'news') return 'news';
+  if (c === 'message') return 'message';
+  return 'notice';
+}
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -38,9 +48,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     const [{ data: notes }, { data: reads }] = await Promise.all([
       supabase.from('notifications' as any)
         .select('id, title, body, type, created_at, expires_at, image_url, category')
-        .in('category', ['news', 'message'])
         .order('created_at', { ascending: false })
-        .limit(30),
+        .limit(60),
       supabase.from('notification_reads' as any)
         .select('notification_id')
         .eq('user_id', user.id),
@@ -73,6 +82,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [user, items]);
 
   const unreadCount = items.filter(n => !n.read).length;
+  const noticeUnread = items.filter(n => !n.read && bucketOf(n.category) === 'notice').length;
+  const newsUnread = items.filter(n => !n.read && bucketOf(n.category) === 'news').length;
+
 
   const value = useMemo<Ctx>(
     () => ({ items, loading, unreadCount, markRead, markAllRead, refresh: load }),
