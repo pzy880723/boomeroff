@@ -954,7 +954,7 @@ export default function Notifications() {
                     )}
                   </Button>
                   <Button size="sm" onClick={publish} disabled={submitting || !title.trim() || !body.trim()} className="h-9 flex-1">
-                    {submitting && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}发布
+                    {submitting && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}{editingId ? '保存修改' : '发布'}
                   </Button>
                 </div>
               </>
