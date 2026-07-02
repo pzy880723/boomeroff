@@ -204,7 +204,7 @@ export default function Notifications() {
   const resetCompose = (defaultCat: TabKey = 'notice') => {
     setChat([]); setInput(''); setTitle(''); setSummary(''); setBody('');
     setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
-    setVersions([]); setView('chat'); setCurrentDraftId(null);
+    setVersions([]); setView('chat'); setCurrentDraftId(null); setEditingId(null);
   };
   const openCompose = () => {
     resetCompose(tab === 'message' ? 'notice' : tab);
