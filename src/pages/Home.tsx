@@ -112,6 +112,13 @@ export default function Home() {
           .limit(3);
         setOkrs(((ok as any[]) || []) as StoreOkr[]);
       }
+
+      // 门店手册分类
+      const { data: cats } = await supabase.from('shop_kb_categories' as any)
+        .select('id, name')
+        .order('sort_order', { ascending: true })
+        .limit(20);
+      setSopCats(((cats as any[]) || []) as SopCategory[]);
     })();
 
     // 每日鼓励
