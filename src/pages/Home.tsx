@@ -2,18 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
-import { BrandLogo } from '@/components/brand/BrandLogo';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
-  Bell, ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target,
+  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target, LayoutGrid,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
 import bannerDefault from '@/assets/banner-default.jpg';
+import brandLogo from '@/assets/boomer-off-vintage-logo.png';
 
 interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null }
 interface StoreOkr {
