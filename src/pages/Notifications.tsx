@@ -108,13 +108,14 @@ export default function Notifications() {
   }, [user, refresh]);
 
   const resetCompose = () => {
-    setChat([]); setInput(''); setTitle(''); setBody(''); setType('announcement');
+    setChat([]); setInput(''); setTitle(''); setBody(''); setType('announcement'); setCategory(tab);
   };
 
   const openCompose = () => {
     resetCompose();
     setOpen(true);
   };
+
 
   const sendToAI = async () => {
     const q = input.trim();
