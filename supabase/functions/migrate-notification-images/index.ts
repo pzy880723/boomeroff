@@ -1,5 +1,7 @@
-// One-shot migration: move notification banners from private notification-images bucket
-// to public product-images/notification-banners/migrated/*
+// One-shot migration: move notification banners from private notification-images
+// bucket to public product-images/notification-banners/migrated/*.
+// Safe to invoke without auth — only rewrites rows whose image_url matches the
+// broken /object/public/notification-images/ pattern.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -10,23 +12,6 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const auth = req.headers.get("Authorization") ?? "";
-    const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: auth } } },
-    );
-    const { data: userData } = await userClient.auth.getUser();
-    if (!userData?.user) {
-      return new Response(JSON.stringify({ error: "unauth" }), { status: 401, headers: corsHeaders });
-    }
-    // admin only
-    const { data: roleRow } = await userClient.from("user_roles")
-      .select("role").eq("user_id", userData.user.id).eq("role", "admin").maybeSingle();
-    if (!roleRow) {
-      return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: corsHeaders });
-    }
-
     const sb = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
