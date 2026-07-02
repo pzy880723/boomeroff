@@ -294,7 +294,7 @@ export default function Notifications() {
       const { data, error } = await supabase.functions.invoke('compose-notification', {
         body: {
           messages: next.map(t => ({ role: t.role, content: t.content })),
-          current_draft: hasDraft ? { title, summary, body, type } : null,
+          current_draft: hasDraft ? { title, summary, body, type, category } : { category },
         },
       });
       if (error) throw error;
