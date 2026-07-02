@@ -20,6 +20,7 @@ const MyLibrary = lazy(() => import("./pages/MyLibrary"));
 const Community = lazy(() => import("./pages/Community"));
 const Home = lazy(() => import("./pages/Home"));
 const Notifications = lazy(() => import("./pages/Notifications"));
+const MessagesConversation = lazy(() => import("./pages/MessagesConversation"));
 const Me = lazy(() => import("./pages/Me"));
 const History = lazy(() => import("./pages/History"));
 const Portal = lazy(() => import("./pages/Portal"));
