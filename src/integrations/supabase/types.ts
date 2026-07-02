@@ -303,6 +303,78 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_file_failures: {
+        Row: {
+          attempt_count: number
+          cos_key: string
+          error_message: string | null
+          first_failed_at: string
+          id: string
+          last_attempt_at: string
+          resolved_at: string | null
+          size: number
+          source_bucket: string
+          source_path: string
+        }
+        Insert: {
+          attempt_count?: number
+          cos_key: string
+          error_message?: string | null
+          first_failed_at?: string
+          id?: string
+          last_attempt_at?: string
+          resolved_at?: string | null
+          size?: number
+          source_bucket: string
+          source_path: string
+        }
+        Update: {
+          attempt_count?: number
+          cos_key?: string
+          error_message?: string | null
+          first_failed_at?: string
+          id?: string
+          last_attempt_at?: string
+          resolved_at?: string | null
+          size?: number
+          source_bucket?: string
+          source_path?: string
+        }
+        Relationships: []
+      }
+      backup_file_ledger: {
+        Row: {
+          content_hash: string | null
+          cos_key: string
+          etag: string | null
+          first_backed_up_at: string
+          last_verified_at: string
+          size: number
+          source_bucket: string
+          source_path: string
+        }
+        Insert: {
+          content_hash?: string | null
+          cos_key: string
+          etag?: string | null
+          first_backed_up_at?: string
+          last_verified_at?: string
+          size?: number
+          source_bucket: string
+          source_path: string
+        }
+        Update: {
+          content_hash?: string | null
+          cos_key?: string
+          etag?: string | null
+          first_backed_up_at?: string
+          last_verified_at?: string
+          size?: number
+          source_bucket?: string
+          source_path?: string
+        }
+        Relationships: []
+      }
       backup_runs: {
         Row: {
           cos_key: string | null

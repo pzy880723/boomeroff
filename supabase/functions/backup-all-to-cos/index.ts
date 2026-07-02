@@ -242,6 +242,97 @@ async function updateRun(admin: ReturnType<typeof createClient>, runId: string, 
   await admin.from("backup_runs").update(patch).eq("id", runId);
 }
 
+// ============= Persistent ledger helpers =============
+// Truth source for "已成功备份" across runs. Populated from backup_file_ledger.
+// Key format for source_bucket:
+//   "storage:<bucket>"  — a file from Supabase Storage
+//   "db:<table>"        — a per-page table dump
+type LedgerEntry = { size: number; cos_key: string; etag?: string };
+
+async function loadLedger(admin: ReturnType<typeof createClient>, sourceBucket: string): Promise<Map<string, LedgerEntry>> {
+  const out = new Map<string, LedgerEntry>();
+  const pageSize = 1000;
+  let from = 0;
+  while (true) {
+    const { data, error } = await admin
+      .from("backup_file_ledger")
+      .select("source_path, size, cos_key, etag")
+      .eq("source_bucket", sourceBucket)
+      .range(from, from + pageSize - 1);
+    if (error) break;
+    const rows = (data ?? []) as Array<{ source_path: string; size: number; cos_key: string; etag: string | null }>;
+    for (const r of rows) out.set(r.source_path, { size: Number(r.size ?? 0), cos_key: r.cos_key, etag: r.etag ?? undefined });
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+  return out;
+}
+
+async function ledgerUpsertBatch(
+  admin: ReturnType<typeof createClient>,
+  rows: Array<{ cos_key: string; source_bucket: string; source_path: string; size: number; etag?: string }>,
+) {
+  if (rows.length === 0) return;
+  const now = new Date().toISOString();
+  const payload = rows.map((r) => ({
+    cos_key: r.cos_key,
+    source_bucket: r.source_bucket,
+    source_path: r.source_path,
+    size: r.size,
+    etag: r.etag ?? null,
+    last_verified_at: now,
+  }));
+  try {
+    await admin.from("backup_file_ledger").upsert(payload, { onConflict: "cos_key" });
+  } catch { /* non-fatal */ }
+}
+
+async function markFailure(
+  admin: ReturnType<typeof createClient>,
+  entry: { source_bucket: string; source_path: string; cos_key: string; size: number; error: string },
+) {
+  try {
+    const { data } = await admin
+      .from("backup_file_failures")
+      .select("id, attempt_count")
+      .eq("source_bucket", entry.source_bucket)
+      .eq("source_path", entry.source_path)
+      .maybeSingle();
+    if (data) {
+      await admin.from("backup_file_failures").update({
+        cos_key: entry.cos_key,
+        size: entry.size,
+        error_message: entry.error,
+        attempt_count: ((data as { attempt_count: number }).attempt_count ?? 1) + 1,
+        last_attempt_at: new Date().toISOString(),
+        resolved_at: null,
+      }).eq("id", (data as { id: string }).id);
+    } else {
+      await admin.from("backup_file_failures").insert({
+        source_bucket: entry.source_bucket,
+        source_path: entry.source_path,
+        cos_key: entry.cos_key,
+        size: entry.size,
+        error_message: entry.error,
+      });
+    }
+  } catch { /* non-fatal */ }
+}
+
+async function markResolved(
+  admin: ReturnType<typeof createClient>,
+  source_bucket: string,
+  source_path: string,
+) {
+  try {
+    await admin.from("backup_file_failures")
+      .update({ resolved_at: new Date().toISOString() })
+      .eq("source_bucket", source_bucket)
+      .eq("source_path", source_path)
+      .is("resolved_at", null);
+  } catch { /* non-fatal */ }
+}
+
 async function dumpTable(admin: ReturnType<typeof createClient>, table: string, from: number) {
   const { data, error } = await admin.from(table).select("*").range(from, from + PAGE_SIZE - 1);
   if (error) throw error;
@@ -509,33 +600,58 @@ Deno.serve(async (req) => {
     return json({ ok: true, restarted: true, run_id: (runRow as { id: string }).id }, 202);
   }
 
-  if (action === "retry_failed" && body.run_id) {
-    const { data: srcRow } = await admin.from("backup_runs").select("id, metadata").eq("id", body.run_id).maybeSingle();
-    if (!srcRow) return json({ ok: false, error: "找不到那次备份记录" }, 404);
-    const srcMeta = normalizeMeta((srcRow as { metadata: unknown }).metadata, day);
-    const queue = (srcMeta.failures ?? [])
-      .filter((f) => f.kind === "storage" && f.bucket && f.path)
-      .map((f) => ({ bucket: f.bucket!, path: f.path!, size: f.size }));
-    if (queue.length === 0) return json({ ok: false, error: "上一次没有失败的文件可以补" }, 400);
+  if (action === "retry_failed") {
+    const { data } = await admin.from("backup_file_failures")
+      .select("source_bucket, source_path, cos_key, size")
+      .is("resolved_at", null)
+      .like("source_bucket", "storage:%")
+      .limit(2000);
+    const rows = (data ?? []) as Array<{ source_bucket: string; source_path: string; cos_key: string; size: number }>;
+    if (rows.length === 0) return json({ ok: false, error: "没有待重试的失败文件" }, 400);
+    const queue = rows.map((r) => ({
+      bucket: r.source_bucket.replace(/^storage:/, ""),
+      path: r.source_path,
+      size: Number(r.size ?? 0),
+    }));
     const newMeta: RunMeta = normalizeMeta({
       step: `只重试失败文件（共 ${queue.length} 个）`,
       day, phase: "storage",
-      retry_of: body.run_id, retry_queue: queue, retry_cursor: 0,
-      // Skip listing — retry mode consumes queue directly.
+      retry_of: body.run_id ?? null,
+      retry_queue: queue, retry_cursor: 0,
       storage_bucket_index: BUCKETS.length,
-      storage_pass: 2, // treat as pass2 so both pass stats stay distinct
+      storage_pass: 2,
     }, day);
-    // Also mark table_index at end so DB phase is skipped.
     newMeta.table_index = TABLES.length;
     newMeta.phase = "storage";
     const { data: newRow, error } = await admin.from("backup_runs").insert({
       kind: "full", status: "running", trigger_source: "manual",
-      metadata: newMeta, retry_of: body.run_id,
+      metadata: newMeta, retry_of: body.run_id ?? null,
     }).select("id").single();
     if (error) return json({ ok: false, error: error.message }, 500);
     scheduleContinuation(req.url);
     return json({ ok: true, run_id: (newRow as { id: string }).id, queued: queue.length });
   }
+
+  // Bootstrap ledger — one-time backfill from COS ListObjects so existing
+  // files stop being re-uploaded. Runs synchronously per bucket.
+  if (action === "bootstrap_ledger") {
+    let inserted = 0;
+    for (const bucket of BUCKETS) {
+      try {
+        const idx = await cosListPrefix({ cfg, prefix: `storage-mirror/${bucket}/`, timeoutMs: 30_000 });
+        const rows: Array<{ cos_key: string; source_bucket: string; source_path: string; size: number; etag?: string }> = [];
+        for (const [key, v] of idx.entries()) {
+          const path = key.replace(`storage-mirror/${bucket}/`, "");
+          if (!path) continue;
+          rows.push({ cos_key: key, source_bucket: `storage:${bucket}`, source_path: path, size: v.size, etag: v.etag });
+          if (rows.length >= 500) { await ledgerUpsertBatch(admin, rows); inserted += rows.length; rows.length = 0; }
+        }
+        if (rows.length) { await ledgerUpsertBatch(admin, rows); inserted += rows.length; }
+      } catch { /* skip bucket */ }
+    }
+    return json({ ok: true, ledger_rows: inserted });
+  }
+
 
   if (action === "reconcile_only" && body.run_id) {
     const { data: srcRow } = await admin.from("backup_runs").select("id, metadata, started_at").eq("id", body.run_id).maybeSingle();
@@ -578,6 +694,32 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ============= LEDGER (persistent "已成功" 台账) =============
+    // Loaded once per bucket per tick. Truth source across runs, so we never
+    // re-upload a file that has already been successfully mirrored — even if
+    // that success happened in a previous run days ago.
+    const ledgerCache = new Map<string, Map<string, LedgerEntry>>();
+    async function getLedger(sourceBucket: string) {
+      const cached = ledgerCache.get(sourceBucket);
+      if (cached) return cached;
+      const idx = await loadLedger(admin, sourceBucket);
+      ledgerCache.set(sourceBucket, idx);
+      return idx;
+    }
+    const pendingLedger: Array<{ cos_key: string; source_bucket: string; source_path: string; size: number; etag?: string }> = [];
+    async function flushLedger(force = false) {
+      if (pendingLedger.length === 0) return;
+      if (!force && pendingLedger.length < 40) return;
+      const batch = pendingLedger.splice(0, pendingLedger.length);
+      await ledgerUpsertBatch(admin, batch);
+    }
+    function noteLedger(row: { cos_key: string; source_bucket: string; source_path: string; size: number; etag?: string }) {
+      pendingLedger.push(row);
+      const idx = ledgerCache.get(row.source_bucket);
+      if (idx) idx.set(row.source_path, { size: row.size, cos_key: row.cos_key, etag: row.etag });
+    }
+
+
     // ============= RETRY QUEUE PHASE (new) =============
     if (meta.retry_queue && meta.phase === "storage") {
       const queue = meta.retry_queue;
@@ -587,13 +729,25 @@ Deno.serve(async (req) => {
       while (cursor < queue.length && hasUploadWindow(tickStart)) {
         const f = queue[cursor++];
         const cosKey = `storage-mirror/${f.bucket}/${f.path}`;
+        const sourceBucket = `storage:${f.bucket}`;
         try {
+          const ledger = await getLedger(sourceBucket);
+          const ledgerHit = ledger.get(f.path);
+          if (ledgerHit && (!f.size || ledgerHit.size === f.size)) {
+            uploaded++;
+            (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: ledgerHit.size, etag: ledgerHit.etag ?? "", bucket: f.bucket, path: f.path });
+            removeFailure(meta, (x) => x.kind === "storage" && x.bucket === f.bucket && x.path === f.path);
+            await markResolved(admin, sourceBucket, f.path);
+            continue;
+          }
           const idx = await getMirrorIndex(f.bucket);
           const existing = idx.get(cosKey);
           if (existing && (!f.size || existing.size === f.size)) {
             uploaded++;
             (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: existing.size, etag: existing.etag, bucket: f.bucket, path: f.path });
             removeFailure(meta, (x) => x.kind === "storage" && x.bucket === f.bucket && x.path === f.path);
+            noteLedger({ cos_key: cosKey, source_bucket: sourceBucket, source_path: f.path, size: existing.size, etag: existing.etag });
+            await markResolved(admin, sourceBucket, f.path);
             continue;
           }
           if (!hasUploadWindow(tickStart)) { cursor--; break; }
@@ -608,16 +762,24 @@ Deno.serve(async (req) => {
           uploaded++; bytes += result.size; filesCount++; totalBytes += result.size;
           (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: result.size, etag: result.etag, bucket: f.bucket, path: f.path });
           removeFailure(meta, (x) => x.kind === "storage" && x.bucket === f.bucket && x.path === f.path);
+          noteLedger({ cos_key: cosKey, source_bucket: sourceBucket, source_path: f.path, size: result.size, etag: result.etag });
+          await markResolved(admin, sourceBucket, f.path);
+          await flushLedger();
         } catch (e) {
           failed++;
-          recordFailure(meta, { kind: "storage", bucket: f.bucket, path: f.path, size: f.size, error: e instanceof Error ? e.message : String(e) });
+          const errMsg = e instanceof Error ? e.message : String(e);
+          recordFailure(meta, { kind: "storage", bucket: f.bucket, path: f.path, size: f.size, error: errMsg });
+          await markFailure(admin, { source_bucket: sourceBucket, source_path: f.path, cos_key: cosKey, size: f.size ?? 0, error: errMsg });
         }
       }
+
       bumpPass(meta, "storage_pass2", { uploaded, failed, bytes, elapsed_ms: Date.now() - passStart, total: queue.length });
+      await flushLedger(true);
       meta.retry_cursor = cursor;
       meta.step = `补传失败文件 ${cursor}/${queue.length}`;
       if (cursor >= queue.length) { meta.phase = "finalize"; meta.step = "生成清单和对账"; }
     }
+
 
     // ============= DATABASE PHASE =============
     const dbPassStart = Date.now();
@@ -641,6 +803,7 @@ Deno.serve(async (req) => {
           filesCount++; totalBytes += uploaded.size;
           dbUploaded++; dbBytes += uploaded.size;
           (meta.manifest ??= []).push({ kind: "table", key, size: uploaded.size, etag: uploaded.etag, table });
+          noteLedger({ cos_key: key, source_bucket: `db:${table}`, source_path: `part-${part}`, size: uploaded.size, etag: uploaded.etag });
         }
         meta.database_rows = (meta.database_rows ?? 0) + dumped.rows;
         if (dumped.hasMore) meta.table_offset = offset + PAGE_SIZE;
@@ -648,11 +811,14 @@ Deno.serve(async (req) => {
         meta.step = `正在备份系统记录 ${meta.table_index}/${TABLES.length}`;
       } catch (e) {
         dbFailed++;
-        recordFailure(meta, { kind: "table", table, offset, error: e instanceof Error ? e.message : String(e) });
+        const errMsg = e instanceof Error ? e.message : String(e);
+        recordFailure(meta, { kind: "table", table, offset, error: errMsg });
+        await markFailure(admin, { source_bucket: `db:${table}`, source_path: `part-${part}`, cos_key: key, size: 0, error: errMsg });
         meta.table_index = start + 1; meta.table_offset = 0;
       }
     }
     if (dbUploaded + dbFailed > 0) bumpPass(meta, "database", { uploaded: dbUploaded, failed: dbFailed, bytes: dbBytes, elapsed_ms: Date.now() - dbPassStart, total: TABLES.length });
+
 
     // ============= STORAGE LIST PHASE =============
     if (meta.phase === "storage_list" && Date.now() - tickStart < TICK_BUDGET_MS) {
@@ -702,13 +868,23 @@ Deno.serve(async (req) => {
         if (pass === 1 && file.size > LARGE_FILE_THRESHOLD) { deferred++; continue; }
         if (pass === 2 && file.size <= LARGE_FILE_THRESHOLD) { continue; }
         const cosKey = `storage-mirror/${file.bucket}/${file.path}`;
+        const sourceBucket = `storage:${file.bucket}`;
         try {
+          // Persistent ledger — never re-upload known-good files.
+          const ledger = await getLedger(sourceBucket);
+          const ledgerHit = ledger.get(file.path);
+          if (ledgerHit && ledgerHit.size === file.size) {
+            skipped++; passSkipped++;
+            (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: ledgerHit.size, etag: ledgerHit.etag ?? "", bucket: file.bucket, path: file.path });
+            continue;
+          }
+          // Fallback to COS listing (populates ledger on next success).
           const idx = await getMirrorIndex(file.bucket);
           const existing = idx.get(cosKey);
           if (existing && existing.size === file.size) {
             skipped++; passSkipped++;
-            // Record in manifest so reconcile sees it; no network round-trip needed.
             (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: existing.size, etag: existing.etag, bucket: file.bucket, path: file.path });
+            noteLedger({ cos_key: cosKey, source_bucket: sourceBucket, source_path: file.path, size: existing.size, etag: existing.etag });
             continue;
           }
           if (!hasUploadWindow(tickStart)) { cursor--; break; }
@@ -723,15 +899,21 @@ Deno.serve(async (req) => {
           uploaded++; passUploaded++; passBytes += result.size;
           filesCount++; totalBytes += result.size;
           (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: result.size, etag: result.etag, bucket: file.bucket, path: file.path });
-          // Populate the cache so a size-only change later this tick still hits.
           idx.set(cosKey, { size: result.size, etag: result.etag });
           removeFailure(meta, (x) => x.kind === "storage" && x.bucket === file.bucket && x.path === file.path);
+          noteLedger({ cos_key: cosKey, source_bucket: sourceBucket, source_path: file.path, size: result.size, etag: result.etag });
+          await markResolved(admin, sourceBucket, file.path);
+          await flushLedger();
         } catch (e) {
           passFailed++;
-          recordFailure(meta, { kind: "storage", bucket: file.bucket, path: file.path, size: file.size, error: e instanceof Error ? e.message : String(e) });
+          const errMsg = e instanceof Error ? e.message : String(e);
+          recordFailure(meta, { kind: "storage", bucket: file.bucket, path: file.path, size: file.size, error: errMsg });
+          await markFailure(admin, { source_bucket: sourceBucket, source_path: file.path, cos_key: cosKey, size: file.size, error: errMsg });
         }
       }
       bumpPass(meta, passKey, { uploaded: passUploaded, failed: passFailed, skipped: passSkipped, bytes: passBytes, elapsed_ms: Date.now() - passStart });
+      await flushLedger(true);
+
 
       meta.storage_cursor = cursor;
       meta.storage_uploaded = uploaded;
