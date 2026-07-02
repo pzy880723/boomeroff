@@ -28,22 +28,23 @@ function useLongPress(cb: () => void, ms = 450) {
   };
 }
 
-/** 品牌红瓷 squircle tile —— 扁平纯色。 */
+/** 活泼版 tile —— 淡红圆底 + 品牌红粗线图标 + 一抹柠檬黄小重点。 */
 function TileFace({ meta, dragging }: { meta: AppIconMeta; dragging?: boolean }) {
   const { Icon } = meta;
   return (
     <span
       className={cn(
-        'relative w-[54px] h-[54px] rounded-[26%] flex items-center justify-center',
-        'bg-primary shadow-[0_4px_10px_-6px_rgba(0,0,0,0.25)]',
+        'relative w-[54px] h-[54px] rounded-full flex items-center justify-center',
+        'bg-primary/10 shadow-[0_2px_6px_-4px_rgba(0,0,0,0.15)]',
         'transition-transform duration-150',
-        dragging && 'scale-[1.08] shadow-[0_20px_30px_-12px_rgba(0,0,0,0.4)]',
+        dragging && 'scale-[1.08] shadow-[0_18px_28px_-10px_rgba(0,0,0,0.25)]',
       )}
     >
-      <Icon className="relative w-[26px] h-[26px] text-white" />
+      <Icon className="relative w-[26px] h-[26px] text-primary" />
     </span>
   );
 }
+
 
 
 interface TileProps {
