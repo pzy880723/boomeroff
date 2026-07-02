@@ -1266,30 +1266,36 @@ export type Database = {
         Row: {
           active: boolean
           body: string
+          category: string | null
           created_at: string
           created_by: string | null
           expires_at: string | null
           id: string
+          image_url: string | null
           title: string
           type: string
         }
         Insert: {
           active?: boolean
           body?: string
+          category?: string | null
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
           id?: string
+          image_url?: string | null
           title: string
           type?: string
         }
         Update: {
           active?: boolean
           body?: string
+          category?: string | null
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
           id?: string
+          image_url?: string | null
           title?: string
           type?: string
         }

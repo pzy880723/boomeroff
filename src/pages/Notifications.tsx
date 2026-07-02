@@ -51,19 +51,25 @@ export default function Notifications() {
   const publish = async () => {
     if (!title.trim() || !body.trim()) { toast.error('标题和内容不能为空'); return; }
     setSubmitting(true);
-    const { error } = await supabase.from('notifications' as any).insert({
+    const { data: inserted, error } = await supabase.from('notifications' as any).insert({
       title: title.trim(),
       body: body.trim(),
       type,
       active: true,
       created_by: user!.id,
-    });
+    }).select('id').single();
     setSubmitting(false);
     if (error) { toast.error('发布失败:' + error.message); return; }
     toast.success('通知已发布');
     setTitle(''); setBody(''); setType('announcement');
     setOpen(false);
     void refresh();
+    // 异步生成 banner 图（失败不阻塞）
+    if ((inserted as any)?.id) {
+      void supabase.functions.invoke('generate-notification-banner', {
+        body: { notification_id: (inserted as any).id, title: title.trim(), body: body.trim() },
+      }).then(() => refresh()).catch(() => {});
+    }
   };
 
   if (authLoading) return null;

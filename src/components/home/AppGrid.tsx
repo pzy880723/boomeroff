@@ -45,8 +45,14 @@ function Tile({ id, editing, onHide, onEnterEdit }: TileProps) {
 
   const content = (
     <>
-      <span className={cn('w-12 h-12 rounded-2xl flex items-center justify-center border border-border/60', tint)}>
-        <Icon className="w-5 h-5" strokeWidth={2} />
+      <span
+        className={cn(
+          'relative w-[52px] h-[52px] rounded-2xl flex items-center justify-center border border-border/50 overflow-hidden',
+          tint,
+        )}
+      >
+        <span aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/45 to-transparent dark:from-white/10" />
+        <Icon className="relative w-[22px] h-[22px]" strokeWidth={1.75} />
       </span>
       <span className="text-[11px] font-medium text-foreground text-center leading-tight mt-1.5">{label}</span>
     </>
@@ -116,16 +122,20 @@ export function AppGrid() {
 
   return (
     <section>
-      <div className="flex items-center justify-between px-1 mb-2">
-        <h2 className="text-sm font-bold">应用</h2>
+      <div className="flex items-center justify-end px-1 mb-1.5 min-h-[24px]">
         {editing ? (
           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-primary" onClick={() => setEditing(false)}>
             <Check className="w-3.5 h-3.5 mr-1" />完成
           </Button>
         ) : (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground" onClick={() => setEditing(true)}>
-            <Pencil className="w-3.5 h-3.5 mr-1" />编辑
-          </Button>
+          <button
+            type="button"
+            aria-label="编辑图标"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            onClick={() => setEditing(true)}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
         )}
       </div>
 
@@ -145,7 +155,7 @@ export function AppGrid() {
               <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
                 <SheetTrigger asChild>
                   <button className="flex flex-col items-center py-1">
-                    <span className="w-12 h-12 rounded-2xl flex items-center justify-center border border-dashed border-border text-muted-foreground">
+                    <span className="w-[52px] h-[52px] rounded-2xl flex items-center justify-center border border-dashed border-border/70 text-muted-foreground bg-muted/30">
                       <Plus className="w-5 h-5" />
                     </span>
                     <span className="text-[11px] font-medium text-muted-foreground mt-1.5">添加</span>
@@ -164,8 +174,9 @@ export function AppGrid() {
                           className="flex flex-col items-center py-2"
                           onClick={() => { showBack(id); }}
                         >
-                          <span className={cn('w-12 h-12 rounded-2xl flex items-center justify-center border border-border/60', tint)}>
-                            <Icon className="w-5 h-5" />
+                          <span className={cn('relative w-[52px] h-[52px] rounded-2xl flex items-center justify-center border border-border/50 overflow-hidden', tint)}>
+                            <span aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/45 to-transparent dark:from-white/10" />
+                            <Icon className="relative w-[22px] h-[22px]" strokeWidth={1.75} />
                           </span>
                           <span className="text-[11px] mt-1.5">{label}</span>
                         </button>

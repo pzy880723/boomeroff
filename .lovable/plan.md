@@ -1,112 +1,76 @@
-# 首页仪表盘重构 & 视觉瘦身 v3
+# BOOMER GO 首页 & 导航 v3 微调计划
 
-## 1. 阴影瘦身（全局）
-- 移除 `shadow-hard` / `shadow-2xl` / `shadow-strong` 等大阴影，统一改用 `border border-border` + `shadow-sm`（悬停可 `shadow-md`）。
-- 影响面：`Home.tsx`、`BottomTabBar.tsx`（去掉大投影，仅保留胶囊描边 + 极轻 shadow-sm）、`FloatingDashboard`、卡片类组件。
-- 保留：主 CTA 按钮的红色轻 ring（品牌识别用），不属于大阴影。
+## 1. 底部导航瘦身圆润化 (`BottomTabBar.tsx`)
 
-## 2. 命名 & 入口修正
-- 底部导航「官方知识」→ **「知识库」**。
-- 「我的知识」入口**同时保留两处**：
-  - 「我的」页保持不动（原入口继续在）。
-  - 新增到首页仪表盘的应用图标网格里。
-- 「我的」页**保持现状不改**（用户明确要求）。
+- **去文字**：AI 识物主按钮只保留图标 + 呼吸光晕，删除下方 "AI 识物" 文字（其他 4 个 tab 保留小字，因为需要区分）。
+  - 可选进阶：全部 tab 都去掉文字，只保留图标（等待用户在评论回复决定，默认只删主按钮文字）。
+- **降高压扁**：
+  - 胶囊 padding：`px-2.5 py-2` → `px-2 py-1.5`。
+  - 普通 tab：`py-1.5` → `py-1`，图标 `w-4 h-4` → `w-[18px] h-[18px]`。
+  - 主按钮：`w-14 h-14 -mt-8 border-4` → `w-12 h-12 -mt-6 border-[3px]`，缩小 ring 光晕。
+- **更圆润**：胶囊本身已 `rounded-full`；主按钮 border 由硬 4px 改成 3px + 更柔的阴影 `shadow-md`（替换 `shadow-hard`）。整条导航底部间距 `bottom-3` → `bottom-2`。
+- 主按钮改成"凸起水滴"造型（顶部略突破胶囊、底部与胶囊融合）。
 
-## 3. 顶栏统一
-- 每个二级页面的顶栏：**左＝页面名称，右＝BOOMER-OFF 红色 logo**（用户之前上传的红色 logo）。
-- 复用现有 `PageHeader` 组件，右侧统一挂 logo；首页不用 PageHeader，走自定义 hero。
+## 2. 首页应用网格 (`AppGrid.tsx` + 新建 `appIconRegistry.tsx`)
 
-## 4. 首页仪表盘重排（`Home.tsx` 全量重写）
+- **移除标题栏文字**：删掉 "应用" 二字，只在右上保留一个 `Pencil` 编辑小按钮（无文字）。
+- **图标重设计**：为每个应用换一套统一视觉：
+  - 圆角方形 tile 48×48 → 52×52，`rounded-2xl` 保留。
+  - 底色改用品牌 tokens 派生的柔和背景：`bg-primary/8`、`bg-foreground/5`，图标本体统一用 `text-primary` / `text-foreground`，去掉现在各种彩色 tint。
+  - 图标笔画 `strokeWidth={1.75}`，尺寸 `w-[22px]`，视觉上更精致、更"BOOMER GO"。
+  - 每个 tile 加一层极淡的高光 `bg-gradient-to-b from-white/60 to-transparent` 提升质感。
+- 保留长按编辑、拖拽排序、隐藏/添加逻辑，不改行为。
 
-```text
-┌─────────────────────────────────────────────┐
-│ 你好，{昵称}                    [⚡ 快速打卡] │  ← 问候 + 右侧小按钮（inline）
-│ {每日 AI 鼓励语一句，随机}                    │
-├─────────────────────────────────────────────┤
-│  ▓▓▓▓▓ Banner 横幅（通知/新闻/默认海报） ▓▓▓▓ │
-├─────────────────────────────────────────────┤
-│  我的排班                                    │
-│  [今日 09:00-18:00 · 门店 X]                 │
-├─────────────────────────────────────────────┤
-│  应用                              [编辑]    │
-│  🔍AI识物  📚知识库  🎟券包  🎬营销         │
-│  💬中古圈  📖我的知识  📅排班  ⚙更多         │
-├─────────────────────────────────────────────┤
-│  门店活动                                    │
-│  [活动卡列表]                                │
-└─────────────────────────────────────────────┘
-```
+## 3. 门店活动改横向单条 (`Home.tsx`)
 
-### 4.1 问候区（顶部）
-- 左：`你好，{staff_profiles.nickname || profile.name}`。
-- 右侧内联小按钮：**「⚡ 快速打卡」**（size sm，红底白字，圆角胶囊），点击直接调 `check-in` RPC，成功 toast，不弹全屏。
-- 下方一行小字：AI 生成的每日鼓励语。
-  - 新增 `daily_encouragement` 表（date 唯一）+ edge function `generate-daily-encouragement`（Lovable AI，google/gemini-3-flash-preview，20 字内）。
-  - 前端按当天日期 select，命中则直出；未命中则调 fn 生成并写回。
-  - 员工侧一天只显示一句，不同员工共享同一句。
+- **删除**当前 2 列 Card 网格。
+- **新组件** `ActiveActivityStrip`：位于「我的排班」下方（原位置替换 AppGrid 之后的活动块 → 移到排班和 AppGrid 之间）。
+- 视觉：一行横向条幅，左封面缩略（56×56 圆角），右侧标题 + 剩余时间，末尾 `ChevronRight`；无活动则整块隐藏。
+- **只显示当前门店**：通过 `staff_profiles.shop_id` 过滤活动。
+  - 由于 `activities` 表无 `shop_id` 字段，本次通过 `created_by` 与本店店员名单交集来判定（读取 `staff_profiles WHERE shop_id = 当前 shop_id` 得到 uid 列表，`activities.created_by IN (...)`)。
+  - 标题改为「正在进行的活动」。
+- 点击整条 → `/me/activities/{id}`；全部按钮跳 `/me/activities`。
 
-### 4.2 Banner 横幅
-- 组件 `HomeBanner.tsx`：横向 16:6 图片轮播（swipeable）。
-- 数据源：`notifications` 表新增字段 `banner_image_url`（nullable）+ `show_on_home_banner boolean`；或复用现有 notifications，`category = 'banner'` 的展示。
-- 空态：显示默认海报（`src/assets/banner-default.jpg`，AI 生成一张 BOOMER GO 品牌调性横幅）。
-- 点击跳到 `/notifications/:id`。
+## 4. Banner = 通知入口 + AI 生成图
 
-### 4.3 我的排班
-- 复用现有 `shift_schedules` 查询，抽成 `HomeShiftCard.tsx`：只显示今天 + 明天的班次，无排班则「今日休息」。
+- 首页 Banner 逻辑维持"取最新一条 banner 类通知"。
+- **新增 Edge Function** `generate-notification-banner`：在 `Notifications.tsx` 管理员发布通知时，若未上传封面，则用 Gemini 3 Flash Image 依据 title/body 生成一张 16:6 横幅图并写回 `notifications.image_url`。
+- `notifications` 表补 `image_url text` 与 `category text` 字段（migration）。
+- 若生成失败，前端仍回退到 `bannerDefault`。
 
-### 4.4 应用图标网格 `AppGrid.tsx`
-- 4 列图标网格（Lucide 图标 + 中文名，图标底 44×44 圆角方块，纯色底+图标，无大阴影）。
-- 全量图标池（可自定义显隐 & 排序）：
-  - AI 识物、知识库、我的知识、我的券包、营销中心、中古圈、排班表、每日打卡、员工手册、门店活动、通知、我的
-- **默认显示**（8 个）：AI识物 / 知识库 / 我的券包 / 营销中心 / 中古圈 / 我的知识 / 排班表 / 更多
-- **自定义方式（简版）**：
-  - 长按任一图标进入「编辑模式」：图标微抖动，右上角出现「－」可隐藏；拖拽排序（用 `@dnd-kit/sortable`）。
-  - 编辑模式末尾出现「+」，点开弹出 sheet 勾选未显示的图标加回。
-  - 顶部出现「完成」按钮退出。
-  - 用户偏好存 `localStorage` key: `boomer_go_home_apps_v1`（含 order + hidden 列表），不入库以减负。
+## 5. 门店 OKR / 培训列表（新模块）
 
-### 4.5 门店活动
-- 复用现有 `activities` 查询，抽成 `HomeActivitiesCard.tsx`，横向滚动卡片。
+- **数据**：复用现有 `operation_okrs` 表（已有 `shop_id / period_start/end / title / objective / key_results / tags`）。
+- **首页新 Section**：位于「门店活动条」下方，标题「门店管理」+ "更多"。
+  - 卡片列表样式参考美团经营宝：每行一条，左侧小图标（依据 `tags[0]` 或默认 `Target`）、中间 `title` + 一行 `objective`、右侧完成度百分比（`key_results` 中已完成占比）+ `ChevronRight`。
+  - 最多展示 3 条当前周期内的 OKR（`period_start <= today <= period_end` AND `shop_id = 当前 shop_id`）。
+- **详情页** `src/pages/OkrDetail.tsx`（新）：展示 objective、KR 列表勾选进度、key_actions。管理员可编辑（后续，先只读）。
+- **列表页** `src/pages/OkrList.tsx`（新）：`/store/okr`，按周期分组，点击进详情。
+- 添加进 `AppGrid` 注册表一个新图标「门店管理」→ `/store/okr`。
 
-## 5. 需要新建/修改的文件
+## 6. 技术细节
 
-**新建**
-- `src/components/home/GreetingHeader.tsx`
-- `src/components/home/DailyEncouragement.tsx`
-- `src/components/home/HomeBanner.tsx`
-- `src/components/home/HomeShiftCard.tsx`
-- `src/components/home/HomeActivitiesCard.tsx`
-- `src/components/home/AppGrid.tsx` + `appIconRegistry.ts`（图标池 + 默认序）
-- `src/lib/homeAppsPref.ts`（localStorage 读写 + 版本迁移）
-- `src/assets/banner-default.jpg`（AI 生成）
-- `supabase/functions/generate-daily-encouragement/index.ts`
+- 数据库迁移：
+  ```sql
+  ALTER TABLE public.notifications
+    ADD COLUMN IF NOT EXISTS image_url text,
+    ADD COLUMN IF NOT EXISTS category text;
+  ```
+- Edge Function `generate-notification-banner`：调用 `google/gemini-3.1-flash-image`，prompt = "为门店通知《{title}》生成 16:6 极简品牌横幅，朱红 + 米白配色，纪实风"；生成后经 Storage 上传拿公开 URL 更新记录。
+- Home 数据请求追加 `staff_profiles.shop_id` 并二次拉店员名单用于活动过滤（并入现有 Promise.all）。
+- 涉及文件：
+  - `src/components/layout/BottomTabBar.tsx`
+  - `src/components/home/AppGrid.tsx` + `appIconRegistry.tsx`
+  - `src/pages/Home.tsx`
+  - `src/pages/OkrList.tsx`（新）、`src/pages/OkrDetail.tsx`（新）
+  - `src/App.tsx` 路由
+  - `src/pages/Notifications.tsx`（发布通知时触发 banner 生成）
+  - `supabase/functions/generate-notification-banner/index.ts`（新）
+  - Supabase migration
 
-**修改**
-- `src/pages/Home.tsx`：全量重写为上面 5 段。
-- `src/components/BottomTabBar.tsx`：`官方知识 → 知识库`；去掉大阴影，只留 `shadow-sm + border`。
-- `src/components/PageHeader.tsx`：右侧统一挂红色 logo。
-- 全局 `rg 'shadow-hard|shadow-2xl|shadow-strong'` 替换为 `border + shadow-sm`。
+## 交付顺序
 
-**DB migration**
-```sql
-create table if not exists public.daily_encouragement(
-  date date primary key,
-  text text not null,
-  created_at timestamptz default now()
-);
-grant select on public.daily_encouragement to authenticated, anon;
-grant all on public.daily_encouragement to service_role;
-alter table public.daily_encouragement enable row level security;
-create policy "read daily_encouragement" on public.daily_encouragement
-  for select to authenticated, anon using (true);
--- 写入通过 edge function（service_role），不开放客户端 insert。
-```
-
-## 6. 验收清单
-- [ ] 底部胶囊 & 首页卡片无「重阴影」，只剩描边 + 极轻阴影。
-- [ ] 底部导航第 2 项文字为「知识库」。
-- [ ] 首页顶部一行「你好 + 快速打卡」，下面一行鼓励语；打卡按钮体积小。
-- [ ] 首页依次出现：问候 → Banner → 我的排班 → 应用网格 → 门店活动。
-- [ ] 应用网格长按可排序 / 隐藏，勾「+」可加回，偏好持久。
-- [ ] 二级页面顶栏右上角均显示红色 BOOMER-OFF logo。
-- [ ] 「我的」页保持不动，「我的知识」在首页和「我的」都能找到。
+1. 底部栏 + AppGrid 视觉（纯前端，立刻可见）。
+2. 首页活动改横条 + 按门店过滤。
+3. Notifications banner 字段 + Edge Function。
+4. 门店 OKR 列表 & 详情页 + 入口。

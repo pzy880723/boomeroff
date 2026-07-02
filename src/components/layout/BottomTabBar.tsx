@@ -17,11 +17,11 @@ export function BottomTabBar() {
   const { unreadCount } = useNotifications();
   return (
     <nav
-      className="fixed bottom-3 left-1/2 -translate-x-1/2 z-40 safe-bottom"
+      className="fixed bottom-2 left-1/2 -translate-x-1/2 z-40 safe-bottom"
       aria-label="底部导航"
     >
-      <div className="rounded-full bg-foreground text-background shadow-hard px-2.5 py-2 border border-foreground/40 backdrop-blur">
-        <ul className="flex items-end gap-1">
+      <div className="rounded-full bg-foreground/95 text-background px-2 py-1 border border-foreground/50 backdrop-blur shadow-[0_6px_20px_-8px_rgba(0,0,0,0.35)]">
+        <ul className="flex items-end gap-0.5">
           {tabs.map(({ to, label, Icon, primary }) => {
             const active =
               location.pathname === to ||
@@ -33,17 +33,16 @@ export function BottomTabBar() {
                   <NavLink
                     to={to}
                     aria-label={label}
-                    className="mx-1 -mt-8 flex flex-col items-center"
+                    className="mx-1.5 -mt-5 flex items-center justify-center"
                   >
                     <span
                       className={cn(
-                        'w-14 h-14 rounded-full flex items-center justify-center shadow-hard border-4 border-foreground transition-transform active:scale-95 bg-primary text-primary-foreground ring-4 ring-primary/25',
-                        active && 'ring-primary/50 scale-105'
+                        'w-12 h-12 rounded-full flex items-center justify-center border-[3px] border-foreground/95 bg-primary text-primary-foreground shadow-md ring-4 ring-primary/20 transition-transform active:scale-95',
+                        active && 'ring-primary/40 scale-105'
                       )}
                     >
-                      <Icon className="w-6 h-6" strokeWidth={2.5} />
+                      <Icon className="w-[22px] h-[22px]" strokeWidth={2.4} />
                     </span>
-                    <span className="mt-1 text-[10px] font-bold text-background/90">{label}</span>
                   </NavLink>
                 </li>
               );
@@ -53,15 +52,16 @@ export function BottomTabBar() {
               <li key={to}>
                 <NavLink
                   to={to}
+                  aria-label={label}
                   className={cn(
-                    'relative flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-full transition-colors min-w-[56px]',
-                    active ? 'bg-primary text-primary-foreground shadow-inner' : 'text-background/80 hover:text-background'
+                    'relative flex flex-col items-center justify-center gap-0.5 px-2.5 py-1 rounded-full transition-colors min-w-[48px]',
+                    active ? 'bg-primary text-primary-foreground' : 'text-background/85 hover:text-background'
                   )}
                 >
-                  <Icon className="w-4 h-4" strokeWidth={active ? 2.5 : 2} />
+                  <Icon className="w-[18px] h-[18px]" strokeWidth={active ? 2.4 : 2} />
                   <span className="text-[10px] font-medium leading-none">{label}</span>
                   {showBadge && (
-                    <span className="absolute top-0.5 right-1.5 min-w-[14px] h-[14px] px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center border-2 border-foreground">
+                    <span className="absolute top-0 right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center border-2 border-foreground/95">
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
