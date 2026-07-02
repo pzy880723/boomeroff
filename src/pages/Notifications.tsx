@@ -18,7 +18,9 @@ import { toast } from 'sonner';
 import {
   MessageCircle, PencilLine, CheckCheck, Loader2, Sparkles, Send,
   ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil, Bell, Search, Filter,
+  Eye, MessageSquare, History, Wand2,
 } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
 import { MarkdownArticle } from '@/components/notifications/MarkdownArticle';
