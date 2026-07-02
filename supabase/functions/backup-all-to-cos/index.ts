@@ -242,6 +242,97 @@ async function updateRun(admin: ReturnType<typeof createClient>, runId: string, 
   await admin.from("backup_runs").update(patch).eq("id", runId);
 }
 
+// ============= Persistent ledger helpers =============
+// Truth source for "已成功备份" across runs. Populated from backup_file_ledger.
+// Key format for source_bucket:
+//   "storage:<bucket>"  — a file from Supabase Storage
+//   "db:<table>"        — a per-page table dump
+type LedgerEntry = { size: number; cos_key: string; etag?: string };
+
+async function loadLedger(admin: ReturnType<typeof createClient>, sourceBucket: string): Promise<Map<string, LedgerEntry>> {
+  const out = new Map<string, LedgerEntry>();
+  const pageSize = 1000;
+  let from = 0;
+  while (true) {
+    const { data, error } = await admin
+      .from("backup_file_ledger")
+      .select("source_path, size, cos_key, etag")
+      .eq("source_bucket", sourceBucket)
+      .range(from, from + pageSize - 1);
+    if (error) break;
+    const rows = (data ?? []) as Array<{ source_path: string; size: number; cos_key: string; etag: string | null }>;
+    for (const r of rows) out.set(r.source_path, { size: Number(r.size ?? 0), cos_key: r.cos_key, etag: r.etag ?? undefined });
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+  return out;
+}
+
+async function ledgerUpsertBatch(
+  admin: ReturnType<typeof createClient>,
+  rows: Array<{ cos_key: string; source_bucket: string; source_path: string; size: number; etag?: string }>,
+) {
+  if (rows.length === 0) return;
+  const now = new Date().toISOString();
+  const payload = rows.map((r) => ({
+    cos_key: r.cos_key,
+    source_bucket: r.source_bucket,
+    source_path: r.source_path,
+    size: r.size,
+    etag: r.etag ?? null,
+    last_verified_at: now,
+  }));
+  try {
+    await admin.from("backup_file_ledger").upsert(payload, { onConflict: "cos_key" });
+  } catch { /* non-fatal */ }
+}
+
+async function markFailure(
+  admin: ReturnType<typeof createClient>,
+  entry: { source_bucket: string; source_path: string; cos_key: string; size: number; error: string },
+) {
+  try {
+    const { data } = await admin
+      .from("backup_file_failures")
+      .select("id, attempt_count")
+      .eq("source_bucket", entry.source_bucket)
+      .eq("source_path", entry.source_path)
+      .maybeSingle();
+    if (data) {
+      await admin.from("backup_file_failures").update({
+        cos_key: entry.cos_key,
+        size: entry.size,
+        error_message: entry.error,
+        attempt_count: ((data as { attempt_count: number }).attempt_count ?? 1) + 1,
+        last_attempt_at: new Date().toISOString(),
+        resolved_at: null,
+      }).eq("id", (data as { id: string }).id);
+    } else {
+      await admin.from("backup_file_failures").insert({
+        source_bucket: entry.source_bucket,
+        source_path: entry.source_path,
+        cos_key: entry.cos_key,
+        size: entry.size,
+        error_message: entry.error,
+      });
+    }
+  } catch { /* non-fatal */ }
+}
+
+async function markResolved(
+  admin: ReturnType<typeof createClient>,
+  source_bucket: string,
+  source_path: string,
+) {
+  try {
+    await admin.from("backup_file_failures")
+      .update({ resolved_at: new Date().toISOString() })
+      .eq("source_bucket", source_bucket)
+      .eq("source_path", source_path)
+      .is("resolved_at", null);
+  } catch { /* non-fatal */ }
+}
+
 async function dumpTable(admin: ReturnType<typeof createClient>, table: string, from: number) {
   const { data, error } = await admin.from(table).select("*").range(from, from + PAGE_SIZE - 1);
   if (error) throw error;
