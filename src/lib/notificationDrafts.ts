@@ -30,6 +30,7 @@ export function saveDraft(input: Omit<NotificationDraft, 'updatedAt' | 'id'> & {
   const item: NotificationDraft = {
     id,
     title: input.title,
+    summary: input.summary,
     body: input.body,
     type: input.type,
     category: input.category,
