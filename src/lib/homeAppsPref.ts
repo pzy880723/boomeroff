@@ -4,7 +4,7 @@ export type AppPref = { order: string[]; hidden: string[] };
 
 const DEFAULT_ORDER = [
   'scan', 'library', 'vouchers', 'marketing',
-  'community', 'my-kb', 'schedule', 'more',
+  'okr', 'my-kb', 'schedule', 'community',
 ];
 
 export function readAppPref(): AppPref {
