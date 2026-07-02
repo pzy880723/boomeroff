@@ -866,13 +866,23 @@ Deno.serve(async (req) => {
         if (pass === 1 && file.size > LARGE_FILE_THRESHOLD) { deferred++; continue; }
         if (pass === 2 && file.size <= LARGE_FILE_THRESHOLD) { continue; }
         const cosKey = `storage-mirror/${file.bucket}/${file.path}`;
+        const sourceBucket = `storage:${file.bucket}`;
         try {
+          // Persistent ledger — never re-upload known-good files.
+          const ledger = await getLedger(sourceBucket);
+          const ledgerHit = ledger.get(file.path);
+          if (ledgerHit && ledgerHit.size === file.size) {
+            skipped++; passSkipped++;
+            (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: ledgerHit.size, etag: ledgerHit.etag ?? "", bucket: file.bucket, path: file.path });
+            continue;
+          }
+          // Fallback to COS listing (populates ledger on next success).
           const idx = await getMirrorIndex(file.bucket);
           const existing = idx.get(cosKey);
           if (existing && existing.size === file.size) {
             skipped++; passSkipped++;
-            // Record in manifest so reconcile sees it; no network round-trip needed.
             (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: existing.size, etag: existing.etag, bucket: file.bucket, path: file.path });
+            noteLedger({ cos_key: cosKey, source_bucket: sourceBucket, source_path: file.path, size: existing.size, etag: existing.etag });
             continue;
           }
           if (!hasUploadWindow(tickStart)) { cursor--; break; }
@@ -887,15 +897,21 @@ Deno.serve(async (req) => {
           uploaded++; passUploaded++; passBytes += result.size;
           filesCount++; totalBytes += result.size;
           (meta.manifest ??= []).push({ kind: "storage", key: cosKey, size: result.size, etag: result.etag, bucket: file.bucket, path: file.path });
-          // Populate the cache so a size-only change later this tick still hits.
           idx.set(cosKey, { size: result.size, etag: result.etag });
           removeFailure(meta, (x) => x.kind === "storage" && x.bucket === file.bucket && x.path === file.path);
+          noteLedger({ cos_key: cosKey, source_bucket: sourceBucket, source_path: file.path, size: result.size, etag: result.etag });
+          await markResolved(admin, sourceBucket, file.path);
+          await flushLedger();
         } catch (e) {
           passFailed++;
-          recordFailure(meta, { kind: "storage", bucket: file.bucket, path: file.path, size: file.size, error: e instanceof Error ? e.message : String(e) });
+          const errMsg = e instanceof Error ? e.message : String(e);
+          recordFailure(meta, { kind: "storage", bucket: file.bucket, path: file.path, size: file.size, error: errMsg });
+          await markFailure(admin, { source_bucket: sourceBucket, source_path: file.path, cos_key: cosKey, size: file.size, error: errMsg });
         }
       }
       bumpPass(meta, passKey, { uploaded: passUploaded, failed: passFailed, skipped: passSkipped, bytes: passBytes, elapsed_ms: Date.now() - passStart });
+      await flushLedger(true);
+
 
       meta.storage_cursor = cursor;
       meta.storage_uploaded = uploaded;
