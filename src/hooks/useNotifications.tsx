@@ -9,6 +9,8 @@ export interface NotificationItem {
   title: string;
   body: string;
   type: string;
+  category: string | null;
+  image_url: string | null;
   created_at: string;
   expires_at: string | null;
   read: boolean;
