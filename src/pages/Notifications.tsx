@@ -49,7 +49,7 @@ type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
 export default function Notifications() {
   const { user, role, loading: authLoading } = useAuth();
-  const { items, loading, unreadCount, markRead, markAllRead, refresh } = useNotifications();
+  const { items, loading, markRead, refresh } = useNotifications();
   const isAdmin = role === 'admin';
 
   // 分栏
