@@ -1055,7 +1055,6 @@ function formatRelativeCn(iso: string): string {
 
 function NewsBigCard({ item, onOpen }: { item: NotificationItem; onOpen: () => void }) {
   const meta = typeMeta(item.type);
-  const summary = (item.summary || item.body.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ')).trim();
   const authorName = item.author?.name || '官方';
   const authorInitial = (authorName[0] || 'O').toUpperCase();
   return (
@@ -1085,9 +1084,6 @@ function NewsBigCard({ item, onOpen }: { item: NotificationItem; onOpen: () => v
           <span>{formatRelativeCn(item.created_at)}</span>
         </div>
         <h3 className="text-base font-bold leading-snug line-clamp-2 text-foreground">{item.title}</h3>
-        {summary && (
-          <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1.5">{summary}</p>
-        )}
         <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             {item.author?.avatar ? (
