@@ -787,7 +787,18 @@ export default function Notifications() {
                 {/* 预览页顶部：分类/类型 + 标题(独立一行) + 版本 */}
                 <div className="px-4 pt-3 pb-2 shrink-0 border-b border-border/50 space-y-2">
                   <div className="flex gap-2">
-                    <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
+                    <Select
+                      value={category}
+                      onValueChange={(v) => {
+                        const nextCat = v as TabKey;
+                        setCategory(nextCat);
+                        const cat: 'notice' | 'news' = nextCat === 'news' ? 'news' : 'notice';
+                        const allowed = cat === 'news' ? NEWS_TYPES : NOTICE_TYPES;
+                        if (!allowed.some(x => x.value === type)) {
+                          setType(DEFAULT_TYPE_FOR[cat]);
+                        }
+                      }}
+                    >
                       <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="notice">通知</SelectItem>
@@ -797,10 +808,9 @@ export default function Notifications() {
                     <Select value={type} onValueChange={setType}>
                       <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="announcement">公告</SelectItem>
-                        <SelectItem value="policy">制度</SelectItem>
-                        <SelectItem value="activity">活动</SelectItem>
-                        <SelectItem value="urgent">紧急</SelectItem>
+                        {(category === 'news' ? NEWS_TYPES : NOTICE_TYPES).map(t => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     {currentDraftId && (
