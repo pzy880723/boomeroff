@@ -774,10 +774,12 @@ Deno.serve(async (req) => {
       }
 
       bumpPass(meta, "storage_pass2", { uploaded, failed, bytes, elapsed_ms: Date.now() - passStart, total: queue.length });
+      await flushLedger(true);
       meta.retry_cursor = cursor;
       meta.step = `补传失败文件 ${cursor}/${queue.length}`;
       if (cursor >= queue.length) { meta.phase = "finalize"; meta.step = "生成清单和对账"; }
     }
+
 
     // ============= DATABASE PHASE =============
     const dbPassStart = Date.now();
