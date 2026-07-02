@@ -58,7 +58,7 @@ function Tile({ id, editing, onHide, onEnterEdit }: TileProps) {
       style={style}
       className={cn(
         'relative flex flex-col items-center py-1 select-none',
-        editing && 'animate-[wiggle_0.35s_ease-in-out_infinite_alternate]',
+        editing && 'wiggle-edit',
       )}
       {...attributes}
       {...(editing ? listeners : {})}

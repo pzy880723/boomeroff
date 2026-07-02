@@ -349,6 +349,11 @@
 .spirit-action-jump  { animation: spirit-jump  1.1s cubic-bezier(0.3,1.4,0.6,1) 1; transform-origin: 50% 100%; }
 .spirit-action-bounce{ animation: spirit-bounce 0.7s cubic-bezier(0.3,1.4,0.6,1) 1; }
 .spirit-wiggle { animation: spirit-wiggle 0.4s ease-in-out infinite; }
+@keyframes home-wiggle {
+  0%, 100% { transform: rotate(-1.2deg); }
+  50%      { transform: rotate(1.2deg); }
+}
+.wiggle-edit { animation: home-wiggle 0.4s ease-in-out infinite; }
 .spirit-think-dot { animation: spirit-thinking-dot 1.2s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
