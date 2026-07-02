@@ -104,6 +104,7 @@ const App = () => {
 
               {/* Standalone pages without bottom tab */}
               <Route path="/library/:id" element={<OfficialDetail />} />
+              <Route path="/messages/:peerId" element={<MessagesConversation />} />
               <Route path="/history" element={<History />} />
               <Route
                 path="/portal"
