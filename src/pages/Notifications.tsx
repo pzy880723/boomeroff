@@ -506,6 +506,10 @@ export default function Notifications() {
               </Button>
             )}
           </div>
+        ) : tab === 'news' ? (
+          currentListItems.map(n => (
+            <NewsBigCard key={n.id} item={n} onOpen={() => openDetail(n)} />
+          ))
         ) : currentListItems.map(n => {
           const meta = typeMeta(n.type);
           return (
@@ -524,16 +528,8 @@ export default function Notifications() {
                     </span>
                   </div>
                   <h3 className="text-sm font-bold mb-1 line-clamp-2">{n.title}</h3>
-                  {n.image_url && tab === 'news' && (
-                    <img
-                      src={n.image_url}
-                      alt={n.title}
-                      loading="lazy"
-                      className="mt-2 w-full aspect-[16/6] object-cover rounded-md"
-                    />
-                  )}
                   <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1">
-                    {n.body.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ').trim()}
+                    {(n.summary || n.body.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ')).trim()}
                   </p>
                 </div>
               </div>
