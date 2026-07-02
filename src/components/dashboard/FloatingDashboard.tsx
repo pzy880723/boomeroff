@@ -17,7 +17,7 @@ const POS_KEY = 'dashboard_capsule_pos_v2';
 const GREETED_KEY = 'spirit_greeted_session';
 const BTN = 104;
 const EDGE = 8;
-const BOTTOM_TAB = 64;
+const BOTTOM_TAB = 104;
 type Side = 'left' | 'right';
 interface Pos { side: Side; y: number }
 

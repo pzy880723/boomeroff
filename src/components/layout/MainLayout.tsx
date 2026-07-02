@@ -21,18 +21,18 @@ export function MainLayout() {
         <div className="min-h-screen bg-gradient-surface flex flex-col">
           {/* 店员端覆盖回内部文案,不影响顾客端 /u 的分享预览 */}
           <Helmet>
-            <title>门店运营辅助系统 | BOOMER-OFF</title>
+            <title>BOOMER GO · 门店运营系统</title>
             <meta
               name="description"
-              content="一站式门店运营辅助平台：AI 秒级识别商品、知识库共享、班次排班与日常运营管理,让店员的每一天都更顺手。"
+              content="BOOMER GO 门店运营系统：仪表盘 · AI 识物 · 官方知识库 · 排班打卡 · 通知中心,BOOMER 体系旗下所有门店共用的一站式运营工具。"
             />
-            <meta property="og:title" content="门店运营辅助系统" />
+            <meta property="og:title" content="BOOMER GO · 门店运营系统" />
             <meta
               property="og:description"
-              content="AI 识物 · 知识共享 · 排班管理 · 销售辅助,门店日常运营一个工具搞定。"
+              content="仪表盘 · AI 识物 · 知识共享 · 排班打卡 · 通知中心,门店日常运营一个工具搞定。"
             />
           </Helmet>
-          <main className="flex-1 pb-24">
+          <main className="flex-1 pb-28">
             <ErrorBoundary scope="page">
               <Outlet />
             </ErrorBoundary>

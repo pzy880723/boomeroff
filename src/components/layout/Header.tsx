@@ -21,7 +21,7 @@ import { ROLE_LABELS } from '@/types';
 import { useLogoTapCounter, verifyPortalPassword, unlockPortal } from '@/hooks/useAdminPortal';
 import { preloadPortal } from '@/pages/preloadPortal';
 import { toast } from 'sonner';
-import logo from '@/assets/boomer-off-vintage-logo.png';
+import { APP_BRAND_LOGO, APP_BRAND_NAME, APP_BRAND_TAGLINE } from '@/assets/brand';
 
 export function Header() {
   const { user, role, signOut } = useAuth();
@@ -90,11 +90,15 @@ export function Header() {
           aria-label="首页"
         >
           <img
-            src={logo}
-            alt="门店运营辅助系统"
+            src={APP_BRAND_LOGO}
+            alt={APP_BRAND_NAME}
             draggable={false}
-            className="h-[5.25rem] w-[5.25rem] sm:h-[6.5rem] sm:w-[6.5rem] rounded-lg object-contain shrink-0"
+            className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg object-contain shrink-0"
           />
+          <span className="flex flex-col leading-tight text-left">
+            <span className="text-base font-black tracking-wide">{APP_BRAND_NAME}</span>
+            <span className="text-[10px] text-muted-foreground -mt-0.5">{APP_BRAND_TAGLINE}</span>
+          </span>
         </button>
 
         <div className="flex items-center gap-1">

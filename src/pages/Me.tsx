@@ -11,7 +11,7 @@ import {
   Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut,
   ChevronRight, Edit2, CalendarCheck, BookOpen, MessagesSquare, MapPin, Briefcase, Ticket, Megaphone, Clapperboard,
 } from 'lucide-react';
-import logo from '@/assets/boomer-off-vintage-logo.png';
+import { APP_BRAND_LOGO, APP_BRAND_NAME, APP_BRAND_TAGLINE, APP_VERSION } from '@/assets/brand';
 import { Link } from 'react-router-dom';
 import { ROLE_LABELS, POSITION_LABELS, type StaffPosition } from '@/types';
 import {
@@ -277,9 +277,10 @@ export default function Me() {
           </button>
         </Card>
 
-        <div className="flex flex-col items-center gap-2 pt-6 pb-4 opacity-70">
-          <img src={logo} alt="BOOMER-OFF" className="h-24 w-24 rounded-xl object-contain" draggable={false} />
-          <p className="text-xs text-muted-foreground">BOOMER-OFF · v0.1.0</p>
+        <div className="flex flex-col items-center gap-2 pt-6 pb-4 opacity-80">
+          <img src={APP_BRAND_LOGO} alt={APP_BRAND_NAME} className="h-24 w-24 rounded-2xl object-contain shadow-hard" draggable={false} />
+          <p className="text-sm font-bold tracking-wide">{APP_BRAND_NAME}</p>
+          <p className="text-xs text-muted-foreground">{APP_BRAND_TAGLINE} · {APP_VERSION}</p>
         </div>
       </div>
 
