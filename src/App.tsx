@@ -32,6 +32,8 @@ const PortalLoadingLazy = lazy(() =>
 const Invite = lazy(() => import("./pages/Invite"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CheckInHistory = lazy(() => import("./pages/CheckInHistory"));
+const OkrList = lazy(() => import("./pages/OkrList"));
+const OkrDetail = lazy(() => import("./pages/OkrDetail"));
 
 const MySop = lazy(() => import("./pages/MySop"));
 const MyQa = lazy(() => import("./pages/MyQa"));
@@ -112,6 +114,9 @@ const App = () => {
               <Route path="/invite/:code" element={<Invite />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/me/check-ins" element={<CheckInHistory />} />
+              <Route path="/store/okr" element={<OkrList />} />
+              <Route path="/store/okr/:id" element={<OkrDetail />} />
+              
               
               <Route path="/me/sop" element={<MySop />} />
               <Route path="/me/qa" element={<MyQa />} />

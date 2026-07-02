@@ -9,18 +9,37 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
-  Bell, ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles,
+  Bell, ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
 import bannerDefault from '@/assets/banner-default.jpg';
 
 interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null }
+interface StoreOkr {
+  id: string; title: string; objective: string | null;
+  key_results: any; tags: string[] | null;
+}
 
 function todayShanghai(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
+}
+
+function daysLeft(ends: string | null): string | null {
+  if (!ends) return null;
+  const diff = new Date(ends).getTime() - Date.now();
+  if (diff <= 0) return '已结束';
+  const d = Math.ceil(diff / 86400000);
+  if (d <= 1) return '今日截止';
+  return `剩 ${d} 天`;
+}
+
+function okrProgress(kr: any): number {
+  if (!Array.isArray(kr) || !kr.length) return 0;
+  const done = kr.filter((k: any) => k?.done || k?.completed || (typeof k?.progress === 'number' && k.progress >= 100)).length;
+  return Math.round((done / kr.length) * 100);
 }
 
 export default function Home() {
@@ -30,7 +49,8 @@ export default function Home() {
   const [name, setName] = useState<string>('店员');
   const [encouragement, setEncouragement] = useState<string>('今天也把每一位进店的客人当作朋友。');
   const [nextShift, setNextShift] = useState<{ work_date: string; shift_code: string } | null>(null);
-  const [acts, setActs] = useState<ActiveActivity[]>([]);
+  const [act, setAct] = useState<ActiveActivity | null>(null);
+  const [okrs, setOkrs] = useState<StoreOkr[]>([]);
   const [checkedToday, setCheckedToday] = useState(false);
   const [checking, setChecking] = useState(false);
   const [bannerNote, setBannerNote] = useState<{ id: string; title: string; image_url?: string | null } | null>(null);
@@ -40,15 +60,10 @@ export default function Home() {
     const today = todayShanghai();
 
     void (async () => {
-      const [{ data: profile }, { data: sp }, { data: ac }, { data: sh }, { data: chk }] =
+      const [{ data: profile }, { data: sp }, { data: sh }, { data: chk }] =
         await Promise.all([
           supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
-          supabase.from('staff_profiles' as any).select('real_name').eq('user_id', user.id).maybeSingle(),
-          supabase.from('activities' as any)
-            .select('id, name, cover_url, ends_at')
-            .eq('status', 'active')
-            .order('starts_at', { ascending: false })
-            .limit(3),
+          supabase.from('staff_profiles' as any).select('real_name, shop_id').eq('user_id', user.id).maybeSingle(),
           supabase.from('shift_schedules' as any)
             .select('work_date, shift_code')
             .eq('user_id', user.id)
@@ -60,9 +75,41 @@ export default function Home() {
         ]);
 
       setName((sp as any)?.real_name || profile?.display_name || user.email?.split('@')[0] || '店员');
-      setActs(((ac as any[]) || []) as ActiveActivity[]);
       setNextShift((sh as any) ?? null);
       setCheckedToday(!!chk);
+
+      const shopId = (sp as any)?.shop_id as string | undefined;
+
+      // 活动：只显示本店店员创建的（activities 无 shop_id 字段，按 created_by 交集过滤）
+      let activityQuery = supabase.from('activities' as any)
+        .select('id, name, cover_url, ends_at, created_by')
+        .eq('status', 'active')
+        .order('starts_at', { ascending: false })
+        .limit(6);
+      const { data: ac } = await activityQuery;
+      let list = ((ac as any[]) || []) as (ActiveActivity & { created_by: string })[];
+      if (shopId && list.length) {
+        const uids = Array.from(new Set(list.map(a => a.created_by).filter(Boolean)));
+        if (uids.length) {
+          const { data: mates } = await supabase.from('staff_profiles' as any)
+            .select('user_id').eq('shop_id', shopId).in('user_id', uids);
+          const set = new Set(((mates as any[]) || []).map(m => m.user_id));
+          list = list.filter(a => set.has(a.created_by));
+        }
+      }
+      setAct(list[0] ?? null);
+
+      // OKR：当前周期 + 本店
+      if (shopId) {
+        const { data: ok } = await supabase.from('operation_okrs' as any)
+          .select('id, title, objective, key_results, tags')
+          .eq('shop_id', shopId)
+          .lte('period_start', today)
+          .gte('period_end', today)
+          .order('created_at', { ascending: false })
+          .limit(3);
+        setOkrs(((ok as any[]) || []) as StoreOkr[]);
+      }
     })();
 
     // 每日鼓励
@@ -83,7 +130,7 @@ export default function Home() {
     })();
   }, [user]);
 
-  // Banner：取最新一条 category='banner' 或最新未读通知
+  // Banner：取最新一条 category='banner' 或最新通知
   useEffect(() => {
     if (!notes.length) return;
     const b = notes.find((n) => (n as any).category === 'banner') || notes[0];
@@ -154,12 +201,12 @@ export default function Home() {
 
         {/* Banner */}
         <Link
-          to={bannerNote ? `/notifications` : '/notifications'}
+          to="/notifications"
           className="block relative rounded-2xl overflow-hidden border border-border/60 aspect-[16/6] bg-muted"
         >
           <img
             src={bannerNote?.image_url || bannerDefault}
-            alt={bannerNote?.title || 'BOOMER-OFF'}
+            alt={bannerNote?.title || 'BOOMER GO'}
             loading="lazy"
             className="w-full h-full object-cover"
           />
@@ -189,36 +236,68 @@ export default function Home() {
           )}
         </SectionCard>
 
-        {/* 应用图标网格 */}
-        <AppGrid />
-
-        {/* 门店活动 */}
-        {acts.length > 0 && (
+        {/* 正在进行的活动（横向条幅） */}
+        {act && (
           <section>
             <div className="flex items-center justify-between mb-2 px-1">
               <h2 className="text-sm font-bold flex items-center gap-1.5">
-                <Megaphone className="w-4 h-4 text-primary" /> 门店活动
+                <Megaphone className="w-4 h-4 text-primary" /> 正在进行的活动
               </h2>
               <Link to="/me/activities" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {acts.map(a => (
-                <Link key={a.id} to={`/me/activities/${a.id}`}>
-                  <Card className="overflow-hidden border-border/60">
-                    {a.cover_url ? (
-                      <div className="aspect-[4/3] bg-muted overflow-hidden">
-                        <img src={a.cover_url} alt={a.name} loading="lazy" className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="aspect-[4/3] bg-gradient-primary" />
-                    )}
-                    <div className="p-2">
-                      <p className="text-xs font-medium line-clamp-2 leading-tight">{a.name}</p>
-                    </div>
-                  </Card>
-                </Link>
-              ))}
+            <Link to={`/me/activities/${act.id}`}>
+              <Card className="flex items-center gap-3 p-2.5 border-border/60 hover:border-primary/40 transition-colors">
+                <div className="w-14 h-14 rounded-xl overflow-hidden bg-muted shrink-0">
+                  {act.cover_url ? (
+                    <img src={act.cover_url} alt={act.name} loading="lazy" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-primary" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold line-clamp-1">{act.name}</p>
+                  {daysLeft(act.ends_at) && (
+                    <p className="text-xs text-muted-foreground mt-1">{daysLeft(act.ends_at)}</p>
+                  )}
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              </Card>
+            </Link>
+          </section>
+        )}
+
+        {/* 应用图标网格 */}
+        <AppGrid />
+
+        {/* 门店管理 / OKR */}
+        {okrs.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h2 className="text-sm font-bold flex items-center gap-1.5">
+                <Target className="w-4 h-4 text-primary" /> 门店管理
+              </h2>
+              <Link to="/store/okr" className="text-xs text-muted-foreground flex items-center">更多 <ChevronRight className="w-3 h-3" /></Link>
             </div>
+            <Card className="divide-y divide-border/60 border-border/60 overflow-hidden">
+              {okrs.map(o => {
+                const p = okrProgress(o.key_results);
+                return (
+                  <Link key={o.id} to={`/store/okr/${o.id}`} className="flex items-center gap-3 px-3 py-3 hover:bg-muted/50 transition-colors">
+                    <span className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <Target className="w-4 h-4" strokeWidth={1.75} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold line-clamp-1">{o.title}</p>
+                      {o.objective && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{o.objective}</p>}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-bold text-primary tabular-nums">{p}%</div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </Link>
+                );
+              })}
+            </Card>
           </section>
         )}
       </main>
