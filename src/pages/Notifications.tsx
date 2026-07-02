@@ -912,28 +912,12 @@ export default function Notifications() {
                           {summary}
                         </p>
                       )}
-                      {body ? (
-                        editingBody ? (
-                          <Textarea
-                            ref={bodyRef}
-                            value={body}
-                            onChange={e => setBody(e.target.value)}
-                            rows={12}
-                            className="text-sm font-mono"
-                            onBlur={() => setEditingBody(false)}
-                          />
-                        ) : (
-                          <div
-                            onClick={() => setEditingBody(true)}
-                            className="cursor-text hover:bg-muted/40 rounded p-1 -m-1"
-                            title="点击编辑正文"
-                          >
-                            <MarkdownArticle content={body} />
-                          </div>
-                        )
-                      ) : (
-                        <p className="text-xs text-muted-foreground">回到「对话」让 AI 帮你写正文</p>
-                      )}
+                      <RichBodyEditor
+                        value={body}
+                        onChange={setBody}
+                        userId={user!.id}
+                        placeholder="在这里写正文，支持插图、加粗、标题…也可以回到「对话」让 AI 帮你写"
+                      />
                     </div>
                   </div>
                 </div>
