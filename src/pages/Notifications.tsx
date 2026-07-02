@@ -143,6 +143,7 @@ export default function Notifications() {
   // 撰稿弹窗状态
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
+  const [summary, setSummary] = useState('');
   const [body, setBody] = useState('');
   const [type, setType] = useState('announcement');
   const [category, setCategory] = useState<TabKey>('news');
