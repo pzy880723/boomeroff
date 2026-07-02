@@ -71,55 +71,58 @@ export default function Notifications() {
 
   return (
     <div className="min-h-screen">
-      <PageHeader title="通知" icon={<Bell className="w-5 h-5" />}>
-        <div className="flex items-center gap-2">
-          {unreadCount > 0 && (
-            <Button size="sm" variant="ghost" onClick={markAllRead}>
-              <CheckCheck className="w-4 h-4 mr-1" />全部已读
-            </Button>
-          )}
-          {isAdmin && (
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="shadow-hard">
-                  <Plus className="w-4 h-4 mr-1" />发通知
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>发布通知</DialogTitle></DialogHeader>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground">类型</label>
-                    <Select value={type} onValueChange={setType}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="announcement">公告</SelectItem>
-                        <SelectItem value="policy">制度</SelectItem>
-                        <SelectItem value="activity">活动</SelectItem>
-                        <SelectItem value="urgent">紧急</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">标题</label>
-                    <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="简明扼要的标题" maxLength={60} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">内容</label>
-                    <Textarea value={body} onChange={e => setBody(e.target.value)} rows={5} placeholder="通知正文..." maxLength={2000} />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setOpen(false)}>取消</Button>
-                  <Button onClick={publish} disabled={submitting}>
-                    {submitting && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}发布
+      <PageHeader
+        title="通知"
+        right={
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button size="sm" variant="ghost" onClick={markAllRead}>
+                <CheckCheck className="w-4 h-4 mr-1" />全部已读
+              </Button>
+            )}
+            {isAdmin && (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="shadow-hard">
+                    <Plus className="w-4 h-4 mr-1" />发通知
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-        </div>
-      </PageHeader>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>发布通知</DialogTitle></DialogHeader>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground">类型</label>
+                      <Select value={type} onValueChange={setType}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="announcement">公告</SelectItem>
+                          <SelectItem value="policy">制度</SelectItem>
+                          <SelectItem value="activity">活动</SelectItem>
+                          <SelectItem value="urgent">紧急</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">标题</label>
+                      <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="简明扼要的标题" maxLength={60} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">内容</label>
+                      <Textarea value={body} onChange={e => setBody(e.target.value)} rows={5} placeholder="通知正文..." maxLength={2000} />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setOpen(false)}>取消</Button>
+                    <Button onClick={publish} disabled={submitting}>
+                      {submitting && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}发布
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+        }
+      />
 
       <main className="mx-auto max-w-screen-md px-4 py-4 space-y-3">
         {loading && items.length === 0 ? (

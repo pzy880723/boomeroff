@@ -98,7 +98,7 @@ export default function Home() {
 
         {/* 打卡卡片 */}
         <Suspense fallback={<Card className="p-4 h-24 animate-pulse" />}>
-          <CheckInCard />
+          <CheckInCard userId={user.id} />
         </Suspense>
 
         {/* 快捷入口 */}
