@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import {
   MessageCircle, PencilLine, CheckCheck, Loader2, Sparkles, Send,
   ImagePlus, X, Upload, Image as ImageIcon, Users2, ChevronRight, Pencil, Bell, Search, Filter,
-  Eye, MessageSquare, History, Wand2,
+  Eye, MessageSquare, History, Wand2, RefreshCw, Save, Inbox, Trash2, Crop,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,9 @@ import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
 import { MarkdownArticle } from '@/components/notifications/MarkdownArticle';
 import { NotificationDetailSheet } from '@/components/notifications/NotificationDetailSheet';
 import { NotificationBannerCropper } from '@/components/notifications/NotificationBannerCropper';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { listDrafts, saveDraft, removeDraft, type NotificationDraft } from '@/lib/notificationDrafts';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 type TabKey = 'notice' | 'news' | 'message';
 const TAB_META: Record<TabKey, { label: string }> = {
@@ -153,6 +156,15 @@ export default function Notifications() {
 
   // 裁剪状态
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const replaceCoverInputRef = useRef<HTMLInputElement>(null);
+
+  // 草稿箱
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<NotificationDraft[]>([]);
+  const [draftBoxOpen, setDraftBoxOpen] = useState(false);
+  const refreshDrafts = () => setDrafts(listDrafts());
+  useEffect(() => { refreshDrafts(); }, []);
+
 
   // AI 对话
   const [chat, setChat] = useState<ChatTurn[]>([]);
@@ -190,12 +202,51 @@ export default function Notifications() {
   const resetCompose = (defaultCat: TabKey = 'notice') => {
     setChat([]); setInput(''); setTitle(''); setBody('');
     setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
-    setVersions([]); setView('chat');
+    setVersions([]); setView('chat'); setCurrentDraftId(null);
   };
   const openCompose = () => {
     resetCompose(tab === 'message' ? 'notice' : tab);
     setOpen(true);
     setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const saveCurrentDraft = (silent = false) => {
+    if (!title.trim() && !body.trim() && !coverUrl) {
+      if (!silent) toast.error('标题、正文或封面至少填一项');
+      return;
+    }
+    const saved = saveDraft({
+      id: currentDraftId ?? undefined,
+      title, body, type, category, coverUrl,
+    });
+    setCurrentDraftId(saved.id);
+    refreshDrafts();
+    if (!silent) toast.success('已保存到草稿箱');
+  };
+
+  const loadDraft = (d: NotificationDraft) => {
+    setCurrentDraftId(d.id);
+    setTitle(d.title); setBody(d.body); setType(d.type);
+    setCategory(d.category as TabKey); setCoverUrl(d.coverUrl);
+    setChat([]); setInput(''); setVersions([]); setView('preview');
+    setDraftBoxOpen(false);
+    setOpen(true);
+  };
+
+  const deleteDraft = (id: string) => {
+    removeDraft(id);
+    refreshDrafts();
+    if (currentDraftId === id) setCurrentDraftId(null);
+  };
+
+  const handleCloseCompose = () => {
+    const hasChanges = !!(title.trim() || body.trim() || coverUrl);
+    if (hasChanges && !currentDraftId) {
+      saveCurrentDraft(true);
+      toast('已自动保存到草稿箱', { icon: <Inbox className="w-4 h-4" /> });
+    }
+    setOpen(false);
+    resetCompose();
   };
 
 
@@ -320,6 +371,9 @@ export default function Notifications() {
       } else {
         setBody(body + snippet);
       }
+      // 切到预览 tab,让用户立刻看到插入效果
+      setView('preview');
+      toast.success('已插入图片');
     } catch (e: any) {
       toast.error(e?.message || '图片上传失败');
     } finally {
@@ -342,6 +396,7 @@ export default function Notifications() {
     setSubmitting(false);
     if (error) { toast.error('发布失败：' + error.message); return; }
     toast.success(`${TAB_META[category].label}已发布`);
+    if (currentDraftId) { removeDraft(currentDraftId); refreshDrafts(); }
     resetCompose();
     setOpen(false);
     void refresh();
@@ -500,7 +555,7 @@ export default function Notifications() {
 
 
       {/* 撰稿弹窗：对话为主，预览可切换/侧滑 */}
-      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetCompose(); }}>
+      <Dialog open={open} onOpenChange={(v) => { if (!v) handleCloseCompose(); else setOpen(true); }}>
         <DialogContent className="max-w-none w-screen h-[100dvh] sm:rounded-none rounded-none p-0 gap-0 border-0 flex flex-col overflow-hidden [&>button.absolute]:hidden">
           <DialogHeader className="px-3 pt-[max(env(safe-area-inset-top),0.5rem)] pb-2 shrink-0 border-b border-border/50 space-y-0">
             <div className="flex items-center gap-2 h-11">
@@ -524,7 +579,7 @@ export default function Notifications() {
               </div>
               <button
                 type="button"
-                onClick={() => { setOpen(false); resetCompose(); }}
+                onClick={handleCloseCompose}
                 className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition"
                 aria-label="关闭"
               >
@@ -646,18 +701,18 @@ export default function Notifications() {
               </>
             ) : (
               <>
-                {/* 预览页顶部：分类/类型/标题 + 版本切换 */}
+                {/* 预览页顶部：分类/类型 + 标题(独立一行) + 版本 */}
                 <div className="px-4 pt-3 pb-2 shrink-0 border-b border-border/50 space-y-2">
                   <div className="flex gap-2">
                     <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
-                      <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="notice">通知</SelectItem>
                         <SelectItem value="news">资讯</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select value={type} onValueChange={setType}>
-                      <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="announcement">公告</SelectItem>
                         <SelectItem value="policy">制度</SelectItem>
@@ -665,14 +720,17 @@ export default function Notifications() {
                         <SelectItem value="urgent">紧急</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input
-                      value={title}
-                      onChange={e => setTitle(e.target.value)}
-                      placeholder="标题"
-                      maxLength={60}
-                      className="flex-1 h-8 text-sm font-semibold"
-                    />
+                    {currentDraftId && (
+                      <span className="inline-flex items-center h-8 px-2 rounded-md bg-muted text-[10px] text-muted-foreground">草稿</span>
+                    )}
                   </div>
+                  <Input
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder="输入通知标题"
+                    maxLength={60}
+                    className="w-full h-10 text-base font-semibold"
+                  />
                   {versions.length > 1 && (
                     <div className="flex items-center gap-2">
                       <History className="w-3.5 h-3.5 text-muted-foreground" />
@@ -704,14 +762,43 @@ export default function Notifications() {
                     {coverUrl ? (
                       <div className="relative">
                         <img src={coverUrl} alt="banner" className="w-full aspect-[16/6] object-cover block" />
-                        <button
-                          type="button"
-                          onClick={() => setCoverUrl('')}
-                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"
-                          aria-label="移除封面"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="absolute top-2 right-2 flex gap-1">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/75"
+                                aria-label="更换封面"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem onClick={() => replaceCoverInputRef.current?.click()}>
+                                <Upload className="w-4 h-4 mr-2" />重新上传
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setCropSrc(coverUrl)}>
+                                <Crop className="w-4 h-4 mr-2" />重新裁剪
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={generateBannerByAI} disabled={genBannerBusy}>
+                                <Sparkles className="w-4 h-4 mr-2" />AI 重画
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <button
+                            type="button"
+                            onClick={() => setCoverUrl('')}
+                            className="w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/75"
+                            aria-label="移除封面"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <input
+                          ref={replaceCoverInputRef}
+                          type="file" accept="image/*" className="hidden"
+                          onChange={e => { pickCoverFile(e.target.files?.[0] || null); e.currentTarget.value = ''; }}
+                        />
                       </div>
                     ) : (
                       <div className="w-full aspect-[16/6] bg-muted/50 flex items-center justify-center text-xs text-muted-foreground gap-2">
@@ -782,8 +869,32 @@ export default function Notifications() {
                   >
                     <Pencil className="w-3.5 h-3.5" />{editingBody ? '完成' : '手改'}
                   </button>
-                  <div className="flex-1" />
-                  <Button size="sm" onClick={publish} disabled={submitting || !title.trim() || !body.trim()} className="h-8">
+                </div>
+
+                {/* 主按钮行 */}
+                <div className="px-4 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shrink-0 border-t border-border/50 flex items-center gap-2 bg-background">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => saveCurrentDraft(false)}
+                    className="h-9 flex-1"
+                  >
+                    <Save className="w-3.5 h-3.5 mr-1" />保存草稿
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { refreshDrafts(); setDraftBoxOpen(true); }}
+                    className="h-9 relative"
+                  >
+                    <Inbox className="w-3.5 h-3.5 mr-1" />草稿箱
+                    {drafts.length > 0 && (
+                      <span className="ml-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 font-semibold">
+                        {drafts.length}
+                      </span>
+                    )}
+                  </Button>
+                  <Button size="sm" onClick={publish} disabled={submitting || !title.trim() || !body.trim()} className="h-9 flex-1">
                     {submitting && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}发布
                   </Button>
                 </div>
@@ -802,6 +913,58 @@ export default function Notifications() {
         onCancel={() => setCropSrc(null)}
         onConfirm={applyCroppedBanner}
       />
+
+      {/* 草稿箱 Sheet */}
+      <Sheet open={draftBoxOpen} onOpenChange={setDraftBoxOpen}>
+        <SheetContent side="bottom" className="max-h-[80vh] flex flex-col p-0">
+          <SheetHeader className="px-4 pt-4 pb-2 text-left">
+            <SheetTitle className="text-base flex items-center gap-2">
+              <Inbox className="w-4 h-4" />草稿箱
+              <span className="text-xs font-normal text-muted-foreground">({drafts.length})</span>
+            </SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2">
+            {drafts.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground text-sm">
+                <Inbox className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                暂无草稿
+              </div>
+            ) : drafts.map(d => (
+              <div
+                key={d.id}
+                className={cn(
+                  'flex items-start gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/40 transition',
+                  currentDraftId === d.id ? 'border-primary/60 bg-primary/5' : 'border-border/60',
+                )}
+                onClick={() => loadDraft(d)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge className={`${typeMeta(d.type).tone} border-0 text-[10px] px-1.5 py-0`}>
+                      {typeMeta(d.type).label}
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground">
+                      {new Date(d.updatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-semibold truncate">{d.title || '（未命名）'}</h4>
+                  <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                    {(d.body || '').replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ').trim() || '（无正文）'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); deleteDraft(d.id); }}
+                  className="shrink-0 w-8 h-8 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center"
+                  aria-label="删除草稿"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
