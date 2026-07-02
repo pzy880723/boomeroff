@@ -74,7 +74,7 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
           aria-label="BOOMER GO"
           className="shrink-0 select-none focus:outline-none ml-1 flex items-center"
         >
-          <img src={brandLogo} alt="BOOMER GO" className="h-7 w-7 object-contain select-none" draggable={false} />
+          <img src={brandWordmark.url} alt="BOOMER GO" className="h-5 w-auto object-contain select-none" draggable={false} />
         </button>
       </div>
 
