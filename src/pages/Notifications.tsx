@@ -701,18 +701,18 @@ export default function Notifications() {
               </>
             ) : (
               <>
-                {/* 预览页顶部：分类/类型/标题 + 版本切换 */}
+                {/* 预览页顶部：分类/类型 + 标题(独立一行) + 版本 */}
                 <div className="px-4 pt-3 pb-2 shrink-0 border-b border-border/50 space-y-2">
                   <div className="flex gap-2">
                     <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
-                      <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="notice">通知</SelectItem>
                         <SelectItem value="news">资讯</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select value={type} onValueChange={setType}>
-                      <SelectTrigger className="w-20 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="announcement">公告</SelectItem>
                         <SelectItem value="policy">制度</SelectItem>
@@ -720,14 +720,17 @@ export default function Notifications() {
                         <SelectItem value="urgent">紧急</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input
-                      value={title}
-                      onChange={e => setTitle(e.target.value)}
-                      placeholder="标题"
-                      maxLength={60}
-                      className="flex-1 h-8 text-sm font-semibold"
-                    />
+                    {currentDraftId && (
+                      <span className="inline-flex items-center h-8 px-2 rounded-md bg-muted text-[10px] text-muted-foreground">草稿</span>
+                    )}
                   </div>
+                  <Input
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder="输入通知标题"
+                    maxLength={60}
+                    className="w-full h-10 text-base font-semibold"
+                  />
                   {versions.length > 1 && (
                     <div className="flex items-center gap-2">
                       <History className="w-3.5 h-3.5 text-muted-foreground" />
@@ -759,14 +762,43 @@ export default function Notifications() {
                     {coverUrl ? (
                       <div className="relative">
                         <img src={coverUrl} alt="banner" className="w-full aspect-[16/6] object-cover block" />
-                        <button
-                          type="button"
-                          onClick={() => setCoverUrl('')}
-                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"
-                          aria-label="移除封面"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="absolute top-2 right-2 flex gap-1">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/75"
+                                aria-label="更换封面"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem onClick={() => replaceCoverInputRef.current?.click()}>
+                                <Upload className="w-4 h-4 mr-2" />重新上传
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setCropSrc(coverUrl)}>
+                                <Crop className="w-4 h-4 mr-2" />重新裁剪
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={generateBannerByAI} disabled={genBannerBusy}>
+                                <Sparkles className="w-4 h-4 mr-2" />AI 重画
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <button
+                            type="button"
+                            onClick={() => setCoverUrl('')}
+                            className="w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/75"
+                            aria-label="移除封面"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <input
+                          ref={replaceCoverInputRef}
+                          type="file" accept="image/*" className="hidden"
+                          onChange={e => { pickCoverFile(e.target.files?.[0] || null); e.currentTarget.value = ''; }}
+                        />
                       </div>
                     ) : (
                       <div className="w-full aspect-[16/6] bg-muted/50 flex items-center justify-center text-xs text-muted-foreground gap-2">
@@ -837,8 +869,32 @@ export default function Notifications() {
                   >
                     <Pencil className="w-3.5 h-3.5" />{editingBody ? '完成' : '手改'}
                   </button>
-                  <div className="flex-1" />
-                  <Button size="sm" onClick={publish} disabled={submitting || !title.trim() || !body.trim()} className="h-8">
+                </div>
+
+                {/* 主按钮行 */}
+                <div className="px-4 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shrink-0 border-t border-border/50 flex items-center gap-2 bg-background">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => saveCurrentDraft(false)}
+                    className="h-9 flex-1"
+                  >
+                    <Save className="w-3.5 h-3.5 mr-1" />保存草稿
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { refreshDrafts(); setDraftBoxOpen(true); }}
+                    className="h-9 relative"
+                  >
+                    <Inbox className="w-3.5 h-3.5 mr-1" />草稿箱
+                    {drafts.length > 0 && (
+                      <span className="ml-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 font-semibold">
+                        {drafts.length}
+                      </span>
+                    )}
+                  </Button>
+                  <Button size="sm" onClick={publish} disabled={submitting || !title.trim() || !body.trim()} className="h-9 flex-1">
                     {submitting && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}发布
                   </Button>
                 </div>
