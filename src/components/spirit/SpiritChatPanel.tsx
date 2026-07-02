@@ -191,6 +191,26 @@ function pickChips(n = 4): Chip[] {
   return result;
 }
 
+function pickChipsByCategory(cat: ChipCategory, n = 4): Chip[] {
+  const pool = QUICK_CHIPS.filter((c) => c.cat === cat).slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, n);
+}
+
+const TOPIC_TABS: { id: ChipCategory | 'all'; label: string; Icon: typeof CalendarDays }[] = [
+  { id: 'all', label: '全部', Icon: Sparkles },
+  { id: 'shift', label: '排班', Icon: CalendarDays },
+  { id: 'level', label: '打卡', Icon: Trophy },
+  { id: 'helper', label: '顾客', Icon: HeartHandshake },
+  { id: 'trivia', label: '中古知识', Icon: BookOpenText },
+  { id: 'today', label: '今日主推', Icon: Store },
+  { id: 'copywriting', label: '写文案', Icon: PenLine },
+  { id: 'mood', label: '打气', Icon: MessageSquareHeart },
+];
+
 const MAX_IMAGES = 4;
 const MAX_FILE_MB = 10;
 
