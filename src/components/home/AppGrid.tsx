@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   DndContext, PointerSensor, useSensor, useSensors, closestCenter,
-  type DragEndEvent,
+  DragOverlay, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext, useSortable, arrayMove, rectSortingStrategy,
@@ -10,14 +10,14 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Check, Plus, X, Pencil, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { APP_ICON_REGISTRY, ALL_APP_IDS } from './appIconRegistry';
+import { APP_ICON_REGISTRY, ALL_APP_IDS, type AppIconMeta } from './appIconRegistry';
 import { readAppPref, writeAppPref } from '@/lib/homeAppsPref';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 
-/** 长按 ~500ms 进入编辑模式 */
+/** 长按 ~450ms 进入编辑模式 */
 function useLongPress(cb: () => void, ms = 450) {
   const [t, setT] = useState<ReturnType<typeof setTimeout> | null>(null);
   return {
@@ -28,6 +28,52 @@ function useLongPress(cb: () => void, ms = 450) {
   };
 }
 
+/** 品牌红/白瓷 squircle tile。 */
+function TileFace({ meta, dragging }: { meta: AppIconMeta; dragging?: boolean }) {
+  const { Icon, tone } = meta;
+  const isRed = tone === 'red';
+  return (
+    <span
+      className={cn(
+        'relative w-[54px] h-[54px] rounded-[26%] flex items-center justify-center overflow-hidden',
+        'transition-transform duration-150',
+        isRed
+          ? 'bg-primary shadow-[0_8px_18px_-8px_hsl(var(--primary)/0.55)] ring-1 ring-primary/40'
+          : 'bg-white shadow-[0_6px_14px_-8px_rgba(0,0,0,0.18)] ring-1 ring-primary/15',
+        dragging && 'scale-110 shadow-[0_18px_28px_-10px_rgba(0,0,0,0.35)]',
+      )}
+    >
+      {/* 顶部高光 */}
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b',
+          isRed ? 'from-white/25 via-white/5 to-transparent' : 'from-white to-white/0',
+        )}
+      />
+      {/* 内描边 */}
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute inset-0 rounded-[26%]',
+          isRed
+            ? 'shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(0,0,0,0.15)]'
+            : 'shadow-[inset_0_1px_0_rgba(255,255,255,0.9),inset_0_-1px_0_rgba(0,0,0,0.05)]',
+        )}
+      />
+      <Icon
+        className={cn(
+          'relative w-[24px] h-[24px]',
+          isRed
+            ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]'
+            : 'text-primary',
+        )}
+        strokeWidth={2.2}
+      />
+    </span>
+  );
+}
+
 interface TileProps {
   id: string;
   editing: boolean;
@@ -35,26 +81,24 @@ interface TileProps {
   onEnterEdit: () => void;
 }
 
-function Tile({ id, editing, onHide, onEnterEdit }: TileProps) {
+function SortableTile({ id, editing, onHide, onEnterEdit }: TileProps) {
   const meta = APP_ICON_REGISTRY[id];
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !editing });
-  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : 'auto' as const };
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id, disabled: !editing });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    // 让位滑动挤压 —— 明确覆盖默认 transition
+    transition: transition ?? 'transform 220ms cubic-bezier(0.2, 0, 0, 1)',
+  };
   const longPress = useLongPress(onEnterEdit);
   if (!meta) return null;
-  const { Icon, label, to, gradient } = meta;
+  const { label, to } = meta;
 
   const content = (
     <>
-      <span
-        className="relative w-[54px] h-[54px] rounded-[26%] flex items-center justify-center overflow-hidden shadow-[0_6px_14px_-6px_rgba(0,0,0,0.35)] ring-1 ring-black/[0.04]"
-        style={{ backgroundImage: gradient }}
-      >
-        {/* Top glossy highlight */}
-        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/45 via-white/10 to-transparent" />
-        {/* Inner top ring for a subtle "glass" edge */}
-        <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[26%] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_0_rgba(0,0,0,0.08)]" />
-        <Icon className="relative w-[24px] h-[24px] text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" strokeWidth={2} />
-      </span>
+      <TileFace meta={meta} />
       <span className="text-[11px] font-medium text-foreground text-center leading-tight mt-1.5">{label}</span>
     </>
   );
@@ -64,8 +108,9 @@ function Tile({ id, editing, onHide, onEnterEdit }: TileProps) {
       ref={setNodeRef}
       style={style}
       className={cn(
-        'relative flex flex-col items-center py-1 select-none',
-        editing && 'wiggle-edit',
+        'relative flex flex-col items-center py-1 select-none touch-none',
+        editing && !isDragging && 'wiggle-edit',
+        isDragging && 'opacity-30',
       )}
       {...attributes}
       {...(editing ? listeners : {})}
@@ -93,24 +138,32 @@ export function AppGrid() {
   const [pref, setPref] = useState(() => readAppPref());
   const [editing, setEditing] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
 
   useEffect(() => { writeAppPref(pref); }, [pref]);
 
-  const visible = pref.order.filter((id) => !pref.hidden.includes(id) && APP_ICON_REGISTRY[id]);
+  const visible = useMemo(
+    () => pref.order.filter((id) => !pref.hidden.includes(id) && APP_ICON_REGISTRY[id]),
+    [pref],
+  );
   const hiddenIds = ALL_APP_IDS.filter((id) => !pref.order.includes(id) || pref.hidden.includes(id));
 
+  const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
   const onDragEnd = (e: DragEndEvent) => {
+    setActiveId(null);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const oldIdx = visible.indexOf(String(active.id));
     const newIdx = visible.indexOf(String(over.id));
     if (oldIdx < 0 || newIdx < 0) return;
     const newVisible = arrayMove(visible, oldIdx, newIdx);
-    // 保留 hidden 顺序拼回 order
     const hiddenFromOrder = pref.order.filter((id) => pref.hidden.includes(id));
     setPref({ ...pref, order: [...newVisible, ...hiddenFromOrder] });
   };
+  const onDragCancel = () => setActiveId(null);
 
   const hide = (id: string) =>
     setPref({ ...pref, hidden: [...new Set([...pref.hidden, id])] });
@@ -120,6 +173,8 @@ export function AppGrid() {
     const order = pref.order.includes(id) ? pref.order : [...pref.order, id];
     setPref({ hidden, order });
   };
+
+  const activeMeta = activeId ? APP_ICON_REGISTRY[activeId] : null;
 
   return (
     <section>
@@ -143,11 +198,17 @@ export function AppGrid() {
         )}
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={onDragCancel}
+      >
         <SortableContext items={visible} strategy={rectSortingStrategy}>
           <div className="grid grid-cols-4 gap-y-3 gap-x-2">
             {visible.map((id) => (
-              <Tile
+              <SortableTile
                 key={id}
                 id={id}
                 editing={editing}
@@ -159,7 +220,7 @@ export function AppGrid() {
               <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
                 <SheetTrigger asChild>
                   <button className="flex flex-col items-center py-1">
-                    <span className="w-[52px] h-[52px] rounded-2xl flex items-center justify-center border border-dashed border-border/70 text-muted-foreground bg-muted/30">
+                    <span className="w-[54px] h-[54px] rounded-[26%] flex items-center justify-center border border-dashed border-primary/40 text-primary bg-primary/5">
                       <Plus className="w-5 h-5" />
                     </span>
                     <span className="text-[11px] font-medium text-muted-foreground mt-1.5">添加</span>
@@ -171,22 +232,14 @@ export function AppGrid() {
                     {hiddenIds.map((id) => {
                       const meta = APP_ICON_REGISTRY[id];
                       if (!meta) return null;
-                      const { Icon, label, gradient } = meta;
                       return (
                         <button
                           key={id}
                           className="flex flex-col items-center py-2"
                           onClick={() => { showBack(id); }}
                         >
-                          <span
-                            className="relative w-[54px] h-[54px] rounded-[26%] flex items-center justify-center overflow-hidden shadow-[0_6px_14px_-6px_rgba(0,0,0,0.35)] ring-1 ring-black/[0.04]"
-                            style={{ backgroundImage: gradient }}
-                          >
-                            <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/45 via-white/10 to-transparent" />
-                            <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[26%] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_0_rgba(0,0,0,0.08)]" />
-                            <Icon className="relative w-[24px] h-[24px] text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" strokeWidth={2} />
-                          </span>
-                          <span className="text-[11px] mt-1.5">{label}</span>
+                          <TileFace meta={meta} />
+                          <span className="text-[11px] mt-1.5">{meta.label}</span>
                         </button>
                       );
                     })}
@@ -199,6 +252,15 @@ export function AppGrid() {
             )}
           </div>
         </SortableContext>
+
+        <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.2,0,0,1)' }}>
+          {activeMeta ? (
+            <div className="flex flex-col items-center py-1 pointer-events-none">
+              <TileFace meta={activeMeta} dragging />
+              <span className="text-[11px] font-medium text-foreground text-center leading-tight mt-1.5">{activeMeta.label}</span>
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </section>
   );

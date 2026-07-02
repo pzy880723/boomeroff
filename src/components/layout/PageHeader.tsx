@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { useLogoTapCounter, verifyPortalPassword, unlockPortal } from '@/hooks/useAdminPortal';
 import { toast } from 'sonner';
-import logo from '@/assets/boomer-go-wordmark.png.asset.json';
+import { BrandWordmark } from '@/components/brand/BrandWordmark';
 
 interface PageHeaderProps {
   title: string;
@@ -74,12 +74,7 @@ export function PageHeader({ title, back, right, subtitle }: PageHeaderProps) {
           aria-label="BOOMER GO"
           className="shrink-0 select-none focus:outline-none ml-1 flex items-center"
         >
-          <img
-            src={logo.url}
-            alt="BOOMER GO"
-            draggable={false}
-            className="h-5 w-auto object-contain"
-          />
+          <BrandWordmark height={20} />
         </button>
       </div>
 
