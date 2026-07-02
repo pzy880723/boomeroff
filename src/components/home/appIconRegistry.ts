@@ -24,7 +24,6 @@ export const APP_ICON_REGISTRY: Record<string, AppIconMeta> = {
   checkins:  { id: 'checkins',  label: '打卡记录',  to: '/me/check-ins',    Icon: CalendarCheck,  tint: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
   sop:       { id: 'sop',       label: '员工手册',  to: '/me/sop',          Icon: FileText,       tint: 'bg-slate-500/10 text-slate-600 dark:text-slate-300' },
   qa:        { id: 'qa',        label: '门店问答',  to: '/me/qa',           Icon: FileText,       tint: 'bg-teal-500/10 text-teal-600 dark:text-teal-400' },
-  sop:       { id: 'sop',       label: '员工手册',  to: '/me/sop',          Icon: FileText,       tint: 'bg-slate-500/10 text-slate-600 dark:text-slate-300' },
   activities:{ id: 'activities',label: '门店活动',  to: '/me/activities',   Icon: Megaphone,      tint: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
   notifications:{ id: 'notifications', label: '通知', to: '/notifications', Icon: Bell,          tint: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' },
   me:        { id: 'me',        label: '我的',      to: '/me',              Icon: User,           tint: 'bg-neutral-500/10 text-neutral-700 dark:text-neutral-200' },
