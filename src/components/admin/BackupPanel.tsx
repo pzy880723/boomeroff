@@ -207,11 +207,10 @@ export function BackupPanel() {
   };
 
   const retryFailed = async () => {
-    if (!focus) return;
     setRetrying(true);
     try {
       const { data, error } = await supabase.functions.invoke('backup-all-to-cos', {
-        body: { action: 'retry_failed', run_id: focus.id },
+        body: { action: 'retry_failed' },
       });
       if (error) throw error;
       const d = data as { queued?: number };
@@ -220,6 +219,21 @@ export function BackupPanel() {
       toast({ title: '补传失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
     } finally { setRetrying(false); load(); }
   };
+
+  const bootstrapLedger = async () => {
+    setBootstrapping(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('backup-all-to-cos', {
+        body: { action: 'bootstrap_ledger' },
+      });
+      if (error) throw error;
+      const d = data as { ledger_rows?: number };
+      toast({ title: '台账已同步', description: `已录入 ${d?.ledger_rows ?? 0} 个已成功备份的文件，后续不再重复上传。` });
+    } catch (e) {
+      toast({ title: '同步失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
+    } finally { setBootstrapping(false); load(); }
+  };
+
 
   const reconcile = async () => {
     if (!focus) return;
