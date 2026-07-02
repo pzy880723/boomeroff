@@ -202,6 +202,21 @@ export default function MyLibrary() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  // 从 ?product=<id> 深链自动打开对应详情
+  const [sp, setSp] = useSearchParams();
+  useEffect(() => {
+    const pid = sp.get('product');
+    if (!pid || !items.length) return;
+    const hit = items.find(i => i.source_type === 'product' && i.source_id === pid);
+    if (hit) {
+      setActive(hit);
+      const next = new URLSearchParams(sp);
+      next.delete('product');
+      setSp(next, { replace: true });
+    }
+  }, [items, sp, setSp]);
+
+
   const totalCount = items.length;
   const passedCount = items.filter((i) => i.passed).length;
   const percent = totalCount ? Math.round((passedCount / totalCount) * 100) : 0;
