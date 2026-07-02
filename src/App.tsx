@@ -18,6 +18,8 @@ const OfficialLibrary = lazy(() => import("./pages/OfficialLibrary"));
 const OfficialDetail = lazy(() => import("./pages/OfficialDetail"));
 const MyLibrary = lazy(() => import("./pages/MyLibrary"));
 const Community = lazy(() => import("./pages/Community"));
+const Home = lazy(() => import("./pages/Home"));
+const Notifications = lazy(() => import("./pages/Notifications"));
 const Me = lazy(() => import("./pages/Me"));
 const History = lazy(() => import("./pages/History"));
 const Portal = lazy(() => import("./pages/Portal"));
@@ -84,11 +86,12 @@ const App = () => {
             <Routes>
               {/* Tabbed pages with bottom navigation */}
               <Route element={<MainLayout />}>
-                <Route path="/" element={<Navigate to="/scan" replace />} />
+                <Route path="/" element={<Home />} />
                 <Route path="/scan" element={<Scan />} />
                 <Route path="/library" element={<OfficialLibrary />} />
                 <Route path="/my-library" element={<MyLibrary />} />
-                <Route path="/community" element={<Community />} />
+                <Route path="/notifications" element={<Notifications />} />
+                <Route path="/community" element={<Navigate to="/notifications" replace />} />
                 <Route path="/me" element={<Me />} />
               </Route>
 
