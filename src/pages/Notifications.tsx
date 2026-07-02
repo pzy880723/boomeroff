@@ -202,12 +202,51 @@ export default function Notifications() {
   const resetCompose = (defaultCat: TabKey = 'notice') => {
     setChat([]); setInput(''); setTitle(''); setBody('');
     setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
-    setVersions([]); setView('chat');
+    setVersions([]); setView('chat'); setCurrentDraftId(null);
   };
   const openCompose = () => {
     resetCompose(tab === 'message' ? 'notice' : tab);
     setOpen(true);
     setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const saveCurrentDraft = (silent = false) => {
+    if (!title.trim() && !body.trim() && !coverUrl) {
+      if (!silent) toast.error('标题、正文或封面至少填一项');
+      return;
+    }
+    const saved = saveDraft({
+      id: currentDraftId ?? undefined,
+      title, body, type, category, coverUrl,
+    });
+    setCurrentDraftId(saved.id);
+    refreshDrafts();
+    if (!silent) toast.success('已保存到草稿箱');
+  };
+
+  const loadDraft = (d: NotificationDraft) => {
+    setCurrentDraftId(d.id);
+    setTitle(d.title); setBody(d.body); setType(d.type);
+    setCategory(d.category as TabKey); setCoverUrl(d.coverUrl);
+    setChat([]); setInput(''); setVersions([]); setView('preview');
+    setDraftBoxOpen(false);
+    setOpen(true);
+  };
+
+  const deleteDraft = (id: string) => {
+    removeDraft(id);
+    refreshDrafts();
+    if (currentDraftId === id) setCurrentDraftId(null);
+  };
+
+  const handleCloseCompose = () => {
+    const hasChanges = !!(title.trim() || body.trim() || coverUrl);
+    if (hasChanges && !currentDraftId) {
+      saveCurrentDraft(true);
+      toast('已自动保存到草稿箱', { icon: <Inbox className="w-4 h-4" /> });
+    }
+    setOpen(false);
+    resetCompose();
   };
 
 
