@@ -1,131 +1,113 @@
-/* 字体已经在 index.html 中以非阻塞方式加载，避免阻塞 CSS 解析 */
+/* 字体已经在 index.html 中以非阻塞方式加载 */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ==========================================================================
-   Design system — 中古商品实时识别系统
-   Premium vintage / editorial aesthetic. All colors HSL.
+   BOOMER GO — 门店运营辅助系统
+   Design tokens: red / white / hard shadow.
    ========================================================================== */
 
 @layer base {
   :root {
-    /* Surfaces — warm off-white / parchment */
-    --background: 35 30% 97%;
-    --foreground: 30 14% 12%;
+    /* 纯白底 · 深字 */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 30 14% 12%;
+    --card-foreground: 0 0% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 30 14% 12%;
+    --popover-foreground: 0 0% 10%;
 
-    /* Brand — deep espresso with warm tone */
-    --primary: 25 35% 18%;
-    --primary-foreground: 35 40% 96%;
-    --primary-glow: 28 45% 32%;
+    /* 主色：BOOMER-OFF 朱红 #E60012 → hsl(355 100% 45%) */
+    --primary: 355 100% 45%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 355 100% 55%;
 
-    /* Accent — antique brass / gold */
-    --accent: 38 55% 52%;
-    --accent-foreground: 30 30% 10%;
-    --accent-soft: 40 60% 92%;
+    /* 深字黑作为强调 / 硬阴影 */
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 100%;
+    --accent-soft: 0 0% 96%;
 
-    --secondary: 32 20% 92%;
-    --secondary-foreground: 25 30% 18%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 10%;
 
-    --muted: 30 15% 94%;
-    --muted-foreground: 28 8% 42%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
 
-    --destructive: 6 72% 50%;
+    --destructive: 355 100% 45%;
     --destructive-foreground: 0 0% 100%;
 
     --success: 142 55% 38%;
     --success-foreground: 0 0% 100%;
 
-    --border: 32 15% 88%;
-    --input: 32 15% 88%;
-    --ring: 28 45% 32%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 355 100% 45%;
 
     --radius: 0.875rem;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(25 35% 18%), hsl(28 45% 32%));
-    --gradient-accent: linear-gradient(135deg, hsl(38 55% 52%), hsl(32 65% 60%));
-    --gradient-surface: linear-gradient(180deg, hsl(35 30% 98%), hsl(35 25% 94%));
+    --gradient-primary: linear-gradient(135deg, hsl(355 100% 48%), hsl(355 100% 40%));
+    --gradient-accent: linear-gradient(135deg, hsl(0 0% 14%), hsl(0 0% 6%));
+    --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%), hsl(0 0% 98%));
     --gradient-overlay: linear-gradient(180deg, hsl(0 0% 0% / 0), hsl(0 0% 0% / 0.55));
 
-    /* Shadows */
-    --shadow-sm: 0 1px 2px hsl(28 30% 15% / 0.06);
-    --shadow-md: 0 4px 12px -2px hsl(28 30% 15% / 0.08), 0 2px 4px -1px hsl(28 30% 15% / 0.04);
-    --shadow-lg: 0 12px 30px -8px hsl(28 30% 15% / 0.18), 0 4px 8px -2px hsl(28 30% 15% / 0.06);
-    --shadow-glow: 0 0 0 1px hsl(38 55% 52% / 0.25), 0 8px 24px -6px hsl(38 55% 52% / 0.35);
+    /* Shadows — 保留柔性阴影 + 新增硬阴影 (Neubrutalism 收敛) */
+    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.06);
+    --shadow-md: 0 4px 12px -2px hsl(0 0% 0% / 0.08), 0 2px 4px -1px hsl(0 0% 0% / 0.04);
+    --shadow-lg: 0 12px 30px -8px hsl(0 0% 0% / 0.18), 0 4px 8px -2px hsl(0 0% 0% / 0.06);
+    --shadow-glow: 0 0 0 3px hsl(355 100% 45% / 0.15), 0 8px 24px -6px hsl(355 100% 45% / 0.35);
+
+    /* 硬阴影 · 品牌招牌感 */
+    --shadow-hard: 4px 4px 0 0 hsl(0 0% 10%);
+    --shadow-hard-red: 4px 4px 0 0 hsl(355 100% 45%);
+    --shadow-hard-sm: 2px 2px 0 0 hsl(0 0% 10%);
 
     /* Motion */
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
-    --sidebar-background: 35 25% 96%;
-    --sidebar-foreground: 25 20% 22%;
-    --sidebar-primary: 25 35% 18%;
-    --sidebar-primary-foreground: 35 40% 96%;
-    --sidebar-accent: 32 20% 92%;
-    --sidebar-accent-foreground: 25 30% 18%;
-    --sidebar-border: 32 15% 88%;
-    --sidebar-ring: 28 45% 32%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 10%;
+    --sidebar-primary: 355 100% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 355 100% 45%;
   }
 
   .dark {
-    --background: 25 15% 8%;
-    --foreground: 35 25% 94%;
-
-    --card: 25 14% 11%;
-    --card-foreground: 35 25% 94%;
-
-    --popover: 25 14% 11%;
-    --popover-foreground: 35 25% 94%;
-
-    --primary: 38 55% 60%;
-    --primary-foreground: 25 30% 10%;
-    --primary-glow: 38 65% 70%;
-
-    --accent: 38 55% 58%;
-    --accent-foreground: 25 30% 10%;
-    --accent-soft: 38 30% 18%;
-
-    --secondary: 25 12% 18%;
-    --secondary-foreground: 35 25% 94%;
-
-    --muted: 25 10% 16%;
-    --muted-foreground: 30 10% 65%;
-
-    --destructive: 6 65% 55%;
+    --background: 0 0% 8%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 355 100% 55%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 355 100% 65%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 10%;
+    --accent-soft: 0 0% 18%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 65%;
+    --destructive: 355 100% 55%;
     --destructive-foreground: 0 0% 100%;
-
     --success: 142 50% 50%;
     --success-foreground: 0 0% 100%;
-
-    --border: 25 10% 20%;
-    --input: 25 10% 20%;
-    --ring: 38 55% 58%;
-
-    --gradient-primary: linear-gradient(135deg, hsl(38 55% 58%), hsl(32 65% 65%));
-    --gradient-accent: linear-gradient(135deg, hsl(38 55% 58%), hsl(32 65% 65%));
-    --gradient-surface: linear-gradient(180deg, hsl(25 14% 11%), hsl(25 15% 8%));
-    --gradient-overlay: linear-gradient(180deg, hsl(0 0% 0% / 0), hsl(0 0% 0% / 0.65));
-
-    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.4);
-    --shadow-md: 0 4px 12px -2px hsl(0 0% 0% / 0.5);
-    --shadow-lg: 0 12px 30px -8px hsl(0 0% 0% / 0.6);
-    --shadow-glow: 0 0 0 1px hsl(38 55% 58% / 0.35), 0 8px 24px -6px hsl(38 55% 58% / 0.4);
-
-    --sidebar-background: 25 14% 10%;
-    --sidebar-foreground: 35 20% 90%;
-    --sidebar-primary: 38 55% 58%;
-    --sidebar-primary-foreground: 25 30% 10%;
-    --sidebar-accent: 25 12% 16%;
-    --sidebar-accent-foreground: 35 20% 90%;
-    --sidebar-border: 25 10% 20%;
-    --sidebar-ring: 38 55% 58%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 355 100% 55%;
+    --shadow-hard: 4px 4px 0 0 hsl(0 0% 96%);
+    --shadow-hard-red: 4px 4px 0 0 hsl(355 100% 55%);
+    --shadow-hard-sm: 2px 2px 0 0 hsl(0 0% 96%);
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 0 0% 96%;
   }
 }
 
@@ -141,17 +123,22 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+    font-family: 'Noto Sans SC', 'HarmonyOS Sans SC', system-ui, -apple-system, sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
-  /* Editorial display font for hero/product names */
   .font-display {
-    font-family: 'Playfair Display', 'Noto Sans SC', serif;
-    letter-spacing: -0.01em;
+    font-family: 'Noto Sans SC', 'HarmonyOS Sans SC', system-ui, sans-serif;
+    font-weight: 900;
+    letter-spacing: -0.02em;
   }
 
-  /* Safe area for mobile devices */
+  .font-num {
+    font-family: 'Inter', 'JetBrains Mono', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
   .safe-bottom {
     padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
   }
@@ -161,32 +148,27 @@
 }
 
 @layer utilities {
-  .bg-gradient-primary {
-    background-image: var(--gradient-primary);
-  }
-  .bg-gradient-accent {
-    background-image: var(--gradient-accent);
-  }
-  .bg-gradient-surface {
-    background-image: var(--gradient-surface);
-  }
-  .shadow-soft {
-    box-shadow: var(--shadow-md);
-  }
-  .shadow-elevated {
-    box-shadow: var(--shadow-lg);
-  }
-  .shadow-glow {
-    box-shadow: var(--shadow-glow);
-  }
+  .bg-gradient-primary { background-image: var(--gradient-primary); }
+  .bg-gradient-accent  { background-image: var(--gradient-accent); }
+  .bg-gradient-surface { background-image: var(--gradient-surface); }
+  .shadow-soft     { box-shadow: var(--shadow-md); }
+  .shadow-elevated { box-shadow: var(--shadow-lg); }
+  .shadow-glow     { box-shadow: var(--shadow-glow); }
+
+  /* 硬阴影招牌感 — BOOMER GO 视觉签名 */
+  .shadow-hard     { box-shadow: var(--shadow-hard); }
+  .shadow-hard-sm  { box-shadow: var(--shadow-hard-sm); }
+  .shadow-hard-red { box-shadow: var(--shadow-hard-red); }
+  .border-hard     { border: 2px solid hsl(var(--foreground)); }
+
   .text-gradient-accent {
-    background-image: var(--gradient-accent);
+    background-image: var(--gradient-primary);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
   .glass {
-    @apply bg-background/70 backdrop-blur-xl backdrop-saturate-150;
+    @apply bg-background/85 backdrop-blur-xl backdrop-saturate-150;
   }
   .hover-lift {
     transition: transform 0.25s var(--ease-out-expo), box-shadow 0.25s var(--ease-out-expo);
@@ -195,16 +177,19 @@
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
   }
+
+  /* 按下反馈 — 硬阴影卡片按下,阴影塌陷 */
+  .press-hard:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 hsl(0 0% 10%);
+  }
 }
 
 @layer components {
-  /* Subtle hairline divider with accent gradient */
   .divider-accent {
     height: 1px;
-    background: linear-gradient(90deg, transparent, hsl(var(--accent) / 0.4), transparent);
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.4), transparent);
   }
-
-  /* 小红书式两列瀑布流 */
   .masonry-2col {
     column-count: 2;
     column-gap: 0.5rem;
@@ -215,15 +200,11 @@
   }
 }
 
-
-/* ===== 仪表盘工作台（暖复古深咖啡 + 古铜金高光） ===== */
+/* ===== 兼容旧仪表盘暗色底(SpiritDrawer 抽屉复用) ===== */
 .dashboard-deep-surface {
   background:
-    linear-gradient(180deg,
-      hsl(25 18% 10%) 0%,
-      hsl(25 16% 13%) 60%,
-      hsl(28 18% 16%) 100%);
-  color: hsl(var(--primary-foreground));
+    linear-gradient(180deg, hsl(0 0% 10%) 0%, hsl(0 0% 8%) 100%);
+  color: hsl(0 0% 96%);
 }
 .dashboard-deep-surface::before {
   content: '';
@@ -231,11 +212,10 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 18% 8%, hsl(var(--accent) / 0.18), transparent 45%),
-    radial-gradient(circle at 88% 92%, hsl(var(--primary-glow) / 0.16), transparent 50%);
+    radial-gradient(circle at 15% 10%, hsl(355 100% 50% / 0.15), transparent 45%),
+    radial-gradient(circle at 88% 92%, hsl(355 100% 45% / 0.12), transparent 50%);
 }
 
-/* 主色按钮上一次性高光扫过（暖白避免在暖底上刺眼） */
 .btn-shine {
   position: relative;
   overflow: hidden;
@@ -247,7 +227,7 @@
   top: 0; bottom: 0;
   width: 40%;
   left: -120%;
-  background: linear-gradient(90deg, transparent, hsl(var(--accent) / 0.35), transparent);
+  background: linear-gradient(90deg, transparent, hsl(0 0% 100% / 0.35), transparent);
   transform: skewX(-20deg);
   animation: shine-once 1.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s 1 forwards;
   pointer-events: none;
@@ -257,18 +237,15 @@
   100% { left: 220%; }
 }
 
-/* ===== 小精灵动效 ===== */
-/* 外层：左右轻摆 */
+/* ===== BOOMER 精灵动效(保留不动) ===== */
 @keyframes spirit-sway {
   0%, 100% { transform: rotate(-2deg); }
   50%      { transform: rotate(2deg); }
 }
-/* 中层：呼吸 + 浮动 */
 @keyframes spirit-float {
   0%, 100% { transform: translateY(0) scale(1); }
   50%      { transform: translateY(-6px) scale(1.025); }
 }
-/* talking：头部点动（柔和），不再整体抖 */
 @keyframes spirit-talk {
   0%, 100% { transform: translateY(0) rotate(-1deg); }
   25%      { transform: translateY(-2px) rotate(1deg); }
@@ -288,8 +265,6 @@
   60%  { opacity: 1; transform: translateY(-2px) scale(1.04); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-
-/* ===== 彩蛋小动作（一次性，1~1.4s） ===== */
 @keyframes spirit-wave {
   0%, 100% { transform: rotate(0deg) translateX(0); }
   20%      { transform: rotate(-10deg) translateX(-2px); }
@@ -337,14 +312,12 @@
   0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
   30%           { opacity: 1;    transform: translateY(-3px); }
 }
-
-.spirit-sway   { animation: spirit-sway 5.5s ease-in-out infinite; transform-origin: 50% 90%; }
-.spirit-float  { animation: spirit-float 3.2s ease-in-out infinite; }
-/* 极轻的 CSS 浮动，配合视频肢体动效使用，避免叠加抖动 */
 @keyframes spirit-float-soft {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-2px); }
 }
+.spirit-sway   { animation: spirit-sway 5.5s ease-in-out infinite; transform-origin: 50% 90%; }
+.spirit-float  { animation: spirit-float 3.2s ease-in-out infinite; }
 .spirit-float-soft { animation: spirit-float-soft 4s ease-in-out infinite; }
 .spirit-talk   { animation: spirit-talk 0.9s ease-in-out infinite; }
 .spirit-blink  { animation: spirit-blink 5s ease-in-out infinite; }
