@@ -428,10 +428,6 @@ export function BackupPanel() {
               <RefreshCw className={`w-4 h-4 mr-1.5 ${triggering ? 'animate-spin' : ''}`} />
               停止并重新开始
             </Button>
-            <Button size="sm" variant="outline" onClick={retryFailed} disabled={retrying || Boolean(running) || failures.length === 0}>
-              <RotateCw className={`w-4 h-4 mr-1.5 ${retrying ? 'animate-spin' : ''}`} />
-              只重试失败文件{failures.length > 0 ? `（${failures.length}）` : ''}
-            </Button>
             <Button size="sm" variant="outline" onClick={reconcile} disabled={reconciling || Boolean(running)}>
               <FileCheck2 className={`w-4 h-4 mr-1.5 ${reconciling ? 'animate-spin' : ''}`} />
               重新对账
