@@ -333,7 +333,7 @@ export default function Community() {
 
   return (
     <>
-      <PageHeader title="中古圈" subtitle="发现别人的中古好物" />
+      <PageHeader title="BOOMER 圈" subtitle="发现别人的中古好物" />
       <div className="container mx-auto max-w-screen-md px-3 py-3 space-y-3">
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
           {cats.map((c) => (

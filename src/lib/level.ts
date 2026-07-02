@@ -70,7 +70,7 @@ export const EXP_RULES = [
   { name: '连续签到 30 天', value: '额外 +30' },
   { name: 'AI 识别商品入库', value: '+5' },
   { name: '通过一条知识测试（每条独立计算）', value: '+15' },
-  { name: '在中古圈发帖', value: '+5' },
+  { name: '在BOOMER 圈发帖', value: '+5' },
   { name: '帖子被点赞', value: '+2' },
   { name: '帖子被评论', value: '+3' },
   { name: '提交识别纠错被采纳', value: '+30' },

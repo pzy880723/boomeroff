@@ -949,10 +949,10 @@ export function LiveStreamPanel() {
                 onApplied={(next) => setOverriddenResult(next)}
               />
 
-              {/* 分享到中古圈（主推） + 个人收藏 */}
+              {/* 分享到BOOMER 圈（主推） + 个人收藏 */}
               {currentProductId && (
                 <div className="space-y-2 pt-1">
-                  {/* 主按钮：分享到中古圈 */}
+                  {/* 主按钮：分享到BOOMER 圈 */}
                   <ShareToCommunityButton
                     productId={currentProductId}
                     name={displayResult.name}
@@ -985,7 +985,7 @@ export function LiveStreamPanel() {
 
                   {/* 引导提示 */}
                   <p className="text-[11px] text-muted-foreground text-center px-2 leading-relaxed">
-                    个人收藏只有自己能看到 · 分享到中古圈能让所有同事学到这件好物
+                    个人收藏只有自己能看到 · 分享到BOOMER 圈能让所有同事学到这件好物
                   </p>
                 </div>
               )}

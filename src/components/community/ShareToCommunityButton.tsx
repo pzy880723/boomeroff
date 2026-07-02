@@ -26,15 +26,15 @@ interface ShareToCommunityButtonProps {
 }
 
 /**
- * 手动分享识别结果到「中古圈」社区。
+ * 手动分享识别结果到「BOOMER 圈」社区。
  * 自动检测当前用户是否已分享过，已分享则禁用并显示「已分享」。
  */
 export function ShareToCommunityButton({
   productId, name, category, era, origin, imageUrl,
   sellingPoints = [], tips,
   variant = 'default', size = 'lg', className = '',
-  label = '分享到中古圈 · 让更多店员看到',
-  sharedLabel = '已分享到中古圈',
+  label = '分享到BOOMER 圈 · 让更多店员看到',
+  sharedLabel = '已分享到BOOMER 圈',
 }: ShareToCommunityButtonProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -97,7 +97,7 @@ export function ShareToCommunityButton({
       });
       if (error) throw error;
       setShared(true);
-      toast({ title: '已分享到中古圈', description: '同事们可以在「中古圈」里看到你的发现' });
+      toast({ title: '已分享到BOOMER 圈', description: '同事们可以在「BOOMER 圈」里看到你的发现' });
     } catch (e: any) {
       console.error('[ShareToCommunity] error:', e);
       toast({ title: '分享失败', description: e?.message || '请重试', variant: 'destructive' });

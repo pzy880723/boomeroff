@@ -29,7 +29,7 @@ const ONBOARD_STEPS: OnboardStep[] = [
   },
   {
     title: '让更多人看见你的发现',
-    desc: '一键以「游客」身份匿名发布到中古圈，不需要登录、不留账号。',
+    desc: '一键以「游客」身份匿名发布到BOOMER 圈，不需要登录、不留账号。',
     icon: Share2,
   },
 ];
@@ -98,7 +98,7 @@ export default function PublicScan() {
         <ul className="text-[12.5px] text-muted-foreground space-y-2 leading-relaxed">
           <Tip n="01">让物件占满画面 2/3，背景越简单越准</Tip>
           <Tip n="02">有铭文 / 底款时单独补一张近照</Tip>
-          <Tip n="03">识别完可一键匿名分享到「中古圈」</Tip>
+          <Tip n="03">识别完可一键匿名分享到「BOOMER 圈」</Tip>
         </ul>
       </section>
 
