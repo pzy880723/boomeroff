@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
 import { HomeFeedTabs } from '@/components/home/HomeFeedTabs';
 import bannerDefault from '@/assets/banner-default.jpg';
-import brandLogo from '@/assets/boomer-off-vintage-logo.png';
+import brandWordmark from '@/assets/boomer-go-wordmark.png.asset.json';
 import xhsIcon from '@/assets/icon-xhs-activity.png';
 
 interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null; voucher_id?: string | null }
@@ -163,10 +163,10 @@ export default function Home() {
         <div className="mx-auto max-w-screen-md px-4 h-12 flex items-center justify-between">
           <h1 className="text-base font-semibold tracking-tight">仪表盘</h1>
           <img
-            src={brandLogo}
-            alt="BOOMER-OFF"
+            src={brandWordmark.url}
+            alt="BOOMER GO"
             draggable={false}
-            className="h-8 w-auto object-contain select-none"
+            className="h-5 w-auto object-contain select-none"
           />
         </div>
       </header>
