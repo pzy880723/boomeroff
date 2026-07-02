@@ -203,7 +203,9 @@ export default function Home() {
           <img
             src={bannerNote?.image_url || bannerDefault}
             alt={bannerNote?.title || 'BOOMER GO'}
-            loading="lazy"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
             className="w-full h-full object-cover"
           />
           {bannerNote?.title && (
