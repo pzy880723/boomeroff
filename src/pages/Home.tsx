@@ -8,19 +8,21 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
-  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target, BookOpen,
+  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target, QrCode,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
+import { HomeFeedTabs } from '@/components/home/HomeFeedTabs';
 import bannerDefault from '@/assets/banner-default.jpg';
 import brandLogo from '@/assets/boomer-off-vintage-logo.png';
+import xhsIcon from '@/assets/icon-xhs-activity.png';
 
-interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null }
+interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null; voucher_id?: string | null }
 interface StoreOkr {
   id: string; title: string; objective: string | null;
   key_results: any; tags: string[] | null;
 }
-interface SopCategory { id: string; name: string }
+
 
 function todayShanghai(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -52,7 +54,7 @@ export default function Home() {
   const [nextShift, setNextShift] = useState<{ work_date: string; shift_code: string } | null>(null);
   const [act, setAct] = useState<ActiveActivity | null>(null);
   const [okrs, setOkrs] = useState<StoreOkr[]>([]);
-  const [sopCats, setSopCats] = useState<SopCategory[]>([]);
+  
   const [checkedToday, setCheckedToday] = useState(false);
   const [checking, setChecking] = useState(false);
   const [bannerNote, setBannerNote] = useState<{ id: string; title: string; image_url?: string | null } | null>(null);
@@ -84,7 +86,7 @@ export default function Home() {
 
       // 活动：只显示本店店员创建的（activities 无 shop_id 字段，按 created_by 交集过滤）
       let activityQuery = supabase.from('activities' as any)
-        .select('id, name, cover_url, ends_at, created_by')
+        .select('id, name, cover_url, ends_at, voucher_id, created_by')
         .eq('status', 'active')
         .order('starts_at', { ascending: false })
         .limit(6);
@@ -113,12 +115,6 @@ export default function Home() {
         setOkrs(((ok as any[]) || []) as StoreOkr[]);
       }
 
-      // 门店手册分类
-      const { data: cats } = await supabase.from('shop_kb_categories' as any)
-        .select('id, name')
-        .order('sort_order', { ascending: true })
-        .limit(20);
-      setSopCats(((cats as any[]) || []) as SopCategory[]);
     })();
 
     // 每日鼓励
