@@ -30,18 +30,27 @@ Deno.serve(async (req) => {
     const { messages = [], current_draft } = await req.json();
 
     const draftBlock = current_draft && (current_draft.title || current_draft.body)
-      ? `\n\n【当前草稿】\n标题：${current_draft.title || ''}\n导语：${current_draft.summary || ''}\n类型：${current_draft.type || ''}\n正文：\n${current_draft.body || ''}`
+      ? `\n\n【当前草稿】\n分类：${current_draft.category || 'notice'}\n标题：${current_draft.title || ''}\n导语：${current_draft.summary || ''}\n类型：${current_draft.type || ''}\n正文：\n${current_draft.body || ''}`
       : '';
 
-    const system = `你是 BOOMER GO 门店运营助手，帮管理员写门店通知/资讯。返回**必须是纯 JSON 对象**（不要 markdown、不要围栏、不要多余文字），schema：
+    const currentCategory = (current_draft?.category === 'news') ? 'news' : 'notice';
+    const typeEnum = currentCategory === 'news'
+      ? `"store_open"|"store_update"|"hot_item"|"official_event"|"industry"|"staff_story"`
+      : `"announcement"|"policy"|"activity"|"urgent"`;
+    const typeGuide = currentCategory === 'news'
+      ? `资讯类型含义：store_open=新店开业, store_update=门店动态, hot_item=爆款情报, official_event=官方活动, industry=中古行业动态, staff_story=店员故事。请根据主题从中挑一个最贴切的。`
+      : `通知类型含义：announcement=公告, policy=制度, activity=活动, urgent=紧急。请根据主题从中挑一个最贴切的。`;
+
+    const system = `你是 BOOMER GO 门店运营助手，帮管理员写门店${currentCategory === 'news' ? '资讯' : '通知'}。返回**必须是纯 JSON 对象**（不要 markdown、不要围栏、不要多余文字），schema：
 {
   "need_more": boolean,        // true 表示信息严重不足需追问；否则 false 且必须给出稿件
   "reply": string,             // 一句话简短说明（追问或说明）
   "title": string,             // ≤ 24 字，开门见山
   "summary": string,           // 20-40 字的公众号式导语：一句话说清"这条讲的是什么、跟店员有什么关系"；不重复标题、不用感叹号堆砌
   "body": string,              // Markdown，2-5 段，使用 ## 小标题 / - 列表 / **加粗**
-  "type": "announcement"|"policy"|"activity"|"urgent"
+  "type": ${typeEnum}
 }
+${typeGuide}
 核心原则：
 1) 默认「直接出稿」，能拼一段就出稿；只有输入不足 6 字且完全没有主题时才 need_more=true。
 2) summary 必填，用作列表卡片摘要；不要照抄标题，也不要照抄正文首句。

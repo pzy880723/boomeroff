@@ -26,6 +26,7 @@ import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
 import { MarkdownArticle } from '@/components/notifications/MarkdownArticle';
 import { NotificationDetailSheet } from '@/components/notifications/NotificationDetailSheet';
 import { NotificationBannerCropper } from '@/components/notifications/NotificationBannerCropper';
+import { RichBodyEditor } from '@/components/notifications/RichBodyEditor';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { listDrafts, saveDraft, removeDraft, type NotificationDraft } from '@/lib/notificationDrafts';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -39,6 +40,7 @@ const TAB_META: Record<TabKey, { label: string }> = {
 const TAB_PREF = 'notifications-tab';
 
 const TYPE_LABEL: Record<string, { label: string; tone: string }> = {
+  // 通知类
   announcement: { label: '公告', tone: 'bg-primary/10 text-primary' },
   policy: { label: '制度', tone: 'bg-foreground/10 text-foreground' },
   activity: { label: '活动', tone: 'bg-accent/50 text-accent-foreground' },
@@ -46,7 +48,34 @@ const TYPE_LABEL: Record<string, { label: string; tone: string }> = {
   system: { label: '系统', tone: 'bg-muted text-muted-foreground' },
   shift: { label: '排班', tone: 'bg-accent/50 text-accent-foreground' },
   notice: { label: '通知', tone: 'bg-primary/10 text-primary' },
+  // 资讯类(门店经营向)
+  store_open: { label: '新店开业', tone: 'bg-primary/10 text-primary' },
+  store_update: { label: '门店动态', tone: 'bg-accent/50 text-accent-foreground' },
+  hot_item: { label: '爆款情报', tone: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
+  official_event: { label: '官方活动', tone: 'bg-primary/10 text-primary' },
+  industry: { label: '中古行业', tone: 'bg-foreground/10 text-foreground' },
+  staff_story: { label: '店员故事', tone: 'bg-accent/50 text-accent-foreground' },
 };
+
+const NOTICE_TYPES = [
+  { value: 'announcement', label: '公告' },
+  { value: 'policy', label: '制度' },
+  { value: 'activity', label: '活动' },
+  { value: 'urgent', label: '紧急' },
+];
+const NEWS_TYPES = [
+  { value: 'store_update', label: '门店动态' },
+  { value: 'store_open', label: '新店开业' },
+  { value: 'hot_item', label: '爆款情报' },
+  { value: 'official_event', label: '官方活动' },
+  { value: 'industry', label: '中古行业' },
+  { value: 'staff_story', label: '店员故事' },
+];
+const DEFAULT_TYPE_FOR: Record<'notice' | 'news', string> = {
+  notice: 'announcement',
+  news: 'store_update',
+};
+
 function typeMeta(t: string) {
   return TYPE_LABEL[t] ?? { label: t || '通知', tone: 'bg-muted text-muted-foreground' };
 }
@@ -202,8 +231,9 @@ export default function Notifications() {
   }, [user, refresh]);
 
   const resetCompose = (defaultCat: TabKey = 'notice') => {
+    const cat: 'notice' | 'news' = defaultCat === 'news' ? 'news' : 'notice';
     setChat([]); setInput(''); setTitle(''); setSummary(''); setBody('');
-    setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
+    setType(DEFAULT_TYPE_FOR[cat]); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
     setVersions([]); setView('chat'); setCurrentDraftId(null); setEditingId(null);
   };
   const openCompose = () => {
@@ -264,7 +294,7 @@ export default function Notifications() {
       const { data, error } = await supabase.functions.invoke('compose-notification', {
         body: {
           messages: next.map(t => ({ role: t.role, content: t.content })),
-          current_draft: hasDraft ? { title, summary, body, type } : null,
+          current_draft: hasDraft ? { title, summary, body, type, category } : { category },
         },
       });
       if (error) throw error;
@@ -305,12 +335,19 @@ export default function Notifications() {
     setTitle(v.title); setSummary(v.summary || ''); setBody(v.body); setType(v.type);
   };
 
-  const CHIPS: { label: string; prompt: string }[] = [
+  const NOTICE_CHIPS: { label: string; prompt: string }[] = [
     { label: '📢 发公告', prompt: '发一条公告，主题是：' },
     { label: '📋 发制度', prompt: '发一条制度说明，内容是：' },
     { label: '🎉 发活动', prompt: '发一条门店活动通知，活动是：' },
     { label: '🚨 紧急通知', prompt: '发一条紧急通知：' },
   ];
+  const NEWS_CHIPS: { label: string; prompt: string }[] = [
+    { label: '🏪 新店开业', prompt: '写一条新店开业资讯，门店信息：' },
+    { label: '📈 爆款情报', prompt: '写一条爆款商品情报，商品/趋势：' },
+    { label: '🎯 官方活动', prompt: '写一条官方活动预告，活动内容：' },
+    { label: '📖 店员故事', prompt: '写一条店员故事分享，故事主题：' },
+  ];
+  const CHIPS = category === 'news' ? NEWS_CHIPS : NOTICE_CHIPS;
   const REFINE_CHIPS = ['更短一些', '更正式一些', '更活泼一些', '加点数据', '换个角度再写一版'];
 
   const pickCoverFile = (file: File | null) => {
@@ -751,7 +788,18 @@ export default function Notifications() {
                 {/* 预览页顶部：分类/类型 + 标题(独立一行) + 版本 */}
                 <div className="px-4 pt-3 pb-2 shrink-0 border-b border-border/50 space-y-2">
                   <div className="flex gap-2">
-                    <Select value={category} onValueChange={(v) => setCategory(v as TabKey)}>
+                    <Select
+                      value={category}
+                      onValueChange={(v) => {
+                        const nextCat = v as TabKey;
+                        setCategory(nextCat);
+                        const cat: 'notice' | 'news' = nextCat === 'news' ? 'news' : 'notice';
+                        const allowed = cat === 'news' ? NEWS_TYPES : NOTICE_TYPES;
+                        if (!allowed.some(x => x.value === type)) {
+                          setType(DEFAULT_TYPE_FOR[cat]);
+                        }
+                      }}
+                    >
                       <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="notice">通知</SelectItem>
@@ -761,10 +809,9 @@ export default function Notifications() {
                     <Select value={type} onValueChange={setType}>
                       <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="announcement">公告</SelectItem>
-                        <SelectItem value="policy">制度</SelectItem>
-                        <SelectItem value="activity">活动</SelectItem>
-                        <SelectItem value="urgent">紧急</SelectItem>
+                        {(category === 'news' ? NEWS_TYPES : NOTICE_TYPES).map(t => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     {currentDraftId && (
@@ -866,28 +913,12 @@ export default function Notifications() {
                           {summary}
                         </p>
                       )}
-                      {body ? (
-                        editingBody ? (
-                          <Textarea
-                            ref={bodyRef}
-                            value={body}
-                            onChange={e => setBody(e.target.value)}
-                            rows={12}
-                            className="text-sm font-mono"
-                            onBlur={() => setEditingBody(false)}
-                          />
-                        ) : (
-                          <div
-                            onClick={() => setEditingBody(true)}
-                            className="cursor-text hover:bg-muted/40 rounded p-1 -m-1"
-                            title="点击编辑正文"
-                          >
-                            <MarkdownArticle content={body} />
-                          </div>
-                        )
-                      ) : (
-                        <p className="text-xs text-muted-foreground">回到「对话」让 AI 帮你写正文</p>
-                      )}
+                      <RichBodyEditor
+                        value={body}
+                        onChange={setBody}
+                        userId={user!.id}
+                        placeholder="在这里写正文，支持插图、加粗、标题…也可以回到「对话」让 AI 帮你写"
+                      />
                     </div>
                   </div>
                 </div>
@@ -912,23 +943,8 @@ export default function Notifications() {
                     {genBannerBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                     AI 画封面
                   </button>
-                  <label className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70 cursor-pointer">
-                    {insertingImg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5" />}
-                    插图
-                    <input
-                      type="file" accept="image/*" className="hidden"
-                      disabled={insertingImg}
-                      onChange={e => { const f = e.target.files?.[0]; if (f) void insertBodyImage(f); e.currentTarget.value = ''; }}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setEditingBody(v => !v)}
-                    className="inline-flex items-center gap-1 h-8 px-3 rounded-full text-xs bg-muted hover:bg-muted/70"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />{editingBody ? '完成' : '手改'}
-                  </button>
                 </div>
+
 
                 {/* 主按钮行 */}
                 <div className="px-4 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shrink-0 border-t border-border/50 flex items-center gap-2 bg-background">
