@@ -1305,6 +1305,7 @@ export type Database = {
           expires_at: string | null
           id: string
           image_url: string | null
+          summary: string | null
           title: string
           type: string
         }
@@ -1317,6 +1318,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           image_url?: string | null
+          summary?: string | null
           title: string
           type?: string
         }
@@ -1329,6 +1331,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           image_url?: string | null
+          summary?: string | null
           title?: string
           type?: string
         }

@@ -2,6 +2,7 @@
 export interface NotificationDraft {
   id: string;
   title: string;
+  summary: string;
   body: string;
   type: string;
   category: 'notice' | 'news' | 'message';
@@ -29,6 +30,7 @@ export function saveDraft(input: Omit<NotificationDraft, 'updatedAt' | 'id'> & {
   const item: NotificationDraft = {
     id,
     title: input.title,
+    summary: input.summary,
     body: input.body,
     type: input.type,
     category: input.category,

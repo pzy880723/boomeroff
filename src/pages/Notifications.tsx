@@ -143,6 +143,7 @@ export default function Notifications() {
   // 撰稿弹窗状态
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
+  const [summary, setSummary] = useState('');
   const [body, setBody] = useState('');
   const [type, setType] = useState('announcement');
   const [category, setCategory] = useState<TabKey>('news');
@@ -176,7 +177,7 @@ export default function Notifications() {
 
   // 视图 & 版本历史
   const [view, setView] = useState<'chat' | 'preview'>('chat');
-  const [versions, setVersions] = useState<{ title: string; body: string; type: string; at: string }[]>([]);
+  const [versions, setVersions] = useState<{ title: string; summary: string; body: string; type: string; at: string }[]>([]);
   const touchStartX = useRef<number | null>(null);
   const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -200,7 +201,7 @@ export default function Notifications() {
   }, [user, refresh]);
 
   const resetCompose = (defaultCat: TabKey = 'notice') => {
-    setChat([]); setInput(''); setTitle(''); setBody('');
+    setChat([]); setInput(''); setTitle(''); setSummary(''); setBody('');
     setType('announcement'); setCategory(defaultCat); setCoverUrl(''); setEditingBody(false);
     setVersions([]); setView('chat'); setCurrentDraftId(null);
   };
@@ -217,7 +218,7 @@ export default function Notifications() {
     }
     const saved = saveDraft({
       id: currentDraftId ?? undefined,
-      title, body, type, category, coverUrl,
+      title, summary, body, type, category, coverUrl,
     });
     setCurrentDraftId(saved.id);
     refreshDrafts();
@@ -226,7 +227,7 @@ export default function Notifications() {
 
   const loadDraft = (d: NotificationDraft) => {
     setCurrentDraftId(d.id);
-    setTitle(d.title); setBody(d.body); setType(d.type);
+    setTitle(d.title); setSummary(d.summary || ''); setBody(d.body); setType(d.type);
     setCategory(d.category as TabKey); setCoverUrl(d.coverUrl);
     setChat([]); setInput(''); setVersions([]); setView('preview');
     setDraftBoxOpen(false);
@@ -262,7 +263,7 @@ export default function Notifications() {
       const { data, error } = await supabase.functions.invoke('compose-notification', {
         body: {
           messages: next.map(t => ({ role: t.role, content: t.content })),
-          current_draft: hasDraft ? { title, body, type } : null,
+          current_draft: hasDraft ? { title, summary, body, type } : null,
         },
       });
       if (error) throw error;
@@ -271,16 +272,18 @@ export default function Notifications() {
         need_more?: boolean;
         reply?: string;
         title?: string;
+        summary?: string;
         body?: string;
         type?: string;
       };
       if (d.error) throw new Error(d.error);
       if (!d.need_more && (d.title || d.body)) {
         const nt = d.title || title;
+        const ns = d.summary ?? summary;
         const nb = d.body || body;
         const ntype = d.type || type;
-        setTitle(nt); setBody(nb); if (d.type) setType(d.type);
-        setVersions(v => [...v, { title: nt, body: nb, type: ntype, at: new Date().toISOString() }]);
+        setTitle(nt); setSummary(ns); setBody(nb); if (d.type) setType(d.type);
+        setVersions(v => [...v, { title: nt, summary: ns, body: nb, type: ntype, at: new Date().toISOString() }]);
         setChat([...next, { role: 'assistant', content: d.reply || '草稿已生成 ✅ 点「查看预览」看看效果' }]);
         toast.success('草稿已生成', {
           action: { label: '查看预览', onClick: () => setView('preview') },
@@ -298,7 +301,7 @@ export default function Notifications() {
   const applyVersion = (idx: number) => {
     const v = versions[idx];
     if (!v) return;
-    setTitle(v.title); setBody(v.body); setType(v.type);
+    setTitle(v.title); setSummary(v.summary || ''); setBody(v.body); setType(v.type);
   };
 
   const CHIPS: { label: string; prompt: string }[] = [
@@ -387,6 +390,7 @@ export default function Notifications() {
     const { error } = await supabase.from('notifications' as any).insert({
       title: title.trim(),
       body: body.trim(),
+      summary: summary.trim() || null,
       type,
       category,
       image_url: coverUrl || null,
@@ -502,6 +506,10 @@ export default function Notifications() {
               </Button>
             )}
           </div>
+        ) : tab === 'news' ? (
+          currentListItems.map(n => (
+            <NewsBigCard key={n.id} item={n} onOpen={() => openDetail(n)} />
+          ))
         ) : currentListItems.map(n => {
           const meta = typeMeta(n.type);
           return (
@@ -520,16 +528,8 @@ export default function Notifications() {
                     </span>
                   </div>
                   <h3 className="text-sm font-bold mb-1 line-clamp-2">{n.title}</h3>
-                  {n.image_url && tab === 'news' && (
-                    <img
-                      src={n.image_url}
-                      alt={n.title}
-                      loading="lazy"
-                      className="mt-2 w-full aspect-[16/6] object-cover rounded-md"
-                    />
-                  )}
                   <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1">
-                    {n.body.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ').trim()}
+                    {(n.summary || n.body.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ')).trim()}
                   </p>
                 </div>
               </div>
@@ -731,6 +731,13 @@ export default function Notifications() {
                     maxLength={60}
                     className="w-full h-10 text-base font-semibold"
                   />
+                  <Textarea
+                    value={summary}
+                    onChange={e => setSummary(e.target.value.slice(0, 80))}
+                    placeholder="一句话导语(公众号卡片摘要,20-40 字)"
+                    rows={2}
+                    className="w-full text-sm resize-none"
+                  />
                   {versions.length > 1 && (
                     <div className="flex items-center gap-2">
                       <History className="w-3.5 h-3.5 text-muted-foreground" />
@@ -807,6 +814,11 @@ export default function Notifications() {
                     )}
                     <div className="p-4">
                       <h2 className="text-base font-bold mb-2">{title || '（未命名标题）'}</h2>
+                      {summary && (
+                        <p className="text-sm text-muted-foreground leading-relaxed mb-3 pb-3 border-b border-border/50">
+                          {summary}
+                        </p>
+                      )}
                       {body ? (
                         editingBody ? (
                           <Textarea
@@ -966,6 +978,75 @@ export default function Notifications() {
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+/* ---------- 资讯大卡(公众号风格) ---------- */
+function formatRelativeCn(iso: string): string {
+  const d = new Date(iso).getTime();
+  const now = Date.now();
+  const diff = Math.max(0, now - d);
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return '刚刚';
+  if (min < 60) return `${min}分钟前`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}小时前`;
+  const day = Math.floor(hr / 24);
+  if (day === 1) return '昨天';
+  if (day < 7) return `${day}天前`;
+  return new Date(iso).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+}
+
+function NewsBigCard({ item, onOpen }: { item: NotificationItem; onOpen: () => void }) {
+  const meta = typeMeta(item.type);
+  const summary = (item.summary || item.body.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/[#*_>`-]+/g, ' ')).trim();
+  const authorName = item.author?.name || '官方';
+  const authorInitial = (authorName[0] || 'O').toUpperCase();
+  return (
+    <article
+      onClick={onOpen}
+      className={cn(
+        'rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm cursor-pointer active:scale-[0.995] transition',
+        item.read && 'opacity-80',
+      )}
+    >
+      {item.image_url ? (
+        <img
+          src={item.image_url}
+          alt={item.title}
+          loading="lazy"
+          className="w-full aspect-[16/6] object-cover block"
+        />
+      ) : (
+        <div className="w-full aspect-[16/6] bg-muted flex items-center justify-center text-muted-foreground">
+          <ImageIcon className="w-8 h-8 opacity-40" />
+        </div>
+      )}
+      <div className="p-4">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-2">
+          <Badge className={`${meta.tone} border-0 text-[10px] px-1.5 py-0`}>{meta.label}</Badge>
+          <span>·</span>
+          <span>{formatRelativeCn(item.created_at)}</span>
+        </div>
+        <h3 className="text-base font-bold leading-snug line-clamp-2 text-foreground">{item.title}</h3>
+        {summary && (
+          <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1.5">{summary}</p>
+        )}
+        <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            {item.author?.avatar ? (
+              <img src={item.author.avatar} alt={authorName} className="w-6 h-6 rounded-full object-cover" />
+            ) : (
+              <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-semibold flex items-center justify-center">
+                {authorInitial}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground truncate">{authorName}</span>
+          </div>
+          {!item.read && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
+        </div>
+      </div>
+    </article>
   );
 }
 

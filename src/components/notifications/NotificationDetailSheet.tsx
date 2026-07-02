@@ -45,6 +45,11 @@ export function NotificationDetailSheet({ item, onOpenChange, onOpen }: Props) {
             </span>
           </div>
           <h2 className="text-lg font-bold mb-3 leading-snug">{item.title}</h2>
+          {item.summary && (
+            <p className="text-sm text-muted-foreground leading-relaxed mb-4 pb-4 border-b border-border/50">
+              {item.summary}
+            </p>
+          )}
           <MarkdownArticle content={item.body || ''} />
         </div>
       </DialogContent>
