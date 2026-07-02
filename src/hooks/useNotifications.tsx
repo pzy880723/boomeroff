@@ -35,7 +35,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     const [{ data: notes }, { data: reads }] = await Promise.all([
       supabase.from('notifications' as any)
-        .select('id, title, body, type, created_at, expires_at')
+        .select('id, title, body, type, created_at, expires_at, image_url, category')
         .order('created_at', { ascending: false })
         .limit(20),
       supabase.from('notification_reads' as any)
