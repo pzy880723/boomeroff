@@ -462,19 +462,19 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
                 handleSend();
               }
             }}
-            placeholder={pending.length > 0 ? '想问点啥？也可以直接发送…' : '跟 BOOMER 聊聊吧…（Enter 发送）'}
+            placeholder={pending.length > 0 ? '想问点啥…' : '跟 BOOMER 聊聊…'}
             rows={1}
-            className="min-h-[40px] max-h-32 resize-none border-0 bg-transparent text-[16px] text-[hsl(var(--primary-foreground))] placeholder:text-[hsl(var(--primary-foreground)/0.4)] focus-visible:ring-0 focus-visible:ring-offset-0 px-1"
+            className="min-h-[32px] max-h-28 resize-none border-0 bg-transparent text-[13px] leading-snug text-[hsl(var(--primary-foreground))] placeholder:text-[hsl(var(--primary-foreground)/0.4)] focus-visible:ring-0 focus-visible:ring-offset-0 px-1 py-1"
           />
           {busy ? (
             <Button
               type="button"
               size="icon"
               onClick={stop}
-              className="h-9 w-9 shrink-0 rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              className="h-7 w-7 shrink-0 rounded-lg bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               aria-label="停止生成"
             >
-              <Square className="w-4 h-4" />
+              <Square className="w-3 h-3" />
             </Button>
           ) : (
             <Button
@@ -482,10 +482,10 @@ export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
               size="icon"
               onClick={handleSend}
               disabled={!input.trim() && pending.length === 0}
-              className="h-9 w-9 shrink-0 rounded-xl bg-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.9)] text-[hsl(var(--accent-foreground))]"
+              className="h-7 w-7 shrink-0 rounded-lg bg-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.9)] text-[hsl(var(--accent-foreground))]"
               aria-label="发送"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-3 h-3" />
             </Button>
           )}
         </div>
