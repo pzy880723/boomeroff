@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { useLogoTapCounter, verifyPortalPassword, unlockPortal } from '@/hooks/useAdminPortal';
 import { toast } from 'sonner';
-import brandWordmark from '@/assets/boomer-go-wordmark.png.asset.json';
+import brandWordmarkUrl from '@/assets/boomer-go-wordmark.png';
 
 interface PageHeaderProps {
   title: string;
