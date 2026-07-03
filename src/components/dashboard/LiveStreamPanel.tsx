@@ -804,7 +804,7 @@ export function LiveStreamPanel() {
                   <Button
                     size="lg"
                     onClick={() => startCamera()}
-                    className="gap-2 h-12 px-6 rounded-full bg-accent hover:bg-accent/90 text-accent-foreground shadow-glow font-medium"
+                    className="gap-2 h-12 px-6 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-glow font-medium"
                   >
                     <Camera className="w-5 h-5" />
                     启动摄像头
