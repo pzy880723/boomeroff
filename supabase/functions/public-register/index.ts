@@ -52,11 +52,37 @@ Deno.serve(async (req) => {
       const first = parsed.error.errors[0]?.message ?? "参数错误";
       return json({ error: first }, 400);
     }
-    const { username, password, display_name, real_name, shop_id } = parsed.data;
+    const { username, password, display_name, real_name, phone, code, shop_id } = parsed.data;
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+
+    // 1. 验证手机验证码
+    const code_hash = await sha256Hex(code);
+    const { data: otpRow } = await admin
+      .from("phone_login_otp")
+      .select("id, expires_at, used_at, attempts")
+      .eq("phone", phone)
+      .eq("code_hash", code_hash)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!otpRow) {
+      return json({ error: "验证码错误，请检查后重试" }, 400);
+    }
+    if (otpRow.used_at) {
+      return json({ error: "该验证码已使用，请重新获取" }, 400);
+    }
+    if (new Date(otpRow.expires_at).getTime() < Date.now()) {
+      return json({ error: "验证码已过期，请重新获取" }, 400);
+    }
+
+    // 2. 手机号必须未被占用
+    const { data: existingUidByPhone } = await admin.rpc("find_user_id_by_phone", { _phone: phone });
+    if (existingUidByPhone) {
+      return json({ error: "该手机号已被注册，请直接登录" }, 409);
+    }
 
     const email = `${username.toLowerCase()}@boomeroff.local`;
 
