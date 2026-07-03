@@ -484,7 +484,14 @@ export default function Notifications() {
     }
   };
 
-  if (authLoading) return null;
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-gradient-surface text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        <p className="text-sm">正在加载消息…</p>
+      </div>
+    );
+  }
   if (!user) return <AuthPage />;
 
   const markAllReadInTab = async () => {
