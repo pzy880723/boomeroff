@@ -46,6 +46,9 @@ export function PublicLayout() {
         </ErrorBoundary>
       </main>
 
+      <EdgeSwipeBack />
+      <PullToRefresh />
+
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/40 bg-background/85 backdrop-blur-xl safe-bottom"
         aria-label="底部导航"
