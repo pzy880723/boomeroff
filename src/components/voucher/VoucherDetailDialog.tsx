@@ -15,6 +15,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { invokeFn } from '@/lib/invokeFn';
 import { toast } from 'sonner';
+import { humanizeRpcError, type FriendlyRpcError } from '@/lib/rpcError';
+import { PermissionErrorState } from '@/components/common/PermissionErrorState';
 import {
   type VoucherTemplate, type VoucherClaim, formatVoucherRule, formatValidityRange,
   buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, getVoucherTemplateTimeInfo,
@@ -40,19 +42,29 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
   const [deleting, setDeleting] = useState(false);
   const [claimSearch, setClaimSearch] = useState('');
 
+  const [claimsError, setClaimsError] = useState<FriendlyRpcError | null>(null);
+
+  const loadClaims = async () => {
+    if (!voucher) return;
+    setLoading(true);
+    setClaimsError(null);
+    const { data, error } = await supabase.rpc('list_voucher_claims_with_pii', {
+      _voucher_id: voucher.id,
+      _limit: 50,
+    });
+    if (error) {
+      setClaimsError(humanizeRpcError(error));
+      setClaims([]);
+    } else {
+      setClaims((data || []) as unknown as VoucherClaim[]);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     if (!open || !voucher) return;
-    (async () => {
-      setLoading(true);
-      const { data } = await supabase
-        .from('voucher_claims')
-        .select('*')
-        .eq('voucher_id', voucher.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      setClaims((data || []) as unknown as VoucherClaim[]);
-      setLoading(false);
-    })();
+    loadClaims();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, voucher]);
 
   const directRelease = async () => {
@@ -208,6 +220,8 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
             )}
             {loading ? (
               <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+            ) : claimsError ? (
+              <PermissionErrorState compact error={claimsError} onRetry={loadClaims} />
             ) : claims.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-3">暂无</p>
             ) : (() => {

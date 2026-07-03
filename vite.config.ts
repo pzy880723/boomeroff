@@ -28,10 +28,20 @@ export default defineConfig(({ mode }) => ({
       output: {
         manualChunks: (id) => {
           if (!id.includes("node_modules")) return;
-          if (id.includes("react-dom") || id.includes("/react/") || id.includes("scheduler")) {
+          // 所有会在模块顶层调用 React API 的库都并入同一个 chunk,
+          // 避免 rollup 分包时因加载顺序错乱导致 React.forwardRef undefined 白屏。
+          if (
+            id.includes("/react-dom/") ||
+            id.includes("/react/") ||
+            id.includes("/scheduler/") ||
+            id.includes("@radix-ui") ||
+            id.includes("react-hook-form") ||
+            id.includes("@hookform") ||
+            id.includes("@tanstack/react-query") ||
+            id.includes("react-router")
+          ) {
             return "react-vendor";
           }
-          if (id.includes("@radix-ui")) return "radix";
           if (id.includes("@supabase")) return "supabase";
           if (id.includes("recharts") || id.includes("d3-")) return "charts";
           if (id.includes("react-markdown") || id.includes("remark") || id.includes("micromark") || id.includes("mdast") || id.includes("hast")) {

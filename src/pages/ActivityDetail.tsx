@@ -23,6 +23,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { humanizeRpcError, type FriendlyRpcError } from '@/lib/rpcError';
+import { PermissionErrorState } from '@/components/common/PermissionErrorState';
 
 type AppWithClaim = ActivityApplication & {
   voucher_claim?: { status: string; short_code: string | null; redeemed_at: string | null } | null;
@@ -42,6 +44,7 @@ export default function ActivityDetail() {
   const [confirmApp, setConfirmApp] = useState<AppWithClaim | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
   const [signedUrlMap, setSignedUrlMap] = useState<Record<string, string>>({});
+  const [loadError, setLoadError] = useState<FriendlyRpcError | null>(null);
 
   const openImage = async (path: string) => {
     const cached = signedUrlMap[path];
@@ -65,15 +68,19 @@ export default function ActivityDetail() {
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
-    const [{ data: a }, { data: ap }] = await Promise.all([
+    const [actRes, appsRes] = await Promise.all([
       supabase.from('activities').select('*').eq('id', id).maybeSingle(),
-      supabase
-        .from('activity_applications')
-        .select('*, voucher_claim:voucher_claims!activity_applications_voucher_claim_id_fkey(status, short_code, redeemed_at)')
-        .eq('activity_id', id)
-        .order('created_at', { ascending: false }),
+      supabase.rpc('list_activity_applications', { _activity_id: id as string }),
     ]);
-    setActivity((a as any) || null);
+    if (appsRes.error) {
+      setLoadError(humanizeRpcError(appsRes.error));
+      if (!silent) setLoading(false);
+      return;
+    }
+    setLoadError(null);
+    const a = actRes.data as any;
+    const ap = appsRes.data as any;
+    setActivity(a || null);
     const list = ((ap || []) as unknown as AppWithClaim[]);
     setApps(list);
     if (!silent) setLoading(false);
@@ -132,6 +139,16 @@ export default function ActivityDetail() {
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  }
+  if (loadError) {
+    return (
+      <>
+        <PageHeader title="活动详情" back="/me/activities" />
+        <div className="container max-w-screen-md mx-auto px-3 py-6">
+          <PermissionErrorState error={loadError} onRetry={() => load()} />
+        </div>
+      </>
+    );
   }
   if (!activity) {
     return (
