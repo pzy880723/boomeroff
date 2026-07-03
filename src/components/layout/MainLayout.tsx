@@ -13,6 +13,9 @@ const FloatingDashboard = lazy(() =>
 const LevelUpWatcher = lazy(() =>
   import('@/components/system/LevelUpWatcher').then(m => ({ default: m.LevelUpWatcher }))
 );
+const PushBootstrap = lazy(() =>
+  import('@/components/system/PushBootstrap').then(m => ({ default: m.PushBootstrap }))
+);
 
 export function MainLayout() {
   return (
