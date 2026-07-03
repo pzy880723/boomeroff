@@ -66,7 +66,7 @@ export function UserTable() {
   const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
   const [resetUser, setResetUser] = useState<UserWithRole | null>(null);
   const [profileUser, setProfileUser] = useState<UserWithRole | null>(null);
-  const [filter, setFilter] = useState<'all' | 'pending'>('all');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'missing_phone'>('all');
   const [roleNameMap, setRoleNameMap] = useState<Record<string, string>>({});
   const [shopNameMap, setShopNameMap] = useState<Record<string, string>>({});
   const [shifts, setShifts] = useState<{ code: string; name: string }[]>([]);
