@@ -67,11 +67,7 @@ export default function ActivityDetail() {
     if (!silent) setLoading(true);
     const [{ data: a }, { data: ap }] = await Promise.all([
       supabase.from('activities').select('*').eq('id', id).maybeSingle(),
-      supabase
-        .from('activity_applications')
-        .select('*, voucher_claim:voucher_claims!activity_applications_voucher_claim_id_fkey(status, short_code, redeemed_at)')
-        .eq('activity_id', id)
-        .order('created_at', { ascending: false }),
+      supabase.rpc('list_activity_applications', { _activity_id: id as string }),
     ]);
     setActivity((a as any) || null);
     const list = ((ap || []) as unknown as AppWithClaim[]);
