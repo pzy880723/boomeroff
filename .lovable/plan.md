@@ -1,35 +1,29 @@
-# 修复线上发布后白屏（Cannot read properties of undefined (reading 'forwardRef')）
+## 问题诊断
 
-## 问题
-- 预览环境（dev）正常，发布后 https://boomeroff.lovable.app/ 是空白页。
-- Playwright 抓到 pageerror：`Cannot read properties of undefined (reading 'forwardRef')`，`#root` 为空。
-- 原因：`vite.config.ts` 的 `manualChunks` 把 `react / react-dom / scheduler` 拆到 `react-vendor`，同时把 `@radix-ui` 拆到 `radix` chunk。Rollup 生成的 chunk 图存在循环/顺序问题，导致 `radix` chunk 执行 `React.forwardRef` 时 React 尚未初始化，全站崩溃。
+1. **Banner 闪现旧图**：`Home.tsx` 的 Banner `<img>` 使用了 `bannerNote?.image_url || bannerDefault`。资讯还没加载完（`notes` 为空）时 fallback 到本地的 `banner-default.jpg`（AI 设计的那张），加载完后再换成真实资讯图 —— 产生「先旧图，后真图」的闪烁。
 
-## 修复方案（只改一个文件：`vite.config.ts`）
-1. 保留代码分包收益，但把所有"依赖 React 且会在模块顶层调用 React API（forwardRef/createContext 等）"的第三方库并入同一个 `react-vendor` chunk，彻底消除顺序风险：
-   - `react`、`react-dom`、`react/jsx-runtime`、`scheduler`
-   - `@radix-ui/*`
-   - `react-hook-form`、`@hookform/*`
-   - `@tanstack/react-query`、`react-router-dom`
-2. 其余非 React-critical 的大依赖继续独立分包（体积收益仍在）：
-   - `@supabase/*` → `supabase`
-   - `recharts` / `d3-*` → `charts`
-   - `react-markdown` / `remark*` / `micromark*` / `mdast*` / `hast*` → `markdown`
-   - `react-day-picker` / `date-fns` → `date`
-   - `@dnd-kit/*` → `dnd`
-   - `embla-carousel*` → `carousel`
-   - `html-to-image` → `html-to-image`
-   - `lucide-react` → `icons`
-3. 不改动任何业务代码、路由、样式或后端逻辑。
+2. **返回落到资讯页**：Home 的 Banner 通过 `<Link to="/notifications?tab=news&open={id}">` 打开；`Notifications.tsx` 把 `?open=` 认到后打开详情弹窗，同时 `replace` 掉 URL。用户关闭详情后停在资讯列表页，需要再点一次「返回」才能回到首页。
 
-## 验证
-1. 本地构建 (`bun run build`) 观察 chunk 列表，确认 `radix` chunk 已合并进 `react-vendor`。
-2. 用 Playwright 打开线上 URL（发布后），断言：
-   - HTTP 200
-   - `#root` innerHTML 长度 > 0
-   - 无 `pageerror`，无 `forwardRef undefined` 报错
-3. 手动回归首页 / 底部 5 个 Tab / AI 识图 / 中古圈，确认无回归。
+## 计划
 
-## 风险
-- `react-vendor` chunk 会略微变大（几十 KB gzip），但由长效缓存，属可接受代价。
-- 不涉及数据库、Edge Function、RLS，无数据风险。
+### 1. Home.tsx —— 消除 Banner 闪现
+- 从 `useNotifications()` 一起取出 `loading`。
+- Banner 渲染逻辑改为：
+  - `loading` 期间：渲染一个纯色/骨架占位（`bg-muted` + 轻微 shimmer），**不再显示** `bannerDefault`。
+  - 加载完成后：有资讯 → 直接显示真实图；无资讯 → 才 fallback 到 `bannerDefault`（保留品牌兜底）。
+- 图片自身仍保留 `loading="eager"` + `fetchpriority="high"`，切换时用 `key={bannerNote?.id}` 避免同一 `<img>` 复用旧 src。
+
+### 2. Home → 资讯详情 → 返回首页
+- Home 的 `<Link>` 携带 state：`state={{ fromHome: true }}`。
+- `Notifications.tsx`：
+  - 使用 `useLocation()` 读取 `location.state?.fromHome`，用 `useRef` 记住（因为一旦 replace URL 后 state 也会变）。
+  - 详情弹窗的 `onOpenChange(false)` 关闭时：若来自首页，则 `navigate('/', { replace: true })`；否则维持现有行为（留在资讯页）。
+- 只影响「从首页 Banner 打开」这条路径；从「中古圈 / 消息中心 Tab 内部」打开的详情关闭后仍留在资讯页。
+
+### 3. 不做的事
+- 不改资讯详情弹窗本身样式。
+- 不动 `useNotifications` 数据结构。
+- 不改路由结构（不新增独立详情路由）。
+
+## 需要你确认
+- 加载中占位就用「灰底 + 轻微骨架」即可吗？还是想显示一张固定的 BOOMER GO 品牌背景？（默认按前者实现，最不闪。）

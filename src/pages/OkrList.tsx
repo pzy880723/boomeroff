@@ -27,20 +27,26 @@ export default function OkrList() {
   useEffect(() => {
     if (!user) return;
     void (async () => {
-      const { data: sp } = await supabase.from('staff_profiles' as any)
-        .select('shop_id').eq('user_id', user.id).maybeSingle();
-      const shopId = (sp as any)?.shop_id;
-      if (!shopId) { setItems([]); setLoading(false); return; }
-      const { data } = await supabase.from('operation_okrs' as any)
-        .select('id, title, objective, key_results, tags, period_start, period_end')
-        .eq('shop_id', shopId)
-        .order('period_start', { ascending: false });
-      setItems(((data as any[]) || []) as Okr[]);
-      setLoading(false);
+      try {
+        const { data: sp } = await supabase.from('staff_profiles' as any)
+          .select('shop_id').eq('user_id', user.id).maybeSingle();
+        const shopId = (sp as any)?.shop_id;
+        if (!shopId) { setItems([]); return; }
+        const { data } = await supabase.from('operation_okrs' as any)
+          .select('id, title, objective, key_results, tags, period_start, period_end')
+          .eq('shop_id', shopId)
+          .order('period_start', { ascending: false });
+        setItems(((data as any[]) || []) as Okr[]);
+      } catch (error) {
+        console.error('[OkrList] 加载失败:', error);
+        setItems([]);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [user]);
 
-  if (authLoading) return null;
+  if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (!user) return <AuthPage />;
 
   return (

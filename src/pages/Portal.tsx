@@ -19,6 +19,9 @@ import { SmsTestPanel } from '@/components/admin/SmsTestPanel';
 import { MarketingPresetsPanel } from '@/components/admin/MarketingPresetsPanel';
 import { BrandKbManager } from '@/components/admin/BrandKbManager';
 import { BackupPanel } from '@/components/admin/BackupPanel';
+import { AuditLogTable } from '@/components/admin/AuditLogTable';
+
+
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,7 +36,7 @@ import {
   Shield, Users, LogOut, AlertCircle, Sparkles, BadgeCheck,
   MessageSquare, MessageSquareWarning, Menu,
   CalendarDays, Clock, BookOpen, MessagesSquare, Store, ShieldCheck,
-  UserCog, Building2, Library, Megaphone, Settings, Ticket, Database,
+  UserCog, Building2, Library, Megaphone, Settings, Ticket, Database, History,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { lockPortal } from '@/hooks/useAdminPortal';
@@ -41,7 +44,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'brand_kb' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test' | 'marketing_presets' | 'backup';
+type TabKey = 'users' | 'audit' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'brand_kb' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test' | 'marketing_presets' | 'backup';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -50,6 +53,7 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     key: 'people', label: '人员', icon: UserCog, items: [
       { key: 'users', label: '用户管理', icon: Users, perm: 'user.read' },
+      { key: 'audit', label: '操作日志', icon: History, perm: 'user.read' },
       { key: 'roles', label: '角色与权限', icon: ShieldCheck, perm: 'role.manage' },
     ],
   },
@@ -232,6 +236,7 @@ export default function Portal() {
                 <UserTable />
               </div>
             )}
+            {effectiveTab === 'audit' && can('user.read') && <AuditLogTable />}
             {effectiveTab === 'roles' && can('role.manage') && <RolePermissionManager />}
             {effectiveTab === 'shops' && can('shop.write') && <ShopManager />}
             {effectiveTab === 'schedule' && can('schedule.write') && <ScheduleManager />}

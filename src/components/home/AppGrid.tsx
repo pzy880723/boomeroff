@@ -17,16 +17,6 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 
-/** 长按 ~450ms 进入编辑模式 */
-function useLongPress(cb: () => void, ms = 450) {
-  const [t, setT] = useState<ReturnType<typeof setTimeout> | null>(null);
-  return {
-    onPointerDown: () => setT(setTimeout(cb, ms)),
-    onPointerUp: () => { if (t) { clearTimeout(t); setT(null); } },
-    onPointerLeave: () => { if (t) { clearTimeout(t); setT(null); } },
-    onPointerCancel: () => { if (t) { clearTimeout(t); setT(null); } },
-  };
-}
 
 /** 活泼版 tile —— 淡红圆底 + 品牌红粗线图标 + 一抹柠檬黄小重点。 */
 function TileFace({ meta, dragging }: { meta: AppIconMeta; dragging?: boolean }) {
@@ -51,10 +41,9 @@ interface TileProps {
   id: string;
   editing: boolean;
   onHide: () => void;
-  onEnterEdit: () => void;
 }
 
-function SortableTile({ id, editing, onHide, onEnterEdit }: TileProps) {
+function SortableTile({ id, editing, onHide }: TileProps) {
   const meta = APP_ICON_REGISTRY[id];
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -66,12 +55,10 @@ function SortableTile({ id, editing, onHide, onEnterEdit }: TileProps) {
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    // 空闲时也保留过渡,让邻居"让位/回位"都有动画
     transition: transition ?? 'transform 220ms cubic-bezier(0.2, 0, 0, 1)',
     willChange: 'transform',
     zIndex: isDragging ? 30 : undefined,
   };
-  const longPress = useLongPress(onEnterEdit);
   if (!meta) return null;
   const { label, to } = meta;
 
@@ -87,10 +74,11 @@ function SortableTile({ id, editing, onHide, onEnterEdit }: TileProps) {
       ref={setNodeRef}
       style={style}
       className={cn(
-        'relative flex flex-col items-center py-1 select-none touch-none',
+        'relative flex flex-col items-center py-1 select-none',
+        editing && 'touch-none',
         editing && !isDragging && 'wiggle-edit',
       )}
-      {...attributes}
+      {...(editing ? attributes : {})}
       {...(editing ? listeners : {})}
     >
       {editing && (
@@ -106,7 +94,7 @@ function SortableTile({ id, editing, onHide, onEnterEdit }: TileProps) {
       {editing ? (
         <div className="flex flex-col items-center">{content}</div>
       ) : (
-        <Link to={to} className="flex flex-col items-center" {...longPress}>{content}</Link>
+        <Link to={to} className="flex flex-col items-center">{content}</Link>
       )}
     </div>
   );
@@ -190,7 +178,6 @@ export function AppGrid() {
                 id={id}
                 editing={editing}
                 onHide={() => hide(id)}
-                onEnterEdit={() => setEditing(true)}
               />
             ))}
             {editing && (

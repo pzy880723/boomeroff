@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
@@ -104,6 +104,9 @@ export default function Notifications() {
   const isAdmin = role === 'admin';
 
   const [sp, setSp] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const fromHomeRef = useRef<boolean>(Boolean((location.state as any)?.fromHome));
   const initialTab = (() => {
     const q = sp.get('tab');
     if (q === 'notice' || q === 'news' || q === 'message') return q as TabKey;
@@ -484,7 +487,14 @@ export default function Notifications() {
     }
   };
 
-  if (authLoading) return null;
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-gradient-surface text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        <p className="text-sm">正在加载消息…</p>
+      </div>
+    );
+  }
   if (!user) return <AuthPage />;
 
   const markAllReadInTab = async () => {
@@ -619,7 +629,15 @@ export default function Notifications() {
       {/* 详情 Sheet */}
       <NotificationDetailSheet
         item={detailItem}
-        onOpenChange={(v) => !v && setDetailItem(null)}
+        onOpenChange={(v) => {
+          if (!v) {
+            setDetailItem(null);
+            if (fromHomeRef.current) {
+              fromHomeRef.current = false;
+              navigate('/', { replace: true });
+            }
+          }
+        }}
         isAdmin={isAdmin}
         onEdit={openEditFromDetail}
         onDelete={handleDeleteFromDetail}

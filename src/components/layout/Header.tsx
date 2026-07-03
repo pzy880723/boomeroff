@@ -92,8 +92,12 @@ export function Header() {
           <img
             src={APP_BRAND_LOGO}
             alt={APP_BRAND_NAME}
+            width={44}
+            height={44}
+            loading="eager"
+            decoding="async"
             draggable={false}
-            className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg object-contain shrink-0"
+            className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg object-contain shrink-0 bg-white/60"
           />
           <span className="flex flex-col leading-tight text-left">
             <span className="text-base font-black tracking-wide">{APP_BRAND_NAME}</span>

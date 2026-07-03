@@ -47,7 +47,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   handleGoHome = () => {
     try {
-      window.location.assign('/scan');
+      window.location.assign('/');
     } catch {
       /* noop */
     }

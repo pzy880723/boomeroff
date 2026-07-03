@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { AuthPage } from '@/components/auth/AuthPage';
 import { ArrowLeft, Send, Loader2, ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadNotificationImage } from '@/lib/uploadNotificationImage';
@@ -119,8 +120,15 @@ export default function MessagesConversation() {
     }
   };
 
-  if (authLoading) return null;
-  if (!user) { nav('/'); return null; }
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-gradient-surface text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        <p className="text-sm">正在加载对话…</p>
+      </div>
+    );
+  }
+  if (!user) return <AuthPage />;
 
   return (
     <div className="min-h-screen flex flex-col bg-muted/30">
