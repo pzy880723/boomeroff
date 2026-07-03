@@ -470,6 +470,118 @@ export type Database = {
           },
         ]
       }
+      chat_messages: {
+        Row: {
+          attachment_mime: string | null
+          attachment_name: string | null
+          attachment_size: number | null
+          attachment_type: string | null
+          attachment_url: string | null
+          body: string | null
+          created_at: string
+          id: string
+          room_id: string
+          sender_id: string
+        }
+        Insert: {
+          attachment_mime?: string | null
+          attachment_name?: string | null
+          attachment_size?: number | null
+          attachment_type?: string | null
+          attachment_url?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          room_id: string
+          sender_id: string
+        }
+        Update: {
+          attachment_mime?: string | null
+          attachment_name?: string | null
+          attachment_size?: number | null
+          attachment_type?: string | null
+          attachment_url?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          room_id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_room_members: {
+        Row: {
+          id: string
+          joined_at: string
+          role: string
+          room_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          role?: string
+          room_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          role?: string
+          room_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_room_members_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_rooms: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       claim_otp: {
         Row: {
           attempts: number
@@ -747,6 +859,11 @@ export type Database = {
       }
       direct_messages: {
         Row: {
+          attachment_mime: string | null
+          attachment_name: string | null
+          attachment_size: number | null
+          attachment_type: string | null
+          attachment_url: string | null
           body: string | null
           created_at: string
           id: string
@@ -757,6 +874,11 @@ export type Database = {
           shop_id: string | null
         }
         Insert: {
+          attachment_mime?: string | null
+          attachment_name?: string | null
+          attachment_size?: number | null
+          attachment_type?: string | null
+          attachment_url?: string | null
           body?: string | null
           created_at?: string
           id?: string
@@ -767,6 +889,11 @@ export type Database = {
           shop_id?: string | null
         }
         Update: {
+          attachment_mime?: string | null
+          attachment_name?: string | null
+          attachment_size?: number | null
+          attachment_type?: string | null
+          attachment_url?: string | null
           body?: string | null
           created_at?: string
           id?: string
@@ -1737,6 +1864,36 @@ export type Database = {
           id?: string
           phone?: string | null
           real_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      push_tokens: {
+        Row: {
+          created_at: string
+          device_name: string | null
+          id: string
+          platform: string
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_name?: string | null
+          id?: string
+          platform: string
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_name?: string | null
+          id?: string
+          platform?: string
+          token?: string
           updated_at?: string
           user_id?: string
         }
@@ -3049,6 +3206,10 @@ export type Database = {
         Returns: boolean
       }
       increment_official_view: { Args: { _id: string }; Returns: undefined }
+      is_chat_room_member: {
+        Args: { _room: string; _user: string }
+        Returns: boolean
+      }
       kb_enqueue: {
         Args: { _op?: string; _source_id: string; _source_type: string }
         Returns: undefined
