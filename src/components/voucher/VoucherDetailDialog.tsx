@@ -15,6 +15,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { invokeFn } from '@/lib/invokeFn';
 import { toast } from 'sonner';
+import { humanizeRpcError, type FriendlyRpcError } from '@/lib/rpcError';
+import { PermissionErrorState } from '@/components/common/PermissionErrorState';
 import {
   type VoucherTemplate, type VoucherClaim, formatVoucherRule, formatValidityRange,
   buildClaimShareUrl, CLAIM_STATUS_LABEL, CLAIM_STATUS_VARIANT, getVoucherTemplateTimeInfo,
