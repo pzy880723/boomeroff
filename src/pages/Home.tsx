@@ -47,7 +47,7 @@ function okrProgress(kr: any): number {
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
-  const { items: notes } = useNotifications();
+  const { items: notes, loading: notesLoading } = useNotifications();
 
   const [name, setName] = useState<string>('店员');
   const [encouragement, setEncouragement] = useState<string>('今天也把每一位进店的客人当作朋友。');
