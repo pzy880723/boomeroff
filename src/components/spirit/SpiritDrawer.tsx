@@ -56,7 +56,17 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
 
       {/* 对话面板 */}
       <div className="flex-1 min-h-0">
-        <SpiritChatPanel chat={chat} />
+        <SpiritChatPanel
+          chat={chat}
+          taskCard={
+            tasks ? (
+              <SpiritTaskCard
+                tasks={tasks}
+                onNavigate={(path) => { onClose(); navigate(path); }}
+              />
+            ) : null
+          }
+        />
       </div>
     </div>
   );
