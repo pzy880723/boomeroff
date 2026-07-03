@@ -68,11 +68,19 @@ export default function ActivityDetail() {
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
-    const [{ data: a }, { data: ap }] = await Promise.all([
+    const [actRes, appsRes] = await Promise.all([
       supabase.from('activities').select('*').eq('id', id).maybeSingle(),
       supabase.rpc('list_activity_applications', { _activity_id: id as string }),
     ]);
-    setActivity((a as any) || null);
+    if (appsRes.error) {
+      setLoadError(humanizeRpcError(appsRes.error));
+      if (!silent) setLoading(false);
+      return;
+    }
+    setLoadError(null);
+    const a = actRes.data as any;
+    const ap = appsRes.data as any;
+    setActivity(a || null);
     const list = ((ap || []) as unknown as AppWithClaim[]);
     setApps(list);
     if (!silent) setLoading(false);
