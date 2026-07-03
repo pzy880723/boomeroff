@@ -54,19 +54,19 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
         <X className="w-4 h-4" />
       </button>
 
+      {/* 顶部固定：任务卡片（不随聊天滚动） */}
+      {tasks && (
+        <div className="shrink-0">
+          <SpiritTaskCard
+            tasks={tasks}
+            onNavigate={(path) => { onClose(); navigate(path); }}
+          />
+        </div>
+      )}
+
       {/* 对话面板 */}
       <div className="flex-1 min-h-0">
-        <SpiritChatPanel
-          chat={chat}
-          taskCard={
-            tasks ? (
-              <SpiritTaskCard
-                tasks={tasks}
-                onNavigate={(path) => { onClose(); navigate(path); }}
-              />
-            ) : null
-          }
-        />
+        <SpiritChatPanel chat={chat} />
       </div>
     </div>
   );
