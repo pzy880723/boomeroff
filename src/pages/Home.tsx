@@ -16,6 +16,13 @@ import { HomeFeedTabs } from '@/components/home/HomeFeedTabs';
 import bannerDefault from '@/assets/banner-default.jpg';
 import brandWordmarkUrl from '@/assets/boomer-go-wordmark.png';
 import xhsIcon from '@/assets/icon-xhs-activity.png';
+import { addDaysISO, formatShiftTime, shortDateLabel, weekdayLabel } from '@/lib/scheduleUtils';
+
+interface ShiftInfo {
+  work_date: string;
+  shift_code: string;
+  shift?: { name: string; start_time: string; end_time: string; color: string | null } | null;
+}
 
 interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null; voucher_id?: string | null }
 interface StoreOkr {
