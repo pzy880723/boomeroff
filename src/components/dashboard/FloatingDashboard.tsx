@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useTasks } from '@/hooks/useTasks';
 import { SpiritMascot, type SpiritState } from '../spirit/SpiritMascot';
 import { SpiritDrawer } from '../spirit/SpiritDrawer';
-import { SpiritRewardPopover } from '../spirit/SpiritRewardPopover';
 
 import { useSpiritChat } from '@/hooks/useSpiritChat';
 import { cn } from '@/lib/utils';
@@ -56,7 +54,6 @@ function getCapsuleX(side: Side): number {
 
 export function FloatingDashboard() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -204,14 +201,6 @@ export function FloatingDashboard() {
         />,
         document.body,
       )}
-
-      <SpiritRewardPopover
-        tasks={tasks}
-        capsuleSide={pos.side}
-        capsuleY={capsuleY}
-        hidden={open || closing || dragging}
-        onOpenTask={(path) => navigate(path)}
-      />
 
       <Suspense fallback={null}>
         {greetOpen && <SpiritGreetingDialog open={greetOpen} onClose={closeGreeting} />}

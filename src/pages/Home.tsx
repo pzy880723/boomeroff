@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
+import { RewardInboxCard } from '@/components/home/RewardInboxCard';
 import { HomeFeedTabs } from '@/components/home/HomeFeedTabs';
 import bannerDefault from '@/assets/banner-default.jpg';
 import brandWordmarkUrl from '@/assets/boomer-go-wordmark.png';
@@ -260,18 +261,13 @@ export default function Home() {
           )}
         </Link>
 
-        {/* 我的排班 - 今日 + 明日 */}
+        {/* 我的排班 - 今日 + 明日 (今明两日都没排班则隐藏) */}
+        {(todayShift || tomorrowShift) && (
         <SectionCard
           title="我的排班"
           icon={<CalendarDays className="w-4 h-4 text-primary" />}
           action={<Link to="/me" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>}
         >
-          {!todayShift && !tomorrowShift ? (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">今明两日暂无排班</p>
-              <Link to="/me" className="text-xs text-primary flex items-center">去查看 <ChevronRight className="w-3 h-3" /></Link>
-            </div>
-          ) : (
             <div className="space-y-2">
               {/* 今日：次要 */}
               <div className="flex items-center justify-between px-1 py-0.5">
@@ -326,8 +322,8 @@ export default function Home() {
                 )}
               </div>
             </div>
-          )}
         </SectionCard>
+        )}
 
 
 
@@ -363,6 +359,9 @@ export default function Home() {
             </Card>
           </section>
         )}
+
+        {/* 奖励待领取 - 默认收起, 展开可看待完成任务 */}
+        <RewardInboxCard />
 
         {/* 我的应用 */}
         <AppGrid />
