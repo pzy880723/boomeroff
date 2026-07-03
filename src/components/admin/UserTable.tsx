@@ -274,11 +274,15 @@ export function UserTable() {
   }
 
   const pendingCount = users.filter((u) => u.suspended).length;
-  const filteredUsers = filter === 'pending' ? users.filter((u) => u.suspended) : users;
+  const missingPhoneCount = users.filter((u) => !u.profile?.phone).length;
+  const filteredUsers =
+    filter === 'pending' ? users.filter((u) => u.suspended)
+    : filter === 'missing_phone' ? users.filter((u) => !u.profile?.phone)
+    : users;
 
   return (
     <>
-      <Tabs value={filter} onValueChange={(v) => setFilter(v as 'all' | 'pending')}>
+      <Tabs value={filter} onValueChange={(v) => setFilter(v as any)}>
         <TabsList>
           <TabsTrigger value="all">全部 ({users.length})</TabsTrigger>
           <TabsTrigger value="pending" className="gap-1.5">
@@ -286,6 +290,14 @@ export function UserTable() {
             {pendingCount > 0 && (
               <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
                 {pendingCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="missing_phone" className="gap-1.5">
+            未填手机
+            {missingPhoneCount > 0 && (
+              <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
+                {missingPhoneCount}
               </Badge>
             )}
           </TabsTrigger>
