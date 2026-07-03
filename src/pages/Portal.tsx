@@ -53,6 +53,7 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     key: 'people', label: '人员', icon: UserCog, items: [
       { key: 'users', label: '用户管理', icon: Users, perm: 'user.read' },
+      { key: 'audit', label: '操作日志', icon: History, perm: 'user.read' },
       { key: 'roles', label: '角色与权限', icon: ShieldCheck, perm: 'role.manage' },
     ],
   },
