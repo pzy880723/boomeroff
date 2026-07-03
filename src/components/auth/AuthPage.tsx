@@ -4,7 +4,7 @@ import { ForgotPasswordForm } from './ForgotPasswordForm';
 import { RegisterForm } from './RegisterForm';
 import { PhoneLoginForm } from './PhoneLoginForm';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { APP_BRAND_LOGO, APP_BRAND_NAME } from '@/assets/brand';
+import { APP_BRAND_LOGO, APP_BRAND_NAME, APP_BRAND_TAGLINE } from '@/assets/brand';
 
 type AuthMode = 'login' | 'forgot-password' | 'register';
 
@@ -15,7 +15,7 @@ export function AuthPage() {
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-surface relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none opacity-40 [background:radial-gradient(circle_at_20%_10%,hsl(var(--accent)/0.15),transparent_40%),radial-gradient(circle_at_80%_90%,hsl(var(--primary)/0.12),transparent_40%)]" />
       <div className="relative z-10 w-full max-w-md animate-fade-in">
-        <div className="mb-6 flex justify-center">
+        <div className="mb-6 text-center">
           <img
             src={APP_BRAND_LOGO}
             alt={APP_BRAND_NAME}
@@ -23,9 +23,11 @@ export function AuthPage() {
             height={96}
             loading="eager"
             decoding="async"
-            className="h-20 sm:h-24 w-20 sm:w-24 object-contain rounded-2xl shadow-hard bg-white/60"
+            className="h-20 sm:h-24 w-20 sm:w-24 object-contain mx-auto mb-3 rounded-2xl shadow-hard bg-white/60"
           />
+          <p className="text-muted-foreground text-sm">{APP_BRAND_TAGLINE} · AI 识物 · 知识共享 · 排班管理</p>
         </div>
+
 
         {mode === 'login' && (
           <div className="bg-card border border-border/60 rounded-2xl p-4 sm:p-5 shadow-soft">
