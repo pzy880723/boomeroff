@@ -1,57 +1,39 @@
-## 背景
+## 问题定位
 
-仪表盘迁到首页后，原来"识别完弹出海獭角标 → 点开领经验"的入口没了。目前 `FloatingDashboard` 只在气泡上显示数字角标，点开抽屉只有对话，不告诉用户"你有 X 项奖励可领"，也没法在对话里领。
+线上 `ai.boomeroff.com` 顶栏只显示"BOOMER GO"文字（img alt 回退），Logo 图裂。实测：
 
-`useTasks` 已经聚合了两类可领内容：
-- **每日任务** `dailyTasks`：完成 1/3 次识别、通过一次知识测试、发一条 BOOMER 圈帖子
-- **事件奖励** `pending`（`exp_pending` 表）：签到连击、点赞、评论、纠错采纳等触发的一次性奖励
+```
+curl -I https://ai.boomeroff.com/__l5e/assets-v1/.../boomer-go-wordmark.png
+→ 200, content-type: text/html   # 返回的是 SPA 的 index.html，不是图片
+curl -I https://boomeroff.lovable.app/__l5e/...
+→ 200, content-type: image/png   # Lovable 官方域名正常
+```
 
-`TasksPanel` 已实现完整领取交互，但只在旧仪表盘用到。
+根因：`PageHeader.tsx` 和 `Home.tsx` 里的 wordmark 引用的是 `boomer-go-wordmark.png.asset.json` 里的 URL `/__l5e/assets-v1/...`。这个路径只有 Lovable 自家域名会代理到 R2；用户自建 nginx 的 `ai.boomeroff.com` 没有配置这个反代，SPA 的 catch-all 兜底把它当成前端路由，返回 index.html，浏览器就把它当图片加载失败 → 显示 alt 文本。
 
-## 目标
+而首页左上角 Header 的 Logo 用的是 `@/assets/boomer-go-logo.png` 直接 import（走 Vite 打包，产物路径是 `/assets/xxx.hash.png`），所以那个是正常显示的——这也解释了"之前没出问题"：之前顶部用的是本地打包 logo，最近改成用 asset.json 里的 wordmark 之后才坏。
 
-1. 打开 BOOMER 抽屉时，如果有可领奖励，**在对话流顶部**由 BOOMER 主动"发一条消息"，列出待领内容并允许直接在气泡里点按钮领取。
-2. 把所有需要"去做才能拿角标"的每日任务也统一收进这条卡片，未完成的显示"去完成"跳转，完成未领的显示"领取 +N"。
-3. 领取后卡片实时更新；全部领完后 BOOMER 说一句庆祝话，卡片自动隐藏。
+## 修复方案
 
-## 实现方案
+统一改回"Vite 本地打包"路径，不再依赖 `__l5e` 运行时代理。
 
-### 1. 新增 `SpiritTaskCard.tsx`（`src/components/spirit/`）
+1. 把 wordmark 真图落到源码里
+   - 从 CDN 下载真实 PNG 保存为 `src/assets/boomer-go-wordmark.png`（原 asset.json 保留不动，避免其它引用意外报错）。
 
-BOOMER 气泡内嵌卡片，复用 `useTasks` 的数据和方法：
-- 顶部：`🦦 BOOMER：你今天还有 X 项奖励可以领（共 +Y 经验）`
-- 已完成未领：绿色行 + `领取 +N` 按钮 → `claimDaily` / `claimEvent`
-- 未完成：灰色行 + `去完成` 按钮 → `onNavigate(path)` 关闭抽屉并跳转
-- 底部：`一键领取全部（+Y）` 按钮 → `claimAllPending` + 循环 `claimDaily`
-- 全部领完时替换为一句 BOOMER 语："今天的角标都被你收干净了，好厉害～"
+2. 改引用（把 `.asset.json` 换成直接 import PNG）
+   - `src/components/layout/PageHeader.tsx`
+     `import brandWordmark from '@/assets/boomer-go-wordmark.png.asset.json'` → `import brandWordmarkUrl from '@/assets/boomer-go-wordmark.png'`，`<img src={brandWordmark.url}>` → `<img src={brandWordmarkUrl}>`。
+   - `src/pages/Home.tsx` 同上。
 
-任务路由映射沿用 `TasksPanel` 的 `TASK_ROUTE`。
+3. 顺手扫一遍类似的 `.asset.json` 引用（`boomer-off-wordmark.png.asset.json`、`icon-xhs-activity.png.asset.json`），当前只有 wordmark 是在活跃路径上被引用，其它没有 import 就不动，避免范围扩散。
 
-### 2. 改 `SpiritChatPanel.tsx`
+## 验证
 
-- 接收新 prop `taskCard?: ReactNode`，在消息流最上方（空态与非空态都显示）渲染。
-- 空态 `EmptyState` 上方也保留卡片，让用户一打开就看到。
+- 本地 build 后检查 `dist/assets/` 里应出现 `boomer-go-wordmark-*.png`，HTML 里指向 `/assets/...`。
+- 部署后打开 `ai.boomeroff.com/me`，顶栏右上应显示 Logo 图；`curl -I` 该资源应返回 `content-type: image/png`。
 
-### 3. 改 `SpiritDrawer.tsx` / `FloatingDashboard.tsx`
+## 不做
 
-- `FloatingDashboard` 里已有 `useTasks()`，把 `tasks` 传给 `SpiritDrawer`。
-- `SpiritDrawer` 组装 `<SpiritTaskCard tasks={tasks} onNavigate={(p) => { onClose(); navigate(p); }} />` 传入 `SpiritChatPanel`。
-- 首次打开抽屉且 `totalUnclaimedCount > 0` 时，让 BOOMER mascot 状态短暂切到 `alert`（视觉呼应）。
-
-### 4. 领取后交互
-
-- 领取成功后依赖 `useTasks` 的 realtime + `refresh` 自动更新数字；`FloatingDashboard` 气泡角标同步减少。
-- 全部领完时保留卡片 2 秒显示"收干净了"，然后 `setDismissed(true)` 折叠。
-
-### 5. 不做的事
-
-- 不改 `exp_pending` 表结构；不改识别页/签到页的触发逻辑。
-- 不恢复旧的"识别完弹角标"浮层——BOOMER 抽屉替代它。
-- 不动 `TasksPanel`（旧组件仍可用，暂不删）。
-
-## 技术细节
-
-- 领取按钮 loading 用局部 `busyKey` state（复刻 `TasksPanel`）。
-- `onNavigate` 走 `useNavigate()`，在 `SpiritDrawer` 里注入。
-- 卡片外观：`bg-white/8 border border-white/10 rounded-2xl`，与抽屉深色底一致；行内按钮用 `bg-gradient-accent`。
-- 空态时卡片放在 `EmptyState` 前；有历史消息时放在滚动区顶部（跟着滚）。
+- 不去改 nginx 配置（不在 Lovable 项目范围内）。
+- 不改 `Header.tsx`（本来就是打包路径，正常）。
+- 不动 backend / 数据库 / 其它业务代码。
