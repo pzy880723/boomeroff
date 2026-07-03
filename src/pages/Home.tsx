@@ -70,25 +70,35 @@ export default function Home() {
   useEffect(() => {
     if (!user) return;
     const today = todayShanghai();
+    const tomorrow = addDaysISO(today, 1);
 
     void (async () => {
       try {
-        const [{ data: profile }, { data: sp }, { data: sh }, { data: chk }] =
+        const [{ data: profile }, { data: sp }, { data: sh }, { data: shifts }, { data: chk }] =
           await Promise.all([
             supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
             supabase.from('staff_profiles' as any).select('real_name, shop_id').eq('user_id', user.id).maybeSingle(),
             supabase.from('shift_schedules' as any)
               .select('work_date, shift_code')
               .eq('user_id', user.id)
-              .gte('work_date', today)
-              .order('work_date', { ascending: true })
-              .limit(1)
-              .maybeSingle(),
+              .in('work_date', [today, tomorrow]),
+            supabase.from('shop_shifts' as any).select('code, name, start_time, end_time, color'),
             supabase.from('user_check_ins').select('id').eq('user_id', user.id).eq('check_in_date', today).maybeSingle(),
           ]);
 
         setName((sp as any)?.real_name || profile?.display_name || user.email?.split('@')[0] || '店员');
-        setNextShift((sh as any) ?? null);
+        const shiftMap = new Map<string, any>();
+        ((shifts as any[]) || []).forEach(s => shiftMap.set(s.code, s));
+        const rows = ((sh as any[]) || []);
+        const buildInfo = (row: any): ShiftInfo => ({
+          work_date: row.work_date,
+          shift_code: row.shift_code,
+          shift: shiftMap.get(row.shift_code) || null,
+        });
+        const tRow = rows.find(r => r.work_date === today);
+        const mRow = rows.find(r => r.work_date === tomorrow);
+        setTodayShift(tRow ? buildInfo(tRow) : null);
+        setTomorrowShift(mRow ? buildInfo(mRow) : null);
         setCheckedToday(!!chk);
 
         const shopId = (sp as any)?.shop_id as string | undefined;
