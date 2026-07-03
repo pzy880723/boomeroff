@@ -19,6 +19,9 @@ import { SmsTestPanel } from '@/components/admin/SmsTestPanel';
 import { MarketingPresetsPanel } from '@/components/admin/MarketingPresetsPanel';
 import { BrandKbManager } from '@/components/admin/BrandKbManager';
 import { BackupPanel } from '@/components/admin/BackupPanel';
+import { AuditLogTable } from '@/components/admin/AuditLogTable';
+
+
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
