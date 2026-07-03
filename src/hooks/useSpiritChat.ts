@@ -2,11 +2,24 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeFn } from '@/lib/invokeFn';
 
+export interface SpiritRewardItem {
+  kind: 'event' | 'daily';
+  id: string;
+  title: string;
+  amount: number;
+}
+
 export interface SpiritMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   images?: string[];
+  meta?: {
+    reward?: {
+      items: SpiritRewardItem[];
+      claimed?: boolean;
+    };
+  };
 }
 
 export interface SpiritConversationSummary {
@@ -226,10 +239,21 @@ export function useSpiritChat() {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
   }, []);
 
+  const appendLocal = useCallback((msg: Omit<SpiritMessage, 'id'> & { id?: string }) => {
+    const full: SpiritMessage = { id: msg.id ?? uid(), role: msg.role, content: msg.content, images: msg.images, meta: msg.meta };
+    setMessages((prev) => [...prev, full]);
+    return full.id;
+  }, []);
+
+  const patchMessage = useCallback((id: string, patch: Partial<SpiritMessage>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch, meta: patch.meta ? { ...m.meta, ...patch.meta } : m.meta } : m)));
+  }, []);
+
   return {
     messages, status, error, conversationId,
     send, stop, clear,
     loadConversation, newConversation,
+    appendLocal, patchMessage,
   };
 }
 
