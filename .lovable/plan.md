@@ -1,28 +1,32 @@
-## 诊断
-上一轮虽然写了 `PhoneLoginForm.tsx` 并做了后端/Edge Function 支持，但**没有把它挂进 `AuthPage`**——所以线上/预览看到的登录页依旧是旧样子：
-- Logo 下仍显示 `BOOMER GO / 门店运营系统 · AI 识物 · 知识共享 · 排班管理`
-- 只有账号密码表单，没有「账号密码 / 手机验证码」Tab
+## 现象判断
+登录成功后不是账号没登录上，而是首页首屏在认证加载/懒加载/页面异常之间没有稳定兜底：有些页面在 `authLoading` 时直接 `return null`，所以用户看到纯白；同时登录完成后立即跳首页时，角色/权限和首页 Provider 还在异步初始化，容易第一次进入卡住，刷新或点其他页面后才恢复。
 
-Header Logo、`useAuth` 沙盒判断、`LoginForm` 成功后 `navigate('/', {replace:true})` 均已到位，无需再动。
+## 修复计划
+1. **统一登录后的认证就绪状态**
+   - 调整 `useAuth`：明确区分“会话恢复中”和“角色加载中”。
+   - 防止 `SIGNED_IN`、`INITIAL_SESSION` 并发触发时互相跳过导致 loading 状态不稳定。
+   - 登录成功后先等认证状态稳定，再进入首页。
 
-## 改动文件
-`src/components/auth/AuthPage.tsx`
+2. **去掉首页/关键页的白屏返回**
+   - 把 `Home`、`Notifications`、`MessagesConversation`、`OkrList`、`OkrDetail` 这类 `if (authLoading) return null` 改成中文加载页。
+   - 这样即使网络慢或权限查询慢，也不会白屏。
 
-## 具体改动
-1. **移除 Logo 下方文字**：删掉 `<h1>{APP_BRAND_NAME}</h1>` 与 `<p>...tagline...</p>`，仅保留 Logo（略微下移间距）。
-2. **登录态引入 Tab**（复用 shadcn `Tabs`）：
-   - Tab A「账号密码」→ 现有 `<LoginForm />`
-   - Tab B「手机验证码」→ 已存在的 `<PhoneLoginForm />`
-   - Tab 只在 `mode === 'login'` 时显示；忘记密码 / 注册 分支保持不变。
-3. Tab 外套一个白色圆角卡片（`bg-card border rounded-2xl p-4 shadow-soft`），与 App 视觉一致。
+3. **登录跳转固定到首页**
+   - 账号密码登录、手机验证码登录成功后都跳 `/`。
+   - 如果当前在其它页面登录，也不再默认回拍照页或旧路径。
 
-## 不改
-- 后端 Edge Functions / RPC / `phone_login_otp` 表（已就绪）
-- `LoginForm` / `PhoneLoginForm` / `RegisterForm` / `ForgotPasswordForm` 内部逻辑
-- `useAuth` 沙盒自动登录判定
-- Header Logo 显式尺寸与背景
+4. **首页数据加载失败不阻塞首屏**
+   - 首页的 profile、排班、活动、OKR、打卡数据查询分别做容错。
+   - 某个表 RLS/RPC 权限慢或报错时，只显示空状态/中文提示，不让整个首页卡住。
 
-## 验证
-1. 预览打开 `/`（未登录）→ 登录页 Logo 下无任何文字；出现「账号密码 / 手机验证码」两个 Tab；切换 Tab 表单正确渲染。
-2. 用手机验证码登录成功 → 直接跳 `/`（首页）。
-3. 发布后线上不再触发自动登录、不再闪现兜底页面。
+5. **修正兜底页“返回首页”路径**
+   - 当前错误兜底页的“返回首页”实际跳 `/scan`，这会造成用户以为又跳错页面。
+   - 改成 `/`，并把文案保持中文。
+
+6. **顺手清理一个明确控制台警告**
+   - `Home.tsx` 里 React 不识别 `fetchPriority`，改成兼容写法，避免干扰判断真正错误。
+
+## 验证方式
+- 用预览登录一次，确认第一次登录后直接进入首页，不再白屏。
+- 刷新首页、通知页、我的页，确认慢加载时显示加载态。
+- 检查控制台没有新的认证/RLS/RPC 报错导致页面空白。

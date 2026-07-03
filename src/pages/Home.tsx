@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
-  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target, QrCode,
+  ChevronRight, CalendarDays, Megaphone, Flame, Check, Sparkles, Target, QrCode, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppGrid } from '@/components/home/AppGrid';
@@ -64,57 +64,59 @@ export default function Home() {
     const today = todayShanghai();
 
     void (async () => {
-      const [{ data: profile }, { data: sp }, { data: sh }, { data: chk }] =
-        await Promise.all([
-          supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
-          supabase.from('staff_profiles' as any).select('real_name, shop_id').eq('user_id', user.id).maybeSingle(),
-          supabase.from('shift_schedules' as any)
-            .select('work_date, shift_code')
-            .eq('user_id', user.id)
-            .gte('work_date', today)
-            .order('work_date', { ascending: true })
-            .limit(1)
-            .maybeSingle(),
-          supabase.from('user_check_ins').select('id').eq('user_id', user.id).eq('check_in_date', today).maybeSingle(),
-        ]);
+      try {
+        const [{ data: profile }, { data: sp }, { data: sh }, { data: chk }] =
+          await Promise.all([
+            supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
+            supabase.from('staff_profiles' as any).select('real_name, shop_id').eq('user_id', user.id).maybeSingle(),
+            supabase.from('shift_schedules' as any)
+              .select('work_date, shift_code')
+              .eq('user_id', user.id)
+              .gte('work_date', today)
+              .order('work_date', { ascending: true })
+              .limit(1)
+              .maybeSingle(),
+            supabase.from('user_check_ins').select('id').eq('user_id', user.id).eq('check_in_date', today).maybeSingle(),
+          ]);
 
-      setName((sp as any)?.real_name || profile?.display_name || user.email?.split('@')[0] || '店员');
-      setNextShift((sh as any) ?? null);
-      setCheckedToday(!!chk);
+        setName((sp as any)?.real_name || profile?.display_name || user.email?.split('@')[0] || '店员');
+        setNextShift((sh as any) ?? null);
+        setCheckedToday(!!chk);
 
-      const shopId = (sp as any)?.shop_id as string | undefined;
+        const shopId = (sp as any)?.shop_id as string | undefined;
 
-      // 活动：只显示本店店员创建的（activities 无 shop_id 字段，按 created_by 交集过滤）
-      let activityQuery = supabase.from('activities' as any)
-        .select('id, name, cover_url, ends_at, voucher_id, created_by')
-        .eq('status', 'active')
-        .order('starts_at', { ascending: false })
-        .limit(6);
-      const { data: ac } = await activityQuery;
-      let list = ((ac as any[]) || []) as (ActiveActivity & { created_by: string })[];
-      if (shopId && list.length) {
-        const uids = Array.from(new Set(list.map(a => a.created_by).filter(Boolean)));
-        if (uids.length) {
-          const { data: mates } = await supabase.from('staff_profiles' as any)
-            .select('user_id').eq('shop_id', shopId).in('user_id', uids);
-          const set = new Set(((mates as any[]) || []).map(m => m.user_id));
-          list = list.filter(a => set.has(a.created_by));
+        // 活动：只显示本店店员创建的（activities 无 shop_id 字段，按 created_by 交集过滤）
+        const { data: ac } = await supabase.from('activities' as any)
+          .select('id, name, cover_url, ends_at, voucher_id, created_by')
+          .eq('status', 'active')
+          .order('starts_at', { ascending: false })
+          .limit(6);
+        let list = ((ac as any[]) || []) as (ActiveActivity & { created_by: string })[];
+        if (shopId && list.length) {
+          const uids = Array.from(new Set(list.map(a => a.created_by).filter(Boolean)));
+          if (uids.length) {
+            const { data: mates } = await supabase.from('staff_profiles' as any)
+              .select('user_id').eq('shop_id', shopId).in('user_id', uids);
+            const set = new Set(((mates as any[]) || []).map(m => m.user_id));
+            list = list.filter(a => set.has(a.created_by));
+          }
         }
-      }
-      setAct(list[0] ?? null);
+        setAct(list[0] ?? null);
 
-      // OKR：当前周期 + 本店
-      if (shopId) {
-        const { data: ok } = await supabase.from('operation_okrs' as any)
-          .select('id, title, objective, key_results, tags')
-          .eq('shop_id', shopId)
-          .lte('period_start', today)
-          .gte('period_end', today)
-          .order('created_at', { ascending: false })
-          .limit(3);
-        setOkrs(((ok as any[]) || []) as StoreOkr[]);
+        // OKR：当前周期 + 本店
+        if (shopId) {
+          const { data: ok } = await supabase.from('operation_okrs' as any)
+            .select('id, title, objective, key_results, tags')
+            .eq('shop_id', shopId)
+            .lte('period_start', today)
+            .gte('period_end', today)
+            .order('created_at', { ascending: false })
+            .limit(3);
+          setOkrs(((ok as any[]) || []) as StoreOkr[]);
+        }
+      } catch (error) {
+        console.error('[Home] 首页数据加载失败:', error);
       }
-
     })();
 
     // 每日鼓励
@@ -156,7 +158,14 @@ export default function Home() {
     setCheckedToday(true);
   };
 
-  if (authLoading) return null;
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-gradient-surface text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        <p className="text-sm">正在进入首页…</p>
+      </div>
+    );
+  }
   if (!user) return <AuthPage />;
 
   return (
@@ -214,8 +223,8 @@ export default function Home() {
             src={bannerNote?.image_url || bannerDefault}
             alt={bannerNote?.title || 'BOOMER GO'}
             loading="eager"
-            fetchPriority="high"
             decoding="async"
+            {...({ fetchpriority: 'high' } as any)}
             className="w-full h-full object-cover"
           />
           {bannerNote?.title && (

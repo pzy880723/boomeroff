@@ -23,14 +23,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [suspended, setSuspended] = useState(false);
   const [loading, setLoading] = useState(true);
-  const isFetchingRef = useRef(false);
+  const roleRequestIdRef = useRef(0);
 
   const fetchUserRole = async (userId: string) => {
-    if (isFetchingRef.current) {
-      console.log('[Auth] Already fetching role, skipping...');
-      return;
-    }
-    isFetchingRef.current = true;
+    const requestId = ++roleRequestIdRef.current;
     console.log('[Auth] Fetching role for user:', userId);
 
     const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
@@ -45,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+      if (requestId !== roleRequestIdRef.current) return;
 
       console.log('[Auth] Role query result:', { data, error });
 
@@ -69,13 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSuspended(false);
       }
     } catch (error) {
+      if (requestId !== roleRequestIdRef.current) return;
       console.error('[Auth] Unexpected error fetching role:', error);
       setRole('anchor');
       setSuspended(false);
     } finally {
+      if (requestId !== roleRequestIdRef.current) return;
       console.log('[Auth] Setting loading to false');
       setLoading(false);
-      isFetchingRef.current = false;
     }
   };
 
@@ -106,23 +104,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     // 获取初始会话
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log('[Auth] Initial session:', session ? 'exists' : 'null');
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserRole(session.user.id);
-      } else {
-        console.log('[Auth] No session, setting loading to false');
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        console.log('[Auth] Initial session:', session ? 'exists' : 'null');
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          await fetchUserRole(session.user.id);
+        } else {
+          console.log('[Auth] No session, setting loading to false');
+          setRole(null);
+          setSuspended(false);
+          setLoading(false);
+          await tryDevAutoLogin();
+        }
+      })
+      .catch((error) => {
+        console.error('[Auth] Initial session error:', error);
+        setSession(null);
+        setUser(null);
+        setRole(null);
+        setSuspended(false);
         setLoading(false);
-        await tryDevAutoLogin();
-      }
-    });
+      });
 
     // 监听认证状态变化
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         console.log('[Auth] Auth state changed:', _event);
+        setLoading(true);
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -131,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             fetchUserRole(session.user.id);
           }, 0);
         } else {
+          roleRequestIdRef.current += 1;
           setRole(null);
           setSuspended(false);
           setLoading(false);
@@ -142,11 +153,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    if (error) throw error;
+    if (error) {
+      setLoading(false);
+      throw error;
+    }
+    const nextSession = data.session ?? null;
+    setSession(nextSession);
+    setUser(nextSession?.user ?? null);
+    if (nextSession?.user) {
+      await fetchUserRole(nextSession.user.id);
+    } else {
+      setLoading(false);
+    }
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {

@@ -23,15 +23,21 @@ export default function OkrDetail() {
   useEffect(() => {
     if (!user || !id) return;
     void (async () => {
-      const { data } = await supabase.from('operation_okrs' as any)
-        .select('id, title, objective, key_results, key_actions, tags, period_start, period_end')
-        .eq('id', id).maybeSingle();
-      setItem((data as any) ?? null);
-      setLoading(false);
+      try {
+        const { data } = await supabase.from('operation_okrs' as any)
+          .select('id, title, objective, key_results, key_actions, tags, period_start, period_end')
+          .eq('id', id).maybeSingle();
+        setItem((data as any) ?? null);
+      } catch (error) {
+        console.error('[OkrDetail] 加载失败:', error);
+        setItem(null);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [user, id]);
 
-  if (authLoading) return null;
+  if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (!user) return <AuthPage />;
 
   return (
