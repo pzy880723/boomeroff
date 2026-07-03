@@ -182,6 +182,19 @@ Deno.serve(async (req) => {
       console.error("Failed to create staff_profile:", profileErr);
     }
 
+    // 同步手机号与真实姓名到 profiles（handle_new_user 触发器已建行）
+    const { error: profErr } = await admin
+      .from("profiles")
+      .update({ phone, real_name })
+      .eq("user_id", newUserId);
+    if (profErr) console.error("Failed to update profile phone/real_name:", profErr);
+
+    // 标记验证码已用
+    await admin
+      .from("phone_login_otp")
+      .update({ used_at: new Date().toISOString() })
+      .eq("id", otpRow.id);
+
     return json({
       success: true,
       message: "注册成功，等待管理员审核",
