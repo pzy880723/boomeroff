@@ -216,7 +216,7 @@ const MAX_FILE_MB = 10;
 
 type SpiritChatApi = ReturnType<typeof useSpiritChat>;
 
-export function SpiritChatPanel({ chat }: { chat?: SpiritChatApi } = {}) {
+export function SpiritChatPanel({ chat, taskCard }: { chat?: SpiritChatApi; taskCard?: React.ReactNode } = {}) {
   const fallback = useSpiritChat();
   const { messages, status, send, stop } = chat ?? fallback;
   const { toast } = useToast();
