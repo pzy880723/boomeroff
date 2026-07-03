@@ -133,8 +133,14 @@ Deno.serve(async (req) => {
       await admin.auth.admin.createUser({
         email,
         password,
+        phone,
+        phone_confirm: true,
         email_confirm: true,
-        user_metadata: { display_name: display_name || real_name || username },
+        user_metadata: {
+          display_name: display_name || real_name || username,
+          real_name,
+          phone,
+        },
       });
 
     if (createErr || !created.user) {
