@@ -237,7 +237,7 @@ function ContactsList({ userId }: { userId: string }) {
       // 1) 拉 staff_profiles(受 RLS 限制,同店/管理员可看)
       const { data: sp } = await supabase
         .from('staff_profiles')
-        .select('user_id, shop_id, position');
+        .select('user_id, shop_id, position, real_name');
       const rows = ((sp as any[]) || []).filter(r => r.user_id && r.user_id !== userId);
 
       const ids = Array.from(new Set(rows.map(r => r.user_id)));
@@ -266,6 +266,7 @@ function ContactsList({ userId }: { userId: string }) {
           user_id: r.user_id,
           display_name: p.display_name || null,
           avatar_url: p.avatar_url || null,
+          real_name: r.real_name || null,
           shop_id: r.shop_id || null,
           shop_name: r.shop_id ? (sMap.get(r.shop_id) || '未命名门店') : '未分配门店',
           position: r.position || null,
