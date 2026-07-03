@@ -710,8 +710,8 @@ export function LiveStreamPanel() {
 
           {!isStreaming && !capturedImage && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 p-6 bg-gradient-to-b from-neutral-900 to-neutral-950">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/5 backdrop-blur ring-1 ring-white/10 flex items-center justify-center">
-                <Camera className="w-9 h-9 sm:w-11 sm:h-11 text-accent" strokeWidth={1.5} />
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/5 backdrop-blur ring-1 ring-white/30 flex items-center justify-center">
+                <Camera className="w-9 h-9 sm:w-11 sm:h-11 text-white" strokeWidth={1.5} />
               </div>
               <div className="text-center space-y-1.5">
                 <p className="text-white font-display text-lg sm:text-xl tracking-tight">即时识别 · 秒级反馈</p>
@@ -804,7 +804,7 @@ export function LiveStreamPanel() {
                   <Button
                     size="lg"
                     onClick={() => startCamera()}
-                    className="gap-2 h-12 px-6 rounded-full bg-accent hover:bg-accent/90 text-accent-foreground shadow-glow font-medium"
+                    className="gap-2 h-12 px-6 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-glow font-medium"
                   >
                     <Camera className="w-5 h-5" />
                     启动摄像头
