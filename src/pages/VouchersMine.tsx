@@ -20,12 +20,22 @@ export default function VouchersMine() {
   const { user, loading: authLoading } = useAuth();
   const { can } = usePermissions();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [vouchers, setVouchers] = useState<VoucherTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<VoucherTemplate | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [detail, setDetail] = useState<VoucherTemplate | null>(null);
+
+  // 支持 ?scan=1 直接打开扫码核销（首页“去核销”入口一步直达）
+  useEffect(() => {
+    if (searchParams.get('scan') === '1' && can('voucher.redeem')) {
+      setScanOpen(true);
+      searchParams.delete('scan');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, can]);
 
   const load = useCallback(async () => {
     if (!user) return;
