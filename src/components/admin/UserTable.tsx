@@ -378,12 +378,6 @@ export function UserTable() {
                           </Badge>
                         )}
                       </span>
-                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Mail className="h-3 w-3" />
-                        <span className="truncate max-w-[200px]" title={user.email || ''}>
-                          {user.email || '—'}
-                        </span>
-                      </span>
                     </div>
                   </TableCell>
                   <TableCell>
