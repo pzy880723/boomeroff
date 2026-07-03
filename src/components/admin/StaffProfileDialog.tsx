@@ -61,10 +61,11 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
     if (!open) return;
     (async () => {
       setLoading(true);
-      const [{ data }, { data: shopRows }, { data: offRows }] = await Promise.all([
+      const [{ data }, { data: shopRows }, { data: offRows }, { data: prof }] = await Promise.all([
         supabase.from('staff_profiles' as any).select('*').eq('user_id', userId).maybeSingle(),
         supabase.from('shops' as any).select('id, name').eq('active', true).order('sort_order').order('name'),
         supabase.from('staff_day_offs' as any).select('*').eq('user_id', userId).gte('off_date', new Date().toISOString().slice(0,10)).order('off_date'),
+        supabase.from('profiles').select('phone').eq('user_id', userId).maybeSingle(),
       ]);
       setShops((shopRows as any) || []);
       setDayOffs((offRows as any) || []);
@@ -83,6 +84,7 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
         real_name: d.real_name ?? null,
         position: d.position ?? null,
         shop_id: d.shop_id ?? null,
+        phone: (prof as any)?.phone ?? null,
       });
       setLoading(false);
     })();
