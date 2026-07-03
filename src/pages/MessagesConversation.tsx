@@ -181,10 +181,10 @@ export default function MessagesConversation() {
           </button>
           <div className="relative">
             {peer?.avatar_url ? (
-              <img src={peer.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+              <img src={peer.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold">
-                {(peer?.display_name || '同').slice(0, 1)}
+              <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold">
+                {((peer?.real_name || peer?.display_name) || '同').slice(0, 1)}
               </div>
             )}
             {isOnline && (
@@ -192,9 +192,18 @@ export default function MessagesConversation() {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate">{peer?.display_name || '同事'}</p>
-            <p className="text-[10px] text-muted-foreground -mt-0.5">
-              {isOnline ? '在线' : '离线'}
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold truncate">{peer?.real_name || peer?.display_name || '同事'}</p>
+              {peer?.role_label && (
+                <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] shrink-0">{peer.role_label}</span>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground truncate -mt-0.5">
+              {[
+                isOnline ? '在线' : '离线',
+                peer?.shop_name,
+                peer?.position,
+              ].filter(Boolean).join(' · ')}
             </p>
           </div>
         </div>
