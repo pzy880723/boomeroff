@@ -100,13 +100,13 @@ export function UserTable() {
       if (rolesError) throw rolesError;
 
       const userIds = (roles || []).map((r: any) => r.user_id);
-      let profileMap: Record<string, { display_name: string | null; avatar_url: string | null }> = {};
+      let profileMap: Record<string, { display_name: string | null; avatar_url: string | null; phone: string | null }> = {};
       let staffMap: Record<string, { real_name: string | null; shop_id: string | null }> = {};
       if (userIds.length > 0) {
         const [{ data: profs }, { data: staff }] = await Promise.all([
           supabase
             .from('profiles')
-            .select('user_id, display_name, avatar_url')
+            .select('user_id, display_name, avatar_url, phone')
             .in('user_id', userIds),
           supabase
             .from('staff_profiles' as any)
@@ -114,7 +114,7 @@ export function UserTable() {
             .in('user_id', userIds),
         ]);
         (profs || []).forEach((p: any) => {
-          profileMap[p.user_id] = { display_name: p.display_name, avatar_url: p.avatar_url };
+          profileMap[p.user_id] = { display_name: p.display_name, avatar_url: p.avatar_url, phone: p.phone };
         });
         (staff || []).forEach((s: any) => {
           staffMap[s.user_id] = { real_name: s.real_name, shop_id: s.shop_id };
