@@ -205,6 +205,14 @@ export function FloatingDashboard() {
         document.body,
       )}
 
+      <SpiritRewardPopover
+        tasks={tasks}
+        capsuleSide={pos.side}
+        capsuleY={capsuleY}
+        hidden={open || closing || dragging}
+        onOpenTask={(path) => navigate(path)}
+      />
+
       <Suspense fallback={null}>
         {greetOpen && <SpiritGreetingDialog open={greetOpen} onClose={closeGreeting} />}
       </Suspense>
