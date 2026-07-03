@@ -29,7 +29,21 @@ interface Peer {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  real_name?: string | null;
+  shop_name?: string | null;
+  position?: string | null;
+  role_label?: string | null;
 }
+
+const ROLE_ZH: Record<string, string> = {
+  admin: '超级管理员',
+  boss: '老板',
+  store_manager: '店长',
+  staff: '店员',
+  associate: '合伙人',
+  hq: '总部',
+  finance: '财务',
+};
 
 const SELECT_COLS =
   'id, sender_id, receiver_id, body, image_url, attachment_type, attachment_url, attachment_name, attachment_size, attachment_mime, created_at, read_at';
