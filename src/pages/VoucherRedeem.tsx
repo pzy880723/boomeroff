@@ -47,13 +47,20 @@ export default function VoucherRedeem() {
     if (!code) return;
     (async () => {
       setLoading(true);
-      const { data, error: e } = await supabase
-        .from('voucher_claims')
-        .select('id, code, status, recipient_name, recipient_phone, claimed_at, expires_at, redeemed_at, voucher:vouchers(name, threshold_type, discount_amount, min_spend, template_terms)')
-        .eq('code', code.toUpperCase())
-        .maybeSingle();
-      if (e || !data) { setError('券码不存在'); setLoading(false); return; }
-      setClaim(data as unknown as ClaimView);
+      const { data: rows, error: e } = await supabase
+        .rpc('get_claim_for_redeem' as any, { _code: code.toUpperCase() });
+      const row: any = Array.isArray(rows) ? rows[0] : null;
+      if (e || !row) { setError('券码不存在或无权查看'); setLoading(false); return; }
+      let voucher: ClaimView['voucher'] = null;
+      if (row.voucher_id) {
+        const { data: v } = await supabase
+          .from('vouchers')
+          .select('name, threshold_type, discount_amount, min_spend, template_terms')
+          .eq('id', row.voucher_id)
+          .maybeSingle();
+        voucher = (v as any) ?? null;
+      }
+      setClaim({ ...row, voucher } as ClaimView);
       setLoading(false);
     })();
   }, [code]);

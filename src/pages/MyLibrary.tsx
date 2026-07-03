@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
@@ -201,6 +201,21 @@ export default function MyLibrary() {
     return () => document.removeEventListener('visibilitychange', onVis);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // 从 ?product=<id> 深链自动打开对应详情
+  const [sp, setSp] = useSearchParams();
+  useEffect(() => {
+    const pid = sp.get('product');
+    if (!pid || !items.length) return;
+    const hit = items.find(i => i.source_type === 'product' && i.source_id === pid);
+    if (hit) {
+      setActive(hit);
+      const next = new URLSearchParams(sp);
+      next.delete('product');
+      setSp(next, { replace: true });
+    }
+  }, [items, sp, setSp]);
+
 
   const totalCount = items.length;
   const passedCount = items.filter((i) => i.passed).length;

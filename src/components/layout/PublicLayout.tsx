@@ -6,7 +6,7 @@ import { ErrorBoundary } from '@/components/system/ErrorBoundary';
 
 const tabs = [
   { to: '/u', label: '拍一拍', Icon: Camera, exact: true },
-  { to: '/u/community', label: '中古圈', Icon: Users },
+  { to: '/u/community', label: 'BOOMER 圈', Icon: Users },
   { to: '/u/about', label: '关于', Icon: Info },
 ];
 

@@ -70,7 +70,7 @@ const MENU_GROUPS: MenuGroup[] = [
   },
   {
     key: 'social', label: '社区', icon: Megaphone, items: [
-      { key: 'community', label: '中古圈', icon: MessageSquare, perm: 'community.moderate' },
+      { key: 'community', label: 'BOOMER 圈', icon: MessageSquare, perm: 'community.moderate' },
       { key: 'corrections', label: '纠错审核', icon: MessageSquareWarning, perm: 'correction.review' },
       { key: 'notifications', label: '系统通知', icon: Megaphone, perm: 'role.manage' },
     ],

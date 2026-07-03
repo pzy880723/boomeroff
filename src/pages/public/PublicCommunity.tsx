@@ -20,7 +20,7 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('zh-CN');
 }
 
-interface Post {
+export interface Post {
   id: string;
   image_url: string | null;
   thumbnail_url: string | null;
@@ -101,7 +101,7 @@ export default function PublicCommunity() {
       <header className="px-1">
         <div className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground/80">Community Feed</div>
         <div className="mt-1 flex items-end justify-between gap-3">
-          <h1 className="font-display text-[24px] leading-tight tracking-tight">中古圈</h1>
+          <h1 className="font-display text-[24px] leading-tight tracking-tight">BOOMER 圈</h1>
           <Link
             to="/u"
             className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full bg-foreground text-background hover:opacity-90 transition-opacity"
@@ -220,7 +220,7 @@ export default function PublicCommunity() {
   );
 }
 
-function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void }) {
+export function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void }) {
   const cardData = {
     name: post.name,
     category: post.category,
@@ -305,7 +305,7 @@ function PostDetailSheet({ post, onClose }: { post: Post; onClose: () => void })
             onClick={onClose}
             className="h-11 rounded-2xl bg-card ring-1 ring-border/60 text-[13px] font-medium hover:bg-muted transition-colors"
           >
-            返回中古圈
+            返回BOOMER 圈
           </button>
           <Link
             to="/u"

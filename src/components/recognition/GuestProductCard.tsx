@@ -14,7 +14,7 @@ const JP_CATS: ReadonlySet<ProductCategory> = new Set([
   'jp_porcelain','incense','anime_toy','otaku_goods','walkman','ccd','media_record','playback_device','game_console',
 ]);
 
-/** 通用化的「编辑式杂志卡」数据结构 —— 既能渲染识别结果，也能渲染中古圈帖子。 */
+/** 通用化的「编辑式杂志卡」数据结构 —— 既能渲染识别结果，也能渲染BOOMER 圈帖子。 */
 export interface EditorialCardData {
   name: string;
   category: ProductCategory;

@@ -303,6 +303,78 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_file_failures: {
+        Row: {
+          attempt_count: number
+          cos_key: string
+          error_message: string | null
+          first_failed_at: string
+          id: string
+          last_attempt_at: string
+          resolved_at: string | null
+          size: number
+          source_bucket: string
+          source_path: string
+        }
+        Insert: {
+          attempt_count?: number
+          cos_key: string
+          error_message?: string | null
+          first_failed_at?: string
+          id?: string
+          last_attempt_at?: string
+          resolved_at?: string | null
+          size?: number
+          source_bucket: string
+          source_path: string
+        }
+        Update: {
+          attempt_count?: number
+          cos_key?: string
+          error_message?: string | null
+          first_failed_at?: string
+          id?: string
+          last_attempt_at?: string
+          resolved_at?: string | null
+          size?: number
+          source_bucket?: string
+          source_path?: string
+        }
+        Relationships: []
+      }
+      backup_file_ledger: {
+        Row: {
+          content_hash: string | null
+          cos_key: string
+          etag: string | null
+          first_backed_up_at: string
+          last_verified_at: string
+          size: number
+          source_bucket: string
+          source_path: string
+        }
+        Insert: {
+          content_hash?: string | null
+          cos_key: string
+          etag?: string | null
+          first_backed_up_at?: string
+          last_verified_at?: string
+          size?: number
+          source_bucket: string
+          source_path: string
+        }
+        Update: {
+          content_hash?: string | null
+          cos_key?: string
+          etag?: string | null
+          first_backed_up_at?: string
+          last_verified_at?: string
+          size?: number
+          source_bucket?: string
+          source_path?: string
+        }
+        Relationships: []
+      }
       backup_runs: {
         Row: {
           cos_key: string | null
@@ -595,6 +667,24 @@ export type Database = {
           },
         ]
       }
+      daily_encouragement: {
+        Row: {
+          created_at: string
+          date: string
+          text: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          text: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          text?: string
+        }
+        Relationships: []
+      }
       daily_knowledge: {
         Row: {
           content: Json
@@ -613,6 +703,39 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+        }
+        Relationships: []
+      }
+      direct_messages: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          image_url: string | null
+          read_at: string | null
+          receiver_id: string
+          sender_id: string
+          shop_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          read_at?: string | null
+          receiver_id: string
+          sender_id: string
+          shop_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          read_at?: string | null
+          receiver_id?: string
+          sender_id?: string
+          shop_id?: string | null
         }
         Relationships: []
       }
@@ -1176,30 +1299,39 @@ export type Database = {
         Row: {
           active: boolean
           body: string
+          category: string | null
           created_at: string
           created_by: string | null
           expires_at: string | null
           id: string
+          image_url: string | null
+          summary: string | null
           title: string
           type: string
         }
         Insert: {
           active?: boolean
           body?: string
+          category?: string | null
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
           id?: string
+          image_url?: string | null
+          summary?: string | null
           title: string
           type?: string
         }
         Update: {
           active?: boolean
           body?: string
+          category?: string | null
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
           id?: string
+          image_url?: string | null
+          summary?: string | null
           title?: string
           type?: string
         }
@@ -2784,6 +2916,20 @@ export type Database = {
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
       gen_short_code: { Args: never; Returns: string }
       gen_voucher_code: { Args: never; Returns: string }
+      get_claim_for_redeem: {
+        Args: { _code: string }
+        Returns: {
+          claimed_at: string
+          code: string
+          expires_at: string
+          id: string
+          recipient_name: string
+          recipient_phone: string
+          redeemed_at: string
+          status: string
+          voucher_id: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]

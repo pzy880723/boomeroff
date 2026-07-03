@@ -47,6 +47,7 @@ type BackupRun = {
     failures?: FailureItem[];
     manifest_key?: string;
     reconcile?: ReconcileMeta;
+    last_tick_at?: string;
   } | null;
 };
 
@@ -96,11 +97,24 @@ export function BackupPanel() {
   const [runs, setRuns] = useState<BackupRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
-  const [continuing, setContinuing] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [nudging, setNudging] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(false);
   const [showFailures, setShowFailures] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
+  const [ledgerCount, setLedgerCount] = useState<number | null>(null);
+  const [pendingFailures, setPendingFailures] = useState<number>(0);
+
+  const loadLedgerStats = useCallback(async () => {
+    const [{ count: lc }, { count: fc }] = await Promise.all([
+      supabase.from('backup_file_ledger').select('*', { count: 'exact', head: true }),
+      supabase.from('backup_file_failures').select('*', { count: 'exact', head: true }).is('resolved_at', null),
+    ]);
+    setLedgerCount(lc ?? 0);
+    setPendingFailures(fc ?? 0);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -112,7 +126,8 @@ export function BackupPanel() {
     setLoading(false);
     if (error) { toast({ title: '加载失败', description: error.message, variant: 'destructive' }); return; }
     setRuns((data ?? []) as BackupRun[]);
-  }, []);
+    loadLedgerStats();
+  }, [loadLedgerStats]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -120,6 +135,7 @@ export function BackupPanel() {
     const t = setInterval(load, 4000);
     return () => clearInterval(t);
   }, [runs, load]);
+
 
   // Realtime toast on new backup notifications
   useEffect(() => {
@@ -139,17 +155,21 @@ export function BackupPanel() {
   const latest = visibleRuns[0];
   const focus = running ?? latest;
 
-  // Self-continue running run
+  // Low-frequency safety nudge: backend normally continues itself; this only
+  // wakes a run that has not written progress for about a minute.
   useEffect(() => {
-    if (!running || continuing) return;
+    if (!running || nudging) return;
+    const lastTick = running.metadata?.last_tick_at ?? running.started_at;
+    const staleMs = Date.now() - new Date(lastTick).getTime();
+    if (staleMs < 55_000) return;
     const t = window.setTimeout(async () => {
-      setContinuing(true);
+      setNudging(true);
       try {
-        await supabase.functions.invoke('backup-all-to-cos', { body: { trigger_source: 'manual', continue_run: true } });
-      } finally { setContinuing(false); load(); }
-    }, 2500);
+        await supabase.functions.invoke('backup-all-to-cos', { body: { trigger_source: 'manual' } });
+      } finally { setNudging(false); load(); }
+    }, 10_000);
     return () => window.clearTimeout(t);
-  }, [running, continuing, load]);
+  }, [running, nudging, load]);
 
   const trigger = async () => {
     setTriggering(true);
@@ -163,12 +183,34 @@ export function BackupPanel() {
     } finally { setTriggering(false); load(); }
   };
 
+  const stopRunning = async () => {
+    setStopping(true);
+    try {
+      const { error } = await supabase.functions.invoke('backup-all-to-cos', { body: { action: 'cancel_running' } });
+      if (error) throw error;
+      toast({ title: '已停止备份', description: '当前卡住的备份已结束，可以重新开始。' });
+    } catch (e) {
+      toast({ title: '停止失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
+    } finally { setStopping(false); load(); }
+  };
+
+  const restartFresh = async () => {
+    setTriggering(true);
+    try {
+      const { error } = await supabase.functions.invoke('backup-all-to-cos', { body: { action: 'start_fresh', trigger_source: 'manual' } });
+      if (error) throw error;
+      toast({ title: '已重新开始', description: '旧备份已停止，新备份会从头检查并继续跑。' });
+      setTimeout(load, 500);
+    } catch (e) {
+      toast({ title: '重新开始失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
+    } finally { setTriggering(false); load(); }
+  };
+
   const retryFailed = async () => {
-    if (!focus) return;
     setRetrying(true);
     try {
       const { data, error } = await supabase.functions.invoke('backup-all-to-cos', {
-        body: { action: 'retry_failed', run_id: focus.id },
+        body: { action: 'retry_failed' },
       });
       if (error) throw error;
       const d = data as { queued?: number };
@@ -177,6 +219,21 @@ export function BackupPanel() {
       toast({ title: '补传失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
     } finally { setRetrying(false); load(); }
   };
+
+  const bootstrapLedger = async () => {
+    setBootstrapping(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('backup-all-to-cos', {
+        body: { action: 'bootstrap_ledger' },
+      });
+      if (error) throw error;
+      const d = data as { ledger_rows?: number };
+      toast({ title: '台账已同步', description: `已录入 ${d?.ledger_rows ?? 0} 个已成功备份的文件，后续不再重复上传。` });
+    } catch (e) {
+      toast({ title: '同步失败', description: humanizeError(e instanceof Error ? e.message : String(e)), variant: 'destructive' });
+    } finally { setBootstrapping(false); load(); }
+  };
+
 
   const reconcile = async () => {
     if (!focus) return;
@@ -224,12 +281,41 @@ export function BackupPanel() {
           <p className="text-xs text-muted-foreground mt-1">
             系统每天凌晨会自动把全部数据保存到 <span className="font-medium text-foreground">你自己的腾讯云（上海）</span>。
           </p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            已启用腾讯云 <span className="font-medium text-foreground">全球加速</span> 上传通道，跨境延迟已优化。
+          </p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
           <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
           刷新
         </Button>
       </div>
+
+      {/* Persistent ledger stats — the truth source of "已成功备份" */}
+      <Card className="p-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-xs">
+          <span className="text-muted-foreground">累计已备份文件：</span>
+          <span className="font-semibold text-foreground tabular-nums">{ledgerCount ?? '—'}</span>
+          <span className="mx-2 text-muted-foreground/60">·</span>
+          <span className="text-muted-foreground">待重试失败：</span>
+          <span className={`font-semibold tabular-nums ${pendingFailures > 0 ? 'text-destructive' : 'text-foreground'}`}>{pendingFailures}</span>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            台账会记录每个已成功上传到腾讯云的文件，下次备份会直接跳过；只有台账里没有或大小对不上的文件才会重新上传。
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={retryFailed} disabled={retrying || pendingFailures === 0}>
+            <RotateCw className={`w-4 h-4 mr-1.5 ${retrying ? 'animate-spin' : ''}`} />
+            重试全部失败{pendingFailures > 0 ? `（${pendingFailures}）` : ''}
+          </Button>
+          <Button size="sm" variant="outline" onClick={bootstrapLedger} disabled={bootstrapping}>
+            <FileCheck2 className={`w-4 h-4 mr-1.5 ${bootstrapping ? 'animate-spin' : ''}`} />
+            同步已备份清单
+          </Button>
+        </div>
+      </Card>
+
+
 
       {/* Focus card: current run or last run */}
       {focus && (
@@ -332,9 +418,15 @@ export function BackupPanel() {
             <Button size="sm" onClick={trigger} disabled={triggering || Boolean(running)}>
               {triggering || running ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />备份中…</> : '立即备份'}
             </Button>
-            <Button size="sm" variant="outline" onClick={retryFailed} disabled={retrying || Boolean(running) || failures.length === 0}>
-              <RotateCw className={`w-4 h-4 mr-1.5 ${retrying ? 'animate-spin' : ''}`} />
-              只重试失败文件{failures.length > 0 ? `（${failures.length}）` : ''}
+            {running && (
+              <Button size="sm" variant="destructive" onClick={stopRunning} disabled={stopping}>
+                {stopping ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <XCircle className="w-4 h-4 mr-1.5" />}
+                停止当前备份
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={restartFresh} disabled={triggering || stopping}>
+              <RefreshCw className={`w-4 h-4 mr-1.5 ${triggering ? 'animate-spin' : ''}`} />
+              停止并重新开始
             </Button>
             <Button size="sm" variant="outline" onClick={reconcile} disabled={reconciling || Boolean(running)}>
               <FileCheck2 className={`w-4 h-4 mr-1.5 ${reconciling ? 'animate-spin' : ''}`} />

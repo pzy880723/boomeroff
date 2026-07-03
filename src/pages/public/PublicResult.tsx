@@ -159,7 +159,7 @@ export default function PublicResult() {
       if (error) throw new Error((error as any).message || '发布失败');
       if (data?.error) throw new Error(data.error);
       setShared(true);
-      toast.success('已匿名发布到中古圈', { description: '其他人现在可以看到你的发现' });
+      toast.success('已匿名发布到BOOMER 圈', { description: '其他人现在可以看到你的发现' });
     } catch (e: any) {
       toast.error(e?.message || '发布失败，请稍后再试');
     } finally {
@@ -326,7 +326,7 @@ export default function PublicResult() {
               让更多人看见这件好物
             </h3>
             <p className="mt-2 text-[12.5px] leading-relaxed opacity-85 max-w-[24rem]">
-              以「<span className="font-medium opacity-100">游客</span>」身份匿名发布到「中古圈」，
+              以「<span className="font-medium opacity-100">游客</span>」身份匿名发布到「BOOMER 圈」，
               不会留下任何账号信息，也不必登录。
             </p>
           </div>
@@ -343,14 +343,14 @@ export default function PublicResult() {
             ) : (
               <Share2 className="w-4 h-4" />
             )}
-            {shared ? '已分享到中古圈' : '匿名分享到中古圈'}
+            {shared ? '已分享到BOOMER 圈' : '匿名分享到BOOMER 圈'}
           </Button>
           {shared && (
             <Link
               to="/u/community"
               className="block text-center text-xs underline-offset-2 hover:underline opacity-90"
             >
-              去中古圈看看 →
+              去BOOMER 圈看看 →
             </Link>
           )}
         </div>
@@ -377,7 +377,7 @@ export default function PublicResult() {
           >
             <Link to="/u/community">
               <Aperture className="w-4 h-4 text-accent" />
-              <span className="text-[12.5px] font-medium">逛中古圈</span>
+              <span className="text-[12.5px] font-medium">逛BOOMER 圈</span>
             </Link>
           </Button>
         </div>

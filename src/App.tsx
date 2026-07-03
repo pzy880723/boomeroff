@@ -18,6 +18,9 @@ const OfficialLibrary = lazy(() => import("./pages/OfficialLibrary"));
 const OfficialDetail = lazy(() => import("./pages/OfficialDetail"));
 const MyLibrary = lazy(() => import("./pages/MyLibrary"));
 const Community = lazy(() => import("./pages/Community"));
+const Home = lazy(() => import("./pages/Home"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const MessagesConversation = lazy(() => import("./pages/MessagesConversation"));
 const Me = lazy(() => import("./pages/Me"));
 const History = lazy(() => import("./pages/History"));
 const Portal = lazy(() => import("./pages/Portal"));
@@ -30,6 +33,8 @@ const PortalLoadingLazy = lazy(() =>
 const Invite = lazy(() => import("./pages/Invite"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CheckInHistory = lazy(() => import("./pages/CheckInHistory"));
+const OkrList = lazy(() => import("./pages/OkrList"));
+const OkrDetail = lazy(() => import("./pages/OkrDetail"));
 
 const MySop = lazy(() => import("./pages/MySop"));
 const MyQa = lazy(() => import("./pages/MyQa"));
@@ -48,6 +53,8 @@ import PublicResult from "./pages/public/PublicResult";
 import PublicCommunity from "./pages/public/PublicCommunity";
 import PublicAbout from "./pages/public/PublicAbout";
 import { PublicErrorBoundary } from "./components/system/PublicErrorBoundary";
+import { ScrollRestoration } from "./components/system/ScrollRestoration";
+
 
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
@@ -81,20 +88,24 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <ScrollRestoration />
           <Suspense fallback={<RouteFallback />}>
+
             <Routes>
               {/* Tabbed pages with bottom navigation */}
               <Route element={<MainLayout />}>
-                <Route path="/" element={<Navigate to="/scan" replace />} />
+                <Route path="/" element={<Home />} />
                 <Route path="/scan" element={<Scan />} />
                 <Route path="/library" element={<OfficialLibrary />} />
                 <Route path="/my-library" element={<MyLibrary />} />
+                <Route path="/notifications" element={<Notifications />} />
                 <Route path="/community" element={<Community />} />
                 <Route path="/me" element={<Me />} />
               </Route>
 
               {/* Standalone pages without bottom tab */}
               <Route path="/library/:id" element={<OfficialDetail />} />
+              <Route path="/messages/:peerId" element={<MessagesConversation />} />
               <Route path="/history" element={<History />} />
               <Route
                 path="/portal"
@@ -110,6 +121,9 @@ const App = () => {
               <Route path="/invite/:code" element={<Invite />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/me/check-ins" element={<CheckInHistory />} />
+              <Route path="/store/okr" element={<OkrList />} />
+              <Route path="/store/okr/:id" element={<OkrDetail />} />
+              
               
               <Route path="/me/sop" element={<MySop />} />
               <Route path="/me/qa" element={<MyQa />} />

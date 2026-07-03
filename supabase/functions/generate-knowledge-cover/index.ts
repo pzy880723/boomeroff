@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
     const fullPrompt = `Square product cover. Subject: ${cleaned}. On plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo.`;
     const fallbackPrompt = `A ${categoryHint} on plain white background, soft natural light, centered, photorealistic, no text, no watermark, no logo.`;
 
-    const callImage = async (model: string, body: string, timeoutMs = 18000) => {
+    const callImage = async (model: string, body: string, timeoutMs = 55000) => {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
@@ -109,11 +109,12 @@ Deno.serve(async (req) => {
       return undefined;
     };
 
-    // 依次尝试：新模型完整 prompt → 旧模型完整 prompt → 新模型简化 prompt
+    // 依次尝试:新模型完整 prompt → 旧模型完整 prompt → 旧模型简化 prompt
+    // 模型 id 必须与 Lovable 白名单一致(不能带 -preview 后缀)
     const attempts: Array<{ model: string; body: string; label: string }> = [
-      { model: "google/gemini-3.1-flash-image-preview", body: fullPrompt, label: "v3.1 full" },
+      { model: "google/gemini-3.1-flash-image", body: fullPrompt, label: "v3.1 full" },
       { model: "google/gemini-2.5-flash-image", body: fullPrompt, label: "v2.5 full" },
-      { model: "google/gemini-3.1-flash-image-preview", body: fallbackPrompt, label: "v3.1 fallback" },
+      { model: "google/gemini-2.5-flash-image", body: fallbackPrompt, label: "v2.5 fallback" },
     ];
 
     let dataUrl: string | undefined;

@@ -149,21 +149,21 @@ export function SchedulePanel() {
       {/* Header */}
       <div className="px-5 pt-5 pb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-accent-soft flex items-center justify-center shrink-0">
-            <CalendarDays className="w-5 h-5 text-primary" />
+          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+            <CalendarDays className="w-5 h-5 text-foreground/70" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-primary font-bold text-lg leading-tight">我的排班</h2>
+            <h2 className="text-foreground font-bold text-lg leading-tight">我的排班</h2>
             <p className="text-muted-foreground text-xs mt-0.5">
-              未来 30 天上班 <span className="text-primary font-bold">{workDays}</span> 天
+              未来 30 天上班 <span className="text-foreground font-bold">{workDays}</span> 天
             </p>
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[10px] text-accent font-bold tracking-widest" style={{ fontFamily: 'Oswald, sans-serif' }}>
+          <p className="text-[10px] text-muted-foreground font-bold tracking-widest">
             OFFICIAL SCHEDULE
           </p>
-          <p className="text-muted-foreground text-[10px] italic">VINTAGE ARCHIVE</p>
+          <p className="text-muted-foreground/70 text-[10px] italic">VINTAGE ARCHIVE</p>
         </div>
       </div>
 
@@ -218,11 +218,11 @@ function TicketRow({ item, index, peersByCode }: {
   const stubBg = isTomorrow
     ? 'bg-gradient-primary'
     : !isWorking
-      ? 'bg-secondary'
-      : 'bg-accent-soft';
+      ? 'bg-muted'
+      : 'bg-muted';
 
-  const stubFg = isTomorrow ? 'text-primary-foreground' : 'text-primary';
-  const stubAccent = isTomorrow ? 'text-primary-foreground/70' : 'text-muted-foreground';
+  const stubFg = isTomorrow ? 'text-primary-foreground' : 'text-foreground';
+  const stubAccent = isTomorrow ? 'text-primary-foreground/75' : 'text-muted-foreground';
 
 
   const [, m, d] = date.split('-');
@@ -230,9 +230,9 @@ function TicketRow({ item, index, peersByCode }: {
   const wd = weekdayLabel(date);
 
   const codeColor = (c: string) =>
-    c === 'A' ? 'text-accent' :
-    c === 'B' ? 'text-accent' :
-    c === 'C' ? 'text-destructive' :
+    c === 'A' ? 'text-foreground' :
+    c === 'B' ? 'text-foreground' :
+    c === 'C' ? 'text-foreground' :
     'text-muted-foreground';
 
   return (
@@ -271,19 +271,19 @@ function TicketRow({ item, index, peersByCode }: {
             {isWorking ? (
               <>
                 <ShiftBadge code={shift!.code} />
-                <span className="text-primary text-sm font-bold tabular-nums tracking-tight whitespace-nowrap">
+                <span className="text-foreground text-sm font-bold tabular-nums tracking-tight whitespace-nowrap">
                   {formatShiftTime(shift!.start_time, shift!.end_time)}
                 </span>
               </>
             ) : (
               <>
-                <span className="px-3 py-1 rounded bg-secondary text-secondary-foreground text-xs font-bold tracking-widest">
+                <span className="px-3 py-1 rounded bg-muted text-muted-foreground text-xs font-bold tracking-widest">
                   休息
                 </span>
               </>
             )}
           </div>
-          <span className="text-primary text-xs font-medium truncate max-w-[45%] text-right shrink-0">
+          <span className="text-muted-foreground text-xs font-medium truncate max-w-[45%] text-right shrink-0">
             {shopName || (isWorking ? '—' : '')}
           </span>
         </div>
@@ -291,10 +291,11 @@ function TicketRow({ item, index, peersByCode }: {
         {/* row 2: peers by shift */}
         {peersByCode.length > 0 && (
           <div className="flex flex-col gap-0.5 pt-0.5 border-t border-dashed border-border/60">
+            <div className="text-[10px] text-muted-foreground/70 tracking-wider">同事在岗</div>
             {peersByCode.map((g) => (
               <div key={g.code} className="text-[11px] text-muted-foreground leading-snug">
                 <span className={cn('font-bold mr-1', codeColor(g.code))}>{g.code} 班</span>
-                <span className="text-primary/80">· {g.names.join('、')}</span>
+                <span className="text-foreground/70">· {g.names.join('、')}</span>
               </div>
             ))}
           </div>
@@ -307,10 +308,10 @@ function TicketRow({ item, index, peersByCode }: {
 function ShiftBadge({ code }: { code: string }) {
   const u = code.toUpperCase();
   const cls =
-    u === 'A' ? 'bg-accent text-accent-foreground' :
-    u === 'B' ? 'bg-primary text-accent border border-accent/40' :
-    u === 'C' ? 'bg-destructive/85 text-destructive-foreground' :
-    'bg-secondary text-secondary-foreground';
+    u === 'A' ? 'bg-foreground text-background' :
+    u === 'B' ? 'bg-muted text-foreground border border-border' :
+    u === 'C' ? 'bg-foreground/80 text-background' :
+    'bg-muted text-muted-foreground';
   return (
     <span className={cn(
       'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
