@@ -581,7 +581,7 @@ export default function Notifications() {
         )}
 
         {tab === 'message' ? (
-          <StaffMessagesList userId={user.id} />
+          <MessagesTabs userId={user.id} />
         ) : loading && currentListItems.length === 0 ? (
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
         ) : currentListItems.length === 0 ? (
