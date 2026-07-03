@@ -2982,6 +2982,13 @@ export type Database = {
         Args: { _amount: number; _user_id: string }
         Returns: number
       }
+      admin_list_user_emails: {
+        Args: { _user_ids: string[] }
+        Returns: {
+          email: string
+          user_id: string
+        }[]
+      }
       admin_update_user_phone: {
         Args: { _phone: string; _real_name: string; _user_id: string }
         Returns: undefined
