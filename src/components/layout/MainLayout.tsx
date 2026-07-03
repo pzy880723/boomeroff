@@ -44,6 +44,7 @@ export function MainLayout() {
           <Suspense fallback={null}>
             <FloatingDashboard />
             <LevelUpWatcher />
+            <PushBootstrap />
           </Suspense>
         </div>
       </TasksProvider>
