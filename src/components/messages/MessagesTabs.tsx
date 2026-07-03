@@ -128,17 +128,20 @@ function ChatList({ userId }: { userId: string }) {
     }
     const allIds = Array.from(new Set([...coworkerIds, ...lastByPeer.keys()]));
     let profiles: any[] = [];
+    let staffMap = new Map<string, string>();
     if (allIds.length) {
-      const { data } = await supabase.from('profiles')
-        .select('user_id, display_name, avatar_url')
-        .in('user_id', allIds);
-      profiles = (data as any[]) || [];
+      const [{ data: pf }, { data: sp2 }] = await Promise.all([
+        supabase.from('profiles').select('user_id, display_name, avatar_url').in('user_id', allIds),
+        supabase.from('staff_profiles').select('user_id, real_name').in('user_id', allIds),
+      ]);
+      profiles = (pf as any[]) || [];
+      for (const s of (sp2 as any[]) || []) if (s.real_name) staffMap.set(s.user_id, s.real_name);
     }
     const list: StaffPeer[] = profiles.map(p => {
       const l = lastByPeer.get(p.user_id);
       return {
         user_id: p.user_id,
-        display_name: p.display_name,
+        display_name: staffMap.get(p.user_id) || p.display_name,
         avatar_url: p.avatar_url,
         last_message: l?.text || null,
         last_at: l?.at || null,
