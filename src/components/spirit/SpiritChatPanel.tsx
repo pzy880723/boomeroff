@@ -302,6 +302,7 @@ export function SpiritChatPanel({ chat, taskCard }: { chat?: SpiritChatApi; task
     <div className="relative flex flex-col h-full">
       {/* 消息流 */}
       <div ref={scrollerRef} className="relative flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-2">
+        {taskCard}
         {messages.length === 0 ? (
           <EmptyState onPickTopic={(t) => { setTopicFilter(t); }} onQuickAsk={(p) => handleChip(p)} />
         ) : (
