@@ -216,7 +216,11 @@ const MAX_FILE_MB = 10;
 
 type SpiritChatApi = ReturnType<typeof useSpiritChat>;
 
-export function SpiritChatPanel({ chat, taskCard }: { chat?: SpiritChatApi; taskCard?: React.ReactNode } = {}) {
+export function SpiritChatPanel({ chat, taskCard, tasks }: {
+  chat?: SpiritChatApi;
+  taskCard?: React.ReactNode;
+  tasks?: ReturnType<typeof import('@/hooks/useTasks').useTasks>;
+} = {}) {
   const fallback = useSpiritChat();
   const { messages, status, send, stop } = chat ?? fallback;
   const { toast } = useToast();
@@ -321,6 +325,25 @@ export function SpiritChatPanel({ chat, taskCard }: { chat?: SpiritChatApi; task
                       ? status === 'uploading' ? 'uploading' : 'thinking'
                       : null
                   }
+                  reward={m.meta?.reward}
+                  onClaimReward={async () => {
+                    if (!tasks || !m.meta?.reward || m.meta.reward.claimed) return;
+                    const items = m.meta.reward.items;
+                    let total = 0;
+                    for (const it of items) {
+                      const r = it.kind === 'event'
+                        ? await tasks.claimEvent(it.id)
+                        : await tasks.claimDaily(it.id as any);
+                      if (r.ok && r.amount) total += r.amount;
+                    }
+                    if (chat?.patchMessage) {
+                      chat.patchMessage(m.id, { meta: { reward: { items, claimed: true } } });
+                    }
+                    if (total > 0) {
+                      const { toast } = await import('sonner');
+                      toast.success(`+${total} 经验已入袋 ✨`);
+                    }
+                  }}
                 />
               );
             })}
@@ -570,7 +593,17 @@ function MessageBubble({
   images,
   streaming,
   hintMode,
-}: { role: 'user' | 'assistant'; content: string; images?: string[]; streaming: boolean; hintMode?: 'thinking' | 'uploading' | null }) {
+  reward,
+  onClaimReward,
+}: {
+  role: 'user' | 'assistant';
+  content: string;
+  images?: string[];
+  streaming: boolean;
+  hintMode?: 'thinking' | 'uploading' | null;
+  reward?: { items: { kind: 'event' | 'daily'; id: string; title: string; amount: number }[]; claimed?: boolean };
+  onClaimReward?: () => void;
+}) {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
@@ -599,6 +632,7 @@ function MessageBubble({
       </div>
     );
   }
+  const totalExp = reward?.items.reduce((s, i) => s + i.amount, 0) ?? 0;
   return (
     <div className="flex items-start gap-2">
       <SpiritMascot size={36} flat />
@@ -627,6 +661,35 @@ function MessageBubble({
               <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent)/0.7)] animate-bounce" style={{ animationDelay: '240ms' }} />
             </div>
             {hintMode && <ThinkingHint mode={hintMode} />}
+          </div>
+        )}
+
+        {reward && reward.items.length > 0 && (
+          <div className="mt-2 p-2.5 rounded-xl bg-[hsl(var(--accent)/0.1)] border border-[hsl(var(--accent)/0.3)] flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-[11.5px] font-medium text-[hsl(var(--primary-foreground)/0.9)] truncate">
+                {reward.items.length === 1
+                  ? reward.items[0].title
+                  : `共 ${reward.items.length} 项奖励`}
+              </div>
+              <div className="text-[10px] text-[hsl(var(--primary-foreground)/0.55)] tabular-nums">
+                +{totalExp} 经验
+              </div>
+            </div>
+            {reward.claimed ? (
+              <span className="shrink-0 h-7 px-2.5 rounded-md text-[11px] font-semibold bg-white/10 text-[hsl(var(--primary-foreground)/0.7)] inline-flex items-center gap-1">
+                已入袋 ✓
+              </span>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                onClick={onClaimReward}
+                className="shrink-0 h-7 px-3 text-[11px] font-semibold whitespace-nowrap bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] hover:bg-[hsl(var(--accent))]/90"
+              >
+                领取 +{totalExp}
+              </Button>
+            )}
           </div>
         )}
       </div>

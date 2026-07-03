@@ -3,6 +3,8 @@ import { Outlet } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { BottomTabBar } from './BottomTabBar';
 import { ErrorBoundary } from '@/components/system/ErrorBoundary';
+import { EdgeSwipeBack } from '@/components/system/EdgeSwipeBack';
+import { PullToRefresh } from '@/components/system/PullToRefresh';
 import { lazyWithRetry as lazy } from '@/lib/lazyWithRetry';
 import { NotificationsProvider } from '@/hooks/useNotifications';
 import { TasksProvider } from '@/hooks/useTasks';
@@ -41,6 +43,8 @@ export function MainLayout() {
             </ErrorBoundary>
           </main>
           <BottomTabBar />
+          <EdgeSwipeBack />
+          <PullToRefresh />
           <Suspense fallback={null}>
             <FloatingDashboard />
             <LevelUpWatcher />
