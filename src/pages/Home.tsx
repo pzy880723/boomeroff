@@ -16,6 +16,13 @@ import { HomeFeedTabs } from '@/components/home/HomeFeedTabs';
 import bannerDefault from '@/assets/banner-default.jpg';
 import brandWordmarkUrl from '@/assets/boomer-go-wordmark.png';
 import xhsIcon from '@/assets/icon-xhs-activity.png';
+import { addDaysISO, formatShiftTime, shortDateLabel, weekdayLabel } from '@/lib/scheduleUtils';
+
+interface ShiftInfo {
+  work_date: string;
+  shift_code: string;
+  shift?: { name: string; start_time: string; end_time: string; color: string | null } | null;
+}
 
 interface ActiveActivity { id: string; name: string; cover_url: string | null; ends_at: string | null; voucher_id?: string | null }
 interface StoreOkr {
@@ -51,7 +58,8 @@ export default function Home() {
 
   const [name, setName] = useState<string>('店员');
   const [encouragement, setEncouragement] = useState<string>('今天也把每一位进店的客人当作朋友。');
-  const [nextShift, setNextShift] = useState<{ work_date: string; shift_code: string } | null>(null);
+  const [todayShift, setTodayShift] = useState<ShiftInfo | null>(null);
+  const [tomorrowShift, setTomorrowShift] = useState<ShiftInfo | null>(null);
   const [act, setAct] = useState<ActiveActivity | null>(null);
   const [okrs, setOkrs] = useState<StoreOkr[]>([]);
   
@@ -62,25 +70,35 @@ export default function Home() {
   useEffect(() => {
     if (!user) return;
     const today = todayShanghai();
+    const tomorrow = addDaysISO(today, 1);
 
     void (async () => {
       try {
-        const [{ data: profile }, { data: sp }, { data: sh }, { data: chk }] =
+        const [{ data: profile }, { data: sp }, { data: sh }, { data: shifts }, { data: chk }] =
           await Promise.all([
             supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle(),
             supabase.from('staff_profiles' as any).select('real_name, shop_id').eq('user_id', user.id).maybeSingle(),
             supabase.from('shift_schedules' as any)
               .select('work_date, shift_code')
               .eq('user_id', user.id)
-              .gte('work_date', today)
-              .order('work_date', { ascending: true })
-              .limit(1)
-              .maybeSingle(),
+              .in('work_date', [today, tomorrow]),
+            supabase.from('shop_shifts' as any).select('code, name, start_time, end_time, color'),
             supabase.from('user_check_ins').select('id').eq('user_id', user.id).eq('check_in_date', today).maybeSingle(),
           ]);
 
         setName((sp as any)?.real_name || profile?.display_name || user.email?.split('@')[0] || '店员');
-        setNextShift((sh as any) ?? null);
+        const shiftMap = new Map<string, any>();
+        ((shifts as any[]) || []).forEach(s => shiftMap.set(s.code, s));
+        const rows = ((sh as any[]) || []);
+        const buildInfo = (row: any): ShiftInfo => ({
+          work_date: row.work_date,
+          shift_code: row.shift_code,
+          shift: shiftMap.get(row.shift_code) || null,
+        });
+        const tRow = rows.find(r => r.work_date === today);
+        const mRow = rows.find(r => r.work_date === tomorrow);
+        setTodayShift(tRow ? buildInfo(tRow) : null);
+        setTomorrowShift(mRow ? buildInfo(mRow) : null);
         setCheckedToday(!!chk);
 
         const shopId = (sp as any)?.shop_id as string | undefined;
@@ -242,27 +260,75 @@ export default function Home() {
           )}
         </Link>
 
-        {/* 我的排班 */}
+        {/* 我的排班 - 今日 + 明日 */}
         <SectionCard
           title="我的排班"
           icon={<CalendarDays className="w-4 h-4 text-primary" />}
           action={<Link to="/me" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>}
         >
-          {nextShift ? (
+          {!todayShift && !tomorrowShift ? (
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">{nextShift.work_date}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">下一次班次</p>
-              </div>
-              <Badge variant="secondary" className="text-sm px-3 py-1">{nextShift.shift_code}</Badge>
+              <p className="text-sm text-muted-foreground">今明两日暂无排班</p>
+              <Link to="/me" className="text-xs text-primary flex items-center">去查看 <ChevronRight className="w-3 h-3" /></Link>
             </div>
           ) : (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">近期暂无排班</p>
-              <Link to="/me" className="text-xs text-primary flex items-center">去查看 <ChevronRight className="w-3 h-3" /></Link>
+            <div className="space-y-2">
+              {/* 今日：次要 */}
+              <div className="flex items-center justify-between px-1 py-0.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[10px] font-semibold text-muted-foreground tracking-wide">今日</span>
+                  <span className="text-[10px] text-muted-foreground/70">{shortDateLabel(todayShanghai())} {weekdayLabel(todayShanghai())}</span>
+                </div>
+                {todayShift?.shift ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {formatShiftTime(todayShift.shift.start_time, todayShift.shift.end_time)}
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] px-1.5 py-0 h-5 text-white border-0"
+                      style={{ background: todayShift.shift.color || 'hsl(var(--muted-foreground))' }}
+                    >
+                      {todayShift.shift_code}
+                    </Badge>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">休息</span>
+                )}
+              </div>
+
+              {/* 明日：主要突出 */}
+              <div className="rounded-xl border-2 border-primary/40 bg-primary/5 px-3 py-2.5 flex items-center justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-primary tracking-wide">明日</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {shortDateLabel(addDaysISO(todayShanghai(), 1))} {weekdayLabel(addDaysISO(todayShanghai(), 1))}
+                    </span>
+                  </div>
+                  {tomorrowShift?.shift ? (
+                    <p className="text-base font-bold tabular-nums text-foreground mt-0.5">
+                      {formatShiftTime(tomorrowShift.shift.start_time, tomorrowShift.shift.end_time)}
+                    </p>
+                  ) : (
+                    <p className="text-base font-bold text-muted-foreground mt-0.5">休息一天</p>
+                  )}
+                </div>
+                {tomorrowShift?.shift ? (
+                  <Badge
+                    className="text-base px-3 py-1 text-white border-0 shrink-0"
+                    style={{ background: tomorrowShift.shift.color || 'hsl(var(--primary))' }}
+                  >
+                    {tomorrowShift.shift_code}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-sm px-3 py-1 shrink-0">休</Badge>
+                )}
+              </div>
             </div>
           )}
         </SectionCard>
+
 
 
         {/* 正在进行的活动（横向条幅） */}
