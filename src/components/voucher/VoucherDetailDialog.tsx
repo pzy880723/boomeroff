@@ -220,6 +220,8 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
             )}
             {loading ? (
               <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+            ) : claimsError ? (
+              <PermissionErrorState compact error={claimsError} onRetry={loadClaims} />
             ) : claims.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-3">暂无</p>
             ) : (() => {
