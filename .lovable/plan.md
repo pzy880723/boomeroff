@@ -1,32 +1,44 @@
-## 现象判断
-登录成功后不是账号没登录上，而是首页首屏在认证加载/懒加载/页面异常之间没有稳定兜底：有些页面在 `authLoading` 时直接 `return null`，所以用户看到纯白；同时登录完成后立即跳首页时，角色/权限和首页 Provider 还在异步初始化，容易第一次进入卡住，刷新或点其他页面后才恢复。
+## 目标
+后台用户管理增加手机号显示与补录、缺失手机号强制补录、以及登录/操作日志。
 
-## 修复计划
-1. **统一登录后的认证就绪状态**
-   - 调整 `useAuth`：明确区分“会话恢复中”和“角色加载中”。
-   - 防止 `SIGNED_IN`、`INITIAL_SESSION` 并发触发时互相跳过导致 loading 状态不稳定。
-   - 登录成功后先等认证状态稳定，再进入首页。
+## 一、后台用户表增加手机号列
+`src/components/admin/UserTable.tsx`:
+- `UserWithRole.profile` 增加 `phone`；`fetchUsers` 的 `profiles` 查询加 `phone`。
+- 用户列展示手机号（若无则显示"未填写"红色标签）。
+- 新增筛选 Tab：`missing_phone` 未填写手机号。
+- `StaffProfileDialog` 内加入"手机号"字段，允许管理员直接补录（调用现有 `update_my_phone_realname` 需改造为 admin 版，或新增 RPC `admin_update_user_phone(_user_id, _phone, _real_name)`）。
 
-2. **去掉首页/关键页的白屏返回**
-   - 把 `Home`、`Notifications`、`MessagesConversation`、`OkrList`、`OkrDetail` 这类 `if (authLoading) return null` 改成中文加载页。
-   - 这样即使网络慢或权限查询慢，也不会白屏。
+`CreateUserDialog.tsx`：已支持手机号（保持）。
 
-3. **登录跳转固定到首页**
-   - 账号密码登录、手机验证码登录成功后都跳 `/`。
-   - 如果当前在其它页面登录，也不再默认回拍照页或旧路径。
+## 二、强制未填手机号用户补录
+新建 `src/components/auth/RequirePhoneGate.tsx`：
+- 登录后从 `profiles` 读取当前用户 `phone`；若为空则全屏遮罩弹窗，要求输入手机号 + 验证码（复用现有 `phone-login-send-otp` 的短信发码逻辑，但需要新增 `bind-phone-send-otp` / `bind-phone-verify` 边缘函数，写入当前登录用户的 `profiles.phone`）。
+- 无法关闭，直到验证成功。
+- 挂载在 `App.tsx` 已登录路由树最外层。
 
-4. **首页数据加载失败不阻塞首屏**
-   - 首页的 profile、排班、活动、OKR、打卡数据查询分别做容错。
-   - 某个表 RLS/RPC 权限慢或报错时，只显示空状态/中文提示，不让整个首页卡住。
+## 三、登录 / 操作日志
+新建 `audit_logs` 表（迁移）：
+```
+id, user_id, actor_role_code, action(text), target_type, target_id, 
+detail(jsonb), ip, user_agent, created_at
+```
+带 GRANT + RLS：仅管理员可读（`user_has_permission(auth.uid(),'user.manage')` 之类），任何认证用户可 INSERT 自己的记录；service_role 全权。
 
-5. **修正兜底页“返回首页”路径**
-   - 当前错误兜底页的“返回首页”实际跳 `/scan`，这会造成用户以为又跳错页面。
-   - 改成 `/`，并把文案保持中文。
+写入点：
+- 登录：`useAuth.tsx` 的 signIn 成功回调，以及 `phone-login-verify-otp` 边缘函数返回后写 `action='login'`（渠道区分 password/phone）。
+- 关键管理操作：`UserTable` 的 handleSuspend / handleDelete / handleRoleChange / 重置密码 / 编辑资料 / 创建用户 后写入。
+- 封装 `src/lib/audit.ts` 提供 `logAudit(action, detail)`。
 
-6. **顺手清理一个明确控制台警告**
-   - `Home.tsx` 里 React 不识别 `fetchPriority`，改成兼容写法，避免干扰判断真正错误。
+后台查询页：在 `Portal.tsx` 新增 Tab "操作日志"（`src/components/admin/AuditLogTable.tsx`）：
+- 支持按用户、动作类型、日期区间筛选，分页查询。
+- 展示时间、用户（真实姓名/手机号）、动作、目标、IP。
 
-## 验证方式
-- 用预览登录一次，确认第一次登录后直接进入首页，不再白屏。
-- 刷新首页、通知页、我的页，确认慢加载时显示加载态。
-- 检查控制台没有新的认证/RLS/RPC 报错导致页面空白。
+## 四、技术细节
+- 迁移：创建 `audit_logs` + 索引 (user_id, created_at desc)、(action, created_at desc)。
+- 新增 RPC `admin_update_user_phone(_user_id uuid, _phone text, _real_name text)`：SECURITY DEFINER，校验调用者具有 `user.create` 权限，唯一性校验。
+- 新增边缘函数 `bind-phone-send-otp` 与 `bind-phone-verify`：写入 `phone_login_otp` 表；验证成功后调用 `update_my_phone_realname` 或直接更新 `profiles.phone`。
+
+## 验证
+- 后台表格看到手机号列、未填写筛选。
+- 用无手机号账号登录 → 立即弹出补录框，验证通过后跳首页。
+- 完成登录、暂停用户等操作 → "操作日志" Tab 出现记录。
