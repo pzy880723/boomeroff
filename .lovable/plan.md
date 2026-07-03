@@ -1,45 +1,35 @@
-## 诊断结果
+# 修复线上发布后白屏（Cannot read properties of undefined (reading 'forwardRef')）
 
-页面本身没有前端编译错误，首页在本地可以渲染；真正的异常来自后端接口：
+## 问题
+- 预览环境（dev）正常，发布后 https://boomeroff.lovable.app/ 是空白页。
+- Playwright 抓到 pageerror：`Cannot read properties of undefined (reading 'forwardRef')`，`#root` 为空。
+- 原因：`vite.config.ts` 的 `manualChunks` 把 `react / react-dom / scheduler` 拆到 `react-vendor`，同时把 `@radix-ui` 拆到 `radix` chunk。Rollup 生成的 chunk 图存在循环/顺序问题，导致 `radix` chunk 执行 `React.forwardRef` 时 React 尚未初始化，全站崩溃。
 
-- 失败接口：`staff_profiles`
-- 错误原因：`infinite recursion detected in policy for relation "staff_profiles"`
-- 影响：任何需要读取员工档案 / 门店 / 排班 / 首页信息的页面都可能加载失败或部分内容空白。
+## 修复方案（只改一个文件：`vite.config.ts`）
+1. 保留代码分包收益，但把所有"依赖 React 且会在模块顶层调用 React API（forwardRef/createContext 等）"的第三方库并入同一个 `react-vendor` chunk，彻底消除顺序风险：
+   - `react`、`react-dom`、`react/jsx-runtime`、`scheduler`
+   - `@radix-ui/*`
+   - `react-hook-form`、`@hookform/*`
+   - `@tanstack/react-query`、`react-router-dom`
+2. 其余非 React-critical 的大依赖继续独立分包（体积收益仍在）：
+   - `@supabase/*` → `supabase`
+   - `recharts` / `d3-*` → `charts`
+   - `react-markdown` / `remark*` / `micromark*` / `mdast*` / `hast*` → `markdown`
+   - `react-day-picker` / `date-fns` → `date`
+   - `@dnd-kit/*` → `dnd`
+   - `embla-carousel*` → `carousel`
+   - `html-to-image` → `html-to-image`
+   - `lucide-react` → `icons`
+3. 不改动任何业务代码、路由、样式或后端逻辑。
 
-根因是上一轮安全修复里，为了限制 `staff_profiles` 真实姓名泄露，把同店判断写成了在 `staff_profiles` 的 RLS 策略里再次查询 `staff_profiles`，触发了数据库 RLS 递归。
+## 验证
+1. 本地构建 (`bun run build`) 观察 chunk 列表，确认 `radix` chunk 已合并进 `react-vendor`。
+2. 用 Playwright 打开线上 URL（发布后），断言：
+   - HTTP 200
+   - `#root` innerHTML 长度 > 0
+   - 无 `pageerror`，无 `forwardRef undefined` 报错
+3. 手动回归首页 / 底部 5 个 Tab / AI 识图 / 中古圈，确认无回归。
 
-## 修复计划
-
-1. 新增一个安全的后端函数，用 `SECURITY DEFINER` 查询当前用户的 `shop_id`，避免在 `staff_profiles` 的 RLS 策略里直接递归查询自身。
-2. 重建 `staff_profiles` 的读取策略：
-   - 本人可以读取自己的员工档案。
-   - 有 `staff.read` 权限的人只能读取同门店员工档案。
-   - 管理员可读取员工档案。
-3. 保留之前四个安全修复的意图，不改动其它扫描项：
-   - 不放开验证码表读取。
-   - 不恢复匿名 OKR 读取。
-   - 不扩大优惠券领取手机号读取范围。
-4. 验证首页 `/` 和 `staff_profiles` 请求不再 500，确认页面可打开。
-
-## 技术细节
-
-会通过 Lovable Cloud migration 执行类似以下修复：
-
-```sql
-CREATE OR REPLACE FUNCTION public.current_user_shop_id()
-RETURNS uuid
-SECURITY DEFINER
-...
-
-DROP POLICY IF EXISTS "staff read self or same shop manager" ON public.staff_profiles;
-CREATE POLICY ... USING (
-  auth.uid() = user_id
-  OR public.has_role(auth.uid(), 'admin')
-  OR (
-    public.user_has_permission(auth.uid(), 'staff.read')
-    AND shop_id = public.current_user_shop_id()
-  )
-);
-```
-
-然后用浏览器打开首页确认不再报错。
+## 风险
+- `react-vendor` chunk 会略微变大（几十 KB gzip），但由长效缓存，属可接受代价。
+- 不涉及数据库、Edge Function、RLS，无数据风险。
