@@ -1,29 +1,57 @@
-## 问题诊断
+## 背景
 
-1. **Banner 闪现旧图**：`Home.tsx` 的 Banner `<img>` 使用了 `bannerNote?.image_url || bannerDefault`。资讯还没加载完（`notes` 为空）时 fallback 到本地的 `banner-default.jpg`（AI 设计的那张），加载完后再换成真实资讯图 —— 产生「先旧图，后真图」的闪烁。
+仪表盘迁到首页后，原来"识别完弹出海獭角标 → 点开领经验"的入口没了。目前 `FloatingDashboard` 只在气泡上显示数字角标，点开抽屉只有对话，不告诉用户"你有 X 项奖励可领"，也没法在对话里领。
 
-2. **返回落到资讯页**：Home 的 Banner 通过 `<Link to="/notifications?tab=news&open={id}">` 打开；`Notifications.tsx` 把 `?open=` 认到后打开详情弹窗，同时 `replace` 掉 URL。用户关闭详情后停在资讯列表页，需要再点一次「返回」才能回到首页。
+`useTasks` 已经聚合了两类可领内容：
+- **每日任务** `dailyTasks`：完成 1/3 次识别、通过一次知识测试、发一条 BOOMER 圈帖子
+- **事件奖励** `pending`（`exp_pending` 表）：签到连击、点赞、评论、纠错采纳等触发的一次性奖励
 
-## 计划
+`TasksPanel` 已实现完整领取交互，但只在旧仪表盘用到。
 
-### 1. Home.tsx —— 消除 Banner 闪现
-- 从 `useNotifications()` 一起取出 `loading`。
-- Banner 渲染逻辑改为：
-  - `loading` 期间：渲染一个纯色/骨架占位（`bg-muted` + 轻微 shimmer），**不再显示** `bannerDefault`。
-  - 加载完成后：有资讯 → 直接显示真实图；无资讯 → 才 fallback 到 `bannerDefault`（保留品牌兜底）。
-- 图片自身仍保留 `loading="eager"` + `fetchpriority="high"`，切换时用 `key={bannerNote?.id}` 避免同一 `<img>` 复用旧 src。
+## 目标
 
-### 2. Home → 资讯详情 → 返回首页
-- Home 的 `<Link>` 携带 state：`state={{ fromHome: true }}`。
-- `Notifications.tsx`：
-  - 使用 `useLocation()` 读取 `location.state?.fromHome`，用 `useRef` 记住（因为一旦 replace URL 后 state 也会变）。
-  - 详情弹窗的 `onOpenChange(false)` 关闭时：若来自首页，则 `navigate('/', { replace: true })`；否则维持现有行为（留在资讯页）。
-- 只影响「从首页 Banner 打开」这条路径；从「中古圈 / 消息中心 Tab 内部」打开的详情关闭后仍留在资讯页。
+1. 打开 BOOMER 抽屉时，如果有可领奖励，**在对话流顶部**由 BOOMER 主动"发一条消息"，列出待领内容并允许直接在气泡里点按钮领取。
+2. 把所有需要"去做才能拿角标"的每日任务也统一收进这条卡片，未完成的显示"去完成"跳转，完成未领的显示"领取 +N"。
+3. 领取后卡片实时更新；全部领完后 BOOMER 说一句庆祝话，卡片自动隐藏。
 
-### 3. 不做的事
-- 不改资讯详情弹窗本身样式。
-- 不动 `useNotifications` 数据结构。
-- 不改路由结构（不新增独立详情路由）。
+## 实现方案
 
-## 需要你确认
-- 加载中占位就用「灰底 + 轻微骨架」即可吗？还是想显示一张固定的 BOOMER GO 品牌背景？（默认按前者实现，最不闪。）
+### 1. 新增 `SpiritTaskCard.tsx`（`src/components/spirit/`）
+
+BOOMER 气泡内嵌卡片，复用 `useTasks` 的数据和方法：
+- 顶部：`🦦 BOOMER：你今天还有 X 项奖励可以领（共 +Y 经验）`
+- 已完成未领：绿色行 + `领取 +N` 按钮 → `claimDaily` / `claimEvent`
+- 未完成：灰色行 + `去完成` 按钮 → `onNavigate(path)` 关闭抽屉并跳转
+- 底部：`一键领取全部（+Y）` 按钮 → `claimAllPending` + 循环 `claimDaily`
+- 全部领完时替换为一句 BOOMER 语："今天的角标都被你收干净了，好厉害～"
+
+任务路由映射沿用 `TasksPanel` 的 `TASK_ROUTE`。
+
+### 2. 改 `SpiritChatPanel.tsx`
+
+- 接收新 prop `taskCard?: ReactNode`，在消息流最上方（空态与非空态都显示）渲染。
+- 空态 `EmptyState` 上方也保留卡片，让用户一打开就看到。
+
+### 3. 改 `SpiritDrawer.tsx` / `FloatingDashboard.tsx`
+
+- `FloatingDashboard` 里已有 `useTasks()`，把 `tasks` 传给 `SpiritDrawer`。
+- `SpiritDrawer` 组装 `<SpiritTaskCard tasks={tasks} onNavigate={(p) => { onClose(); navigate(p); }} />` 传入 `SpiritChatPanel`。
+- 首次打开抽屉且 `totalUnclaimedCount > 0` 时，让 BOOMER mascot 状态短暂切到 `alert`（视觉呼应）。
+
+### 4. 领取后交互
+
+- 领取成功后依赖 `useTasks` 的 realtime + `refresh` 自动更新数字；`FloatingDashboard` 气泡角标同步减少。
+- 全部领完时保留卡片 2 秒显示"收干净了"，然后 `setDismissed(true)` 折叠。
+
+### 5. 不做的事
+
+- 不改 `exp_pending` 表结构；不改识别页/签到页的触发逻辑。
+- 不恢复旧的"识别完弹角标"浮层——BOOMER 抽屉替代它。
+- 不动 `TasksPanel`（旧组件仍可用，暂不删）。
+
+## 技术细节
+
+- 领取按钮 loading 用局部 `busyKey` state（复刻 `TasksPanel`）。
+- `onNavigate` 走 `useNavigate()`，在 `SpiritDrawer` 里注入。
+- 卡片外观：`bg-white/8 border border-white/10 rounded-2xl`，与抽屉深色底一致；行内按钮用 `bg-gradient-accent`。
+- 空态时卡片放在 `EmptyState` 前；有历史消息时放在滚动区顶部（跟着滚）。

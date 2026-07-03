@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthPage } from '@/components/auth/AuthPage';
@@ -110,6 +111,26 @@ export default function Community() {
   }, [cat, user]);
 
   useEffect(() => { if (user) loadPosts(); }, [user, loadPosts]);
+
+  // 支持从首页深链 ?post=<id> 直接打开详情
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pid = searchParams.get('post');
+    if (!pid || !user || openedRef.current === pid) return;
+    openedRef.current = pid;
+    (async () => {
+      const local = posts.find(p => p.id === pid);
+      if (local) { openDetail(local); return; }
+      const { data } = await supabase.from('community_posts').select('*').eq('id', pid).maybeSingle();
+      if (data) openDetail(data as Post);
+    })();
+    // 打开后清除 URL 参数,避免返回时再次触发
+    const next = new URLSearchParams(searchParams);
+    next.delete('post');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, user, posts]);
 
   // realtime — 只依赖 cat 挂载一次,profiles 用 ref 读,避免每收一条就重订阅
   useEffect(() => {

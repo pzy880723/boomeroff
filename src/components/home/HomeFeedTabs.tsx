@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -10,8 +10,6 @@ import {
 import { cn } from '@/lib/utils';
 import { thumbUrl } from '@/lib/imageUrl';
 import { CATEGORY_LABELS, type ProductCategory } from '@/types';
-import { PostDetailSheet, type Post as CommunityPost } from '@/pages/public/PublicCommunity';
-
 
 type TabKey = 'my-kb' | 'community';
 
@@ -22,14 +20,23 @@ interface KbCard {
   name: string;
   cover: string | null;
   meta?: string | null;
-  officialRow?: any;
-  productRow?: any;
+}
+
+interface CommunityCard {
+  id: string;
+  name: string;
+  cover: string | null;
+  likes_count: number;
+  comments_count: number;
+  guest_name: string | null;
 }
 
 const PREF_KEY = 'home-feed-tab';
+const PAGE = 30;
 
 export function HomeFeedTabs() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>(() => {
     try {
       const v = localStorage.getItem(PREF_KEY);
@@ -37,20 +44,23 @@ export function HomeFeedTabs() {
     } catch { return 'my-kb'; }
   });
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [kbCards, setKbCards] = useState<KbCard[]>([]);
-  const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [activePost, setActivePost] = useState<CommunityPost | null>(null);
-
+  const [posts, setPosts] = useState<CommunityCard[]>([]);
+  const [kbDone, setKbDone] = useState(false);
+  const [postsDone, setPostsDone] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem(PREF_KEY, tab); } catch { /* ignore */ }
   }, [tab]);
 
+  // 首屏加载 — 优先用 snapshot 快出图, 再异步补最新数据
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       if (!user) return;
       setLoading(true);
+      setKbDone(false); setPostsDone(false);
       try {
         if (tab === 'my-kb') {
           const { data: favs } = await supabase
@@ -58,46 +68,69 @@ export function HomeFeedTabs() {
             .select('id, source_type, source_id, snapshot, created_at')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
-            .limit(10);
+            .limit(PAGE);
           const rows = (favs || []) as any[];
-          const officialIds = rows.filter(r => r.source_type === 'official').map(r => r.source_id).filter(Boolean);
-          const productIds = rows.filter(r => r.source_type === 'product').map(r => r.source_id).filter(Boolean);
-          const [officialFresh, productFresh] = await Promise.all([
-            officialIds.length
-              ? supabase.from('official_knowledge').select('*').in('id', officialIds)
-              : Promise.resolve({ data: [] as any[] }),
-            productIds.length
-              ? supabase.from('products').select('*').in('id', productIds)
-              : Promise.resolve({ data: [] as any[] }),
-          ]);
-          const om = new Map<string, any>((officialFresh.data || []).map((r: any) => [r.id, r]));
-          const pm = new Map<string, any>((productFresh.data || []).map((r: any) => [r.id, r]));
+          if (cancelled) return;
+          // 立刻用 snapshot 渲染
           const list: KbCard[] = rows.map((f: any) => {
             const snap = f.snapshot || {};
-            const src = f.source_type === 'official' ? om.get(f.source_id) : f.source_type === 'product' ? pm.get(f.source_id) : null;
-            const name = src?.name || snap?.name || '未命名';
-            const cover = (src?.cover_url || src?.image_url || snap?.cover_url || snap?.image_url) as string | null;
-            const cat = (src?.category || snap?.category) as ProductCategory | undefined;
+            const cat = snap?.category as ProductCategory | undefined;
             return {
               key: f.id,
               source_type: f.source_type,
               source_id: f.source_id,
-              name,
-              cover,
+              name: snap?.name || '未命名',
+              cover: (snap?.cover_url || snap?.image_url) as string | null,
               meta: cat ? CATEGORY_LABELS[cat] : null,
-              officialRow: f.source_type === 'official' ? src : undefined,
-              productRow: f.source_type === 'product' ? src : undefined,
             };
           });
-          if (!cancelled) setKbCards(list);
+          setKbCards(list);
+          setKbDone(rows.length < PAGE);
+          setLoading(false);
+
+          // 异步用最新数据回填 (无 cover / 无 name 的项)
+          const need = rows.filter((r: any) => !(r.snapshot?.cover_url || r.snapshot?.image_url));
+          const officialIds = need.filter(r => r.source_type === 'official').map(r => r.source_id).filter(Boolean);
+          const productIds = need.filter(r => r.source_type === 'product').map(r => r.source_id).filter(Boolean);
+          if (officialIds.length || productIds.length) {
+            const [of, pr] = await Promise.all([
+              officialIds.length ? supabase.from('official_knowledge').select('id,name,cover_url,category').in('id', officialIds) : Promise.resolve({ data: [] as any[] }),
+              productIds.length ? supabase.from('products').select('id,name,image_url,category').in('id', productIds) : Promise.resolve({ data: [] as any[] }),
+            ]);
+            if (cancelled) return;
+            const om = new Map<string, any>((of.data || []).map((r: any) => [r.id, r]));
+            const pm = new Map<string, any>((pr.data || []).map((r: any) => [r.id, r]));
+            setKbCards(prev => prev.map(c => {
+              if (c.cover) return c;
+              const src = c.source_type === 'official' ? om.get(c.source_id!) : c.source_type === 'product' ? pm.get(c.source_id!) : null;
+              if (!src) return c;
+              const cat = src.category as ProductCategory | undefined;
+              return {
+                ...c,
+                name: c.name === '未命名' ? (src.name || c.name) : c.name,
+                cover: (src.cover_url || src.image_url) as string | null,
+                meta: c.meta || (cat ? CATEGORY_LABELS[cat] : null),
+              };
+            }));
+          }
         } else {
           const { data } = await supabase
             .from('community_posts')
-            .select('id,image_url,thumbnail_url,name,category,era,origin,selling_points,tips,story,appreciation,description,care_tips,material,craft,dimensions,condition,confidence,rarity,collection_value,market_value,buy_reason,created_at,likes_count,comments_count,is_guest,guest_name,user_id')
+            .select('id,image_url,thumbnail_url,name,likes_count,comments_count,guest_name,created_at')
             .eq('is_public', true)
             .order('created_at', { ascending: false })
-            .limit(10);
-          if (!cancelled) setPosts((data as any as CommunityPost[]) || []);
+            .limit(PAGE);
+          if (cancelled) return;
+          const list: CommunityCard[] = (data || []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            cover: p.thumbnail_url || thumbUrl(p.image_url, 320) || p.image_url,
+            likes_count: p.likes_count ?? 0,
+            comments_count: p.comments_count ?? 0,
+            guest_name: p.guest_name || null,
+          }));
+          setPosts(list);
+          setPostsDone((data || []).length < PAGE);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -105,6 +138,59 @@ export function HomeFeedTabs() {
     })();
     return () => { cancelled = true; };
   }, [tab, user]);
+
+  const loadMore = async () => {
+    if (!user || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      if (tab === 'my-kb') {
+        const last = kbCards.at(-1);
+        const { data: favs } = await supabase
+          .from('user_favorites')
+          .select('id, source_type, source_id, snapshot, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .lt('created_at', (last as any)?.created_at || new Date().toISOString())
+          .limit(PAGE);
+        const rows = (favs || []) as any[];
+        const more: KbCard[] = rows.map((f: any) => {
+          const snap = f.snapshot || {};
+          const cat = snap?.category as ProductCategory | undefined;
+          return {
+            key: f.id,
+            source_type: f.source_type,
+            source_id: f.source_id,
+            name: snap?.name || '未命名',
+            cover: (snap?.cover_url || snap?.image_url) as string | null,
+            meta: cat ? CATEGORY_LABELS[cat] : null,
+          };
+        });
+        setKbCards(prev => [...prev, ...more]);
+        setKbDone(rows.length < PAGE);
+      } else {
+        const last = posts.at(-1);
+        const { data } = await supabase
+          .from('community_posts')
+          .select('id,image_url,thumbnail_url,name,likes_count,comments_count,guest_name,created_at')
+          .eq('is_public', true)
+          .order('created_at', { ascending: false })
+          .lt('created_at', (last as any)?.created_at || new Date().toISOString())
+          .limit(PAGE);
+        const more: CommunityCard[] = (data || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          cover: p.thumbnail_url || thumbUrl(p.image_url, 320) || p.image_url,
+          likes_count: p.likes_count ?? 0,
+          comments_count: p.comments_count ?? 0,
+          guest_name: p.guest_name || null,
+        }));
+        setPosts(prev => [...prev, ...more]);
+        setPostsDone((data || []).length < PAGE);
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const rightAction = useMemo(() => {
     if (tab === 'my-kb') {
@@ -117,15 +203,16 @@ export function HomeFeedTabs() {
       );
     }
     return (
-      <Link to="/scan">
+      <Link to="/community">
         <Button size="sm" variant="secondary" className="h-7 px-2.5 text-xs rounded-full">
-          <Camera className="w-3.5 h-3.5 mr-1" />发一条
+          <Camera className="w-3.5 h-3.5 mr-1" />去 BOOMER 圈
         </Button>
       </Link>
     );
   }, [tab]);
 
   const isEmpty = tab === 'my-kb' ? kbCards.length === 0 : posts.length === 0;
+  const done = tab === 'my-kb' ? kbDone : postsDone;
 
   return (
     <section>
@@ -150,7 +237,17 @@ export function HomeFeedTabs() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+        <div className="grid grid-cols-2 gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl overflow-hidden border border-border/60 bg-card">
+              <div className="aspect-square bg-muted animate-pulse" />
+              <div className="p-2 space-y-1">
+                <div className="h-3 w-3/4 bg-muted rounded animate-pulse" />
+                <div className="h-2.5 w-1/2 bg-muted rounded animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : isEmpty ? (
         <div className="rounded-2xl border border-dashed border-border/60 py-10 text-center text-xs text-muted-foreground">
           {tab === 'my-kb' ? '还没收藏，去知识库星标你想学的' : '还没人发帖，识别一件商品分享出来吧'}
@@ -161,7 +258,7 @@ export function HomeFeedTabs() {
           </div>
         </div>
       ) : tab === 'my-kb' ? (
-        <div className="columns-2 gap-2 [column-fill:_balance]">
+        <div className="grid grid-cols-2 gap-2">
           {kbCards.map((c) => {
             const to = c.source_type === 'official'
               ? `/library/${c.source_id}`
@@ -172,18 +269,18 @@ export function HomeFeedTabs() {
               <Link
                 key={c.key}
                 to={to}
-                className="mb-2 break-inside-avoid block w-full text-left rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
+                className="block rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
               >
                 {c.cover ? (
                   <img
                     src={thumbUrl(c.cover, 320) || c.cover}
                     alt={c.name}
-                    className="w-full h-auto bg-muted block"
+                    className="w-full aspect-square object-cover bg-muted block"
                     loading="lazy"
                     decoding="async"
                   />
                 ) : (
-                  <div className="w-full bg-muted flex items-center justify-center text-muted-foreground" style={{ aspectRatio: '3 / 4' }}>
+                  <div className="w-full aspect-square bg-muted flex items-center justify-center text-muted-foreground">
                     <ImageOff className="w-5 h-5" />
                   </div>
                 )}
@@ -197,47 +294,52 @@ export function HomeFeedTabs() {
         </div>
 
       ) : (
-        <div className="columns-2 gap-2 [column-fill:_balance]">
-          {posts.map((p) => {
-            const cover = p.thumbnail_url || thumbUrl(p.image_url, 320) || p.image_url;
-            return (
-              <button
-                key={p.id}
-                onClick={() => setActivePost(p)}
-                className="mb-2 break-inside-avoid block w-full text-left rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
-              >
-                {cover ? (
-                  <img
-                    src={cover}
-                    alt={p.name}
-                    className="w-full h-auto bg-muted block"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                ) : (
-                  <div className="w-full bg-muted flex items-center justify-center text-muted-foreground" style={{ aspectRatio: '3 / 4' }}>
-                    <ImageOff className="w-5 h-5" />
-                  </div>
-                )}
-                <div className="p-2 space-y-1">
-                  <p className="text-[12.5px] font-medium leading-snug line-clamp-2">{p.name}</p>
-                  <div className="flex items-center justify-between text-[10.5px] text-muted-foreground">
-                    <span className="truncate">{p.guest_name || '游客'}</span>
-                    <span className="inline-flex items-center gap-2 shrink-0">
-                      <span className="inline-flex items-center gap-0.5"><Heart className="w-3 h-3" />{p.likes_count ?? 0}</span>
-                      <span className="inline-flex items-center gap-0.5"><MessageCircle className="w-3 h-3" />{p.comments_count ?? 0}</span>
-                    </span>
-                  </div>
+        <div className="grid grid-cols-2 gap-2">
+          {posts.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => navigate(`/community?post=${p.id}`)}
+              className="block w-full text-left rounded-xl overflow-hidden bg-card border border-border/60 shadow-sm"
+            >
+              {p.cover ? (
+                <img
+                  src={p.cover}
+                  alt={p.name}
+                  className="w-full aspect-square object-cover bg-muted block"
+                  loading="lazy"
+                  decoding="async"
+                />
+              ) : (
+                <div className="w-full aspect-square bg-muted flex items-center justify-center text-muted-foreground">
+                  <ImageOff className="w-5 h-5" />
                 </div>
-              </button>
-            );
-          })}
+              )}
+              <div className="p-2 space-y-1">
+                <p className="text-[12.5px] font-medium leading-snug line-clamp-2">{p.name}</p>
+                <div className="flex items-center justify-between text-[10.5px] text-muted-foreground">
+                  <span className="truncate">{p.guest_name || '店员'}</span>
+                  <span className="inline-flex items-center gap-2 shrink-0">
+                    <span className="inline-flex items-center gap-0.5"><Heart className="w-3 h-3" />{p.likes_count}</span>
+                    <span className="inline-flex items-center gap-0.5"><MessageCircle className="w-3 h-3" />{p.comments_count}</span>
+                  </span>
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       )}
 
-      {/* BOOMER 圈 弹窗 (复用公开版详情) */}
-      {activePost && <PostDetailSheet post={activePost} onClose={() => setActivePost(null)} />}
+      {!loading && !isEmpty && (
+        <div className="mt-3 flex justify-center">
+          {done ? (
+            <span className="text-[11px] text-muted-foreground">— 到底啦 —</span>
+          ) : (
+            <Button variant="outline" size="sm" className="h-7 rounded-full text-xs" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '加载更多'}
+            </Button>
+          )}
+        </div>
+      )}
     </section>
   );
 }
-

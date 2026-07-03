@@ -12,32 +12,32 @@ export function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-surface relative overflow-hidden">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-gradient-surface relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none opacity-40 [background:radial-gradient(circle_at_20%_10%,hsl(var(--accent)/0.15),transparent_40%),radial-gradient(circle_at_80%_90%,hsl(var(--primary)/0.12),transparent_40%)]" />
       <div className="relative z-10 w-full max-w-md animate-fade-in">
-        <div className="mb-6 text-center">
+        <div className="mb-4 text-center">
           <img
             src={APP_BRAND_LOGO}
             alt={APP_BRAND_NAME}
-            width={96}
-            height={96}
+            width={80}
+            height={80}
             loading="eager"
             decoding="async"
-            className="h-20 sm:h-24 w-20 sm:w-24 object-contain mx-auto mb-3 rounded-2xl shadow-hard bg-white/60"
+            className="h-16 w-16 object-contain mx-auto mb-2 rounded-2xl shadow-hard bg-white/60"
           />
-          <p className="text-muted-foreground text-sm">{APP_BRAND_TAGLINE} · AI 识物 · 知识共享 · 排班管理</p>
+          <p className="text-muted-foreground text-xs">{APP_BRAND_TAGLINE} · AI 识物 · 知识共享 · 排班管理</p>
         </div>
 
-
         {mode === 'login' && (
-          <div className="bg-card border border-border/60 rounded-2xl p-4 sm:p-5 shadow-soft">
+          <div className="bg-card border border-border/60 rounded-2xl p-4 shadow-soft">
             <Tabs defaultValue="password" className="w-full">
-              <TabsList className="grid grid-cols-2 w-full mb-4">
+              <TabsList className="grid grid-cols-2 w-full mb-3">
                 <TabsTrigger value="password">账号密码</TabsTrigger>
                 <TabsTrigger value="phone">手机验证码</TabsTrigger>
               </TabsList>
               <TabsContent value="password" className="mt-0">
                 <LoginForm
+                  variant="embedded"
                   onForgotPassword={() => setMode('forgot-password')}
                   onRegister={() => setMode('register')}
                 />

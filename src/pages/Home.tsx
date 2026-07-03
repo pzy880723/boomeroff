@@ -289,7 +289,7 @@ export default function Home() {
                   <p className="text-xs text-muted-foreground mt-1">{daysLeft(act.ends_at)}</p>
                 )}
               </Link>
-              <Link to={act.voucher_id ? `/me/vouchers?activity=${act.id}` : `/me/activities/${act.id}?tab=redeem`}>
+              <Link to="/me/vouchers?scan=1">
                 <Button size="sm" className="h-8 px-3 rounded-full text-xs shrink-0">
                   <QrCode className="w-3.5 h-3.5 mr-1" />去核销
                 </Button>

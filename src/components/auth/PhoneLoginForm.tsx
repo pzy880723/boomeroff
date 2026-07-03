@@ -58,7 +58,6 @@ export function PhoneLoginForm({ onSuccess }: { onSuccess?: () => void }) {
       if (data?.error) throw new Error(data.error);
       const { error: eV } = await supabase.auth.verifyOtp({
         type: 'magiclink',
-        email: data.email,
         token_hash: data.token_hash,
       });
       if (eV) throw eV;
