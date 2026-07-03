@@ -1474,6 +1474,36 @@ export type Database = {
           },
         ]
       }
+      phone_login_otp: {
+        Row: {
+          attempts: number
+          code_hash: string
+          created_at: string
+          expires_at: string
+          id: string
+          phone: string
+          used_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          code_hash: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          phone: string
+          used_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          code_hash?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          phone?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       price_records: {
         Row: {
           created_at: string
@@ -1646,6 +1676,8 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          phone: string | null
+          real_name: string | null
           updated_at: string
           user_id: string
         }
@@ -1654,6 +1686,8 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          phone?: string | null
+          real_name?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1662,6 +1696,8 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          phone?: string | null
+          real_name?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -2915,6 +2951,7 @@ export type Database = {
       claim_pending_exp: { Args: { _id: string }; Returns: Json }
       current_user_shop_id: { Args: never; Returns: string }
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
+      find_user_id_by_phone: { Args: { _phone: string }; Returns: string }
       gen_short_code: { Args: never; Returns: string }
       gen_voucher_code: { Args: never; Returns: string }
       get_claim_for_redeem: {
@@ -3002,6 +3039,10 @@ export type Database = {
         }[]
       }
       perform_check_in: { Args: never; Returns: Json }
+      update_my_phone_realname: {
+        Args: { _phone: string; _real_name: string }
+        Returns: undefined
+      }
       user_has_permission: {
         Args: { _perm: string; _user_id: string }
         Returns: boolean
