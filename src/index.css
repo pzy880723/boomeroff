@@ -209,6 +209,11 @@
   background:
     linear-gradient(180deg, hsl(0 0% 10%) 0%, hsl(0 0% 8%) 100%);
   color: hsl(0 0% 96%);
+  /* 抽屉内使用暖色 accent,保证 chips/tabs/图标在深色底上清晰可见
+     (原 --accent = 0 0% 10% 是近黑色,在此深色底上完全看不见) */
+  --accent: 28 92% 62%;
+  --accent-foreground: 28 30% 12%;
+  --primary-foreground: 0 0% 96%;
 }
 .dashboard-deep-surface::before {
   content: '';
