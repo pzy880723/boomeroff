@@ -122,15 +122,6 @@ export function UserTable() {
         });
       }
 
-      // 批量取登录邮箱（管理员权限，通过 RPC 读 auth.users）
-      let emailMap: Record<string, string> = {};
-      if (userIds.length > 0) {
-        const { data: emails } = await supabase.rpc('admin_list_user_emails' as any, { _user_ids: userIds });
-        (emails || []).forEach((e: any) => {
-          if (e?.user_id) emailMap[e.user_id] = e.email || '';
-        });
-      }
-
       const usersWithProfiles: UserWithRole[] = (roles || []).map((r: any) => ({
         id: r.id,
         user_id: r.user_id,
@@ -141,7 +132,6 @@ export function UserTable() {
         suspended_at: r.suspended_at,
         profile: profileMap[r.user_id],
         staff: staffMap[r.user_id],
-        email: emailMap[r.user_id] || null,
       }));
 
       setUsers(usersWithProfiles);
