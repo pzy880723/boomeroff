@@ -167,6 +167,12 @@ export function UserTable() {
           : u,
       ),
     );
+    logAudit({
+      action: 'user.update_role',
+      target_type: 'user',
+      target_id: userId,
+      detail: { role_code: newRoleCode },
+    });
     return true;
   };
 
@@ -186,6 +192,15 @@ export function UserTable() {
     }
 
     toast.success(newSuspendedState ? '用户已暂停' : '已通过审核，用户可登录');
+    logAudit({
+      action: newSuspendedState ? 'user.suspend' : 'user.resume',
+      target_type: 'user',
+      target_id: user.user_id,
+      detail: {
+        target_name: user.staff?.real_name || user.profile?.display_name || '',
+        suspended: newSuspendedState,
+      },
+    });
     fetchUsers();
   };
 
@@ -208,6 +223,12 @@ export function UserTable() {
         .eq('user_id', userToDelete.user_id);
 
       toast.success('用户已删除');
+      logAudit({
+        action: 'user.delete',
+        target_type: 'user',
+        target_id: userToDelete.user_id,
+        detail: { target_name: userToDelete.staff?.real_name || userToDelete.profile?.display_name || '' },
+      });
       fetchUsers();
     } catch (error) {
       toast.error('删除失败');
