@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,8 @@ const registerSchema = z
       .trim()
       .regex(/^[a-zA-Z0-9_]{3,32}$/, '用户名仅支持字母、数字、下划线，3-32 位'),
     real_name: z.string().trim().min(1, '请填写真实姓名').max(32, '姓名过长'),
+    phone: z.string().trim().regex(/^1[3-9]\d{9}$/, '手机号格式不正确'),
+    code: z.string().trim().regex(/^\d{6}$/, '请输入 6 位验证码'),
     password: z.string().min(6, '密码至少 6 位').max(72, '密码过长'),
     confirmPassword: z.string(),
     shop_id: z.string().uuid('请选择所属门店'),
@@ -39,6 +41,8 @@ interface Shop { id: string; name: string }
 export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
   const [username, setUsername] = useState('');
   const [realName, setRealName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [shopId, setShopId] = useState('');
@@ -46,6 +50,9 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
   const [shopsLoading, setShopsLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const cooldownTimer = useRef<number | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -58,12 +65,54 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
       setShops((data as any) || []);
       setShopsLoading(false);
     })();
+    return () => {
+      if (cooldownTimer.current) window.clearInterval(cooldownTimer.current);
+    };
   }, []);
+
+  const startCooldown = () => {
+    setCooldown(60);
+    if (cooldownTimer.current) window.clearInterval(cooldownTimer.current);
+    cooldownTimer.current = window.setInterval(() => {
+      setCooldown((c) => {
+        if (c <= 1) {
+          if (cooldownTimer.current) window.clearInterval(cooldownTimer.current);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+  };
+
+  const handleSendCode = async () => {
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      toast({ title: '手机号格式不正确', variant: 'destructive' });
+      return;
+    }
+    setSendingCode(true);
+    try {
+      const { data, error } = await invokeFn('register-send-otp', { body: { phone } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: '验证码已发送', description: '请注意查收短信' });
+      startCooldown();
+    } catch (err) {
+      toast({
+        title: '发送失败',
+        description: err instanceof Error ? err.message : '请稍后再试',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingCode(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const parsed = registerSchema.safeParse({ username, real_name: realName, password, confirmPassword, shop_id: shopId });
+    const parsed = registerSchema.safeParse({
+      username, real_name: realName, phone, code, password, confirmPassword, shop_id: shopId,
+    });
     if (!parsed.success) {
       toast({
         title: '输入有误',
@@ -77,7 +126,15 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
     try {
       const { data, error } = await invokeFn(
         'public-register',
-        { body: { username, password, shop_id: shopId, real_name: realName.trim(), display_name: realName.trim() } },
+        { body: {
+          username,
+          password,
+          shop_id: shopId,
+          real_name: realName.trim(),
+          display_name: realName.trim(),
+          phone,
+          code,
+        } },
       );
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -133,6 +190,47 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
               maxLength={32}
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="reg-phone">手机号</Label>
+            <Input
+              id="reg-phone"
+              type="tel"
+              inputMode="numeric"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+              placeholder="请输入 11 位手机号"
+              autoComplete="tel"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="reg-code">短信验证码</Label>
+            <div className="flex gap-2">
+              <Input
+                id="reg-code"
+                type="text"
+                inputMode="numeric"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="6 位验证码"
+                autoComplete="one-time-code"
+                required
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSendCode}
+                disabled={sendingCode || cooldown > 0 || !/^1[3-9]\d{9}$/.test(phone)}
+                className="whitespace-nowrap"
+              >
+                {sendingCode && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                {cooldown > 0 ? `${cooldown}s 后重试` : '获取验证码'}
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
