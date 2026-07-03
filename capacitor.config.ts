@@ -4,6 +4,10 @@ const config: CapacitorConfig = {
   appId: 'com.boomeroff.go',
   appName: 'BOOMER GO',
   webDir: 'dist',
+  server: {
+    url: 'https://ai.boomeroff.com',
+    cleartext: false,
+  },
   plugins: {
     StatusBar: {
       overlaysWebView: false,
