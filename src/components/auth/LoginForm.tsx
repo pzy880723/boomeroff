@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ export function LoginForm({ onForgotPassword, onRegister, variant = 'card' }: Lo
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +54,7 @@ export function LoginForm({ onForgotPassword, onRegister, variant = 'card' }: Lo
         ? trimmed
         : `${trimmed.toLowerCase()}@boomeroff.local`;
       await signIn(loginEmail, password);
-    } catch (error) {
+      navigate('/', { replace: true });
       const raw = error instanceof Error ? error.message : '';
       const friendly = /invalid login credentials/i.test(raw)
         ? '用户名不存在或密码错误'
