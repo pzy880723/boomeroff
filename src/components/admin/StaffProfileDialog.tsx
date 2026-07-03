@@ -99,11 +99,25 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
 
   const save = async () => {
     if (!p) return;
-    const payload = { ...p, real_name: p.real_name?.trim() || null };
+    const cleanPhone = (p.phone || '').trim();
+    if (cleanPhone && !/^1[3-9]\d{9}$/.test(cleanPhone)) {
+      toast.error('手机号格式不正确'); return;
+    }
+    const { phone, ...rest } = p;
+    const payload = { ...rest, real_name: p.real_name?.trim() || null };
     const { error } = await supabase.from('staff_profiles' as any).upsert(payload);
-    if (error) toast.error(error.message);
-    else { toast.success('已保存'); onOpenChange(false); onSaved?.(); }
+    if (error) { toast.error(error.message); return; }
+    const { error: ePhone } = await supabase.rpc('admin_update_user_phone' as any, {
+      _user_id: userId,
+      _phone: cleanPhone,
+      _real_name: p.real_name?.trim() || '',
+    });
+    if (ePhone) { toast.error(ePhone.message); return; }
+    toast.success('已保存');
+    onOpenChange(false);
+    onSaved?.();
   };
+
 
   const addDayOff = async () => {
     if (!newOff.off_date) { toast.error('请选择日期'); return; }
