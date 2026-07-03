@@ -303,6 +303,45 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_logs: {
+        Row: {
+          action: string
+          actor_role_code: string | null
+          created_at: string
+          detail: Json
+          id: string
+          ip: string | null
+          target_id: string | null
+          target_type: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_role_code?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          ip?: string | null
+          target_id?: string | null
+          target_type?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_role_code?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          ip?: string | null
+          target_id?: string | null
+          target_type?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       backup_file_failures: {
         Row: {
           attempt_count: number
@@ -2943,6 +2982,11 @@ export type Database = {
         Args: { _amount: number; _user_id: string }
         Returns: number
       }
+      admin_update_user_phone: {
+        Args: { _phone: string; _real_name: string; _user_id: string }
+        Returns: undefined
+      }
+      bind_my_phone: { Args: { _phone: string }; Returns: undefined }
       can_assign_role_code: {
         Args: { _actor: string; _target_role_code: string }
         Returns: boolean
