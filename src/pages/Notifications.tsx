@@ -30,6 +30,7 @@ import { RichBodyEditor } from '@/components/notifications/RichBodyEditor';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { listDrafts, saveDraft, removeDraft, type NotificationDraft } from '@/lib/notificationDrafts';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { MessagesTabs } from '@/components/messages/MessagesTabs';
 
 type TabKey = 'notice' | 'news' | 'message';
 const TAB_META: Record<TabKey, { label: string }> = {
