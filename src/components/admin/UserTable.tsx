@@ -357,6 +357,16 @@ export function UserTable() {
                         <Store className="h-3 w-3" />
                         {user.staff?.shop_id ? (shopNameMap[user.staff.shop_id] || '门店') : '未绑定门店'}
                       </span>
+                      <span className="text-[11px] flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        {user.profile?.phone ? (
+                          <span className="text-muted-foreground tabular-nums">{user.profile.phone}</span>
+                        ) : (
+                          <Badge variant="outline" className="h-4 px-1.5 text-[10px] text-destructive border-destructive/60">
+                            未填写
+                          </Badge>
+                        )}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell>
