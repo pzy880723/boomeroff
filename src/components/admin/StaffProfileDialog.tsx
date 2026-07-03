@@ -163,6 +163,21 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
             </div>
 
             <div>
+              <Label className="text-xs">手机号 <span className="text-destructive">*</span></Label>
+              <Input
+                type="tel"
+                inputMode="numeric"
+                maxLength={11}
+                value={p.phone || ''}
+                onChange={e => setP({ ...p, phone: e.target.value.replace(/\D/g, '') })}
+                placeholder="11 位手机号，用于登录与验证"
+              />
+              {!p.phone && (
+                <p className="text-[11px] text-destructive mt-1">该用户尚未绑定手机号，登录后会被强制补录</p>
+              )}
+            </div>
+
+            <div>
               <Label className="text-xs">主门店</Label>
               <Select value={p.shop_id || ''} onValueChange={(v) => setP({ ...p, shop_id: v || null })}>
                 <SelectTrigger><SelectValue placeholder="请选择主门店" /></SelectTrigger>
