@@ -56,6 +56,7 @@ function getCapsuleX(side: Side): number {
 
 export function FloatingDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
