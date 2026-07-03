@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ export function PhoneLoginForm({ onSuccess }: { onSuccess?: () => void }) {
   const [verifying, setVerifying] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const timerRef = useRef<number | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => () => { if (timerRef.current) window.clearInterval(timerRef.current); }, []);
 
@@ -61,6 +63,7 @@ export function PhoneLoginForm({ onSuccess }: { onSuccess?: () => void }) {
       });
       if (eV) throw eV;
       onSuccess?.();
+      navigate('/', { replace: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '登录失败');
     } finally {

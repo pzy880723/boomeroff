@@ -55,6 +55,7 @@ export function LoginForm({ onForgotPassword, onRegister, variant = 'card' }: Lo
         : `${trimmed.toLowerCase()}@boomeroff.local`;
       await signIn(loginEmail, password);
       navigate('/', { replace: true });
+    } catch (error) {
       const raw = error instanceof Error ? error.message : '';
       const friendly = /invalid login credentials/i.test(raw)
         ? '用户名不存在或密码错误'
