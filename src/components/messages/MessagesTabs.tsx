@@ -290,6 +290,7 @@ function ContactsList({ userId }: { userId: string }) {
     const k = keyword.trim().toLowerCase();
     if (!k) return contacts;
     return contacts.filter(c =>
+      (c.real_name || '').toLowerCase().includes(k) ||
       (c.display_name || '').toLowerCase().includes(k) ||
       (c.shop_name || '').toLowerCase().includes(k) ||
       (c.position || '').toLowerCase().includes(k) ||
