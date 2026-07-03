@@ -3,6 +3,8 @@ import { Camera, Users, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 import { ErrorBoundary } from '@/components/system/ErrorBoundary';
+import { EdgeSwipeBack } from '@/components/system/EdgeSwipeBack';
+import { PullToRefresh } from '@/components/system/PullToRefresh';
 
 const tabs = [
   { to: '/u', label: '拍一拍', Icon: Camera, exact: true },
@@ -43,6 +45,9 @@ export function PublicLayout() {
           <Outlet />
         </ErrorBoundary>
       </main>
+
+      <EdgeSwipeBack />
+      <PullToRefresh />
 
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/40 bg-background/85 backdrop-blur-xl safe-bottom"
