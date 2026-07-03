@@ -51,6 +51,7 @@ interface UserWithRole {
   profile?: {
     display_name: string | null;
     avatar_url: string | null;
+    phone: string | null;
   };
   staff?: {
     real_name: string | null;
