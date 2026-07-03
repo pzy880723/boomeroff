@@ -236,6 +236,7 @@ export default function Portal() {
                 <UserTable />
               </div>
             )}
+            {effectiveTab === 'audit' && can('user.read') && <AuditLogTable />}
             {effectiveTab === 'roles' && can('role.manage') && <RolePermissionManager />}
             {effectiveTab === 'shops' && can('shop.write') && <ShopManager />}
             {effectiveTab === 'schedule' && can('schedule.write') && <ScheduleManager />}
