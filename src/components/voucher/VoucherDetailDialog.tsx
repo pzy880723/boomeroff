@@ -42,17 +42,29 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
   const [deleting, setDeleting] = useState(false);
   const [claimSearch, setClaimSearch] = useState('');
 
+  const [claimsError, setClaimsError] = useState<FriendlyRpcError | null>(null);
+
+  const loadClaims = async () => {
+    if (!voucher) return;
+    setLoading(true);
+    setClaimsError(null);
+    const { data, error } = await supabase.rpc('list_voucher_claims_with_pii', {
+      _voucher_id: voucher.id,
+      _limit: 50,
+    });
+    if (error) {
+      setClaimsError(humanizeRpcError(error));
+      setClaims([]);
+    } else {
+      setClaims((data || []) as unknown as VoucherClaim[]);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     if (!open || !voucher) return;
-    (async () => {
-      setLoading(true);
-      const { data } = await supabase.rpc('list_voucher_claims_with_pii', {
-        _voucher_id: voucher.id,
-        _limit: 50,
-      });
-      setClaims((data || []) as unknown as VoucherClaim[]);
-      setLoading(false);
-    })();
+    loadClaims();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, voucher]);
 
   const directRelease = async () => {
