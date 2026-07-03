@@ -197,6 +197,7 @@ export function FloatingDashboard() {
           onAnimEnd={onAnimEnd}
           onClose={closeDrawer}
           chat={spiritChat}
+          tasks={tasks}
         />,
         document.body,
       )}

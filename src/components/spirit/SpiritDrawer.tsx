@@ -1,7 +1,10 @@
 import { X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { SpiritChatPanel } from './SpiritChatPanel';
+import { SpiritTaskCard } from './SpiritTaskCard';
 import { cn } from '@/lib/utils';
 import type { useSpiritChat } from '@/hooks/useSpiritChat';
+import type { useTasks } from '@/hooks/useTasks';
 
 interface Props {
   open: boolean;
@@ -11,13 +14,15 @@ interface Props {
   onAnimEnd: () => void;
   onClose: () => void;
   chat?: ReturnType<typeof useSpiritChat>;
+  tasks?: ReturnType<typeof useTasks>;
 }
 
 /**
  * BOOMER 抽屉 — 只保留对话面板。
  * 仪表盘已迁至首页 /home,这里不再有 Tab 切换。
  */
-export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClose, chat }: Props) {
+export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClose, chat, tasks }: Props) {
+  const navigate = useNavigate();
   return (
     <div
       onAnimationEnd={onAnimEnd}
@@ -51,7 +56,17 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
 
       {/* 对话面板 */}
       <div className="flex-1 min-h-0">
-        <SpiritChatPanel chat={chat} />
+        <SpiritChatPanel
+          chat={chat}
+          taskCard={
+            tasks ? (
+              <SpiritTaskCard
+                tasks={tasks}
+                onNavigate={(path) => { onClose(); navigate(path); }}
+              />
+            ) : null
+          }
+        />
       </div>
     </div>
   );

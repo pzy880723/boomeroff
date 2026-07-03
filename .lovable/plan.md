@@ -1,48 +1,57 @@
+## 背景
 
-## 问题定位
+仪表盘迁到首页后，原来"识别完弹出海獭角标 → 点开领经验"的入口没了。目前 `FloatingDashboard` 只在气泡上显示数字角标，点开抽屉只有对话，不告诉用户"你有 X 项奖励可领"，也没法在对话里领。
 
-**1. 登录页多余文案**
-`src/components/auth/AuthPage.tsx` 使用了默认 `variant='card'` 的 `LoginForm`，而 `LoginForm` 在 card 模式下会渲染 `CardTitle "登录"` 与 `CardDescription "登录您的账户以继续"`——这就是你看到的「登录您的账户」「以继续」多余标题。
+`useTasks` 已经聚合了两类可领内容：
+- **每日任务** `dailyTasks`：完成 1/3 次识别、通过一次知识测试、发一条 BOOMER 圈帖子
+- **事件奖励** `pending`（`exp_pending` 表）：签到连击、点赞、评论、纠错采纳等触发的一次性奖励
 
-**2. 手机验证码登录失败**
-查了后台日志和数据库,原因已经明确:
+`TasksPanel` 已实现完整领取交互，但只在旧仪表盘用到。
 
-- OTP 表 `phone_login_otp` 显示你刚刚 04:20 那条验证码已经成功核销(`used_at` 有值,`attempts=0`),说明我们自己的 edge function `phone-login-verify-otp` 一切正常。
-- 但紧接着 Supabase Auth 的 `/verify` 接口返回了 **400: `Only the token_hash and type should be provided`**。
-- 原因在 `src/components/auth/PhoneLoginForm.tsx` 第 59-63 行:
-  ```ts
-  supabase.auth.verifyOtp({ type: 'magiclink', email: data.email, token_hash: data.token_hash })
-  ```
-  当使用 `token_hash` 模式时,Supabase Auth **不允许同时传 `email`**,只能传 `{ type, token_hash }`。edge function 里那个 `email` 字段其实用不上,是历史残留。
+## 目标
 
-后台强制补录手机号那一步是我们自己的 RPC,不走 Supabase Auth 的 `/verify`,所以能过——这跟这里的失败并不矛盾。
+1. 打开 BOOMER 抽屉时，如果有可领奖励，**在对话流顶部**由 BOOMER 主动"发一条消息"，列出待领内容并允许直接在气泡里点按钮领取。
+2. 把所有需要"去做才能拿角标"的每日任务也统一收进这条卡片，未完成的显示"去完成"跳转，完成未领的显示"领取 +N"。
+3. 领取后卡片实时更新；全部领完后 BOOMER 说一句庆祝话，卡片自动隐藏。
 
-## 修改方案
+## 实现方案
 
-### 1. 精简登录页 UI —— `src/components/auth/AuthPage.tsx`
-- 给 `<LoginForm>` 传 `variant="embedded"`,直接去掉 Card 标题和描述,只保留 Tab 下方的「用户名 / 密码」表单本体。
-- 副标题一行(`APP_BRAND_TAGLINE · AI 识物…`)保持不动;真正的「登录您的账户以继续」来自 Card,已随 embedded 模式一并去掉。
+### 1. 新增 `SpiritTaskCard.tsx`（`src/components/spirit/`）
 
-### 2. 首页整体居中、去掉上下滑动条 —— `src/components/auth/AuthPage.tsx`
-- 外层容器已经是 `min-h-screen flex items-center justify-center`,已经居中。但 `overflow-hidden` + 内容高度过大在小屏(390×598)下仍会溢出,所以把根容器改为 `h-[100dvh] overflow-hidden`,并把内部卡片的内边距/图标尺寸略微压缩(logo `h-16 w-16`、卡片 padding `p-4`、Tab 与表单间距 `mb-3` / `space-y-3`),确保 iPhone 竖屏首屏内一屏放下,无滚动条。
-- 底部 mode 切换(注册/忘记密码)保留链接式按钮,不引入额外滚动。
+BOOMER 气泡内嵌卡片，复用 `useTasks` 的数据和方法：
+- 顶部：`🦦 BOOMER：你今天还有 X 项奖励可以领（共 +Y 经验）`
+- 已完成未领：绿色行 + `领取 +N` 按钮 → `claimDaily` / `claimEvent`
+- 未完成：灰色行 + `去完成` 按钮 → `onNavigate(path)` 关闭抽屉并跳转
+- 底部：`一键领取全部（+Y）` 按钮 → `claimAllPending` + 循环 `claimDaily`
+- 全部领完时替换为一句 BOOMER 语："今天的角标都被你收干净了，好厉害～"
 
-### 3. 修复手机验证码登录 —— `src/components/auth/PhoneLoginForm.tsx`
-把 verifyOtp 调用改为:
-```ts
-const { error: eV } = await supabase.auth.verifyOtp({
-  type: 'magiclink',
-  token_hash: data.token_hash,
-});
-```
-去掉 `email` 字段。这样 `/verify` 就不会再报 400。
+任务路由映射沿用 `TasksPanel` 的 `TASK_ROUTE`。
 
-其余逻辑不动:仍然由 `phone-login-verify-otp` 校验短信验证码 → 生成 `token_hash` → 前端 `verifyOtp` 建立会话 → 写入 audit log → 跳 `/`。
+### 2. 改 `SpiritChatPanel.tsx`
 
-### 4. 兜底提示优化(轻量)
-`PhoneLoginForm` catch 分支已经用 `toast.error(e.message)`,修复后 400 不再出现。同时把 `invokeFn` 抛出的错误也保留原样,方便后续排查。
+- 接收新 prop `taskCard?: ReactNode`，在消息流最上方（空态与非空态都显示）渲染。
+- 空态 `EmptyState` 上方也保留卡片，让用户一打开就看到。
 
-## 影响面
-- 仅前端两个文件 + UI 微调;不动数据库、不动 edge function、不改 RLS。
-- 账号密码登录、注册、忘记密码流程不受影响。
-- 修复后此前已登记的手机号(比如你后台补录过的那批)都能正常通过验证码登录。
+### 3. 改 `SpiritDrawer.tsx` / `FloatingDashboard.tsx`
+
+- `FloatingDashboard` 里已有 `useTasks()`，把 `tasks` 传给 `SpiritDrawer`。
+- `SpiritDrawer` 组装 `<SpiritTaskCard tasks={tasks} onNavigate={(p) => { onClose(); navigate(p); }} />` 传入 `SpiritChatPanel`。
+- 首次打开抽屉且 `totalUnclaimedCount > 0` 时，让 BOOMER mascot 状态短暂切到 `alert`（视觉呼应）。
+
+### 4. 领取后交互
+
+- 领取成功后依赖 `useTasks` 的 realtime + `refresh` 自动更新数字；`FloatingDashboard` 气泡角标同步减少。
+- 全部领完时保留卡片 2 秒显示"收干净了"，然后 `setDismissed(true)` 折叠。
+
+### 5. 不做的事
+
+- 不改 `exp_pending` 表结构；不改识别页/签到页的触发逻辑。
+- 不恢复旧的"识别完弹角标"浮层——BOOMER 抽屉替代它。
+- 不动 `TasksPanel`（旧组件仍可用，暂不删）。
+
+## 技术细节
+
+- 领取按钮 loading 用局部 `busyKey` state（复刻 `TasksPanel`）。
+- `onNavigate` 走 `useNavigate()`，在 `SpiritDrawer` 里注入。
+- 卡片外观：`bg-white/8 border border-white/10 rounded-2xl`，与抽屉深色底一致；行内按钮用 `bg-gradient-accent`。
+- 空态时卡片放在 `EmptyState` 前；有历史消息时放在滚动区顶部（跟着滚）。
