@@ -54,7 +54,6 @@ function getCapsuleX(side: Side): number {
 
 export function FloatingDashboard() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -202,14 +201,6 @@ export function FloatingDashboard() {
         />,
         document.body,
       )}
-
-      <SpiritRewardPopover
-        tasks={tasks}
-        capsuleSide={pos.side}
-        capsuleY={capsuleY}
-        hidden={open || closing || dragging}
-        onOpenTask={(path) => navigate(path)}
-      />
 
       <Suspense fallback={null}>
         {greetOpen && <SpiritGreetingDialog open={greetOpen} onClose={closeGreeting} />}
