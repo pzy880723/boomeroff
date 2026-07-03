@@ -14,9 +14,22 @@ const BodySchema = z.object({
     .regex(/^[a-zA-Z0-9_]{3,32}$/, "用户名仅支持字母、数字、下划线，3-32 位"),
   password: z.string().min(6, "密码至少 6 位").max(72),
   display_name: z.string().trim().max(32).optional(),
-  real_name: z.string().trim().min(1, "请填写真实姓名").max(32).optional(),
+  real_name: z.string().trim().min(1, "请填写真实姓名").max(32),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^1[3-9]\d{9}$/, "手机号格式不正确"),
+  code: z.string().trim().regex(/^\d{6}$/, "请输入 6 位验证码"),
   shop_id: z.string().uuid("请选择所属门店"),
 });
+
+async function sha256Hex(s: string) {
+  const buf = new TextEncoder().encode(s);
+  const hash = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
