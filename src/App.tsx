@@ -89,6 +89,7 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <ScrollRestoration />
+          <RequirePhoneGate />
           <Suspense fallback={<RouteFallback />}>
 
             <Routes>
