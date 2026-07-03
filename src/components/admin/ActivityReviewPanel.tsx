@@ -52,6 +52,7 @@ export function ActivityReviewPanel() {
   };
 
   if (loading) return <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
+  if (loadError) return <PermissionErrorState compact error={loadError} onRetry={load} />;
 
   return (
     <div className="space-y-3">
