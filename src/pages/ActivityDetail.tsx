@@ -44,6 +44,7 @@ export default function ActivityDetail() {
   const [confirmApp, setConfirmApp] = useState<AppWithClaim | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
   const [signedUrlMap, setSignedUrlMap] = useState<Record<string, string>>({});
+  const [loadError, setLoadError] = useState<FriendlyRpcError | null>(null);
 
   const openImage = async (path: string) => {
     const cached = signedUrlMap[path];
