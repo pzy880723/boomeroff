@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { SpiritChatPanel } from './SpiritChatPanel';
-import { SpiritTaskCard } from './SpiritTaskCard';
+
 import { cn } from '@/lib/utils';
 import type { useSpiritChat, SpiritRewardItem } from '@/hooks/useSpiritChat';
 import type { useTasks } from '@/hooks/useTasks';
@@ -105,14 +105,6 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
         <X className="w-4 h-4" />
       </button>
 
-      {tasks && (
-        <div className="shrink-0">
-          <SpiritTaskCard
-            tasks={tasks}
-            onNavigate={(path) => { onClose(); navigate(path); }}
-          />
-        </div>
-      )}
 
       <div className="flex-1 min-h-0">
         <SpiritChatPanel chat={chat} tasks={tasks} />
