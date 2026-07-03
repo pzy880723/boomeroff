@@ -2913,6 +2913,7 @@ export type Database = {
       }
       claim_daily_task: { Args: { _task_key: string }; Returns: Json }
       claim_pending_exp: { Args: { _id: string }; Returns: Json }
+      current_user_shop_id: { Args: never; Returns: string }
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
       gen_short_code: { Args: never; Returns: string }
       gen_voucher_code: { Args: never; Returns: string }

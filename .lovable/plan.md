@@ -1,30 +1,45 @@
-## 首页顶部区域微调
+## 诊断结果
 
-在 `src/pages/Home.tsx` 做三处调整，只动展示层。
+页面本身没有前端编译错误，首页在本地可以渲染；真正的异常来自后端接口：
 
-### 1. 姓名右侧显示日期
-把 header 下方的问候行改成三段布局：
+- 失败接口：`staff_profiles`
+- 错误原因：`infinite recursion detected in policy for relation "staff_profiles"`
+- 影响：任何需要读取员工档案 / 门店 / 排班 / 首页信息的页面都可能加载失败或部分内容空白。
 
-```text
-[你好，陆哥  周四 · 11/13]                [快速打卡]
+根因是上一轮安全修复里，为了限制 `staff_profiles` 真实姓名泄露，把同店判断写成了在 `staff_profiles` 的 RLS 策略里再次查询 `staff_profiles`，触发了数据库 RLS 递归。
+
+## 修复计划
+
+1. 新增一个安全的后端函数，用 `SECURITY DEFINER` 查询当前用户的 `shop_id`，避免在 `staff_profiles` 的 RLS 策略里直接递归查询自身。
+2. 重建 `staff_profiles` 的读取策略：
+   - 本人可以读取自己的员工档案。
+   - 有 `staff.read` 权限的人只能读取同门店员工档案。
+   - 管理员可读取员工档案。
+3. 保留之前四个安全修复的意图，不改动其它扫描项：
+   - 不放开验证码表读取。
+   - 不恢复匿名 OKR 读取。
+   - 不扩大优惠券领取手机号读取范围。
+4. 验证首页 `/` 和 `staff_profiles` 请求不再 500，确认页面可打开。
+
+## 技术细节
+
+会通过 Lovable Cloud migration 执行类似以下修复：
+
+```sql
+CREATE OR REPLACE FUNCTION public.current_user_shop_id()
+RETURNS uuid
+SECURITY DEFINER
+...
+
+DROP POLICY IF EXISTS "staff read self or same shop manager" ON public.staff_profiles;
+CREATE POLICY ... USING (
+  auth.uid() = user_id
+  OR public.has_role(auth.uid(), 'admin')
+  OR (
+    public.user_has_permission(auth.uid(), 'staff.read')
+    AND shop_id = public.current_user_shop_id()
+  )
+);
 ```
 
-- 在 `你好，{name}` 后面加一小段灰色文字：`周X · M/D`（`Asia/Shanghai` 时区，`Intl.DateTimeFormat('zh-CN', { weekday:'short', month:'numeric', day:'numeric' })`）。
-- 姓名与日期同一行，姓名超长时先截断姓名，日期保持可见。
-
-### 2. 问候语单行显示
-把 `encouragement` 那段 `<p>` 从多行改成单行：
-- 去掉 `leading-relaxed`，加 `truncate whitespace-nowrap overflow-hidden`。
-- `<Sparkles />` 图标保留在开头。
-- 文案本身不改（由 `daily_encouragement` / edge function 生成），仅通过 `truncate` 保证不换行；过长的部分尾部省略。
-
-### 3. Banner 下方始终显示"我的排班"
-当前逻辑：`nextShift` 为空时整卡隐藏。改为始终渲染 `SectionCard`：
-
-- 有 `nextShift`：保持现状（日期 + 班次 Badge）。
-- 无 `nextShift`：显示占位文案「近期暂无排班」+ 右侧「去查看」跳 `/me`。
-- 卡片位置保持在 Banner 之下、活动条幅之上，不动其他区块。
-
-### 不改动
-- 打卡按钮、Banner、活动、AppGrid、OKR、Feed Tabs 都不动。
-- 不改数据获取逻辑，只在 `nextShift` 分支加空态 UI。
+然后用浏览器打开首页确认不再报错。
