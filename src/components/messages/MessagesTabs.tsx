@@ -20,6 +20,7 @@ interface StaffPeer extends PeerBase {
   unread: number;
 }
 interface ContactPeer extends PeerBase {
+  real_name: string | null;
   shop_id: string | null;
   shop_name: string | null;
   position: string | null;
