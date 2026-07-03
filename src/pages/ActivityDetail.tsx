@@ -140,6 +140,16 @@ export default function ActivityDetail() {
   if (loading) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   }
+  if (loadError) {
+    return (
+      <>
+        <PageHeader title="活动详情" back="/me/activities" />
+        <div className="container max-w-screen-md mx-auto px-3 py-6">
+          <PermissionErrorState error={loadError} onRetry={() => load()} />
+        </div>
+      </>
+    );
+  }
   if (!activity) {
     return (
       <>
