@@ -32,10 +32,11 @@ import { ROLE_LABELS, AppRole } from '@/types';
 import { legacyRoleOf } from '@/lib/roles';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound, IdCard, Store } from 'lucide-react';
+import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound, IdCard, Store, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
+import { logAudit } from '@/lib/audit';
 import { ResetUserPasswordDialog } from './ResetUserPasswordDialog';
 import { StaffProfileDialog } from './StaffProfileDialog';
 
