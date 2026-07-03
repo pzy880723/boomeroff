@@ -1,97 +1,35 @@
+## 问题
+1. **领取按钮显示破损**：截图中"领 +5"按钮文字被截断，只看到深色圆角空块。原因是 `SpiritTaskCard.tsx` 里按钮 `size="sm" + h-7 px-2.5`，`bg-gradient-accent` 与暗色抽屉背景对比不够，加上按钮宽度受父容器约束被压缩，出现文本重叠/截断。
+2. **提醒不主动**：现在的 `SpiritTaskCard` 塞在 `SpiritChatPanel` 消息流顶部，聊天多几轮后就被顶到滚动区最上面，用户根本不知道"还有一项可领"，需要打开抽屉再上滑才看到。用户要求：**有可领奖励时，直接以独立浮层弹出，不用上滑，一键领取**。
 
-# 消息中心重构
+## 方案
 
-## 一、Tab 布局修复(Notifications 页)
+### 一、新增"主动奖励浮层" `SpiritRewardPopover.tsx`
+挂在 `FloatingDashboard.tsx`（BOOMER 胶囊按钮同级），作为独立浮层：
 
-在 `src/pages/Notifications.tsx` 顶部 Tab 切换器:
+- **触发条件**：`useTasks().totalUnclaimedCount > 0` 且当前不在抽屉打开态。
+- **展示形态**：从 BOOMER 胶囊上方弹出一张小卡片（宽 ~ 280px），带小獭头像 + "你还有 X 项奖励可领 (+N 经验)" + **一键领取**主按钮 + 折叠展开的项目列表 + 右上角 × 关闭。
+- **交互**：
+  - 一键领取：调用 `tasks.claimAllPending()` + 遍历 `claimableDaily.claimDaily()`，成功后浮层进入庆祝态 1.2s 后自动收起。
+  - 逐条领取：点击项目行的领取按钮直接领取该项。
+  - 关闭 (×)：本次会话内 dismiss（sessionStorage 记录），有新的可领项再弹。
+  - 点击卡片头部/"去完成"：打开对应路由或抽屉。
+- **首次进入应用**：延迟 1.5s 弹出（避免首屏干扰），并带轻微弹跳动画引导视线。
+- **移动端安全区**：`bottom: calc(env(safe-area-inset-bottom) + 88px)`，位于 BottomTabBar 与 BOOMER 胶囊之上。
 
-- **拉满宽度**:去掉 `max-w-[320px]`,改为 `w-full`,三个 tab 平分整行。
-- **角标贴文字**:去掉 `absolute -top-1 -right-0.5`(会跑到按钮外角),改用 flex 布局把数字紧贴文字右侧,如 `通知 3` 之间用 gap-1.5,数字用小胶囊 badge。
-- 保持点击切换、下划线/背景高亮不变。
+### 二、抽屉内保留 `SpiritTaskCard`（辅助入口）
+- 不删除，用户从抽屉进来时仍可看到并领取（保持一致的能力）。
+- 但**将其位置从消息流顶部（会被滚动隐藏）提升到抽屉顶部固定条**：放在 `SpiritDrawer.tsx` 顶部品牌栏下方 shrink-0 区，不随聊天滚动。
 
-## 二、消息 Tab 内部结构:双子 Tab
+### 三、修复领取按钮显示
+在 `SpiritTaskCard.tsx` 的按钮：
+- 加 `min-w-[64px]` 防止被压缩、加 `whitespace-nowrap`。
+- 提升按钮文字对比：`text-white font-semibold`，去掉 gradient 与暗色描边冲突，改用实心 `bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]`。
+- Row 内 `title` 保留 `truncate`，把按钮 `shrink-0` 位置提前确保始终显示完整文字。
 
-消息 Tab 内新增顶部置顶的二级 Tab:**聊天 / 联系人**(默认「聊天」)。
-
-### 1. 聊天子 Tab(最近会话)
-- 复用现有 `StaffMessagesList` 逻辑,但只显示**有过消息往来**的会话(不再把全部同事塞进来)。
-- 每条会话:头像 + 名字 + 所属门店 · 角色 · 最后一条摘要 + 时间 + 未读红点。
-- 空态改为:「还没有会话,去『联系人』找同事发起聊天」。
-
-### 2. 联系人子 Tab(全员架构)
-- 直接展示全部在用同事(不再"暂无同事"),按**组织架构树**分组:
-  - 一级:门店(`shops.name`) / 无门店时归入「总部/未分配」
-  - 二级:角色(`app_roles.name`,如超级管理员/区域经理/店长/店员)
-  - 三级:用户卡片
-- 每张用户卡片显示:头像 + 姓名 + 门店 · 岗位 + 「在线/离线」状态点(基于 `current_session` 表或 5 分钟内心跳)。
-- 点击进入 `/messages/:peerId` 现有单聊页。
-- 顶部搜索框:按姓名/门店模糊搜索。
-
-## 三、单聊页增强(`MessagesConversation.tsx`)
-
-支持文字/图片/视频/文件四类消息:
-
-- `direct_messages` 表新增字段:`attachment_type`(image/video/file/audio)、`attachment_name`、`attachment_size`、`attachment_mime`。
-- 底部输入区加号菜单:📷 图片 · 🎥 视频 · 📎 文件。视频用 `<video controls>` 内联播放,文件显示图标 + 文件名 + 大小 + 下载按钮。
-- 复用 `marketing-assets` 或新建 `chat-attachments` bucket 存储。
-
-## 四、群聊占位
-
-- 数据库预留 `chat_rooms` / `chat_room_members` / `chat_messages` 表结构(带 RLS + GRANT),但前端本轮**不建群管理 UI**。
-- 联系人页右上角显示「+ 发起群聊」按钮 → 点击弹「即将上线」toast,埋点保留。
-
-## 五、推送通知(Capacitor)
-
-按你选的方案「先本地,后端调用时同时发远程」:
-
-### 本地推送(立即可用,无需凭证)
-- `bun add @capacitor/local-notifications @capacitor/push-notifications`
-- 新建 `src/lib/push.ts`:
-  - 启动时请求权限并注册。
-  - 订阅 `notifications` / `direct_messages` 的 realtime INSERT,当**当前收件人 = 自己**时触发 `LocalNotifications.schedule`,内容为标题 + 摘要。
-  - `notificationActionPerformed` 监听:点通知 → `/notifications?open=xxx`(通知)或 `/messages/:peerId`(私信)。
-- Web 端优雅降级为 `toast`(已存在)+ 浏览器 Notification API。
-
-### 远程推送(后端 Edge Function 占位)
-- 新表 `push_tokens` (`user_id`, `platform`, `token`, `updated_at`) + RLS。
-- App 启动注册 APNs/FCM token → 存入 `push_tokens`。
-- 新 Edge Function `send-push`:
-  - 收到 `{user_id, title, body, deeplink}`,查 tokens 并调 APNs (`.p8`) / FCM v1 API。
-  - 未配置凭证时静默 no-op(不阻塞现有流程)。
-- 在**发通知/发私信**的现有 Edge Function 里追加 `send-push` 调用。
-- 凭证(`APNS_KEY_P8` / `APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_BUNDLE_ID` / `FCM_SERVICE_ACCOUNT_JSON`)后续用 `add_secret` 收集,先留占位不阻塞。
-
-### 通知点击深链
-- `notifications` 通知:跳 `/notifications?tab=notice&open={id}`(现有支持)。
-- 私信:跳 `/messages/{peer_id}`。
-- Capacitor 层用 `App.addListener('appUrlOpen', …)` 统一处理。
-
-## 六、数据库改动一览(单次 migration)
-
-1. `direct_messages`:加 4 列 `attachment_type/name/size/mime`。
-2. `push_tokens`:新表 + RLS + GRANT。
-3. `chat_rooms` / `chat_room_members` / `chat_messages`:新表 + RLS + GRANT(占位)。
-4. `current_session`:确认结构可推导在线状态(已存在,不改)。
-
-## 七、文件改动清单
-
-- **新建**
-  - `src/components/messages/ChatTab.tsx` — 最近会话列表
-  - `src/components/messages/ContactsTab.tsx` — 全员架构树 + 搜索
-  - `src/components/messages/AttachmentPicker.tsx` — 图片/视频/文件选择
-  - `src/lib/push.ts` — Capacitor 推送封装
-  - `src/lib/onlineStatus.ts` — 在线状态计算
-  - `supabase/functions/send-push/index.ts` — 远程推送 Edge Function
-- **修改**
-  - `src/pages/Notifications.tsx` — Tab 拉满 + 角标位置 + 消息 Tab 接双子 Tab
-  - `src/pages/MessagesConversation.tsx` — 支持视频/文件消息
-  - `src/hooks/useNotifications.tsx` — 触发本地推送
-  - `src/App.tsx` — 挂载 push 初始化
-  - `capacitor.config.ts` — 通知图标/声音
-
-## 八、验证
-
-- 桌面浏览器:Tab 平分/角标贴文字/联系人架构可展开/单聊发文件收发正常。
-- 手机预览:Realtime 到达时能看到 toast 兜底。
-- 打 APK/IPA 后:授权推送 → 后台收到本地通知 → 点击跳转正确页面。
-
+## 涉及文件
+- 新建 `src/components/spirit/SpiritRewardPopover.tsx`
+- 修改 `src/components/dashboard/FloatingDashboard.tsx`（挂载浮层）
+- 修改 `src/components/spirit/SpiritDrawer.tsx`（TaskCard 上移到固定区）
+- 修改 `src/components/spirit/SpiritChatPanel.tsx`（去掉消息流顶部的 taskCard 或改为可选）
+- 修改 `src/components/spirit/SpiritTaskCard.tsx`（按钮修复 + 支持 `compact` 变体供浮层复用）
