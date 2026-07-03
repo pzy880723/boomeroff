@@ -356,12 +356,15 @@ function ContactsList({ userId }: { userId: string }) {
                     to={`/messages/${c.user_id}`}
                     className="flex items-center gap-3 px-3 py-3 hover:bg-muted/40 active:bg-muted transition-colors"
                   >
-                    <AvatarWithPresence name={c.display_name} avatar={c.avatar_url} online={online.has(c.user_id)} size={40} />
+                    <AvatarWithPresence name={c.real_name || c.display_name} avatar={c.avatar_url} online={online.has(c.user_id)} size={40} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold truncate">{c.display_name || '同事'}</p>
+                        <p className="text-sm font-semibold truncate">{c.real_name || c.display_name || '同事'}</p>
+                        {c.real_name && c.display_name && c.real_name !== c.display_name && (
+                          <span className="text-[10px] text-muted-foreground truncate">@{c.display_name}</span>
+                        )}
                         {online.has(c.user_id) && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 shrink-0">
                             <Circle className="w-2 h-2 fill-current" />在线
                           </span>
                         )}
