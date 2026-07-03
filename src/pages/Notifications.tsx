@@ -104,6 +104,9 @@ export default function Notifications() {
   const isAdmin = role === 'admin';
 
   const [sp, setSp] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const fromHomeRef = useRef<boolean>(Boolean((location.state as any)?.fromHome));
   const initialTab = (() => {
     const q = sp.get('tab');
     if (q === 'notice' || q === 'news' || q === 'message') return q as TabKey;
