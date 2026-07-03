@@ -117,7 +117,7 @@ export function SpiritTaskCard({ tasks, onNavigate }: Props) {
             size="sm"
             disabled={claimingAll}
             onClick={handleClaimAll}
-            className="h-7 px-2.5 text-[11px] shrink-0 bg-gradient-accent text-accent-foreground hover:opacity-90"
+            className="h-7 min-w-[64px] px-2.5 text-[11px] font-semibold whitespace-nowrap shrink-0 bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] hover:bg-[hsl(var(--accent))]/90"
           >
             {claimingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : `一键领 +${totalExp}`}
           </Button>
@@ -137,7 +137,7 @@ export function SpiritTaskCard({ tasks, onNavigate }: Props) {
                 size="sm"
                 disabled={busyKey === p.id}
                 onClick={() => handleClaimEvent(p.id, p.amount)}
-                className="h-7 px-2.5 text-[11px] shrink-0 bg-gradient-accent text-accent-foreground hover:opacity-90"
+                className="h-7 min-w-[64px] px-2.5 text-[11px] font-semibold whitespace-nowrap shrink-0 bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] hover:bg-[hsl(var(--accent))]/90"
               >
                 {busyKey === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : `领 +${p.amount}`}
               </Button>
@@ -158,7 +158,7 @@ export function SpiritTaskCard({ tasks, onNavigate }: Props) {
                 size="sm"
                 disabled={busyKey === t.key}
                 onClick={() => handleClaimDaily(t.key, t.amount)}
-                className="h-7 px-2.5 text-[11px] shrink-0 bg-gradient-accent text-accent-foreground hover:opacity-90"
+                className="h-7 min-w-[64px] px-2.5 text-[11px] font-semibold whitespace-nowrap shrink-0 bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] hover:bg-[hsl(var(--accent))]/90"
               >
                 {busyKey === t.key ? <Loader2 className="w-3 h-3 animate-spin" /> : `领 +${t.amount}`}
               </Button>
