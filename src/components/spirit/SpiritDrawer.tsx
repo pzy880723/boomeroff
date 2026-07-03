@@ -105,14 +105,6 @@ export function SpiritDrawer({ open, closing, originX, originY, onAnimEnd, onClo
         <X className="w-4 h-4" />
       </button>
 
-      {tasks && (
-        <div className="shrink-0">
-          <SpiritTaskCard
-            tasks={tasks}
-            onNavigate={(path) => { onClose(); navigate(path); }}
-          />
-        </div>
-      )}
 
       <div className="flex-1 min-h-0">
         <SpiritChatPanel chat={chat} tasks={tasks} />
