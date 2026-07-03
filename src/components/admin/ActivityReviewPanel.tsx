@@ -9,16 +9,25 @@ import { Loader2, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { invokeFn } from '@/lib/invokeFn';
+import { humanizeRpcError, type FriendlyRpcError } from '@/lib/rpcError';
+import { PermissionErrorState } from '@/components/common/PermissionErrorState';
 
 export function ActivityReviewPanel() {
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<FriendlyRpcError | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.rpc('list_pending_activity_applications');
-    setList((data as any[]) || []);
+    setLoadError(null);
+    const { data, error } = await supabase.rpc('list_pending_activity_applications');
+    if (error) {
+      setLoadError(humanizeRpcError(error));
+      setList([]);
+    } else {
+      setList((data as any[]) || []);
+    }
     setLoading(false);
   }, []);
 
@@ -43,6 +52,7 @@ export function ActivityReviewPanel() {
   };
 
   if (loading) return <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
+  if (loadError) return <PermissionErrorState compact error={loadError} onRetry={load} />;
 
   return (
     <div className="space-y-3">
