@@ -360,6 +360,9 @@ export default function Home() {
           </section>
         )}
 
+        {/* 奖励待领取 - 默认收起, 展开可看待完成任务 */}
+        <RewardInboxCard />
+
         {/* 我的应用 */}
         <AppGrid />
 
