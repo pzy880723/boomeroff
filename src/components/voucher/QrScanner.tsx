@@ -65,22 +65,18 @@ export function QrScanner({ onScanned, onClose }: Props) {
         }
         #${containerId} > div:not(#qr-shaded-region) { border: none !important; }
       `}</style>
-      <div className="flex items-center justify-between p-3 text-white">
+      <div className="flex items-center justify-center p-3 text-white">
         <span className="text-sm">将二维码对准方框</span>
-        <Button variant="ghost" size="icon" onClick={onClose} className="text-white">
-          <X className="w-5 h-5" />
-        </Button>
       </div>
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="relative bg-black rounded-xl overflow-hidden"
           style={{ width: 'min(86vw, 360px)', height: 'min(86vw, 360px)' }}
         >
           <div id={containerId} className="w-full h-full" />
-          {/* 视觉对位框 */}
           <div className="pointer-events-none absolute inset-[8%] rounded-xl ring-2 ring-white/80" />
         </div>
       </div>
-      <div className="p-4 text-center text-sm text-white/70 min-h-[3rem]">
+      <div className="px-4 pt-2 text-center text-sm text-white/70 min-h-[2.5rem]">
         {starting && (
           <span className="inline-flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -88,6 +84,16 @@ export function QrScanner({ onScanned, onClose }: Props) {
           </span>
         )}
         {error && <span className="text-red-300">{error}</span>}
+      </div>
+      <div className="flex justify-center pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="关闭扫码"
+          className="w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 ring-1 ring-white/30 backdrop-blur flex items-center justify-center text-white transition-colors"
+        >
+          <X className="w-7 h-7" />
+        </button>
       </div>
     </div>
   );
