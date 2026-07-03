@@ -54,6 +54,7 @@ import PublicCommunity from "./pages/public/PublicCommunity";
 import PublicAbout from "./pages/public/PublicAbout";
 import { PublicErrorBoundary } from "./components/system/PublicErrorBoundary";
 import { ScrollRestoration } from "./components/system/ScrollRestoration";
+import { RequirePhoneGate } from "./components/auth/RequirePhoneGate";
 
 
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
@@ -88,6 +89,7 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <ScrollRestoration />
+          <RequirePhoneGate />
           <Suspense fallback={<RouteFallback />}>
 
             <Routes>

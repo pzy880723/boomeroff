@@ -33,6 +33,7 @@ interface Profile {
   real_name?: string | null;
   position?: StaffPosition | null;
   shop_id?: string | null;
+  phone?: string | null;
 }
 
 const WEEK = [
@@ -60,10 +61,11 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
     if (!open) return;
     (async () => {
       setLoading(true);
-      const [{ data }, { data: shopRows }, { data: offRows }] = await Promise.all([
+      const [{ data }, { data: shopRows }, { data: offRows }, { data: prof }] = await Promise.all([
         supabase.from('staff_profiles' as any).select('*').eq('user_id', userId).maybeSingle(),
         supabase.from('shops' as any).select('id, name').eq('active', true).order('sort_order').order('name'),
         supabase.from('staff_day_offs' as any).select('*').eq('user_id', userId).gte('off_date', new Date().toISOString().slice(0,10)).order('off_date'),
+        supabase.from('profiles').select('phone').eq('user_id', userId).maybeSingle(),
       ]);
       setShops((shopRows as any) || []);
       setDayOffs((offRows as any) || []);
@@ -82,6 +84,7 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
         real_name: d.real_name ?? null,
         position: d.position ?? null,
         shop_id: d.shop_id ?? null,
+        phone: (prof as any)?.phone ?? null,
       });
       setLoading(false);
     })();
@@ -96,11 +99,25 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
 
   const save = async () => {
     if (!p) return;
-    const payload = { ...p, real_name: p.real_name?.trim() || null };
+    const cleanPhone = (p.phone || '').trim();
+    if (cleanPhone && !/^1[3-9]\d{9}$/.test(cleanPhone)) {
+      toast.error('手机号格式不正确'); return;
+    }
+    const { phone, ...rest } = p;
+    const payload = { ...rest, real_name: p.real_name?.trim() || null };
     const { error } = await supabase.from('staff_profiles' as any).upsert(payload);
-    if (error) toast.error(error.message);
-    else { toast.success('已保存'); onOpenChange(false); onSaved?.(); }
+    if (error) { toast.error(error.message); return; }
+    const { error: ePhone } = await supabase.rpc('admin_update_user_phone' as any, {
+      _user_id: userId,
+      _phone: cleanPhone,
+      _real_name: p.real_name?.trim() || '',
+    });
+    if (ePhone) { toast.error(ePhone.message); return; }
+    toast.success('已保存');
+    onOpenChange(false);
+    onSaved?.();
   };
+
 
   const addDayOff = async () => {
     if (!newOff.off_date) { toast.error('请选择日期'); return; }
@@ -143,6 +160,21 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div>
+              <Label className="text-xs">手机号 <span className="text-destructive">*</span></Label>
+              <Input
+                type="tel"
+                inputMode="numeric"
+                maxLength={11}
+                value={p.phone || ''}
+                onChange={e => setP({ ...p, phone: e.target.value.replace(/\D/g, '') })}
+                placeholder="11 位手机号，用于登录与验证"
+              />
+              {!p.phone && (
+                <p className="text-[11px] text-destructive mt-1">该用户尚未绑定手机号，登录后会被强制补录</p>
+              )}
             </div>
 
             <div>

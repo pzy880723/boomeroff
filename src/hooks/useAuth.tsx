@@ -166,6 +166,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
     if (nextSession?.user) {
+      // 异步写审计日志，不阻塞登录流程
+      import('@/lib/audit').then(({ logAudit }) => {
+        logAudit({ action: 'login.password', detail: { email } });
+      }).catch(() => {});
       await fetchUserRole(nextSession.user.id);
     } else {
       setLoading(false);

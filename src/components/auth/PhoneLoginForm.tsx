@@ -62,6 +62,9 @@ export function PhoneLoginForm({ onSuccess }: { onSuccess?: () => void }) {
         token_hash: data.token_hash,
       });
       if (eV) throw eV;
+      import('@/lib/audit').then(({ logAudit }) => {
+        logAudit({ action: 'login.phone', detail: { phone: String(phone).replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') } });
+      }).catch(() => {});
       onSuccess?.();
       navigate('/', { replace: true });
     } catch (e) {

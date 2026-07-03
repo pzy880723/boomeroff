@@ -32,10 +32,11 @@ import { ROLE_LABELS, AppRole } from '@/types';
 import { legacyRoleOf } from '@/lib/roles';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound, IdCard, Store } from 'lucide-react';
+import { Shield, Mail, Calendar, MoreHorizontal, UserX, Trash2, PlayCircle, CheckCircle2, KeyRound, IdCard, Store, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
+import { logAudit } from '@/lib/audit';
 import { ResetUserPasswordDialog } from './ResetUserPasswordDialog';
 import { StaffProfileDialog } from './StaffProfileDialog';
 
@@ -50,6 +51,7 @@ interface UserWithRole {
   profile?: {
     display_name: string | null;
     avatar_url: string | null;
+    phone: string | null;
   };
   staff?: {
     real_name: string | null;
@@ -64,7 +66,7 @@ export function UserTable() {
   const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
   const [resetUser, setResetUser] = useState<UserWithRole | null>(null);
   const [profileUser, setProfileUser] = useState<UserWithRole | null>(null);
-  const [filter, setFilter] = useState<'all' | 'pending'>('all');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'missing_phone'>('all');
   const [roleNameMap, setRoleNameMap] = useState<Record<string, string>>({});
   const [shopNameMap, setShopNameMap] = useState<Record<string, string>>({});
   const [shifts, setShifts] = useState<{ code: string; name: string }[]>([]);
@@ -98,13 +100,13 @@ export function UserTable() {
       if (rolesError) throw rolesError;
 
       const userIds = (roles || []).map((r: any) => r.user_id);
-      let profileMap: Record<string, { display_name: string | null; avatar_url: string | null }> = {};
+      let profileMap: Record<string, { display_name: string | null; avatar_url: string | null; phone: string | null }> = {};
       let staffMap: Record<string, { real_name: string | null; shop_id: string | null }> = {};
       if (userIds.length > 0) {
         const [{ data: profs }, { data: staff }] = await Promise.all([
           supabase
             .from('profiles')
-            .select('user_id, display_name, avatar_url')
+            .select('user_id, display_name, avatar_url, phone')
             .in('user_id', userIds),
           supabase
             .from('staff_profiles' as any)
@@ -112,7 +114,7 @@ export function UserTable() {
             .in('user_id', userIds),
         ]);
         (profs || []).forEach((p: any) => {
-          profileMap[p.user_id] = { display_name: p.display_name, avatar_url: p.avatar_url };
+          profileMap[p.user_id] = { display_name: p.display_name, avatar_url: p.avatar_url, phone: p.phone };
         });
         (staff || []).forEach((s: any) => {
           staffMap[s.user_id] = { real_name: s.real_name, shop_id: s.shop_id };
@@ -165,6 +167,12 @@ export function UserTable() {
           : u,
       ),
     );
+    logAudit({
+      action: 'user.update_role',
+      target_type: 'user',
+      target_id: userId,
+      detail: { role_code: newRoleCode },
+    });
     return true;
   };
 
@@ -184,6 +192,15 @@ export function UserTable() {
     }
 
     toast.success(newSuspendedState ? '用户已暂停' : '已通过审核，用户可登录');
+    logAudit({
+      action: newSuspendedState ? 'user.suspend' : 'user.resume',
+      target_type: 'user',
+      target_id: user.user_id,
+      detail: {
+        target_name: user.staff?.real_name || user.profile?.display_name || '',
+        suspended: newSuspendedState,
+      },
+    });
     fetchUsers();
   };
 
@@ -206,6 +223,12 @@ export function UserTable() {
         .eq('user_id', userToDelete.user_id);
 
       toast.success('用户已删除');
+      logAudit({
+        action: 'user.delete',
+        target_type: 'user',
+        target_id: userToDelete.user_id,
+        detail: { target_name: userToDelete.staff?.real_name || userToDelete.profile?.display_name || '' },
+      });
       fetchUsers();
     } catch (error) {
       toast.error('删除失败');
@@ -251,11 +274,15 @@ export function UserTable() {
   }
 
   const pendingCount = users.filter((u) => u.suspended).length;
-  const filteredUsers = filter === 'pending' ? users.filter((u) => u.suspended) : users;
+  const missingPhoneCount = users.filter((u) => !u.profile?.phone).length;
+  const filteredUsers =
+    filter === 'pending' ? users.filter((u) => u.suspended)
+    : filter === 'missing_phone' ? users.filter((u) => !u.profile?.phone)
+    : users;
 
   return (
     <>
-      <Tabs value={filter} onValueChange={(v) => setFilter(v as 'all' | 'pending')}>
+      <Tabs value={filter} onValueChange={(v) => setFilter(v as any)}>
         <TabsList>
           <TabsTrigger value="all">全部 ({users.length})</TabsTrigger>
           <TabsTrigger value="pending" className="gap-1.5">
@@ -263,6 +290,14 @@ export function UserTable() {
             {pendingCount > 0 && (
               <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
                 {pendingCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="missing_phone" className="gap-1.5">
+            未填手机
+            {missingPhoneCount > 0 && (
+              <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
+                {missingPhoneCount}
               </Badge>
             )}
           </TabsTrigger>
@@ -321,6 +356,16 @@ export function UserTable() {
                       <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                         <Store className="h-3 w-3" />
                         {user.staff?.shop_id ? (shopNameMap[user.staff.shop_id] || '门店') : '未绑定门店'}
+                      </span>
+                      <span className="text-[11px] flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        {user.profile?.phone ? (
+                          <span className="text-muted-foreground tabular-nums">{user.profile.phone}</span>
+                        ) : (
+                          <Badge variant="outline" className="h-4 px-1.5 text-[10px] text-destructive border-destructive/60">
+                            未填写
+                          </Badge>
+                        )}
                       </span>
                     </div>
                   </TableCell>
