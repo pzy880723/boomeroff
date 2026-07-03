@@ -33,6 +33,7 @@ interface Profile {
   real_name?: string | null;
   position?: StaffPosition | null;
   shop_id?: string | null;
+  phone?: string | null;
 }
 
 const WEEK = [
