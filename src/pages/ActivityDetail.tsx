@@ -23,6 +23,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { humanizeRpcError, type FriendlyRpcError } from '@/lib/rpcError';
+import { PermissionErrorState } from '@/components/common/PermissionErrorState';
 
 type AppWithClaim = ActivityApplication & {
   voucher_claim?: { status: string; short_code: string | null; redeemed_at: string | null } | null;
