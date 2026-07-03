@@ -58,7 +58,8 @@ export default function Home() {
 
   const [name, setName] = useState<string>('店员');
   const [encouragement, setEncouragement] = useState<string>('今天也把每一位进店的客人当作朋友。');
-  const [nextShift, setNextShift] = useState<{ work_date: string; shift_code: string } | null>(null);
+  const [todayShift, setTodayShift] = useState<ShiftInfo | null>(null);
+  const [tomorrowShift, setTomorrowShift] = useState<ShiftInfo | null>(null);
   const [act, setAct] = useState<ActiveActivity | null>(null);
   const [okrs, setOkrs] = useState<StoreOkr[]>([]);
   
