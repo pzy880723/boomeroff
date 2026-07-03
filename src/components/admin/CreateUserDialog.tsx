@@ -34,6 +34,7 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState('');
   const [realName, setRealName] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [roleCode, setRoleCode] = useState('');
@@ -69,6 +70,7 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
   const reset = () => {
     setUsername('');
     setRealName('');
+    setPhone('');
     setPassword('');
     setShowPassword(false);
     setRoleCode('');
@@ -99,6 +101,11 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
       return;
     }
 
+    if (phone && !/^1[3-9]\d{9}$/.test(phone)) {
+      toast.error('手机号格式不正确');
+      return;
+    }
+
     setLoading(true);
     try {
       const { data, error } = await invokeFn(
@@ -109,6 +116,7 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
             password,
             role_code: roleCode,
             real_name: realName.trim() || undefined,
+            phone: phone.trim() || undefined,
             shop_id: shopId,
           },
         },
@@ -168,6 +176,22 @@ export function CreateUserDialog({ onCreated }: CreateUserDialogProps) {
               placeholder="例如：张三"
               maxLength={32}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="new-phone">手机号（用于验证码登录）</Label>
+            <Input
+              id="new-phone"
+              type="tel"
+              inputMode="numeric"
+              maxLength={11}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+              placeholder="选填，例如 138xxxx1234"
+            />
+            <p className="text-xs text-muted-foreground">
+              登记后该手机号可用于短信验证码登录（白名单制）
+            </p>
           </div>
 
           <div className="space-y-2">
