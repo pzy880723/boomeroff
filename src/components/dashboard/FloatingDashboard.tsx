@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useTasks } from '@/hooks/useTasks';
 import { SpiritMascot, type SpiritState } from '../spirit/SpiritMascot';
 import { SpiritDrawer } from '../spirit/SpiritDrawer';
-import { SpiritRewardPopover } from '../spirit/SpiritRewardPopover';
 
 import { useSpiritChat } from '@/hooks/useSpiritChat';
 import { cn } from '@/lib/utils';
