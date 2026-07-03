@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,15 +22,18 @@ const loginSchema = z.object({
 interface LoginFormProps {
   onForgotPassword: () => void;
   onRegister?: () => void;
+  /** embedded: 不再套 Card，直接嵌入 Tabs 内 */
+  variant?: 'card' | 'embedded';
 }
 
-export function LoginForm({ onForgotPassword, onRegister }: LoginFormProps) {
+export function LoginForm({ onForgotPassword, onRegister, variant = 'card' }: LoginFormProps) {
   const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +54,7 @@ export function LoginForm({ onForgotPassword, onRegister }: LoginFormProps) {
         ? trimmed
         : `${trimmed.toLowerCase()}@boomeroff.local`;
       await signIn(loginEmail, password);
-      // 不再立即弹"登录成功"——若账号待审核，useAuth 会弹审核提示并登出，避免互相矛盾
+      navigate('/', { replace: true });
     } catch (error) {
       const raw = error instanceof Error ? error.message : '';
       const friendly = /invalid login credentials/i.test(raw)
@@ -66,61 +70,57 @@ export function LoginForm({ onForgotPassword, onRegister }: LoginFormProps) {
     }
   };
 
-  return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">登录</CardTitle>
-        <CardDescription>登录您的账户以使用商品识别助手</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="account">用户名</Label>
+  const formBody = (
+    <>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="account">用户名</Label>
+          <Input
+            id="account"
+            type="text"
+            value={account}
+            onChange={(e) => setAccount(e.target.value)}
+            placeholder="请输入用户名"
+            autoComplete="username"
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">密码</Label>
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              className="text-sm text-primary hover:underline"
+            >
+              忘记密码？
+            </button>
+          </div>
+          <div className="relative">
             <Input
-              id="account"
-              type="text"
-              value={account}
-              onChange={(e) => setAccount(e.target.value)}
-              placeholder="请输入用户名"
-              autoComplete="username"
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="请输入密码"
               required
+              className="pr-10"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">密码</Label>
-              <button
-                type="button"
-                onClick={onForgotPassword}
-                className="text-sm text-primary hover:underline"
-              >
-                忘记密码？
-              </button>
-            </div>
-            <div className="relative">
-              <Input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="请输入密码"
-                required
-                className="pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            登录
-          </Button>
-        </form>
+        </div>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          登录
+        </Button>
+      </form>
+      {onRegister && (
         <p className="text-center text-sm text-muted-foreground mt-4">
           还没有账号？{' '}
           <button
@@ -131,7 +131,19 @@ export function LoginForm({ onForgotPassword, onRegister }: LoginFormProps) {
             注册账号
           </button>
         </p>
-      </CardContent>
+      )}
+    </>
+  );
+
+  if (variant === 'embedded') return formBody;
+
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl">登录</CardTitle>
+        <CardDescription>登录您的账户以继续</CardDescription>
+      </CardHeader>
+      <CardContent>{formBody}</CardContent>
     </Card>
   );
 }

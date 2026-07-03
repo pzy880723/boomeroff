@@ -82,18 +82,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     console.log('[Auth] Initializing auth state...');
     
-    // 预览域名下自动登录开发账号（仅 lovable.app / localhost）
+    // 仅本地 / Lovable 沙盒里自动登录；线上正式域名不再触发，避免 “打不开的兜底页面”
     const tryDevAutoLogin = async () => {
       try {
         const host = window.location.hostname;
-        const isPreview =
-          host.endsWith('.lovable.app') ||
+        const isSandbox =
           host === 'localhost' ||
-          host === '127.0.0.1';
-        if (!isPreview) return;
+          host === '127.0.0.1' ||
+          host.endsWith('.lovableproject.com') ||
+          host.startsWith('id-preview--');
+        if (!isSandbox) return;
         if (sessionStorage.getItem('dev-autologin-tried') === '1') return;
         sessionStorage.setItem('dev-autologin-tried', '1');
-        console.log('[Auth] Preview detected, auto-login dev account...');
+        console.log('[Auth] Sandbox detected, auto-login dev account...');
         const { error } = await supabase.auth.signInWithPassword({
           email: '87113911@qq.com',
           password: 'pzy5565283',

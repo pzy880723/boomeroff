@@ -17,6 +17,11 @@ const BodySchema = z.object({
   role_code: z.string().trim().min(1).optional(),
   role: z.enum(["admin", "anchor"]).optional(),
   real_name: z.string().trim().max(32).optional(),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^1[3-9]\d{9}$/, "手机号格式不正确")
+    .optional(),
   shop_id: z.string().uuid("请选择所属门店").optional(),
 });
 
@@ -76,7 +81,7 @@ Deno.serve(async (req) => {
       const first = parsed.error.errors[0]?.message ?? "参数错误";
       return json({ error: first }, 400);
     }
-    const { username, password, role, role_code, real_name, shop_id } =
+    const { username, password, role, role_code, real_name, phone, shop_id } =
       parsed.data;
 
     // 计算最终 role_code：优先使用前端传的 role_code；否则根据 legacy role 兜底
