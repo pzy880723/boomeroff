@@ -29,7 +29,21 @@ interface Peer {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  real_name?: string | null;
+  shop_name?: string | null;
+  position?: string | null;
+  role_label?: string | null;
 }
+
+const ROLE_ZH: Record<string, string> = {
+  admin: '超级管理员',
+  boss: '老板',
+  store_manager: '店长',
+  staff: '店员',
+  associate: '合伙人',
+  hq: '总部',
+  finance: '财务',
+};
 
 const SELECT_COLS =
   'id, sender_id, receiver_id, body, image_url, attachment_type, attachment_url, attachment_name, attachment_size, attachment_mime, created_at, read_at';
@@ -49,8 +63,10 @@ export default function MessagesConversation() {
     if (!user || !peerId) return;
     let cancelled = false;
     void (async () => {
-      const [{ data: p }, { data: history }] = await Promise.all([
+      const [{ data: p }, { data: sp }, { data: ur }, { data: history }] = await Promise.all([
         supabase.from('profiles').select('user_id, display_name, avatar_url').eq('user_id', peerId).maybeSingle(),
+        supabase.from('staff_profiles').select('real_name, position, shop_id').eq('user_id', peerId).maybeSingle(),
+        supabase.from('user_roles').select('role').eq('user_id', peerId).limit(1).maybeSingle(),
         supabase.from('direct_messages')
           .select(SELECT_COLS)
           .or(`and(sender_id.eq.${user.id},receiver_id.eq.${peerId}),and(sender_id.eq.${peerId},receiver_id.eq.${user.id})`)
@@ -58,7 +74,22 @@ export default function MessagesConversation() {
           .limit(200),
       ]);
       if (cancelled) return;
-      setPeer((p as Peer) || { user_id: peerId, display_name: '同事', avatar_url: null });
+      let shop_name: string | null = null;
+      const shopId = (sp as any)?.shop_id;
+      if (shopId) {
+        const { data: shop } = await supabase.from('shops').select('name').eq('id', shopId).maybeSingle();
+        shop_name = (shop as any)?.name || null;
+      }
+      const roleCode = (ur as any)?.role as string | undefined;
+      setPeer({
+        user_id: peerId,
+        display_name: (p as any)?.display_name || null,
+        avatar_url: (p as any)?.avatar_url || null,
+        real_name: (sp as any)?.real_name || null,
+        position: (sp as any)?.position || null,
+        shop_name,
+        role_label: roleCode ? (ROLE_ZH[roleCode] || roleCode) : null,
+      });
       setMsgs((history as Msg[]) || []);
       const unread = ((history as Msg[]) || []).filter(m => m.receiver_id === user.id && !m.read_at);
       if (unread.length) {
@@ -150,10 +181,10 @@ export default function MessagesConversation() {
           </button>
           <div className="relative">
             {peer?.avatar_url ? (
-              <img src={peer.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+              <img src={peer.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold">
-                {(peer?.display_name || '同').slice(0, 1)}
+              <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold">
+                {((peer?.real_name || peer?.display_name) || '同').slice(0, 1)}
               </div>
             )}
             {isOnline && (
@@ -161,9 +192,18 @@ export default function MessagesConversation() {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate">{peer?.display_name || '同事'}</p>
-            <p className="text-[10px] text-muted-foreground -mt-0.5">
-              {isOnline ? '在线' : '离线'}
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold truncate">{peer?.real_name || peer?.display_name || '同事'}</p>
+              {peer?.role_label && (
+                <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] shrink-0">{peer.role_label}</span>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground truncate -mt-0.5">
+              {[
+                isOnline ? '在线' : '离线',
+                peer?.shop_name,
+                peer?.position,
+              ].filter(Boolean).join(' · ')}
             </p>
           </div>
         </div>

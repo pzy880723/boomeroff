@@ -20,6 +20,7 @@ interface StaffPeer extends PeerBase {
   unread: number;
 }
 interface ContactPeer extends PeerBase {
+  real_name: string | null;
   shop_id: string | null;
   shop_name: string | null;
   position: string | null;
@@ -127,17 +128,20 @@ function ChatList({ userId }: { userId: string }) {
     }
     const allIds = Array.from(new Set([...coworkerIds, ...lastByPeer.keys()]));
     let profiles: any[] = [];
+    let staffMap = new Map<string, string>();
     if (allIds.length) {
-      const { data } = await supabase.from('profiles')
-        .select('user_id, display_name, avatar_url')
-        .in('user_id', allIds);
-      profiles = (data as any[]) || [];
+      const [{ data: pf }, { data: sp2 }] = await Promise.all([
+        supabase.from('profiles').select('user_id, display_name, avatar_url').in('user_id', allIds),
+        supabase.from('staff_profiles').select('user_id, real_name').in('user_id', allIds),
+      ]);
+      profiles = (pf as any[]) || [];
+      for (const s of (sp2 as any[]) || []) if (s.real_name) staffMap.set(s.user_id, s.real_name);
     }
     const list: StaffPeer[] = profiles.map(p => {
       const l = lastByPeer.get(p.user_id);
       return {
         user_id: p.user_id,
-        display_name: p.display_name,
+        display_name: staffMap.get(p.user_id) || p.display_name,
         avatar_url: p.avatar_url,
         last_message: l?.text || null,
         last_at: l?.at || null,
@@ -236,7 +240,7 @@ function ContactsList({ userId }: { userId: string }) {
       // 1) 拉 staff_profiles(受 RLS 限制,同店/管理员可看)
       const { data: sp } = await supabase
         .from('staff_profiles')
-        .select('user_id, shop_id, position');
+        .select('user_id, shop_id, position, real_name');
       const rows = ((sp as any[]) || []).filter(r => r.user_id && r.user_id !== userId);
 
       const ids = Array.from(new Set(rows.map(r => r.user_id)));
@@ -265,6 +269,7 @@ function ContactsList({ userId }: { userId: string }) {
           user_id: r.user_id,
           display_name: p.display_name || null,
           avatar_url: p.avatar_url || null,
+          real_name: r.real_name || null,
           shop_id: r.shop_id || null,
           shop_name: r.shop_id ? (sMap.get(r.shop_id) || '未命名门店') : '未分配门店',
           position: r.position || null,
@@ -288,6 +293,7 @@ function ContactsList({ userId }: { userId: string }) {
     const k = keyword.trim().toLowerCase();
     if (!k) return contacts;
     return contacts.filter(c =>
+      (c.real_name || '').toLowerCase().includes(k) ||
       (c.display_name || '').toLowerCase().includes(k) ||
       (c.shop_name || '').toLowerCase().includes(k) ||
       (c.position || '').toLowerCase().includes(k) ||
@@ -353,12 +359,15 @@ function ContactsList({ userId }: { userId: string }) {
                     to={`/messages/${c.user_id}`}
                     className="flex items-center gap-3 px-3 py-3 hover:bg-muted/40 active:bg-muted transition-colors"
                   >
-                    <AvatarWithPresence name={c.display_name} avatar={c.avatar_url} online={online.has(c.user_id)} size={40} />
+                    <AvatarWithPresence name={c.real_name || c.display_name} avatar={c.avatar_url} online={online.has(c.user_id)} size={40} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold truncate">{c.display_name || '同事'}</p>
+                        <p className="text-sm font-semibold truncate">{c.real_name || c.display_name || '同事'}</p>
+                        {c.real_name && c.display_name && c.real_name !== c.display_name && (
+                          <span className="text-[10px] text-muted-foreground truncate">@{c.display_name}</span>
+                        )}
                         {online.has(c.user_id) && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 shrink-0">
                             <Circle className="w-2 h-2 fill-current" />在线
                           </span>
                         )}
