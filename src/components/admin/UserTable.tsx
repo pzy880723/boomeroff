@@ -53,7 +53,7 @@ interface UserWithRole {
     avatar_url: string | null;
     phone: string | null;
   };
-  email?: string | null;
+  
   staff?: {
     real_name: string | null;
     shop_id: string | null;
