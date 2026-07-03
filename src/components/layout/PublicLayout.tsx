@@ -3,6 +3,8 @@ import { Camera, Users, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import logo from '@/assets/boomer-off-vintage-logo.png';
 import { ErrorBoundary } from '@/components/system/ErrorBoundary';
+import { EdgeSwipeBack } from '@/components/system/EdgeSwipeBack';
+import { PullToRefresh } from '@/components/system/PullToRefresh';
 
 const tabs = [
   { to: '/u', label: '拍一拍', Icon: Camera, exact: true },
