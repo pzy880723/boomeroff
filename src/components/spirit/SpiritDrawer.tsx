@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { SpiritChatPanel } from './SpiritChatPanel';
-import { SpiritTaskCard } from './SpiritTaskCard';
+
 import { cn } from '@/lib/utils';
 import type { useSpiritChat, SpiritRewardItem } from '@/hooks/useSpiritChat';
 import type { useTasks } from '@/hooks/useTasks';
