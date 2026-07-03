@@ -260,27 +260,75 @@ export default function Home() {
           )}
         </Link>
 
-        {/* 我的排班 */}
+        {/* 我的排班 - 今日 + 明日 */}
         <SectionCard
           title="我的排班"
           icon={<CalendarDays className="w-4 h-4 text-primary" />}
           action={<Link to="/me" className="text-xs text-muted-foreground flex items-center">全部 <ChevronRight className="w-3 h-3" /></Link>}
         >
-          {nextShift ? (
+          {!todayShift && !tomorrowShift ? (
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">{nextShift.work_date}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">下一次班次</p>
-              </div>
-              <Badge variant="secondary" className="text-sm px-3 py-1">{nextShift.shift_code}</Badge>
+              <p className="text-sm text-muted-foreground">今明两日暂无排班</p>
+              <Link to="/me" className="text-xs text-primary flex items-center">去查看 <ChevronRight className="w-3 h-3" /></Link>
             </div>
           ) : (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">近期暂无排班</p>
-              <Link to="/me" className="text-xs text-primary flex items-center">去查看 <ChevronRight className="w-3 h-3" /></Link>
+            <div className="space-y-2">
+              {/* 今日：次要 */}
+              <div className="flex items-center justify-between px-1 py-0.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[10px] font-semibold text-muted-foreground tracking-wide">今日</span>
+                  <span className="text-[10px] text-muted-foreground/70">{shortDateLabel(todayShanghai())} {weekdayLabel(todayShanghai())}</span>
+                </div>
+                {todayShift?.shift ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {formatShiftTime(todayShift.shift.start_time, todayShift.shift.end_time)}
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] px-1.5 py-0 h-5 text-white border-0"
+                      style={{ background: todayShift.shift.color || 'hsl(var(--muted-foreground))' }}
+                    >
+                      {todayShift.shift_code}
+                    </Badge>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">休息</span>
+                )}
+              </div>
+
+              {/* 明日：主要突出 */}
+              <div className="rounded-xl border-2 border-primary/40 bg-primary/5 px-3 py-2.5 flex items-center justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-primary tracking-wide">明日</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {shortDateLabel(addDaysISO(todayShanghai(), 1))} {weekdayLabel(addDaysISO(todayShanghai(), 1))}
+                    </span>
+                  </div>
+                  {tomorrowShift?.shift ? (
+                    <p className="text-base font-bold tabular-nums text-foreground mt-0.5">
+                      {formatShiftTime(tomorrowShift.shift.start_time, tomorrowShift.shift.end_time)}
+                    </p>
+                  ) : (
+                    <p className="text-base font-bold text-muted-foreground mt-0.5">休息一天</p>
+                  )}
+                </div>
+                {tomorrowShift?.shift ? (
+                  <Badge
+                    className="text-base px-3 py-1 text-white border-0 shrink-0"
+                    style={{ background: tomorrowShift.shift.color || 'hsl(var(--primary))' }}
+                  >
+                    {tomorrowShift.shift_code}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-sm px-3 py-1 shrink-0">休</Badge>
+                )}
+              </div>
             </div>
           )}
         </SectionCard>
+
 
 
         {/* 正在进行的活动（横向条幅） */}
