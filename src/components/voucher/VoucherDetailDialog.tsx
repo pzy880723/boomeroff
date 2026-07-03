@@ -44,12 +44,10 @@ export function VoucherDetailDialog({ open, onOpenChange, voucher, onEdit, onDel
     if (!open || !voucher) return;
     (async () => {
       setLoading(true);
-      const { data } = await supabase
-        .from('voucher_claims')
-        .select('*')
-        .eq('voucher_id', voucher.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const { data } = await supabase.rpc('list_voucher_claims_with_pii', {
+        _voucher_id: voucher.id,
+        _limit: 50,
+      });
       setClaims((data || []) as unknown as VoucherClaim[]);
       setLoading(false);
     })();
