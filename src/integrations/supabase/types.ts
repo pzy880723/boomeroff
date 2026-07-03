@@ -2931,6 +2931,7 @@ export type Database = {
           voucher_id: string
         }[]
       }
+      get_social_account_worker_key: { Args: { _id: string }; Returns: string }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -2946,6 +2947,40 @@ export type Database = {
       kb_enqueue: {
         Args: { _op?: string; _source_id: string; _source_type: string }
         Returns: undefined
+      }
+      list_activity_applications: {
+        Args: { _activity_id: string }
+        Returns: Json[]
+      }
+      list_pending_activity_applications: { Args: never; Returns: Json[] }
+      list_voucher_claims_with_pii: {
+        Args: { _limit?: number; _voucher_id: string }
+        Returns: {
+          activity_application_id: string | null
+          claimed_at: string | null
+          code: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          recipient_extra: Json
+          recipient_name: string | null
+          recipient_phone: string | null
+          redeemed_at: string | null
+          redeemed_by: string | null
+          share_token: string
+          short_code: string | null
+          source: string
+          status: string
+          updated_at: string
+          voucher_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "voucher_claims"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       match_kb: {
         Args: {

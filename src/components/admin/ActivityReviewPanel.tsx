@@ -17,12 +17,8 @@ export function ActivityReviewPanel() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('activity_applications')
-      .select('*, activity:activities(id, name)')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false });
-    setList(data || []);
+    const { data } = await supabase.rpc('list_pending_activity_applications');
+    setList((data as any[]) || []);
     setLoading(false);
   }, []);
 
