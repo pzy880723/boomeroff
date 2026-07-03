@@ -1,7 +1,10 @@
 import { X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { SpiritChatPanel } from './SpiritChatPanel';
+import { SpiritTaskCard } from './SpiritTaskCard';
 import { cn } from '@/lib/utils';
 import type { useSpiritChat } from '@/hooks/useSpiritChat';
+import type { useTasks } from '@/hooks/useTasks';
 
 interface Props {
   open: boolean;
@@ -11,6 +14,7 @@ interface Props {
   onAnimEnd: () => void;
   onClose: () => void;
   chat?: ReturnType<typeof useSpiritChat>;
+  tasks?: ReturnType<typeof useTasks>;
 }
 
 /**
