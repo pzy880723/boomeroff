@@ -629,7 +629,15 @@ export default function Notifications() {
       {/* 详情 Sheet */}
       <NotificationDetailSheet
         item={detailItem}
-        onOpenChange={(v) => !v && setDetailItem(null)}
+        onOpenChange={(v) => {
+          if (!v) {
+            setDetailItem(null);
+            if (fromHomeRef.current) {
+              fromHomeRef.current = false;
+              navigate('/', { replace: true });
+            }
+          }
+        }}
         isAdmin={isAdmin}
         onEdit={openEditFromDetail}
         onDelete={handleDeleteFromDetail}
