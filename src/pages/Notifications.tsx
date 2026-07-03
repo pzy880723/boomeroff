@@ -30,6 +30,7 @@ import { RichBodyEditor } from '@/components/notifications/RichBodyEditor';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { listDrafts, saveDraft, removeDraft, type NotificationDraft } from '@/lib/notificationDrafts';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { MessagesTabs } from '@/components/messages/MessagesTabs';
 
 type TabKey = 'notice' | 'news' | 'message';
 const TAB_META: Record<TabKey, { label: string }> = {
@@ -520,19 +521,19 @@ export default function Notifications() {
 
       <main className="mx-auto max-w-screen-md px-4 py-3 space-y-3">
         {/* 3 分栏切换 */}
-        <div className="inline-flex rounded-full bg-muted p-0.5 text-xs w-full max-w-[320px]">
+        <div className="flex w-full rounded-full bg-muted p-0.5 text-xs">
           {(['notice', 'news', 'message'] as TabKey[]).map(k => (
             <button
               key={k}
               onClick={() => setTab(k)}
               className={cn(
-                'relative flex-1 h-7 rounded-full font-medium transition-colors',
+                'flex-1 h-8 rounded-full font-medium transition-colors inline-flex items-center justify-center gap-1.5',
                 tab === k ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground',
               )}
             >
-              {TAB_META[k].label}
+              <span>{TAB_META[k].label}</span>
               {TAB_UNREAD[k] > 0 && (
-                <span className="absolute -top-1 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 font-semibold">
+                <span className="min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 font-semibold">
                   {TAB_UNREAD[k] > 99 ? '99+' : TAB_UNREAD[k]}
                 </span>
               )}
@@ -581,7 +582,7 @@ export default function Notifications() {
         )}
 
         {tab === 'message' ? (
-          <StaffMessagesList userId={user.id} />
+          <MessagesTabs userId={user.id} />
         ) : loading && currentListItems.length === 0 ? (
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
         ) : currentListItems.length === 0 ? (
