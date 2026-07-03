@@ -217,20 +217,28 @@ export default function Home() {
         {/* Banner */}
         <Link
           to={bannerNote?.id ? `/notifications?tab=news&open=${bannerNote.id}` : '/notifications?tab=news'}
+          state={{ fromHome: true }}
           className="block relative rounded-2xl overflow-hidden border border-border/60 aspect-[16/6] bg-muted"
         >
-          <img
-            src={bannerNote?.image_url || bannerDefault}
-            alt={bannerNote?.title || 'BOOMER GO'}
-            loading="eager"
-            decoding="async"
-            {...({ fetchpriority: 'high' } as any)}
-            className="w-full h-full object-cover"
-          />
-          {bannerNote?.title && (
-            <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/60 to-transparent">
-              <p className="text-white text-sm font-semibold line-clamp-1">{bannerNote.title}</p>
-            </div>
+          {notesLoading ? (
+            <div className="w-full h-full animate-pulse bg-gradient-to-r from-muted via-muted/60 to-muted" />
+          ) : (
+            <>
+              <img
+                key={bannerNote?.id || 'default'}
+                src={bannerNote?.image_url || bannerDefault}
+                alt={bannerNote?.title || 'BOOMER GO'}
+                loading="eager"
+                decoding="async"
+                {...({ fetchpriority: 'high' } as any)}
+                className="w-full h-full object-cover"
+              />
+              {bannerNote?.title && (
+                <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/60 to-transparent">
+                  <p className="text-white text-sm font-semibold line-clamp-1">{bannerNote.title}</p>
+                </div>
+              )}
+            </>
           )}
         </Link>
 
