@@ -1,19 +1,41 @@
-## 目标
-移除 BOOMER 抽屉顶部（图中红框）常驻的"你今天还有 N 项奖励可以领"任务卡。奖励入口现在已经有两处更合适的呈现：
+## 问题
 
-1. **首页** `RewardInboxCard` —— 默认收起，展开看任务清单，是常态入口。
-2. **BOOMER 对话内消息气泡** —— 完成任务后 BOOMER 主动发消息 + 内联"领取 +N"按钮，是主动推送场景。
+点「分享到 BOOMER 圈」时 toast 报 `record "new" has no field "is_featured"`。
 
-抽屉顶部再挂一张一样的卡片是重复展示，还会挤占对话区。
+根因:数据库触发器 `kb_trigger_community`(建在 `community_posts` 上,把优质帖子灌进知识库 RAG)引用了 `NEW.is_featured`,但表里从来没有 `is_featured` 列 —— 只有 `is_public`。所以任何 INSERT / UPDATE `community_posts` 都会被这个触发器炸掉,分享全线失败。
 
-## 改动
-- `src/components/spirit/SpiritDrawer.tsx`
-  - 删除顶部 `<SpiritTaskCard />` 区块及其 `tasks` 相关传递。
-  - `tasks` prop 仍需保留（用于 useEffect 里判断"打开抽屉时是否需要 BOOMER 主动播报奖励"）以及传给 `SpiritChatPanel` 让消息气泡里的"领取"按钮能真正调用 `claimEvent / claimDaily`。
-  - 关闭按钮 (`X`) 的绝对定位保留不变。
-- 不改 `SpiritTaskCard.tsx` 本体（首页 `RewardInboxCard` 视觉独立，未依赖它；组件文件可保留待后续复用/清理，本次不动以缩小影响面）。
-- 不改首页、不改 `SpiritChatPanel` 内联领取逻辑。
+## 修复
 
-## 验收
-- 打开 BOOMER 抽屉：顶部只有标题栏和关闭按钮，对话区直接从欢迎语开始，不再出现"你今天还有 N 项奖励"卡片。
-- 首页奖励卡片、对话内 BOOMER 主动播报 + 内联领取按钮功能不受影响。
+用 migration 重写 `public.kb_trigger_community()`,把 `NEW.is_featured` 换成 `coalesce(NEW.is_public, false)`。语义等价于「公开的帖子入 KB,非公开的从 KB 里删掉」,和现在的分享按钮(始终写 `is_public: true`)以及 admin 审核撤下(设为 false)完全对得上。
+
+```sql
+CREATE OR REPLACE FUNCTION public.kb_trigger_community()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+begin
+  if TG_OP = 'DELETE' then
+    perform public.kb_enqueue('community', OLD.id::text, 'delete');
+    return OLD;
+  end if;
+  if coalesce(NEW.is_public, false) then
+    perform public.kb_enqueue('community', NEW.id::text, 'upsert');
+  else
+    perform public.kb_enqueue('community', NEW.id::text, 'delete');
+  end if;
+  return NEW;
+end;
+$$;
+```
+
+## 验证
+
+修完之后在 /scan 拍一张图 → 点「分享到 BOOMER 圈」应该正常提示「已分享到 BOOMER 圈」,不再报 is_featured 错误;去 BOOMER 圈 feed 能看到这条新帖。
+
+## 不改动
+
+- `community_posts` 表结构、RLS、grants 全部不动
+- 前端 `ShareToCommunityButton.tsx` 不动 —— 逻辑本来就是对的
+- 其它 `kb_trigger_*` 触发器不动
