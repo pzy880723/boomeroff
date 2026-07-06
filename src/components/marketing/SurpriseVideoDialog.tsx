@@ -151,7 +151,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     if (job) {
       setActiveJob(job);
       setRenderPhase('running');
-      startPolling(job.jobId, shopId);
+      if (job.kind !== 'director') startPolling(job.jobId, shopId);
       return;
     }
     setActiveJob(null);
