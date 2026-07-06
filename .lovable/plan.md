@@ -1,68 +1,40 @@
-## 问题
 
-现在 persona 有 age/ageBucket,但 `formatPersonaBriefZh`(给脚本 AI 用)和 `formatPersonaDirective`(给 Seedance 用)只丢了年龄数字过去,没告诉脚本 AI "这个年龄段该说什么话",导致老头子也会讲"暑假来逛"这种年轻人台词。
+## 思路调整
 
-## 方案
+同意你的判断：分段拼接一定会崩人物一致性，Seedance 也吃不下那么细的分镜口令。改成"一段话式脚本 + one_shot 直出"更稳。
 
-只改 `supabase/functions/_shared/persona-generator.ts`,不动调用方。
+## 改动
 
-### 1. 新增按年龄段的「话题白名单 / 黑名单」
+### 1. 15s 脚本生成：内部保留分镜，对外输出"一段话导演稿"
+文件：`supabase/functions/generate-marketing-video-script/index.ts`
 
-在文件顶部加一份小字典:
+- 保留现在的 5 段 JSON 结构（前端展示、字幕烧录仍要用），但**新增一个字段** `one_shot_prompt`：一段 120–180 字的中文口语化导演稿，把 hook + 3 中段 + outro 揉成一段自然叙述，只交代：
+  - 主角在这家店里做什么（连贯动作串起来，例："走进店里 → 挑起一只中古包 → 试戴一副墨镜 → 拉着镜头喊冲"）
+  - 整体情绪、节奏、镜头感（"手持跟拍、明亮色调、节奏轻快"）
+  - 一句总台词方向（"全程边逛边对镜头讲这家店多好逛、多便宜、姐妹快冲"），**不写逐字台词**
+- prompt 里明确告诉模型："逐镜 dialogue 只给字幕烧录用，`one_shot_prompt` 才是交给视频模型的最终稿，越自然越好，别写分段、别写秒数、别写'镜头 1 / 镜头 2'"。
+- 非 15s 视频不受影响，`one_shot_prompt` 可为空字符串。
 
-```ts
-const AGE_TOPIC_HINTS = {
-  young:  { 
-    ok:  '暑假/寒假/开学/周末逛街/追星/入坑/打卡/攒钱买/上班摸鱼/情人节',
-    ban: '退休/含饴弄孙/老伴/年轻时候/我们那年代'
-  },
-  middle: {
-    ok:  '下班顺路/带娃/接孩子/周末陪家人/送礼/孝敬爸妈/给老公给老婆挑',
-    ban: '暑假作业/开学季/追星/入坑二次元/退休金'
-  },
-  senior: {
-    ok:  '退休了多出来走走/接孙子放学路上/老伙计聚会/给孙辈挑个小玩意/年轻时候就喜欢/怀旧',
-    ban: '暑假/寒假/开学/追星/入坑/打卡/摸鱼/上班'
-  },
-}
-```
+### 2. 渲染：15s 一律走 one_shot，用 `one_shot_prompt` 当主 prompt
+文件：`supabase/functions/render-marketing-video/index.ts`
 
-### 2. 把提示塞进 `formatPersonaBriefZh`
+- `buildOneShotPrompt` 改造：如果 `script.one_shot_prompt` 存在，就用它当"分镜叙述"主体，替代现在按镜头逐条堆砌 `【开场】【镜头1】…` 的写法。人物锁定、店铺环境、风格、真实感、"禁止门/街边/文字水印"这些约束**全部保留**放在前后。
+- auto 策略回退到原来的判断：`total ≤15s → one_shot`，不再强推 per_shot；`surprise-marketing-video` 继续 `render_strategy: 'one_shot'`。
+- 参考图逻辑保持不变（角色板 + storyboard + 实景照，上限 9 张），继续锁人物。
 
-在返回的中文人设简介末尾追加一段【口播话题指引】:
+### 3. `surprise-marketing-video` 无需改
+- 它现在就是 one_shot 提交，脚本里多出的 `one_shot_prompt` 会自然带过去。
 
-```
-【口播话题 · 必须符合角色年龄】
-- 该角色是 ${age} 岁 ${ageBucket === 'senior' ? '老年人' : ageBucket === 'middle' ? '中年人' : '年轻人'},台词只能讲这个年龄段真实会讲的场景。
-- 推荐话题:${AGE_TOPIC_HINTS[bucket].ok}
-- 严禁话题:${AGE_TOPIC_HINTS[bucket].ban}
-- 例:senior 不许说"暑假来逛""开学季""追星入坑",应该说"退休了多出来走走""接孙子路上顺道进来""老伙计推荐的"。
-- couple/family 里如果有老人,老人开口只讲老人话题;孩子话题让年轻/中年成员讲。
-```
-
-### 3. 同步给 `generatePersona` 的 sys prompt 加一句
-
-让 AI 生成 `opener / catchphrase / cta` 时就已经符合年龄,而不是等脚本环节再纠偏:
-
-```
-opener/catchphrase/cta 必须符合 ${age} 岁 ${bucket} 的真实口吻:
-- young 可以讲暑假、开学、周末逛街、追星、入坑、打卡;
-- middle 讲下班顺路、带娃、送礼、孝敬爸妈;
-- senior 讲退休了多出来走走、接孙子路上、老伙计聚会、怀旧;严禁"暑假/开学/追星/摸鱼"。
-```
-
-并在 fallback 池里把 senior 那位的 opener/catchphrase/cta 也改成退休口吻(现在如果是硬编码的可能也不对)。
-
-### 4. `formatPersonaDirective`(英文,给 Seedance)
-
-只加一句轻量约束,不用堆太多:
-
-```
-Speech style must match the character's real age: seniors talk about retirement walks, picking up grandkids, old friends' recommendations — never school holidays, fandom or office life.
-```
+### 4. 前端字幕（可选，不做也行）
+文件：`src/lib/marketingVideoStitch.ts` / `AssetDetailDialog.tsx`
+- 15s one_shot 场景下不需要拼接。若想让台词可见，可后处理把 hook/scenes/outro 的 `subtitle` 按时间点烧成底部字幕；这一步独立、失败不影响出片。**先不做，看直出效果再定。**
 
 ## 不改
+- 角色一致性、参考图、storyboard 流程
+- 脚本 JSON 结构对外契约（只是新增 `one_shot_prompt`）
+- 20s / 30s 及以上长视频的分段渲染路径
 
-- DB / 前端 / 调用方 edge function
-- 上一轮的年龄抽签、真实感面部约束、fallback 池结构
-
+## 技术细节
+- `one_shot_prompt` 走同一个 JSON 输出，模型只多写一段字符串，几乎不增成本。
+- `buildOneShotPrompt` 优先级：`one_shot_prompt` > 逐镜堆砌（老逻辑保留做兜底，防止旧脚本失效）。
+- 总 prompt 长度仍限制在 2000 字符内，超出就截断。
