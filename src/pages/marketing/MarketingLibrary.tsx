@@ -805,8 +805,6 @@ export default function MarketingLibrary() {
                         ? it.output_url
                         : (it.meta?.poster_url
                             || it.meta?.cover_url
-                            || (Array.isArray(it.meta?.image_urls) && it.meta.image_urls[0])
-                            || (Array.isArray(it.input_image_urls) && it.input_image_urls[0])
                             || null);
                       const thumbUrl = rawThumb ? (thumb(rawThumb, 240) || rawThumb) : null;
                       const srcSet = rawThumb ? thumbSrcSet(rawThumb, 120) : undefined;
@@ -825,7 +823,11 @@ export default function MarketingLibrary() {
                           : segTotal > 0
                             ? Math.min(95, Math.round((segDone / segTotal) * 80))
                             : 8;
+                      const videoTitle = it.kind === 'video'
+                        ? (it.meta?.title || it.meta?.topic || '').toString().trim()
+                        : '';
                       return (
+
                         <button
                           type="button"
                           key={it.id}
@@ -906,9 +908,16 @@ export default function MarketingLibrary() {
                                   <Play className="w-3.5 h-3.5 text-white fill-white" />
                                 </span>
                               </span>
-                              <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] px-1 rounded leading-tight">VIDEO</span>
+                              {videoTitle ? (
+                                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-1.5 pt-3 pb-1 text-white text-[10px] leading-tight truncate text-left">
+                                  {videoTitle}
+                                </span>
+                              ) : (
+                                <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] px-1 rounded leading-tight">VIDEO</span>
+                              )}
                             </>
                           )}
+
 
                           {showStatus && (
                             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent flex flex-col justify-end p-1.5 gap-1">

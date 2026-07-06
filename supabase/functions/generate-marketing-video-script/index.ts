@@ -157,6 +157,7 @@ ${refList}
 
 输出严格 JSON：
 {
+  "title": "<≤14 字的中文标题，一眼看出这条视频拍的是什么，避免『视频/短片』这类无信息词>",
   "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "<中文台词,可为空字符串>", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": 2, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
   "scenes": [
     { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
@@ -303,6 +304,12 @@ ${refList}
     script.topic = topic;
     script.style = styleKey;
     script.style_label = VIDEO_STYLE_LABELS[styleKey];
+    // 标题:AI 给了就用,没给就从 topic 兜底,再兜底 rule.label
+    {
+      const rawTitle = (script?.title ?? "").toString();
+      const cleaned = clean(rawTitle, 24).replace(/[「」『』"'\s]+$/g, "").trim();
+      script.title = cleaned || (topic ? clean(topic, 14) : rule.label);
+    }
     if (character) script.character = character;
 
     return json({ success: true, script, video_type: videoType, video_type_label: rule.label, __kb_sources: kbSourcesMeta(kbHits) });
