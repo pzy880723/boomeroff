@@ -1,56 +1,40 @@
-## 背景
-排查后确认两件事：
-
-1. **素材库视频打不开**：抽样看 `marketing_assets.output_url`，大量视频直接指向火山 TOS 的签名 URL（`X-Tos-Expires=86400`，24 小时有效）。超过 1 天后所有视频就变成 403，前端 `<video>` 触发 onError → 显示"视频加载失败"。只有个别走了 Supabase Storage 转存的视频（token 有效期 10 年）能正常播。**根因是我们把易失的 TOS 签名链接直接落库，没有转存到自有 Storage。**
-2. **下载**：目前 `AssetDetailDialog.downloadAsset` 只做浏览器 blob + `<a download>`，在 Capacitor WebView 里等同于"在应用里打开一个新页"，不会进相册。项目已经装了 `@capacitor/filesystem`，但缺一个真正写入系统相册（Photos / DCIM）的插件。
-
 ## 目标
-- 素材库所有历史 & 新生成的视频都能长期播放。
-- 在打包出来的 APP 里，点"下载"直接落到系统相册（iOS 相册 / Android DCIM），Web 端保留现有浏览器下载行为。
+解决营销素材库视频的三个体验问题：加载慢 / 封面千篇一律 / 没有标题。
 
-## 改动一：视频永久化（关键修复）
+## 1. 视频加载优化
+- **详情页 LazyVideoPlayer**：给 `<video>` 加 `preload="metadata"`、`playsInline`；点击后立即 `play()`，同时把 poster 用 `<img fetchPriority="high" decoding="async">` 先撑起画面，避免空白等待。
+- **列表页缩略图**：把 poster 用 `srcSet` 缩到 240px（当前已用 `thumb()`，但对 Supabase Storage 的签名 URL 未生效——改成先走 `imageThumb` 缩放，若不支持则退回原图），只有网格首屏的前 6 张 `eager`，其余 `lazy`。
+- **首屏体感**：视频块骨架 → poster → 播放按钮的过渡改为 200ms 淡入，避免"整块空白 → 突然出现"的错觉。
 
-### 后端
-- **新增/复用 edge function `mirror-marketing-asset`**：入参 `asset_id`，用 service role 读取 `output_url`，若域名是 `*.volces.com / *.volccdn.com`：
-  1. `fetch` 原视频 → 上传到 Storage bucket `marketing-videos/<user_id>/<asset_id>.mp4`
-  2. 用 `createSignedUrl(path, 10 年)` 拿长期链接
-  3. `update marketing_assets set output_url = <新链接>, meta = meta || {tos_url_original, mirrored_at}` 回写
-- **成功回调路径**：在 `poll-marketing-video` / `render-marketing-video` 视频状态变为 `succeeded` 且 `output_url` 是 TOS 域名时，直接同步调用上面的转存逻辑（可抽成同文件里一个 helper），保证**新任务不再落 TOS 直链**。
-- **存量修复**：写一个一次性 SQL / RPC 或用同一个函数带 `?backfill=1`，遍历 `kind='video' and output_url like '%volces.com%'` 的记录，逐条尝试转存；转不到（源已过期）的把 `meta.status='expired'`、`meta.expired_at=now()`。
+（说明：视频体积本身受生成模型控制，无法在前端压缩；这里做的是**首屏可见**与**元数据预取**优化。）
 
-### 前端
-- `AssetDetailDialog` 的 `LazyVideoPlayer`：当 `videoError=true` 且 `meta.status !== 'expired'`，加一个"刷新链接"按钮，调用 `mirror-marketing-asset` 后重播；`status==='expired'` 时显示"视频源已过期，请重新生成"，直接复用已有的 `regenerateVideo`。
-- `MarketingLibrary` 缩略图列表遇到 `meta.status='expired'` 的视频加一个灰色角标"已过期"，避免用户以为是随机 bug。
+## 2. 更有代表性的封面
+问题：
+- 旧视频从没生成过 `poster_url`，列表 fallback 到 `input_image_urls[0]` = 参考图（门口那张）。
+- 新视频的 poster 是 0.5s 首帧，很多时候就是参考图的静止画面。
 
-## 改动二：下载直接进相册（Capacitor 原生路径）
+方案：
+- **抽帧位置改到视频中段**：`extractFirstFrame` 增加 `atSec` 逻辑，默认取 `duration * 0.45`（35%~55% 之间），比 0.5s 更能代表内容；同名 API 加入 `videoDuration` 优先分支，向下兼容。
+- **详情页首次播放时自动补 poster**：在 `LazyVideoPlayer` 里，如果 `assetId && !posterUrl && video.readyState >= 2`，在 `timeupdate` 到 40% 时抓 canvas 帧，走一个新的 `refresh-marketing-poster` edge function 存到 Storage，并把 `meta.poster_url` 更新。用户看视频即帮忙"渐进式补封面"，无需批处理成本。
+- **手动"换封面"入口**：详情抽屉里加一个小按钮 `换封面`，播放到想要的画面后点一下，把当前帧上传为新的 poster。
+- **保留 fallback**：仍然允许 `meta.cover_url / image_urls / input_image_urls` 作为最后兜底，但顺序调整为 `poster_url → cover_url → 空占位（视频图标 + 品牌灰底）`，**不再默认回退到参考图**——避免所有视频看起来都一样。
 
-### 依赖
-- 新增 `@capacitor/filesystem`（已有）+ **`capacitor-plugin-dynamic-ios-permissions`不需要**；用社区插件 **`@capacitor-community/media`** 处理"保存到相册"（同时支持 iOS Photos 与 Android MediaStore，视频/图片都行）。
+## 3. 视频标题
+- **数据层**：视频素材已有 `meta.topic / meta.style_label`。新增 `meta.title`：
+  - `generate-marketing-video-script` 让 AI 额外产出一句 ≤14 字的 `title`（例：`夏日轻穿搭 · 一分钟合集`），写入返回的 script。
+  - `render-marketing-video` 落库时把 `script.title` 存到 `meta.title`（缺省时用 `topic` 截断作为回退）。
+- **展示层**：
+  - **列表页**：每个视频缩略图底部叠一层深色渐变 + 一行 `meta.title` (`truncate`)，与现有 `VIDEO` 角标共存。
+  - **详情抽屉**：在视频容器上方新增一行大标题（`font-display text-base`），下方保留 `style_label · 时长` 元信息。
+- **旧素材兼容**：读取时 `title = meta.title || meta.topic || '未命名视频'`，无需批量迁移。
 
-### iOS / Android 配置
-- iOS `Info.plist` 增加 `NSPhotoLibraryAddUsageDescription`（"需要保存图片/视频到你的相册"）。
-- Android `AndroidManifest.xml` 增加 `READ_MEDIA_IMAGES / READ_MEDIA_VIDEO`（API 33+）与旧版 `WRITE_EXTERNAL_STORAGE`（`maxSdkVersion=28`）。
-- `capacitor.config.ts` 无需改动，用户 pull 后跑 `npx cap sync`。
-
-### 代码
-- 新建 `src/lib/saveToGallery.ts`：
-  ```ts
-  export async function saveToGallery(blob: Blob, filename: string, kind: 'video'|'image') {
-    if (!Capacitor.isNativePlatform()) return webDownload(blob, filename);
-    // blob -> base64 -> Filesystem.writeFile(Directory.Cache)
-    // Media.savePhoto / Media.saveVideo({ path: fileUri })
-  }
-  ```
-- `AssetDetailDialog.downloadAsset` 拿到 `blob` 之后走 `saveToGallery`，成功后 toast "已保存到相册"。原来的错误兜底（新窗口打开原链接）保留。
-- 图文素材（`kind==='photo'`）同样接入，`ShareMenu` 的"保存长图"也走同一个函数，让"保存到相册"体验一致。
-
-## 技术细节
-- Storage bucket `marketing-videos` 已存在（历史转存路径证明）；保持私有 + 长期 signed URL 的现状，避免公开桶策略问题。
-- 转存 edge function 使用 service role bypass RLS，写文件路径 `<user_id>/<asset_id>.mp4`，与现有约定一致。
-- `@capacitor-community/media` 在 Android 13+ 需要 runtime 请求 `READ_MEDIA_*`，插件本身处理；iOS 首次调用弹权限。
-- 用户交付流程：本次改完后需要 `git pull → npm install → npx cap sync → 重新出包`，我会在最后一步的回复里提示。
-- 参考文档：[Capacitor 移动开发指南](https://lovable.dev/blog/mobile-development-with-capacitor)
-
-## 不改动
-- 现有 `download-marketing-asset` edge function（作为 Web / 兜底通道保留）。
-- `ShareToCommunityButton` / 识别流程 / RLS。
+## 技术要点
+- 涉及文件：
+  - `src/lib/extractFirstFrame.ts`（抽帧位置）
+  - `src/components/marketing/AssetDetailDialog.tsx`（LazyVideoPlayer 预加载、渐进补 poster、换封面按钮、标题展示）
+  - `src/pages/marketing/MarketingLibrary.tsx`（缩略图 fallback 顺序、标题叠层、加载优化）
+  - `supabase/functions/generate-marketing-video-script/index.ts`（新增 `title` 输出字段 + prompt 更新）
+  - `supabase/functions/render-marketing-video/index.ts`（把 `script.title` 存入 `meta.title`）
+  - `supabase/functions/refresh-marketing-poster/index.ts`（**新**：接收 base64 帧，写入 `marketing-videos/<uid>/posters/<assetId>.jpg`，10 年签名，更新 `meta.poster_url`）
+- 无数据库结构变更；`meta` 是 JSONB，新增字段无需 migration。
+- 兼容旧数据，无破坏性变更。
