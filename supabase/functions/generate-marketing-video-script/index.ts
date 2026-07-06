@@ -35,12 +35,15 @@ Deno.serve(async (req) => {
     const videoType: VideoType = (Object.keys(presets.videoRules) as VideoType[]).includes(body.video_type)
       ? body.video_type : "store_tour";
     const duration: number = [15, 20, 30].includes(Number(body.duration)) ? Number(body.duration) : 15;
-    // 按 ~2.5s/镜估算总镜数(含 hook + outro)
-    const targetClips = Math.max(3, Math.round(duration / 2.5));    // 15→6, 20→8, 30→12
-    const minScenes = Math.max(2, targetClips - 2);
-    const maxScenes = targetClips + 1;
-    const perClipMin = duration >= 25 ? 1.5 : 2;
-    const perClipMax = duration >= 25 ? 3.5 : 5;
+    // 15s 走严格路径：固定 hook + 3 scenes + outro,每段 3s;>15s 沿用原公式
+    const isTight15 = duration <= 15;
+    const targetClips = isTight15 ? 5 : Math.max(3, Math.round(duration / 2.5));
+    const minScenes = isTight15 ? 3 : Math.max(2, targetClips - 2);
+    const maxScenes = isTight15 ? 3 : targetClips + 1;
+    const perClipMin = isTight15 ? 3 : (duration >= 25 ? 1.5 : 2);
+    const perClipMax = isTight15 ? 3 : (duration >= 25 ? 3.5 : 5);
+    // 口播字数硬预算:4 汉字/秒(清晰口播),15s → 60 字
+    const totalSpeakBudgetCn = Math.floor(duration * 4);
     const aspect: string = ["9:16", "1:1", "16:9"].includes(body.aspect) ? body.aspect : "9:16";
     // 用户输入(topic/highlight/brief)可能带真实商场名或第三方招牌关键词,
     // 进 AI 之前统一去敏,防止 Seedance 事后判"版权风险"拒绝出片。
