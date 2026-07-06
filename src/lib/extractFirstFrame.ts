@@ -18,11 +18,10 @@ export async function extractFirstFrame(
       const fail = () => { cleanup(); resolve(null); };
       video.onloadedmetadata = () => {
         const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
-        // 未指定 atSec → 取中段(~45%),固定在 [0.6, 12] 秒之间
-        const auto = Math.min(Math.max(dur * 0.45, 0.6), Math.max(0.6, dur - 0.1));
+        // 默认取第一帧(0.05s,避开可能的纯黑首帧);传 atSec 可强制到具体秒
         const t = typeof atSec === 'number'
           ? Math.min(atSec, Math.max(0, dur - 0.05))
-          : Math.min(auto, 12);
+          : Math.min(0.05, Math.max(0, dur - 0.05));
         video.currentTime = t;
       };
       video.onseeked = () => {
