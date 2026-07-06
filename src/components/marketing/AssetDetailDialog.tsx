@@ -1,10 +1,6 @@
 // 营销素材详情 / 编辑抽屉。支持文案、图片、视频三种 kind。
 import { useEffect, useRef, useState } from 'react';
-import { Play, RefreshCw, Loader2 as Spin } from 'lucide-react';
-import { invokeFn } from '@/lib/invokeFn';
-import { toast as toastFn } from 'sonner';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _KeepRefreshInScope = typeof RefreshCw;
+import { Play } from 'lucide-react';
 
 function LazyVideoPlayer({
   src, poster, assetId, expired, onRefreshed,
