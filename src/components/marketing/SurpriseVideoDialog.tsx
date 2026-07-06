@@ -23,6 +23,8 @@ import { toastVideoFailure } from '@/lib/toastVideoFailure';
 import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
 import { invokeFn } from '@/lib/invokeFn';
+import { DirectorProgress } from '@/components/marketing/director/DirectorProgress';
+import { createVideoJob } from '@/api/videoGeneration';
 
 // 惊喜一下固定真人写实,不暴露切换开关
 const SURPRISE_REALISM: Realism = 'photoreal';
