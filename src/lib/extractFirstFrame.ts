@@ -1,5 +1,11 @@
-// 从视频 Blob 抽出 ~0.5s 处的首帧,返回 JPEG Blob。失败返回 null。
-export async function extractFirstFrame(videoBlob: Blob, atSec = 0.5, quality = 0.72): Promise<Blob | null> {
+// 从视频 Blob 抽帧,返回 JPEG Blob。失败返回 null。
+// 默认取视频中段(约 45% 位置),比 0.5s 首帧更能代表内容。
+// 传 atSec 可强制到具体秒。
+export async function extractFirstFrame(
+  videoBlob: Blob,
+  atSec?: number,
+  quality = 0.72,
+): Promise<Blob | null> {
   return new Promise((resolve) => {
     try {
       const url = URL.createObjectURL(videoBlob);
@@ -11,7 +17,12 @@ export async function extractFirstFrame(videoBlob: Blob, atSec = 0.5, quality = 
       const cleanup = () => { URL.revokeObjectURL(url); };
       const fail = () => { cleanup(); resolve(null); };
       video.onloadedmetadata = () => {
-        const t = Math.min(atSec, Math.max(0, (video.duration || 1) - 0.05));
+        const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
+        // 未指定 atSec → 取中段(~45%),固定在 [0.6, 12] 秒之间
+        const auto = Math.min(Math.max(dur * 0.45, 0.6), Math.max(0.6, dur - 0.1));
+        const t = typeof atSec === 'number'
+          ? Math.min(atSec, Math.max(0, dur - 0.05))
+          : Math.min(auto, 12);
         video.currentTime = t;
       };
       video.onseeked = () => {
