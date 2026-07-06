@@ -33,19 +33,19 @@ function LazyVideoPlayer({
     if (!assetId || refreshing) return;
     setRefreshing(true);
     try {
-      const { data, error } = await invokeFn('mirror-marketing-asset', { body: { asset_id: assetId } });
+      const { data, error } = await invokeFnTop('mirror-marketing-asset', { body: { asset_id: assetId } });
       if (error) throw error;
       const d = data as any;
-      if (d?.expired) { toastFn.error('视频源已过期，请重新生成'); return; }
+      if (d?.expired) { toastTop.error('视频源已过期，请重新生成'); return; }
       if (d?.url) {
         onRefreshed?.(d.url);
         setVideoError(false);
         setActive(true);
         setSrcNonce((n) => n + 1);
-        toastFn.success('视频已刷新');
+        toastTop.success('视频已刷新');
       }
     } catch (e: any) {
-      toastFn.error(e?.message || '刷新失败');
+      toastTop.error(e?.message || '刷新失败');
     } finally { setRefreshing(false); }
   };
 
@@ -105,7 +105,7 @@ function LazyVideoPlayer({
               disabled={refreshing}
               className="inline-flex items-center gap-1 px-3 h-8 rounded-full bg-primary text-primary-foreground disabled:opacity-60"
             >
-              {refreshing ? <Spin className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              {refreshing ? <SpinTop className="w-3 h-3 animate-spin" /> : <RefreshIconTop className="w-3 h-3" />}
               刷新链接
             </button>
           )}
@@ -209,7 +209,7 @@ export function AssetDetailDialog({
           mid: [],
         };
       }
-      const { data, error } = await invokeFn('render-marketing-video', {
+      const { data, error } = await invokeFnTop('render-marketing-video', {
         body: {
           script,
           style: asset.meta?.style || 'realistic_storefront',
@@ -238,7 +238,7 @@ export function AssetDetailDialog({
     setStitching(true);
     try {
       let segUrls = Array.isArray(asset.meta?.segment_urls) ? asset.meta.segment_urls.filter(Boolean) : [];
-      const { data } = await invokeFn('poll-marketing-video', { body: { job_id: jobId } });
+      const { data } = await invokeFnTop('poll-marketing-video', { body: { job_id: jobId } });
       const d = data as any;
       if (Array.isArray(d?.segment_urls) && d.segment_urls.filter(Boolean).length) {
         segUrls = d.segment_urls.filter(Boolean);
@@ -301,7 +301,7 @@ export function AssetDetailDialog({
     let c: CopyCand | null = null;
     try {
       const topic = asset.meta?.topic || asset.meta?.style_label || '';
-      const { data, error } = await invokeFn('generate-marketing-copy', {
+      const { data, error } = await invokeFnTop('generate-marketing-copy', {
         body: {
           image_urls: [poster],
           platform: 'xhs',
@@ -566,7 +566,7 @@ export function AssetDetailDialog({
                     onClick={continueStitching}
                     disabled={stitching}
                   >
-                    {stitching ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                    {stitching ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshIconTop className="w-3.5 h-3.5 mr-1" />}
                     不重渲，继续合成已生成分段
                   </Button>
                 ) : null}
@@ -576,7 +576,7 @@ export function AssetDetailDialog({
                   onClick={regenerateVideo}
                   disabled={regenerating}
                 >
-                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshIconTop className="w-3.5 h-3.5 mr-1" />}
                   用同样的脚本重新生成
                 </Button>
               </div>
@@ -611,7 +611,7 @@ export function AssetDetailDialog({
                     )}
                     <div className="pt-2 border-t border-border/60">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1.5 flex items-center gap-1">
-                        <RefreshCw className="w-3 h-3" />换个风格再来一版
+                        <RefreshIconTop className="w-3 h-3" />换个风格再来一版
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {(Object.keys(VIRAL_STYLE_LABELS) as ViralStyle[]).map((s) => (
@@ -677,7 +677,7 @@ export function AssetDetailDialog({
                   onClick={regenerateVideo}
                   disabled={regenerating}
                 >
-                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshIconTop className="w-3.5 h-3.5 mr-1" />}
                   用同样的脚本重新生成一条
                 </Button>
               </div>
