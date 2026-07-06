@@ -64,7 +64,7 @@ export default function MarketingLibrary() {
 
   const PAGE_SIZE = 60;
   // 只显式取需要的列,避免将来 marketing_assets 新增大字段拖慢首屏。
-  const ASSET_COLS = 'id, kind, output_url, input_image_urls, tags, category, shop_id, user_id, created_at, meta';
+  const ASSET_COLS = 'id, kind, output_url, output_text, input_image_urls, tags, category, shop_id, user_id, created_at, meta';
 
   const fetchItems = async (silent = false) => {
     if (!user) return;
