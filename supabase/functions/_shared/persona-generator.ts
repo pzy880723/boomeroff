@@ -161,11 +161,14 @@ const FALLBACK_POOL: InfluencerPersona[] = [
 ];
 
 function fallbackPersona(slot?: { ageBucket: AgeBucket; groupType: GroupType }): InfluencerPersona {
-  if (!slot) return FALLBACK_POOL[Math.floor(Math.random() * FALLBACK_POOL.length)];
+  if (!slot) {
+    const pick = FALLBACK_POOL[Math.floor(Math.random() * FALLBACK_POOL.length)];
+    return { ...pick };
+  }
   // 按年龄段挑最接近的一个
   const targetAge = slot.ageBucket === 'senior' ? 65 : slot.ageBucket === 'middle' ? 42 : 25;
   const sorted = [...FALLBACK_POOL].sort((a, b) => Math.abs(a.age - targetAge) - Math.abs(b.age - targetAge));
-  return { ...sorted[0], group_type: slot.groupType };
+  return { ...sorted[0], group_type: slot.groupType, age_bucket: slot.ageBucket };
 }
 
 // ---------- 主流程 ----------
