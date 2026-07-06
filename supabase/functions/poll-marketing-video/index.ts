@@ -4,6 +4,7 @@
 //   全部成功后把 segment_urls 返回给前端, 由前端用 mediabunny 拼接并回写。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
+import { isVolcesTosUrl, mirrorTosVideoToStorage } from "../_shared/mirror-tos-video.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,9 +87,28 @@ async function updateAssetMeta(
     .filter("meta->>job_id", "eq", jobId)
     .maybeSingle();
   if (!asset) return;
-  const newMeta = { ...(asset.meta || {}), ...patch };
+  let finalUrl: string | null | undefined = outputUrl;
+  const extraMeta: Record<string, unknown> = {};
+  // 火山 TOS 签名 URL 只有 24h 有效,成功时立刻转存到 Storage 拿长期链接
+  if (typeof outputUrl === "string" && isVolcesTosUrl(outputUrl)) {
+    try {
+      const r = await mirrorTosVideoToStorage(admin, userId, asset.id as string, outputUrl);
+      if (r.ok) {
+        finalUrl = r.url;
+        extraMeta.tos_url_original = outputUrl;
+        extraMeta.storage_path = r.path;
+        extraMeta.mirrored_at = new Date().toISOString();
+      } else {
+        console.warn("[poll] mirror failed", asset.id, r.error);
+        extraMeta.mirror_error = r.error;
+      }
+    } catch (e) {
+      console.warn("[poll] mirror exception", asset.id, e);
+    }
+  }
+  const newMeta = { ...(asset.meta || {}), ...patch, ...extraMeta };
   const update: Record<string, unknown> = { meta: newMeta };
-  if (outputUrl !== undefined) update.output_url = outputUrl;
+  if (finalUrl !== undefined) update.output_url = finalUrl;
   await admin.from("marketing_assets").update(update).eq("id", asset.id);
 }
 
