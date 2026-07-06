@@ -66,24 +66,31 @@ function buildOneShotPrompt(
   if (character?.name && !overrides?.persona_directive) {
     lines.push(`【主体1】参考图 1 中的 ${character.name}(${character.role_label || '主角'})为全片唯一主角。外观锁:${character.visual_signature || '以参考图为准'}。全程同一人,禁止换人/换装/分身/双胞胎。`);
   }
-  lines.push(`【镜头节奏】共 ${shots.length || 1} 个镜头,以自然剪辑切换,不要黑场过渡,人物、光线、调色保持一致。`);
 
-  // 按时间线累积秒数,告诉模型每镜大概的起止
-  let t = 0;
-  for (const { label, sc } of shots) {
-    const dur = Math.max(1, Math.min(MAX_SEG_DUR, Number(sc.duration_s) || 3));
-    const start = t; const end = Math.min(total, t + dur); t = end;
-    const motion = (sc.motion || '自然运镜').toString();
-    const scene = (sc.scene || sc.video_prompt || '').toString().trim();
-    const action = (sc.action || '').toString().trim();
-    const dialogue = (sc.dialogue || '').toString().trim();
-    const subtitle = (sc.subtitle || sc.text || '').toString().trim();
-    const parts = [`【${label}】(${start}-${end}s · ${motion})`];
-    if (scene) parts.push(`场景:${scene}`);
-    if (action) parts.push(`动作:${action}`);
-    if (dialogue) parts.push(`台词(同步口型):{${dialogue}}`);
-    if (subtitle) parts.push(`屏幕字幕:【${subtitle}】`);
-    lines.push(parts.join(' '));
+  // 【核心】优先使用脚本里的 one_shot_prompt(一段话导演稿),让 Seedance 自由发挥,
+  // 分镜逐条的堆砌只在没有 one_shot_prompt 时兜底,避免模型被硬口令切碎导致人物/情节崩塌。
+  const oneShotPrompt = (script?.one_shot_prompt || '').toString().trim();
+  if (oneShotPrompt) {
+    lines.push(`【导演稿(核心内容 · 请围绕这段自由发挥,不要切成机械分镜)】\n${oneShotPrompt}`);
+  } else {
+    lines.push(`【镜头节奏】共 ${shots.length || 1} 个镜头,以自然剪辑切换,不要黑场过渡,人物、光线、调色保持一致。`);
+    // 按时间线累积秒数,告诉模型每镜大概的起止
+    let t = 0;
+    for (const { label, sc } of shots) {
+      const dur = Math.max(1, Math.min(MAX_SEG_DUR, Number(sc.duration_s) || 3));
+      const start = t; const end = Math.min(total, t + dur); t = end;
+      const motion = (sc.motion || '自然运镜').toString();
+      const scene = (sc.scene || sc.video_prompt || '').toString().trim();
+      const action = (sc.action || '').toString().trim();
+      const dialogue = (sc.dialogue || '').toString().trim();
+      const subtitle = (sc.subtitle || sc.text || '').toString().trim();
+      const parts = [`【${label}】(${start}-${end}s · ${motion})`];
+      if (scene) parts.push(`场景:${scene}`);
+      if (action) parts.push(`动作:${action}`);
+      if (dialogue) parts.push(`台词(同步口型):{${dialogue}}`);
+      if (subtitle) parts.push(`屏幕字幕:【${subtitle}】`);
+      lines.push(parts.join(' '));
+    }
   }
 
   if (shopBlock) lines.push(`店铺背景:\n${shopBlock}`);
@@ -438,8 +445,8 @@ Deno.serve(async (req) => {
     } else if (requestedStrategy === 'per_shot') {
       strategy = 'per_shot'; autoReason = 'user_per_shot';
     } else {
-      // auto:总时长 ≤15s 且分镜数 ≤4 → one_shot
-      if (totalDur > 0 && totalDur <= MAX_SEG_DUR && meaningfulShotCount <= 4) {
+      // auto:总时长 ≤15s → one_shot(避免分段拼接导致人物一致性崩塌);>15s 才走分段
+      if (totalDur > 0 && totalDur <= MAX_SEG_DUR) {
         strategy = 'one_shot';
         autoReason = `auto:duration<=${MAX_SEG_DUR}s,shots=${meaningfulShotCount}`;
       } else {

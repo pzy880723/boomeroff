@@ -173,6 +173,7 @@ ${refList}
 输出严格 JSON：
 {
   "title": "<≤14 字的中文标题，一眼看出这条视频拍的是什么，避免『视频/短片』这类无信息词>",
+  "one_shot_prompt": "<${isTight15 ? '【15 秒必填】' : '可留空字符串'}120–180 字中文口语化『导演稿』。这段话是交给视频模型的最终稿,要写成一段自然叙述:主角在这家店里连贯地做什么(走进店→拿起商品→试戴/试穿→惊喜表情→拉镜头喊姐妹冲,动作要串起来不要分段),整体情绪节奏(手持跟拍、明亮色调、轻快 vlog 感)、以及一句总台词方向(例:『全程边逛边对镜头讲这家店多好逛、便宜到离谱、姐妹速冲』)。**不要**写『镜头 1 / 镜头 2』『0-3 秒』这种分镜/时间码,**不要**堆逐字台词,让视频模型自由发挥。>",
   "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "<中文台词,可为空字符串>", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": 2, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
   "scenes": [
     { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
@@ -183,6 +184,7 @@ ${refList}
   "aspect": "${aspect}",
   "mode": "text2video"
 }
+说明:hook/scenes/outro 里的 dialogue 和 subtitle 只是用来展示给店员看 + 后期烧字幕,**真正交给视频模型的是 one_shot_prompt**,写得自然口语、有画面感、不要分镜。
 只输出 JSON，不要 \`\`\` 包裹。`;
 
     const userContent: any[] = [{ type: "text", text: userPrompt }];
@@ -392,6 +394,19 @@ ${refList}
     script.aspect = aspect;
     script.total_duration_s = duration;
     script.mode = "text2video";
+    // one_shot_prompt:交给视频模型的一段话导演稿,做去敏 + 去分镜口令 + 截断
+    {
+      let osp = (script?.one_shot_prompt ?? "").toString();
+      osp = scrubThirdPartyBrands(sanitizeStorefrontText(osp))
+        .replace(/主播/g, "店员").replace(/直播间/g, "店里")
+        // 去掉模型可能偷偷带的分镜/时间码前缀
+        .replace(/【[^】]{0,10}(镜头|开场|收尾|中段)[^】]{0,10}】/g, "")
+        .replace(/\d+\s*[-–~到至]\s*\d+\s*秒/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+        .slice(0, 500);
+      script.one_shot_prompt = osp;
+    }
     script.image_urls = imageUrls;
     script.topic = topic;
     script.style = styleKey;

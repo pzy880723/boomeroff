@@ -1,26 +1,40 @@
-## 问题
-15 秒脚本里出现"先演一段无声画面 → 再停下来讲对白"的分段,导致 15 秒装不下完整口播,尾巴被砍。用户要求:探店的动作和口播必须**同步进行**——边走边说、边拿起商品边讲、边收尾边喊 CTA,15 秒里全程有声。
 
-## 修改 — `supabase/functions/generate-marketing-video-script/index.ts`
+## 思路调整
 
-### 1. `viralBlock`(洗脑探店模板,约 100–114 行)
-补一条【硬规则】置顶:
+同意你的判断：分段拼接一定会崩人物一致性，Seedance 也吃不下那么细的分镜口令。改成"一段话式脚本 + one_shot 直出"更稳。
 
-> **动作与口播必须同步(walk-and-talk)**:每一镜的 dialogue 就是主角在做那个 action 的**同时**说的话,不允许"先做动作 → 再停下讲话"、也不允许"静默走位镜"。action 描述里必须体现"边 ×× 边对镜头说";subtitle 与 dialogue 同帧出现。
+## 改动
 
-### 2. `sys` 提示词的"硬性约束"块(约 139–150 行)
-新增两条(仅 15s / isTight15 时强调):
-- **所有 5 段(hook + 3 scenes + outro)都必须有非空 dialogue**;严禁纯氛围镜、严禁 dialogue 为空字符串。
-- **action 必须写成"边动作边说话"**(例:"边从货架取下手袋边对镜头说"),不要"停下、转身、然后说"这类分步措辞。
+### 1. 15s 脚本生成：内部保留分镜，对外输出"一段话导演稿"
+文件：`supabase/functions/generate-marketing-video-script/index.ts`
 
-### 3. 服务端兜底(约 252–310 行,`isTight15` 分支)
-现在只在 hook/outro 为空时兜底,并保留一个中段镜可能 dialogue=""(见 298 行填充空 dialogue)。改为:
+- 保留现在的 5 段 JSON 结构（前端展示、字幕烧录仍要用），但**新增一个字段** `one_shot_prompt`：一段 120–180 字的中文口语化导演稿，把 hook + 3 中段 + outro 揉成一段自然叙述，只交代：
+  - 主角在这家店里做什么（连贯动作串起来，例："走进店里 → 挑起一只中古包 → 试戴一副墨镜 → 拉着镜头喊冲"）
+  - 整体情绪、节奏、镜头感（"手持跟拍、明亮色调、节奏轻快"）
+  - 一句总台词方向（"全程边逛边对镜头讲这家店多好逛、多便宜、姐妹快冲"），**不写逐字台词**
+- prompt 里明确告诉模型："逐镜 dialogue 只给字幕烧录用，`one_shot_prompt` 才是交给视频模型的最终稿，越自然越好，别写分段、别写秒数、别写'镜头 1 / 镜头 2'"。
+- 非 15s 视频不受影响，`one_shot_prompt` 可为空字符串。
 
-- **3 个中段 scene 的 dialogue 若为空,也用与 scene 内容相关的一句短口播兜底**(≤14 字):优先复用同镜 subtitle;subtitle 也空则给通用兜底如"这个真的绝"/"店里都是好货"/"闭眼冲不亏"。
-- 补齐空 scenes(现有 while 循环填充的那段)时,`dialogue` 不再留空,给一句默认口播。
-- `action` 兜底文案(现"手持镜头顺移,店员拿起一件商品自然展示")改成明确的同步表达:"手持镜头顺移,店员边拿起一件商品边对镜头说"。
+### 2. 渲染：15s 一律走 one_shot，用 `one_shot_prompt` 当主 prompt
+文件：`supabase/functions/render-marketing-video/index.ts`
 
-### 4. 不改动
-- 15s 时长/5 段结构/每段 3s/60 字总预算/按比例截断逻辑 —— 全部保留。
-- 非 15s(20s / 30s)路径不动。
-- 前端、DB、其它 edge function 不动。
+- `buildOneShotPrompt` 改造：如果 `script.one_shot_prompt` 存在，就用它当"分镜叙述"主体，替代现在按镜头逐条堆砌 `【开场】【镜头1】…` 的写法。人物锁定、店铺环境、风格、真实感、"禁止门/街边/文字水印"这些约束**全部保留**放在前后。
+- auto 策略回退到原来的判断：`total ≤15s → one_shot`，不再强推 per_shot；`surprise-marketing-video` 继续 `render_strategy: 'one_shot'`。
+- 参考图逻辑保持不变（角色板 + storyboard + 实景照，上限 9 张），继续锁人物。
+
+### 3. `surprise-marketing-video` 无需改
+- 它现在就是 one_shot 提交，脚本里多出的 `one_shot_prompt` 会自然带过去。
+
+### 4. 前端字幕（可选，不做也行）
+文件：`src/lib/marketingVideoStitch.ts` / `AssetDetailDialog.tsx`
+- 15s one_shot 场景下不需要拼接。若想让台词可见，可后处理把 hook/scenes/outro 的 `subtitle` 按时间点烧成底部字幕；这一步独立、失败不影响出片。**先不做，看直出效果再定。**
+
+## 不改
+- 角色一致性、参考图、storyboard 流程
+- 脚本 JSON 结构对外契约（只是新增 `one_shot_prompt`）
+- 20s / 30s 及以上长视频的分段渲染路径
+
+## 技术细节
+- `one_shot_prompt` 走同一个 JSON 输出，模型只多写一段字符串，几乎不增成本。
+- `buildOneShotPrompt` 优先级：`one_shot_prompt` > 逐镜堆砌（老逻辑保留做兜底，防止旧脚本失效）。
+- 总 prompt 长度仍限制在 2000 字符内，超出就截断。
