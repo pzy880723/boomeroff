@@ -805,8 +805,6 @@ export default function MarketingLibrary() {
                         ? it.output_url
                         : (it.meta?.poster_url
                             || it.meta?.cover_url
-                            || (Array.isArray(it.meta?.image_urls) && it.meta.image_urls[0])
-                            || (Array.isArray(it.input_image_urls) && it.input_image_urls[0])
                             || null);
                       const thumbUrl = rawThumb ? (thumb(rawThumb, 240) || rawThumb) : null;
                       const srcSet = rawThumb ? thumbSrcSet(rawThumb, 120) : undefined;
@@ -825,7 +823,11 @@ export default function MarketingLibrary() {
                           : segTotal > 0
                             ? Math.min(95, Math.round((segDone / segTotal) * 80))
                             : 8;
+                      const videoTitle = it.kind === 'video'
+                        ? (it.meta?.title || it.meta?.topic || '').toString().trim()
+                        : '';
                       return (
+
                         <button
                           type="button"
                           key={it.id}
