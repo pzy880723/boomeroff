@@ -413,12 +413,9 @@ export default function MarketingLibrary() {
     if (tab === 'photo') list = list.filter((it) => it.kind === 'photo');
     else if (tab === 'copy') list = list.filter((it) => it.kind === 'copy');
     else if (tab === 'video') list = list.filter((it) => it.kind === 'video');
-    if ((tab === 'all' || tab === 'photo') && imgSource !== 'all') {
-      list = list.filter((it) => {
-        // 视频/文案不受来源过滤影响,只过滤 photo
-        if (it.kind !== 'photo') return true;
-        return assetSource(it) === imgSource;
-      });
+    // 来源筛选仅在「图片」tab 生效,「全部」tab 显示全部素材(所有 kind 与来源)
+    if (tab === 'photo' && imgSource !== 'all') {
+      list = list.filter((it) => assetSource(it) === imgSource);
     }
     if (activeTag) list = list.filter((it) => Array.isArray(it.tags) && it.tags.includes(activeTag));
     return list;
@@ -605,7 +602,7 @@ export default function MarketingLibrary() {
 
 
           {/* 来源分段:基础素材 / 我上传的 / AI 生成 / 全部 */}
-          {(tab === 'all' || tab === 'photo') && (
+          {tab === 'photo' && (
             <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px] flex-wrap">
               {([
                 { v: 'base', label: '📌 基础素材', Icon: null as any },
