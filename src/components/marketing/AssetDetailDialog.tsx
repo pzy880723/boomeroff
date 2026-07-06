@@ -253,6 +253,10 @@ export function AssetDetailDialog({
   const [downloading, setDownloading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [stitching, setStitching] = useState(false);
+  // 视频详情:折叠的原始脚本
+  const [videoScript, setVideoScript] = useState<any>(null);
+  const [scriptOpen, setScriptOpen] = useState(false);
+
   
 
   const regenerateVideo = async () => {
