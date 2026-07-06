@@ -1,26 +1,29 @@
 // 营销素材详情 / 编辑抽屉。支持文案、图片、视频三种 kind。
 import { useEffect, useRef, useState } from 'react';
-import { Play, RefreshCw as RefreshIconTop, Loader2 as SpinTop } from 'lucide-react';
+import { Play, RefreshCw as RefreshIconTop, Loader2 as SpinTop, ImageDown } from 'lucide-react';
 import { invokeFn as invokeFnTop } from '@/lib/invokeFn';
 import { toast as toastTop } from 'sonner';
 
 function LazyVideoPlayer({
-  src, poster, assetId, expired, onRefreshed,
+  src, poster, assetId, expired, onRefreshed, onPosterUpdated,
 }: {
   src: string;
   poster?: string;
   assetId?: string;
   expired?: boolean;
   onRefreshed?: (nextUrl: string) => void;
+  onPosterUpdated?: (nextPosterUrl: string) => void;
 }) {
   const [active, setActive] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | undefined>(poster);
   const [videoError, setVideoError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [srcNonce, setSrcNonce] = useState(0);
+  const [savingPoster, setSavingPoster] = useState(false);
+  const [autoPosterDone, setAutoPosterDone] = useState<boolean>(!!poster);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  useEffect(() => { setPosterUrl(poster); }, [poster]);
+  useEffect(() => { setPosterUrl(poster); setAutoPosterDone(!!poster); }, [poster]);
   useEffect(() => { setVideoError(false); setActive(false); }, [src]);
 
   useEffect(() => {
@@ -28,6 +31,61 @@ function LazyVideoPlayer({
       Promise.resolve().then(() => videoRef.current?.play().catch(() => {}));
     }
   }, [active, srcNonce]);
+
+  // 抓当前 <video> 的一帧 → 上传到 refresh-marketing-poster
+  const captureAndUpload = async (opts?: { silent?: boolean }): Promise<boolean> => {
+    if (!assetId) return false;
+    const v = videoRef.current;
+    if (!v || !v.videoWidth || !v.videoHeight) return false;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = v.videoWidth;
+      canvas.height = v.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return false;
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      // 降到 720 宽以内减少上传体积
+      const maxW = 720;
+      let outCanvas: HTMLCanvasElement = canvas;
+      if (canvas.width > maxW) {
+        const ratio = maxW / canvas.width;
+        outCanvas = document.createElement('canvas');
+        outCanvas.width = maxW;
+        outCanvas.height = Math.round(canvas.height * ratio);
+        outCanvas.getContext('2d')?.drawImage(canvas, 0, 0, outCanvas.width, outCanvas.height);
+      }
+      const dataUrl = outCanvas.toDataURL('image/jpeg', 0.78);
+      if (!opts?.silent) setSavingPoster(true);
+      const { data, error } = await invokeFnTop<{ ok: boolean; url: string }>('refresh-marketing-poster', {
+        body: { asset_id: assetId, image_base64: dataUrl },
+      });
+      if (error) throw error;
+      const nextUrl = data?.url;
+      if (nextUrl) {
+        setPosterUrl(nextUrl);
+        onPosterUpdated?.(nextUrl);
+        if (!opts?.silent) toastTop.success('封面已更新');
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      if (!opts?.silent) toastTop.error(e?.message || '换封面失败');
+      return false;
+    } finally {
+      if (!opts?.silent) setSavingPoster(false);
+    }
+  };
+
+  // 首次播放:视频过半 & 之前没有 poster → 悄悄抓一帧上传
+  const handleTimeUpdate = () => {
+    if (autoPosterDone || !assetId) return;
+    const v = videoRef.current;
+    if (!v || !v.duration || !isFinite(v.duration)) return;
+    if (v.currentTime / v.duration >= 0.4) {
+      setAutoPosterDone(true);
+      captureAndUpload({ silent: true });
+    }
+  };
 
   const tryRefresh = async () => {
     if (!assetId || refreshing) return;
@@ -77,7 +135,7 @@ function LazyVideoPlayer({
           <img
             src={posterUrl}
             alt=""
-            className="absolute inset-0 w-full h-full object-contain"
+            className="absolute inset-0 w-full h-full object-contain transition-opacity duration-200"
             loading="eager"
             decoding="async"
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -122,19 +180,36 @@ function LazyVideoPlayer({
   }
 
   return (
-    <video
-      key={`${src}#${srcNonce}`}
-      ref={videoRef}
-      src={src}
-      controls
-      playsInline
-      preload="metadata"
-      poster={posterUrl}
-      onError={() => setVideoError(true)}
-      className="w-full rounded-lg bg-black"
-    />
+    <div className="relative">
+      <video
+        key={`${src}#${srcNonce}`}
+        ref={videoRef}
+        src={src}
+        controls
+        playsInline
+        preload="metadata"
+        poster={posterUrl}
+        onError={() => setVideoError(true)}
+        onTimeUpdate={handleTimeUpdate}
+        className="w-full rounded-lg bg-black"
+        crossOrigin="anonymous"
+      />
+      {assetId && (
+        <button
+          type="button"
+          onClick={() => captureAndUpload()}
+          disabled={savingPoster}
+          className="absolute top-2 right-2 inline-flex items-center gap-1 px-2.5 h-7 rounded-full bg-black/55 backdrop-blur text-white text-[11px] hover:bg-black/70 disabled:opacity-60"
+          title="用当前画面作为视频封面"
+        >
+          {savingPoster ? <SpinTop className="w-3 h-3 animate-spin" /> : <ImageDown className="w-3 h-3" />}
+          换封面
+        </button>
+      )}
+    </div>
   );
 }
+
 
 
 
