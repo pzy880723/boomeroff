@@ -307,14 +307,22 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         </DialogHeader>
 
         {activeJob ? (
-          <RenderingBody
-            job={activeJob} phase={renderPhase} progress={progress}
-            error={renderError}
-            onApplyFix={handleFix}
-            busy={submitting}
-            onClose={() => onOpenChange(false)}
-            onReset={resetToPicker}
-          />
+          activeJob.kind === 'director' ? (
+            <DirectorProgress
+              jobId={activeJob.jobId}
+              onClose={() => onOpenChange(false)}
+              onReset={resetToPicker}
+            />
+          ) : (
+            <RenderingBody
+              job={activeJob} phase={renderPhase} progress={progress}
+              error={renderError}
+              onApplyFix={handleFix}
+              busy={submitting}
+              onClose={() => onOpenChange(false)}
+              onReset={resetToPicker}
+            />
+          )
         ) : picking || !pick ? (
           <div className="py-16 px-4 flex flex-col items-center gap-3 text-sm text-muted-foreground">
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
