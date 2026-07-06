@@ -76,7 +76,7 @@ export async function completeMarketingVideoFromSegments({
 
   let posterUrl: string | undefined;
   try {
-    const posterBlob = await extractFirstFrame(blob);
+    const posterBlob = await extractFirstFrame(blob); // 默认取中段 ~45%,更能代表内容
     if (posterBlob) {
       const posterPath = `${userId}/posters/${jobId}.jpg`;
       const pu = await supabase.storage.from('marketing-videos').upload(posterPath, posterBlob, {
