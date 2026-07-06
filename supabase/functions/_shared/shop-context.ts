@@ -44,19 +44,26 @@ export async function loadShopContext(shopId: string | null | undefined): Promis
   }
 }
 
+import { scrubThirdPartyBrands } from "./brand-scrub.ts";
+
 export function formatShopContext(s: ShopContext | null): string {
   if (!s) return "";
+  // 视频模型侧统一去敏:真实店名(可能含"中信泰富"这类第三方商标)不再进 AI 提示词,
+  // 只保留"BOOMER·OFF(商场店)"这种中性表述。店名原文仍在数据库/前端展示,不受影响。
+  const scrub = (v: string) => scrubThirdPartyBrands(v);
   const lines: string[] = ["【店铺画像】"];
-  lines.push(`门店：${s.name}${s.address ? ` · ${s.address}` : ""}`);
-  if (s.tagline) lines.push(`定位：${s.tagline}`);
-  if (s.description) lines.push(`介绍：${s.description}`);
+  const nameSafe = scrub(s.name) || 'BOOMER·OFF(商场店)';
+  const addrSafe = s.address ? scrub(s.address) : '';
+  lines.push(`门店:${nameSafe}${addrSafe ? ` · ${addrSafe}` : ""}`);
+  if (s.tagline) lines.push(`定位:${scrub(s.tagline)}`);
+  if (s.description) lines.push(`介绍:${scrub(s.description)}`);
   if (Array.isArray(s.selling_points) && s.selling_points.length) {
-    const arr = s.selling_points.map((x: any) => typeof x === "string" ? x : x?.text || "").filter(Boolean);
-    if (arr.length) lines.push(`卖点：${arr.join(" / ")}`);
+    const arr = s.selling_points.map((x: any) => scrub(typeof x === "string" ? x : x?.text || "")).filter(Boolean);
+    if (arr.length) lines.push(`卖点:${arr.join(" / ")}`);
   }
-  if (s.target_audience) lines.push(`目标人群：${s.target_audience}`);
-  if (s.tone) lines.push(`偏好口吻：${s.tone}`);
-  if (Array.isArray(s.brand_keywords) && s.brand_keywords.length) lines.push(`关键词：${s.brand_keywords.join(", ")}`);
-  if (Array.isArray(s.default_hashtags) && s.default_hashtags.length) lines.push(`常用话题：${s.default_hashtags.join(" ")}`);
+  if (s.target_audience) lines.push(`目标人群:${scrub(s.target_audience)}`);
+  if (s.tone) lines.push(`偏好口吻:${scrub(s.tone)}`);
+  if (Array.isArray(s.brand_keywords) && s.brand_keywords.length) lines.push(`关键词:${s.brand_keywords.map(scrub).join(", ")}`);
+  if (Array.isArray(s.default_hashtags) && s.default_hashtags.length) lines.push(`常用话题:${s.default_hashtags.map(scrub).join(" ")}`);
   return lines.join("\n");
 }
