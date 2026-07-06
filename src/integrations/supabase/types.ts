@@ -2868,6 +2868,143 @@ export type Database = {
         }
         Relationships: []
       }
+      video_generation_jobs: {
+        Row: {
+          aspect_ratio: string
+          brief_json: Json | null
+          character_json: Json | null
+          cover_url: string | null
+          created_at: string
+          duration: number
+          error_message: string | null
+          final_video_url: string | null
+          id: string
+          meta: Json
+          script_json: Json | null
+          shop_id: string | null
+          source_pick_json: Json | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          aspect_ratio?: string
+          brief_json?: Json | null
+          character_json?: Json | null
+          cover_url?: string | null
+          created_at?: string
+          duration?: number
+          error_message?: string | null
+          final_video_url?: string | null
+          id?: string
+          meta?: Json
+          script_json?: Json | null
+          shop_id?: string | null
+          source_pick_json?: Json | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          aspect_ratio?: string
+          brief_json?: Json | null
+          character_json?: Json | null
+          cover_url?: string | null
+          created_at?: string
+          duration?: number
+          error_message?: string | null
+          final_video_url?: string | null
+          id?: string
+          meta?: Json
+          script_json?: Json | null
+          shop_id?: string | null
+          source_pick_json?: Json | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      video_generation_shots: {
+        Row: {
+          action: string | null
+          camera: string | null
+          created_at: string
+          dialogue: string | null
+          duration: number
+          error_message: string | null
+          first_frame_url: string | null
+          id: string
+          job_id: string
+          meta: Json
+          prompt: string
+          reference_image_url: string | null
+          retry_count: number
+          scene: string | null
+          seedance_task_id: string | null
+          shot_index: number
+          status: string
+          subject: string | null
+          subtitle: string | null
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          action?: string | null
+          camera?: string | null
+          created_at?: string
+          dialogue?: string | null
+          duration?: number
+          error_message?: string | null
+          first_frame_url?: string | null
+          id?: string
+          job_id: string
+          meta?: Json
+          prompt?: string
+          reference_image_url?: string | null
+          retry_count?: number
+          scene?: string | null
+          seedance_task_id?: string | null
+          shot_index: number
+          status?: string
+          subject?: string | null
+          subtitle?: string | null
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          action?: string | null
+          camera?: string | null
+          created_at?: string
+          dialogue?: string | null
+          duration?: number
+          error_message?: string | null
+          first_frame_url?: string | null
+          id?: string
+          job_id?: string
+          meta?: Json
+          prompt?: string
+          reference_image_url?: string | null
+          retry_count?: number
+          scene?: string | null
+          seedance_task_id?: string | null
+          shot_index?: number
+          status?: string
+          subject?: string | null
+          subtitle?: string | null
+          updated_at?: string
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_generation_shots_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "video_generation_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voucher_claims: {
         Row: {
           activity_application_id: string | null

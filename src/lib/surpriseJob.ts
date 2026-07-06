@@ -44,6 +44,8 @@ export interface ActiveRenderJob {
   coverUrl: string | null;
   createdAt: number;
   segmentTotal?: number;
+  /** 'director' = 新版 7 步流水线;undefined = 旧的 render-marketing-video 一次成片。 */
+  kind?: 'director' | 'legacy';
 }
 
 export function getActiveRenderJob(shopId: string | null | undefined): ActiveRenderJob | null {

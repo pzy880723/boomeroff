@@ -23,6 +23,8 @@ import { toastVideoFailure } from '@/lib/toastVideoFailure';
 import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
 import { invokeFn } from '@/lib/invokeFn';
+import { DirectorProgress } from '@/components/marketing/director/DirectorProgress';
+import { createVideoJob } from '@/api/videoGeneration';
 
 // 惊喜一下固定真人写实,不暴露切换开关
 const SURPRISE_REALISM: Realism = 'photoreal';
@@ -149,7 +151,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     if (job) {
       setActiveJob(job);
       setRenderPhase('running');
-      startPolling(job.jobId, shopId);
+      if (job.kind !== 'director') startPolling(job.jobId, shopId);
       return;
     }
     setActiveJob(null);
@@ -179,15 +181,40 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     const useRes = overrides?.resolution || resolution;
     setSubmitting(true);
     setRenderError(null);
+    // 主路径:走新的 7 步导演流水线(角色参考图 + 逐镜 Seedance + 客户端拼片)
+    try {
+      const { job_id } = await createVideoJob({
+        shop_id: shopId,
+        script: pick.script,
+        picked_assets: pick.assets,
+        persona: pick.persona,
+        style: pick.style,
+        model: useModel,
+        resolution: useRes,
+        prompt_overrides: pick.prompt_overrides,
+      });
+      const job: ActiveRenderJob = {
+        jobId: job_id, coverUrl: pick.picked.cover_url,
+        createdAt: Date.now(), kind: 'director',
+      };
+      setActiveRenderJob(shopId, job);
+      clearSavedPick(shopId);
+      setActiveJob(job);
+      setRenderPhase('queued');
+      toast.success('已开拍 · 关掉也会继续');
+      return;
+    } catch (e: any) {
+      console.warn('[surprise] director path failed, fallback to legacy', e);
+      toast.message('导演流水线不可用,退回一次成片模式');
+    }
+    // 兜底:退回老 surprise-marketing-video 一次成片
     try {
       const { data, error } = await invokeFn('surprise-marketing-video', {
         body: {
           shop_id: shopId, preview: false,
           script: pick.script, picked_assets: pick.assets,
           vtype: pick.vtype, style: pick.style,
-          model: useModel,
-          resolution: useRes,
-          realism,
+          model: useModel, resolution: useRes, realism,
           disable_references: !!overrides?.disable_references,
           face_pipeline: overrides?.face_pipeline,
           prompt_overrides: pick.prompt_overrides,
@@ -198,7 +225,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       if (d?.ok === false || !d?.job_id) throw new Error(d?.error || '提交失败');
       const job: ActiveRenderJob = {
         jobId: d.job_id, coverUrl: pick.picked.cover_url,
-        createdAt: Date.now(), segmentTotal: d.segment_total,
+        createdAt: Date.now(), segmentTotal: d.segment_total, kind: 'legacy',
       };
       setActiveRenderJob(shopId, job);
       clearSavedPick(shopId);
@@ -207,7 +234,6 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       startPolling(d.job_id, shopId);
       toast.success('已入队,关掉也会继续跑');
     } catch (e: any) {
-      // 把英文报错翻译成中文卡片 + 一键修复
       toastVideoFailure(e, { onApplyFix: handleFix });
     } finally { setSubmitting(false); }
   };
@@ -281,14 +307,22 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         </DialogHeader>
 
         {activeJob ? (
-          <RenderingBody
-            job={activeJob} phase={renderPhase} progress={progress}
-            error={renderError}
-            onApplyFix={handleFix}
-            busy={submitting}
-            onClose={() => onOpenChange(false)}
-            onReset={resetToPicker}
-          />
+          activeJob.kind === 'director' ? (
+            <DirectorProgress
+              jobId={activeJob.jobId}
+              onClose={() => onOpenChange(false)}
+              onReset={resetToPicker}
+            />
+          ) : (
+            <RenderingBody
+              job={activeJob} phase={renderPhase} progress={progress}
+              error={renderError}
+              onApplyFix={handleFix}
+              busy={submitting}
+              onClose={() => onOpenChange(false)}
+              onReset={resetToPicker}
+            />
+          )
         ) : picking || !pick ? (
           <div className="py-16 px-4 flex flex-col items-center gap-3 text-sm text-muted-foreground">
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
