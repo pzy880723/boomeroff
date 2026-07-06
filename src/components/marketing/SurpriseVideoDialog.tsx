@@ -448,16 +448,59 @@ function RenderingBody({
 
       <VideoJobDetailPanel jobId={job.jobId} defaultExpanded={phase === 'failed'} />
 
-      <div className="flex gap-2">
-        <Button variant="outline" className="flex-1" onClick={onClose}>
-          关闭(后台继续)
-        </Button>
-        <Link to="/me/marketing/library" className="flex-1">
-          <Button className="w-full" onClick={onClose}>
-            去素材库 <ArrowRight className="w-4 h-4 ml-1" />
-          </Button>
-        </Link>
-      </div>
+      {(phase === 'done' || phase === 'failed') && onReset ? (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={onClose}>
+              关闭
+            </Button>
+            {phase === 'done' ? (
+              <Link to="/me/marketing/library" className="flex-1">
+                <Button className="w-full" onClick={onClose}>
+                  去素材库 <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
+            ) : (
+              <Button className="flex-1" onClick={onReset} disabled={busy}>
+                <RefreshCw className="w-4 h-4 mr-1" /> 再拍一条
+              </Button>
+            )}
+          </div>
+          {phase === 'done' && (
+            <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={onReset} disabled={busy}>
+              <RefreshCw className="w-3.5 h-3.5 mr-1" /> 再来一条(重新挑素材)
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={onClose}>
+              关闭(后台继续)
+            </Button>
+            <Link to="/me/marketing/library" className="flex-1">
+              <Button className="w-full" onClick={onClose}>
+                去素材库 <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </Link>
+          </div>
+          {onReset && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs text-muted-foreground hover:text-destructive"
+              onClick={() => {
+                if (window.confirm('强制结束这次任务?后台渲染仍会继续跑完(结果会自动进素材库),但当前弹窗会回到"挑素材"步骤,可以立刻再拍一条。')) {
+                  onReset();
+                }
+              }}
+              disabled={busy}
+            >
+              强制结束这次任务 · 重新拍一条
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
