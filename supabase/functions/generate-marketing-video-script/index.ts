@@ -280,7 +280,16 @@ ${refList}
         if (cnLen(s.dialogue) > 14) s.dialogue = truncCn(s.dialogue, 14);
       });
 
-      // 2) 总预算(60 字)超了 → 保 hook/outro,从中段最长的先削
+      // 2) 中段空 dialogue → 用 subtitle 或通用兜底填(严禁静默镜)
+      const MID_FALLBACKS = ['这个真的绝', '店里都是好货', '闭眼冲不亏'];
+      script.scenes.forEach((s: any, i: number) => {
+        if (!s.dialogue || !s.dialogue.trim()) {
+          const sub = (s.subtitle || '').toString().trim();
+          s.dialogue = sub ? truncCn(sub, 14) : MID_FALLBACKS[i % MID_FALLBACKS.length];
+        }
+      });
+
+      // 3) 总预算(60 字)超了 → 保 hook/outro,从中段最长的先削
       const budget = totalSpeakBudgetCn;
       const headTail = cnLen(script.hook.dialogue) + cnLen(script.outro.dialogue);
       let midBudget = Math.max(0, budget - headTail);
@@ -294,12 +303,14 @@ ${refList}
         });
       }
 
-      // 3) 保证 3 段中段
+      // 4) 保证 3 段中段(补齐的段也必须"边演边说")
+      const FILL_LINES = ['这个真的绝', '店里都是好货', '闭眼冲不亏'];
       while (script.scenes.length < 3) {
+        const i = script.scenes.length;
         script.scenes.push({
           scene: script.hook.scene || '店内继续展示商品',
-          action: '手持镜头顺移,店员拿起一件商品自然展示',
-          dialogue: '',
+          action: '手持镜头顺移,店员边拿起一件商品边对镜头说',
+          dialogue: FILL_LINES[i % FILL_LINES.length],
           subtitle: '',
           image_index: null,
           duration_s: 3,
@@ -307,6 +318,7 @@ ${refList}
         });
       }
       script.scenes = script.scenes.slice(0, 3);
+
 
       // 4) duration 全部锁 3s
       script.hook.duration_s = 3;
