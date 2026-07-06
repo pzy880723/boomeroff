@@ -304,6 +304,12 @@ ${refList}
     script.topic = topic;
     script.style = styleKey;
     script.style_label = VIDEO_STYLE_LABELS[styleKey];
+    // 标题:AI 给了就用,没给就从 topic 兜底,再兜底 rule.label
+    {
+      const rawTitle = (script?.title ?? "").toString();
+      const cleaned = clean(rawTitle, 24).replace(/[「」『』"'\s]+$/g, "").trim();
+      script.title = cleaned || (topic ? clean(topic, 14) : rule.label);
+    }
     if (character) script.character = character;
 
     return json({ success: true, script, video_type: videoType, video_type_label: rule.label, __kb_sources: kbSourcesMeta(kbHits) });
