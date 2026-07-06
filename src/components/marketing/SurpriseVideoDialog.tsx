@@ -336,7 +336,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 }
 
 function RenderingBody({
-  job, phase, progress, onClose, error, onApplyFix, busy,
+  job, phase, progress, onClose, error, onApplyFix, busy, onReset,
 }: {
   job: ActiveRenderJob; phase: 'queued' | 'running' | 'done' | 'failed';
   progress: { done: number; total: number } | null;
@@ -344,6 +344,7 @@ function RenderingBody({
   error?: string | null;
   onApplyFix?: (fix: VideoFix) => void | Promise<void>;
   busy?: boolean;
+  onReset?: () => void;
 }) {
   const [elapsed, setElapsed] = useState(() => Math.max(0, Math.floor((Date.now() - (job.createdAt || Date.now())) / 1000)));
   useEffect(() => {
