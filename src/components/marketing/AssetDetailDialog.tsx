@@ -1,26 +1,67 @@
 // 营销素材详情 / 编辑抽屉。支持文案、图片、视频三种 kind。
 import { useEffect, useRef, useState } from 'react';
-import { Play } from 'lucide-react';
+import { Play, RefreshCw as RefreshIconTop, Loader2 as SpinTop } from 'lucide-react';
+import { invokeFn as invokeFnTop } from '@/lib/invokeFn';
+import { toast as toastTop } from 'sonner';
 
-function LazyVideoPlayer({ src, poster }: { src: string; poster?: string }) {
+function LazyVideoPlayer({
+  src, poster, assetId, expired, onRefreshed,
+}: {
+  src: string;
+  poster?: string;
+  assetId?: string;
+  expired?: boolean;
+  onRefreshed?: (nextUrl: string) => void;
+}) {
   const [active, setActive] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | undefined>(poster);
   const [videoError, setVideoError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [srcNonce, setSrcNonce] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => { setPosterUrl(poster); }, [poster]);
+  useEffect(() => { setVideoError(false); setActive(false); }, [src]);
 
   useEffect(() => {
     if (active && videoRef.current) {
-      // 静默尝试播放;移动浏览器拒绝 autoplay 时只是 reject,不要让它冒成渲染异常
       Promise.resolve().then(() => videoRef.current?.play().catch(() => {}));
     }
-  }, [active]);
+  }, [active, srcNonce]);
+
+  const tryRefresh = async () => {
+    if (!assetId || refreshing) return;
+    setRefreshing(true);
+    try {
+      const { data, error } = await invokeFnTop('mirror-marketing-asset', { body: { asset_id: assetId } });
+      if (error) throw error;
+      const d = data as any;
+      if (d?.expired) { toastTop.error('视频源已过期，请重新生成'); return; }
+      if (d?.url) {
+        onRefreshed?.(d.url);
+        setVideoError(false);
+        setActive(true);
+        setSrcNonce((n) => n + 1);
+        toastTop.success('视频已刷新');
+      }
+    } catch (e: any) {
+      toastTop.error(e?.message || '刷新失败');
+    } finally { setRefreshing(false); }
+  };
 
   if (!src) {
     return (
       <div className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex items-center justify-center text-xs text-muted-foreground">
         视频暂不可用
+      </div>
+    );
+  }
+
+  if (expired) {
+    return (
+      <div className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground p-4 text-center">
+        <span className="text-sm">视频源已过期</span>
+        <span>请点右下方「重新生成」再来一版</span>
       </div>
     );
   }
@@ -54,19 +95,35 @@ function LazyVideoPlayer({ src, poster }: { src: string; poster?: string }) {
 
   if (videoError) {
     return (
-      <button
-        type="button"
-        onClick={() => { setVideoError(false); setActive(false); }}
-        className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground"
-      >
+      <div className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex flex-col items-center justify-center gap-3 text-xs text-muted-foreground p-4">
         <span>视频加载失败</span>
-        <span className="underline">点这里重试</span>
-      </button>
+        <div className="flex gap-2">
+          {assetId && (
+            <button
+              type="button"
+              onClick={tryRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1 px-3 h-8 rounded-full bg-primary text-primary-foreground disabled:opacity-60"
+            >
+              {refreshing ? <SpinTop className="w-3 h-3 animate-spin" /> : <RefreshIconTop className="w-3 h-3" />}
+              刷新链接
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setVideoError(false); setActive(false); }}
+            className="px-3 h-8 rounded-full border border-border"
+          >
+            重试
+          </button>
+        </div>
+      </div>
     );
   }
 
   return (
     <video
+      key={`${src}#${srcNonce}`}
       ref={videoRef}
       src={src}
       controls
@@ -152,7 +209,7 @@ export function AssetDetailDialog({
           mid: [],
         };
       }
-      const { data, error } = await invokeFn('render-marketing-video', {
+      const { data, error } = await invokeFnTop('render-marketing-video', {
         body: {
           script,
           style: asset.meta?.style || 'realistic_storefront',
@@ -181,7 +238,7 @@ export function AssetDetailDialog({
     setStitching(true);
     try {
       let segUrls = Array.isArray(asset.meta?.segment_urls) ? asset.meta.segment_urls.filter(Boolean) : [];
-      const { data } = await invokeFn('poll-marketing-video', { body: { job_id: jobId } });
+      const { data } = await invokeFnTop('poll-marketing-video', { body: { job_id: jobId } });
       const d = data as any;
       if (Array.isArray(d?.segment_urls) && d.segment_urls.filter(Boolean).length) {
         segUrls = d.segment_urls.filter(Boolean);
@@ -244,7 +301,7 @@ export function AssetDetailDialog({
     let c: CopyCand | null = null;
     try {
       const topic = asset.meta?.topic || asset.meta?.style_label || '';
-      const { data, error } = await invokeFn('generate-marketing-copy', {
+      const { data, error } = await invokeFnTop('generate-marketing-copy', {
         body: {
           image_urls: [poster],
           platform: 'xhs',
@@ -298,26 +355,25 @@ export function AssetDetailDialog({
         throw new Error(t || `下载失败 (${res.status})`);
       }
       const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      // 优先用响应头里的 filename
+      // 文件名优先取 Content-Disposition
       const cd = res.headers.get('content-disposition') || '';
       const m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
-      a.download = m ? decodeURIComponent(m[1]) : (tail || `boomer-${kind}-${asset.id.slice(0,8)}.${kind === 'video' ? 'mp4' : 'jpg'}`);
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-      // 视频同时复制文案
+      const filename = m ? decodeURIComponent(m[1]) : (tail || `boomer-${kind}-${asset.id.slice(0,8)}.${kind === 'video' ? 'mp4' : 'jpg'}`);
+
+      const { saveToGallery, isNativeApp } = await import('@/lib/saveToGallery');
+      const save = await saveToGallery(blob, filename, kind);
       if (kind === 'video') {
         const txt = videoCopyText(videoCopy);
-        if (txt) {
-          try { await navigator.clipboard.writeText(txt); toast.success('视频已下载,文案也复制好了'); return; }
-          catch { /* noop */ }
-        }
+        if (txt) { try { await navigator.clipboard.writeText(txt); } catch { /* noop */ } }
       }
-      toast.success('下载完成');
+      if (save.ok) {
+        if (save.target === 'gallery') toast.success('已保存到相册');
+        else toast.success('下载完成');
+      } else if (isNativeApp()) {
+        toast.error(save.error || '保存到相册失败，可能是相册权限被拒');
+      } else {
+        toast.error(save.error || '下载失败');
+      }
     } catch (e: any) {
       // 兜底:直接打开原链接
       toast.message(e?.message || '下载失败,已尝试在新窗口打开,请长按保存');
@@ -484,6 +540,9 @@ export function AssetDetailDialog({
             {asset.output_url ? (
               <LazyVideoPlayer
                 src={asset.output_url}
+                assetId={asset.id}
+                expired={asset.meta?.status === 'expired'}
+                onRefreshed={(nextUrl) => onUpdated?.({ ...asset, output_url: nextUrl })}
                 poster={asset.meta?.poster_url || asset.meta?.cover_url || (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) || (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) || undefined}
               />
             ) : asset.meta?.status === 'failed' ? (
@@ -506,7 +565,7 @@ export function AssetDetailDialog({
                     onClick={continueStitching}
                     disabled={stitching}
                   >
-                    {stitching ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                    {stitching ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshIconTop className="w-3.5 h-3.5 mr-1" />}
                     不重渲，继续合成已生成分段
                   </Button>
                 ) : null}
@@ -516,7 +575,7 @@ export function AssetDetailDialog({
                   onClick={regenerateVideo}
                   disabled={regenerating}
                 >
-                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshIconTop className="w-3.5 h-3.5 mr-1" />}
                   用同样的脚本重新生成
                 </Button>
               </div>
@@ -551,7 +610,7 @@ export function AssetDetailDialog({
                     )}
                     <div className="pt-2 border-t border-border/60">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1.5 flex items-center gap-1">
-                        <RefreshCw className="w-3 h-3" />换个风格再来一版
+                        <RefreshIconTop className="w-3 h-3" />换个风格再来一版
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {(Object.keys(VIRAL_STYLE_LABELS) as ViralStyle[]).map((s) => (
@@ -617,7 +676,7 @@ export function AssetDetailDialog({
                   onClick={regenerateVideo}
                   disabled={regenerating}
                 >
-                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                  {regenerating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshIconTop className="w-3.5 h-3.5 mr-1" />}
                   用同样的脚本重新生成一条
                 </Button>
               </div>

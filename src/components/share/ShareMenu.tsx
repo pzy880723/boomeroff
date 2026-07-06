@@ -82,14 +82,24 @@ export function ShareMenu({ data, trigger }: Props) {
     }
   };
 
-  const downloadImage = () => {
+  const downloadImage = async () => {
     if (!previewUrl) return;
-    const a = document.createElement('a');
-    a.href = previewUrl;
-    a.download = `${data.name || 'boomeroff'}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const filename = `${data.name || 'boomeroff'}.png`;
+    try {
+      const blob = await (await fetch(previewUrl)).blob();
+      const { saveToGallery } = await import('@/lib/saveToGallery');
+      const r = await saveToGallery(blob, filename, 'image');
+      if (r.ok) toast.success(r.target === 'gallery' ? '已保存到相册' : '已下载');
+      else toast.error(r.error || '保存失败');
+    } catch {
+      // 兜底:传统 a[download]
+      const a = document.createElement('a');
+      a.href = previewUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   };
 
   return (
