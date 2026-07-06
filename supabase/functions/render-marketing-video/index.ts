@@ -492,6 +492,7 @@ Deno.serve(async (req) => {
           one_shot_refs: refImages,
           storyboard_ref_count: storyboardRefs.length,
           topic: script.topic || "", style: styleKey,
+          title: (script.title || script.topic || "").toString().slice(0, 24),
           style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
           warnings: [
             ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
