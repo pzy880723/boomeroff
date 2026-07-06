@@ -17,6 +17,11 @@ export function useDirectorJob(jobId: string | null, opts?: { intervalMs?: numbe
       if (!alive.current) return;
       setState(r);
       setError(null);
+      const st = r?.job?.status;
+      if ((st === 'done' || st === 'failed') && timer.current) {
+        window.clearInterval(timer.current);
+        timer.current = null;
+      }
     } catch (e: any) {
       if (!alive.current) return;
       setError(e?.message || '轮询失败');
@@ -32,14 +37,11 @@ export function useDirectorJob(jobId: string | null, opts?: { intervalMs?: numbe
     void refresh(jobId);
     timer.current = window.setInterval(() => {
       void refresh(jobId);
-      const st = state?.job.status;
-      if (st === 'done' || st === 'failed') {
-        if (timer.current) window.clearInterval(timer.current);
-      }
     }, opts?.intervalMs || 2500);
     return () => {
       alive.current = false;
       if (timer.current) window.clearInterval(timer.current);
+      timer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
