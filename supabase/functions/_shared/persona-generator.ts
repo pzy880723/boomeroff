@@ -48,6 +48,26 @@ const CATEGORY_TABLE: CategoryWeights[] = [
 
 const DEFAULT_AGE_WEIGHTS: [number, number, number] = [40, 35, 25];
 
+// 各年龄段真实会讲 / 绝对不会讲的场景话题,喂给脚本 AI 和 persona AI,防止老头子讲"暑假来逛"
+const AGE_TOPIC_HINTS: Record<AgeBucket, { ok: string; ban: string }> = {
+  young: {
+    ok: '暑假/寒假/开学/周末逛街/追星/入坑/打卡/攒钱买/上班摸鱼/情人节/闺蜜安利',
+    ban: '退休/含饴弄孙/老伴/年轻时候/我们那年代/接孙子',
+  },
+  middle: {
+    ok: '下班顺路/带娃/接孩子放学/周末陪家人/送礼/孝敬爸妈/给老公老婆挑/顺路遛弯',
+    ban: '暑假作业/开学季/追星/入坑二次元/退休金/摸鱼',
+  },
+  senior: {
+    ok: '退休了多出来走走/接孙子放学路上/老伙计聚会/给孙辈挑个小玩意/年轻时候就喜欢/怀旧/老邻居推荐',
+    ban: '暑假/寒假/开学/追星/入坑/打卡/摸鱼/上班/加班',
+  },
+};
+
+function ageBucketZhShort(b: AgeBucket): string {
+  return b === 'senior' ? '老年人' : b === 'middle' ? '中年人' : '年轻人';
+}
+
 function weightedPick<T>(items: { item: T; w: number }[]): T {
   const total = items.reduce((s, x) => s + Math.max(0, x.w), 0);
   if (total <= 0) return items[0].item;
