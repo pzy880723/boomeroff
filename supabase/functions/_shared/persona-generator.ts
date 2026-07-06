@@ -25,6 +25,7 @@ export interface InfluencerPersona {
   catchphrase: string[];
   cta: string;
   group_type?: GroupType;
+  age_bucket?: AgeBucket;
   companions?: PersonaCompanion[];
 }
 
