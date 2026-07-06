@@ -602,11 +602,18 @@ export function AssetDetailDialog({
         {/* 视频 */}
         {asset.kind === 'video' && (
           <div className="space-y-3">
-            <p className="text-[11px] text-muted-foreground">
-              状态 · {asset.meta?.status || '未知'}　时长 {asset.meta?.duration || '?'}s　{asset.meta?.aspect || ''}
-              {asset.meta?.mode === 'text2video' && '　· 文生视频'}
-            </p>
-            {asset.meta?.topic && (
+            <div>
+              <p className="font-display text-lg leading-snug text-foreground">
+                {(asset.meta?.title || asset.meta?.topic || '未命名视频').toString().slice(0, 30)}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {asset.meta?.style_label && <span>{asset.meta.style_label}　·　</span>}
+                时长 {asset.meta?.duration || '?'}s　{asset.meta?.aspect || ''}
+                {asset.meta?.mode === 'text2video' && '　· 文生视频'}
+                <span className="mx-1">·</span>状态 {asset.meta?.status || '未知'}
+              </p>
+            </div>
+            {asset.meta?.topic && asset.meta?.topic !== asset.meta?.title && (
               <div className="border border-accent/15 rounded-lg p-3 bg-muted/30">
                 <p className="text-[10px] uppercase tracking-[0.18em] text-accent mb-1">立意</p>
                 <p className="text-sm">{asset.meta.topic}</p>
@@ -618,8 +625,10 @@ export function AssetDetailDialog({
                 assetId={asset.id}
                 expired={asset.meta?.status === 'expired'}
                 onRefreshed={(nextUrl) => onUpdated?.({ ...asset, output_url: nextUrl })}
-                poster={asset.meta?.poster_url || asset.meta?.cover_url || (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) || (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) || undefined}
+                onPosterUpdated={(nextPoster) => onUpdated?.({ ...asset, meta: { ...(asset.meta || {}), poster_url: nextPoster } })}
+                poster={asset.meta?.poster_url || asset.meta?.cover_url || undefined}
               />
+
             ) : asset.meta?.status === 'failed' ? (
               <div className="space-y-2">
                 <VideoFailureCard
