@@ -959,6 +959,15 @@ export default function MarketingLibrary() {
         }}
       />
 
+      <TagManagerDialog
+        open={tagManagerOpen}
+        onOpenChange={setTagManagerOpen}
+        items={items}
+        onUpdated={(updater) => setItems(updater)}
+      />
+
+
+
       <AlertDialog open={confirmDel} onOpenChange={setConfirmDel}>
         <AlertDialogContent>
           <AlertDialogHeader>
