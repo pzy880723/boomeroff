@@ -38,6 +38,7 @@ export interface VideoFailure {
   code:
     | 'resolution_not_supported'
     | 'real_person_blocked'
+    | 'copyright_blocked'
     | 'output_sensitive'
     | 'text_sensitive'
     | 'rate_limited'
@@ -104,6 +105,28 @@ export function classifyVideoFailure(rawIn: string | null | undefined): VideoFai
           patch: { disable_storyboard: true }, reRender: true },
         { id: 'text_only', label: '退回纯文字渲染', kind: 'text_only',
           patch: { disable_storyboard: true, disable_references: true }, reRender: true },
+      ],
+      raw,
+    };
+  }
+
+  // 2a) 版权/商标风控 — Seedance 看到"XX 泰富店/万象城/商场招牌"这类会拒绝
+  if (
+    has(r, /copyright/) ||
+    has(r, /trademark/) ||
+    has(r, /intellectual\s*prop/) ||
+    has(r, /版权/) || has(r, /商标/) ||
+    has(r, /output\s*video.*may.*(related|relate).*copyright/)
+  ) {
+    return {
+      code: 'copyright_blocked',
+      title: '被判定涉及版权风险',
+      detail:
+        '模型分析了脚本和参考图,认为画面里可能出现受保护的第三方品牌/商场名/招牌/logo,所以拒绝出片。这不是我们代码的 bug,通常也不扣费。最常见的原因是脚本里写了真实商场名(比如"XX 泰富店""XX 广场店""XX 万象城"),或要求还原某个真实招牌。改法:把脚本里的第三方店铺/商场名换成"本店/我们门店/BOOMER·OFF",招牌只提我们自己的 BOOMER·OFF 灯箱。',
+      fixes: [
+        { id: 'rewrite', label: '让 AI 改写为安全表达', kind: 'rewrite_safe_prompt', reRender: true },
+        { id: 'restart', label: '整条重新生成', kind: 'restart', reRender: true },
+        { id: 'delete', label: '删除此素材', kind: 'delete' },
       ],
       raw,
     };
@@ -305,10 +328,17 @@ export function classifyVideoFailure(rawIn: string | null | undefined): VideoFai
   }
 
   // 8) 兜底
+  // raw 是纯 ASCII / 英文时,不要把英文糊到用户脸上——给一段固定中文,详情放"查看技术细节"。
+  const isPureEnglish = raw && /^[\x00-\x7F\s]+$/.test(raw);
+  const detail = !raw
+    ? '没拿到具体原因,可以先重试一次,或者换成更稳的 Fast 模型。'
+    : isPureEnglish
+      ? '渲染失败,但服务端只给了英文原始报错,没有对应的中文分类。可以先重试一次,或者换成更稳的 Fast 模型;完整技术信息点下方「查看技术细节」查看。'
+      : raw;
   return {
     code: 'unknown',
     title: '渲染失败',
-    detail: raw || '没拿到具体原因,可以先重试一次,或者换成更稳的 Fast 模型。',
+    detail,
     fixes: [
       { id: 'retry', label: '原样重试', kind: 'retry', reRender: true },
       { id: 'sw_fast', label: '换 Fast 重试', kind: 'switch_model',
