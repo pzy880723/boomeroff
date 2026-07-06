@@ -137,11 +137,16 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${OWN_BRAND
 视频类型节奏指引：${rule.scriptHint}
 
 硬性约束：
-- 总时长 ≈ ${duration} 秒。
+- 总时长 = ${duration} 秒。${isTight15 ? '\n- 【15 秒严格模式】必须写完整:1 个 hook + 3 个中段镜头 + 1 个 outro,总共 5 段,每段 3 秒,不多不少。' : ''}
 - 画幅 ${aspect}。
 - 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
-- subtitle ≤ 24 字。scene 30–80 字，action 15–50 字，dialogue ≤ ${isViralStoreTour ? 16 : 30} 字${isViralStoreTour ? '(洗脑探店每镜必须有 dialogue,不能为空)' : '(可为空)'}。
-- 镜头总条数 ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间;每条 ${perClipMin}–${perClipMax} 秒,所有镜头 duration_s 之和 ≈ ${duration} 秒(允许 ±20% 浮动,最终以渲染端为准,不必精确到秒)。
+- subtitle ≤ 24 字。scene 30–80 字，action 15–50 字。
+- 【口播字数硬预算】按 4 汉字/秒清晰口播计算,全片 dialogue 汉字合计 ≤ ${totalSpeakBudgetCn} 字。${isTight15 ? `
+- hook.dialogue ≤ 8 字(必须是完整钩子,不许省略,不许半句)。
+- outro.dialogue ≤ 8 字(必须是完整 CTA/收尾,不许省略,不许半句)。
+- 中段每 scene.dialogue ≤ 14 字。
+- 宁可少说也不许写半句;宁可省一句中段也不许砍掉钩子或 CTA。全片说的话必须能在 ${duration} 秒内自然念完并且有头有尾。` : `- dialogue ≤ ${isViralStoreTour ? 16 : 30} 字${isViralStoreTour ? '(洗脑探店每镜必须有 dialogue,不能为空)' : '(可为空)'}。`}
+- 镜头总条数${isTight15 ? ' = 5(hook + 3 scenes + outro)' : ` ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间`};每条 ${perClipMin}–${perClipMax} 秒${isTight15 ? '(严格 3 秒)' : ',所有镜头 duration_s 之和 ≈ ' + duration + ' 秒(允许 ±20% 浮动)'}。
 - 不写"主播""直播间""保真""保证升值"等违禁词。`;
 
     const refList = imageUrls.length
