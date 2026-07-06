@@ -252,6 +252,23 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     });
   };
 
+  // 手动结束当前任务(完成/失败/卡死都可用),回到"挑素材"步骤,立刻可以再拍一条
+  const resetToPicker = () => {
+    stopPolling();
+    if (shopId) {
+      clearActiveRenderJob(shopId);
+      clearSavedPick(shopId);
+    }
+    setActiveJob(null);
+    setRenderPhase('running');
+    setProgress(null);
+    setRenderError(null);
+    setPick(null);
+    doPick(excluded);
+  };
+
+  // 完成/失败时,自动让用户回到"再拍一条"入口(不强制,但把弹窗底部的按钮变成"再拍一条")
+  // 这里不清 activeJob(用户可能想在完成态看一下详情),只在他们点按钮时清
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
