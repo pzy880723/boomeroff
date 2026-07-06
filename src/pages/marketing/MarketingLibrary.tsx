@@ -908,9 +908,16 @@ export default function MarketingLibrary() {
                                   <Play className="w-3.5 h-3.5 text-white fill-white" />
                                 </span>
                               </span>
-                              <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] px-1 rounded leading-tight">VIDEO</span>
+                              {videoTitle ? (
+                                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-1.5 pt-3 pb-1 text-white text-[10px] leading-tight truncate text-left">
+                                  {videoTitle}
+                                </span>
+                              ) : (
+                                <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] px-1 rounded leading-tight">VIDEO</span>
+                              )}
                             </>
                           )}
+
 
                           {showStatus && (
                             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent flex flex-col justify-end p-1.5 gap-1">
