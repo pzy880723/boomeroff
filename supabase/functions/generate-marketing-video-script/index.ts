@@ -394,6 +394,19 @@ ${refList}
     script.aspect = aspect;
     script.total_duration_s = duration;
     script.mode = "text2video";
+    // one_shot_prompt:交给视频模型的一段话导演稿,做去敏 + 去分镜口令 + 截断
+    {
+      let osp = (script?.one_shot_prompt ?? "").toString();
+      osp = scrubThirdPartyBrands(sanitizeStorefrontText(osp))
+        .replace(/主播/g, "店员").replace(/直播间/g, "店里")
+        // 去掉模型可能偷偷带的分镜/时间码前缀
+        .replace(/【[^】]{0,10}(镜头|开场|收尾|中段)[^】]{0,10}】/g, "")
+        .replace(/\d+\s*[-–~到至]\s*\d+\s*秒/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+        .slice(0, 500);
+      script.one_shot_prompt = osp;
+    }
     script.image_urls = imageUrls;
     script.topic = topic;
     script.style = styleKey;
