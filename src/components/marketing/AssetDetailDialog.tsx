@@ -785,3 +785,44 @@ export function copyPreview(asset: any): string {
     return (asset.output_text as string).replace(/[\[\]{}"`]/g, '').slice(0, 80);
   }
 }
+
+// 视频脚本折叠面板:展示 hook / scenes / outro
+function VideoScriptPanel({ script, open, onToggle }: { script: any; open: boolean; onToggle: () => void }) {
+  const clips: { label: string; c: any }[] = [];
+  if (script?.hook) clips.push({ label: '钩子', c: script.hook });
+  if (Array.isArray(script?.scenes)) script.scenes.forEach((c: any, i: number) => clips.push({ label: `镜${String(i + 1).padStart(2, '0')}`, c }));
+  if (script?.outro) clips.push({ label: '收尾', c: script.outro });
+  const total = clips.reduce((a, x) => a + (Number(x.c?.duration_s) || 0), 0);
+
+  return (
+    <div className="rounded-lg border border-border bg-card/60 overflow-hidden">
+      <button type="button" onClick={onToggle} className="w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-muted/40">
+        {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        <FileText className="w-3.5 h-3.5 text-accent" />
+        <span className="font-medium">视频脚本</span>
+        {clips.length > 0 ? (
+          <span className="text-muted-foreground text-[11px]">· 共 {clips.length} 镜 · 总 {Math.round(total)}s</span>
+        ) : (
+          <span className="text-muted-foreground text-[11px]">· {script ? '空脚本' : '脚本已过期或未保存'}</span>
+        )}
+      </button>
+      {open && clips.length > 0 && (
+        <ul className="divide-y divide-border">
+          {clips.map((x, i) => (
+            <li key={i} className="px-3 py-2 text-[11.5px] space-y-0.5">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="font-medium text-foreground">{x.label}</span>
+                <span>· {Number(x.c?.duration_s) || 0}s</span>
+                {x.c?.motion ? <span>· {x.c.motion}</span> : null}
+              </div>
+              {x.c?.dialogue ? <p className="text-foreground">🎙 {x.c.dialogue}</p> : null}
+              {x.c?.subtitle ? <p className="text-accent">💬 {x.c.subtitle}</p> : null}
+              {x.c?.scene ? <p className="text-muted-foreground line-clamp-2">🎬 {x.c.scene}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
