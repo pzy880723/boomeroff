@@ -232,7 +232,7 @@ ${refList}
     const sanitizeScene = (sc: any) => ({
       scene: clean(sc?.scene, 200),
       action: clean(sc?.action, 120),
-      dialogue: clean(sc?.dialogue, isViralStoreTour ? 16 : 60),
+      dialogue: clean(sc?.dialogue, isTight15 ? 14 : (isViralStoreTour ? 16 : 60)),
       subtitle: clean(sc?.subtitle ?? sc?.text, 24),
       image_index: clampIdx(sc?.image_index),
       duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), perClipMax + 1),
@@ -245,8 +245,71 @@ ${refList}
     if (script.scenes.length < minScenes) {
       console.warn(`[script] only ${script.scenes.length} scenes returned, expected >= ${minScenes} for ${duration}s`);
     }
-    // 软目标:总时长允许 ±20% 浮动,最终由渲染端按火山合法网格(5/10s)吸附,不再硬拉回 duration。
-    {
+
+    // 汉字计数(把中文标点也算作 0.5 字更贴近实际念稿节奏,这里简化只算汉字)
+    const cnLen = (s: string) => (s || '').replace(/[^\u4e00-\u9fa5]/g, '').length;
+
+    if (isTight15) {
+      // === 15 秒严格模式:每段固定 3s,hook/outro 兜底,超预算按比例截中段 ===
+      // 1) hook / outro 若为空,给一句短兜底,不允许空
+      if (!script.hook.dialogue) script.hook.dialogue = '进来看看 ✨';
+      if (!script.outro.dialogue) script.outro.dialogue = '感兴趣速冲';
+      // 单条截到 8 字(hook/outro)
+      const truncCn = (s: string, maxCn: number): string => {
+        let cnt = 0; let out = '';
+        for (const ch of s) {
+          if (/[\u4e00-\u9fa5]/.test(ch)) {
+            if (cnt >= maxCn) break;
+            cnt++;
+          }
+          out += ch;
+        }
+        // 收尾修补句末
+        if (out.length && !/[。!?！?…]$/.test(out)) {
+          if (/[,,、]$/.test(out)) out = out.slice(0, -1);
+        }
+        return out.trim();
+      };
+      if (cnLen(script.hook.dialogue) > 8) script.hook.dialogue = truncCn(script.hook.dialogue, 8);
+      if (cnLen(script.outro.dialogue) > 8) script.outro.dialogue = truncCn(script.outro.dialogue, 8);
+      script.scenes.forEach((s: any) => {
+        if (cnLen(s.dialogue) > 14) s.dialogue = truncCn(s.dialogue, 14);
+      });
+
+      // 2) 总预算(60 字)超了 → 保 hook/outro,从中段最长的先削
+      const budget = totalSpeakBudgetCn;
+      const headTail = cnLen(script.hook.dialogue) + cnLen(script.outro.dialogue);
+      let midBudget = Math.max(0, budget - headTail);
+      let midSum = script.scenes.reduce((a: number, c: any) => a + cnLen(c.dialogue), 0);
+      // 逐段按比例缩放
+      if (midSum > midBudget && midSum > 0) {
+        const k = midBudget / midSum;
+        script.scenes.forEach((s: any) => {
+          const target = Math.max(0, Math.floor(cnLen(s.dialogue) * k));
+          if (cnLen(s.dialogue) > target) s.dialogue = truncCn(s.dialogue, target);
+        });
+      }
+
+      // 3) 保证 3 段中段
+      while (script.scenes.length < 3) {
+        script.scenes.push({
+          scene: script.hook.scene || '店内继续展示商品',
+          action: '手持镜头顺移,店员拿起一件商品自然展示',
+          dialogue: '',
+          subtitle: '',
+          image_index: null,
+          duration_s: 3,
+          motion: '手持',
+        });
+      }
+      script.scenes = script.scenes.slice(0, 3);
+
+      // 4) duration 全部锁 3s
+      script.hook.duration_s = 3;
+      script.outro.duration_s = 3;
+      script.scenes.forEach((s: any) => { s.duration_s = 3; });
+    } else {
+      // 非 15s:沿用旧的软目标 ±20% 浮动
       const allClips = [script.hook, ...script.scenes, script.outro];
       const sum = allClips.reduce((a: number, c: any) => a + (Number(c.duration_s) || 0), 0);
       const lo = duration * 0.7;
