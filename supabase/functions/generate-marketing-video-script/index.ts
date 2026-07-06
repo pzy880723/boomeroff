@@ -101,17 +101,19 @@ ${approvedScript}
       ? `
 
 【洗脑探店口播模板 · 高转化优先】(本片必须按这套节奏拍)
-- hook(≤2 秒)第一句必须是冲击型口语钩子,从这类句式里挑:"姐妹冲!"/"别再去 XX 了"/"我真的会谢"/"不是吧还有人不知道"/"这家店我能吹一年"。情绪要激动、有感染力。**钩子台词 ≤10 字**。
-- 中段每镜 2-3 秒,scenes 数组 4-6 段;主角始终是同一个人(沿用上面锁定的角色),每镜必须有具体动作:指货架、拿起单品、试穿/试戴、转身展示、对镜头说话。
-- 全片必须像真人连续口播,**dialogue 字数加起来 65–80 字**,每镜 10–14 字,**hook ≤10 字、CTA ≤10 字**;**所有镜头都必须有 dialogue,严禁空台词**(纯氛围画面会让视频太平,15 秒里至少 13 秒在说话)。
+- 【最高优先级 · 动作口播同步 walk-and-talk】每一镜的 dialogue 就是主角**在做那个 action 的同一时刻**说出的话。严禁"先做动作 → 停下 → 再讲话"、严禁纯氛围/静默走位镜。action 描述必须写成"边 ×× 边对镜头说 / 一边 ×× 一边讲",不要"停下、转身、然后说"这类分步措辞。15 秒全程都要有人在说话。
+- hook(≤2 秒)第一句必须是冲击型口语钩子,从这类句式里挑:"姐妹冲!"/"别再去 XX 了"/"我真的会谢"/"不是吧还有人不知道"/"这家店我能吹一年"。情绪要激动、有感染力。**钩子台词 ≤10 字**,且是主角一边走入店里一边喊出来的。
+- 中段每镜 2-3 秒,scenes 数组 4-6 段;主角始终是同一个人(沿用上面锁定的角色),每镜必须有具体动作:指货架、拿起单品、试穿/试戴、转身展示、对镜头说话——**动作和台词在同一秒发生**。
+- 全片必须像真人连续口播,**dialogue 字数加起来 65–80 字**,每镜 10–14 字,**hook ≤10 字、CTA ≤10 字**;**所有镜头都必须有非空 dialogue,严禁空台词**(15 秒里至少 13 秒在说话)。
 - 【贯穿主线】所有镜头的 dialogue 串起来要是一段连贯的"探店日记"——从「为什么走进这家店 → 一进门看到什么 → 上手体验/挑到什么 → 价格或惊喜点 → 谁适合来 → 喊大家冲」依次递进;反复点名店铺关键词(店名/品类/钩子产品)让观众记得住,不要每镜各说各的。
 - 【硬规则】台词必须能在该镜 duration_s 内自然念完(按 4 字/秒清晰口播估算,即 dialogue 字数 ≤ duration_s × 4)。超出就删字,Seedance 念得太赶会糊。
-- subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""人均 50 封顶""闭眼冲"。≤24 字。subtitle 可与 dialogue 不同,用来补关键信息。
-- outro(≤2 秒)必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。**CTA 台词 ≤10 字**。
+- subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""人均 50 封顶""闭眼冲"。≤24 字。subtitle 可与 dialogue 不同,用来补关键信息,并与 dialogue 同帧出现。
+- outro(≤2 秒)必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。**CTA 台词 ≤10 字**,主角一边比手势/一边收尾定格一边喊出来。
 - 画面色调明亮、节奏快,运镜以推镜/手持/特写切换为主,避免慢悠悠的长镜头。
-- 【场景硬约束】本店在商场 B1 室内,是开放式 8 米无门店面;开场镜必须是「商场走廊视角 → 博主从走廊侧自然走入开放式店面」,严禁出现「推门 / 拉门 / 玻璃门 / 街边 / 马路 / 户外」等任何镜头与文字。
+- 【场景硬约束】本店在商场 B1 室内,是开放式 8 米无门店面;开场镜必须是「商场走廊视角 → 博主从走廊侧自然走入开放式店面(边走边喊 hook)」,严禁出现「推门 / 拉门 / 玻璃门 / 街边 / 马路 / 户外」等任何镜头与文字。
 - 不要写成纪录片或氛围片,目标就是 15 秒抓人 + 让人想立刻去这家店。`
       : '';
+
 
     const sys = `${presets.brand}
 ${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${OWN_BRAND_LOCK_ZH}\n${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}${viralBlock}
@@ -142,10 +144,12 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${OWN_BRAND
 - 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
 - subtitle ≤ 24 字。scene 30–80 字，action 15–50 字。
 - 【口播字数硬预算】按 4 汉字/秒清晰口播计算,全片 dialogue 汉字合计 ≤ ${totalSpeakBudgetCn} 字。${isTight15 ? `
-- hook.dialogue ≤ 8 字(必须是完整钩子,不许省略,不许半句)。
-- outro.dialogue ≤ 8 字(必须是完整 CTA/收尾,不许省略,不许半句)。
-- 中段每 scene.dialogue ≤ 14 字。
+- 【15 秒最高优先级 · 边演边说】所有 5 段(hook + 3 中段 + outro)**都必须有非空 dialogue**,严禁纯氛围镜、严禁 dialogue 为空字符串。每一镜的 action 必须写成"边 ×× 边对镜头说 / 一边 ×× 一边讲",动作和口播在同一秒发生,不许"先做动作 → 停下 → 再说话"。
+- hook.dialogue ≤ 8 字(必须是完整钩子,不许省略,不许半句,主角边走入店里边喊)。
+- outro.dialogue ≤ 8 字(必须是完整 CTA/收尾,不许省略,不许半句,主角边定格/比手势边喊)。
+- 中段每 scene.dialogue ≤ 14 字,与该镜动作同步说出。
 - 宁可少说也不许写半句;宁可省一句中段也不许砍掉钩子或 CTA。全片说的话必须能在 ${duration} 秒内自然念完并且有头有尾。` : `- dialogue ≤ ${isViralStoreTour ? 16 : 30} 字${isViralStoreTour ? '(洗脑探店每镜必须有 dialogue,不能为空)' : '(可为空)'}。`}
+
 - 镜头总条数${isTight15 ? ' = 5(hook + 3 scenes + outro)' : ` ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间`};每条 ${perClipMin}–${perClipMax} 秒${isTight15 ? '(严格 3 秒)' : ',所有镜头 duration_s 之和 ≈ ' + duration + ' 秒(允许 ±20% 浮动)'}。
 - 不写"主播""直播间""保真""保证升值"等违禁词。`;
 
@@ -276,7 +280,16 @@ ${refList}
         if (cnLen(s.dialogue) > 14) s.dialogue = truncCn(s.dialogue, 14);
       });
 
-      // 2) 总预算(60 字)超了 → 保 hook/outro,从中段最长的先削
+      // 2) 中段空 dialogue → 用 subtitle 或通用兜底填(严禁静默镜)
+      const MID_FALLBACKS = ['这个真的绝', '店里都是好货', '闭眼冲不亏'];
+      script.scenes.forEach((s: any, i: number) => {
+        if (!s.dialogue || !s.dialogue.trim()) {
+          const sub = (s.subtitle || '').toString().trim();
+          s.dialogue = sub ? truncCn(sub, 14) : MID_FALLBACKS[i % MID_FALLBACKS.length];
+        }
+      });
+
+      // 3) 总预算(60 字)超了 → 保 hook/outro,从中段最长的先削
       const budget = totalSpeakBudgetCn;
       const headTail = cnLen(script.hook.dialogue) + cnLen(script.outro.dialogue);
       let midBudget = Math.max(0, budget - headTail);
@@ -290,12 +303,14 @@ ${refList}
         });
       }
 
-      // 3) 保证 3 段中段
+      // 4) 保证 3 段中段(补齐的段也必须"边演边说")
+      const FILL_LINES = ['这个真的绝', '店里都是好货', '闭眼冲不亏'];
       while (script.scenes.length < 3) {
+        const i = script.scenes.length;
         script.scenes.push({
           scene: script.hook.scene || '店内继续展示商品',
-          action: '手持镜头顺移,店员拿起一件商品自然展示',
-          dialogue: '',
+          action: '手持镜头顺移,店员边拿起一件商品边对镜头说',
+          dialogue: FILL_LINES[i % FILL_LINES.length],
           subtitle: '',
           image_index: null,
           duration_s: 3,
@@ -303,6 +318,7 @@ ${refList}
         });
       }
       script.scenes = script.scenes.slice(0, 3);
+
 
       // 4) duration 全部锁 3s
       script.hook.duration_s = 3;
