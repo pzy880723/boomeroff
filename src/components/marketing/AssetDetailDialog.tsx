@@ -221,7 +221,6 @@ import { Copy, Download, Loader2, Pencil, Save, X, Sparkles, RefreshCw } from 'l
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
-import { buildXhsViral, VIRAL_STYLE_LABELS, type ViralStyle } from '@/lib/shareCopy';
 import { invokeFn } from '@/lib/invokeFn';
 import { completeMarketingVideoFromSegments } from '@/lib/completeMarketingVideo';
 import { useAuth } from '@/hooks/useAuth';
@@ -232,7 +231,6 @@ interface CopyCand {
   body?: string;
   hashtags?: string[];
   first_comment?: string;
-  style?: ViralStyle;
 }
 
 export function AssetDetailDialog({
