@@ -217,7 +217,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Copy, Download, Loader2, Pencil, Save, X, Sparkles, RefreshCw } from 'lucide-react';
+import { Copy, Download, Loader2, Pencil, Save, X, Sparkles, RefreshCw, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
