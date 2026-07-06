@@ -217,11 +217,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Copy, Download, Loader2, Pencil, Save, X, Sparkles, RefreshCw } from 'lucide-react';
+import { Copy, Download, Loader2, Pencil, Save, X, Sparkles, RefreshCw, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
-import { buildXhsViral, VIRAL_STYLE_LABELS, type ViralStyle } from '@/lib/shareCopy';
 import { invokeFn } from '@/lib/invokeFn';
 import { completeMarketingVideoFromSegments } from '@/lib/completeMarketingVideo';
 import { useAuth } from '@/hooks/useAuth';
@@ -232,7 +231,6 @@ interface CopyCand {
   body?: string;
   hashtags?: string[];
   first_comment?: string;
-  style?: ViralStyle;
 }
 
 export function AssetDetailDialog({
@@ -255,6 +253,10 @@ export function AssetDetailDialog({
   const [downloading, setDownloading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [stitching, setStitching] = useState(false);
+  // 视频详情:折叠的原始脚本
+  const [videoScript, setVideoScript] = useState<any>(null);
+  const [scriptOpen, setScriptOpen] = useState(false);
+
   
 
   const regenerateVideo = async () => {
@@ -334,7 +336,7 @@ export function AssetDetailDialog({
   };
 
   useEffect(() => {
-    if (!asset) { setCands([]); setVideoCopy(null); return; }
+    if (!asset) { setCands([]); setVideoCopy(null); setVideoScript(null); setScriptOpen(false); return; }
     if (asset.kind === 'copy') {
       try {
         const parsed = JSON.parse(asset.output_text || '[]');
@@ -351,8 +353,36 @@ export function AssetDetailDialog({
     } else {
       setVideoCopy(null);
     }
+    setVideoScript(null);
+    setScriptOpen(false);
     setEditing(null);
   }, [asset]);
+
+  // 视频详情:异步拉取原始脚本供折叠展示
+  useEffect(() => {
+    if (!asset || asset.kind !== 'video') return;
+    const jobId = asset.meta?.job_id;
+    if (!jobId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.from('marketing_video_jobs' as any).select('script').eq('id', jobId).maybeSingle();
+        if (!cancelled) setVideoScript((data as any)?.script || null);
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [asset]);
+
+  // 视频渲染完成后 & 还没生成文案 → 自动生成一次
+  useEffect(() => {
+    if (!asset || asset.kind !== 'video') return;
+    if (!asset.output_url) return;
+    if (videoCopy) return;
+    if (genCopyLoading) return;
+    if (!asset.meta?.job_id) return;
+    void generateVideoCopy({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset?.id, asset?.output_url]);
 
   if (!asset) return null;
 
@@ -363,54 +393,29 @@ export function AssetDetailDialog({
     return [c.title, c.body, (c.hashtags || []).join(' ')].filter(Boolean).join('\n\n').trim();
   };
 
-  const generateVideoCopy = async (style: ViralStyle = 'scream') => {
+  const generateVideoCopy = async (opts?: { silent?: boolean }) => {
     if (!asset || asset.kind !== 'video') return;
-    const poster: string | undefined =
-      asset.meta?.poster_url ||
-      asset.meta?.cover_url ||
-      (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) ||
-      (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) ||
-      undefined;
-    if (!poster) { toast.error('找不到视频封面,无法生成文案'); return; }
     setGenCopyLoading(true);
-    let c: CopyCand | null = null;
     try {
-      const topic = asset.meta?.topic || asset.meta?.style_label || '';
-      const { data, error } = await invokeFnTop('generate-marketing-copy', {
-        body: {
-          image_urls: [poster],
-          platform: 'xhs',
-          tone: '种草',
-          style,
-          highlight: topic ? `配合一条 ${asset.meta?.duration || 15}s 视频:${topic}` : '',
-          shop_id: asset.shop_id || null,
-          from_video_id: asset.id,
-        },
+      const { data, error } = await invokeFnTop('generate-marketing-video-copy', {
+        body: { asset_id: asset.id, shop_id: asset.shop_id || null },
       });
       if (error) throw error;
       const d = data as any;
-      const got: CopyCand | undefined = Array.isArray(d?.candidates) ? d.candidates[0] : undefined;
-      if (!got) throw new Error(d?.error || '生成失败');
-      c = { ...got, style };
+      const got: CopyCand | undefined = d?.copy;
+      if (!got || (!got.title && !got.body)) throw new Error(d?.error || '生成失败');
+      setVideoCopy(got);
+      const nextMeta = { ...(asset.meta || {}), video_copy: got };
+      onUpdated?.({ ...asset, meta: nextMeta });
+      if (!opts?.silent) toast.success('小红书文案已生成');
     } catch (e: any) {
-      // 兜底:本地爆文模板,断网/限流也能立刻出
-      const fallback = buildXhsViral({
-        name: asset.meta?.topic || '中古好物',
-        category: asset.meta?.category,
-      }, style);
-      c = fallback;
-      toast.message('AI 暂时忙，先给你一版本地爆文模板');
+      if (!opts?.silent) toast.error(e?.message || '生成失败,请稍后重试');
+    } finally {
+      setGenCopyLoading(false);
     }
-    try {
-      setVideoCopy(c);
-      const nextMeta = { ...(asset.meta || {}), video_copy: c, video_copy_style: style };
-      try {
-        await supabase.from('marketing_assets' as any).update({ meta: nextMeta }).eq('id', asset.id);
-        onUpdated?.({ ...asset, meta: nextMeta });
-      } catch {}
-      toast.success(`文案已生成 · ${VIRAL_STYLE_LABELS[style]}`);
-    } finally { setGenCopyLoading(false); }
   };
+
+
 
   const downloadAsset = async (kind: 'video' | 'image') => {
     if (!asset?.output_url) return;
@@ -669,18 +674,28 @@ export function AssetDetailDialog({
               </p>
             )}
 
-            {/* 视频可用时:一键生成小红书爆文 + 下载 */}
+            {/* 视频脚本(折叠) */}
+            {asset.output_url && (
+              <VideoScriptPanel script={videoScript} open={scriptOpen} onToggle={() => setScriptOpen(v => !v)} />
+            )}
+
+            {/* 视频可用时:自动生成单条小红书文案 + 下载 */}
             {asset.output_url && (
               <div className="space-y-2 pt-1">
                 {videoCopy ? (
                   <div className="border border-accent/15 rounded-lg p-3 space-y-2 bg-card">
                     <div className="flex items-center justify-between">
                       <span className="font-display text-[11px] text-accent tracking-[0.18em]">
-                        小红书爆文{videoCopy.style ? ` · ${VIRAL_STYLE_LABELS[videoCopy.style as ViralStyle]}` : ''}
+                        小红书文案
                       </span>
-                      <Button size="sm" variant="ghost" onClick={() => copy(videoCopyText(videoCopy))}>
-                        <Copy className="w-3.5 h-3.5" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => copy(videoCopyText(videoCopy))} title="复制全文">
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => generateVideoCopy()} disabled={genCopyLoading} title="重新生成">
+                          {genCopyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshIconTop className="w-3.5 h-3.5" />}
+                        </Button>
+                      </div>
                     </div>
                     {videoCopy.title && <p className="font-display text-[15px] leading-snug">{videoCopy.title}</p>}
                     {videoCopy.body && <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">{videoCopy.body}</p>}
@@ -692,50 +707,19 @@ export function AssetDetailDialog({
                         <span className="text-accent font-semibold mr-1">首评</span>{videoCopy.first_comment}
                       </p>
                     )}
-                    <div className="pt-2 border-t border-border/60">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1.5 flex items-center gap-1">
-                        <RefreshIconTop className="w-3 h-3" />换个风格再来一版
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(Object.keys(VIRAL_STYLE_LABELS) as ViralStyle[]).map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => generateVideoCopy(s)}
-                            disabled={genCopyLoading}
-                            className={[
-                              'px-2.5 h-7 rounded-full text-[11px] border transition-all',
-                              videoCopy.style === s
-                                ? 'bg-primary text-primary-foreground border-primary'
-                                : 'bg-transparent text-foreground border-border hover:border-accent/50',
-                            ].join(' ')}
-                          >
-                            {VIRAL_STYLE_LABELS[s]}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">挑一种爆文风格 ✨</p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {(Object.keys(VIRAL_STYLE_LABELS) as ViralStyle[]).map((s) => (
-                        <Button
-                          key={s}
-                          variant="outline"
-                          size="sm"
-                          className="h-9 text-[12px] justify-center"
-                          onClick={() => generateVideoCopy(s)}
-                          disabled={genCopyLoading}
-                        >
-                          {genCopyLoading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
-                          {VIRAL_STYLE_LABELS[s]}
-                        </Button>
-                      ))}
-                    </div>
+                  <div className="border border-dashed border-border rounded-lg p-3 text-center space-y-2">
+                    <p className="text-[11px] text-muted-foreground">
+                      {genCopyLoading ? '正在根据脚本生成小红书文案…' : '还没生成小红书文案'}
+                    </p>
+                    <Button variant="outline" size="sm" onClick={() => generateVideoCopy()} disabled={genCopyLoading}>
+                      {genCopyLoading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
+                      生成小红书文案
+                    </Button>
                   </div>
                 )}
+
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1" onClick={() => copy(asset.output_url)}>
                     <Copy className="w-3.5 h-3.5 mr-1" />复制链接
@@ -801,3 +785,44 @@ export function copyPreview(asset: any): string {
     return (asset.output_text as string).replace(/[\[\]{}"`]/g, '').slice(0, 80);
   }
 }
+
+// 视频脚本折叠面板:展示 hook / scenes / outro
+function VideoScriptPanel({ script, open, onToggle }: { script: any; open: boolean; onToggle: () => void }) {
+  const clips: { label: string; c: any }[] = [];
+  if (script?.hook) clips.push({ label: '钩子', c: script.hook });
+  if (Array.isArray(script?.scenes)) script.scenes.forEach((c: any, i: number) => clips.push({ label: `镜${String(i + 1).padStart(2, '0')}`, c }));
+  if (script?.outro) clips.push({ label: '收尾', c: script.outro });
+  const total = clips.reduce((a, x) => a + (Number(x.c?.duration_s) || 0), 0);
+
+  return (
+    <div className="rounded-lg border border-border bg-card/60 overflow-hidden">
+      <button type="button" onClick={onToggle} className="w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-muted/40">
+        {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        <FileText className="w-3.5 h-3.5 text-accent" />
+        <span className="font-medium">视频脚本</span>
+        {clips.length > 0 ? (
+          <span className="text-muted-foreground text-[11px]">· 共 {clips.length} 镜 · 总 {Math.round(total)}s</span>
+        ) : (
+          <span className="text-muted-foreground text-[11px]">· {script ? '空脚本' : '脚本已过期或未保存'}</span>
+        )}
+      </button>
+      {open && clips.length > 0 && (
+        <ul className="divide-y divide-border">
+          {clips.map((x, i) => (
+            <li key={i} className="px-3 py-2 text-[11.5px] space-y-0.5">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="font-medium text-foreground">{x.label}</span>
+                <span>· {Number(x.c?.duration_s) || 0}s</span>
+                {x.c?.motion ? <span>· {x.c.motion}</span> : null}
+              </div>
+              {x.c?.dialogue ? <p className="text-foreground">🎙 {x.c.dialogue}</p> : null}
+              {x.c?.subtitle ? <p className="text-accent">💬 {x.c.subtitle}</p> : null}
+              {x.c?.scene ? <p className="text-muted-foreground line-clamp-2">🎬 {x.c.scene}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+

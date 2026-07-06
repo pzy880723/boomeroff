@@ -35,12 +35,15 @@ Deno.serve(async (req) => {
     const videoType: VideoType = (Object.keys(presets.videoRules) as VideoType[]).includes(body.video_type)
       ? body.video_type : "store_tour";
     const duration: number = [15, 20, 30].includes(Number(body.duration)) ? Number(body.duration) : 15;
-    // 按 ~2.5s/镜估算总镜数(含 hook + outro)
-    const targetClips = Math.max(3, Math.round(duration / 2.5));    // 15→6, 20→8, 30→12
-    const minScenes = Math.max(2, targetClips - 2);
-    const maxScenes = targetClips + 1;
-    const perClipMin = duration >= 25 ? 1.5 : 2;
-    const perClipMax = duration >= 25 ? 3.5 : 5;
+    // 15s 走严格路径：固定 hook + 3 scenes + outro,每段 3s;>15s 沿用原公式
+    const isTight15 = duration <= 15;
+    const targetClips = isTight15 ? 5 : Math.max(3, Math.round(duration / 2.5));
+    const minScenes = isTight15 ? 3 : Math.max(2, targetClips - 2);
+    const maxScenes = isTight15 ? 3 : targetClips + 1;
+    const perClipMin = isTight15 ? 3 : (duration >= 25 ? 1.5 : 2);
+    const perClipMax = isTight15 ? 3 : (duration >= 25 ? 3.5 : 5);
+    // 口播字数硬预算:4 汉字/秒(清晰口播),15s → 60 字
+    const totalSpeakBudgetCn = Math.floor(duration * 4);
     const aspect: string = ["9:16", "1:1", "16:9"].includes(body.aspect) ? body.aspect : "9:16";
     // 用户输入(topic/highlight/brief)可能带真实商场名或第三方招牌关键词,
     // 进 AI 之前统一去敏,防止 Seedance 事后判"版权风险"拒绝出片。
@@ -102,7 +105,7 @@ ${approvedScript}
 - 中段每镜 2-3 秒,scenes 数组 4-6 段;主角始终是同一个人(沿用上面锁定的角色),每镜必须有具体动作:指货架、拿起单品、试穿/试戴、转身展示、对镜头说话。
 - 全片必须像真人连续口播,**dialogue 字数加起来 65–80 字**,每镜 10–14 字,**hook ≤10 字、CTA ≤10 字**;**所有镜头都必须有 dialogue,严禁空台词**(纯氛围画面会让视频太平,15 秒里至少 13 秒在说话)。
 - 【贯穿主线】所有镜头的 dialogue 串起来要是一段连贯的"探店日记"——从「为什么走进这家店 → 一进门看到什么 → 上手体验/挑到什么 → 价格或惊喜点 → 谁适合来 → 喊大家冲」依次递进;反复点名店铺关键词(店名/品类/钩子产品)让观众记得住,不要每镜各说各的。
-- 【硬规则】台词必须能在该镜 duration_s 内自然念完(按 5 字/秒激动口播估算,即 dialogue 字数 ≤ duration_s × 5)。超出就删字,Seedance 念得太赶会糊。
+- 【硬规则】台词必须能在该镜 duration_s 内自然念完(按 4 字/秒清晰口播估算,即 dialogue 字数 ≤ duration_s × 4)。超出就删字,Seedance 念得太赶会糊。
 - subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""人均 50 封顶""闭眼冲"。≤24 字。subtitle 可与 dialogue 不同,用来补关键信息。
 - outro(≤2 秒)必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。**CTA 台词 ≤10 字**。
 - 画面色调明亮、节奏快,运镜以推镜/手持/特写切换为主,避免慢悠悠的长镜头。
@@ -134,11 +137,16 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${OWN_BRAND
 视频类型节奏指引：${rule.scriptHint}
 
 硬性约束：
-- 总时长 ≈ ${duration} 秒。
+- 总时长 = ${duration} 秒。${isTight15 ? '\n- 【15 秒严格模式】必须写完整:1 个 hook + 3 个中段镜头 + 1 个 outro,总共 5 段,每段 3 秒,不多不少。' : ''}
 - 画幅 ${aspect}。
 - 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
-- subtitle ≤ 24 字。scene 30–80 字，action 15–50 字，dialogue ≤ ${isViralStoreTour ? 16 : 30} 字${isViralStoreTour ? '(洗脑探店每镜必须有 dialogue,不能为空)' : '(可为空)'}。
-- 镜头总条数 ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间;每条 ${perClipMin}–${perClipMax} 秒,所有镜头 duration_s 之和 ≈ ${duration} 秒(允许 ±20% 浮动,最终以渲染端为准,不必精确到秒)。
+- subtitle ≤ 24 字。scene 30–80 字，action 15–50 字。
+- 【口播字数硬预算】按 4 汉字/秒清晰口播计算,全片 dialogue 汉字合计 ≤ ${totalSpeakBudgetCn} 字。${isTight15 ? `
+- hook.dialogue ≤ 8 字(必须是完整钩子,不许省略,不许半句)。
+- outro.dialogue ≤ 8 字(必须是完整 CTA/收尾,不许省略,不许半句)。
+- 中段每 scene.dialogue ≤ 14 字。
+- 宁可少说也不许写半句;宁可省一句中段也不许砍掉钩子或 CTA。全片说的话必须能在 ${duration} 秒内自然念完并且有头有尾。` : `- dialogue ≤ ${isViralStoreTour ? 16 : 30} 字${isViralStoreTour ? '(洗脑探店每镜必须有 dialogue,不能为空)' : '(可为空)'}。`}
+- 镜头总条数${isTight15 ? ' = 5(hook + 3 scenes + outro)' : ` ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间`};每条 ${perClipMin}–${perClipMax} 秒${isTight15 ? '(严格 3 秒)' : ',所有镜头 duration_s 之和 ≈ ' + duration + ' 秒(允许 ±20% 浮动)'}。
 - 不写"主播""直播间""保真""保证升值"等违禁词。`;
 
     const refList = imageUrls.length
@@ -224,7 +232,7 @@ ${refList}
     const sanitizeScene = (sc: any) => ({
       scene: clean(sc?.scene, 200),
       action: clean(sc?.action, 120),
-      dialogue: clean(sc?.dialogue, isViralStoreTour ? 16 : 60),
+      dialogue: clean(sc?.dialogue, isTight15 ? 14 : (isViralStoreTour ? 16 : 60)),
       subtitle: clean(sc?.subtitle ?? sc?.text, 24),
       image_index: clampIdx(sc?.image_index),
       duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), perClipMax + 1),
@@ -237,8 +245,71 @@ ${refList}
     if (script.scenes.length < minScenes) {
       console.warn(`[script] only ${script.scenes.length} scenes returned, expected >= ${minScenes} for ${duration}s`);
     }
-    // 软目标:总时长允许 ±20% 浮动,最终由渲染端按火山合法网格(5/10s)吸附,不再硬拉回 duration。
-    {
+
+    // 汉字计数(把中文标点也算作 0.5 字更贴近实际念稿节奏,这里简化只算汉字)
+    const cnLen = (s: string) => (s || '').replace(/[^\u4e00-\u9fa5]/g, '').length;
+
+    if (isTight15) {
+      // === 15 秒严格模式:每段固定 3s,hook/outro 兜底,超预算按比例截中段 ===
+      // 1) hook / outro 若为空,给一句短兜底,不允许空
+      if (!script.hook.dialogue) script.hook.dialogue = '进来看看 ✨';
+      if (!script.outro.dialogue) script.outro.dialogue = '感兴趣速冲';
+      // 单条截到 8 字(hook/outro)
+      const truncCn = (s: string, maxCn: number): string => {
+        let cnt = 0; let out = '';
+        for (const ch of s) {
+          if (/[\u4e00-\u9fa5]/.test(ch)) {
+            if (cnt >= maxCn) break;
+            cnt++;
+          }
+          out += ch;
+        }
+        // 收尾修补句末
+        if (out.length && !/[。!?！?…]$/.test(out)) {
+          if (/[,,、]$/.test(out)) out = out.slice(0, -1);
+        }
+        return out.trim();
+      };
+      if (cnLen(script.hook.dialogue) > 8) script.hook.dialogue = truncCn(script.hook.dialogue, 8);
+      if (cnLen(script.outro.dialogue) > 8) script.outro.dialogue = truncCn(script.outro.dialogue, 8);
+      script.scenes.forEach((s: any) => {
+        if (cnLen(s.dialogue) > 14) s.dialogue = truncCn(s.dialogue, 14);
+      });
+
+      // 2) 总预算(60 字)超了 → 保 hook/outro,从中段最长的先削
+      const budget = totalSpeakBudgetCn;
+      const headTail = cnLen(script.hook.dialogue) + cnLen(script.outro.dialogue);
+      let midBudget = Math.max(0, budget - headTail);
+      let midSum = script.scenes.reduce((a: number, c: any) => a + cnLen(c.dialogue), 0);
+      // 逐段按比例缩放
+      if (midSum > midBudget && midSum > 0) {
+        const k = midBudget / midSum;
+        script.scenes.forEach((s: any) => {
+          const target = Math.max(0, Math.floor(cnLen(s.dialogue) * k));
+          if (cnLen(s.dialogue) > target) s.dialogue = truncCn(s.dialogue, target);
+        });
+      }
+
+      // 3) 保证 3 段中段
+      while (script.scenes.length < 3) {
+        script.scenes.push({
+          scene: script.hook.scene || '店内继续展示商品',
+          action: '手持镜头顺移,店员拿起一件商品自然展示',
+          dialogue: '',
+          subtitle: '',
+          image_index: null,
+          duration_s: 3,
+          motion: '手持',
+        });
+      }
+      script.scenes = script.scenes.slice(0, 3);
+
+      // 4) duration 全部锁 3s
+      script.hook.duration_s = 3;
+      script.outro.duration_s = 3;
+      script.scenes.forEach((s: any) => { s.duration_s = 3; });
+    } else {
+      // 非 15s:沿用旧的软目标 ±20% 浮动
       const allClips = [script.hook, ...script.scenes, script.outro];
       const sum = allClips.reduce((a: number, c: any) => a + (Number(c.duration_s) || 0), 0);
       const lo = duration * 0.7;
