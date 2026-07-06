@@ -52,7 +52,9 @@ export default function MarketingLibrary() {
   const [verifyCharacter, setVerifyCharacter] = useState<any | null>(null);
   const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [imgSource, setImgSource] = useState<AssetSource | 'all'>(() => {
+
     try {
       const v = localStorage.getItem('lib.imgSource') as any;
       // 旧默认是 'upload',全局升级到 'base'
