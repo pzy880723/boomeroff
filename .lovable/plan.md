@@ -1,75 +1,87 @@
-## 目标
+## 问题
 
-1. 「帮我拍一条」只从"用户上传"图片里挑,不再挑 AI 生成图
-2. 素材库合并/精简顶部工具栏
-3. 精简标签体系 + 增加"标签管理"入口
+`_shared/persona-generator.ts` 里的 prompt 默认把主角定成"25 岁年轻女生 / 潮牌帅哥",fallback 也是"25 岁高能女生",导致「帮我拍一条」几乎每次都出年轻人,而且服装容易被 AI 玩夸张(oversize 卫衣/时髦…),脸也是典型 AI 塑料感。用户要:
+
+1. 年龄要真正随机 —— 年轻/中年/老年都有机会
+2. 支持一家三口、情侣同框(不只单人)
+3. 品类合理匹配年龄段(瓷器→老人、玩具→年轻),其他品类各年龄段都可以
+4. 外观"普通人"化,不要奇装异服
+5. **面部纹理真实自然,不要 AI 塑料感,让人看不出是 AI 做的**
 
 ---
 
-## 1. 惊喜视频只挑用户上传的实景图
+## 方案
 
-**文件:** `supabase/functions/surprise-marketing-video/index.ts` (~L161)
+只改一个文件:`supabase/functions/_shared/persona-generator.ts`。不动调用方、DB、前端。
 
-拉素材池时,除了现有"剔除分镜头"过滤,再排除所有 AI 生成来源:
+### 1. 调用 AI 前先随机抽「年龄段 + 组合形式」
 
-```
-.not("meta->>asset_class", "eq", "generated")
-.not("meta->>source", "in", "(storyboard,ai_smart_ad,ai-smart-ad,ai_image,smart_ad,generated,ai_generated)")
-```
+新增 `pickPersonaSlot(assetTags, assetCategories)` → `{ ageBucket, groupType }`,按品类给权重:
 
-拉回后再用与前端 `assetSource()` 完全一致的规则在内存里二次过滤(旧数据没 `asset_class` 但可能是 AI 生成的,靠 source/category 兜底),只保留 `base` 与 `upload` 两类。这样"基础素材 + 我上传的"合并成一个"用户上传"概念,与用户理解一致。
+| 品类关键字 | young | middle | senior |
+| --- | --- | --- | --- |
+| 瓷器 / 古董 / 文玩 / 字画 / 旗袍 / 茶器 / 老物件 | 5 | 30 | **65** |
+| 玩具 / 潮玩 / 盲盒 / 谷子 / 动漫 / 二次元 | **65** | 25 | 10 |
+| 母婴 / 亲子 / 绘本 / 童装 | 25 | **60** | 15 |
+| 美妆 / 首饰 / 包包 / 穿搭 / 潮牌 / 球鞋 | **60** | 30 | 10 |
+| 家居 / 咖啡器具 / 原木 / 北欧 | 35 | **50** | 15 |
+| 户外 / 运动 / 装备 / 工具 | 25 | **55** | 20 |
+| 食品 / 餐饮 / 烘焙 / 小吃 | 40 | 40 | 20 |
+| **默认** | **40** | **35** | **25** |
 
-若过滤后池子为空 → 返回中文提示 `"素材库还没有你上传的实景图,先去『素材库 › 图片』上传几张"`。
+年龄:young 18-32 / middle 35-52 / senior 58-72,区间内再随机一岁。
 
-## 2. 素材库工具栏精简
+groupType 独立抽:solo 65% / couple 20% / family 15%(命中亲子/母婴品类时 family 提到 45%)。
 
-**文件:** `src/pages/marketing/MarketingLibrary.tsx`
+### 2. 把抽中的槽位硬塞进 AI prompt
 
-**A. 三个上传按钮合并为一个** (L631-648)
+改写 sys/usr:预先声明"角色档案槽位已抽好,禁止改年龄/组合"。品类只影响气质/口头禅,不再规定性别年龄。删掉所有"25 岁 / 年轻女生 / 时髦帅哥"硬指引。
 
-用一个 `+ 新增素材` 主按钮,点击弹出小菜单 (DropdownMenu 或 Popover) 让用户选「图片 / 文案 / 视频」,再打开原有的 `UploadAssetDialog`。
+### 3. 外观 · 真实感 · 反 AI 感硬约束(prompt 原文)
 
-**B. 移除管理员一次性按钮**
-
-删掉这些按钮及其对应的 handler / state:
-- 回填分镜头 (`runBackfillStoryboards`, `backfilling`)
-- 补标签 (`runBackfillTags`, `backfillingTags`)  
-- 重整来源 (`runReclassify`, `reclassing`)
-- 清理标签 (`runCleanTags`, `cleaningTags`)
-
-edge functions (`backfill-*`, `cleanup-marketing-tags`) 本身保留,只是不再从 UI 触发。
-
-**C. 保留:** `管理` (进入多选删除)、`清理失败视频`、以及即将新加的 `标签管理` 按钮。
-
-## 3. 精简 + 新增标签管理
-
-**文件:** `src/components/marketing/AssetTagDialog.tsx`
-
-缩减 `TAG_GROUPS` 到 3 组、约 18 个核心标签:
+在 sys 里加下面这段(会同时影响 `visual` 字段的写法,和后续 Seedance 渲染时 `formatPersonaDirective` 拼进去的英文约束):
 
 ```
-📍 场景  : 门头、店内、橱窗、货架、收银台、门口
-🛍 商品  : 商品、细节、特写、套装、配饰
-👤 人物  : 人物、顾客、店员、合影
-🎨 氛围  : 白天、夜景、复古、高级感
+【外观 · 硬约束】
+- 都要写成"街上真能看到的普通人":合身日常穿搭(T 恤、衬衫、针织、外套、牛仔裤、休闲裙、旗袍等),中性/低饱和配色。
+- 严禁:cosplay、二次元造型、夸张假发、亮片、荧光色、汉服写真、舞台服、艺术家浮夸装扮、oversize 到滑稽。
+- senior 必须像真正的中老年人:自然银发或花白发,眼角/额头有真实细纹,颈部与手部有年龄痕迹,体态自然不僵。禁止"少女感奶奶"。
+- couple/family:各自单独写外观,风格互相协调(不要一个潮牌一个正装)。
+
+【面部质感 · 反 AI 感硬约束】(全部人物都必须满足,写进 visual 字段末尾)
+- 皮肤要有真实肌理:可见毛孔、细小绒毛、皮脂反光不均匀、局部小瑕疵(斑点/痘印/晒纹/唇纹)。
+- 眼睛要有真实高光和虹膜纹理,眼白略带血丝,不完全对称。
+- 头发要有碎发、飞毛、发根颜色深浅过渡,不是一体成型的假发。
+- 光线是自然商场/室内混合光,略带阴影,不是柔化磨皮打光。
+- 严禁:磨皮塑料感、糖水片美颜、瞳孔完全对称、CGI 般光滑肌肤、无毛孔陶瓷脸、双胞胎脸、AI 通用美女/帅哥脸模、身体比例失真。
 ```
 
-去掉「场景位置 / 分镜头 / 风格氛围」里的冷门词(店招、试穿区、街拍、材质、摆件、博主、主角、开场/过渡/结尾/空镜/特效、文艺、潮流、温馨、场景)。用户仍可通过搜索框自建自定义标签。
+### 4. `formatPersonaDirective`(英文,Seedance 用)追加真实感锁
 
-**新文件:** `src/components/marketing/TagManagerDialog.tsx`
+```
+Photorealistic real human, documentary-style handheld footage, natural imperfect skin with visible pores, fine facial hair, subtle blemishes, uneven skin tone, natural under-eye shadow, realistic hair with flyaways and darker roots, real iris texture with catchlights, indoor mall mixed lighting with soft ambient shadows. Absolutely NOT: airbrushed, plastic skin, poreless CGI face, symmetric AI beauty face, doll-like eyes, over-smoothed, over-lit beauty-cam look, cartoon, anime, cosplay, stage costume. Must be indistinguishable from a real phone-shot vlog.
+```
 
-范围:当前店铺内所有素材的标签(从已加载的 `items` 聚合;跨分页可先用当前列表,够 MVP)。
+### 5. 类型扩展(向后兼容)
 
-功能:
-- 列出所有不同标签 + 使用次数,按频次排序
-- 每行三个动作:**重命名**(输入框,批量 update 所有含该标签的素材)、**合并到**(选另一个已有标签,把 A 全部改成 B)、**删除**(从所有素材里移除该标签,不删素材本身)
-- 全部操作走 supabase `update marketing_assets set tags = ... where id in (...)`,操作前 `confirm`,完成后本地 `setItems` 同步
+`InfluencerPersona` 新增可选字段:
 
-**入口按钮:** 在 MarketingLibrary 工具栏 `管理` 旁加一个 `🏷 标签管理` (ghost 按钮),打开该 Dialog。
+```ts
+group_type?: 'solo' | 'couple' | 'family';
+companions?: Array<{ role: string; visual: string }>;
+```
 
-## 技术细节
+`formatPersonaDirective` / `formatPersonaBriefZh` 里,若非 solo,把同伴外观也拼进去,并加"每镜同 1-3 人固定出现,禁止换人"。
 
-- `UploadAssetDialog` API 不变,只是入口变成"先选类型再打开"
-- `AssetDetailDialog` 现有的"编辑标签"入口保留不动(单张编辑仍走 `AssetTagDialog`)
-- 无 DB 变更、无 edge function 新增
-- 惊喜视频那次已经生成失败/跑掉的任务不做迁移
+### 6. Fallback 池化
+
+`FALLBACK_PERSONA` 从"25 岁女生"改成 4 人小池(年轻女生 / 中年男主理人 / 老克勒大叔 / 宝妈),AI 调不通时随机选一位,不再永远回到 25 岁女生。
+
+---
+
+## 不改的部分
+
+- `surprise-marketing-video/index.ts` 接口不变
+- `generate-marketing-video-script/index.ts`(character 字段结构兼容)
+- Seedance 渲染流(通过 `formatPersonaDirective` 自动带入真实感锁)
+- 前端 UI / 数据库
