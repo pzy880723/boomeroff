@@ -355,26 +355,25 @@ export function AssetDetailDialog({
         throw new Error(t || `下载失败 (${res.status})`);
       }
       const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      // 优先用响应头里的 filename
+      // 文件名优先取 Content-Disposition
       const cd = res.headers.get('content-disposition') || '';
       const m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
-      a.download = m ? decodeURIComponent(m[1]) : (tail || `boomer-${kind}-${asset.id.slice(0,8)}.${kind === 'video' ? 'mp4' : 'jpg'}`);
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-      // 视频同时复制文案
+      const filename = m ? decodeURIComponent(m[1]) : (tail || `boomer-${kind}-${asset.id.slice(0,8)}.${kind === 'video' ? 'mp4' : 'jpg'}`);
+
+      const { saveToGallery, isNativeApp } = await import('@/lib/saveToGallery');
+      const save = await saveToGallery(blob, filename, kind);
       if (kind === 'video') {
         const txt = videoCopyText(videoCopy);
-        if (txt) {
-          try { await navigator.clipboard.writeText(txt); toast.success('视频已下载,文案也复制好了'); return; }
-          catch { /* noop */ }
-        }
+        if (txt) { try { await navigator.clipboard.writeText(txt); } catch { /* noop */ } }
       }
-      toast.success('下载完成');
+      if (save.ok) {
+        if (save.target === 'gallery') toast.success('已保存到相册');
+        else toast.success('下载完成');
+      } else if (isNativeApp()) {
+        toast.error(save.error || '保存到相册失败，可能是相册权限被拒');
+      } else {
+        toast.error(save.error || '下载失败');
+      }
     } catch (e: any) {
       // 兜底:直接打开原链接
       toast.message(e?.message || '下载失败,已尝试在新窗口打开,请长按保存');
