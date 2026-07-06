@@ -543,6 +543,7 @@ Deno.serve(async (req) => {
         render_strategy: "per_shot",
         auto_decision_reason: autoReason,
         topic: script.topic || "", style: styleKey,
+        title: (script.title || script.topic || "").toString().slice(0, 24),
         style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
         warnings: [
           ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
