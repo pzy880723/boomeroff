@@ -602,7 +602,7 @@ export default function MarketingLibrary() {
 
 
           {/* 来源分段:基础素材 / 我上传的 / AI 生成 / 全部 */}
-          {(tab === 'all' || tab === 'photo') && (
+          {tab === 'photo' && (
             <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px] flex-wrap">
               {([
                 { v: 'base', label: '📌 基础素材', Icon: null as any },
