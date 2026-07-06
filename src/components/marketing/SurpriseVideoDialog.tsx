@@ -252,6 +252,23 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     });
   };
 
+  // 手动结束当前任务(完成/失败/卡死都可用),回到"挑素材"步骤,立刻可以再拍一条
+  const resetToPicker = () => {
+    stopPolling();
+    if (shopId) {
+      clearActiveRenderJob(shopId);
+      clearSavedPick(shopId);
+    }
+    setActiveJob(null);
+    setRenderPhase('running');
+    setProgress(null);
+    setRenderError(null);
+    setPick(null);
+    doPick(excluded);
+  };
+
+  // 完成/失败时,自动让用户回到"再拍一条"入口(不强制,但把弹窗底部的按钮变成"再拍一条")
+  // 这里不清 activeJob(用户可能想在完成态看一下详情),只在他们点按钮时清
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -270,6 +287,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             onApplyFix={handleFix}
             busy={submitting}
             onClose={() => onOpenChange(false)}
+            onReset={resetToPicker}
           />
         ) : picking || !pick ? (
           <div className="py-16 px-4 flex flex-col items-center gap-3 text-sm text-muted-foreground">
@@ -318,7 +336,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 }
 
 function RenderingBody({
-  job, phase, progress, onClose, error, onApplyFix, busy,
+  job, phase, progress, onClose, error, onApplyFix, busy, onReset,
 }: {
   job: ActiveRenderJob; phase: 'queued' | 'running' | 'done' | 'failed';
   progress: { done: number; total: number } | null;
@@ -326,6 +344,7 @@ function RenderingBody({
   error?: string | null;
   onApplyFix?: (fix: VideoFix) => void | Promise<void>;
   busy?: boolean;
+  onReset?: () => void;
 }) {
   const [elapsed, setElapsed] = useState(() => Math.max(0, Math.floor((Date.now() - (job.createdAt || Date.now())) / 1000)));
   useEffect(() => {
@@ -429,16 +448,59 @@ function RenderingBody({
 
       <VideoJobDetailPanel jobId={job.jobId} defaultExpanded={phase === 'failed'} />
 
-      <div className="flex gap-2">
-        <Button variant="outline" className="flex-1" onClick={onClose}>
-          关闭(后台继续)
-        </Button>
-        <Link to="/me/marketing/library" className="flex-1">
-          <Button className="w-full" onClick={onClose}>
-            去素材库 <ArrowRight className="w-4 h-4 ml-1" />
-          </Button>
-        </Link>
-      </div>
+      {(phase === 'done' || phase === 'failed') && onReset ? (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={onClose}>
+              关闭
+            </Button>
+            {phase === 'done' ? (
+              <Link to="/me/marketing/library" className="flex-1">
+                <Button className="w-full" onClick={onClose}>
+                  去素材库 <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
+            ) : (
+              <Button className="flex-1" onClick={onReset} disabled={busy}>
+                <RefreshCw className="w-4 h-4 mr-1" /> 再拍一条
+              </Button>
+            )}
+          </div>
+          {phase === 'done' && (
+            <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={onReset} disabled={busy}>
+              <RefreshCw className="w-3.5 h-3.5 mr-1" /> 再来一条(重新挑素材)
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={onClose}>
+              关闭(后台继续)
+            </Button>
+            <Link to="/me/marketing/library" className="flex-1">
+              <Button className="w-full" onClick={onClose}>
+                去素材库 <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </Link>
+          </div>
+          {onReset && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs text-muted-foreground hover:text-destructive"
+              onClick={() => {
+                if (window.confirm('强制结束这次任务?后台渲染仍会继续跑完(结果会自动进素材库),但当前弹窗会回到"挑素材"步骤,可以立刻再拍一条。')) {
+                  onReset();
+                }
+              }}
+              disabled={busy}
+            >
+              强制结束这次任务 · 重新拍一条
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

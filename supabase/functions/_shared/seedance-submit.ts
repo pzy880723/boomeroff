@@ -35,7 +35,9 @@ export interface SubmitSegmentResult {
 
 function snapR2vDuration(d: number): number {
   const n = Math.round(Number(d) || 5);
-  return n <= 7 ? 5 : 10;
+  if (n <= 7) return 5;
+  if (n <= 12) return 10;
+  return 15;
 }
 
 function isSensitive(err?: string, raw?: any) {

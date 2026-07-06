@@ -10,6 +10,7 @@ import { pickSegmentImages, planSegments, type ScriptLike } from "../_shared/mar
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 import { STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
+import { OWN_BRAND_LOCK_EN } from "../_shared/brand-scrub.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,6 +55,7 @@ function buildOneShotPrompt(
   const lines: string[] = [];
   lines.push(`【一段 ${total}s 的 ${aspect} 短视频,整体风格:${styleEn}${overrides?.style_cue ? ` · ${overrides.style_cue}` : ''}】`);
   lines.push(STOREFRONT_CONSTRAINT_EN);
+  lines.push(OWN_BRAND_LOCK_EN);
   if (overrides?.persona_directive) {
     lines.push(`【主角(虚构探店博主 · 全片唯一主体)】${overrides.persona_directive}`);
   }
@@ -160,6 +162,7 @@ function buildPrompt(
   lines.push(`【最重要】本段随请求附带的分镜静帧是画面蓝图:必须严格参考静帧里的店内空间、商品陈列、人物位置、镜头景别、光线和构图来动起来;不要重新设计场景,不要凭空生成门框/街边/陌生店铺。`);
   lines.push(`整体风格:${styleEn}。品牌:BOOMER·OFF 中古二手杂货店,货架密集,室内暖色调。`);
   lines.push(STOREFRONT_CONSTRAINT_EN);
+  lines.push(OWN_BRAND_LOCK_EN);
   if (shopBlock) lines.push(`店铺背景(中文,用于影响氛围与字幕):\n${shopBlock}`);
   lines.push(`画幅 ${script.aspect || '9:16'},本段时长约 ${script.total_duration_s || 10} 秒。`);
 
@@ -492,6 +495,7 @@ Deno.serve(async (req) => {
           one_shot_refs: refImages,
           storyboard_ref_count: storyboardRefs.length,
           topic: script.topic || "", style: styleKey,
+          title: (script.title || script.topic || "").toString().slice(0, 24),
           style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
           warnings: [
             ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
@@ -542,6 +546,7 @@ Deno.serve(async (req) => {
         render_strategy: "per_shot",
         auto_decision_reason: autoReason,
         topic: script.topic || "", style: styleKey,
+        title: (script.title || script.topic || "").toString().slice(0, 24),
         style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
         warnings: [
           ...(resolutionDowngraded ? ["resolution_downgraded"] : []),

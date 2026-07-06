@@ -10,14 +10,14 @@ import { Loader2, X, Search, Plus } from 'lucide-react';
 
 export const DEFAULT_CATEGORIES = ['分镜头', '门店', '商品', '人物', '其他'];
 
-// 分组标签字典
+// 分组标签字典(精简版)
 export const TAG_GROUPS: { label: string; icon: string; tags: string[] }[] = [
-  { label: '场景位置', icon: '📍', tags: ['门头', '店招', '店内', '橱窗', '货架', '收银台', '试穿区', '街拍', '门口'] },
-  { label: '商品', icon: '🛍', tags: ['商品', '价签', '细节', '特写', '套装', '配饰', '材质', '摆件'] },
-  { label: '人物', icon: '👤', tags: ['人物', '博主', '顾客', '店员', '主角', '合影'] },
-  { label: '分镜头', icon: '🎬', tags: ['分镜头', '开场', '过渡', '结尾', '空镜', '特效'] },
-  { label: '风格氛围', icon: '🎨', tags: ['复古', '文艺', '潮流', '温馨', '高级感', '夜景', '白天', '场景'] },
+  { label: '场景', icon: '📍', tags: ['门头', '店内', '橱窗', '货架', '收银台', '门口'] },
+  { label: '商品', icon: '🛍', tags: ['商品', '细节', '特写', '套装', '配饰'] },
+  { label: '人物', icon: '👤', tags: ['人物', '顾客', '店员', '合影'] },
+  { label: '氛围', icon: '🎨', tags: ['白天', '夜景', '复古', '高级感'] },
 ];
+
 
 // flatten 后保持向后兼容
 export const ALL_PRESET_TAGS = Array.from(new Set(TAG_GROUPS.flatMap((g) => g.tags)));

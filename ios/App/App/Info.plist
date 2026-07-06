@@ -25,9 +25,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>BOOMER GO 需要使用相机拍摄商品照片，用于商品识别和门店作业。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>BOOMER GO 需要保存生成的商品海报和分享图片。</string>
+	<string>BOOMER GO 需要将生成的视频、商品海报和分享图片保存到你的相册。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>BOOMER GO 需要读取照片用于商品识别、资料上传和分享。</string>
+	<string>BOOMER GO 需要读取照片和素材，用于商品识别、资料上传、保存和分享。</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

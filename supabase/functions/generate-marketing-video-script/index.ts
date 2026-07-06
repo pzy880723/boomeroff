@@ -6,6 +6,7 @@ import { normalizeStyle, VIDEO_STYLE_LABELS, VIDEO_STYLE_EN } from "../_shared/v
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
 import { STOREFRONT_CONSTRAINT_ZH, sanitizeStorefrontText } from "../_shared/storefront-constraints.ts";
+import { scrubThirdPartyBrands, OWN_BRAND_LOCK_ZH } from "../_shared/brand-scrub.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,11 +42,13 @@ Deno.serve(async (req) => {
     const perClipMin = duration >= 25 ? 1.5 : 2;
     const perClipMax = duration >= 25 ? 3.5 : 5;
     const aspect: string = ["9:16", "1:1", "16:9"].includes(body.aspect) ? body.aspect : "9:16";
-    const topic = (body.topic || "").toString().trim().slice(0, 200);
-    const highlight = (body.highlight || "").toString().trim().slice(0, 80);
+    // 用户输入(topic/highlight/brief)可能带真实商场名或第三方招牌关键词,
+    // 进 AI 之前统一去敏,防止 Seedance 事后判"版权风险"拒绝出片。
+    const topic = scrubThirdPartyBrands((body.topic || "").toString().trim().slice(0, 200));
+    const highlight = scrubThirdPartyBrands((body.highlight || "").toString().trim().slice(0, 80));
     const styleKey = normalizeStyle(body.style);
-    const briefTranscript = (body.brief_transcript || "").toString().trim().slice(0, 2000);
-    const approvedScript = (body.approved_script || "").toString().trim().slice(0, 3000);
+    const briefTranscript = scrubThirdPartyBrands((body.brief_transcript || "").toString().trim().slice(0, 2000));
+    const approvedScript = scrubThirdPartyBrands((body.approved_script || "").toString().trim().slice(0, 3000));
     const imageDescriptions: { index: number; summary: string; best_for?: string }[] = Array.isArray(body.image_descriptions)
       ? body.image_descriptions.slice(0, 20)
       : [];
@@ -108,7 +111,7 @@ ${approvedScript}
       : '';
 
     const sys = `${presets.brand}
-${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}${viralBlock}
+${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${OWN_BRAND_LOCK_ZH}\n${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}${viralBlock}
 
 你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】(全中文)。
 
@@ -157,6 +160,7 @@ ${refList}
 
 输出严格 JSON：
 {
+  "title": "<≤14 字的中文标题，一眼看出这条视频拍的是什么，避免『视频/短片』这类无信息词>",
   "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "<中文台词,可为空字符串>", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": 2, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
   "scenes": [
     { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
@@ -205,9 +209,11 @@ ${refList}
     }
 
     const clean = (s: any, max: number) =>
-      sanitizeStorefrontText(
-        (s || "").toString().replace(/主播/g, "店员").replace(/直播间/g, "店里")
-          .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "")
+      scrubThirdPartyBrands(
+        sanitizeStorefrontText(
+          (s || "").toString().replace(/主播/g, "店员").replace(/直播间/g, "店里")
+            .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "")
+        )
       ).trim().slice(0, max);
     const clampIdx = (n: any): number | null => {
       if (n === null || n === undefined || n === "null") return null;
@@ -303,6 +309,12 @@ ${refList}
     script.topic = topic;
     script.style = styleKey;
     script.style_label = VIDEO_STYLE_LABELS[styleKey];
+    // 标题:AI 给了就用,没给就从 topic 兜底,再兜底 rule.label
+    {
+      const rawTitle = (script?.title ?? "").toString();
+      const cleaned = clean(rawTitle, 24).replace(/[「」『』"'\s]+$/g, "").trim();
+      script.title = cleaned || (topic ? clean(topic, 14) : rule.label);
+    }
     if (character) script.character = character;
 
     return json({ success: true, script, video_type: videoType, video_type_label: rule.label, __kb_sources: kbSourcesMeta(kbHits) });

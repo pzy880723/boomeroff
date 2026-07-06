@@ -158,30 +158,44 @@ Deno.serve(async (req) => {
     // ====== Preview / 兜底:全流程 ======
     // 1) 拉素材库里这家店的实景商品图(剔除合成静帧)
     const ninetyDays = new Date(Date.now() - 90 * 86400 * 1000).toISOString();
+
+    // 只挑用户上传的实景图,排除任何 AI 生成来源(分镜头/AI智能广告/AI 图等)
+    const GENERATED_SOURCES = new Set([
+      "storyboard", "ai_smart_ad", "ai-smart-ad", "ai_image",
+      "smart_ad", "generated", "ai_generated",
+    ]);
+    const GENERATED_CATEGORIES = new Set(["分镜头", "AI生成", "AI 生成", "ai生成"]);
+    const isUserUploaded = (a: any) => {
+      const klass = a?.meta?.asset_class;
+      if (klass === "generated") return false;
+      if (klass === "base" || klass === "upload") return true;
+      const src = a?.meta?.source;
+      if (typeof src === "string" && GENERATED_SOURCES.has(src)) return false;
+      if (a?.category && GENERATED_CATEGORIES.has(String(a.category))) return false;
+      return true;
+    };
+
     const { data: assetsRaw, error: aErr } = await admin.from("marketing_assets")
       .select("id, output_url, tags, category, meta, created_at")
       .eq("shop_id", shopId)
       .eq("kind", "photo")
       .not("output_url", "is", null)
-      .or("category.is.null,category.neq.分镜头")
-      .not("meta->>source", "eq", "storyboard")
       .gte("created_at", ninetyDays)
       .order("created_at", { ascending: false })
-      .limit(80);
+      .limit(160);
     if (aErr) return json({ ok: false, error: "读取素材失败: " + aErr.message });
-    let pool = (assetsRaw || []).filter((a: any) => !exclude.includes(a.id));
+    let pool = (assetsRaw || []).filter((a: any) => !exclude.includes(a.id) && isUserUploaded(a));
     if (pool.length === 0) {
       const { data: any2 } = await admin.from("marketing_assets")
         .select("id, output_url, tags, category, meta, created_at")
         .eq("shop_id", shopId).eq("kind", "photo").not("output_url", "is", null)
-        .or("category.is.null,category.neq.分镜头")
-        .not("meta->>source", "eq", "storyboard")
-        .order("created_at", { ascending: false }).limit(40);
-      pool = (any2 || []).filter((a: any) => !exclude.includes(a.id));
+        .order("created_at", { ascending: false }).limit(80);
+      pool = (any2 || []).filter((a: any) => !exclude.includes(a.id) && isUserUploaded(a));
     }
     if (pool.length === 0) {
-      return json({ ok: false, error: "素材库还没有商品图,先去拍/上传几张" });
+      return json({ ok: false, error: "素材库还没有你上传的实景图,先去『素材库 › 图片』上传几张(AI 生成图不参与)" });
     }
+
 
     // 2) 找门头:命中则锁第 1 位;没命中只标记,不阻塞
     const storefrontHit = pool.find(isStorefrontAsset) || null;
