@@ -338,18 +338,33 @@ const REALISM_LOCK_EN =
   'ABSOLUTELY NOT: airbrushed / plastic skin / poreless CGI face / symmetric AI beauty face / doll-like eyes / over-smoothed / beauty-cam over-lit look / cartoon / anime / cosplay / stage costume / synthetic hair. ' +
   'The result must be indistinguishable from a real phone-shot vlog by an ordinary person.';
 
+// 根据 age 推断 bucket(persona 里没显式带就兜底)
+function inferBucket(p: InfluencerPersona): AgeBucket {
+  if (p.age_bucket) return p.age_bucket;
+  if (p.age >= 55) return 'senior';
+  if (p.age >= 34) return 'middle';
+  return 'young';
+}
+
+function ageSpeechLockEn(b: AgeBucket): string {
+  if (b === 'senior') return 'Speech style MUST match a real senior (age 55+): talk about retirement strolls, picking up grandkids, old friends recommendation, nostalgia. NEVER mention school holidays, summer/winter break, fandom, "打卡", office life or slacking.';
+  if (b === 'middle') return 'Speech style MUST match a real middle-aged adult: after-work stops, taking kids to activities, weekend family time, gifts for parents/spouse. Avoid teen slang, fandom or "开学".';
+  return 'Speech style is a young adult (18-32): summer/winter break, weekend hangouts, fandom, "打卡", saving up. Avoid retirement or grandkid topics.';
+}
+
 // 拼成 Seedance Prompt 强约束(主角虚构博主,不绑参考图)
 export function formatPersonaDirective(p: InfluencerPersona): string {
   const g = p.gender === 'male' ? '男' : p.gender === 'female' ? '女' : '';
   const group = p.group_type || 'solo';
   const companions = (p.companions || []).filter((c) => c.role && c.visual);
+  const bucket = inferBucket(p);
 
-  let lead = `Lead character (virtual influencer, NOT a real celebrity): ${p.label} · ${g} · age ${p.age}. Appearance lock: ${p.visual}. Speaks Mandarin Chinese in this vibe: ${p.vibe}. Overall pacing: ${paceEn(p.pace)}.`;
+  let lead = `Lead character (virtual influencer, NOT a real celebrity): ${p.label} · ${g} · age ${p.age}. Appearance lock: ${p.visual}. Speaks Mandarin Chinese in this vibe: ${p.vibe}. Overall pacing: ${paceEn(p.pace)}. ${ageSpeechLockEn(bucket)}`;
 
   if (group !== 'solo' && companions.length) {
     const compStr = companions.map((c) => `${c.role}: ${c.visual}`).join(' | ');
     const groupLabel = group === 'family' ? 'family group (2-3 people, natural family dynamic)' : 'duo (2 people together, natural chemistry)';
-    lead += ` This is a ${groupLabel}. Companions (all fixed, same people every shot): ${compStr}. All members appear together consistently across every shot, no swapping, no extra people.`;
+    lead += ` This is a ${groupLabel}. Companions (all fixed, same people every shot): ${compStr}. All members appear together consistently across every shot, no swapping, no extra people. Each speaker only talks about topics that fit their own age (seniors only senior topics; kid/school topics only from young or middle members).`;
   } else {
     lead += ' Same person, same hair, same outfit across every shot. No twins, no body doubles, no swap.';
   }
