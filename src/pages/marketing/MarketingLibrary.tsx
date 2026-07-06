@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock, Play, X } from 'lucide-react';
+import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock, Play, X, Tags } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -18,6 +18,9 @@ import { IdentityVerifyDialog } from '@/components/marketing/IdentityVerifyDialo
 import { BatchPreflightButton } from '@/components/marketing/BatchPreflightButton';
 
 import { AssetTagDialog } from '@/components/marketing/AssetTagDialog';
+import { TagManagerDialog } from '@/components/marketing/TagManagerDialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+
 import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
@@ -49,7 +52,9 @@ export default function MarketingLibrary() {
   const [verifyCharacter, setVerifyCharacter] = useState<any | null>(null);
   const [tagEditAsset, setTagEditAsset] = useState<any | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [imgSource, setImgSource] = useState<AssetSource | 'all'>(() => {
+
     try {
       const v = localStorage.getItem('lib.imgSource') as any;
       // 旧默认是 'upload',全局升级到 'base'
@@ -290,91 +295,8 @@ export default function MarketingLibrary() {
     }
   };
 
-  // 一次性回填历史分镜头到素材库
-  const [backfilling, setBackfilling] = useState(false);
-  const runBackfillStoryboards = async () => {
-    if (backfilling) return;
-    setBackfilling(true);
-    try {
-      const { data, error } = await invokeFn('backfill-storyboard-assets', { body: {} });
-      if (error || (data as any)?.ok === false) {
-        toast.error((data as any)?.error || error?.message || '回填失败');
-        return;
-      }
-      const d = data as any;
-      toast.success(`回填完成:新增 ${d.inserted} / 跳过 ${d.skipped} / 失败 ${d.failed}(共 ${d.total} 张)`);
-      fetchItems(true);
-    } catch (e: any) {
-      toast.error(e?.message || '回填失败');
-    } finally {
-      setBackfilling(false);
-    }
-  };
 
-  // 一次性给历史无标签素材补 AI 标签
-  const [backfillingTags, setBackfillingTags] = useState(false);
-  const runBackfillTags = async () => {
-    if (backfillingTags) return;
-    setBackfillingTags(true);
-    try {
-      const { data, error } = await invokeFn('backfill-marketing-asset-tags', { body: {} });
-      if (error || (data as any)?.ok === false) {
-        toast.error((data as any)?.error || error?.message || '补标签失败');
-        return;
-      }
-      const d = data as any;
-      const remainTxt = d.remaining > 0 ? ` · 还剩 ${d.remaining} 张,可再点一次` : ' · 全部完成';
-      toast.success(`本轮补标签 ${d.updated}/${d.processed} 张${remainTxt}`);
-      fetchItems(true);
-    } catch (e: any) {
-      toast.error(e?.message || '补标签失败');
-    } finally {
-      setBackfillingTags(false);
-    }
-  };
 
-  // 一次性:把历史素材按规则回填 meta.asset_class(base / upload / generated)
-  const [reclassing, setReclassing] = useState(false);
-  const runReclassify = async () => {
-    if (reclassing) return;
-    setReclassing(true);
-    try {
-      const { data, error } = await invokeFn('backfill-asset-class', { body: {} });
-      if (error || (data as any)?.ok === false) {
-        toast.error((data as any)?.error || error?.message || '重整失败');
-        return;
-      }
-      const d = data as any;
-      toast.success(`重整完成 · 基础 ${d.base} / 上传 ${d.upload} / AI ${d.generated}`);
-      fetchItems(true);
-    } catch (e: any) {
-      toast.error(e?.message || '重整失败');
-    } finally {
-      setReclassing(false);
-    }
-  };
-
-  // 一次性:批量清理无意义标签(场景1..场景11 / 英文情绪词 / AI智能广告 等)
-  const [cleaningTags, setCleaningTags] = useState(false);
-  const runCleanTags = async () => {
-    if (cleaningTags) return;
-    if (!confirm('将批量删除「场景1..场景11、elegant、AI智能广告」等噪声标签,确认继续吗?')) return;
-    setCleaningTags(true);
-    try {
-      const { data, error } = await invokeFn('cleanup-marketing-tags', { body: {} });
-      if (error || (data as any)?.ok === false) {
-        toast.error((data as any)?.error || error?.message || '清理失败');
-        return;
-      }
-      const d = data as any;
-      toast.success(`清理完成 · 移除 ${d.removed_tags} 个噪声 · 涉及 ${d.affected_rows} 条素材`);
-      fetchItems(true);
-    } catch (e: any) {
-      toast.error(e?.message || '清理失败');
-    } finally {
-      setCleaningTags(false);
-    }
-  };
 
 
 
@@ -629,23 +551,24 @@ export default function MarketingLibrary() {
         {tab !== 'profile' && tab !== 'character' && shopId && (<>
           {/* 上传按钮 + 管理 */}
           <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
-            <div className="flex gap-1.5">
-              {(tab === 'all' || tab === 'photo') && (
-                <Button size="sm" variant="outline" onClick={() => setUploadKind('photo')} className="h-8">
-                  <Plus className="w-3.5 h-3.5" />图片
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-8">
+                  <Plus className="w-3.5 h-3.5" />新增素材
                 </Button>
-              )}
-              {(tab === 'all' || tab === 'copy') && (
-                <Button size="sm" variant="outline" onClick={() => setUploadKind('copy')} className="h-8">
-                  <Plus className="w-3.5 h-3.5" />文案
-                </Button>
-              )}
-              {(tab === 'all' || tab === 'video') && (
-                <Button size="sm" variant="outline" onClick={() => setUploadKind('video')} className="h-8">
-                  <Plus className="w-3.5 h-3.5" />视频
-                </Button>
-              )}
-            </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => setUploadKind('photo')}>
+                  <ImageIcon className="w-3.5 h-3.5 mr-2" />图片
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setUploadKind('copy')}>
+                  <FileText className="w-3.5 h-3.5 mr-2" />文案
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setUploadKind('video')}>
+                  <Video className="w-3.5 h-3.5 mr-2" />视频
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {!loading && filtered.length > 0 && (
               manageMode ? (
                 <div className="flex items-center gap-2">
@@ -657,57 +580,9 @@ export default function MarketingLibrary() {
                 </div>
               ) : (
                 <div className="flex items-center gap-1">
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={runBackfillStoryboards}
-                      disabled={backfilling}
-                      title="把历史分镜头图回填到素材库"
-                    >
-                      {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      回填分镜头
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={runBackfillTags}
-                      disabled={backfillingTags}
-                      title="给历史无标签的素材一次性补 AI 标签"
-                    >
-                      {backfillingTags ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      补标签
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={runReclassify}
-                      disabled={reclassing}
-                      title="按规则把历史素材分到 基础/上传/AI 三类"
-                    >
-                      {reclassing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      重整来源
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={runCleanTags}
-                      disabled={cleaningTags}
-                      title="批量删除无意义标签(场景1..场景11、英文情绪词、AI智能广告 等)"
-                    >
-                      {cleaningTags ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                      清理标签
-                    </Button>
-                  )}
-
-
-
+                  <Button size="sm" variant="ghost" onClick={() => setTagManagerOpen(true)} title="重命名/合并/删除标签">
+                    <Tags className="w-3.5 h-3.5" />标签管理
+                  </Button>
                   {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
                     <Button
                       size="sm"
@@ -727,6 +602,7 @@ export default function MarketingLibrary() {
               )
             )}
           </div>
+
 
           {/* 来源分段:基础素材 / 我上传的 / AI 生成 / 全部 */}
           {(tab === 'all' || tab === 'photo') && (
@@ -1082,6 +958,15 @@ export default function MarketingLibrary() {
           setItems((prev) => prev.map((x) => x.id === tagEditAsset.id ? { ...x, tags, category } : x));
         }}
       />
+
+      <TagManagerDialog
+        open={tagManagerOpen}
+        onOpenChange={setTagManagerOpen}
+        items={items}
+        onUpdated={(updater) => setItems(updater)}
+      />
+
+
 
       <AlertDialog open={confirmDel} onOpenChange={setConfirmDel}>
         <AlertDialogContent>

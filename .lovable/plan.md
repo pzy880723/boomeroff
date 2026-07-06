@@ -1,60 +1,75 @@
-# 修复:第三方商标混入视频提示词 + 版权失败给的是英文报错
+## 目标
 
-## 问题拆解
-
-**为什么这次视频出现"中信泰富"?**
-
-Seedance 收到的提示词里,`中信泰富`同时出现在三个地方:
-1. **店铺画像**:后端 `shop-context.ts` 把 `shops.name`("上海中信泰富店")直接拼进 prompt → `门店:上海中信泰富店`。
-2. **视频主题(topic)**:你在策划对话里输入的"上海中信泰富店暑假寻宝攻略"被原样带入。
-3. **强调点(highlight)**:"上海中信泰富店门头店招"里明确要求还原第三方商场招牌。
-
-Seedance 一看是真实商场名+要还原招牌,直接判"可能涉及版权"拒绝出片。
-
-**为什么失败提示是英文一大段?**
-
-前端 `src/lib/videoFailure.ts` 的 `classifyVideoFailure` 里没有针对 `copyright` 的分支,英文报错走到了 `unknown` 兜底分支,`detail` 直接把原始英文丢出来给你。
+1. 「帮我拍一条」只从"用户上传"图片里挑,不再挑 AI 生成图
+2. 素材库合并/精简顶部工具栏
+3. 精简标签体系 + 增加"标签管理"入口
 
 ---
 
-## 改法(两处)
+## 1. 惊喜视频只挑用户上传的实景图
 
-### 1. 后端:把第三方品牌/商场名从进入模型的提示词里剥掉,只留 BOOMER 自家招牌
+**文件:** `supabase/functions/surprise-marketing-video/index.ts` (~L161)
 
-新增共享工具 `supabase/functions/_shared/brand-scrub.ts`,导出:
-- `THIRD_PARTY_BRAND_PATTERNS`:一份可扩展的第三方商标/商场名词典(中信泰富、太古汇、万象城、IFC、恒隆、来福士、大悦城、正大广场、K11、久光、新天地、SKP、太古里… 以及"某某商场""某某广场"这类真实招牌关键词)。
-- `scrubThirdPartyBrands(text)`:把命中的词替换为"本店 / 门店 / 商场内"等中性词,并去掉"店招""招牌""门头 logo"这类要求还原招牌的措辞(因为 Seedance 会自作主张画第三方 logo)。
-- `OWN_BRAND_LOCK_ZH`:一段追加到系统提示的硬规则——"招牌上只能出现 BOOMER / BOOMER·OFF 自家 logo,严禁出现任何第三方商标/商场名/品牌名;涉及门头店招时,只描写'开放式店面上方的 BOOMER·OFF 灯箱',不要提第三方招牌"。
+拉素材池时,除了现有"剔除分镜头"过滤,再排除所有 AI 生成来源:
 
-在这两个文件里接入:
-- `supabase/functions/_shared/shop-context.ts`:`formatShopContext` 输出的每一行走一遍 `scrubThirdPartyBrands`(店名/地址/描述都会被清洗)。同时把"门店:上海中信泰富店"改成"门店:BOOMER·OFF(商场店)"这种去敏形式——原始店名仍在数据库保留,只是不进 AI 提示词。
-- `supabase/functions/generate-marketing-video-script/index.ts`:`topic` / `highlight` / `briefTranscript` 三个用户输入,进 AI 之前也过一次 `scrubThirdPartyBrands`;并把 `OWN_BRAND_LOCK_ZH` 追加到 `sys` 提示词里。生成完 script 后,`clean()` 里在 `sanitizeStorefrontText` 后再 pipe 一次 `scrubThirdPartyBrands`,兜底把 AI 自己蹦出来的第三方名擦掉。
-- `supabase/functions/render-marketing-video/index.ts`:传给 Seedance 的 `shopBlock` 用清洗过的版本,同时在 `buildOneShotPrompt` / `buildPrompt` 里把 `OWN_BRAND_LOCK_ZH` 的英文版(新增 `OWN_BRAND_LOCK_EN`)拼进 NEGATIVE 段。
+```
+.not("meta->>asset_class", "eq", "generated")
+.not("meta->>source", "in", "(storyboard,ai_smart_ad,ai-smart-ad,ai_image,smart_ad,generated,ai_generated)")
+```
 
-**结果**:哪怕店铺开在中信泰富商场里,Seedance 拿到的也只会是"BOOMER·OFF(商场店)"+"招牌上只能是 BOOMER·OFF"的信号,不会再触发第三方版权。
+拉回后再用与前端 `assetSource()` 完全一致的规则在内存里二次过滤(旧数据没 `asset_class` 但可能是 AI 生成的,靠 source/category 兜底),只保留 `base` 与 `upload` 两类。这样"基础素材 + 我上传的"合并成一个"用户上传"概念,与用户理解一致。
 
-### 2. 前端:让"版权风险"这类报错说人话
+若过滤后池子为空 → 返回中文提示 `"素材库还没有你上传的实景图,先去『素材库 › 图片』上传几张"`。
 
-在 `src/lib/videoFailure.ts` 的 `classifyVideoFailure` 里,在 `unknown` 兜底之前插入两个新分支:
+## 2. 素材库工具栏精简
 
-- **`copyright_blocked`**——匹配 `/copyright/i`、`/版权/`、`/trademark/i`、`/intellectual\s*prop/i`、`/output\s*video.*may.*related.*copyright/i`。
-  - title:`被判定涉及版权风险`
-  - detail:`模型分析了脚本和参考图,认为画面里可能出现受保护的第三方品牌/商场名/招牌/logo,所以拒绝出片。这不是我们代码的 bug,通常也不扣费。最常见的原因是脚本里写了真实商场名(比如"XX 泰富店""XX 广场店")或要求还原某个真实招牌。改法:把脚本里的第三方店铺/商场名换成"本店/我们门店/BOOMER·OFF",招牌只提我们自己的 BOOMER·OFF 灯箱。`
-  - fixes:`让 AI 改写为安全表达 (rewrite_safe_prompt, reRender)` / `整条重新生成 (restart, reRender)` / `删除此素材`。
-- **`unknown` 分支的兜底 detail**:如果 `raw` 是纯英文(检测 `/^[\x00-\x7F\s]+$/`),不要直接把英文塞给用户,改为固定中文提示:"渲染失败但没拿到中文原因,可以先重试一次,或换成更稳的 Fast 模型;完整技术信息可以点下方『查看技术细节』展开"。这样任何漏网英文都不会再糊用户脸上。
+**文件:** `src/pages/marketing/MarketingLibrary.tsx`
 
-`VideoFailureCard.tsx` 不动——它本来就渲染 `failure.title / failure.detail`,分类器改完自动生效。
+**A. 三个上传按钮合并为一个** (L631-648)
 
-## 影响范围
+用一个 `+ 新增素材` 主按钮,点击弹出小菜单 (DropdownMenu 或 Popover) 让用户选「图片 / 文案 / 视频」,再打开原有的 `UploadAssetDialog`。
 
-- 只动后端 3 个 edge function 的提示词构造 + 1 个新共享文件,以及前端 1 个分类函数。**没有 DB migration,没有 UI 结构改动**。
-- 店铺真实名(中信泰富店)在 shops 表、门店选择器、`Me` 页排班等处照常显示,只是不进 AI 提示词。
-- 前端 `VideoFailureCard` 无改动。
-- 已生成的失败素材(比如你截图这条)重新点"用同样脚本重新生成"就会走新流程;老失败记录卡片本身也会立即变成中文提示。
+**B. 移除管理员一次性按钮**
 
-## 不做的事
+删掉这些按钮及其对应的 handler / state:
+- 回填分镜头 (`runBackfillStoryboards`, `backfilling`)
+- 补标签 (`runBackfillTags`, `backfillingTags`)  
+- 重整来源 (`runReclassify`, `reclassing`)
+- 清理标签 (`runCleanTags`, `cleaningTags`)
 
-- 不建立第三方品牌白名单/审批流程(过度工程)。
-- 不改 `shops.name` 数据(那是店员用来区分门店的,数据库层不动)。
-- 不动 Seedance 侧任何鉴权/API 调用逻辑。
-- 词典先手工列 20+ 个主流商场名,漏网的以后再加——目标是 90% 场景不再触发,不是 100%。
+edge functions (`backfill-*`, `cleanup-marketing-tags`) 本身保留,只是不再从 UI 触发。
+
+**C. 保留:** `管理` (进入多选删除)、`清理失败视频`、以及即将新加的 `标签管理` 按钮。
+
+## 3. 精简 + 新增标签管理
+
+**文件:** `src/components/marketing/AssetTagDialog.tsx`
+
+缩减 `TAG_GROUPS` 到 3 组、约 18 个核心标签:
+
+```
+📍 场景  : 门头、店内、橱窗、货架、收银台、门口
+🛍 商品  : 商品、细节、特写、套装、配饰
+👤 人物  : 人物、顾客、店员、合影
+🎨 氛围  : 白天、夜景、复古、高级感
+```
+
+去掉「场景位置 / 分镜头 / 风格氛围」里的冷门词(店招、试穿区、街拍、材质、摆件、博主、主角、开场/过渡/结尾/空镜/特效、文艺、潮流、温馨、场景)。用户仍可通过搜索框自建自定义标签。
+
+**新文件:** `src/components/marketing/TagManagerDialog.tsx`
+
+范围:当前店铺内所有素材的标签(从已加载的 `items` 聚合;跨分页可先用当前列表,够 MVP)。
+
+功能:
+- 列出所有不同标签 + 使用次数,按频次排序
+- 每行三个动作:**重命名**(输入框,批量 update 所有含该标签的素材)、**合并到**(选另一个已有标签,把 A 全部改成 B)、**删除**(从所有素材里移除该标签,不删素材本身)
+- 全部操作走 supabase `update marketing_assets set tags = ... where id in (...)`,操作前 `confirm`,完成后本地 `setItems` 同步
+
+**入口按钮:** 在 MarketingLibrary 工具栏 `管理` 旁加一个 `🏷 标签管理` (ghost 按钮),打开该 Dialog。
+
+## 技术细节
+
+- `UploadAssetDialog` API 不变,只是入口变成"先选类型再打开"
+- `AssetDetailDialog` 现有的"编辑标签"入口保留不动(单张编辑仍走 `AssetTagDialog`)
+- 无 DB 变更、无 edge function 新增
+- 惊喜视频那次已经生成失败/跑掉的任务不做迁移
