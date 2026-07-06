@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Play, RefreshCw, Loader2 as Spin } from 'lucide-react';
 import { invokeFn } from '@/lib/invokeFn';
 import { toast as toastFn } from 'sonner';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _KeepRefreshInScope = typeof RefreshCw;
 
 function LazyVideoPlayer({
   src, poster, assetId, expired, onRefreshed,
