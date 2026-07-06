@@ -18,6 +18,9 @@ import { IdentityVerifyDialog } from '@/components/marketing/IdentityVerifyDialo
 import { BatchPreflightButton } from '@/components/marketing/BatchPreflightButton';
 
 import { AssetTagDialog } from '@/components/marketing/AssetTagDialog';
+import { TagManagerDialog } from '@/components/marketing/TagManagerDialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+
 import { thumbUrl as thumb, thumbSrcSet } from '@/lib/imageUrl';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LibraryErrorBoundary } from '@/components/marketing/LibraryErrorBoundary';
