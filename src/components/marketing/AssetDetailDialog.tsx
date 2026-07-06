@@ -336,7 +336,7 @@ export function AssetDetailDialog({
   };
 
   useEffect(() => {
-    if (!asset) { setCands([]); setVideoCopy(null); return; }
+    if (!asset) { setCands([]); setVideoCopy(null); setVideoScript(null); setScriptOpen(false); return; }
     if (asset.kind === 'copy') {
       try {
         const parsed = JSON.parse(asset.output_text || '[]');
@@ -353,8 +353,36 @@ export function AssetDetailDialog({
     } else {
       setVideoCopy(null);
     }
+    setVideoScript(null);
+    setScriptOpen(false);
     setEditing(null);
   }, [asset]);
+
+  // 视频详情:异步拉取原始脚本供折叠展示
+  useEffect(() => {
+    if (!asset || asset.kind !== 'video') return;
+    const jobId = asset.meta?.job_id;
+    if (!jobId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.from('marketing_video_jobs' as any).select('script').eq('id', jobId).maybeSingle();
+        if (!cancelled) setVideoScript((data as any)?.script || null);
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [asset]);
+
+  // 视频渲染完成后 & 还没生成文案 → 自动生成一次
+  useEffect(() => {
+    if (!asset || asset.kind !== 'video') return;
+    if (!asset.output_url) return;
+    if (videoCopy) return;
+    if (genCopyLoading) return;
+    if (!asset.meta?.job_id) return;
+    void generateVideoCopy({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset?.id, asset?.output_url]);
 
   if (!asset) return null;
 
@@ -365,54 +393,29 @@ export function AssetDetailDialog({
     return [c.title, c.body, (c.hashtags || []).join(' ')].filter(Boolean).join('\n\n').trim();
   };
 
-  const generateVideoCopy = async (style: ViralStyle = 'scream') => {
+  const generateVideoCopy = async (opts?: { silent?: boolean }) => {
     if (!asset || asset.kind !== 'video') return;
-    const poster: string | undefined =
-      asset.meta?.poster_url ||
-      asset.meta?.cover_url ||
-      (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) ||
-      (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) ||
-      undefined;
-    if (!poster) { toast.error('找不到视频封面,无法生成文案'); return; }
     setGenCopyLoading(true);
-    let c: CopyCand | null = null;
     try {
-      const topic = asset.meta?.topic || asset.meta?.style_label || '';
-      const { data, error } = await invokeFnTop('generate-marketing-copy', {
-        body: {
-          image_urls: [poster],
-          platform: 'xhs',
-          tone: '种草',
-          style,
-          highlight: topic ? `配合一条 ${asset.meta?.duration || 15}s 视频:${topic}` : '',
-          shop_id: asset.shop_id || null,
-          from_video_id: asset.id,
-        },
+      const { data, error } = await invokeFnTop('generate-marketing-video-copy', {
+        body: { asset_id: asset.id, shop_id: asset.shop_id || null },
       });
       if (error) throw error;
       const d = data as any;
-      const got: CopyCand | undefined = Array.isArray(d?.candidates) ? d.candidates[0] : undefined;
-      if (!got) throw new Error(d?.error || '生成失败');
-      c = { ...got, style };
+      const got: CopyCand | undefined = d?.copy;
+      if (!got || (!got.title && !got.body)) throw new Error(d?.error || '生成失败');
+      setVideoCopy(got);
+      const nextMeta = { ...(asset.meta || {}), video_copy: got };
+      onUpdated?.({ ...asset, meta: nextMeta });
+      if (!opts?.silent) toast.success('小红书文案已生成');
     } catch (e: any) {
-      // 兜底:本地爆文模板,断网/限流也能立刻出
-      const fallback = buildXhsViral({
-        name: asset.meta?.topic || '中古好物',
-        category: asset.meta?.category,
-      }, style);
-      c = fallback;
-      toast.message('AI 暂时忙，先给你一版本地爆文模板');
+      if (!opts?.silent) toast.error(e?.message || '生成失败,请稍后重试');
+    } finally {
+      setGenCopyLoading(false);
     }
-    try {
-      setVideoCopy(c);
-      const nextMeta = { ...(asset.meta || {}), video_copy: c, video_copy_style: style };
-      try {
-        await supabase.from('marketing_assets' as any).update({ meta: nextMeta }).eq('id', asset.id);
-        onUpdated?.({ ...asset, meta: nextMeta });
-      } catch {}
-      toast.success(`文案已生成 · ${VIRAL_STYLE_LABELS[style]}`);
-    } finally { setGenCopyLoading(false); }
   };
+
+
 
   const downloadAsset = async (kind: 'video' | 'image') => {
     if (!asset?.output_url) return;
