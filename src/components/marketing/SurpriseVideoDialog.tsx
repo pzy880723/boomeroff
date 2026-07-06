@@ -287,6 +287,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             onApplyFix={handleFix}
             busy={submitting}
             onClose={() => onOpenChange(false)}
+            onReset={resetToPicker}
           />
         ) : picking || !pick ? (
           <div className="py-16 px-4 flex flex-col items-center gap-3 text-sm text-muted-foreground">
