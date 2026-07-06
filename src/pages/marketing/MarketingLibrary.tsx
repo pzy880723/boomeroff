@@ -551,23 +551,24 @@ export default function MarketingLibrary() {
         {tab !== 'profile' && tab !== 'character' && shopId && (<>
           {/* 上传按钮 + 管理 */}
           <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
-            <div className="flex gap-1.5">
-              {(tab === 'all' || tab === 'photo') && (
-                <Button size="sm" variant="outline" onClick={() => setUploadKind('photo')} className="h-8">
-                  <Plus className="w-3.5 h-3.5" />图片
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-8">
+                  <Plus className="w-3.5 h-3.5" />新增素材
                 </Button>
-              )}
-              {(tab === 'all' || tab === 'copy') && (
-                <Button size="sm" variant="outline" onClick={() => setUploadKind('copy')} className="h-8">
-                  <Plus className="w-3.5 h-3.5" />文案
-                </Button>
-              )}
-              {(tab === 'all' || tab === 'video') && (
-                <Button size="sm" variant="outline" onClick={() => setUploadKind('video')} className="h-8">
-                  <Plus className="w-3.5 h-3.5" />视频
-                </Button>
-              )}
-            </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => setUploadKind('photo')}>
+                  <ImageIcon className="w-3.5 h-3.5 mr-2" />图片
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setUploadKind('copy')}>
+                  <FileText className="w-3.5 h-3.5 mr-2" />文案
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setUploadKind('video')}>
+                  <Video className="w-3.5 h-3.5 mr-2" />视频
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {!loading && filtered.length > 0 && (
               manageMode ? (
                 <div className="flex items-center gap-2">
@@ -579,57 +580,9 @@ export default function MarketingLibrary() {
                 </div>
               ) : (
                 <div className="flex items-center gap-1">
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={runBackfillStoryboards}
-                      disabled={backfilling}
-                      title="把历史分镜头图回填到素材库"
-                    >
-                      {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      回填分镜头
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={runBackfillTags}
-                      disabled={backfillingTags}
-                      title="给历史无标签的素材一次性补 AI 标签"
-                    >
-                      {backfillingTags ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      补标签
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={runReclassify}
-                      disabled={reclassing}
-                      title="按规则把历史素材分到 基础/上传/AI 三类"
-                    >
-                      {reclassing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      重整来源
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={runCleanTags}
-                      disabled={cleaningTags}
-                      title="批量删除无意义标签(场景1..场景11、英文情绪词、AI智能广告 等)"
-                    >
-                      {cleaningTags ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                      清理标签
-                    </Button>
-                  )}
-
-
-
+                  <Button size="sm" variant="ghost" onClick={() => setTagManagerOpen(true)} title="重命名/合并/删除标签">
+                    <Tags className="w-3.5 h-3.5" />标签管理
+                  </Button>
                   {items.some((it) => it.kind === 'video' && it.meta?.status === 'failed') && (
                     <Button
                       size="sm"
@@ -649,6 +602,7 @@ export default function MarketingLibrary() {
               )
             )}
           </div>
+
 
           {/* 来源分段:基础素材 / 我上传的 / AI 生成 / 全部 */}
           {(tab === 'all' || tab === 'photo') && (
