@@ -1,26 +1,67 @@
 // 营销素材详情 / 编辑抽屉。支持文案、图片、视频三种 kind。
 import { useEffect, useRef, useState } from 'react';
-import { Play } from 'lucide-react';
+import { Play, RefreshCw, Loader2 as Spin } from 'lucide-react';
+import { invokeFn } from '@/lib/invokeFn';
+import { toast as toastFn } from 'sonner';
 
-function LazyVideoPlayer({ src, poster }: { src: string; poster?: string }) {
+function LazyVideoPlayer({
+  src, poster, assetId, expired, onRefreshed,
+}: {
+  src: string;
+  poster?: string;
+  assetId?: string;
+  expired?: boolean;
+  onRefreshed?: (nextUrl: string) => void;
+}) {
   const [active, setActive] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | undefined>(poster);
   const [videoError, setVideoError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [srcNonce, setSrcNonce] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => { setPosterUrl(poster); }, [poster]);
+  useEffect(() => { setVideoError(false); setActive(false); }, [src]);
 
   useEffect(() => {
     if (active && videoRef.current) {
-      // 静默尝试播放;移动浏览器拒绝 autoplay 时只是 reject,不要让它冒成渲染异常
       Promise.resolve().then(() => videoRef.current?.play().catch(() => {}));
     }
-  }, [active]);
+  }, [active, srcNonce]);
+
+  const tryRefresh = async () => {
+    if (!assetId || refreshing) return;
+    setRefreshing(true);
+    try {
+      const { data, error } = await invokeFn('mirror-marketing-asset', { body: { asset_id: assetId } });
+      if (error) throw error;
+      const d = data as any;
+      if (d?.expired) { toastFn.error('视频源已过期，请重新生成'); return; }
+      if (d?.url) {
+        onRefreshed?.(d.url);
+        setVideoError(false);
+        setActive(true);
+        setSrcNonce((n) => n + 1);
+        toastFn.success('视频已刷新');
+      }
+    } catch (e: any) {
+      toastFn.error(e?.message || '刷新失败');
+    } finally { setRefreshing(false); }
+  };
 
   if (!src) {
     return (
       <div className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex items-center justify-center text-xs text-muted-foreground">
         视频暂不可用
+      </div>
+    );
+  }
+
+  if (expired) {
+    return (
+      <div className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground p-4 text-center">
+        <span className="text-sm">视频源已过期</span>
+        <span>请点右下方「重新生成」再来一版</span>
       </div>
     );
   }
@@ -54,19 +95,35 @@ function LazyVideoPlayer({ src, poster }: { src: string; poster?: string }) {
 
   if (videoError) {
     return (
-      <button
-        type="button"
-        onClick={() => { setVideoError(false); setActive(false); }}
-        className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground"
-      >
+      <div className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex flex-col items-center justify-center gap-3 text-xs text-muted-foreground p-4">
         <span>视频加载失败</span>
-        <span className="underline">点这里重试</span>
-      </button>
+        <div className="flex gap-2">
+          {assetId && (
+            <button
+              type="button"
+              onClick={tryRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1 px-3 h-8 rounded-full bg-primary text-primary-foreground disabled:opacity-60"
+            >
+              {refreshing ? <Spin className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              刷新链接
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setVideoError(false); setActive(false); }}
+            className="px-3 h-8 rounded-full border border-border"
+          >
+            重试
+          </button>
+        </div>
+      </div>
     );
   }
 
   return (
     <video
+      key={`${src}#${srcNonce}`}
       ref={videoRef}
       src={src}
       controls
@@ -484,6 +541,9 @@ export function AssetDetailDialog({
             {asset.output_url ? (
               <LazyVideoPlayer
                 src={asset.output_url}
+                assetId={asset.id}
+                expired={asset.meta?.status === 'expired'}
+                onRefreshed={(nextUrl) => onUpdated?.({ ...asset, output_url: nextUrl })}
                 poster={asset.meta?.poster_url || asset.meta?.cover_url || (Array.isArray(asset.meta?.image_urls) && asset.meta.image_urls[0]) || (Array.isArray(asset.input_image_urls) && asset.input_image_urls[0]) || undefined}
               />
             ) : asset.meta?.status === 'failed' ? (
