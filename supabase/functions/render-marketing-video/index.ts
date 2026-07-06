@@ -445,8 +445,8 @@ Deno.serve(async (req) => {
     } else if (requestedStrategy === 'per_shot') {
       strategy = 'per_shot'; autoReason = 'user_per_shot';
     } else {
-      // auto:总时长 ≤15s 且分镜数 ≤4 → one_shot
-      if (totalDur > 0 && totalDur <= MAX_SEG_DUR && meaningfulShotCount <= 4) {
+      // auto:总时长 ≤15s → one_shot(避免分段拼接导致人物一致性崩塌);>15s 才走分段
+      if (totalDur > 0 && totalDur <= MAX_SEG_DUR) {
         strategy = 'one_shot';
         autoReason = `auto:duration<=${MAX_SEG_DUR}s,shots=${meaningfulShotCount}`;
       } else {
