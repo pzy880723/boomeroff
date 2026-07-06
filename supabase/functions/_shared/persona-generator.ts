@@ -307,6 +307,7 @@ ${opts.holidayName ? `临近节日:${opts.holidayName}` : ''}
       catchphrase: cps.length ? cps : fb.catchphrase,
       cta: String(parsed.cta || '').trim().slice(0, 12) || fb.cta,
       group_type: slot.groupType,
+      age_bucket: slot.ageBucket,
       companions: slot.groupType === 'solo' ? [] : parseCompanions(parsed.companions),
     };
     return persona;
