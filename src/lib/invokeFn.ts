@@ -82,6 +82,10 @@ export async function invokeFn<T = any>(
       if (ctx && typeof ctx.clone === 'function') {
         try {
           const body = await ctx.clone().json();
+          // 后端用 4xx 明确回传业务标记(如 expired) —— 当作数据返回,方便调用方分支处理
+          if (body && typeof body === 'object' && ('expired' in body || 'code' in body)) {
+            return { data: body as T, error: null };
+          }
           const serverMsg = body?.error || body?.message;
           if (serverMsg) return { data: null, error: { message: humanize(String(serverMsg)) } };
         } catch {
