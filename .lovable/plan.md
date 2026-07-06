@@ -1,28 +1,34 @@
-## 根本原因
+## 一句话原因
 
-之前给素材库做加载优化时，为了减少数据量，`MarketingLibrary.tsx` 里定义了 `ASSET_COLS` 只拉取了轻量字段：
+后台在把你的 15 秒请求发给火山之前，有一道"档位对齐"函数写错了：它只有 5 秒和 10 秒两个出口，没有 15 秒。所以你填 15，被偷偷改成 10 发出去，火山就按 10 秒生成。脚本、数据库、界面上一切都还显示 15 秒，只有真正下单那一步"缩水"了，所以肉眼看不出来。
 
-```
-id, kind, output_url, input_image_urls, tags, category, shop_id, user_id, created_at, meta
-```
+## 出问题的代码
 
-**漏掉了 `output_text` 这一列**。而所有"文案"素材（`kind='copy'`）的正文都存在 `output_text`：
-
-- 列表里的两行预览用 `copyPreview(it)` 读 `it.output_text` → 拿不到 → 显示"（无内容）"
-- 点开详情用 `JSON.parse(asset.output_text || '[]')` → 解析出空数组 → 显示"没有可读的文案内容"
-
-数据库里文案本身完全没问题（已核对：JSON 结构完整、正文 800~1200 字）。视频文案（存在 `meta.video_copy` 里）不受影响，所以只有独立的"文案"卡片失效。
-
-## 修复方案
-
-`src/pages/marketing/MarketingLibrary.tsx` 第 67 行，把 `output_text` 加进 `ASSET_COLS`：
+`supabase/functions/_shared/seedance-submit.ts` 第 36-39 行：
 
 ```ts
-const ASSET_COLS = 'id, kind, output_url, output_text, input_image_urls, tags, category, shop_id, user_id, created_at, meta';
+function snapR2vDuration(d: number): number {
+  const n = Math.round(Number(d) || 5);
+  return n <= 7 ? 5 : 10;   // ← 没有 15 这一档,15 被砍成 10
+}
 ```
 
-影响：每条素材多传几百字节，图片/视频卡片本来 `output_text` 就是空，只在文案卡片上有真实开销，不会明显拖慢加载。
+## 修法（1 行）
 
-## 顺带清理（可选，需你确认）
+补上 15 这一档，跟同一个仓库里 `render-marketing-video/index.ts` 第 284 行的 `snapOneShotDuration` 保持一致：
 
-前面被我删掉的 12 条失效视频，还留着 8 条 `from_video_id` 指向已删除视频的旧文案（`meta.from_video_id` 里能看到）。文案本身可用，只是"来源视频"已经不存在了。要不要一并删掉？还是保留文案（它们独立可用）？
+```ts
+function snapR2vDuration(d: number): number {
+  const n = Math.round(Number(d) || 5);
+  if (n <= 7) return 5;
+  if (n <= 12) return 10;
+  return 15;
+}
+```
+
+## 影响
+
+- 之后"快速生成 15 秒"会真的下单 15 秒 → 拿到 15 秒成片。
+- 5 秒 / 10 秒请求完全不受影响。
+- 分段渲染路径（30 秒那种拼接的）不走这条函数，也不受影响。
+- 已经生成的那条 10 秒视频没法补时长，需要重新点一次"生成"才能拿到 15 秒版本。
