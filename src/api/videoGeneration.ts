@@ -63,6 +63,7 @@ export interface CreateVideoJobPayload {
   model?: string;
   resolution?: string;
   prompt_overrides?: any;
+  user_prompt?: string;
 }
 
 export async function createVideoJob(payload: CreateVideoJobPayload): Promise<{ job_id: string }> {
