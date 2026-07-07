@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
       .insert({
         user_id: u.user.id,
         shop_id: shopId,
+        user_prompt: userPrompt,
         source_pick_json: { picked_assets: pickedAssets, persona, model: modelId, resolution, style, prompt_overrides: promptOverrides },
         brief_json: brief,
         script_json: script,
