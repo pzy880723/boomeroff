@@ -33,6 +33,9 @@ Deno.serve(async (req) => {
     const resolution: string | undefined = typeof body.resolution === 'string' ? body.resolution : undefined;
     const style: string | undefined = typeof body.style === 'string' ? body.style : undefined;
     const promptOverrides = body.prompt_overrides && typeof body.prompt_overrides === 'object' ? body.prompt_overrides : null;
+    const userPrompt: string | null = typeof body.user_prompt === 'string' && body.user_prompt.trim()
+      ? body.user_prompt.trim().slice(0, 500)
+      : (typeof script?.title === 'string' ? String(script.title).slice(0, 500) : null);
     if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
     if (!script) return json({ ok: false, error: "缺少脚本" });
 
