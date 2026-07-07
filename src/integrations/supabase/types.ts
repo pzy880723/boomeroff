@@ -2886,6 +2886,7 @@ export type Database = {
           status: string
           updated_at: string
           user_id: string
+          user_prompt: string | null
         }
         Insert: {
           aspect_ratio?: string
@@ -2904,6 +2905,7 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id: string
+          user_prompt?: string | null
         }
         Update: {
           aspect_ratio?: string
@@ -2922,6 +2924,7 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id?: string
+          user_prompt?: string | null
         }
         Relationships: []
       }
