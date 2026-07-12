@@ -50,11 +50,19 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async () => {
     if (!user) { setItems([]); setLoading(false); return; }
     setLoading(true);
+    // 判定是否管理员：非管理员不应看到备份等运维通知
+    let isAdmin = false;
+    try {
+      const { data } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' as any });
+      isAdmin = !!data;
+    } catch { /* ignore */ }
+    let notesQuery = supabase.from('notifications' as any)
+      .select('id, title, body, summary, type, created_at, expires_at, image_url, category, created_by')
+      .order('created_at', { ascending: false })
+      .limit(60);
+    if (!isAdmin) notesQuery = notesQuery.neq('type', 'backup');
     const [{ data: notes }, { data: reads }] = await Promise.all([
-      supabase.from('notifications' as any)
-        .select('id, title, body, summary, type, created_at, expires_at, image_url, category, created_by')
-        .order('created_at', { ascending: false })
-        .limit(60),
+      notesQuery,
       supabase.from('notification_reads' as any)
         .select('notification_id')
         .eq('user_id', user.id),
