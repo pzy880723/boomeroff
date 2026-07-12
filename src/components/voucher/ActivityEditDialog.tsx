@@ -117,7 +117,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
           setStartsAt(a.starts_at ? toLocalInput(new Date(a.starts_at)) : toLocalInput(new Date()));
           setEndsAt(a.ends_at ? toLocalInput(new Date(a.ends_at)) : '');
           setActive(a.status !== 'closed');
-          
+          setMinFollowers(typeof a.min_followers === 'number' ? a.min_followers : 1000);
         }
         setLoadingDetail(false);
       })();
@@ -127,7 +127,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       setStartsAt(toLocalInput(new Date()));
       setEndsAt('');
       setActive(true);
-      
+      setMinFollowers(1000);
     }
   }, [open, activityId]);
 
