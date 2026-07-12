@@ -145,6 +145,8 @@ Deno.serve(async (req) => {
         character_json: job.character_json, script_json: job.script_json,
         final_video_url: job.final_video_url, cover_url: job.cover_url,
         error_message: job.error_message, meta: job.meta,
+        compose_status: job.compose_status, compose_error: job.compose_error,
+        compose_heartbeat_at: job.compose_heartbeat_at,
       },
       shots: shotList.map((s: any) => ({
         id: s.id, shot_index: s.shot_index, duration: Number(s.duration),
