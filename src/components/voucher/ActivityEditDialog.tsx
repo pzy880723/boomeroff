@@ -54,6 +54,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [active, setActive] = useState(true);
+  const [minFollowers, setMinFollowers] = useState<number>(1000);
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [polishing, setPolishing] = useState(false);
@@ -116,7 +117,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
           setStartsAt(a.starts_at ? toLocalInput(new Date(a.starts_at)) : toLocalInput(new Date()));
           setEndsAt(a.ends_at ? toLocalInput(new Date(a.ends_at)) : '');
           setActive(a.status !== 'closed');
-          
+          setMinFollowers(typeof a.min_followers === 'number' ? a.min_followers : 1000);
         }
         setLoadingDetail(false);
       })();
@@ -126,7 +127,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       setStartsAt(toLocalInput(new Date()));
       setEndsAt('');
       setActive(true);
-      
+      setMinFollowers(1000);
     }
   }, [open, activityId]);
 
@@ -163,6 +164,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       requires_review: false,
       starts_at: startsDate.toISOString(),
       ends_at: endsDate.toISOString(),
+      min_followers: Math.max(0, Math.floor(Number(minFollowers) || 0)),
     };
     let error;
     if (isEdit && activityId) {
@@ -233,6 +235,21 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
           </div>
 
           <div className="space-y-1.5">
+            <Label className="text-xs">最低粉丝数门槛（小红书主页截图 AI 识别，0 = 不校验）</Label>
+            <Input
+              type="number"
+              min={0}
+              step={100}
+              value={minFollowers}
+              onChange={(e) => setMinFollowers(Number(e.target.value) || 0)}
+              className="h-9 text-xs"
+              placeholder="1000"
+            />
+            <p className="text-[10px] text-muted-foreground">开启后，请把某个『图片』字段标记为"主页截图"、某个『网址/文本』字段标记为"小红书主页链接"。</p>
+          </div>
+
+
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label className="text-xs">填写内容</Label>
               <Button size="sm" variant="outline" className="h-7" onClick={addField}>
@@ -272,7 +289,22 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </Button>
                   </div>
-                  <div className="flex items-center justify-end">
+                  <div className="flex items-center justify-between gap-2">
+                    <Select
+                      value={f.role || 'none'}
+                      onValueChange={(v) => updateField(i, { role: v === 'none' ? undefined : (v as ActivityField['role']) })}
+                    >
+                      <SelectTrigger className="h-7 w-40 text-[11px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">普通字段</SelectItem>
+                        {f.type === 'image' && (
+                          <SelectItem value="profile_screenshot">小红书主页截图（用于识粉丝数）</SelectItem>
+                        )}
+                        {(f.type === 'url' || f.type === 'text') && (
+                          <SelectItem value="xhs_profile_url">小红书主页链接</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                     <label className="flex items-center gap-1.5 text-[11px]">
                       <Switch checked={!!f.required} onCheckedChange={(v) => updateField(i, { required: v })} />
                       必填

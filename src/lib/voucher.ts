@@ -77,6 +77,8 @@ export interface ActivityField {
   required?: boolean;
   options?: string[];
   placeholder?: string;
+  /** 字段特殊角色：主页截图 / 小红书主页链接 */
+  role?: 'profile_screenshot' | 'xhs_profile_url';
 }
 
 export interface Activity {
@@ -95,6 +97,8 @@ export interface Activity {
   created_by: string | null;
   created_at: string;
   poster_url?: string | null;
+  min_followers?: number;
+  platform?: string;
 }
 
 export interface ActivityApplication {

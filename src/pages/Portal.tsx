@@ -20,6 +20,7 @@ import { MarketingPresetsPanel } from '@/components/admin/MarketingPresetsPanel'
 import { BrandKbManager } from '@/components/admin/BrandKbManager';
 import { BackupPanel } from '@/components/admin/BackupPanel';
 import { AuditLogTable } from '@/components/admin/AuditLogTable';
+import { XhsRiskPanel } from '@/components/admin/XhsRiskPanel';
 
 
 
@@ -44,7 +45,7 @@ import { usePermissions, type PermissionKey } from '@/hooks/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'users' | 'audit' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'brand_kb' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'sms_test' | 'marketing_presets' | 'backup';
+type TabKey = 'users' | 'audit' | 'roles' | 'shops' | 'schedule' | 'shifts' | 'sop' | 'qa' | 'official' | 'brand_kb' | 'community' | 'corrections' | 'ai' | 'deploy' | 'notifications' | 'activity_review' | 'xhs_risk' | 'sms_test' | 'marketing_presets' | 'backup';
 
 type MenuItem = { key: TabKey; label: string; icon: typeof Users; perm: PermissionKey };
 type MenuGroup = { key: string; label: string; icon: typeof Users; items: MenuItem[] };
@@ -82,6 +83,7 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     key: 'vouchers', label: '活动审核', icon: Ticket, items: [
       { key: 'activity_review', label: '活动申请审核', icon: BadgeCheck, perm: 'voucher.manage' },
+      { key: 'xhs_risk', label: '小红书发文核查', icon: ShieldCheck, perm: 'voucher.manage' },
     ],
   },
   {
@@ -255,6 +257,7 @@ export default function Portal() {
             
             {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
             {effectiveTab === 'activity_review' && can('voucher.manage') && <ActivityReviewPanel />}
+            {effectiveTab === 'xhs_risk' && can('voucher.manage') && <XhsRiskPanel />}
             {effectiveTab === 'sms_test' && can('settings.ai') && <SmsTestPanel />}
             {effectiveTab === 'backup' && can('settings.ai') && <BackupPanel />}
           </Card>

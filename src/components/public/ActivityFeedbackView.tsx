@@ -234,15 +234,19 @@ export function ActivityFeedbackView({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-[#6b3a18]">发布链接（小红书 / 抖音 / 大众点评 等）</Label>
+            <Label className="text-xs text-[#6b3a18]">发布链接（推荐粘贴小红书笔记链接，系统会自动核查）</Label>
             <Input
               value={publishUrl}
               onChange={(e) => setPublishUrl(e.target.value)}
-              placeholder="https://..."
+              placeholder="https://www.xiaohongshu.com/explore/..."
               inputMode="url"
               className="bg-white border-[#e8d5b3] rounded-xl h-11"
             />
+            <p className="text-[10px] text-[#8b6a44]">
+              提交小红书笔记链接后，系统会自动比对作者主页并识别内容是否与本次探店相关，无需人工审核。
+            </p>
           </div>
+
 
           <div className="space-y-1.5">
             <Label className="text-xs text-[#6b3a18]">备注（可选）</Label>

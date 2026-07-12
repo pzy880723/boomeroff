@@ -1,4 +1,5 @@
 // 公开：凭 activity share_token 提交申请；图片字段走 base64 上传
+// 领券前新增：若 activity.min_followers > 0，用 Gemini vision 识图判定粉丝数
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -30,17 +31,16 @@ Deno.serve(async (req) => {
 
     const { data: activity, error: aErr } = await admin
       .from('activities')
-      .select('id, status, form_fields, max_applications, starts_at, ends_at, requires_review, voucher_id')
+      .select('id, status, form_fields, max_applications, starts_at, ends_at, requires_review, voucher_id, min_followers, platform')
       .eq('share_token', share_token)
       .maybeSingle();
     if (aErr || !activity) return json({ error: '活动不存在' }, 404);
     if (activity.status !== 'active') return json({ error: '活动已结束' }, 400);
-    // 允许提前报名：starts_at 在未来仍可报名
     if (activity.ends_at && new Date(activity.ends_at) < new Date()) {
       return json({ error: '活动已结束' }, 400);
     }
 
-    // 校验手机验证码（最近一条未消费、未过期的 OTP 必须匹配）
+    // 校验手机验证码
     const { data: otpRow } = await admin
       .from('activity_apply_otp')
       .select('id, code, expires_at, consumed_at')
@@ -56,9 +56,10 @@ Deno.serve(async (req) => {
     await admin.from('activity_apply_otp').update({ consumed_at: new Date().toISOString() }).eq('id', otpRow.id);
 
 
-    // 校验必填字段 + 处理图片字段
+    // 校验必填字段 + 处理图片字段（上传后 val 变成 storage path）
     const cleaned: Record<string, unknown> = {};
-    for (const f of (activity.form_fields as Array<Record<string, unknown>>) || []) {
+    const formFields = (activity.form_fields as Array<Record<string, unknown>>) || [];
+    for (const f of formFields) {
       const key = f.key as string;
       const required = !!f.required;
       const type = f.type as string;
@@ -67,7 +68,6 @@ Deno.serve(async (req) => {
         return json({ error: `请填写：${f.label}` }, 400);
       }
       if (type === 'image' && typeof val === 'string' && val.startsWith('data:')) {
-        // base64 上传
         const match = val.match(/^data:([^;]+);base64,(.+)$/);
         if (match) {
           const contentType = match[1];
@@ -84,6 +84,93 @@ Deno.serve(async (req) => {
       cleaned[key] = val ?? null;
     }
 
+    // === 领券前风控：粉丝数识图 ===
+    let profileCheck: Record<string, unknown> | null = null;
+    if ((activity.min_followers ?? 0) > 0) {
+      const profileField = formFields.find((f) => (f as any).role === 'profile_screenshot' && f.type === 'image')
+        || formFields.find((f) => f.type === 'image');
+      const path = profileField ? (cleaned[profileField.key as string] as string | undefined) : undefined;
+      if (!path || typeof path !== 'string') {
+        return json({ error: '请上传小红书主页截图' }, 400);
+      }
+      try {
+        const { data: file, error: dErr } = await admin.storage.from('voucher-screenshots').download(path);
+        if (dErr || !file) throw new Error(dErr?.message || 'download failed');
+        const buf = new Uint8Array(await file.arrayBuffer());
+        // 分块 base64 避免栈溢出
+        let bin = '';
+        const CHUNK = 0x8000;
+        for (let i = 0; i < buf.length; i += CHUNK) {
+          bin += String.fromCharCode(...buf.subarray(i, i + CHUNK));
+        }
+        const b64 = btoa(bin);
+        const mime = file.type || 'image/png';
+
+        const key = Deno.env.get('LOVABLE_API_KEY');
+        if (!key) throw new Error('LOVABLE_API_KEY 未配置');
+        const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash',
+            response_format: { type: 'json_object' },
+            messages: [
+              {
+                role: 'system',
+                content: '你是审核员。用户会上传一张小红书 App 个人主页截图，请只返回严格 JSON：{"followers": number|null, "note": "ok"|"not_xiaohongshu"|"unreadable"}。followers = 主页顶部『粉丝』标签下方的数字（支持 1234 / 1.2万 / 1234w，统一转成整数，w 或 万 均乘 10000）。如果截图不像小红书返回 not_xiaohongshu；模糊或看不到粉丝数返回 unreadable。不要多余字段。',
+              },
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: '识别这张截图的粉丝数。' },
+                  { type: 'image_url', image_url: { url: `data:${mime};base64,${b64}` } },
+                ],
+              },
+            ],
+          }),
+        });
+        if (aiResp.status === 429) return json({ error: '识别服务繁忙，请稍后重试' }, 429);
+        if (aiResp.status === 402) return json({ error: '识别服务额度已用完，请联系管理员' }, 402);
+        if (!aiResp.ok) {
+          const errTxt = await aiResp.text();
+          throw new Error(`ai ${aiResp.status}: ${errTxt.slice(0, 200)}`);
+        }
+        const aiJson = await aiResp.json();
+        const raw = aiJson?.choices?.[0]?.message?.content ?? '{}';
+        let parsed: { followers?: number | null; note?: string } = {};
+        try { parsed = JSON.parse(raw); } catch { /* ignore */ }
+        const note = String(parsed.note || 'unreadable');
+        const followers = typeof parsed.followers === 'number' ? Math.floor(parsed.followers) : null;
+        profileCheck = {
+          followers,
+          note,
+          model: 'google/gemini-2.5-flash',
+          checked_at: new Date().toISOString(),
+          screenshot_path: path,
+        };
+        if (note === 'not_xiaohongshu') {
+          return json({ error: '未识别为小红书主页截图，请重新上传主页粉丝页截图', profile_check: profileCheck }, 400);
+        }
+        if (note === 'unreadable' || followers == null) {
+          return json({ error: '未能读取粉丝数，请上传更清晰的主页截图', profile_check: profileCheck }, 400);
+        }
+        if (followers < (activity.min_followers ?? 0)) {
+          return json({
+            error: `识别到粉丝数 ${followers}，未达到 ${activity.min_followers} 门槛，暂不能领取`,
+            profile_check: profileCheck,
+          }, 400);
+        }
+      } catch (e) {
+        console.error('[activity-apply] vision check failed:', e);
+        // 识图技术性失败：不放行也不长期阻塞，让用户重试
+        return json({ error: '截图识别失败，请稍后重试' }, 500);
+      }
+      (cleaned as any).__profile_check = profileCheck;
+    }
+
     // 限额
     if (activity.max_applications) {
       const { count } = await admin
@@ -95,7 +182,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 统一走"直接领取"流程；任意已存在的申请都视为已报名
+    // 已存在则复用
     const existingResp = await admin
       .from('activity_applications')
       .select('id, voucher_claim_id, voucher_claim:voucher_claims(short_code)')
@@ -124,7 +211,6 @@ Deno.serve(async (req) => {
       .select('id')
       .single();
     if (iErr) {
-      // 并发或历史重复 → 回退到"返回已申请"
       if ((iErr as any).code === '23505') {
         const again = await admin
           .from('activity_applications')
@@ -158,7 +244,6 @@ Deno.serve(async (req) => {
       .single();
     if (cErr) return json({ error: cErr.message }, 400);
 
-    // 关联回 application（不阻塞返回）和拉取完整 claim 并行
     const [fullClaim] = await Promise.all([
       fetchFullClaim(admin, claim.short_code),
       admin.from('activity_applications').update({ voucher_claim_id: claim.id }).eq('id', app.id),
@@ -192,12 +277,10 @@ async function ensureClaimForApplication(
 ): Promise<{ short_code: string }> {
   const existingCode = (app as any)?.voucher_claim?.short_code as string | undefined;
   if (app.voucher_claim_id && existingCode) return { short_code: existingCode };
-  // 关联了 claim_id 但 join 没拿到 → 直接按 id 取
   if (app.voucher_claim_id) {
     const { data } = await admin.from('voucher_claims').select('short_code').eq('id', app.voucher_claim_id).maybeSingle();
     if (data?.short_code) return { short_code: data.short_code };
   }
-  // 没绑券 → 补发一张
   const nowIso = new Date().toISOString();
   const { data: claim, error } = await admin
     .from('voucher_claims')
