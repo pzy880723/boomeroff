@@ -257,6 +257,7 @@ export default function Portal() {
             
             {effectiveTab === 'notifications' && can('role.manage') && <NotificationManager />}
             {effectiveTab === 'activity_review' && can('voucher.manage') && <ActivityReviewPanel />}
+            {effectiveTab === 'xhs_risk' && can('voucher.manage') && <XhsRiskPanel />}
             {effectiveTab === 'sms_test' && can('settings.ai') && <SmsTestPanel />}
             {effectiveTab === 'backup' && can('settings.ai') && <BackupPanel />}
           </Card>
