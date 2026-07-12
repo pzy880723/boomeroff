@@ -102,6 +102,42 @@ Deno.serve(async (req) => {
       job.status = nextStatus;
     }
 
+    // 所有镜头拍完 & 还没生成配音/文案 → 后台并发触发,不阻塞前端轮询
+    const jobMeta = (job.meta as any) || {};
+    if (nextStatus === 'ready_to_stitch') {
+      const needVoice = !jobMeta.voiceover?.generated_at;
+      const needCopy = !jobMeta.publish_copy?.generated_at;
+      const fnBase = `${SUPABASE_URL}/functions/v1`;
+      const headers = { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` };
+      const tasks: Promise<unknown>[] = [];
+      if (needVoice) {
+        tasks.push(fetch(`${fnBase}/director-generate-voiceover`, {
+          method: "POST", headers, body: JSON.stringify({ job_id: jobId }),
+        }).catch((e) => console.warn("[poll-job] voiceover fire-and-forget", e)));
+      }
+      if (needCopy) {
+        tasks.push(fetch(`${fnBase}/director-generate-publish-copy`, {
+          method: "POST", headers, body: JSON.stringify({ job_id: jobId }),
+        }).catch((e) => console.warn("[poll-job] publish-copy fire-and-forget", e)));
+      }
+      // @ts-ignore EdgeRuntime.waitUntil for background tasks
+      if (tasks.length && typeof (globalThis as any).EdgeRuntime?.waitUntil === "function") {
+        (globalThis as any).EdgeRuntime.waitUntil(Promise.all(tasks));
+      }
+      // 若管理员开启了 Worker 合成模式且还没入队,把 job 推到合成队列
+      if (job.compose_status === 'idle') {
+        const { data: setting } = await admin.from("app_settings").select("value").eq("key", "compose_mode").maybeSingle();
+        const mode = (setting?.value as any)?.mode || (setting?.value as any) || 'client';
+        if (mode === 'worker') {
+          await admin.from("video_generation_jobs").update({
+            status: 'composing', compose_status: 'queued',
+          }).eq("id", jobId).eq("compose_status", "idle");
+          job.status = 'composing';
+          job.compose_status = 'queued';
+        }
+      }
+    }
+
     return json({
       ok: true,
       job: {
@@ -109,6 +145,8 @@ Deno.serve(async (req) => {
         character_json: job.character_json, script_json: job.script_json,
         final_video_url: job.final_video_url, cover_url: job.cover_url,
         error_message: job.error_message, meta: job.meta,
+        compose_status: job.compose_status, compose_error: job.compose_error,
+        compose_heartbeat_at: job.compose_heartbeat_at,
       },
       shots: shotList.map((s: any) => ({
         id: s.id, shot_index: s.shot_index, duration: Number(s.duration),
