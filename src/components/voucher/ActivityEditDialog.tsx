@@ -164,6 +164,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
       requires_review: false,
       starts_at: startsDate.toISOString(),
       ends_at: endsDate.toISOString(),
+      min_followers: Math.max(0, Math.floor(Number(minFollowers) || 0)),
     };
     let error;
     if (isEdit && activityId) {
