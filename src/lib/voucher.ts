@@ -9,13 +9,14 @@ export const CLAIM_STATUS_LABEL: Record<string, string> = {
 
 export const CLAIM_STATUS_VARIANT: Record<
   string,
-  'default' | 'secondary' | 'destructive' | 'outline'
+  'default' | 'secondary' | 'destructive' | 'outline' | 'success'
 > = {
   claimed: 'default',
-  redeemed: 'secondary',
+  redeemed: 'success',
   expired: 'outline',
   void: 'destructive',
 };
+
 
 export const APPLICATION_STATUS_LABEL: Record<string, string> = {
   pending: '待审核',

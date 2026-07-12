@@ -163,8 +163,9 @@ export default function VoucherRedeem() {
                 );
               }
               if (claim.status === 'redeemed') {
-                return <Card className="p-4 text-center bg-muted/30 text-sm text-muted-foreground">该券已核销，无需重复操作</Card>;
+                return <Card className="p-4 text-center bg-success/10 text-sm text-success">该券已核销，无需重复操作</Card>;
               }
+
               if (claim.status === 'expired' || claim.status === 'void') {
                 return (
                   <Card className="p-4 text-center text-sm text-destructive bg-destructive/5">
