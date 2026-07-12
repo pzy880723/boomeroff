@@ -343,39 +343,72 @@ export default function ActivityDetail() {
                   </Badge>
                 </div>
 
-                {/* 表单字段:上下结构,每行整宽 */}
+                {/* 表单字段:上下结构,每行整宽;主页名称+主页截图放同一行 */}
                 {activity.form_fields.length > 0 && (() => {
-                  const rows = activity.form_fields
+                  const allRows = activity.form_fields
                     .map((f) => {
                       const v = app.form_data?.[f.key];
                       if (v === null || v === undefined || v === '') return null;
                       return { f, v };
                     })
                     .filter(Boolean) as Array<{ f: typeof activity.form_fields[number]; v: any }>;
-                  if (rows.length === 0) return null;
+                  if (allRows.length === 0) return null;
+
+                  const isNameField = (f: typeof activity.form_fields[number]) =>
+                    f.role === 'xhs_profile_url' || f.label.includes('主页名称') || f.label.includes('账号名称');
+                  const isScreenshotField = (f: typeof activity.form_fields[number]) =>
+                    f.role === 'profile_screenshot' || f.label.includes('主页截图') || f.label.includes('截图');
+
+                  const nameRow = allRows.find(({ f }) => isNameField(f));
+                  const screenshotRow = allRows.find(({ f }) => isScreenshotField(f));
+                  const paired = nameRow && screenshotRow;
+                  const otherRows = allRows.filter(({ f }) =>
+                    f.key !== nameRow?.f.key && f.key !== screenshotRow?.f.key
+                  );
+
+                  const renderField = ({ f, v }: { f: typeof activity.form_fields[number]; v: any }) => {
+                    if (f.type === 'image' && typeof v === 'string') {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => openImage(String(v))}
+                          className="self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-primary/40 text-primary text-[11px] hover:bg-primary/5"
+                        >
+                          <ImageIcon className="w-3 h-3" />查看截图
+                        </button>
+                      );
+                    }
+                    if (f.type === 'url' && typeof v === 'string') {
+                      return (
+                        <a
+                          href={String(v)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-primary underline break-all"
+                        >{String(v)}</a>
+                      );
+                    }
+                    return <span className="text-xs break-all">{String(v)}</span>;
+                  };
+
                   return (
                     <div className="border-t pt-2 grid grid-cols-1 gap-2">
-                      {rows.map(({ f, v }) => (
+                      {paired && (
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                            <span className="text-[11px] text-muted-foreground">{nameRow.f.label}</span>
+                            {renderField(nameRow)}
+                          </div>
+                          <div className="flex flex-col gap-0.5 items-start">
+                            <span className="text-[11px] text-muted-foreground">{screenshotRow.f.label}</span>
+                            {renderField(screenshotRow)}
+                          </div>
+                        </div>
+                      )}
+                      {otherRows.map(({ f, v }) => (
                         <div key={f.key} className="flex flex-col gap-0.5">
                           <span className="text-[11px] text-muted-foreground">{f.label}</span>
-                          {f.type === 'image' && typeof v === 'string' ? (
-                            <button
-                              type="button"
-                              onClick={() => openImage(String(v))}
-                              className="self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-primary/40 text-primary text-[11px] hover:bg-primary/5"
-                            >
-                              <ImageIcon className="w-3 h-3" />查看截图
-                            </button>
-                          ) : f.type === 'url' && typeof v === 'string' ? (
-                            <a
-                              href={String(v)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs text-primary underline break-all"
-                            >{String(v)}</a>
-                          ) : (
-                            <span className="text-xs break-all">{String(v)}</span>
-                          )}
+                          {renderField({ f, v })}
                         </div>
                       ))}
                     </div>
