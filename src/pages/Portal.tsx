@@ -20,6 +20,7 @@ import { MarketingPresetsPanel } from '@/components/admin/MarketingPresetsPanel'
 import { BrandKbManager } from '@/components/admin/BrandKbManager';
 import { BackupPanel } from '@/components/admin/BackupPanel';
 import { AuditLogTable } from '@/components/admin/AuditLogTable';
+import { XhsRiskPanel } from '@/components/admin/XhsRiskPanel';
 
 
 
