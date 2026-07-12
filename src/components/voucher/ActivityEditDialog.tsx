@@ -235,6 +235,21 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
           </div>
 
           <div className="space-y-1.5">
+            <Label className="text-xs">最低粉丝数门槛（小红书主页截图 AI 识别，0 = 不校验）</Label>
+            <Input
+              type="number"
+              min={0}
+              step={100}
+              value={minFollowers}
+              onChange={(e) => setMinFollowers(Number(e.target.value) || 0)}
+              className="h-9 text-xs"
+              placeholder="1000"
+            />
+            <p className="text-[10px] text-muted-foreground">开启后，请把某个『图片』字段标记为"主页截图"、某个『网址/文本』字段标记为"小红书主页链接"。</p>
+          </div>
+
+
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label className="text-xs">填写内容</Label>
               <Button size="sm" variant="outline" className="h-7" onClick={addField}>
