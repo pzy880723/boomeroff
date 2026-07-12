@@ -54,6 +54,7 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [active, setActive] = useState(true);
+  const [minFollowers, setMinFollowers] = useState<number>(1000);
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [polishing, setPolishing] = useState(false);
