@@ -6,6 +6,7 @@ export type DirectorJobStatus =
   | 'queued'
   | 'character'
   | 'shooting'
+  | 'generating_voice'
   | 'ready_to_stitch'
   | 'composing'
   | 'done'

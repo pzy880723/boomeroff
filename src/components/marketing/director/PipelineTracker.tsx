@@ -41,13 +41,17 @@ function computeStepStatuses(
       s[3] = 'done';
       s[4] = 'running';
       break;
-    case 'ready_to_stitch':
+    case 'generating_voice':
       s[3] = 'done'; s[4] = 'done';
       s[5] = 'running';
       break;
+    case 'ready_to_stitch':
+      s[3] = 'done'; s[4] = 'done'; s[5] = 'done';
+      s[6] = 'running';
+      break;
     case 'composing':
-      s[3] = 'done'; s[4] = 'done';
-      s[5] = 'running';
+      s[3] = 'done'; s[4] = 'done'; s[5] = 'done';
+      s[6] = 'running';
       break;
     case 'done':
       for (let i = 3; i < s.length; i++) s[i] = 'done';
