@@ -178,13 +178,12 @@ export default function ActivityDetail() {
     if (!s) return '已领取';
     return CLAIM_STATUS_LABEL[s] || s;
   };
-  const claimStatusVariant = (app: AppWithClaim): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' => {
+  const claimStatusVariant = (app: AppWithClaim): 'default' | 'secondary' | 'destructive' | 'outline' => {
     const s = app.voucher_claim?.status;
-    if (s === 'redeemed') return 'success';
+    if (s === 'redeemed') return 'secondary';
     if (s === 'expired' || s === 'void') return 'destructive';
     return 'default';
   };
-
 
   const timeInfo = getActivityTimeInfo(activity);
 

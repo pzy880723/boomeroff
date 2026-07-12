@@ -173,11 +173,10 @@ export default function PublicClaim() {
         )}
 
         {claim.status === 'redeemed' && (
-          <Card className="p-4 text-center text-sm bg-success/10 rounded-2xl text-success">
+          <Card className="p-4 text-center text-sm bg-muted/30 rounded-2xl text-muted-foreground">
             该券已核销，感谢光临
           </Card>
         )}
-
         {(claim.status === 'expired' || (claim.status === 'claimed' && expiredNow)) && (
           <Card className="p-4 text-center text-sm text-destructive bg-destructive/5 rounded-2xl">
             该券已过期，无法核销
