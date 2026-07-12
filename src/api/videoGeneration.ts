@@ -6,8 +6,10 @@ export type DirectorJobStatus =
   | 'queued'
   | 'character'
   | 'shooting'
+  | 'generating_voice'
   | 'ready_to_stitch'
   | 'composing'
+  | 'uploading'
   | 'done'
   | 'failed';
 
@@ -46,6 +48,10 @@ export interface DirectorJob {
   cover_url?: string | null;
   error_message?: string | null;
   meta?: any;
+  compose_status?: 'idle' | 'queued' | 'claimed' | 'running' | 'done' | 'failed' | string | null;
+  compose_error?: string | null;
+  compose_heartbeat_at?: string | null;
+  compose_worker_id?: string | null;
 }
 
 export interface DirectorPollResult {

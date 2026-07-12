@@ -1,4 +1,4 @@
-// 7 步流水线进度条
+// Director 标准视频流水线进度条
 import { Check, Loader2, Circle, X } from 'lucide-react';
 import type { DirectorJobStatus } from '@/api/videoGeneration';
 
@@ -12,7 +12,8 @@ const STEPS: Step[] = [
   { key: 'storyboard', label: '拆分镜' },
   { key: 'character',  label: '创建角色' },
   { key: 'shooting',   label: '生成镜头' },
-  { key: 'composing',  label: '合成字幕与配音' },
+  { key: 'voice',      label: '配音字幕' },
+  { key: 'composing',  label: '合成成片' },
   { key: 'saving',     label: '保存成片' },
 ];
 
@@ -23,7 +24,7 @@ function computeStepStatuses(
   progress?: { done: number; total: number; failed: number } | null,
 ): StepStatus[] {
   // create-job 一进来就把 step1-3 落库了
-  const s: StepStatus[] = ['done', 'done', 'done', 'pending', 'pending', 'pending', 'pending'];
+  const s: StepStatus[] = ['done', 'done', 'done', 'pending', 'pending', 'pending', 'pending', 'pending'];
   if (jobStatus === 'failed') {
     // 找出正在跑的那步标红
     const idx = jobStatus === 'failed' ? Math.max(3, (progress?.done ?? 0) > 0 ? 4 : 3) : 3;
@@ -43,11 +44,20 @@ function computeStepStatuses(
       break;
     case 'ready_to_stitch':
       s[3] = 'done'; s[4] = 'done';
+      s[5] = 'done';
+      s[6] = 'running';
+      break;
+    case 'generating_voice':
+      s[3] = 'done'; s[4] = 'done';
       s[5] = 'running';
       break;
     case 'composing':
-      s[3] = 'done'; s[4] = 'done';
-      s[5] = 'running';
+      s[3] = 'done'; s[4] = 'done'; s[5] = 'done';
+      s[6] = 'running';
+      break;
+    case 'uploading':
+      s[3] = 'done'; s[4] = 'done'; s[5] = 'done'; s[6] = 'done';
+      s[7] = 'running';
       break;
     case 'done':
       for (let i = 3; i < s.length; i++) s[i] = 'done';

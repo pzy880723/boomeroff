@@ -102,38 +102,73 @@ Deno.serve(async (req) => {
       job.status = nextStatus;
     }
 
-    // 所有镜头拍完 & 还没生成配音/文案 → 后台并发触发,不阻塞前端轮询
-    const jobMeta = (job.meta as any) || {};
-    if (nextStatus === 'ready_to_stitch') {
-      const needVoice = !jobMeta.voiceover?.generated_at;
-      const needCopy = !jobMeta.publish_copy?.generated_at;
+    // 所有镜头拍完后，必须先补齐“标准视频”所需资产：
+    // 1) TTS 配音 + 字幕时间轴；2) 发布文案/hashtag/封面标题。
+    // 只有这些准备好后，才允许进入 client/worker 合成，避免 Worker 领取半成品。
+    let responseMeta = (job.meta as any) || {};
+    const allShotsReady = done === total && total > 0 && !failed;
+    if (allShotsReady && (nextStatus === 'ready_to_stitch' || job.status === 'generating_voice')) {
+      const needVoice = !responseMeta.voiceover?.generated_at;
+      const needCopy = !responseMeta.publish_copy?.generated_at;
       const fnBase = `${SUPABASE_URL}/functions/v1`;
       const headers = { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` };
       const tasks: Promise<unknown>[] = [];
-      if (needVoice) {
+      const precompose = responseMeta.precompose || {};
+      const nowMs = Date.now();
+      const isFresh = (iso?: string) => iso && nowMs - new Date(iso).getTime() < 90_000;
+      const nextPrecompose = { ...precompose };
+      if (needVoice && !isFresh(precompose.voiceover_requested_at)) {
+        nextPrecompose.voiceover_requested_at = new Date().toISOString();
         tasks.push(fetch(`${fnBase}/director-generate-voiceover`, {
           method: "POST", headers, body: JSON.stringify({ job_id: jobId }),
         }).catch((e) => console.warn("[poll-job] voiceover fire-and-forget", e)));
       }
-      if (needCopy) {
+      if (needCopy && !isFresh(precompose.publish_copy_requested_at)) {
+        nextPrecompose.publish_copy_requested_at = new Date().toISOString();
         tasks.push(fetch(`${fnBase}/director-generate-publish-copy`, {
           method: "POST", headers, body: JSON.stringify({ job_id: jobId }),
         }).catch((e) => console.warn("[poll-job] publish-copy fire-and-forget", e)));
       }
-      // @ts-ignore EdgeRuntime.waitUntil for background tasks
-      if (tasks.length && typeof (globalThis as any).EdgeRuntime?.waitUntil === "function") {
-        (globalThis as any).EdgeRuntime.waitUntil(Promise.all(tasks));
-      }
-      // 若管理员开启了 Worker 合成模式且还没入队,把 job 推到合成队列
-      if (job.compose_status === 'idle') {
+
+      if (needVoice || needCopy) {
+        responseMeta = {
+          ...responseMeta,
+          precompose: {
+            ...nextPrecompose,
+            waiting_for: [
+              ...(needVoice ? ["voiceover"] : []),
+              ...(needCopy ? ["publish_copy"] : []),
+            ],
+          },
+        };
+        await admin.from("video_generation_jobs").update({
+          status: "generating_voice",
+          meta: responseMeta,
+        }).eq("id", jobId);
+        job.status = "generating_voice";
+        job.meta = responseMeta;
+
+        // @ts-ignore EdgeRuntime.waitUntil for background tasks
+        if (tasks.length && typeof (globalThis as any).EdgeRuntime?.waitUntil === "function") {
+          (globalThis as any).EdgeRuntime.waitUntil(Promise.all(tasks));
+        } else if (tasks.length) {
+          void Promise.all(tasks);
+        }
+      } else if (job.compose_status === 'idle') {
+        // 若管理员开启了 Worker 合成模式且还没入队，把 job 推到合成队列。
+        // 否则保持 ready_to_stitch，让前端客户端 MVP 合成接管。
         const { data: setting } = await admin.from("app_settings").select("value").eq("key", "compose_mode").maybeSingle();
         const mode = (setting?.value as any)?.mode || (setting?.value as any) || 'client';
         if (mode === 'worker') {
           await admin.from("video_generation_jobs").update({
-            status: 'composing', compose_status: 'queued',
+            status: 'composing',
+            compose_status: 'queued',
           }).eq("id", jobId).eq("compose_status", "idle");
           job.status = 'composing';
           job.compose_status = 'queued';
+        } else if (job.status !== 'ready_to_stitch') {
+          await admin.from("video_generation_jobs").update({ status: 'ready_to_stitch' }).eq("id", jobId);
+          job.status = 'ready_to_stitch';
         }
       }
     }
@@ -147,6 +182,7 @@ Deno.serve(async (req) => {
         error_message: job.error_message, meta: job.meta,
         compose_status: job.compose_status, compose_error: job.compose_error,
         compose_heartbeat_at: job.compose_heartbeat_at,
+        compose_worker_id: job.compose_worker_id,
       },
       shots: shotList.map((s: any) => ({
         id: s.id, shot_index: s.shot_index, duration: Number(s.duration),
