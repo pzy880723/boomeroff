@@ -289,7 +289,22 @@ export function ActivityEditDialog({ open, onOpenChange, userId, activityId, onS
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </Button>
                   </div>
-                  <div className="flex items-center justify-end">
+                  <div className="flex items-center justify-between gap-2">
+                    <Select
+                      value={f.role || 'none'}
+                      onValueChange={(v) => updateField(i, { role: v === 'none' ? undefined : (v as ActivityField['role']) })}
+                    >
+                      <SelectTrigger className="h-7 w-40 text-[11px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">普通字段</SelectItem>
+                        {f.type === 'image' && (
+                          <SelectItem value="profile_screenshot">小红书主页截图（用于识粉丝数）</SelectItem>
+                        )}
+                        {(f.type === 'url' || f.type === 'text') && (
+                          <SelectItem value="xhs_profile_url">小红书主页链接</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                     <label className="flex items-center gap-1.5 text-[11px]">
                       <Switch checked={!!f.required} onCheckedChange={(v) => updateField(i, { required: v })} />
                       必填
