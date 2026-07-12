@@ -24,7 +24,9 @@ export type Database = {
           form_fields: Json
           id: string
           max_applications: number | null
+          min_followers: number
           name: string
+          platform: string
           poster_url: string | null
           requires_review: boolean
           share_token: string
@@ -42,7 +44,9 @@ export type Database = {
           form_fields?: Json
           id?: string
           max_applications?: number | null
+          min_followers?: number
           name: string
+          platform?: string
           poster_url?: string | null
           requires_review?: boolean
           share_token?: string
@@ -60,7 +64,9 @@ export type Database = {
           form_fields?: Json
           id?: string
           max_applications?: number | null
+          min_followers?: number
           name?: string
+          platform?: string
           poster_url?: string | null
           requires_review?: boolean
           share_token?: string
@@ -101,6 +107,12 @@ export type Database = {
           status: string
           updated_at: string
           voucher_claim_id: string | null
+          xhs_note_id: string | null
+          xhs_note_url: string | null
+          xhs_verify_attempts: number
+          xhs_verify_last_at: string | null
+          xhs_verify_result: Json | null
+          xhs_verify_status: string
         }
         Insert: {
           activity_id: string
@@ -123,6 +135,12 @@ export type Database = {
           status?: string
           updated_at?: string
           voucher_claim_id?: string | null
+          xhs_note_id?: string | null
+          xhs_note_url?: string | null
+          xhs_verify_attempts?: number
+          xhs_verify_last_at?: string | null
+          xhs_verify_result?: Json | null
+          xhs_verify_status?: string
         }
         Update: {
           activity_id?: string
@@ -145,6 +163,12 @@ export type Database = {
           status?: string
           updated_at?: string
           voucher_claim_id?: string | null
+          xhs_note_id?: string | null
+          xhs_note_url?: string | null
+          xhs_verify_attempts?: number
+          xhs_verify_last_at?: string | null
+          xhs_verify_result?: Json | null
+          xhs_verify_status?: string
         }
         Relationships: [
           {

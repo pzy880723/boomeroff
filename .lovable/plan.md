@@ -1,75 +1,106 @@
 
-# 营销中心 AIGC 升级方案
+# 活动风控升级（精简版）
 
-目前 Director Pipeline 主链路已跑通（create-job → run-pipeline → poll-job → retry-shot → complete-job，shots 有完整字段、局部重试、进度七步）。这轮按文档补齐剩下的三块，让"一句话生成 15 秒视频"更贴近小云雀那种可交付水平。
+只保留两件事：**领券前粉丝数识图** + **领券后小红书发文核查**。不做黑名单、逾期惩罚、提醒短信、pg_cron。
 
-## A. TTS 配音 + 字幕时间轴
+## 一、活动配置
 
-- 新增 edge function `director-generate-voiceover`
-  - 输入：`job_id`
-  - 读取 `video_generation_shots.subtitle`（没有就退回 `dialogue`），逐 shot 调 Lovable AI TTS `openai/gpt-4o-mini-tts`（`response_format: mp3`，非流式，一次拿完整音频），上传到 storage bucket `video-assets/voiceover/{job_id}/{shot_index}.mp3`
-  - 写回 `shots.meta.voiceover_url` + `shots.meta.voiceover_duration_s`
-  - 汇总生成字幕时间轴 `subtitles: [{shot_index, text, start_s, end_s}]`，写到 `video_generation_jobs.meta.subtitles` 和 `meta.voiceover`
-- `director-run-pipeline` 在所有 shot `succeeded` 之后、`status='composing'` 之前调用它；期间 job.status = `generating_voice`（新增字符串状态，无需改 enum）
-- 密钥：使用现有 `LOVABLE_API_KEY`（用户回复"已经在密钥里"指的是 TTS 走 Lovable Gateway，无需再要）
-- 语音选择：从 `character_json.voice` 或 job.meta.persona.pace 推导 voice（默认 `alloy`）
-- 失败降级：TTS 失败不阻塞整体，仅标记 `job.meta.voiceover.error`；字幕时间轴退回按字数估算
+`activities` 表新增：
+- `min_followers int default 1000` — 0 表示不校验
+- `platform text default 'xiaohongshu'`
 
-## B. 自动生成发布文案 / hashtag / 封面标题
+`ActivityEditor` 加"最低粉丝数"输入框，默认 1000。
 
-- 新增 edge function `director-generate-publish-copy`
-  - 输入：`job_id`
-  - 读 `job.script_json` + `job.user_prompt` + 门店/品牌信息（shop 名、city、tags）
-  - 调 Lovable AI `google/gemini-2.5-flash`，结构化输出：
-    ```json
-    {
-      "caption": "小红书风格 100-140 字",
-      "douyin_caption": "抖音风格 60 字内",
-      "hashtags": ["#..."],
-      "cover_title": "封面大字 6-10 字",
-      "cover_subtitle": "副标题 12 字内"
-    }
-    ```
-  - 写到 `video_generation_jobs.meta.publish_copy`
-- `director-complete-job` 落 `marketing_assets` 时，把 `caption/hashtags/cover_title` 写进 `marketing_assets.meta.publish_copy`，供后续小红书/抖音发布任务直接取用
-- 前端 `DirectorProgress` 完成态展示"文案已生成，一键复制/去发布"卡片
+表单字段（`form_fields`）新增一个字段角色：某个 `type='image'` 字段可勾选 `role='profile_screenshot'`（小红书主页截图），某个 `type='text'` 字段可勾选 `role='xhs_profile_url'`（小红书主页链接）。识图和后续核查都用这两个 role 定位字段，不用硬编码 key。
 
-## C. 外部 Worker 合成接口
+## 二、领券前：粉丝数识图校验
 
-用于把 FFmpeg 拼接、字幕烧录、TTS 混音、BGM、Logo 合成交给腾讯云 Worker，Lovable 只做编排。
+改造 `activity-apply`。在校验完 OTP、处理完 image 字段的 base64 上传之后，插入 application 之前：
 
-- DB
-  - `video_generation_jobs` 新增 `compose_status text default 'idle'`（idle / queued / claimed / running / done / failed）、`compose_worker_id text`、`compose_claimed_at timestamptz`、`compose_heartbeat_at timestamptz`
-  - Pipeline 走完 TTS 后：`status='composing'`, `compose_status='queued'`
-- 新增三个 edge function（`verify_jwt=false`，用 header `X-Worker-Token` 校验，密钥 `COMPOSE_WORKER_TOKEN` 走 `generate_secret`）
-  1. `compose-claim-next`：Worker 轮询拉一个 `compose_status='queued'` 的 job，原子更新为 `claimed`，返回 job + shots + voiceover_urls + subtitles + character
-  2. `compose-heartbeat`：更新 `compose_heartbeat_at`，防止僵死
-  3. `compose-callback`：Worker 上传完 mp4 后回写 `final_video_url / cover_url / duration_seconds`，标记 `compose_status='done'`，触发 `director-complete-job` 入素材库
-- 超时补偿：`compose-claim-next` 会把 heartbeat > 5min 的 claimed 任务回退到 queued
-- 兼容现有 MVP：`app_settings.compose_mode = 'client' | 'worker'`（默认 `client` 走现在客户端 FFmpeg 拼片；管理员在 `/portal` 切换到 `worker` 时才走上面新链路）
+1. 若 `activity.min_followers > 0`，在 `form_fields` 找 `role='profile_screenshot'` 的字段，取到刚上传的 storage path；找不到直接跳过（后台没配置就不校验）。
+2. 用 service role 从 `voucher-screenshots` 桶 download 该文件 → 转 base64。
+3. 调 Lovable AI `google/gemini-2.5-flash`（vision），system prompt 明确"只输出 JSON"：
+   ```
+   {"followers": number|null, "note": "ok"|"not_xiaohongshu"|"unreadable"}
+   ```
+   粉丝数支持 "1234" / "1.2万" / "1234w"，统一转成整数。
+4. 结果写入 `activity_applications.form_data.__profile_check = { followers, note, model, checked_at }`（即使通过也留档，方便后台复查）。
+5. 判定：
+   - `note != 'ok'` → 400 `{ error: '未能识别为小红书主页截图，请重传' }`
+   - `followers < min_followers` → 400 `{ error: '识别到粉丝数 X，未达 1000 门槛，暂不能领取' }`
+6. 通过 → 走原逻辑发券。
 
-## 前端改动
+前端 `PublicActivityApply` 捕获错误信息，把识别到的粉丝数展示给用户。
 
-- `DirectorProgress.tsx` 七步展示新增两步：`generating_voice`、`composing`（Worker 模式时展示 heartbeat 时间）
-- `VideoJobDetailPanel` 完成态新增：可复制的 caption / hashtags / cover_title
-- `/portal` "AI 视频" tab 加合成模式开关
+## 三、领券后：小红书发文核查（外部 Worker + 用户登录 Cookie）
 
-## 技术细节
+关于"搜索肯定要登录"这一点，方案是：**由店主/管理员在后台配置一个自用的小红书账号 Cookie，Worker 用它去带登录态抓取用户主页**。分两层：
 
-- 状态字符串（不动 enum，用 text）：
-  `queued → planning → storyboarding → character_created → generating_shots → retrying_shots → generating_voice → composing → uploading → completed / failed`
-- 密钥新增：`COMPOSE_WORKER_TOKEN`（generate_secret，用于给 Codex 那边配到 Worker env）
-- 密钥沿用：`LOVABLE_API_KEY`（TTS + 文案）
-- Storage bucket：如果 `video-assets` 不存在则建，`voiceover/{job_id}/*.mp3` public
-- 施工顺序（同一轮内完成）：
-  1. migration：加 compose_* 字段、meta.subtitles/voiceover/publish_copy 由 JSON 无需 schema
-  2. 生成 COMPOSE_WORKER_TOKEN
-  3. 3 个新 edge function：generate-voiceover / generate-publish-copy / compose-*
-  4. `director-run-pipeline` 串起 voiceover + publish-copy + compose 分支
-  5. `director-complete-job` 消费 publish_copy 写入 marketing_assets
-  6. 前端 DirectorProgress + /portal 开关
+### 3.1 后台配置
 
-## 交付后你要做的事
+在 `app_settings` 加两条 key：
+- `xhs_worker_cookie` — 小红书 web 版 cookie 字符串（`web_session=xxx; a1=xxx; ...`），管理员登录小红书 web 版后从浏览器 DevTools 复制粘贴到 `/portal → 活动风控` 新 tab。
+- `xhs_worker_user_agent` — 配对的 UA（防止风控），有默认值。
 
-- 把 `COMPOSE_WORKER_TOKEN` 和 compose-claim-next / compose-callback 的 URL 交给 Codex，那边照文档实现 Worker
-- 在 `/portal` 把合成模式切到 `worker` 才会真正走外部合成，切换前一切按现在的客户端 MVP 跑
+Cookie 走 `app_settings`（仅 admin 可读写），不落前端。Worker 通过 `xhs-worker-config` edge function 拉取（`X-Worker-Token` 鉴权）。
+
+### 3.2 用户提交发文
+
+领券成功后的 `activity-feedback` 反馈页新增：
+- 输入小红书笔记链接（`https://www.xiaohongshu.com/explore/xxx` 或 `xhslink.com/xxx` 短链）
+- 现有截图上传保留
+
+提交时写入 `activity_applications` 新字段：
+- `xhs_note_url text`
+- `xhs_note_id text` — 从 URL 提取的笔记 ID
+- `xhs_verify_status text default 'pending'` — pending / running / verified / not_found / mismatch / failed
+- `xhs_verify_last_at timestamptz`
+- `xhs_verify_attempts int default 0`
+- `xhs_verify_result jsonb` — 存 Worker 回写的详情（笔记标题、作者主页 ID、发布时间、匹配到的关键词）
+
+### 3.3 Worker 核查链路（沿用 compose Worker 模式）
+
+3 个新 edge function，`verify_jwt=false`，`X-Worker-Token: $XHS_WORKER_TOKEN`（`generate_secret`）：
+
+1. **`xhs-verify-claim-next`**
+   - 拉取待核查任务：`xhs_verify_status IN ('pending','failed')` 且 `xhs_verify_attempts < 5` 且 `xhs_note_url IS NOT NULL`。
+   - 原子更新为 `running`，`xhs_verify_last_at=now()`，attempts+1。
+   - 同时返回 `xhs_worker_cookie` + `xhs_worker_user_agent` + `xhs_profile_url`（申请时通过 `role='xhs_profile_url'` 字段填的）+ 活动关键词（活动名 / 门店名 / 券名，用于命中判断）。
+   - 无任务返回 `{ empty: true }`。
+
+2. **`xhs-verify-heartbeat`** — 同 compose，更新 `xhs_verify_last_at`。
+
+3. **`xhs-verify-callback`** — Worker 抓完回写：
+   - `{ verified: true, note_title, author_profile_url, published_at, matched_keywords }` → `xhs_verify_status='verified'`
+   - `{ verified: false, reason: 'author_mismatch'|'not_found'|'no_keyword'|... }` → 对应状态
+   - 写入 `xhs_verify_result`
+
+### 3.4 Worker 侧的抓取逻辑（Codex 那边实现，本项目不写）
+
+用管理员 cookie + UA 请求：
+1. 拿 `xhs_note_url`：抓 `https://www.xiaohongshu.com/explore/{note_id}`（或短链跳转后）→ 解析笔记详情（标题/正文/作者主页 URL/发布时间）。
+2. 校验作者主页 URL == 用户提交的 `xhs_profile_url`（防止贴别人的爆款）。
+3. 校验正文/标题包含 `matched_keywords` 中任一（防止提交无关笔记）。
+4. 全部通过 → callback verified。
+
+Cookie 失效时（Worker 收到 XHS 登录跳转）→ callback `failed`，管理端在 `/portal` 看到"Cookie 已失效"提示，重新粘贴即可。
+
+## 四、管理端
+
+`/portal` 活动详情页 application 列表加两列：
+- 粉丝数（`form_data.__profile_check.followers`）
+- 小红书核查状态（`xhs_verify_status` + 点开看笔记链接和匹配结果）
+
+新增 `/portal → 活动风控` tab：填写 XHS Cookie / UA、显示"Cookie 最后一次生效时间"。
+
+## 五、需要用户/系统各做什么
+
+- **系统自动**：`generate_secret` 生成 `XHS_WORKER_TOKEN`；migration；edge functions；前端。
+- **只需用户做一次**：在小红书 web 版登录一个自用账号，复制 cookie 粘到 `/portal → 活动风控`。除此之外无需再动。
+
+## 技术细节（可跳过）
+
+- Gemini vision 调用：`POST https://ai.gateway.lovable.dev/v1/chat/completions`，`response_format: { type: 'json_object' }`，`messages[].content` 用 `image_url` 块传 base64 data URL。
+- Storage download → base64：`admin.storage.from('voucher-screenshots').download(path)` → `arrayBuffer` → `btoa(String.fromCharCode(...new Uint8Array(...)))`（分块避免栈溢出）。
+- XHS 笔记 ID 提取：`/explore/([0-9a-f]{24})` + 短链 `xhslink.com/*` 先 HEAD 跟随重定向拿真实 URL。
+- 施工顺序：migration（activity/application 新字段 + app_settings 两条 key 占位）→ `activity-apply` 加识图 → 3 个 xhs-verify edge function → `xhs-worker-config` 拉 cookie 的 function → 前端 `ActivityEditor` / `PublicActivityApply` / `ActivityFeedbackView` / `/portal` 风控 tab。
