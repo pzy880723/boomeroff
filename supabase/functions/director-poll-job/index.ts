@@ -82,61 +82,90 @@ Deno.serve(async (req) => {
       }));
     }
 
-    // 汇总 job status
+    // 汇总 job status —— 严格分两阶段:
+    //   镜头全部 succeeded → generating_voice (仅触发配音+文案,不入合成队列)
+    //   voiceover.generated_at && publish_copy.generated_at → ready_to_stitch → (worker模式) composing/queued
     const total = shotList.length;
     const done = shotList.filter((s: any) => s.status === 'succeeded').length;
     const failed = shotList.some((s: any) => s.status === 'failed');
+    const allDone = done === total && total > 0;
+    const allSettled = (done + shotList.filter((s: any) => s.status === 'failed').length) === total;
+
+    let jobMeta = (job.meta as any) || {};
+    const voiceReady = !!jobMeta.voiceover?.generated_at;
+    const copyReady = !!jobMeta.publish_copy?.generated_at;
+    const postReady = voiceReady && copyReady;
+
     let nextStatus = job.status;
     if (job.status === 'shooting' || job.status === 'queued' || job.status === 'character') {
-      if (failed && (done + shotList.filter((s: any) => s.status === 'failed').length === total)) {
+      if (failed && allSettled) {
         nextStatus = 'failed';
-      } else if (done === total && total > 0) {
-        nextStatus = 'ready_to_stitch';
+      } else if (allDone) {
+        // 先进入配音/文案阶段,禁止直接跳到 ready_to_stitch
+        nextStatus = postReady ? 'ready_to_stitch' : 'generating_voice';
       }
+    } else if (job.status === 'generating_voice' && postReady) {
+      nextStatus = 'ready_to_stitch';
     }
+
     if (nextStatus !== job.status) {
       await admin.from("video_generation_jobs").update({
         status: nextStatus,
-        error_message: failed && nextStatus === 'failed' ? (shotList.find((s: any) => s.status === 'failed')?.error_message || '有镜头失败') : null,
+        error_message: failed && nextStatus === 'failed'
+          ? (shotList.find((s: any) => s.status === 'failed')?.error_message || '有镜头失败')
+          : null,
       }).eq("id", jobId);
       job.status = nextStatus;
     }
 
-    // 所有镜头拍完 & 还没生成配音/文案 → 后台并发触发,不阻塞前端轮询
-    const jobMeta = (job.meta as any) || {};
-    if (nextStatus === 'ready_to_stitch') {
-      const needVoice = !jobMeta.voiceover?.generated_at;
-      const needCopy = !jobMeta.publish_copy?.generated_at;
+    // generating_voice 阶段:并发触发 voiceover + publish_copy,直到两者 generated_at 都写入
+    if (job.status === 'generating_voice') {
+      const needVoice = !voiceReady;
+      const needCopy = !copyReady;
       const fnBase = `${SUPABASE_URL}/functions/v1`;
       const headers = { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` };
       const tasks: Promise<unknown>[] = [];
-      if (needVoice) {
+      const inflight = (jobMeta.__inflight ?? {}) as { voice_at?: number; copy_at?: number };
+      const now = Date.now();
+      const STALE_MS = 90_000; // 90s 无回执才允许重触发,避免刷屏
+      if (needVoice && (!inflight.voice_at || now - inflight.voice_at > STALE_MS)) {
+        inflight.voice_at = now;
         tasks.push(fetch(`${fnBase}/director-generate-voiceover`, {
           method: "POST", headers, body: JSON.stringify({ job_id: jobId }),
         }).catch((e) => console.warn("[poll-job] voiceover fire-and-forget", e)));
       }
-      if (needCopy) {
+      if (needCopy && (!inflight.copy_at || now - inflight.copy_at > STALE_MS)) {
+        inflight.copy_at = now;
         tasks.push(fetch(`${fnBase}/director-generate-publish-copy`, {
           method: "POST", headers, body: JSON.stringify({ job_id: jobId }),
         }).catch((e) => console.warn("[poll-job] publish-copy fire-and-forget", e)));
       }
-      // @ts-ignore EdgeRuntime.waitUntil for background tasks
-      if (tasks.length && typeof (globalThis as any).EdgeRuntime?.waitUntil === "function") {
-        (globalThis as any).EdgeRuntime.waitUntil(Promise.all(tasks));
+      if (tasks.length) {
+        jobMeta = { ...jobMeta, __inflight: inflight };
+        await admin.from("video_generation_jobs").update({ meta: jobMeta }).eq("id", jobId);
+        job.meta = jobMeta;
+        // @ts-ignore EdgeRuntime.waitUntil for background tasks
+        if (typeof (globalThis as any).EdgeRuntime?.waitUntil === "function") {
+          (globalThis as any).EdgeRuntime.waitUntil(Promise.all(tasks));
+        }
       }
-      // 若管理员开启了 Worker 合成模式且还没入队,把 job 推到合成队列
-      if (job.compose_status === 'idle') {
-        const { data: setting } = await admin.from("app_settings").select("value").eq("key", "compose_mode").maybeSingle();
-        const mode = (setting?.value as any)?.mode || (setting?.value as any) || 'client';
-        if (mode === 'worker') {
-          await admin.from("video_generation_jobs").update({
-            status: 'composing', compose_status: 'queued',
-          }).eq("id", jobId).eq("compose_status", "idle");
+    }
+
+    // 只有 ready_to_stitch(即配音+文案都已 generated_at) 才允许把 job 推入 Worker 合成队列
+    if (job.status === 'ready_to_stitch' && job.compose_status === 'idle' && postReady) {
+      const { data: setting } = await admin.from("app_settings").select("value").eq("key", "compose_mode").maybeSingle();
+      const mode = (setting?.value as any)?.mode || (setting?.value as any) || 'client';
+      if (mode === 'worker') {
+        const upd = await admin.from("video_generation_jobs").update({
+          status: 'composing', compose_status: 'queued',
+        }).eq("id", jobId).eq("compose_status", "idle").select("id").maybeSingle();
+        if (upd.data) {
           job.status = 'composing';
           job.compose_status = 'queued';
         }
       }
     }
+
 
     return json({
       ok: true,
