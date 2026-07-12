@@ -160,13 +160,24 @@ Deno.serve(async (req) => {
       if (note && note.length > 500) return json({ error: '备注过长' }, 400);
       if (!note) note = null;
 
+      // 若是小红书链接，提取 note_id 并排入核查队列
+      const patch: Record<string, unknown> = {
+        publish_screenshots: screenshots,
+        publish_url,
+        publish_confirm_note: note,
+      };
+      if (publish_url && /xiaohongshu\.com|xhslink\.com/i.test(publish_url)) {
+        const idMatch = publish_url.match(/\/(?:explore|discovery\/item|item)\/([0-9a-zA-Z]{16,})/);
+        patch.xhs_note_url = publish_url;
+        patch.xhs_note_id = idMatch ? idMatch[1] : null;
+        patch.xhs_verify_status = 'pending';
+        patch.xhs_verify_attempts = 0;
+        patch.xhs_verify_result = null;
+      }
+
       const { error: upErr } = await sb
         .from('activity_applications')
-        .update({
-          publish_screenshots: screenshots,
-          publish_url,
-          publish_confirm_note: note,
-        })
+        .update(patch)
         .eq('id', r.app.id);
       if (upErr) return json({ error: upErr.message }, 500);
       return json({ ok: true });
