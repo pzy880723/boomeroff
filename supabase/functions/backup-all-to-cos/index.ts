@@ -462,20 +462,21 @@ async function finalizeManifestAndReconcile(
 async function sendCompletionNotification(admin: ReturnType<typeof createClient>, runId: string, meta: RunMeta, filesCount: number, elapsedMs: number, triggerBy?: string) {
   if (meta.notified) return;
   const failed = meta.failures?.length ?? 0;
-  const success = Math.max(0, filesCount - failed);
-  const rate = filesCount > 0 ? Math.round((success / (success + failed)) * 100) : 100;
+  const success = filesCount;
+  const attempts = success + failed;
+  const rate = attempts > 0 ? Math.round((success / attempts) * 100) : 100;
   const mins = Math.max(1, Math.round(elapsedMs / 60_000));
   const okAll = meta.reconcile?.ok !== false && failed === 0;
   const title = okAll ? `备份成功 ✓ 成功率 ${rate}%` : `备份完成但有失败 ⚠ 成功率 ${rate}%`;
-  const topErrors = (meta.failures ?? []).slice(0, 3).map((f) => `· ${(f.bucket ?? f.table) || ""}${f.path ? "/" + f.path : ""}：${f.error}`).join("\n");
-  const body = [
-    `文件 ${filesCount} · 失败 ${failed} · 耗时约 ${mins} 分钟`,
-    meta.reconcile ? `对账：表 ${meta.reconcile.tables_present}/${meta.reconcile.tables_expected}，文件 ${meta.reconcile.storage_present}/${meta.reconcile.storage_expected}` : "",
-    topErrors ? `失败原因：\n${topErrors}` : "",
-  ].filter(Boolean).join("\n");
+  const line1 = `新增文件 ${filesCount} · 成功 ${success} · 失败 ${failed} · 耗时约 ${mins} 分钟`;
+  const line2 = meta.reconcile
+    ? `总表 ${meta.reconcile.tables_present}/${meta.reconcile.tables_expected} · 总文件 ${meta.reconcile.storage_present}/${meta.reconcile.storage_expected}`
+    : "";
+  const body = [line1, line2].filter(Boolean).join("\n");
   try {
     await admin.from("notifications").insert({
       title, body, type: "backup",
+      category: "admin",
       created_by: triggerBy ?? null,
       active: true,
       expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
