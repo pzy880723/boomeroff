@@ -82,6 +82,7 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     key: 'vouchers', label: '活动审核', icon: Ticket, items: [
       { key: 'activity_review', label: '活动申请审核', icon: BadgeCheck, perm: 'voucher.manage' },
+      { key: 'xhs_risk', label: '小红书发文核查', icon: ShieldCheck, perm: 'voucher.manage' },
     ],
   },
   {
