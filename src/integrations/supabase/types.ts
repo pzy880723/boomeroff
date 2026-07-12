@@ -2873,6 +2873,11 @@ export type Database = {
           aspect_ratio: string
           brief_json: Json | null
           character_json: Json | null
+          compose_claimed_at: string | null
+          compose_error: string | null
+          compose_heartbeat_at: string | null
+          compose_status: string
+          compose_worker_id: string | null
           cover_url: string | null
           created_at: string
           duration: number
@@ -2892,6 +2897,11 @@ export type Database = {
           aspect_ratio?: string
           brief_json?: Json | null
           character_json?: Json | null
+          compose_claimed_at?: string | null
+          compose_error?: string | null
+          compose_heartbeat_at?: string | null
+          compose_status?: string
+          compose_worker_id?: string | null
           cover_url?: string | null
           created_at?: string
           duration?: number
@@ -2911,6 +2921,11 @@ export type Database = {
           aspect_ratio?: string
           brief_json?: Json | null
           character_json?: Json | null
+          compose_claimed_at?: string | null
+          compose_error?: string | null
+          compose_heartbeat_at?: string | null
+          compose_status?: string
+          compose_worker_id?: string | null
           cover_url?: string | null
           created_at?: string
           duration?: number
