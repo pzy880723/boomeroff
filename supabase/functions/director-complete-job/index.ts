@@ -42,7 +42,11 @@ Deno.serve(async (req) => {
     // 落一条 marketing_assets(允许失败,不阻断)
     try {
       const script = job.script_json as any;
-      const title = script?.title || 'BOOMER 惊喜一下 · 探店短片';
+      const publishCopy = (job.meta as any)?.publish_copy || null;
+      const title = publishCopy?.cover_title || script?.title || 'BOOMER 惊喜一下 · 探店短片';
+      const tags = publishCopy?.hashtags?.length
+        ? publishCopy.hashtags.slice(0, 5).map((h: string) => h.replace(/^#/, ''))
+        : ['惊喜一下', '探店', 'BOOMER'];
       await admin.from("marketing_assets").insert({
         user_id: job.user_id,
         shop_id: job.shop_id,
@@ -50,12 +54,14 @@ Deno.serve(async (req) => {
         output_url: finalVideoUrl,
         cover_url: coverUrl || (job.character_json as any)?.reference_image_url || null,
         category: '惊喜一下',
-        tags: ['惊喜一下', '探店', 'BOOMER'],
+        tags,
         meta: {
           summary: title,
           source: 'director',
           director_job_id: jobId,
           duration_s: job.duration,
+          publish_copy: publishCopy,
+          subtitles: (job.meta as any)?.subtitles || null,
         } as any,
       });
     } catch (e) {
