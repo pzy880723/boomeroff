@@ -649,9 +649,10 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
 
 
       <div>
-        <div className="text-[11px] text-muted-foreground mb-2">BOOMER 拟好的脚本 · {clips.length} 个节奏段 · 将原样编译成 15 秒时间轴</div>
+        <div className="text-[11px] text-muted-foreground mb-2">画面切点 · {clips.length} 段 · 口播在整条 15 秒中不停,画面按切点切换</div>
         <div className="space-y-2">
           {withTime.map(({ label, clip, start, dur }, i) => (
+
             <div key={i} className="p-2.5 rounded-lg border bg-card min-w-0 space-y-1">
               <div className="flex items-center justify-between gap-2 min-w-0">
                 <div className="flex items-center gap-1.5 min-w-0">
