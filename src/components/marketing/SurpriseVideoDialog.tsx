@@ -601,15 +601,16 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
       <div className="rounded-xl border border-accent/35 bg-accent/[0.06] px-3.5 py-3 space-y-1.5">
         <div className="flex items-center gap-1.5 text-[11px] font-semibold text-accent">
           <MessageSquare className="w-3.5 h-3.5" />
-          完整口播 · Seedance 将按这段对白生成
+          15 秒连续口播 · 全片一条不停顿的人声
         </div>
         <p className="text-[13px] leading-6 font-medium text-foreground break-words">
-          “{spokenScript}”
+          "{spokenScript}"
         </p>
         <p className="text-[10px] text-muted-foreground">
-          15 秒全程连续说话 · 开场强钩子 · 中段递进种草 · 结尾明确到店
+          共 {spokenCharCount} 字 · 0.2s 开口 · 14.8s 收尾 · 切镜时声音不停,只切画面
         </p>
       </div>
+
 
       {pick.picked.needs_storefront && (
         <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded px-2.5 py-2 leading-snug flex gap-1.5">
