@@ -186,19 +186,27 @@ ${refList}
 输出严格 JSON：
 {
   "title": "<≤14 字的中文标题，一眼看出这条视频拍的是什么，避免『视频/短片』这类无信息词>",
-  "one_shot_prompt": "<${isViralStoreTour ? '必须为空字符串。惊喜一下以 hook/scenes/outro 为唯一脚本来源,服务端会确定性编译 Seedance 时间轴。' : `${isTight15 ? '【15 秒必填】' : '可留空字符串'}120–180 字中文导演稿。`}>",
-  "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "<中文台词,可为空字符串>", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": 2, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
+  "one_shot_prompt": "<${isViralStoreTour ? '必须为空字符串。惊喜一下由服务端根据 continuous_dialogue 和 visual beats 确定性编译 Seedance 提示词。' : `${isTight15 ? '【15 秒必填】' : '可留空字符串'}120–180 字中文导演稿。`}>",${isViralStoreTour ? `
+  "continuous_dialogue": "<全片唯一的连续中文口播,58-62 个汉字,只用中文逗号或顿号连接,不含语气词/客套词/句号/感叹号/省略号>",
+  "visual_beats": [
+    { "start_s": 0,    "end_s": 2.8,  "visual": "<钩子画面>",   "action": "<边×边继续对镜头说>", "motion": "手持推镜", "image_index": 0, "cut_on_keyword": "<对应口播中出现的关键词>" },
+    { "start_s": 2.8,  "end_s": 5.8,  "visual": "<进店发现画面>", "action": "<边×边继续对镜头说>", "motion": "广角横移", "image_index": null, "cut_on_keyword": "<关键词>" },
+    { "start_s": 5.8,  "end_s": 8.8,  "visual": "<细节特写画面>", "action": "<边×边继续对镜头说>", "motion": "俯拍跟随", "image_index": null, "cut_on_keyword": "<关键词>" },
+    { "start_s": 8.8,  "end_s": 11.8, "visual": "<体验互动画面>", "action": "<边×边继续对镜头说>", "motion": "中景推近", "image_index": null, "cut_on_keyword": "<关键词>" },
+    { "start_s": 11.8, "end_s": 15,   "visual": "<CTA 画面>",    "action": "<边×边继续对镜头说>", "motion": "拉镜定格", "image_index": null, "cut_on_keyword": "<关键词>" }
+  ],` : ''}
+  "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "${isViralStoreTour ? '' : '<中文台词,可为空字符串>'}", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
   "scenes": [
-    { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
+    { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '' : '...'}", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
   ],
-  "outro": { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "<收尾字幕,可含 BOOMER·OFF>", "image_index": null, "duration_s": 2, "motion": "定格" },
+  "outro": { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '' : '...'}", "subtitle": "<收尾字幕,可含 BOOMER·OFF>", "image_index": null, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "定格" },
   "bgm":   "<lo-fi|城市夜色|暖民谣>",
   "total_duration_s": ${duration},
   "aspect": "${aspect}",
   "mode": "text2video"
 }
 说明:${isViralStoreTour
-        ? 'hook/scenes/outro 就是店员确认和 Seedance 实际执行的同一份脚本。每段 dialogue 必须完整、明确、可直接逐字说出;one_shot_prompt 必须为空。'
+        ? 'continuous_dialogue 是 Seedance 唯一朗读的连续口播,人物从 0.2s 说到 14.8s,不停顿;hook/scenes/outro 与 visual_beats 只决定 5 段画面的场景/动作/运镜/参考图,不再分别决定台词,dialogue 字段留空字符串即可;one_shot_prompt 必须为空。'
         : 'hook/scenes/outro 用于分镜展示和后期;one_shot_prompt 用于兼容普通一次成片。'}
 只输出 JSON，不要 \`\`\` 包裹。`;
 
