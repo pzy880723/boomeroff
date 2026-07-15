@@ -540,10 +540,13 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
   const refLightbox = refTiles.map((tile) => tile.url);
 
   const persona = pick.persona;
-  const spokenScript = clips
+  const derivedSpoken = clips
     .map(({ clip }) => (clip.dialogue || '').trim())
     .filter(Boolean)
     .join('，');
+  const spokenScript = (pick.script.continuous_dialogue || '').trim() || derivedSpoken;
+  const spokenCharCount = pick.script.dialogue_char_count
+    || spokenScript.replace(/[^\u4e00-\u9fa5]/g, '').length;
   const paceClass = persona?.pace === 'slow'
     ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
     : persona?.pace === 'fast'
