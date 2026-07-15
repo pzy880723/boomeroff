@@ -93,7 +93,7 @@ async function softPassKeyReferences(
   urls: string[],
   opts: { admin: any; userId: string; max?: number },
 ): Promise<string[]> {
-  const max = Math.max(1, Math.min(1, opts.max ?? 1));
+  const max = Math.max(1, Math.min(SEEDANCE_MAX_REFS, opts.max ?? 1));
   const verified = urls.filter((u) => typeof u === 'string' && u.startsWith('asset://')).slice(0, 1);
   // 已经有火山官方私域素材(asset://)时,不要再在 Edge Function 里处理真人照片。
   // 这样既符合官方真人认证方案,也避免图片解码/重编码触发 WORKER_RESOURCE_LIMIT。
@@ -121,7 +121,15 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
   const keepsStoryboard = (refs: string[]) => !opts.requireStoryboard || !storyboardSet.size || refs.some((u) => storyboardSet.has(u));
 
   if (facePipeline === 'character_sheet' && effectiveRefs.length) {
-    effectiveRefs = await softPassKeyReferences(effectiveRefs, { admin: opts.admin, userId: opts.userId, max: 1 });
+    // 第 1 张固定是角色参考图。只处理角色图,其余门店/商品场景参考图必须保留,
+    // 否则虽然人物一致,但画面会脱离逐镜脚本和真实素材。
+    const [characterRef, ...sceneRefs] = effectiveRefs;
+    const softenedCharacter = await softPassKeyReferences([characterRef], {
+      admin: opts.admin,
+      userId: opts.userId,
+      max: 1,
+    });
+    effectiveRefs = [...softenedCharacter, ...sceneRefs].filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
     if (!keepsStoryboard(effectiveRefs)) {
       return { ok: false, error: '真人审核降级会丢失分镜静帧,已停止渲染。请先对角色做认证或改用软通过重试。', fallbackNotes: ['storyboard_locked_stop'], referenceCount: 0 };
     }

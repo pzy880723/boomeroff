@@ -11,3 +11,15 @@ verify_jwt = false
 
 [functions.dispatch-account-login]
 verify_jwt = false
+
+[functions.director-create-job]
+verify_jwt = true
+
+[functions.director-run-pipeline]
+verify_jwt = true
+
+[functions.director-poll-job]
+verify_jwt = true
+
+[functions.director-retry-shot]
+verify_jwt = true

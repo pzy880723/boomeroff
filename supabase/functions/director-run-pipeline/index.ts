@@ -79,8 +79,11 @@ Deno.serve(async (req) => {
         character_json: { ...characterCard, reference_image_url: characterRefUrl },
       });
     } catch (e) {
-      console.warn("[director-run-pipeline] character gen failed, continue without ref", e);
-      // 不阻断:降级到用户素材做参考图
+      const message = `角色参考图生成失败:${(e as Error).message || String(e)}`;
+      console.error("[director-run-pipeline] character gen failed", e);
+      await updateJob(admin, jobId, { status: 'failed', error_message: message });
+      await admin.from('video_generation_shots').update({ status: 'failed', error_message: message }).eq('job_id', jobId);
+      return json({ ok: false, error: message }, 500);
     }
 
     // ---- step5: 逐镜提交 Seedance ----
@@ -108,17 +111,31 @@ Deno.serve(async (req) => {
         const shot = shots[idx];
         try {
           await updateShot(admin, jobId, shot.shot_index, { status: 'submitting', error_message: null });
-          const refs: string[] = [];
-          if (characterRefUrl) refs.push(characterRefUrl);
-          // 每镜再挂 1 张实景参考图(轮转),让画面场景不飞
-          const sceneRef = sceneRefFallbacks[idx % Math.max(1, sceneRefFallbacks.length)];
-          if (sceneRef && !refs.includes(sceneRef)) refs.push(sceneRef);
+          const refs: string[] = [characterRefUrl!];
+          const meta = shot.meta && typeof shot.meta === 'object' ? shot.meta : {};
+          const plannedIndices: number[] = Array.isArray(meta.image_indices)
+            ? meta.image_indices.filter((value: unknown) => Number.isInteger(value)).slice(0, 2)
+            : [];
+          const indexedAssets = new Map<number, string>();
+          pickedAssets.forEach((asset: any, position: number) => {
+            const assetIndex = Number.isInteger(asset?.index) ? Number(asset.index) : position;
+            if (typeof asset?.url === 'string' && /^https?:/.test(asset.url)) indexedAssets.set(assetIndex, asset.url);
+          });
+          const plannedSceneRefs = plannedIndices.map((assetIndex) => indexedAssets.get(assetIndex)).filter(Boolean) as string[];
+          const sceneRefs = plannedSceneRefs.length
+            ? plannedSceneRefs
+            : [sceneRefFallbacks[idx % Math.max(1, sceneRefFallbacks.length)]].filter(Boolean);
+          for (const sceneRef of sceneRefs) {
+            if (!refs.includes(sceneRef)) refs.push(sceneRef);
+          }
 
           const promptText =
             `${shot.prompt || ''}\n【硬约束】主体必须与参考图第 1 张为同一人物;9:16 竖版;` +
             `不要出现明星/网红/影视角色;` +
             `不要出现任何文字水印/字幕/logo;` +
-            `节奏紧凑,${shot.duration}s 内完成动作与台词。`;
+            `角色的脸、发型、服装、年龄感必须与第 1 张参考图完全一致;` +
+            `其余参考图是本镜头的真实场景/商品依据,不得替换成无关场景;` +
+            `严格按提示词中的节拍顺序表演,${shot.duration}s 内完整完成动作与台词。`;
 
           const sub = await submitSeedanceSegment({
             arkKey: ARK_KEY!,
@@ -130,8 +147,8 @@ Deno.serve(async (req) => {
             duration: shot.duration,
             resolution,
             referenceImages: refs,
-            storyboardRefs: [],
-            requireStoryboard: false,
+            storyboardRefs: sceneRefs,
+            requireStoryboard: sceneRefs.length > 0,
             facePipeline: characterRefUrl ? 'character_sheet' : 'faceless',
           });
           if (!sub.ok || !sub.id) {
@@ -144,7 +161,14 @@ Deno.serve(async (req) => {
             status: 'running',
             seedance_task_id: sub.id,
             reference_image_url: characterRefUrl,
-            meta: { fallback_notes: sub.fallbackNotes, ref_count: sub.referenceCount, mode: sub.mode },
+            meta: {
+              ...meta,
+              fallback_notes: sub.fallbackNotes,
+              ref_count: sub.referenceCount,
+              mode: sub.mode,
+              submitted_duration: sub.duration,
+              scene_reference_count: sceneRefs.length,
+            },
           });
         } catch (e) {
           console.error("[director-run-pipeline] shot submit error", shot.shot_index, e);

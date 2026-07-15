@@ -181,9 +181,10 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     const useRes = overrides?.resolution || resolution;
     setSubmitting(true);
     setRenderError(null);
-    // 主路径:走新的 7 步导演流水线(角色参考图 + 逐镜 Seedance + 客户端拼片)
+    // 唯一路径:角色参考图 + 3 个独立 Seedance 镜头 + 腾讯云标准合成。
+    // 这里禁止退回旧的一次成片模式,否则用户看到的是“成功”,实际却没有执行脚本分镜。
     try {
-      const { job_id } = await createVideoJob({
+      const { job_id, shot_count } = await createVideoJob({
         shop_id: shopId,
         script: pick.script,
         picked_assets: pick.assets,
@@ -201,40 +202,13 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       clearSavedPick(shopId);
       setActiveJob(job);
       setRenderPhase('queued');
-      toast.success('已开拍 · 关掉也会继续');
-      return;
+      setRenderError(null);
+      toast.success(`已开拍 · ${shot_count} 个镜头会分别生成`);
     } catch (e: any) {
-      console.warn('[surprise] director path failed, fallback to legacy', e);
-      toast.message('导演流水线不可用,退回一次成片模式');
-    }
-    // 兜底:退回老 surprise-marketing-video 一次成片
-    try {
-      const { data, error } = await invokeFn('surprise-marketing-video', {
-        body: {
-          shop_id: shopId, preview: false,
-          script: pick.script, picked_assets: pick.assets,
-          vtype: pick.vtype, style: pick.style,
-          model: useModel, resolution: useRes, realism,
-          disable_references: !!overrides?.disable_references,
-          face_pipeline: overrides?.face_pipeline,
-          prompt_overrides: pick.prompt_overrides,
-        },
-      });
-      if (error) throw error;
-      const d = data as any;
-      if (d?.ok === false || !d?.job_id) throw new Error(d?.error || '提交失败');
-      const job: ActiveRenderJob = {
-        jobId: d.job_id, coverUrl: pick.picked.cover_url,
-        createdAt: Date.now(), segmentTotal: d.segment_total, kind: 'legacy',
-      };
-      setActiveRenderJob(shopId, job);
-      clearSavedPick(shopId);
-      setActiveJob(job);
-      setRenderPhase('queued');
-      startPolling(d.job_id, shopId);
-      toast.success('已入队,关掉也会继续跑');
-    } catch (e: any) {
-      toastVideoFailure(e, { onApplyFix: handleFix });
+      const message = e?.message || '导演流水线启动失败';
+      console.error('[surprise] director path failed', e);
+      setRenderError(message);
+      toast.error(message);
     } finally { setSubmitting(false); }
   };
 
@@ -346,7 +320,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 shrink-0" />
                 <span className="truncate">
-                  将使用 <b>{getSeedanceModel(modelId).label}</b> · {resolution} · 一次成片
+                  将使用 <b>{getSeedanceModel(modelId).label}</b> · {resolution} · 3 镜逐镜生成
                 </span>
               </div>
               <div className="flex gap-2">
@@ -358,8 +332,13 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                   就用 {getSeedanceShortLabel(modelId)} · {resolution} 拍
                 </Button>
               </div>
+              {renderError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-[11px] text-destructive">
+                  {renderError}
+                </div>
+              )}
               <p className="text-[10px] text-center text-muted-foreground">
-                一次成片 · 关掉弹窗也会继续拍
+                3 × 5 秒独立镜头 · 同一角色参考图 · 腾讯云合成标准视频
               </p>
             </div>
           </>

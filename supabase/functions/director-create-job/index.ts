@@ -2,7 +2,7 @@
 // 前端在「惊喜一下」确认时调用。落一个 video_generation_jobs + 对应 shots,
 // 然后异步触发 director-run-pipeline 去跑真正的流水线。返回 job_id 立刻给前端做进度轮询。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { flattenScriptToShots, type DirectorScript } from "../_shared/director-utils.ts";
+import { buildDirectorShotPlan, type DirectorScript } from "../_shared/director-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,6 +49,12 @@ Deno.serve(async (req) => {
       style: '复古生活方式 · BOOMER-OFF',
     };
 
+    const shotPlan = buildDirectorShotPlan(script);
+    const plannedDuration = shotPlan.reduce((sum, shot) => sum + shot.duration, 0);
+    if (shotPlan.length !== 3 || plannedDuration !== 15) {
+      return json({ ok: false, error: `导演分镜计划异常:${shotPlan.length} 镜 / ${plannedDuration} 秒` }, 422);
+    }
+
     // 1) insert job
     const { data: job, error: jErr } = await admin
       .from("video_generation_jobs")
@@ -60,17 +66,16 @@ Deno.serve(async (req) => {
         brief_json: brief,
         script_json: script,
         status: 'queued',
-        duration: 15,
+        duration: plannedDuration,
         aspect_ratio: '9:16',
-        meta: {},
+        meta: { pipeline_version: 'director-v2', planned_shot_count: shotPlan.length },
       })
       .select()
       .single();
     if (jErr || !job) return json({ ok: false, error: '建任务失败: ' + (jErr?.message || 'unknown') }, 500);
 
     // 2) insert shots
-    const flat = flattenScriptToShots(script);
-    const shotRows = flat.map((s, i) => ({
+    const shotRows = shotPlan.map((s, i) => ({
       job_id: job.id,
       shot_index: i,
       duration: s.duration,
@@ -82,20 +87,39 @@ Deno.serve(async (req) => {
       dialogue: s.dialogue || null,
       prompt: s.prompt,
       status: 'pending',
+      meta: {
+        pipeline_version: 'director-v2',
+        source_labels: s.sourceLabels,
+        image_indices: s.imageIndices,
+      },
     }));
-    if (shotRows.length) {
-      const { error: sErr } = await admin.from("video_generation_shots").insert(shotRows);
-      if (sErr) {
-        console.error("[director-create-job] shots insert", sErr);
-      }
+    const { error: sErr } = await admin.from("video_generation_shots").insert(shotRows);
+    if (sErr) {
+      console.error("[director-create-job] shots insert", sErr);
+      await admin.from("video_generation_jobs").delete().eq("id", job.id);
+      return json({ ok: false, error: '创建分镜失败:' + sErr.message }, 500);
     }
 
-    // 3) 异步触发 pipeline(不 await,直接放走)
-    fetch(`${SUPABASE_URL}/functions/v1/director-run-pipeline`, {
+    // 3) 异步触发 pipeline,交给 EdgeRuntime 托管,避免响应返回后请求被中止。
+    const pipelineRequest = fetch(`${SUPABASE_URL}/functions/v1/director-run-pipeline`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body: JSON.stringify({ job_id: job.id }),
-    }).catch((e) => console.warn("[director-create-job] pipeline fire failed", e));
+    }).then(async (response) => {
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        await updatePipelineStartFailure(admin, job.id, `导演流水线启动失败(${response.status}):${detail.slice(0, 180)}`);
+      }
+    }).catch(async (e) => {
+      console.warn("[director-create-job] pipeline fire failed", e);
+      await updatePipelineStartFailure(admin, job.id, `导演流水线启动失败:${(e as Error).message || String(e)}`);
+    });
+    // @ts-ignore Supabase Edge Runtime extension
+    if (typeof (globalThis as any).EdgeRuntime?.waitUntil === 'function') {
+      (globalThis as any).EdgeRuntime.waitUntil(pipelineRequest);
+    } else {
+      await pipelineRequest;
+    }
 
     return json({ ok: true, job_id: job.id, shot_count: shotRows.length });
   } catch (e) {
@@ -103,3 +127,7 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: (e as Error).message || String(e) }, 500);
   }
 });
+
+async function updatePipelineStartFailure(admin: any, jobId: string, message: string) {
+  await admin.from('video_generation_jobs').update({ status: 'failed', error_message: message }).eq('id', jobId);
+}

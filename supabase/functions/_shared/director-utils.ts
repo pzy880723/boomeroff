@@ -33,6 +33,8 @@ export interface FlatShot {
   subtitle?: string;
   dialogue?: string;
   prompt: string;
+  sourceLabels: string[];
+  imageIndices: number[];
 }
 
 /** 把 script(hook+scenes+outro)拍平成一串 3-5 秒的镜头,直接落 video_generation_shots 表。 */
@@ -61,6 +63,55 @@ export function flattenScriptToShots(script: DirectorScript): FlatShot[] {
       subtitle: scene.subtitle,
       dialogue: scene.dialogue,
       prompt: parts.join(' · '),
+      sourceLabels: [label],
+      imageIndices: Number.isInteger(scene.image_index) ? [Number(scene.image_index)] : [],
+    };
+  });
+}
+
+/**
+ * Seedance reference-to-video only has a stable 5-second grid. The 15-second
+ * director workflow therefore compiles the script into three independent
+ * 5-second generations, then lets the compose worker join them. Script beats
+ * are grouped contiguously so hook -> body -> CTA ordering is never lost.
+ */
+export function buildDirectorShotPlan(script: DirectorScript): FlatShot[] {
+  const beats = flattenScriptToShots(script);
+  if (beats.length < 3) {
+    throw new Error(`导演脚本至少需要 3 个有效分镜,当前只有 ${beats.length} 个`);
+  }
+
+  const firstBoundary = Math.max(1, Math.round(beats.length / 3));
+  const secondBoundary = Math.min(beats.length - 1, Math.round((beats.length * 2) / 3));
+  const groups = [
+    beats.slice(0, firstBoundary),
+    beats.slice(firstBoundary, secondBoundary),
+    beats.slice(secondBoundary),
+  ];
+
+  if (groups.some((group) => group.length === 0)) {
+    throw new Error('导演脚本无法编译为 3 个独立镜头');
+  }
+
+  return groups.map((group, groupIndex) => {
+    const promptSteps = group.map((beat, index) =>
+      `节拍${index + 1}(${beat.label}):${beat.prompt || '按脚本自然表演'}`
+    );
+    const join = (values: Array<string | undefined>) => values.filter(Boolean).join('；') || undefined;
+    return {
+      label: `成片镜头${groupIndex + 1}`,
+      duration: 5,
+      scene: join(group.map((beat) => beat.scene)),
+      subject: join(group.map((beat) => beat.subject)),
+      action: join(group.map((beat) => beat.action)),
+      camera: join(group.map((beat) => beat.camera)),
+      subtitle: join(group.map((beat) => beat.subtitle)),
+      dialogue: join(group.map((beat) => beat.dialogue)),
+      prompt:
+        `这是 15 秒成片的第 ${groupIndex + 1}/3 个独立镜头,时长严格 5 秒。` +
+        `必须按顺序完整呈现以下脚本节拍,不得省略、调换或自由改写:\n${promptSteps.join('\n')}`,
+      sourceLabels: group.flatMap((beat) => beat.sourceLabels),
+      imageIndices: Array.from(new Set(group.flatMap((beat) => beat.imageIndices))),
     };
   });
 }

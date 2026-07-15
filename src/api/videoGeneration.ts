@@ -71,13 +71,14 @@ export interface CreateVideoJobPayload {
   user_prompt?: string;
 }
 
-export async function createVideoJob(payload: CreateVideoJobPayload): Promise<{ job_id: string }> {
-  const { data, error } = await invokeFn<{ ok: boolean; job_id: string; error?: string }>(
+export async function createVideoJob(payload: CreateVideoJobPayload): Promise<{ job_id: string; shot_count: number }> {
+  const { data, error } = await invokeFn<{ ok: boolean; job_id: string; shot_count: number; error?: string }>(
     'director-create-job', { body: payload },
   );
   if (error) throw new Error(error.message);
   if (!data?.ok || !data.job_id) throw new Error(data?.error || '创建任务失败');
-  return { job_id: data.job_id };
+  if (data.shot_count !== 3) throw new Error(`导演分镜创建不完整:预期 3 镜,实际 ${data.shot_count || 0} 镜`);
+  return { job_id: data.job_id, shot_count: data.shot_count };
 }
 
 export async function getVideoJob(jobId: string): Promise<DirectorPollResult> {
@@ -99,7 +100,7 @@ export async function retryShot(jobId: string, shotIndex: number): Promise<void>
 
 export async function regenerateJob(jobId: string): Promise<void> {
   // 重跑整条 = 重跑 pipeline;把 shots 全部重置由后端处理,目前简化成对每一条失败镜头 retry。
-  // 这一版先只在前端把所有非 succeeded 的 shot 逐一 retry。真正整条重跑走 fallback。
+  // 只重跑未成功的独立镜头;禁止回退到旧的一次成片通道。
   const { job, shots } = await getVideoJob(jobId);
   const targets = shots.filter((s) => s.status !== 'succeeded');
   for (const s of targets) {
