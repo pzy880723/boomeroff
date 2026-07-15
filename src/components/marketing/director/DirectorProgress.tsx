@@ -1,7 +1,7 @@
 // 「让 BOOMER 替你拍一条」的核心进度视图。SurpriseVideoDialog 点「确认生成」后展示这个组件。
 // 内部:轮询 job → 展示 7 步流水线 + 角色卡 + 分镜网格 + 成片播放 + 一键保存到素材库。
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, RefreshCw, ArrowRight, Sparkles, AlertTriangle } from 'lucide-react';
+import { Loader2, RefreshCw, ArrowRight, Sparkles, AlertTriangle, Copy, Clock3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -131,6 +131,21 @@ export function DirectorProgress({
   const jobStatus = job?.status || 'queued';
   const finalUrl = job?.final_video_url || composedUrl;
   const anyFailedShot = shots.some((s) => s.status === 'failed');
+  const publishCopy = job?.meta?.publish_copy;
+  const isWorkerComposing = jobStatus === 'composing' && job?.compose_status && job.compose_status !== 'idle';
+
+  async function copyPublishCopy() {
+    if (!publishCopy) return;
+    const text = [
+      publishCopy.cover_title ? `封面标题：${publishCopy.cover_title}` : '',
+      publishCopy.cover_subtitle ? `封面副标题：${publishCopy.cover_subtitle}` : '',
+      publishCopy.caption ? `小红书文案：\n${publishCopy.caption}` : '',
+      publishCopy.douyin_caption ? `抖音文案：\n${publishCopy.douyin_caption}` : '',
+      Array.isArray(publishCopy.hashtags) && publishCopy.hashtags.length ? publishCopy.hashtags.join(' ') : '',
+    ].filter(Boolean).join('\n\n');
+    await navigator.clipboard.writeText(text);
+    toast.success('发布文案已复制');
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -163,6 +178,27 @@ export function DirectorProgress({
         </div>
       )}
 
+      {isWorkerComposing && (
+        <div className="rounded-lg border bg-card p-2.5 space-y-1.5 text-[12px]">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-accent" />
+            <span className="font-medium">腾讯云正在合成标准视频</span>
+          </div>
+          <div className="text-muted-foreground">
+            状态：{job.compose_status}{job.compose_worker_id ? ` · ${job.compose_worker_id}` : ''}
+          </div>
+          {job.compose_heartbeat_at && (
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Clock3 className="w-3 h-3" />
+              最近心跳：{new Date(job.compose_heartbeat_at).toLocaleTimeString()}
+            </div>
+          )}
+          {job.meta?.compose_progress?.message && (
+            <div className="text-muted-foreground">{job.meta.compose_progress.message}</div>
+          )}
+        </div>
+      )}
+
       {composeState === 'error' && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-2.5 text-[12px] text-destructive">
           <div className="flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> 合成失败</div>
@@ -181,6 +217,28 @@ export function DirectorProgress({
           <div className="p-2 text-[11px] text-muted-foreground text-center">
             成片已保存到素材库 · 可预览 / 编辑文案 / 一键发布
           </div>
+        </div>
+      )}
+
+      {publishCopy && (
+        <div className="rounded-xl border bg-card p-3 space-y-2 text-[12px]">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-medium">发布文案已生成</div>
+            <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={copyPublishCopy}>
+              <Copy className="w-3 h-3 mr-1" />复制
+            </Button>
+          </div>
+          {publishCopy.cover_title && (
+            <div>
+              <span className="text-muted-foreground">封面：</span>
+              <span className="font-medium">{publishCopy.cover_title}</span>
+              {publishCopy.cover_subtitle ? <span className="text-muted-foreground"> · {publishCopy.cover_subtitle}</span> : null}
+            </div>
+          )}
+          {publishCopy.caption && <p className="text-foreground/80 leading-relaxed whitespace-pre-wrap">{publishCopy.caption}</p>}
+          {Array.isArray(publishCopy.hashtags) && publishCopy.hashtags.length > 0 && (
+            <p className="text-accent leading-relaxed">{publishCopy.hashtags.join(' ')}</p>
+          )}
         </div>
       )}
 

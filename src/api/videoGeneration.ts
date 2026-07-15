@@ -47,6 +47,10 @@ export interface DirectorJob {
   cover_url?: string | null;
   error_message?: string | null;
   meta?: any;
+  compose_status?: string | null;
+  compose_error?: string | null;
+  compose_heartbeat_at?: string | null;
+  compose_worker_id?: string | null;
 }
 
 export interface DirectorPollResult {

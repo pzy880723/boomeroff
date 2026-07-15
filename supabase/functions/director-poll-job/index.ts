@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
     const allSettled = (done + shotList.filter((s: any) => s.status === 'failed').length) === total;
 
     let jobMeta = (job.meta as any) || {};
-    const voiceReady = !!jobMeta.voiceover?.generated_at;
+    const voiceReady = !!jobMeta.voiceover?.generated_at && !jobMeta.voiceover?.error;
     const copyReady = !!jobMeta.publish_copy?.generated_at;
     const postReady = voiceReady && copyReady;
 
@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
     // 只有 ready_to_stitch(即配音+文案都已 generated_at) 才允许把 job 推入 Worker 合成队列
     if (job.status === 'ready_to_stitch' && job.compose_status === 'idle' && postReady) {
       const { data: setting } = await admin.from("app_settings").select("value").eq("key", "compose_mode").maybeSingle();
-      const mode = (setting?.value as any)?.mode || (setting?.value as any) || 'client';
+      const mode = (setting?.value as any)?.mode || (setting?.value as any) || 'worker';
       if (mode === 'worker') {
         const upd = await admin.from("video_generation_jobs").update({
           status: 'composing', compose_status: 'queued',
@@ -176,6 +176,7 @@ Deno.serve(async (req) => {
         error_message: job.error_message, meta: job.meta,
         compose_status: job.compose_status, compose_error: job.compose_error,
         compose_heartbeat_at: job.compose_heartbeat_at,
+        compose_worker_id: job.compose_worker_id,
       },
       shots: shotList.map((s: any) => ({
         id: s.id, shot_index: s.shot_index, duration: Number(s.duration),

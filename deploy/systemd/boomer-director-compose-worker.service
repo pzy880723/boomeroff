@@ -1,0 +1,20 @@
+[Unit]
+Description=BOOMER GO Director Compose Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/social-auto-upload
+EnvironmentFile=/home/ubuntu/social-auto-upload/.env.compose-worker
+ExecStart=/home/ubuntu/social-auto-upload/venv/bin/python -m worker.compose_runner
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -31,20 +31,30 @@ Deno.serve(async (req) => {
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     await admin.from("video_generation_jobs")
       .update({ compose_status: "queued", compose_worker_id: null })
-      .eq("compose_status", "claimed")
+      .in("compose_status", ["claimed", "running"])
       .lt("compose_heartbeat_at", fiveMinAgo);
 
-    // 2. 拿最老的一个 queued 任务
+    // 2. 拿最老的一个、预合成资产完整的 queued 任务。
+    // director-poll-job 是第一道门，这里再校验一次，避免历史任务或手工数据进入 Worker。
     const { data: candidates } = await admin
       .from("video_generation_jobs")
-      .select("id")
+      .select("id, status, meta")
       .eq("compose_status", "queued")
       .order("created_at", { ascending: true })
-      .limit(1);
+      .limit(10);
 
     if (!candidates?.length) return json({ ok: true, job: null });
 
-    const jobId = candidates[0].id;
+    const candidate = candidates.find((item: any) => {
+      const meta = item.meta || {};
+      return item.status === "composing"
+        && !!meta.voiceover?.generated_at
+        && !meta.voiceover?.error
+        && !!meta.publish_copy?.generated_at;
+    });
+    if (!candidate) return json({ ok: true, job: null });
+
+    const jobId = candidate.id;
     const nowIso = new Date().toISOString();
 
     // 3. 原子认领 (CAS: 只在 compose_status 还是 queued 时更新)
