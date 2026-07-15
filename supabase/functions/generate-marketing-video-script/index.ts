@@ -107,15 +107,19 @@ ${approvedScript}
     const viralBlock = isViralStoreTour
       ? `
 
-【洗脑探店口播模板 · 高转化优先】(本片必须按这套节奏拍)
-- 【最高优先级 · 动作口播同步 walk-and-talk】每一镜的 dialogue 就是主角**在做那个 action 的同一时刻**说出的话。严禁"先做动作 → 停下 → 再讲话"、严禁纯氛围/静默走位镜。action 描述必须写成"边 ×× 边对镜头说 / 一边 ×× 一边讲",不要"停下、转身、然后说"这类分步措辞。15 秒全程都要有人在说话。
-- hook 是第 1 个 3 秒镜头,第一句必须是冲击型口语钩子,从这类句式里挑:"姐妹冲!"/"别再去 XX 了"/"我真的会谢"/"不是吧还有人不知道"/"这家店我能吹一年"。情绪要激动、有感染力。**钩子台词 6–8 字**,且是主角一边走入店里一边喊出来的。
-- 中段固定 3 镜,每镜 3 秒;主角始终是同一个人(沿用上面锁定的角色),每镜必须有具体动作:指货架、拿起单品、试穿/试戴、转身展示、对镜头说话——**动作和台词在同一秒发生**。
-- 全片必须像真人连续口播,**dialogue 汉字合计 48–52 字**,中段每镜 11–12 字,**hook 6–8 字、CTA 6–8 字**;**所有 5 镜都必须有非空 dialogue,严禁空台词**(15 秒里至少 13 秒在说话)。
-- 【贯穿主线】所有镜头的 dialogue 串起来要是一段连贯的"探店日记"——从「为什么走进这家店 → 一进门看到什么 → 上手体验/挑到什么 → 价格或惊喜点 → 谁适合来 → 喊大家冲」依次递进;反复点名店铺关键词(店名/品类/钩子产品)让观众记得住,不要每镜各说各的。
-- 【硬规则】台词必须能在该镜 duration_s 内自然念完(按 4 字/秒清晰口播估算,即 dialogue 字数 ≤ duration_s × 4)。超出就删字,Seedance 念得太赶会糊。
-- subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""好逛到停不下""闭眼冲"。≤24 字。subtitle 可与 dialogue 不同,用来补关键信息,并与 dialogue 同帧出现。
-- outro 是第 5 个 3 秒镜头,必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。**CTA 台词 6–8 字**,主角一边比手势/一边收尾定格一边喊出来。
+【惊喜一下 15 秒极速成片 · 连续口播模板】(本片必须严格按这套节奏拍,声音全程不能停)
+- 【最高优先级 · 一条连续口播】全片使用同一条连续中文口播音轨。人物从 0.2 秒开始持续说到 14.8 秒,任意位置不得有超过 0.15 秒的停顿;切镜时口播继续,不允许重新起句、不允许重复台词、不允许留白。
+- 【continuous_dialogue 硬规则】
+  · 必须写完整的中文口播全文,58–62 个汉字。
+  · 只允许使用中文逗号「，」或顿号「、」连接,不使用句号、感叹号、问号、省略号。
+  · 严禁"大家好 / 各位姐妹 / 嗯 / 啊 / 那个 / 然后 / 就是"这类语气词、客套词、废话词。
+  · 开头直接给钩子,中间连续输出门店卖点,结尾直接给行动号召。
+  · 主旨固定为强力种草当前门店,但具体表达和卖点组合每次都要有新意。
+- 【视觉分镜】仍然生成 5 段(hook + 3 scenes + outro),每段严格 3 秒,只负责画面设计与切镜时间。
+  · 每段的 dialogue 字段留空字符串或写一句该段的画面关键词摘要即可,不再决定发声。
+  · 每段可以补一个 cut_on_keyword 字段(2–6 个汉字),表示"念到这个关键词时切到本镜"。关键词必须真实出现在 continuous_dialogue 里。
+  · 每段的 action 描述要写清楚"一边做××一边继续对镜头说话",不能出现"停下、静默、思考"等打断口播的措辞。
+- 【贯穿主线】continuous_dialogue 是一段连贯的"探店日记":为什么走进这家店 → 一进门看到什么 → 上手体验/挑到什么 → 谁适合来 → 喊大家冲。反复点名店铺关键词(店名/品类/钩子产品)。
 - 画面色调明亮、节奏快,运镜以推镜/手持/特写切换为主,避免慢悠悠的长镜头。
 - 【场景硬约束】${viralStorefrontRule}
 - 不要写成纪录片或氛围片,目标就是 15 秒抓人 + 让人想立刻去这家店。`
@@ -182,19 +186,27 @@ ${refList}
 输出严格 JSON：
 {
   "title": "<≤14 字的中文标题，一眼看出这条视频拍的是什么，避免『视频/短片』这类无信息词>",
-  "one_shot_prompt": "<${isViralStoreTour ? '必须为空字符串。惊喜一下以 hook/scenes/outro 为唯一脚本来源,服务端会确定性编译 Seedance 时间轴。' : `${isTight15 ? '【15 秒必填】' : '可留空字符串'}120–180 字中文导演稿。`}>",
-  "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "<中文台词,可为空字符串>", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": 2, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
+  "one_shot_prompt": "<${isViralStoreTour ? '必须为空字符串。惊喜一下由服务端根据 continuous_dialogue 和 visual beats 确定性编译 Seedance 提示词。' : `${isTight15 ? '【15 秒必填】' : '可留空字符串'}120–180 字中文导演稿。`}>",${isViralStoreTour ? `
+  "continuous_dialogue": "<全片唯一的连续中文口播,58-62 个汉字,只用中文逗号或顿号连接,不含语气词/客套词/句号/感叹号/省略号>",
+  "visual_beats": [
+    { "start_s": 0,    "end_s": 2.8,  "visual": "<钩子画面>",   "action": "<边×边继续对镜头说>", "motion": "手持推镜", "image_index": 0, "cut_on_keyword": "<对应口播中出现的关键词>" },
+    { "start_s": 2.8,  "end_s": 5.8,  "visual": "<进店发现画面>", "action": "<边×边继续对镜头说>", "motion": "广角横移", "image_index": null, "cut_on_keyword": "<关键词>" },
+    { "start_s": 5.8,  "end_s": 8.8,  "visual": "<细节特写画面>", "action": "<边×边继续对镜头说>", "motion": "俯拍跟随", "image_index": null, "cut_on_keyword": "<关键词>" },
+    { "start_s": 8.8,  "end_s": 11.8, "visual": "<体验互动画面>", "action": "<边×边继续对镜头说>", "motion": "中景推近", "image_index": null, "cut_on_keyword": "<关键词>" },
+    { "start_s": 11.8, "end_s": 15,   "visual": "<CTA 画面>",    "action": "<边×边继续对镜头说>", "motion": "拉镜定格", "image_index": null, "cut_on_keyword": "<关键词>" }
+  ],` : ''}
+  "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "${isViralStoreTour ? '' : '<中文台词,可为空字符串>'}", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
   "scenes": [
-    { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
+    { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '' : '...'}", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
   ],
-  "outro": { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "<收尾字幕,可含 BOOMER·OFF>", "image_index": null, "duration_s": 2, "motion": "定格" },
+  "outro": { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '' : '...'}", "subtitle": "<收尾字幕,可含 BOOMER·OFF>", "image_index": null, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "定格" },
   "bgm":   "<lo-fi|城市夜色|暖民谣>",
   "total_duration_s": ${duration},
   "aspect": "${aspect}",
   "mode": "text2video"
 }
 说明:${isViralStoreTour
-        ? 'hook/scenes/outro 就是店员确认和 Seedance 实际执行的同一份脚本。每段 dialogue 必须完整、明确、可直接逐字说出;one_shot_prompt 必须为空。'
+        ? 'continuous_dialogue 是 Seedance 唯一朗读的连续口播,人物从 0.2s 说到 14.8s,不停顿;hook/scenes/outro 与 visual_beats 只决定 5 段画面的场景/动作/运镜/参考图,不再分别决定台词,dialogue 字段留空字符串即可;one_shot_prompt 必须为空。'
         : 'hook/scenes/outro 用于分镜展示和后期;one_shot_prompt 用于兼容普通一次成片。'}
 只输出 JSON，不要 \`\`\` 包裹。`;
 
@@ -267,12 +279,29 @@ ${refList}
     // 汉字计数(把中文标点也算作 0.5 字更贴近实际念稿节奏,这里简化只算汉字)
     const cnLen = (s: string) => (s || '').replace(/[^\u4e00-\u9fa5]/g, '').length;
 
-    if (isTight15) {
+    if (isTight15 && isViralStoreTour) {
+      // === 惊喜一下：全片一条连续口播，每段固定 3s，不再逐段强制 dialogue ===
+      while (script.scenes.length < 3) {
+        script.scenes.push({
+          scene: script.hook.scene || '店内继续展示商品',
+          action: '手持镜头顺移，边拿起一件商品边继续对镜头说',
+          dialogue: '',
+          subtitle: '',
+          image_index: null,
+          duration_s: 3,
+          motion: '手持',
+        });
+      }
+      script.scenes = script.scenes.slice(0, 3);
+      script.hook.duration_s = 3;
+      script.outro.duration_s = 3;
+      script.scenes.forEach((s: any) => { s.duration_s = 3; });
+      // 保留 continuous_dialogue、visual_beats，并按可用参考图数量绑定 image_index
+      script = bindSurpriseReferences(normalizeSurpriseScript(script), imageUrls.length);
+    } else if (isTight15) {
       // === 15 秒严格模式:每段固定 3s,hook/outro 兜底,超预算按比例截中段 ===
-      // 1) hook / outro 若为空,给一句短兜底,不允许空
       if (!script.hook.dialogue) script.hook.dialogue = '进来看看 ✨';
       if (!script.outro.dialogue) script.outro.dialogue = '感兴趣速冲';
-      // 单条截到 8 字(hook/outro)
       const truncCn = (s: string, maxCn: number): string => {
         let cnt = 0; let out = '';
         for (const ch of s) {
@@ -282,7 +311,6 @@ ${refList}
           }
           out += ch;
         }
-        // 收尾修补句末
         if (out.length && !/[。!?！?…]$/.test(out)) {
           if (/[,,、]$/.test(out)) out = out.slice(0, -1);
         }
@@ -294,7 +322,6 @@ ${refList}
         if (cnLen(s.dialogue) > 14) s.dialogue = truncCn(s.dialogue, 14);
       });
 
-      // 2) 中段空 dialogue → 用 subtitle 或通用兜底填(严禁静默镜)
       const MID_FALLBACKS = ['这个真的绝', '店里都是好货', '闭眼冲不亏'];
       script.scenes.forEach((s: any, i: number) => {
         if (!s.dialogue || !s.dialogue.trim()) {
@@ -303,12 +330,10 @@ ${refList}
         }
       });
 
-      // 3) 总预算(60 字)超了 → 保 hook/outro,从中段最长的先削
       const budget = totalSpeakBudgetCn;
       const headTail = cnLen(script.hook.dialogue) + cnLen(script.outro.dialogue);
       let midBudget = Math.max(0, budget - headTail);
       let midSum = script.scenes.reduce((a: number, c: any) => a + cnLen(c.dialogue), 0);
-      // 逐段按比例缩放
       if (midSum > midBudget && midSum > 0) {
         const k = midBudget / midSum;
         script.scenes.forEach((s: any) => {
@@ -317,7 +342,6 @@ ${refList}
         });
       }
 
-      // 4) 保证 3 段中段(补齐的段也必须"边演边说")
       const FILL_LINES = ['这个真的绝', '店里都是好货', '闭眼冲不亏'];
       while (script.scenes.length < 3) {
         const i = script.scenes.length;
@@ -333,12 +357,9 @@ ${refList}
       }
       script.scenes = script.scenes.slice(0, 3);
 
-
-      // 4) duration 全部锁 3s
       script.hook.duration_s = 3;
       script.outro.duration_s = 3;
       script.scenes.forEach((s: any) => { s.duration_s = 3; });
-      if (isViralStoreTour) script = bindSurpriseReferences(normalizeSurpriseScript(script), imageUrls.length);
     } else {
       // 非 15s:沿用旧的软目标 ±20% 浮动
       const allClips = [script.hook, ...script.scenes, script.outro];

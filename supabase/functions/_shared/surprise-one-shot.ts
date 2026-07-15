@@ -1,12 +1,26 @@
+// 「惊喜一下」15秒极速成片：全片一条连续中文口播 + 5 段画面切点。
+// 不再让 Seedance 按镜逐字重新起句；镜头只切画面，声音持续不停。
+
 export interface SurpriseClip {
   scene?: string;
   action?: string;
-  dialogue?: string;
+  dialogue?: string; // 兼容旧字段；不再用于 Seedance 提示词
   subtitle?: string;
   image_index?: number | null;
   duration_s?: number;
   motion?: string;
+  cut_on_keyword?: string;
   [key: string]: unknown;
+}
+
+export interface SurpriseVisualBeat {
+  start_s: number;
+  end_s: number;
+  visual: string;
+  action: string;
+  motion: string;
+  image_index: number | null;
+  cut_on_keyword: string;
 }
 
 export interface SurpriseScript {
@@ -15,6 +29,13 @@ export interface SurpriseScript {
   outro: SurpriseClip;
   total_duration_s?: number;
   aspect?: string;
+  continuous_dialogue?: string;
+  dialogue_char_count?: number;
+  speech_start_s?: number;
+  speech_end_s?: number;
+  speech_rate?: string;
+  max_silence_s?: number;
+  visual_beats?: SurpriseVisualBeat[];
   [key: string]: unknown;
 }
 
@@ -38,58 +59,126 @@ export interface SurpriseReferencePlan {
   referenceNumberBySourceIndex: Record<number, number>;
 }
 
-const MID_FALLBACKS = [
-  '这里每一排都有新鲜发现',
-  '每个角落都值得慢慢逛逛',
-  '想找特别单品就来这里逛',
+const BEAT_WINDOWS: Array<[number, number]> = [
+  [0, 2.8],
+  [2.8, 5.8],
+  [5.8, 8.8],
+  [8.8, 11.8],
+  [11.8, 15],
 ];
 
-const MID_TAILS = [
-  '越逛越有惊喜',
-  '每排都值得细看',
-  '新手也能放心淘',
+const BEAT_LABELS = ['强钩子', '进店发现', '上手体验', '核心种草', '行动召唤'];
+
+const MIN_CN = 58;
+const MAX_CN = 62;
+
+// 会拖慢连续口播的语气词/客套词，一律清掉
+const FILLER_PATTERNS: RegExp[] = [
+  /大家好[，,、!！。.]?/g,
+  /各位姐妹[，,、!！。.]?/g,
+  /姐妹们好[，,、!！。.]?/g,
+  /嗯+/g,
+  /啊+/g,
+  /呃+/g,
+  /哎+/g,
+  /那个+/g,
+  /然后+/g,
+  /就是说+/g,
+  /其实就是+/g,
+  /就是+/g,
+  /所以说+/g,
 ];
+
+const HOOK_FALLBACK = '姐妹们这家店真的太会藏惊喜了';
+const MID_FALLBACKS = [
+  '一进来每排都想停下翻翻',
+  '随手拿起都是很有意思的特别单品',
+  '价格也友好一个人也能放心逛',
+];
+const CTA_FALLBACK = '周末别犹豫直接来BOOMER认真逛一圈';
 
 function chineseLength(value: string): number {
   return (value || '').replace(/[^\u4e00-\u9fa5]/g, '').length;
 }
 
-function truncateChinese(value: string, maxChinese: number): string {
+function stripFillers(value: string): string {
+  let out = value || '';
+  for (const p of FILLER_PATTERNS) out = out.replace(p, '');
+  return out;
+}
+
+function normalizePunctuation(value: string): string {
+  return (value || '')
+    // 句号 / 感叹号 / 省略号 → 逗号，保持一条不停的语流
+    .replace(/[。.!！?？]+/g, '，')
+    .replace(/[…\.]{2,}/g, '，')
+    .replace(/[;；:：]+/g, '，')
+    // 合并重复逗号 / 顿号
+    .replace(/[，,、]{2,}/g, '，')
+    // 全部改成中文逗号
+    .replace(/,/g, '，')
+    // 去除首尾标点和空白
+    .replace(/^[，、\s]+/, '')
+    .replace(/[，、\s]+$/, '')
+    .replace(/\s+/g, '');
+}
+
+function truncateToChinese(value: string, maxCn: number): string {
   let count = 0;
-  let output = '';
-  for (const char of (value || '').trim()) {
-    if (/\p{Script=Han}/u.test(char)) {
-      if (count >= maxChinese) break;
+  let out = '';
+  for (const ch of value) {
+    const isHan = /[\u4e00-\u9fa5]/.test(ch);
+    if (isHan) {
+      if (count >= maxCn) break;
       count += 1;
     }
-    output += char;
+    out += ch;
   }
-  return output.replace(/[，,、：:]$/u, '').trim();
+  return out.replace(/[，、,]+$/u, '');
 }
 
-function compactText(value: unknown, maxLength: number): string {
-  return String(value || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxLength);
+function padContinuousDialogue(value: string): string {
+  const fillers = ['真心闭眼冲', '越逛越上头', '姐妹别错过', '真的巨值得', '现在冲最合适'];
+  let out = value;
+  let idx = 0;
+  while (chineseLength(out) < MIN_CN && idx < fillers.length * 3) {
+    const piece = fillers[idx % fillers.length];
+    out = `${out}，${piece}`;
+    out = normalizePunctuation(out);
+    idx += 1;
+  }
+  return out;
 }
 
-function ensureDialogue(
-  value: unknown,
-  minChinese: number,
-  maxChinese: number,
-  fallback: string,
-  tail?: string,
-): string {
-  let output = String(value || '').trim();
-  if (chineseLength(output) < minChinese && output && tail) {
-    output = `${output}，${tail}`;
+function buildContinuousFromClips(script: SurpriseScript): string {
+  const clips = [script.hook, ...(script.scenes || []), script.outro];
+  const raw = clips
+    .map((c) => stripFillers(String(c?.dialogue || '').trim()))
+    .filter(Boolean)
+    .join('，');
+  return normalizePunctuation(raw);
+}
+
+function ensureContinuousDialogue(raw: string, script: SurpriseScript): string {
+  let dialogue = normalizePunctuation(stripFillers(raw || ''));
+  if (chineseLength(dialogue) < MIN_CN) {
+    // 用分镜台词补齐
+    const fromClips = buildContinuousFromClips(script);
+    if (fromClips) {
+      dialogue = dialogue
+        ? normalizePunctuation(`${dialogue}，${fromClips}`)
+        : fromClips;
+    }
   }
-  output = truncateChinese(output, maxChinese);
-  if (chineseLength(output) < minChinese) {
-    output = truncateChinese(fallback, maxChinese);
+  if (chineseLength(dialogue) < MIN_CN) {
+    const fallback = [HOOK_FALLBACK, ...MID_FALLBACKS, CTA_FALLBACK].join('，');
+    dialogue = dialogue ? normalizePunctuation(`${dialogue}，${fallback}`) : fallback;
   }
-  return output;
+  dialogue = padContinuousDialogue(dialogue);
+  if (chineseLength(dialogue) > MAX_CN) {
+    dialogue = truncateToChinese(dialogue, MAX_CN);
+  }
+  return dialogue;
 }
 
 function normalizeClip(value: unknown): SurpriseClip {
@@ -105,7 +194,34 @@ function normalizeClip(value: unknown): SurpriseClip {
       : null,
     duration_s: 3,
     motion: String(clip.motion || '手持跟拍').trim(),
+    cut_on_keyword: String(clip.cut_on_keyword || '').trim(),
   };
+}
+
+function deriveVisualBeats(script: SurpriseScript, continuous: string): SurpriseVisualBeat[] {
+  const clips = [script.hook, ...(script.scenes || []), script.outro];
+  // 从连续口播中挑关键词做画面切点：把 dialogue 按逗号切成若干短句，取第 1/2/3/4/5 段的头几字。
+  const chunks = continuous.split(/[，、]/).filter(Boolean);
+  const chunkOf = (i: number) => (chunks[i] || chunks[chunks.length - 1] || '').slice(0, 6);
+  return BEAT_WINDOWS.map(([start, end], i) => {
+    const clip = clips[i] || {};
+    const scene = String(clip.scene || '').trim();
+    const action = String(clip.action || '').trim();
+    const motion = String(clip.motion || (i === 0 ? '手持推镜' : i === 4 ? '拉镜定格' : '手持跟拍')).trim();
+    const imgIdx = Number.isInteger(clip.image_index) && Number(clip.image_index) >= 0
+      ? Number(clip.image_index)
+      : null;
+    const keyword = String(clip.cut_on_keyword || chunkOf(i)).trim();
+    return {
+      start_s: start,
+      end_s: end,
+      visual: scene || `${BEAT_LABELS[i]}画面`,
+      action: action || `${BEAT_LABELS[i]}对镜头继续说`,
+      motion,
+      image_index: imgIdx,
+      cut_on_keyword: keyword,
+    };
+  });
 }
 
 export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
@@ -120,43 +236,15 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     const index = scenes.length;
     scenes.push(normalizeClip({
       scene: hook.scene || 'BOOMER·OFF 店内货架与翻筐区',
-      action: '探店博主边逛边拿起一件好物对镜头介绍',
+      action: '边逛边拿起一件好物对镜头继续说话',
       dialogue: MID_FALLBACKS[index],
-      subtitle: MID_TAILS[index],
+      subtitle: '',
       image_index: null,
       motion: '手持跟拍',
     }));
   }
 
-  hook.dialogue = ensureDialogue(hook.dialogue, 6, 8, '这家店真的绝了', '快跟我进来逛');
-  outro.dialogue = ensureDialogue(outro.dialogue, 6, 8, '姐妹周末快来逛', '周末快来逛');
-  scenes.forEach((scene, index) => {
-    scene.dialogue = ensureDialogue(
-      scene.dialogue,
-      11,
-      12,
-      MID_FALLBACKS[index],
-      MID_TAILS[index],
-    );
-  });
-
-  // Respect complete AI-written lines. Only strengthen middle lines when the
-  // whole 15-second read is too short to sustain continuous speech.
-  let spokenCount = chineseLength([
-    hook.dialogue,
-    ...scenes.map((scene) => scene.dialogue),
-    outro.dialogue,
-  ].join(''));
-  for (let index = 0; index < scenes.length && spokenCount < 48; index += 1) {
-    const before = chineseLength(String(scenes[index].dialogue || ''));
-    scenes[index].dialogue = truncateChinese(
-      `${scenes[index].dialogue || ''}，${MID_TAILS[index]}`,
-      12,
-    );
-    spokenCount += chineseLength(String(scenes[index].dialogue || '')) - before;
-  }
-
-  return {
+  const nextScript: SurpriseScript = {
     ...script,
     hook,
     scenes,
@@ -164,7 +252,36 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     total_duration_s: 15,
     aspect: '9:16',
     one_shot_prompt: '',
+    speech_start_s: 0.2,
+    speech_end_s: 14.8,
+    speech_rate: 'fast_clear',
+    max_silence_s: 0.15,
   };
+
+  const continuous = ensureContinuousDialogue(
+    String(script.continuous_dialogue || ''),
+    nextScript,
+  );
+  nextScript.continuous_dialogue = continuous;
+  nextScript.dialogue_char_count = chineseLength(continuous);
+
+  // 用 AI 提供的 visual_beats（若合法）或按 clips 派生。
+  const providedBeats = Array.isArray(script.visual_beats) ? script.visual_beats : null;
+  const beats = providedBeats && providedBeats.length === 5
+    ? providedBeats.map((b, i) => ({
+        start_s: BEAT_WINDOWS[i][0],
+        end_s: BEAT_WINDOWS[i][1],
+        visual: String(b?.visual || '').trim() || `${BEAT_LABELS[i]}画面`,
+        action: String(b?.action || '').trim() || `${BEAT_LABELS[i]}对镜头继续说`,
+        motion: String(b?.motion || '手持跟拍').trim(),
+        image_index: Number.isInteger(b?.image_index) && Number(b?.image_index) >= 0
+          ? Number(b?.image_index) : null,
+        cut_on_keyword: String(b?.cut_on_keyword || '').trim(),
+      }))
+    : deriveVisualBeats(nextScript, continuous);
+  nextScript.visual_beats = beats;
+
+  return nextScript;
 }
 
 export function bindSurpriseReferences(input: SurpriseScript, imageCount: number): SurpriseScript {
@@ -176,18 +293,24 @@ export function bindSurpriseReferences(input: SurpriseScript, imageCount: number
   clips.forEach((clip, clipIndex) => {
     const requested = clip.image_index;
     if (typeof requested === 'number' && Number.isInteger(requested) && requested >= 0 && requested < count) return;
-    // Spread the five beats across the available real images. With fewer than
-    // five photos, deterministic reuse is safer than inventing an unbound scene.
     clip.image_index = Math.min(clipIndex, count - 1);
+  });
+
+  // visual_beats 与 clips 保持一致
+  (script.visual_beats || []).forEach((beat, i) => {
+    const clip = clips[i];
+    if (clip && Number.isInteger(clip.image_index) && Number(clip.image_index) >= 0) {
+      beat.image_index = Number(clip.image_index);
+    } else if (!Number.isInteger(beat.image_index) || Number(beat.image_index) < 0 || Number(beat.image_index) >= count) {
+      beat.image_index = Math.min(i, count - 1);
+    }
   });
   return script;
 }
 
 export function surpriseSpokenText(script: SurpriseScript): string {
-  return [script.hook, ...(script.scenes || []), script.outro]
-    .map((clip) => String(clip?.dialogue || '').trim())
-    .filter(Boolean)
-    .join('，');
+  const normalized = normalizeSurpriseScript(script);
+  return String(normalized.continuous_dialogue || '').trim();
 }
 
 export function buildSurpriseReferencePlan(
@@ -210,7 +333,6 @@ export function buildSurpriseReferencePlan(
       .map((clip) => clip?.image_index)
       .filter((index): index is number => Number.isInteger(index) && Number(index) >= 0),
   );
-  // Keep one storefront anchor even when a generated script omitted its index.
   if (!boundIndexes.size && imageUrls.length) boundIndexes.add(0);
 
   imageUrls.slice(0, 9).forEach((rawUrl, sourceIndex) => {
@@ -222,14 +344,11 @@ export function buildSurpriseReferencePlan(
       referenceNumberBySourceIndex[sourceIndex] = duplicateNumber;
       return;
     }
-
     const referenceNumber = urls.length + 1;
     const description = descriptionByIndex.get(sourceIndex);
     const role = description?.role || (sourceIndex === 0 ? 'storefront' : 'scene');
-    const summary = compactText(
-      description?.summary || (role === 'storefront' ? '门头和开放式店面' : `店内实景${referenceNumber}`),
-      120,
-    );
+    const summary = String(description?.summary || (role === 'storefront' ? '门头和开放式店面' : `店内实景${referenceNumber}`))
+      .replace(/\s+/g, ' ').trim().slice(0, 120);
     seen.set(url, referenceNumber);
     referenceNumberBySourceIndex[sourceIndex] = referenceNumber;
     urls.push(url);
@@ -237,6 +356,10 @@ export function buildSurpriseReferencePlan(
   });
 
   return { urls, items, referenceNumberBySourceIndex };
+}
+
+function compactText(value: unknown, maxLength: number): string {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 }
 
 export function compileSurpriseOneShotPrompt(options: {
@@ -248,47 +371,63 @@ export function compileSurpriseOneShotPrompt(options: {
   globalConstraints?: string[];
 }): string {
   const script = normalizeSurpriseScript(options.script);
-  const clips = [script.hook, ...script.scenes, script.outro];
-  const labels = ['强钩子', '进店发现', '上手体验', '核心种草', '行动召唤'];
-  const lines: string[] = [
-    '【生成任务】严格生成一条完整的15秒、9:16、真人写实、高密度门店种草短视频。一次生成中自然完成5次剪辑，不要黑场，不要空镜，不要停顿。',
-    `【整体风格】${compactText(options.styleLabel || '高能真实探店 vlog，手持跟拍，明亮自然，节奏紧凑。', 180)}`,
-  ];
+  const continuous = String(script.continuous_dialogue || '').trim();
+  const beats = script.visual_beats || deriveVisualBeats(script, continuous);
 
+  const lines: string[] = [];
+  lines.push('【生成任务】严格生成一条15秒、9:16、真人写实、高密度门店种草短视频。全片使用同一条连续中文口播音轨，人物从头说到尾，切镜时声音继续，不停顿、不重开、不重复。');
+  lines.push(`【整体风格】${compactText(options.styleLabel || '高能真实探店 vlog，手持跟拍，明亮自然，节奏紧凑。', 180)}`);
   if (options.shopContext) lines.push(`【门店事实】${compactText(options.shopContext, 900)}`);
+
   if (options.referencePlan.items.length) {
     lines.push('【参考图片绑定，编号与请求中的图片顺序完全一致】');
     for (const item of options.referencePlan.items) {
-      lines.push(`图片${item.referenceNumber}：${item.summary}。只用于锁定该门店的真实场景、商品、陈列或构图，不得改成无关内容。`);
+      lines.push(`图片${item.referenceNumber}：${item.summary}。仅用于锁定该门店的真实场景、商品、陈列或构图，不得改为无关内容。`);
     }
   }
 
   lines.push(`【唯一主角】${compactText(options.personaDirective || '全片只有同一位原创虚构探店博主。锁定同一张脸、发型、年龄、身形、服装和声音，禁止换人、换装、分身或突然出现其他主角。', 300)}`);
-  lines.push('【原生声音】由 Seedance 在成片中直接生成同步中文对白和环境声，不使用后配 TTS。0.5秒内开始说话，至少13秒持续有清晰中文人声。以下引号内台词必须逐字、按顺序说出，不得改写、删减、合并或新增台词；人物必须边行动边说话并保持口型同步，镜头切换时声音连续，不留静默。');
-  lines.push('【15秒时间轴，必须逐段执行】');
 
-  clips.forEach((clip, index) => {
-    const start = index * 3;
-    const end = start + 3;
-    const sourceIndex = clip.image_index;
-    const requestedReferenceNumber = typeof sourceIndex === 'number'
+  // === 15 秒连续口播 ===
+  lines.push('');
+  lines.push('【15秒连续口播】');
+  lines.push('口播全文：');
+  lines.push(`"${continuous}"`);
+  lines.push('');
+  lines.push('【声音硬规则】');
+  lines.push('1. 这是全片唯一的一条连续中文口播音轨，由 Seedance 直接生成同步人声，不使用后配 TTS。');
+  lines.push('2. 0.2 秒内立即开口，持续说到 14.8 秒左右。');
+  lines.push('3. 全程连续发声，任何位置不得出现超过 0.15 秒的停顿。');
+  lines.push('4. 切换镜头时声音必须继续，不得停止、重新起句或重复台词。');
+  lines.push('5. 严格逐字朗读口播全文，不得改写、遗漏、合并或增加对白。');
+  lines.push('6. 使用偏快、清楚、自然、有感染力的中文口播，语速约每分钟 230–250 汉字。');
+  lines.push('7. 不要片头音乐、呼吸空白、语气词、停顿或结尾拖音。');
+  lines.push('8. 背景音乐和环境声保持低音量，不得遮挡人声。');
+
+  // === 画面切点 ===
+  lines.push('');
+  lines.push('【画面切点】画面根据下方切点切换，声音在整条 15 秒内不间断。禁止等到某句说完再切镜；所有切镜必须发生在连续口播过程中。');
+  beats.forEach((beat, i) => {
+    const label = BEAT_LABELS[i];
+    const start = beat.start_s.toFixed(1).replace(/\.0$/, '');
+    const end = beat.end_s.toFixed(1).replace(/\.0$/, '');
+    const sourceIndex = beat.image_index;
+    const referenceNumber = typeof sourceIndex === 'number'
       ? options.referencePlan.referenceNumberBySourceIndex[sourceIndex]
       : undefined;
-    const fallbackReference = options.referencePlan.items[index % Math.max(1, options.referencePlan.items.length)];
-    const referenceNumber = requestedReferenceNumber || fallbackReference?.referenceNumber;
-    const reference = referenceNumber
+    const refText = referenceNumber
       ? `画面严格参考图片${referenceNumber}`
-      : '该段不绑定参考图，只能延续前后镜头已经确定的同一门店环境';
+      : '延续前后镜头已经确定的同一门店环境';
+    const keyword = beat.cut_on_keyword ? `（切点关键词："${beat.cut_on_keyword}"，切镜发生在念到该关键词时，口播不停）` : '';
     lines.push(
-      `[${start}-${end}秒｜${labels[index]}] ${reference}；` +
-      `场景：${compactText(clip.scene || 'BOOMER·OFF 店内实景', 180)}；` +
-      `动作与运镜：${compactText(clip.action || '探店博主边走边对镜头介绍', 220)}，${compactText(clip.motion || '手持跟拍', 80)}；` +
-      `主角逐字说：“${clip.dialogue}”。`,
+      `${start}-${end} 秒｜${label}：${refText}；画面：${compactText(beat.visual, 160)}；` +
+      `动作与运镜：${compactText(beat.action, 200)}，${compactText(beat.motion, 80)}${keyword}。`,
     );
   });
 
-  lines.push('【连续性】五段是同一次探店经历，人物身份、衣着、声音、门店空间、商品外观、光线和色调必须连续一致；转场使用自然硬切或动作匹配剪辑。');
-  lines.push('【禁止】不得偏离上述脚本，不得虚构价格、品牌、商场、商品、门店或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字、长时间空镜或无声停顿。');
+  lines.push('');
+  lines.push('【连续性】五段是同一次探店经历，人物身份、衣着、声音、门店空间、商品外观、光线和色调必须连续一致；转场使用自然硬切或动作匹配剪辑，不做黑场、不做慢淡。');
+  lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字、长时间空镜或任何超过 0.15 秒的静默。');
   for (const constraint of (options.globalConstraints || []).slice(0, 4)) {
     if (constraint?.trim()) lines.push(compactText(constraint, 240));
   }
