@@ -678,12 +678,6 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
                   <span className="min-w-0">{clip.action}</span>
                 </div>
               )}
-              {clip.dialogue && (
-                <div className="text-[12px] leading-snug flex gap-1 text-foreground/85 break-words">
-                  <MessageSquare className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0">"{clip.dialogue}"</span>
-                </div>
-              )}
               {clip.subtitle && (
                 <div className="text-[11px] leading-snug text-muted-foreground break-words">
                   字幕:{clip.subtitle}
