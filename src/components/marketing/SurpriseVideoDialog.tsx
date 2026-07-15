@@ -42,6 +42,8 @@ interface SceneClip {
 interface ScriptShape {
   hook?: SceneClip | null; scenes?: SceneClip[]; outro?: SceneClip | null;
   total_duration_s?: number; bgm?: string;
+  continuous_dialogue?: string;
+  dialogue_char_count?: number;
 }
 interface SurpriseResult {
   ok: boolean;
