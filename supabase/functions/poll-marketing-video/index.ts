@@ -146,6 +146,8 @@ async function submitQueuedChild(admin: any, arkKey: string, child: any, userId:
     referenceImages: Array.isArray(payload.reference_images) ? payload.reference_images : [],
     storyboardRefs: Array.isArray(payload.storyboard_refs) ? payload.storyboard_refs : [],
     requireStoryboard: Number(payload.storyboard_ref_count || 0) > 0,
+    requireReferences: payload.require_references === true,
+    requiredReferenceCount: Number(payload.required_reference_count || 0),
     facePipeline: payload.face_pipeline || 'auto',
   });
 

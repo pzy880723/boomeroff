@@ -9,8 +9,9 @@ import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { pickSegmentImages, planSegments, type ScriptLike } from "../_shared/marketing-segments.ts";
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
-import { STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
+import { resolveStorefrontConstraintZh, STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
 import { OWN_BRAND_LOCK_EN } from "../_shared/brand-scrub.ts";
+import { bindSurpriseReferences, buildSurpriseReferencePlan, compileSurpriseOneShotPrompt, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -460,10 +461,35 @@ Deno.serve(async (req) => {
     if (strategy === 'one_shot') {
       const oneShotDur = snapOneShotDuration(totalDur || MAX_SEG_DUR);
       const effectiveChar = disableReferences ? null : character;
-      const refImages = disableReferences ? [] : resolveOneShotImages(script, imageUrls, effectiveChar);
-      const storyboardRefs = storyboardRefsOf(script);
       const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
-      const prompt = buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
+      const isSurpriseMode = script.surprise_mode === true || script.intent === 'viral_store_tour';
+      const surpriseScript = isSurpriseMode ? bindSurpriseReferences(normalizeSurpriseScript(script), imageUrls.length) : null;
+      const referencePlan = isSurpriseMode && !disableReferences
+        ? buildSurpriseReferencePlan(
+            surpriseScript!,
+            imageUrls,
+            Array.isArray(script.reference_manifest)
+              ? script.reference_manifest
+              : (Array.isArray(script.image_descriptions) ? script.image_descriptions : []),
+          )
+        : null;
+      const refImages = disableReferences
+        ? []
+        : (referencePlan?.urls || resolveOneShotImages(script, imageUrls, effectiveChar));
+      const storyboardRefs = isSurpriseMode ? [] : storyboardRefsOf(script);
+      const prompt = surpriseScript
+        ? compileSurpriseOneShotPrompt({
+            script: surpriseScript,
+            referencePlan: referencePlan || { urls: [], items: [], referenceNumberBySourceIndex: {} },
+            styleLabel: `${VIDEO_STYLE_EN[styleKey]}${promptOverrides?.style_cue ? ` · ${promptOverrides.style_cue}` : ''}`,
+            personaDirective: promptOverrides?.persona_directive,
+            shopContext: shopBlock,
+            globalConstraints: [
+              resolveStorefrontConstraintZh(`${shopBlock}\n${referencePlan?.items.map((item) => item.summary).join('\n') || ''}`),
+              '【品牌硬约束】画面中唯一允许出现的品牌名或店招是 BOOMER 或 BOOMER·OFF，禁止任何第三方品牌与商场标识。',
+            ],
+          })
+        : buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
       console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur} face_pipeline=${facePipeline}`);
 
       const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
@@ -473,9 +499,12 @@ Deno.serve(async (req) => {
           __render_payload: {
             prompt, duration: oneShotDur, ratio, model, resolution,
             reference_images: refImages,
+            reference_manifest: referencePlan?.items || [],
             storyboard_refs: storyboardRefs,
             storyboard_ref_count: storyboardRefs.length,
             raw_ref_count: Math.max(0, refImages.length - storyboardRefs.length),
+            require_references: isSurpriseMode,
+            required_reference_count: isSurpriseMode ? refImages.length : 0,
             face_pipeline: facePipeline,
           },
         },
@@ -496,10 +525,11 @@ Deno.serve(async (req) => {
           job_id: parent.id, video_type: script.video_type,
           duration: oneShotDur, target_duration_s: totalDur, actual_duration_s: oneShotDur, aspect: ratio,
           mode: refImages.length ? "reference2video" : "text2video",
-          render_mode: "one_shot_reference",
+          render_mode: isSurpriseMode ? "surprise_one_shot" : "one_shot_reference",
           render_strategy: "one_shot",
           auto_decision_reason: autoReason,
           one_shot_refs: refImages,
+          reference_manifest: referencePlan?.items || [],
           storyboard_ref_count: storyboardRefs.length,
           topic: script.topic || "", style: styleKey,
           title: (script.title || script.topic || "").toString().slice(0, 24),

@@ -5,8 +5,9 @@ import { loadMarketingPresets, type VideoType } from "../_shared/brand-context.t
 import { normalizeStyle, VIDEO_STYLE_LABELS, VIDEO_STYLE_EN } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
-import { STOREFRONT_CONSTRAINT_ZH, sanitizeStorefrontText } from "../_shared/storefront-constraints.ts";
+import { resolveStorefrontConstraintZh, sanitizeStorefrontText, usesOpenFrontMallConstraint } from "../_shared/storefront-constraints.ts";
 import { scrubThirdPartyBrands, OWN_BRAND_LOCK_ZH } from "../_shared/brand-scrub.ts";
+import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -84,6 +85,12 @@ Deno.serve(async (req) => {
       ? `\n参考图描述(已经过 AI 识图,scene/action 必须基于这些具体细节):\n` +
         imageDescriptions.map((d) => `  [图 #${d.index}] ${d.summary}${d.best_for ? `(适合${d.best_for})` : ''}`).join('\n')
       : '';
+    const storefrontEvidence = `${shopBlock}\n${imageDescriptions.map((item) => item.summary || '').join('\n')}`;
+    const strictOpenFront = usesOpenFrontMallConstraint(storefrontEvidence);
+    const storefrontConstraint = resolveStorefrontConstraintZh(storefrontEvidence);
+    const viralStorefrontRule = strictOpenFront
+      ? '本店画像明确为商场 B1 的开放式无门店面;开场必须从商场走廊直接走入,禁止推门、玻璃门、街边、马路或户外。'
+      : '门店结构必须严格照当前门店画像和参考图;禁止凭空编造商场楼层、街边环境、入口门体或店面尺寸。';
 
     const approvedBlock = approvedScript
       ? `\n店员已确认的脚本草稿(请严格按这份脚本拆分镜,不要自由发挥):
@@ -102,21 +109,21 @@ ${approvedScript}
 
 【洗脑探店口播模板 · 高转化优先】(本片必须按这套节奏拍)
 - 【最高优先级 · 动作口播同步 walk-and-talk】每一镜的 dialogue 就是主角**在做那个 action 的同一时刻**说出的话。严禁"先做动作 → 停下 → 再讲话"、严禁纯氛围/静默走位镜。action 描述必须写成"边 ×× 边对镜头说 / 一边 ×× 一边讲",不要"停下、转身、然后说"这类分步措辞。15 秒全程都要有人在说话。
-- hook(≤2 秒)第一句必须是冲击型口语钩子,从这类句式里挑:"姐妹冲!"/"别再去 XX 了"/"我真的会谢"/"不是吧还有人不知道"/"这家店我能吹一年"。情绪要激动、有感染力。**钩子台词 ≤10 字**,且是主角一边走入店里一边喊出来的。
-- 中段每镜 2-3 秒,scenes 数组 4-6 段;主角始终是同一个人(沿用上面锁定的角色),每镜必须有具体动作:指货架、拿起单品、试穿/试戴、转身展示、对镜头说话——**动作和台词在同一秒发生**。
-- 全片必须像真人连续口播,**dialogue 字数加起来 65–80 字**,每镜 10–14 字,**hook ≤10 字、CTA ≤10 字**;**所有镜头都必须有非空 dialogue,严禁空台词**(15 秒里至少 13 秒在说话)。
+- hook 是第 1 个 3 秒镜头,第一句必须是冲击型口语钩子,从这类句式里挑:"姐妹冲!"/"别再去 XX 了"/"我真的会谢"/"不是吧还有人不知道"/"这家店我能吹一年"。情绪要激动、有感染力。**钩子台词 6–8 字**,且是主角一边走入店里一边喊出来的。
+- 中段固定 3 镜,每镜 3 秒;主角始终是同一个人(沿用上面锁定的角色),每镜必须有具体动作:指货架、拿起单品、试穿/试戴、转身展示、对镜头说话——**动作和台词在同一秒发生**。
+- 全片必须像真人连续口播,**dialogue 汉字合计 48–52 字**,中段每镜 11–12 字,**hook 6–8 字、CTA 6–8 字**;**所有 5 镜都必须有非空 dialogue,严禁空台词**(15 秒里至少 13 秒在说话)。
 - 【贯穿主线】所有镜头的 dialogue 串起来要是一段连贯的"探店日记"——从「为什么走进这家店 → 一进门看到什么 → 上手体验/挑到什么 → 价格或惊喜点 → 谁适合来 → 喊大家冲」依次递进;反复点名店铺关键词(店名/品类/钩子产品)让观众记得住,不要每镜各说各的。
 - 【硬规则】台词必须能在该镜 duration_s 内自然念完(按 4 字/秒清晰口播估算,即 dialogue 字数 ≤ duration_s × 4)。超出就删字,Seedance 念得太赶会糊。
-- subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""人均 50 封顶""闭眼冲"。≤24 字。subtitle 可与 dialogue 不同,用来补关键信息,并与 dialogue 同帧出现。
-- outro(≤2 秒)必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。**CTA 台词 ≤10 字**,主角一边比手势/一边收尾定格一边喊出来。
+- subtitle 用大白话短句 + 情绪符号:"绝了!""巨好出片""好逛到停不下""闭眼冲"。≤24 字。subtitle 可与 dialogue 不同,用来补关键信息,并与 dialogue 同帧出现。
+- outro 是第 5 个 3 秒镜头,必须带 CTA,从这类句式里挑:"地址放评论区"/"现在冲"/"错过等一年"/"姐妹快去"。**CTA 台词 6–8 字**,主角一边比手势/一边收尾定格一边喊出来。
 - 画面色调明亮、节奏快,运镜以推镜/手持/特写切换为主,避免慢悠悠的长镜头。
-- 【场景硬约束】本店在商场 B1 室内,是开放式 8 米无门店面;开场镜必须是「商场走廊视角 → 博主从走廊侧自然走入开放式店面(边走边喊 hook)」,严禁出现「推门 / 拉门 / 玻璃门 / 街边 / 马路 / 户外」等任何镜头与文字。
+- 【场景硬约束】${viralStorefrontRule}
 - 不要写成纪录片或氛围片,目标就是 15 秒抓人 + 让人想立刻去这家店。`
       : '';
 
 
     const sys = `${presets.brand}
-${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${OWN_BRAND_LOCK_ZH}\n${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}${viralBlock}
+${shopBlock ? `\n${shopBlock}\n` : ""}\n${storefrontConstraint}\n${OWN_BRAND_LOCK_ZH}\n${characterBlock}${kbBlock}${imgDescBlock}${approvedBlock}${viralBlock}
 
 你现在的任务是为店员生成一支「${rule.label}」短视频的【文生视频脚本】(全中文)。
 
@@ -129,6 +136,8 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}\n${STOREFRONT_CONSTRAINT_ZH}\n${OWN_BRAND
 
 参考图(image_index)：${approvedScript
         ? '严格按草稿里的 [图 #N] 标记取值,不要自己挑。'
+        : isViralStoreTour
+          ? `共 ${imageUrls.length} 张实景图。五个节奏段都必须填写有效 image_index;按内容选择最贴合的图,图片少于五张时允许合理复用,但不允许任何一段填 null。`
         : `当上传了参考图时，这是一个**素材池**(共 ${imageUrls.length} 张)。
 为每一镜从池子里挑**最贴合那一镜内容**的那张，输出对应 index(0 起)。
 不要所有镜头都用同一张；找不到合适的就填 null。`}
@@ -173,7 +182,7 @@ ${refList}
 输出严格 JSON：
 {
   "title": "<≤14 字的中文标题，一眼看出这条视频拍的是什么，避免『视频/短片』这类无信息词>",
-  "one_shot_prompt": "<${isTight15 ? '【15 秒必填】' : '可留空字符串'}120–180 字中文口语化『导演稿』。这段话是交给视频模型的最终稿,要写成一段自然叙述:主角在这家店里连贯地做什么(走进店→拿起商品→试戴/试穿→惊喜表情→拉镜头喊姐妹冲,动作要串起来不要分段),整体情绪节奏(手持跟拍、明亮色调、轻快 vlog 感)、以及一句总台词方向(例:『全程边逛边对镜头讲这家店多好逛、便宜到离谱、姐妹速冲』)。**不要**写『镜头 1 / 镜头 2』『0-3 秒』这种分镜/时间码,**不要**堆逐字台词,让视频模型自由发挥。>",
+  "one_shot_prompt": "<${isViralStoreTour ? '必须为空字符串。惊喜一下以 hook/scenes/outro 为唯一脚本来源,服务端会确定性编译 Seedance 时间轴。' : `${isTight15 ? '【15 秒必填】' : '可留空字符串'}120–180 字中文导演稿。`}>",
   "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "<中文台词,可为空字符串>", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": 2, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
   "scenes": [
     { "scene": "...", "action": "...", "dialogue": "...", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
@@ -184,7 +193,9 @@ ${refList}
   "aspect": "${aspect}",
   "mode": "text2video"
 }
-说明:hook/scenes/outro 里的 dialogue 和 subtitle 只是用来展示给店员看 + 后期烧字幕,**真正交给视频模型的是 one_shot_prompt**,写得自然口语、有画面感、不要分镜。
+说明:${isViralStoreTour
+        ? 'hook/scenes/outro 就是店员确认和 Seedance 实际执行的同一份脚本。每段 dialogue 必须完整、明确、可直接逐字说出;one_shot_prompt 必须为空。'
+        : 'hook/scenes/outro 用于分镜展示和后期;one_shot_prompt 用于兼容普通一次成片。'}
 只输出 JSON，不要 \`\`\` 包裹。`;
 
     const userContent: any[] = [{ type: "text", text: userPrompt }];
@@ -226,7 +237,8 @@ ${refList}
       scrubThirdPartyBrands(
         sanitizeStorefrontText(
           (s || "").toString().replace(/主播/g, "店员").replace(/直播间/g, "店里")
-            .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, "")
+            .replace(/保真|保证升值|秒杀|限时抢|全网最低/g, ""),
+          strictOpenFront,
         )
       ).trim().slice(0, max);
     const clampIdx = (n: any): number | null => {
@@ -326,6 +338,7 @@ ${refList}
       script.hook.duration_s = 3;
       script.outro.duration_s = 3;
       script.scenes.forEach((s: any) => { s.duration_s = 3; });
+      if (isViralStoreTour) script = bindSurpriseReferences(normalizeSurpriseScript(script), imageUrls.length);
     } else {
       // 非 15s:沿用旧的软目标 ±20% 浮动
       const allClips = [script.hook, ...script.scenes, script.outro];
@@ -396,8 +409,8 @@ ${refList}
     script.mode = "text2video";
     // one_shot_prompt:交给视频模型的一段话导演稿,做去敏 + 去分镜口令 + 截断
     {
-      let osp = (script?.one_shot_prompt ?? "").toString();
-      osp = scrubThirdPartyBrands(sanitizeStorefrontText(osp))
+      let osp = isViralStoreTour ? "" : (script?.one_shot_prompt ?? "").toString();
+      osp = scrubThirdPartyBrands(sanitizeStorefrontText(osp, strictOpenFront))
         .replace(/主播/g, "店员").replace(/直播间/g, "店里")
         // 去掉模型可能偷偷带的分镜/时间码前缀
         .replace(/【[^】]{0,10}(镜头|开场|收尾|中段)[^】]{0,10}】/g, "")
@@ -408,7 +421,9 @@ ${refList}
       script.one_shot_prompt = osp;
     }
     script.image_urls = imageUrls;
+    script.image_descriptions = imageDescriptions;
     script.topic = topic;
+    script.intent = intent;
     script.style = styleKey;
     script.style_label = VIDEO_STYLE_LABELS[styleKey];
     // 标题:AI 给了就用,没给就从 topic 兜底,再兜底 rule.label

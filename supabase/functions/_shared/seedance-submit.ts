@@ -19,6 +19,8 @@ export interface SubmitSegmentOptions {
   referenceImages?: string[];
   storyboardRefs?: string[];
   requireStoryboard?: boolean;
+  requireReferences?: boolean;
+  requiredReferenceCount?: number;
   facePipeline?: FacePipeline;
 }
 
@@ -117,6 +119,18 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
   const fallbackNotes: string[] = [];
   const facePipeline = opts.facePipeline || 'auto';
   let effectiveRefs = (opts.referenceImages || []).filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
+  const requiredReferenceCount = opts.requireReferences
+    ? Math.max(1, Math.min(SEEDANCE_MAX_REFS, Number(opts.requiredReferenceCount) || effectiveRefs.length || 1))
+    : 0;
+  const lostRequiredReferences = (refs: string[]) => opts.requireReferences && refs.length < requiredReferenceCount;
+  if (lostRequiredReferences(effectiveRefs)) {
+    return {
+      ok: false,
+      error: `本次任务必须保留 ${requiredReferenceCount} 张店铺实景参考图，但提交参数只有 ${effectiveRefs.length} 张，请重新选择素材。`,
+      fallbackNotes: ['required_references_missing'],
+      referenceCount: effectiveRefs.length,
+    };
+  }
   const storyboardSet = new Set((opts.storyboardRefs || []).filter(Boolean));
   const keepsStoryboard = (refs: string[]) => !opts.requireStoryboard || !storyboardSet.size || refs.some((u) => storyboardSet.has(u));
 
@@ -130,12 +144,18 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
       max: 1,
     });
     effectiveRefs = [...softenedCharacter, ...sceneRefs].filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
+    if (lostRequiredReferences(effectiveRefs)) {
+      return { ok: false, error: '真人审核处理会丢失部分店铺参考图，已停止生成，避免后续镜头与脚本脱节。请换一组实景图后重试。', fallbackNotes: ['required_references_locked_stop'], referenceCount: effectiveRefs.length };
+    }
     if (!keepsStoryboard(effectiveRefs)) {
       return { ok: false, error: '真人审核降级会丢失分镜静帧,已停止渲染。请先对角色做认证或改用软通过重试。', fallbackNotes: ['storyboard_locked_stop'], referenceCount: 0 };
     }
     fallbackNotes.push('face_soft_pass_applied');
   } else if (facePipeline === 'faceless') {
     effectiveRefs = effectiveRefs.filter((u) => !/avatar|face|character|portrait/i.test(u)).slice(0, 2);
+    if (lostRequiredReferences(effectiveRefs)) {
+      return { ok: false, error: '无人化处理会丢失部分店铺参考图，已停止生成，避免后续镜头与脚本脱节。请换一组实景图后重试。', fallbackNotes: ['required_references_locked_stop'], referenceCount: effectiveRefs.length };
+    }
     if (!keepsStoryboard(effectiveRefs)) {
       return { ok: false, error: '无人化降级会丢失分镜静帧,已停止渲染。请关闭无人化或重做分镜。', fallbackNotes: ['storyboard_locked_stop'], referenceCount: 0 };
     }
@@ -146,6 +166,9 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
 
   if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
     const marked = await softPassKeyReferences(effectiveRefs, { admin: opts.admin, userId: opts.userId, max: 1 });
+    if (lostRequiredReferences(marked)) {
+      return { ok: false, error: '真人审核重试会丢失部分店铺参考图，已停止生成，避免生成与脚本无关的视频。请换图后重试。', raw: (r as any).raw, fallbackNotes: [...fallbackNotes, 'required_references_locked_stop'], referenceCount: marked.length };
+    }
     if (!keepsStoryboard(marked)) {
       return { ok: false, error: '真人审核触发后需要丢掉分镜静帧才可能继续,已停止渲染。请使用角色认证或软通过后重试。', raw: (r as any).raw, fallbackNotes: ['storyboard_locked_stop'], referenceCount: effectiveRefs.length };
     }
@@ -157,6 +180,9 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
   if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length > 1) {
     fallbackNotes.push('references_trimmed_for_safety');
     const trimmed = effectiveRefs.slice(0, 1);
+    if (lostRequiredReferences(trimmed)) {
+      return { ok: false, error: '继续重试会丢失部分店铺参考图，已停止生成，避免后续镜头偏离脚本。请换图后重试。', raw: (r as any).raw, fallbackNotes: [...fallbackNotes, 'required_references_locked_stop'], referenceCount: trimmed.length };
+    }
     if (!keepsStoryboard(trimmed)) {
       return { ok: false, error: '继续降级会丢掉分镜静帧,已停止渲染。请换一张分镜静帧或完成真人认证后重试。', raw: (r as any).raw, fallbackNotes, referenceCount: effectiveRefs.length };
     }
@@ -166,6 +192,9 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
   if (!r.ok && isSensitive(r.error, (r as any).raw)) {
     if (opts.requireStoryboard && storyboardSet.size) {
       return { ok: false, error: '火山审核不接受当前分镜静帧,系统已停止纯文本兜底,避免生成和分镜无关的视频。请换图或使用软通过重试。', raw: (r as any).raw, fallbackNotes, referenceCount: effectiveRefs.length };
+    }
+    if (opts.requireReferences) {
+      return { ok: false, error: '火山审核不接受当前店铺参考图，系统已停止纯文本兜底，避免生成和脚本无关的视频。请换一组店铺实景图后重试。', raw: (r as any).raw, fallbackNotes: [...fallbackNotes, 'required_references_locked_stop'], referenceCount: effectiveRefs.length };
     }
     fallbackNotes.push('references_dropped_for_safety');
     r = await submitArkTask({ ...opts, referenceImages: [] });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { VideoJobDetailPanel } from '@/components/marketing/VideoJobDetailPanel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -14,20 +14,18 @@ import {
   getSavedPick, setSavedPick, clearSavedPick,
   type ActiveRenderJob,
 } from '@/lib/surpriseJob';
-import { SeedanceModelPicker } from '@/components/marketing/SeedanceModelPicker';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
-import { DEFAULT_SEEDANCE_2, getSeedanceModel, getSeedanceShortLabel, reconcileResolution, type SeedanceResolution } from '@/lib/seedanceModels';
-import { getModelPrefs, getSurpriseModelPrefs, saveModelPrefs } from '@/lib/videoModelPrefs';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { toastVideoFailure } from '@/lib/toastVideoFailure';
 import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
 import { invokeFn } from '@/lib/invokeFn';
 import { DirectorProgress } from '@/components/marketing/director/DirectorProgress';
-import { createVideoJob } from '@/api/videoGeneration';
 
 // 惊喜一下固定真人写实,不暴露切换开关
 const SURPRISE_REALISM: Realism = 'photoreal';
+const SURPRISE_MODEL = 'doubao-seedance-2-0-fast-260128';
+const SURPRISE_RESOLUTION = '720p';
 
 interface PickedAsset {
   asset_id: string;
@@ -81,22 +79,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
-  const [modelId, setModelId] = useState<string>(() => getSurpriseModelPrefs().modelId);
-  const [resolution, setResolution] = useState<SeedanceResolution>(() => getSurpriseModelPrefs().resolution);
   const realism: Realism = SURPRISE_REALISM;
-
-  const handleModelChange = (id: string) => {
-    setModelId(id);
-    setResolution((cur) => {
-      const next = reconcileResolution(id, cur);
-      saveModelPrefs(id, next);
-      return next;
-    });
-  };
-  const handleResolutionChange = (r: SeedanceResolution) => {
-    setResolution(r);
-    saveModelPrefs(modelId, r);
-  };
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = () => {
@@ -175,38 +158,52 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     doPick(newEx);
   };
 
-  const start = async (overrides?: { modelId?: string; resolution?: SeedanceResolution; disable_references?: boolean; face_pipeline?: 'auto' | 'character_sheet' | 'illustration' | 'faceless' }) => {
+  const start = async (overrides?: { modelId?: string; resolution?: string; face_pipeline?: 'auto' | 'character_sheet' | 'illustration' | 'faceless' }) => {
     if (!shopId || !pick) return;
-    const useModel = overrides?.modelId || modelId;
-    const useRes = overrides?.resolution || resolution;
+    const useModel = overrides?.modelId || SURPRISE_MODEL;
+    const useRes = overrides?.resolution || SURPRISE_RESOLUTION;
     setSubmitting(true);
     setRenderError(null);
-    // 唯一路径:角色参考图 + 3 个独立 Seedance 镜头 + 腾讯云标准合成。
-    // 这里禁止退回旧的一次成片模式,否则用户看到的是“成功”,实际却没有执行脚本分镜。
+    // 员工极速路径:店员看到的五段脚本会被确定性编译成同一个 15 秒
+    // Seedance 时间轴。专业逐镜生成只保留在独立的 AI 视频入口。
     try {
-      const { job_id, shot_count } = await createVideoJob({
-        shop_id: shopId,
-        script: pick.script,
-        picked_assets: pick.assets,
-        persona: pick.persona,
-        style: pick.style,
-        model: useModel,
-        resolution: useRes,
-        prompt_overrides: pick.prompt_overrides,
+      const { data, error } = await invokeFn('surprise-marketing-video', {
+        body: {
+          shop_id: shopId,
+          preview: false,
+          script: pick.script,
+          picked_assets: pick.assets,
+          style: pick.style,
+          model: useModel,
+          resolution: useRes,
+          realism,
+          // 惊喜一下必须绑定店铺实景参考图。失败时也不能静默退化成纯文本生成。
+          disable_references: false,
+          face_pipeline: overrides?.face_pipeline,
+          prompt_overrides: pick.prompt_overrides,
+        },
       });
+      if (error) throw error;
+      const result = data as any;
+      if (result?.ok === false || !result?.job_id) throw new Error(result?.error || '15 秒视频生成任务启动失败');
       const job: ActiveRenderJob = {
-        jobId: job_id, coverUrl: pick.picked.cover_url,
-        createdAt: Date.now(), kind: 'director',
+        jobId: result.job_id,
+        coverUrl: pick.picked.cover_url,
+        createdAt: Date.now(),
+        kind: 'legacy',
+        segmentTotal: Number(result.segment_total) || 1,
       };
       setActiveRenderJob(shopId, job);
       clearSavedPick(shopId);
       setActiveJob(job);
       setRenderPhase('queued');
+      setProgress({ done: 0, total: 1 });
       setRenderError(null);
-      toast.success(`已开拍 · ${shot_count} 个镜头会分别生成`);
+      startPolling(result.job_id, shopId);
+      toast.success('已开拍 · Seedance 正按完整脚本生成 15 秒视频');
     } catch (e: any) {
-      const message = e?.message || '导演流水线启动失败';
-      console.error('[surprise] director path failed', e);
+      const message = e?.message || '15 秒视频生成任务启动失败';
+      console.error('[surprise] one-shot path failed', e);
       setRenderError(message);
       toast.error(message);
     } finally { setSubmitting(false); }
@@ -226,11 +223,13 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     }
     if (fix.kind === 'topup') return;
     const patch = fix.patch || {};
-    if (patch.modelId) {
-      setModelId(patch.modelId);
-      setResolution((cur) => reconcileResolution(patch.modelId!, (patch.resolution as SeedanceResolution) || cur));
-    } else if (patch.resolution) {
-      setResolution(patch.resolution as SeedanceResolution);
+    if (patch.disable_references) {
+      setRenderError(null);
+      setActiveJob(null);
+      clearActiveRenderJob(shopId);
+      toast.error('惊喜一下必须使用店铺实景图，请换一组素材后重试');
+      reroll();
+      return;
     }
     // 记住"软通过/插画化/无人化"到角色卡(惊喜路径取 pick.picked 上的角色 id)
     const charId = (pick as any)?.picked?.character_id || (pick as any)?.picked?.character?.id;
@@ -246,8 +245,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     clearActiveRenderJob(shopId);
     await start({
       modelId: patch.modelId,
-      resolution: (patch.resolution as SeedanceResolution) || undefined,
-      disable_references: patch.disable_references,
+      resolution: patch.resolution || undefined,
       face_pipeline: patch.face_pipeline,
     });
   };
@@ -310,26 +308,17 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           <>
             <ScriptBody pick={pick} />
             <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
-              <SeedanceModelPicker
-                value={modelId}
-                onChange={handleModelChange}
-                resolution={resolution}
-                onResolutionChange={handleResolutionChange}
-                compact
-              />
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 shrink-0" />
-                <span className="truncate">
-                  将使用 <b>{getSeedanceModel(modelId).label}</b> · {resolution} · 3 镜逐镜生成
-                </span>
+                <span>固定 9:16 · 15 秒 · Seedance 原生中文对白</span>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
-                  <RefreshCw className="w-4 h-4 mr-1" /> 换一组
+                  <RefreshCw className="w-4 h-4 mr-1" /> 换个创意
                 </Button>
                 <Button className="flex-1" onClick={() => start()} disabled={submitting}>
                   {submitting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
-                  就用 {getSeedanceShortLabel(modelId)} · {resolution} 拍
+                  马上生成 15 秒
                 </Button>
               </div>
               {renderError && (
@@ -338,7 +327,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 </div>
               )}
               <p className="text-[10px] text-center text-muted-foreground">
-                3 × 5 秒独立镜头 · 同一角色参考图 · 腾讯云合成标准视频
+                你看到的脚本和参考图会原样交给 Seedance，不另写一份隐藏文案
               </p>
             </div>
           </>
@@ -385,11 +374,11 @@ function RenderingBody({
     if (progress && progress.total > 0) {
       const ratio = progress.done / progress.total;
       if (ratio >= 0.95) return { title: '即将完成…', hint: '正在打包封面 + 上传到素材库' };
-      return { title: `Seedance 渲染中 · ${progress.done}/${progress.total}`, hint: '每段约 30-60 秒,稳一稳' };
+      return { title: 'Seedance 正在拍摄…', hint: '正在按刚才确认的完整脚本生成 15 秒画面和对白' };
     }
-    if (elapsed < 15) return { title: '准备渲染参数…', hint: '正在把角色板 + 实景参考图打包' };
-    if (elapsed < 45) return { title: 'Seedance 在排镜头…', hint: '模型正在按脚本切分镜,大约还要 1 分钟' };
-    if (elapsed < 90) return { title: 'Seedance 渲染中…', hint: '正在逐帧生成,马上就好' };
+    if (elapsed < 15) return { title: '正在整理素材…', hint: '正在核对脚本、台词和每张参考图的用途' };
+    if (elapsed < 45) return { title: 'Seedance 正在排镜头…', hint: '五段画面会在同一个 15 秒视频里连续完成' };
+    if (elapsed < 90) return { title: 'Seedance 正在拍摄…', hint: '正在生成真人画面和连续中文对白' };
     if (elapsed < 180) return { title: '正在精修画面…', hint: '高清模型耗时略长,辛苦再等一下' };
     return { title: '正在收尾…', hint: '已经在最后阶段,关掉弹窗也会继续' };
   })();
@@ -532,7 +521,6 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
     return { label, clip, start, dur };
   });
 
-  const lightboxUrls = useMemo(() => pick.assets.map((a) => a.url), [pick.assets]);
   const [lbOpen, setLbOpen] = useState(false);
   const [lbIdx, setLbIdx] = useState(0);
   const openLb = (i: number) => { setLbIdx(i); setLbOpen(true); };
@@ -547,9 +535,13 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
       kind: a.role === 'storefront' ? 'storefront' : 'scene',
     });
   });
-  const refLightbox = useMemo(() => refTiles.map((t) => t.url), [refTiles.map((t) => t.url).join('|')]);
+  const refLightbox = refTiles.map((tile) => tile.url);
 
   const persona = pick.persona;
+  const spokenScript = clips
+    .map(({ clip }) => (clip.dialogue || '').trim())
+    .filter(Boolean)
+    .join('，');
   const paceClass = persona?.pace === 'slow'
     ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
     : persona?.pace === 'fast'
@@ -601,20 +593,32 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
         </div>
       )}
 
+      <div className="rounded-xl border border-accent/35 bg-accent/[0.06] px-3.5 py-3 space-y-1.5">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-accent">
+          <MessageSquare className="w-3.5 h-3.5" />
+          完整口播 · Seedance 将按这段对白生成
+        </div>
+        <p className="text-[13px] leading-6 font-medium text-foreground break-words">
+          “{spokenScript}”
+        </p>
+        <p className="text-[10px] text-muted-foreground">
+          15 秒全程连续说话 · 开场强钩子 · 中段递进种草 · 结尾明确到店
+        </p>
+      </div>
+
       {pick.picked.needs_storefront && (
         <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded px-2.5 py-2 leading-snug flex gap-1.5">
           <DoorOpen className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           <span>
-            还没有 <b>门头/店招</b> 照片。本店在<b>商场 B1 · 开放式无门店面</b>,
-            建议补拍一张「商场走廊视角」的店面 + 顶部 logo 招牌,标注「门头」入库,
-            下次开场就能锁死走廊视角,镜头更像真实探店。
+            还没有 <b>门头/店招</b> 照片。建议补拍一张能看清真实入口、店招和周边环境的全景,
+            标注「门头」入库,下次开场就能严格还原当前门店。
           </span>
         </div>
       )}
 
       <div>
         <div className="text-[11px] text-muted-foreground mb-1.5">
-          参考图 · {refTiles.length} 张(门头 / 实景)· 商场 B1 · 开放式店面(无门)· 主角由 AI 现场生成
+          参考图 · {refTiles.length} 张(门头 / 实景)· 门店结构以当前实景为准 · 主角由 AI 现场生成
         </div>
         <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2 pt-1 snap-x">
           {refTiles.map((t, i) => (
@@ -639,7 +643,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
 
 
       <div>
-        <div className="text-[11px] text-muted-foreground mb-2">BOOMER 拟好的脚本 · {clips.length} 个分镜 · 由 Seedance 自己排画面</div>
+        <div className="text-[11px] text-muted-foreground mb-2">BOOMER 拟好的脚本 · {clips.length} 个节奏段 · 将原样编译成 15 秒时间轴</div>
         <div className="space-y-2">
           {withTime.map(({ label, clip, start, dur }, i) => (
             <div key={i} className="p-2.5 rounded-lg border bg-card min-w-0 space-y-1">

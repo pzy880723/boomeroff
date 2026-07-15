@@ -11,7 +11,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadShopContext } from "../_shared/shop-context.ts";
 import { pickUpcomingHoliday, formatHolidayBrief } from "../_shared/holiday-context.ts";
 import { generatePersona, formatPersonaDirective, formatPersonaBriefZh, type InfluencerPersona } from "../_shared/persona-generator.ts";
-import { STOREFRONT_OPENING_EN, STOREFRONT_OPENING_ZH } from "../_shared/storefront-constraints.ts";
+import { resolveStorefrontOpeningEn, resolveStorefrontOpeningZh } from "../_shared/storefront-constraints.ts";
+import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -127,8 +128,30 @@ Deno.serve(async (req) => {
 
     // ====== 提交模式:前端回传 preview 时生成的 script,直接渲染 ======
     if (!preview && body.script && body.picked_assets && body.style) {
+      const submittedAssets = Array.isArray(body.picked_assets) ? body.picked_assets : [];
+      const submittedReferences = submittedAssets
+        .map((asset: any) => ({ asset, url: String(asset?.url || asset?.output_url || '').trim() }))
+        .filter((entry: any) => Boolean(entry.url))
+        .slice(0, 9);
+      const submittedImageUrls = submittedReferences.map((entry: any) => entry.url);
+      if (!submittedImageUrls.length) {
+        return json({ ok: false, error: '惊喜一下必须选择至少一张店铺实景图' });
+      }
+      const submittedDescriptions = submittedReferences.map(({ asset }: any, index: number) => ({
+        index,
+        summary: String(asset?.summary || (asset?.role === 'storefront' ? '门头和开放式店面' : `店内实景${index + 1}`)).slice(0, 160),
+        role: asset?.role === 'storefront' ? 'storefront' : 'scene',
+      }));
       const renderBody: any = {
-        script: { ...body.script, video_type: 'store_tour' },
+        script: bindSurpriseReferences(normalizeSurpriseScript({
+          ...body.script,
+          video_type: 'store_tour',
+          surprise_mode: true,
+          intent: 'viral_store_tour',
+          image_urls: submittedImageUrls,
+          image_descriptions: submittedDescriptions,
+          reference_manifest: submittedDescriptions,
+        }), submittedImageUrls.length),
         style: body.style,
         shop_id: shopId,
         render_strategy: 'one_shot',
@@ -136,7 +159,8 @@ Deno.serve(async (req) => {
       if (typeof body.model === 'string' && body.model) renderBody.model = body.model;
       if (typeof body.resolution === 'string' && body.resolution) renderBody.resolution = body.resolution;
       if (body.realism === 'photoreal' || body.realism === 'stylized') renderBody.realism = body.realism;
-      if (body.disable_references) renderBody.disable_references = true;
+      // 员工极速成片必须以店铺实景图为事实锚点，禁止退化成无参考图生成。
+      renderBody.disable_references = false;
       if (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless') {
         renderBody.face_pipeline = body.face_pipeline;
       }
@@ -285,9 +309,11 @@ Deno.serve(async (req) => {
       : summarizeAsset(scenicAssets[0] || pickedAssets[0]);
 
     const randomHooks = sampleN(HOOK_POOL, 2).map((s) => `"${s}"`).join(" / ");
+    const storefrontEvidence = `${JSON.stringify(shopCtx || {})}\n${pickedAssets.map((asset: any) => summarizeAsset(asset)).join('\n')}`;
+    const storefrontOpeningZh = resolveStorefrontOpeningZh(storefrontEvidence);
     const openingDirective = storefrontHit
-      ? `${STOREFRONT_OPENING_ZH} 参考图 1 是门头/店招/logo,务必在 0-2s 内露出;subtitle 像「${shopCtx?.name || '这家店'},冲!」之类。从第 2 镜起镜头已在店内货架间。`
-      : `${STOREFRONT_OPENING_ZH} subtitle 像「${shopCtx?.name || '这家店'},冲!」。`;
+      ? `${storefrontOpeningZh} 参考图 1 是门头/店招/logo,务必在 0-3s 内露出;subtitle 像「${shopCtx?.name || '这家店'},冲!」之类。从第 2 镜起镜头已在店内货架间。`
+      : `${storefrontOpeningZh} subtitle 像「${shopCtx?.name || '这家店'},冲!」。`;
 
     const briefTranscript =
       `店员:来一条 15 秒竖版探店口播,节奏严格按下面博主人设走(慢就慢、快就快,不要前后割裂)。\n` +
@@ -295,13 +321,14 @@ Deno.serve(async (req) => {
       `${openingDirective}\n` +
       `${holidayBrief ? holidayBrief + '\n' : ''}` +
       `【钩子句池】这次开场的钩子可参考(可改写,不要照抄,必须贴合博主语气与节奏):${randomHooks}。每次拍都要不一样,不要复用上次开头。\n` +
-      `【全片要求】共 6 个 2-3 秒小镜头,主角始终是上面那位虚构博主(同人同发型同服装),每镜都有动作(指/拿/试/转身/对镜头说话);**每一镜都必须有 dialogue,严禁空台词**,所有 dialogue 串成一段连贯的探店日记(为什么进店 → 看到什么 → 上手体验 → 价格惊喜 → 谁适合 → 喊大家冲),反复点名店名「${shopCtx?.name || '这家店'}」与品类;博主每一镜都要有情绪起伏(惊喜/激动/安利/拍桌惊呼),不要平铺直叙,即使是稳重人设也必须带劲、有推进;全部用上传的店内实景;字幕大白话符合博主语气,结尾必须带 CTA(参考博主 CTA「${persona.cta}」)。`;
+      `【全片要求】严格 5 个 3 秒镜头:钩子 1 镜 + 递进种草 3 镜 + CTA 1 镜。主角始终是上面那位虚构博主(同人同发型同服装),每镜都有动作(指/拿/试/转身/对镜头说话);**每一镜都必须有 dialogue,严禁空台词**,五句合计 48–52 个汉字,串成一段连贯的探店日记(为什么进店 → 一进门看到什么 → 上手体验/挑到什么 → 适合谁来 → 喊大家冲)。随机变化钩子、人设和表达,但主旨永远是强力种草当前门店;门店事实和卖点只能来自店铺画像、品牌知识库与已选实景素材,严禁编造价格或活动。博主每一镜都要有情绪推进,全部用上传的店内实景;结尾必须带 CTA(参考博主 CTA「${persona.cta}」)。`;
 
     // 9) 生成脚本
     const imageUrls = pickedAssets.map((a: any) => a.output_url);
     const imageDescriptions = pickedAssets.map((a: any, i: number) => ({
       index: i,
       summary: i === 0 && storefrontHit ? `门头/店招 · ${summarizeAsset(a)}` : summarizeAsset(a),
+      role: i === 0 && storefrontHit ? 'storefront' : 'scene',
     }));
 
     const scriptRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-marketing-video-script`, {
@@ -332,7 +359,14 @@ Deno.serve(async (req) => {
     if (!scriptRes.ok || !scriptData?.script) {
       return json({ ok: false, error: scriptData?.error || '脚本生成失败' });
     }
-    const script = scriptData.script;
+    const script = bindSurpriseReferences(normalizeSurpriseScript({
+      ...scriptData.script,
+      surprise_mode: true,
+      intent: 'viral_store_tour',
+      image_descriptions: imageDescriptions,
+      reference_manifest: imageDescriptions,
+      persona,
+    }), imageUrls.length);
 
     // 10) 输出 assets(给前端做参考图横排展示)
     const assets = pickedAssets.map((a: any, i: number) => ({
@@ -356,9 +390,10 @@ Deno.serve(async (req) => {
     };
 
     // 11) 渲染 prompt_overrides:博主人设 + 开场强制门头 + 节日 vibe
+    const storefrontOpeningEn = resolveStorefrontOpeningEn(storefrontEvidence);
     const openingEn = storefrontHit
-      ? `${STOREFRONT_OPENING_EN} The brand sign / logo from reference image #1 must appear on the lintel above the open shopfront in the opening 0-2s.`
-      : STOREFRONT_OPENING_EN;
+      ? `${storefrontOpeningEn} The brand sign / logo from reference image #1 must remain visible in the opening 0-3s.`
+      : storefrontOpeningEn;
     const styleCue = holiday?.vibe || undefined;
     const promptOverrides = {
       opening: openingEn,

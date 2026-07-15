@@ -113,7 +113,7 @@ export default function MyMarketing() {
               让 BOOMER 替你拍一条
             </h3>
             <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug truncate">
-              自动选图 · 写脚本 · 竖版 15 秒
+              自动选图 · 完整脚本 · 15 秒快速成片
             </p>
           </div>
           {hasActiveJob ? (
@@ -123,7 +123,7 @@ export default function MyMarketing() {
             </span>
           ) : (
             <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold tracking-wider px-2 py-1 rounded-full border border-accent/30 text-accent">
-              9:16 · 15s
+              一键成片
               <ChevronRight className="w-3 h-3" />
             </span>
           )}
@@ -161,7 +161,7 @@ export default function MyMarketing() {
                   <span className="ml-auto text-[10px] tracking-[0.18em] text-accent font-semibold">15-30 秒</span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-muted-foreground mt-1">
-                  文字立意 · 参考图辅助 · AI 出片
+                  自定义脚本 · 逐镜制作 · 专业合成
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:translate-x-0.5 transition-transform" />
@@ -284,5 +284,4 @@ function ToolTile({
     </Link>
   );
 }
-
 
