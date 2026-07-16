@@ -10,7 +10,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
 import { SurpriseVideoDialog } from '@/components/marketing/SurpriseVideoDialog';
-import { getActiveRenderJob } from '@/lib/surpriseJob';
+import { clearActiveRenderJob, getActiveRenderJob } from '@/lib/surpriseJob';
+import { getVideoJob } from '@/api/videoGeneration';
 
 interface RecentItem { id: string; kind: string; output_url: string | null; created_at: string; }
 
@@ -26,7 +27,19 @@ export default function MyMarketing() {
 
   useEffect(() => {
     if (!shopId) { setHasActiveJob(false); return; }
-    const refresh = () => setHasActiveJob(!!getActiveRenderJob(shopId));
+    const refresh = () => {
+      const job = getActiveRenderJob(shopId);
+      setHasActiveJob(!!job);
+      if (job?.kind === 'director') {
+        void getVideoJob(job.jobId).then((result) => {
+          const status = result.job?.status;
+          if (status === 'done' || status === 'failed') {
+            clearActiveRenderJob(shopId);
+            setHasActiveJob(false);
+          }
+        }).catch(() => undefined);
+      }
+    };
     refresh();
     const onChange = () => refresh();
     const onStorage = (e: StorageEvent) => { if (e.key && e.key.includes('boomer.surprise.job')) refresh(); };

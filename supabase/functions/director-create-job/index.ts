@@ -68,7 +68,12 @@ Deno.serve(async (req) => {
         status: 'queued',
         duration: plannedDuration,
         aspect_ratio: '9:16',
-        meta: { pipeline_version: 'director-v2', planned_shot_count: shotPlan.length },
+        meta: {
+          pipeline_version: 'director-v2',
+          planned_shot_count: shotPlan.length,
+          publish_copy_status: 'pending',
+          background: true,
+        },
       })
       .select()
       .single();
@@ -121,7 +126,7 @@ Deno.serve(async (req) => {
       await pipelineRequest;
     }
 
-    return json({ ok: true, job_id: job.id, shot_count: shotRows.length });
+    return json({ ok: true, job_id: job.id, shot_count: shotRows.length }, 202);
   } catch (e) {
     console.error("[director-create-job] fatal", e);
     return json({ ok: false, error: (e as Error).message || String(e) }, 500);
