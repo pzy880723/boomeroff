@@ -1,10 +1,12 @@
 # 惊喜一下 DeepSeek 更新交接
 
-## 拉取分支
+## 同步代码
 
 ```text
-codex/surprise-deepseek-scripts
+main
 ```
+
+功能已合并到 GitHub `main`，Lovable 直接同步主分支最新提交即可。
 
 ## 必须配置的 Secret
 
