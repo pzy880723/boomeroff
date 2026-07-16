@@ -57,8 +57,8 @@ export function scrubThirdPartyBrands(text: string | null | undefined): string {
   for (const { pattern, replace } of THIRD_PARTY_BRAND_PATTERNS) {
     out = out.replace(pattern, replace);
   }
-  // 连续出现的"本店本店"合并
-  out = out.replace(/(本店\s*){2,}/g, '本店');
+  // 连续出现的"BOOMER·OFF"合并
+  out = out.replace(/(BOOMER·OFF\s*){2,}/g, 'BOOMER·OFF');
   return out;
 }
 
@@ -66,7 +66,8 @@ export function scrubThirdPartyBrands(text: string | null | undefined): string {
 export const OWN_BRAND_LOCK_ZH = `【品牌招牌硬约束(不可违反)】
 - 视频里出现的所有招牌 / logo / 灯箱 / 门头字样,只允许是「BOOMER」或「BOOMER·OFF」自家品牌。
 - 严禁出现任何第三方商标 / 商场名 / 百货名 / 品牌名(比如中信泰富、太古里、万象城、IFC、SKP、恒隆、来福士、大悦城、正大广场、K11、久光、银泰、万达、凯德、龙湖天街、合生汇 等,以及所有"XX 广场店 / XX 商场店 / XX 中心店"这类真实招牌)。
-- 如果用户输入里出现了任何第三方商场名,一律理解成"我们门店 / 本店",不要写进 scene / action / dialogue / subtitle 里。
+- 如果用户输入里出现了任何第三方商场名,一律理解成 BOOMER·OFF 自家门店,不要写进 scene / action / dialogue / subtitle 里;也不要用「本店 / 我们门店 / 小店」这种口播,直接说品牌名 BOOMER·OFF。
+
 - 涉及门头 / 店招 / 招牌的镜头,只描写"BOOMER·OFF 开放式店面上方的灯箱 / 门楣 logo",不要提任何第三方招牌。`;
 
 // 追加到 Seedance 渲染 prompt 里(英文/中英混,给视频模型看)
