@@ -2463,6 +2463,8 @@ export type Database = {
       social_publish_targets: {
         Row: {
           account_id: string
+          claim_expires_at: string | null
+          claim_token: string | null
           created_at: string
           error_message: string | null
           finished_at: string | null
@@ -2483,6 +2485,8 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
           created_at?: string
           error_message?: string | null
           finished_at?: string | null
@@ -2503,6 +2507,8 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
           created_at?: string
           error_message?: string | null
           finished_at?: string | null
