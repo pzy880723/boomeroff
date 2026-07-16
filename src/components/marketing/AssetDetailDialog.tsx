@@ -399,6 +399,15 @@ export function AssetDetailDialog({
       setVideoCopy(got);
       const nextMeta = { ...(asset.meta || {}), video_copy: got };
       onUpdated?.({ ...asset, meta: nextMeta });
+      try {
+        const { error: upErr } = await supabase
+          .from('marketing_assets' as any)
+          .update({ meta: nextMeta })
+          .eq('id', asset.id);
+        if (upErr) console.warn('[video-ad-copy] persist meta failed', upErr);
+      } catch (e) {
+        console.warn('[video-ad-copy] persist meta threw', e);
+      }
       if (!opts?.silent) toast.success('视频广告文案已生成');
     } catch (e: any) {
       if (!opts?.silent) toast.error(e?.message || '生成失败,请稍后重试');
