@@ -5,7 +5,7 @@
 //   step4 = 用 Lovable AI Nano Banana 生成一张角色参考图,上传到 marketing-videos bucket。
 //   step5 = 对每个 shot 直接调 _shared/seedance-submit.ts 提交 Seedance,
 //           referenceImages = [character_ref] (锁人),facePipeline='character_sheet'。
-//   step6/7 由前端在所有 shot 完成后调 director-complete-job 拼片 + 存素材库。
+//   step6/7 由后台定时推进 + 合成 Worker 完成,不依赖前端保持打开。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2 } from "../_shared/seedance-models.ts";
@@ -42,6 +42,26 @@ Deno.serve(async (req) => {
     const { data: job, error: jErr } = await admin
       .from("video_generation_jobs").select("*").eq("id", jobId).single();
     if (jErr || !job) return json({ ok: false, error: '任务不存在' }, 404);
+
+    const { data: existingShots } = await admin
+      .from("video_generation_shots")
+      .select("id,status,seedance_task_id")
+      .eq("job_id", jobId);
+    const alreadySubmitted = (existingShots || []).some((s: any) =>
+      s.seedance_task_id || String(s.status || '') === 'succeeded',
+    );
+    if (alreadySubmitted || !['queued', 'character', 'shooting'].includes(String(job.status || ''))) {
+      return json({ ok: true, job_id: jobId, already_started: true, status: job.status });
+    }
+
+    const meta = (job.meta || {}) as any;
+    const lockAt = typeof meta.__pipeline_lock_at === 'string' ? Date.parse(meta.__pipeline_lock_at) : 0;
+    if (lockAt && Date.now() - lockAt < 10 * 60_000) {
+      return json({ ok: true, job_id: jobId, locked: true, status: job.status });
+    }
+    await updateJob(admin, jobId, {
+      meta: { ...meta, __pipeline_lock_at: new Date().toISOString() },
+    });
 
     const shopId = job.shop_id;
     const src = (job.source_pick_json || {}) as any;
@@ -180,7 +200,6 @@ Deno.serve(async (req) => {
     }
     await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
-    // step6/7 由前端在所有 shot succeeded 后调 director-complete-job 完成拼片+入库。
     return json({ ok: true, job_id: jobId, character_ref_url: characterRefUrl });
   } catch (e) {
     console.error("[director-run-pipeline] fatal", e);

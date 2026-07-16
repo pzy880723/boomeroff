@@ -27,11 +27,11 @@ function safeParse(s: string): PublishCopy | null {
     if (!m) return null;
     const j = JSON.parse(m[0]);
     return {
-      caption: String(j.caption || "").slice(0, 200),
-      douyin_caption: String(j.douyin_caption || "").slice(0, 80),
-      hashtags: Array.isArray(j.hashtags) ? j.hashtags.slice(0, 8).map((x: any) => String(x)) : [],
-      cover_title: String(j.cover_title || "").slice(0, 14),
-      cover_subtitle: String(j.cover_subtitle || "").slice(0, 20),
+      caption: String(j.caption || "").slice(0, 260),
+      douyin_caption: String(j.douyin_caption || "").slice(0, 120),
+      hashtags: Array.isArray(j.hashtags) ? j.hashtags.slice(0, 10).map((x: any) => String(x)) : [],
+      cover_title: String(j.cover_title || "").slice(0, 22),
+      cover_subtitle: String(j.cover_subtitle || "").slice(0, 24),
     };
   } catch {
     return null;
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     const scenesText = (script.scenes || []).map((s: any, i: number) => `#${i + 1} ${s.scene || ""}｜${s.subtitle || s.dialogue || ""}`).join("\n");
     const styleLabel = src.style || "自然真实";
 
-    const system = "你是 BOOMER.OFF 中古门店的社媒编辑,给一条 15 秒短视频写发布文案。只返回 JSON,不要任何解释。";
+    const system = "你是 BOOMER·OFF 中古门店的网红感社媒编辑,给一条 15 秒探店短视频写发布文案。只返回 JSON,不要任何解释。";
     const user = `视频主题: ${userPrompt}
 风格: ${styleLabel}
 门店: ${shop?.name || "BOOMER 中古"}${shop?.city ? " · " + shop.city : ""}
@@ -77,13 +77,20 @@ Deno.serve(async (req) => {
 分镜:
 ${scenesText}
 
+写法要求:
+- 文案可以自然出现真实分店/商场名,例如中信泰富;这是发布文案,不是视频画面提示词。
+- 结尾必须自然写清营业时间:每天 10:00–22:00。
+- 标题更标题党,有反差/惊喜/数字感,但不要虚假承诺。
+- 正文要更活泼、更种草、更网红感,2-3 小段,可以用 4-7 个 emoji。
+- 不写地铁线路、到站、步行路线、驾车路线。
+
 请输出以下 JSON:
 {
-  "caption": "小红书正文 100-140 字,轻松种草口吻,可以带 emoji,不要硬广,结尾自然过渡到 hashtag",
-  "douyin_caption": "抖音风格 40-60 字,更抓人,可以带钩子",
-  "hashtags": ["#BOOMEROFF", "#中古店", "..."] // 5-8 个,首个必须是 #BOOMEROFF
-  "cover_title": "封面主标题 6-10 字,大字",
-  "cover_subtitle": "封面副标题 8-14 字"
+  "caption": "小红书正文 140-200 字,开头 3 秒钩子感,中段按视频内容种草,结尾带每天 10:00–22:00",
+  "douyin_caption": "抖音风格 50-90 字,更抓人,像探店博主口吻,带营业时间",
+  "hashtags": ["#BOOMEROFF", "#中古店", "..."] // 6-10 个,首个必须是 #BOOMEROFF,可带城市/商场/人群词
+  "cover_title": "封面主标题 8-18 字,标题党但真实",
+  "cover_subtitle": "封面副标题 8-18 字"
 }`;
 
     const r = await fetch(CHAT_ENDPOINT, {

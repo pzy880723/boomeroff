@@ -15,6 +15,7 @@ import {
   getSavedPick, setSavedPick, clearSavedPick,
   type ActiveRenderJob,
 } from '@/lib/surpriseJob';
+import { createVideoJob } from '@/api/videoGeneration';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { toastVideoFailure } from '@/lib/toastVideoFailure';
@@ -225,46 +226,37 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     const useRes = overrides?.resolution || SURPRISE_DEFAULT_VIDEO_PREFS.resolution;
     setSubmitting(true);
     setRenderError(null);
-    // 员工一键成片路径:店员看到的五段脚本会被确定性编译成同一个 15 秒
-    // Seedance 时间轴。专业逐镜生成只保留在独立的 AI 视频入口。
+    // 员工一键成片路径:确认脚本后立刻落库成导演任务。
+    // 后续拍摄、文案、合成都由后台推进,不再依赖弹窗保持打开。
     try {
-      const { data, error } = await invokeFn('surprise-marketing-video', {
-        body: {
-          shop_id: shopId,
-          preview: false,
-          script: pick.script,
-          picked_assets: pick.assets,
-          style: pick.style,
-          model: useModel,
-          resolution: useRes,
-          realism,
-          // 惊喜一下必须绑定店铺实景参考图。失败时也不能静默退化成纯文本生成。
-          disable_references: false,
-          face_pipeline: overrides?.face_pipeline,
-          prompt_overrides: pick.prompt_overrides,
-        },
+      const result = await createVideoJob({
+        shop_id: shopId,
+        script: pick.script,
+        picked_assets: pick.assets,
+        persona: pick.persona,
+        style: pick.style,
+        model: useModel,
+        resolution: useRes,
+        prompt_overrides: pick.prompt_overrides,
+        user_prompt: pick.picked?.summary || pick.script?.continuous_dialogue || 'BOOMER 探店短片',
       });
-      if (error) throw error;
-      const result = data as any;
-      if (result?.ok === false || !result?.job_id) throw new Error(result?.error || '15 秒视频生成任务启动失败');
       const job: ActiveRenderJob = {
         jobId: result.job_id,
         coverUrl: pick.picked.cover_url,
         createdAt: Date.now(),
-        kind: 'legacy',
-        segmentTotal: Number(result.segment_total) || 1,
+        kind: 'director',
+        segmentTotal: result.shot_count || 3,
       };
       setActiveRenderJob(shopId, job);
       clearSavedPick(shopId);
       setActiveJob(job);
       setRenderPhase('queued');
-      setProgress({ done: 0, total: 1 });
+      setProgress({ done: 0, total: result.shot_count || 3 });
       setRenderError(null);
-      startPolling(result.job_id, shopId);
-      toast.success('已开拍 · Seedance 正按完整脚本生成 15 秒视频');
+      toast.success('已开拍 · 关掉页面也会在后台继续跑');
     } catch (e: any) {
       const message = e?.message || '15 秒视频生成任务启动失败';
-      console.error('[surprise] one-shot path failed', e);
+      console.error('[surprise] director path failed', e);
       setRenderError(message);
       toast.error(message);
     } finally { setSubmitting(false); }

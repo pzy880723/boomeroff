@@ -3,7 +3,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { invokeFn } from '@/lib/invokeFn';
 
-const TTL_MS = 30 * 60 * 1000;
+const TTL_MS = 6 * 60 * 60 * 1000;
 const PICK_TTL_MS = 60 * 60 * 1000;
 const keyOf = (shopId: string) => `boomer.surprise.job:${shopId}`;
 const pickKeyOf = (shopId: string) => `boomer.surprise.pick:${shopId}`;

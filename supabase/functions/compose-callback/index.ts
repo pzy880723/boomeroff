@@ -56,9 +56,16 @@ Deno.serve(async (req) => {
     }).eq("id", jobId);
 
     // 入素材库
+    let assetId: string | null = null;
     try {
       const title = publishCopy?.cover_title || script?.title || "BOOMER 惊喜一下 · 探店短片";
-      await admin.from("marketing_assets").insert({
+      const { data: existing } = await admin.from("marketing_assets")
+        .select("id, meta")
+        .contains("meta", { director_job_id: jobId })
+        .limit(1)
+        .maybeSingle();
+
+      const payload = {
         user_id: job.user_id,
         shop_id: job.shop_id,
         kind: "video",
@@ -67,18 +74,38 @@ Deno.serve(async (req) => {
         category: "惊喜一下",
         tags: publishCopy?.hashtags?.slice(0, 5).map((h: string) => h.replace(/^#/, "")) || ["惊喜一下", "探店", "BOOMER"],
         meta: {
+          ...((existing?.meta as any) || {}),
           summary: title,
           source: "director-worker",
           director_job_id: jobId,
           duration_s: duration || job.duration,
           publish_copy: publishCopy,
+          subtitles: (job.meta as any)?.subtitles || null,
         } as any,
-      });
+      };
+
+      if (existing?.id) {
+        await admin.from("marketing_assets").update(payload).eq("id", existing.id);
+        assetId = existing.id;
+      } else {
+        const { data: created, error: createError } = await admin.from("marketing_assets")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (createError) throw createError;
+        assetId = created?.id || null;
+      }
     } catch (e) {
       console.warn("[compose-callback] insert asset failed", e);
     }
 
-    return json({ ok: true });
+    if (assetId) {
+      await admin.from("video_generation_jobs").update({
+        meta: { ...((job.meta as any) || {}), generated_asset_id: assetId, publish_copy: publishCopy },
+      }).eq("id", jobId);
+    }
+
+    return json({ ok: true, asset_id: assetId });
   } catch (e) {
     console.error("[compose-callback] fatal", e);
     return json({ ok: false, error: (e as Error).message || String(e) }, 500);
