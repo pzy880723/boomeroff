@@ -12,7 +12,7 @@
 //   GET  /getTaskStatus?task_id=    → (规划中) { code, data: { status, progress, url, error } }
 //
 // 平台代号约定(和 SAU 上游一致):
-//   1=xhs 2=wechat_video 3=douyin 4=kuaishou 5=tiktok 6=bilibili
+//   1=xhs 2=wechat_video 3=douyin 4=kuaishou 5=tiktok 6=bilibili 7=dianping
 
 export const SAU_BASE = (Deno.env.get("SAU_WORKER_URL") || "").replace(/\/+$/, "");
 export const SAU_TOKEN = Deno.env.get("SAU_WORKER_TOKEN") || "";
@@ -24,6 +24,7 @@ export const PLATFORM_CODE: Record<string, number> = {
   kuaishou: 4,
   tiktok: 5,
   bilibili: 6,
+  dianping: 7,
 };
 
 export const CODE_PLATFORM: Record<number, string> = {
@@ -33,6 +34,7 @@ export const CODE_PLATFORM: Record<number, string> = {
   4: "kuaishou",
   5: "tiktok",
   6: "bilibili",
+  7: "dianping",
 };
 
 export const PLATFORM_LABEL: Record<string, string> = {
@@ -42,6 +44,7 @@ export const PLATFORM_LABEL: Record<string, string> = {
   kuaishou: "快手",
   tiktok: "TikTok",
   bilibili: "B站",
+  dianping: "大众点评",
 };
 
 export function sauHeaders(extra: Record<string, string> = {}): HeadersInit {
@@ -141,7 +144,8 @@ export async function sauPostVideoBatch(args: PostVideoArgs): Promise<{ ok: bool
     const r = await sauFetch("/postVideoBatch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      // Legacy SAU expects a JSON array even when only one batch is submitted.
+      body: JSON.stringify([payload]),
     });
     const text = await r.text();
     let raw: any = {};

@@ -8,7 +8,7 @@ import { PlatformBadge, platformLabel } from '@/components/marketing/dispatch/Pl
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-const PLATFORMS = ['douyin', 'xhs', 'wechat_video', 'kuaishou', 'bilibili'];
+const PLATFORMS = ['douyin', 'xhs', 'wechat_video', 'kuaishou', 'dianping'];
 const QR_TTL_MS = 90_000;
 
 type Step = 'pick' | 'connecting' | 'qr' | 'scanned' | 'syncing' | 'success' | 'fail' | 'expired';

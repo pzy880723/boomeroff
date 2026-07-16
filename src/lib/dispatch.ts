@@ -34,7 +34,7 @@ export interface PublishTarget {
   job_id: string;
   account_id: string;
   platform: string;
-  status: 'queued' | 'scheduled' | 'running' | 'success' | 'failed' | 'cancelled';
+  status: 'pending' | 'claimed' | 'queued' | 'scheduled' | 'running' | 'success' | 'failed' | 'cancelled';
   progress: number;
   platform_post_url: string | null;
   error_message: string | null;
@@ -62,12 +62,14 @@ export interface PublishJob {
 }
 
 export const STATUS_LABEL: Record<string, string> = {
-  queued: '排队中', scheduled: '已定时', running: '发布中',
+  pending: '等待发布', claimed: '准备发布', queued: '排队中', scheduled: '已定时', running: '发布中',
   success: '已成功', done: '全部成功', partial: '部分成功',
   failed: '失败', cancelled: '已取消',
 };
 
 export const STATUS_COLOR: Record<string, string> = {
+  pending: 'bg-muted text-muted-foreground',
+  claimed: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
   queued: 'bg-muted text-muted-foreground',
   scheduled: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
   running: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',

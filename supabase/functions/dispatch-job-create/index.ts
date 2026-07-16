@@ -1,8 +1,7 @@
-// 建分发任务:校验 specs → 上传素材到 worker → 建 jobs/targets → 立即派单或留给 cron。
-// 视频走 /postVideoBatch;图文目前未实现,标记 failed 提示升级 worker。
+// 建分发任务:校验 specs → 建 jobs/targets → 交给腾讯云 Worker 异步执行。
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { sauUpload, sauPostVideoBatch, sauPostImageBatch, PLATFORM_CODE, PLATFORM_LABEL } from "../_shared/sau.ts";
+import { PLATFORM_LABEL } from "../_shared/sau.ts";
 
 interface PerPlatform {
   title?: string;
@@ -60,6 +59,13 @@ Deno.serve(async (req) => {
     // 加载并验证账号
     const { data: accounts } = await supa.from("social_accounts").select("*").in("id", accountIds);
     if (!accounts || accounts.length !== accountIds.length) return j({ error: "some accounts not found" }, 400);
+    const unavailableAccounts = accounts.filter((a) =>
+      a.cookie_status === "expired" || !(a.worker_account_key || a.worker_account_id)
+    );
+    if (unavailableAccounts.length) {
+      const names = unavailableAccounts.map((a) => a.account_name || a.platform).join("、");
+      return j({ error: `账号未完成登录或登录已失效: ${names}` }, 400);
+    }
     const shopId = accounts[0].shop_id;
     if (accounts.some((a) => a.shop_id !== shopId)) return j({ error: "accounts must belong to same shop" }, 400);
 
@@ -81,6 +87,8 @@ Deno.serve(async (req) => {
       const pp = perPlatform[p] || {};
       const t = pp.title || title;
       if (t.length > spec.title_max) validateErrors.push(`${spec.label}标题超过 ${spec.title_max} 字`);
+      if (kind === "video" && !spec.supports_video) validateErrors.push(`${spec.label}暂不支持视频`);
+      if (isDelayed && !spec.supports_schedule) validateErrors.push(`${spec.label}暂不支持定时发布`);
       if (kind === "image_text") {
         if (!spec.supports_image_text) validateErrors.push(`${spec.label}暂不支持图文`);
         if (images.length < spec.images_min || images.length > spec.images_max)
@@ -88,33 +96,6 @@ Deno.serve(async (req) => {
       }
     }
     if (validateErrors.length) return j({ error: validateErrors.join("; ") }, 400);
-
-    // 视频:下载 + 上传到 worker(图文逐图)
-    let workerFilePath: string | null = null;
-    let workerImagePaths: string[] = [];
-    if (!isDelayed) {
-      try {
-        if (kind === "video") {
-          const r = await fetch(mediaUrl!);
-          if (!r.ok) return j({ error: `视频下载失败 ${r.status}` }, 502);
-          const blob = await r.blob();
-          if (blob.size > 200 * 1024 * 1024) return j({ error: "视频超过 200MB" }, 400);
-          const up = await sauUpload(blob, `boomer-${assetId!.slice(0, 8)}.mp4`);
-          workerFilePath = up.path;
-        } else {
-          for (const url of images) {
-            const r = await fetch(url);
-            if (!r.ok) continue;
-            const blob = await r.blob();
-            const up = await sauUpload(blob, `boomer-img-${crypto.randomUUID().slice(0, 8)}.jpg`);
-            workerImagePaths.push(up.path);
-          }
-          if (workerImagePaths.length === 0) return j({ error: "图片上传全部失败" }, 502);
-        }
-      } catch (e) {
-        return j({ error: `上传到 worker 失败: ${e}` }, 502);
-      }
-    }
 
     // 建 job
     const { data: jobRow, error: jobErr } = await supa.from("social_publish_jobs").insert({
@@ -129,84 +110,27 @@ Deno.serve(async (req) => {
       media_url: mediaUrl,
       per_platform: perPlatform,
       schedule_at: scheduleAt?.toISOString() || null,
-      status: isDelayed ? "scheduled" : "running",
+      status: isDelayed ? "scheduled" : "queued",
       created_by: userId,
-      worker_file_path: workerFilePath,
+      worker_file_path: null,
     }).select().single();
     if (jobErr || !jobRow) return j({ error: "建任务失败: " + jobErr?.message }, 500);
 
     const targets = accounts.map((a) => ({
       job_id: jobRow.id, account_id: a.id, platform: a.platform,
-      status: isDelayed ? "scheduled" : "queued", progress: 0,
+      status: isDelayed ? "scheduled" : "pending", progress: 0,
     }));
-    await supa.from("social_publish_targets").insert(targets);
+    const { error: targetsErr } = await supa.from("social_publish_targets").insert(targets);
+    if (targetsErr) {
+      await supa.from("social_publish_jobs").delete().eq("id", jobRow.id);
+      return j({ error: "建发布目标失败: " + targetsErr.message }, 500);
+    }
 
     if (isDelayed) {
       return j({ job_id: jobRow.id, scheduled: true, schedule_at: scheduleAt!.toISOString() });
     }
 
-    // 立即分发(按平台分组)
-    const errors: string[] = [];
-    const byPlatform = new Map<string, typeof accounts>();
-    for (const a of accounts) {
-      const arr = byPlatform.get(a.platform) || [];
-      arr.push(a as any);
-      byPlatform.set(a.platform, arr);
-    }
-    for (const [platform, accs] of byPlatform.entries()) {
-      const ptype = PLATFORM_CODE[platform];
-      const accIds = accs.map((a: any) => a.id);
-      await supa.from("social_publish_targets").update({
-        status: "running", started_at: new Date().toISOString(), last_step: "submitting",
-      }).eq("job_id", jobRow.id).in("account_id", accIds);
-
-      const pp = perPlatform[platform] || {};
-      const pTitle = (pp.title || title).slice(0, 100);
-      const pTags = pp.tags && pp.tags.length ? pp.tags : tags;
-      const pCategory = pp.category;
-      const workerAccs = accs.map((a: any) => a.worker_account_id).filter(Boolean);
-
-      if (workerAccs.length === 0) {
-        const msg = "账号未在 worker 注册,请重新扫码";
-        errors.push(`${PLATFORM_LABEL[platform]}: ${msg}`);
-        await supa.from("social_publish_targets").update({
-          status: "failed", error_message: msg, finished_at: new Date().toISOString(),
-        }).eq("job_id", jobRow.id).in("account_id", accIds);
-        continue;
-      }
-
-      let res;
-      if (kind === "video") {
-        res = await sauPostVideoBatch({
-          filePath: workerFilePath!, accountIds: workerAccs, platformCode: ptype,
-          title: pTitle, tags: pTags, category: pCategory,
-        });
-      } else {
-        res = await sauPostImageBatch({
-          filePaths: workerImagePaths, accountIds: workerAccs, platformCode: ptype,
-          title: pTitle, tags: pTags, category: pCategory, body: pp.body || description,
-        });
-      }
-      if (!res.ok) {
-        errors.push(`${PLATFORM_LABEL[platform]}: ${res.error || "未知错误"}`);
-        await supa.from("social_publish_targets").update({
-          status: "failed", error_message: res.error || "未知错误", finished_at: new Date().toISOString(),
-        }).eq("job_id", jobRow.id).in("account_id", accIds);
-      } else {
-        await supa.from("social_publish_targets").update({
-          status: "success", progress: 100, finished_at: new Date().toISOString(), last_step: "submitted",
-        }).eq("job_id", jobRow.id).in("account_id", accIds);
-      }
-    }
-
-    // finalize
-    const { data: tgs } = await supa.from("social_publish_targets").select("status").eq("job_id", jobRow.id);
-    const ok = (tgs || []).filter((t: any) => t.status === "success").length;
-    const total = (tgs || []).length;
-    const next = ok === total ? "done" : ok > 0 ? "partial" : "failed";
-    await supa.from("social_publish_jobs").update({ status: next, updated_at: new Date().toISOString() }).eq("id", jobRow.id);
-
-    return j({ job_id: jobRow.id, errors, status: next });
+    return j({ job_id: jobRow.id, queued: true, status: "queued", target_count: targets.length });
   } catch (e) {
     return j({ error: String(e) }, 500);
   }

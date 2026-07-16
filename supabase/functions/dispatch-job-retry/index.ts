@@ -1,7 +1,6 @@
-// 重试单个 target:重新派单到 worker。
+// 重试单个 target:放回队列，由腾讯云 Worker 重新领取。
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { sauPostVideoBatch, PLATFORM_CODE } from "../_shared/sau.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -28,35 +27,17 @@ Deno.serve(async (req) => {
       if (sp?.shop_id !== job.shop_id) return j({ error: "forbidden" }, 403);
     }
 
-    const { data: account } = await supa.from("social_accounts").select("*").eq("id", target.account_id).maybeSingle();
-    if (!account?.worker_account_id) return j({ error: "账号未在 worker 注册" }, 400);
-    if (!job.worker_file_path) return j({ error: "原视频文件已不在 worker,请重新发布" }, 400);
+    const { data: account } = await supa.from("social_accounts").select("worker_account_id,worker_account_key,cookie_status").eq("id", target.account_id).maybeSingle();
+    if (!account?.worker_account_key && !account?.worker_account_id) return j({ error: "账号未在 worker 注册" }, 400);
+    if (account.cookie_status === "expired") return j({ error: "账号登录已失效,请重新扫码" }, 400);
 
     await supa.from("social_publish_targets").update({
-      status: "running", started_at: new Date().toISOString(), error_message: null,
+      status: "pending", progress: 0, started_at: null, finished_at: null,
+      error_message: null, last_step: "retry_queued", worker_task_id: null,
       retry_count: (target.retry_count || 0) + 1, last_retry_at: new Date().toISOString(),
     }).eq("id", target_id);
-
-    const pp = (job.per_platform || {})[target.platform] || {};
-    const res = await sauPostVideoBatch({
-      filePath: job.worker_file_path,
-      accountIds: [account.worker_account_id],
-      platformCode: PLATFORM_CODE[target.platform],
-      title: pp.title || job.title,
-      tags: pp.tags && pp.tags.length ? pp.tags : (job.tags || []),
-      category: pp.category,
-    });
-
-    if (!res.ok) {
-      await supa.from("social_publish_targets").update({
-        status: "failed", error_message: res.error || "未知错误", finished_at: new Date().toISOString(),
-      }).eq("id", target_id);
-      return j({ ok: false, error: res.error });
-    }
-    await supa.from("social_publish_targets").update({
-      status: "success", progress: 100, finished_at: new Date().toISOString(),
-    }).eq("id", target_id);
-    return j({ ok: true });
+    await supa.from("social_publish_jobs").update({ status: "queued", updated_at: new Date().toISOString() }).eq("id", job.id);
+    return j({ ok: true, queued: true });
   } catch (e) {
     return j({ error: String(e) }, 500);
   }

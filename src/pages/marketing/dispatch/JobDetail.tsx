@@ -37,7 +37,7 @@ export default function JobDetail() {
   // 5s 轮询,仅在还有非终态 target 时
   useEffect(() => {
     if (!job) return;
-    const pending = targets.some((t) => ['queued', 'scheduled', 'running'].includes(t.status));
+    const pending = targets.some((t) => ['pending', 'claimed', 'queued', 'scheduled', 'running'].includes(t.status));
     if (!pending) return;
     const id = setInterval(load, 5000);
     return () => clearInterval(id);

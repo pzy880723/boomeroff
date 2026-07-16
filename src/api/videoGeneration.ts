@@ -109,10 +109,12 @@ export async function regenerateJob(jobId: string): Promise<void> {
   void job;
 }
 
-export async function completeVideoJob(jobId: string, finalVideoUrl: string, coverUrl?: string): Promise<void> {
-  const { data, error } = await invokeFn<{ ok: boolean; error?: string }>(
+export async function completeVideoJob(jobId: string, finalVideoUrl: string, coverUrl?: string): Promise<string> {
+  const { data, error } = await invokeFn<{ ok: boolean; asset_id?: string; error?: string }>(
     'director-complete-job', { body: { job_id: jobId, final_video_url: finalVideoUrl, cover_url: coverUrl } },
   );
   if (error) throw new Error(error.message);
   if (!data?.ok) throw new Error(data?.error || '保存成片失败');
+  if (!data.asset_id) throw new Error('成片已生成，但素材库没有返回素材 ID');
+  return data.asset_id;
 }

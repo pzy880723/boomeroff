@@ -28,6 +28,7 @@ export function DirectorProgress({
   const [composeState, setComposeState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [composeError, setComposeError] = useState<string | null>(null);
   const [composedUrl, setComposedUrl] = useState<string | null>(null);
+  const [generatedAssetId, setGeneratedAssetId] = useState<string | null>(null);
   const composeStartedRef = useRef<string | null>(null);
 
   const job = data?.job;
@@ -91,7 +92,8 @@ export function DirectorProgress({
         }
       } catch (e) { console.warn('[director poster]', e); }
 
-      await completeVideoJob(jobId, finalUrl, posterUrl);
+      const assetId = await completeVideoJob(jobId, finalUrl, posterUrl);
+      setGeneratedAssetId(assetId);
       setComposedUrl(finalUrl);
       setComposeState('done');
       toast.success('🎬 拍好啦!已存进素材库');
@@ -130,6 +132,7 @@ export function DirectorProgress({
 
   const jobStatus = job?.status || 'queued';
   const finalUrl = job?.final_video_url || composedUrl;
+  const publishAssetId = generatedAssetId || job?.meta?.generated_asset_id || null;
   const anyFailedShot = shots.some((s) => s.status === 'failed');
   const publishCopy = job?.meta?.publish_copy;
   const isWorkerComposing = jobStatus === 'composing' && job?.compose_status && job.compose_status !== 'idle';
@@ -261,11 +264,15 @@ export function DirectorProgress({
         <Button variant="outline" className="flex-1" onClick={onClose}>
           关闭(后台继续)
         </Button>
-        {finalUrl ? (
-          <Link to="/me/marketing/library" className="flex-1">
+        {finalUrl && publishAssetId ? (
+          <Link to={`/me/marketing/dispatch/workbench?asset_id=${encodeURIComponent(publishAssetId)}`} className="flex-1">
             <Button className="w-full" onClick={onClose}>
-              去素材库 <ArrowRight className="w-4 h-4 ml-1" />
+              一键发布 <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
+          </Link>
+        ) : finalUrl ? (
+          <Link to="/me/marketing/library" className="flex-1">
+            <Button className="w-full" onClick={onClose}>去素材库 <ArrowRight className="w-4 h-4 ml-1" /></Button>
           </Link>
         ) : anyFailedShot ? (
           <Button className="flex-1" onClick={handleRegen} disabled={regenBusy}>

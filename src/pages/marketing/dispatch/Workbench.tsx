@@ -165,7 +165,7 @@ export default function Workbench() {
       const { data, error } = await invokeFn('dispatch-job-create', { body: payload });
       if (error) throw new Error((data as any)?.error || error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast({ title: data?.scheduled ? '已加入定时' : '已提交,正在发布' });
+      toast({ title: data?.scheduled ? '已加入定时' : '已提交到发布队列' });
       if (data?.job_id) nav(`/me/marketing/dispatch/job/${data.job_id}`);
       else nav('/me/marketing/dispatch?tab=history');
     } catch (e: any) {

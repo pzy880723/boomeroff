@@ -33,21 +33,24 @@ Deno.serve(async (req) => {
     const { data: job } = await admin.from("video_generation_jobs").select("*").eq("id", jobId).single();
     if (!job || job.user_id !== u.user.id) return json({ ok: false, error: "任务不存在" }, 404);
 
-    await admin.from("video_generation_jobs").update({
-      status: 'done',
-      final_video_url: finalVideoUrl,
-      cover_url: coverUrl || (job.character_json as any)?.reference_image_url || null,
-    }).eq("id", jobId);
-
-    // 落一条 marketing_assets(允许失败,不阻断)
-    try {
+    // 成片必须有对应素材记录，否则后续“一键发布”无法形成闭环。
+    let assetId = (job.meta as any)?.generated_asset_id as string | undefined;
+    if (!assetId) {
+      const { data: existing } = await admin.from("marketing_assets")
+        .select("id")
+        .contains("meta", { director_job_id: jobId })
+        .limit(1)
+        .maybeSingle();
+      assetId = existing?.id;
+    }
+    if (!assetId) {
       const script = job.script_json as any;
       const publishCopy = (job.meta as any)?.publish_copy || null;
       const title = publishCopy?.cover_title || script?.title || 'BOOMER 惊喜一下 · 探店短片';
       const tags = publishCopy?.hashtags?.length
         ? publishCopy.hashtags.slice(0, 5).map((h: string) => h.replace(/^#/, ''))
         : ['惊喜一下', '探店', 'BOOMER'];
-      await admin.from("marketing_assets").insert({
+      const { data: createdAsset, error: assetError } = await admin.from("marketing_assets").insert({
         user_id: job.user_id,
         shop_id: job.shop_id,
         kind: 'video',
@@ -63,12 +66,21 @@ Deno.serve(async (req) => {
           publish_copy: publishCopy,
           subtitles: (job.meta as any)?.subtitles || null,
         } as any,
-      });
-    } catch (e) {
-      console.warn("[director-complete-job] insert asset failed", e);
+      }).select("id").single();
+      if (assetError || !createdAsset?.id) {
+        throw new Error(`成片写入素材库失败: ${assetError?.message || 'missing asset id'}`);
+      }
+      assetId = createdAsset.id;
     }
 
-    return json({ ok: true });
+    await admin.from("video_generation_jobs").update({
+      status: 'done',
+      final_video_url: finalVideoUrl,
+      cover_url: coverUrl || (job.character_json as any)?.reference_image_url || null,
+      meta: { ...((job.meta as any) || {}), generated_asset_id: assetId },
+    }).eq("id", jobId);
+
+    return json({ ok: true, asset_id: assetId });
   } catch (e) {
     console.error("[director-complete-job] fatal", e);
     return json({ ok: false, error: (e as Error).message || String(e) }, 500);

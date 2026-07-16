@@ -8,6 +8,7 @@ const META: Record<string, { label: string; bg: string; fg: string; icon: string
   kuaishou:     { label: '快手',   bg: 'bg-orange-500',            fg: 'text-white',   icon: 'K' },
   bilibili:     { label: 'B站',    bg: 'bg-pink-400',              fg: 'text-white',   icon: 'B' },
   tiktok:       { label: 'TikTok', bg: 'bg-neutral-900',           fg: 'text-white',   icon: 'T' },
+  dianping:     { label: '大众点评', bg: 'bg-amber-500',            fg: 'text-white',   icon: '点' },
 };
 
 export function PlatformBadge({ platform, size = 'sm', showLabel = false, className }: {
