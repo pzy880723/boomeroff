@@ -64,18 +64,13 @@ Deno.serve(async (req) => {
     const shopId: string | null = asset.shop_id || (typeof body.shop_id === 'string' ? body.shop_id : null);
     const presets = await loadMarketingPresets();
 
-    // 文案专用:直接拉真实 name/address,不做第三方商标脱敏(那是给视频渲染看的规则)。
-    let shopName = '';
-    let shopAddress = '';
+    // 文案专用:只用来判断有没有绑定门店,不把分店名/地址写进文案。
+    let hasShop = false;
     if (shopId) {
-      const { data: shop } = await admin.from('shops').select('name, address').eq('id', shopId).maybeSingle();
-      shopName = ((shop as any)?.name || '').toString().trim();
-      shopAddress = ((shop as any)?.address || '').toString().trim();
+      const { data: shop } = await admin.from('shops').select('name').eq('id', shopId).maybeSingle();
+      hasShop = !!((shop as any)?.name);
     }
-    const hasShop = !!shopName;
-    const shopBlock = hasShop
-      ? `【门店】${shopName}${shopAddress ? `\n(地址仅供你判断是哪一家门店,不要写进文案) ${shopAddress}` : ''}`
-      : '';
+    const shopBlock = '';
 
     const topic = (asset as any).meta?.topic || script?.topic || script?.title || '';
     const title = script?.title || topic || '';
@@ -88,14 +83,11 @@ Deno.serve(async (req) => {
     const kbHits = kbQuery ? await kbSearch(admin, { query: kbQuery, scope: 'copy', shopId, k: 6 }) : [];
     const kbBlock = formatKbBlock(kbHits);
 
-    const shopRules = hasShop
-      ? `【门店必写】
-- 标题或正文首/尾段**至少出现一次门店分店名称**,例如「${shopName}」或从中提取的分店简称(如「中信泰富店」)。
-- hashtags 里可以带一个城市或分店简称标签(如 #上海 #中信泰富店)。
-- **严禁**出现任何地铁线路、地铁站名、公交线路、路名、门牌号、附近地标、开车/步行导航等信息——系统里没有这些数据,不要凭空编,宁可不提,客户会自己搜索。
-- 地址字段仅供你识别是哪一家门店,严禁把详细地址、楼层号以外的路名/地标写进文案。`
-      : `【无门店信息】
-- 本次没有绑定具体门店,文案里不要提任何门店名/位置/导航信息,用「BOOMER·OFF」品牌口吻即可。`;
+    const shopRules = `【品牌口吻】
+- 你是探店博主视角,自称 / 提及门店时**统一用品牌名「BOOMER·OFF」**(或简称「BOOMER」),不要用「本店 / 我们门店 / 我们店 / 小店」这类奇怪口播。
+- **严禁**写具体分店名(如「中信泰富店」「XX 广场店」)、地铁线路/站名、公交、路名、门牌号、附近地标、开车/步行导航等信息——系统里没有这些数据,不要凭空编,宁可不提,客户会自己搜索。
+- hashtags 里也不要放地铁/交通/具体地标类标签${hasShop ? '' : ';没有绑定门店时更不要暗示门店位置'}。`;
+
 
     const sys = `${presets.brand}
 ${shopBlock ? `\n${shopBlock}\n` : ""}
