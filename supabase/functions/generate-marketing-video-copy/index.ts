@@ -1,4 +1,5 @@
-// 根据已生成视频的脚本 (marketing_video_jobs.script) 生成一条小红书文案。
+// 根据已生成视频的脚本 (marketing_video_jobs.script) 生成一条**视频广告文案**。
+// 抖音 / 小红书 / 视频号 / 快手 / B站 通用,不再是纯小红书体。
 // 输入: { asset_id } —— 从 marketing_assets 定位 job_id → 拉 script → 让 AI 写文案 → 回写 meta.video_copy
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadMarketingPresets } from "../_shared/brand-context.ts";
@@ -82,19 +83,23 @@ Deno.serve(async (req) => {
 ${shopBlock ? `\n${shopBlock}\n` : ""}
 ${OWN_BRAND_LOCK_ZH}
 ${kbBlock}
-你的任务:为一条已经拍好的 ${duration} 秒短视频写一条**小红书发帖文案**,要有正宗小红书那味儿——姐妹们唠嗑感、活泼、有 emoji、有互动欲。
+你的任务:为一条已经拍好的 ${duration} 秒短视频写一条**视频广告文案**,
+下发目标平台包括:抖音 / 小红书 / 视频号 / 快手 / B站,所以写法要**跨平台通用**,不做单一平台的极端体裁。
 硬性要求:
 - 文案必须紧扣视频真的说了什么、拍了什么(下面会给你视频脚本摘要),不要发挥无关内容。
 - 单条输出(不要多个候选)。
-- **标题** ≤22 字,**必须带 1–2 个 emoji**(✨🔥📦💖🎁👀🛍️😭🤌🥹💫🫶 等挑合适的用);句式可用"姐妹们/家人们/谁懂啊/绝了/这也太…了吧/××人狂喜"这类小红书口播感开头。
-- **正文** 120–200 字,分 3–5 短段(段落之间空一行);**每 1–2 句自然穿插一个相关 emoji**,可用【】‼️⁉️~ 等符号点缀;可以引用视频里的一两句台词;**结尾必须一句 call-to-action 带 emoji**(如 "冲鸭🛍️" "蹲一个💫" "评论区聊聊👇")。
-- **hashtags** 6–10 个,每个以 `#` 开头;顺序:品类/单品词 → 中古/vintage/二手好物 → 门店/城市/人群相关。
-- **首评** 1 句,引导互动或补充信息,**带 1 个 emoji**。
-- 严禁:淘宝体、"点击购买"、"扫码下单"、公众号腔、硬广感叹号轰炸、假大空商业话术。
+- **标题** ≤22 字,口语化、有钩子(悬念/反差/身份代入/数字冲击择一),可带 1 个 emoji,不要标题党式感叹号轰炸。
+- **正文** 100–180 字,分 2–4 短段(段落之间空一行),节奏短平快;
+  - 首句必须是 hook,能在 3 秒内让人愿意看下去;
+  - 中段用视频里的一两句真话/画面点作证据;
+  - 结尾一句自然的 CTA(评论 / 收藏 / 到店 / 私聊 / 下一条见),带 1 个 emoji 收束。
+  - emoji 全文控制在 3–6 个,适度点缀即可,不做小红书那种堆砌。
+- **hashtags** 5–8 个,每个以 \`#\` 开头,顺序:品类/单品词 → 中古/vintage/二手好物 → 门店/城市/人群相关;不加平台专属标签(如 #小红书推荐)。
+- **首评** 1 句,引导互动或补充信息,可带 1 个 emoji。
+- 严禁:淘宝体、"点击购买"、"扫码下单"、公众号腔、硬广感叹号轰炸、假大空商业话术、明显偏向单一平台的黑话。
 
-输出严格 JSON(单个对象,不要数组):
-{ "title": "...", "body": "...(可含 \\n)", "hashtags": ["#..."], "first_comment": "..." }
-只返回 JSON,不要 \`\`\` 包裹,不要多余文字。`;
+输出严格 JSON(单个对象,不要数组,不要 markdown 围栏):
+{ "title": "...", "body": "...(可含 \\n)", "hashtags": ["#..."], "first_comment": "..." }`;
 
 
     const userMsg = scrubThirdPartyBrands(`视频标题:${title}
@@ -109,11 +114,12 @@ ${scriptDigest}`);
         model: "google/gemini-3-flash-preview",
         messages: [{ role: "system", content: sys }, { role: "user", content: userMsg }],
         temperature: 0.85,
+        response_format: { type: "json_object" },
       }),
     });
     if (!aiRes.ok) {
       const t = await aiRes.text();
-      console.error("[video-copy] AI", aiRes.status, t.slice(0, 400));
+      console.error("[video-ad-copy] AI", aiRes.status, t.slice(0, 400));
       if (aiRes.status === 429) return json({ error: "AI 限流，请稍后重试" }, 429);
       if (aiRes.status === 402) return json({ error: "AI 额度已用尽" }, 402);
       return json({ error: "AI 生成失败" }, 500);
