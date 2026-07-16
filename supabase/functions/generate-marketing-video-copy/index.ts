@@ -3,9 +3,7 @@
 // 输入: { asset_id } —— 从 marketing_assets 定位 job_id → 拉 script → 让 AI 写文案 → 回写 meta.video_copy
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadMarketingPresets } from "../_shared/brand-context.ts";
-import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
-import { scrubThirdPartyBrands, OWN_BRAND_LOCK_ZH } from "../_shared/brand-scrub.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,8 +63,19 @@ Deno.serve(async (req) => {
 
     const shopId: string | null = asset.shop_id || (typeof body.shop_id === 'string' ? body.shop_id : null);
     const presets = await loadMarketingPresets();
-    const shopCtx = await loadShopContext(shopId);
-    const shopBlock = formatShopContext(shopCtx);
+
+    // 文案专用:直接拉真实 name/address,不做第三方商标脱敏(那是给视频渲染看的规则)。
+    let shopName = '';
+    let shopAddress = '';
+    if (shopId) {
+      const { data: shop } = await admin.from('shops').select('name, address').eq('id', shopId).maybeSingle();
+      shopName = ((shop as any)?.name || '').toString().trim();
+      shopAddress = ((shop as any)?.address || '').toString().trim();
+    }
+    const hasShop = !!shopName;
+    const shopBlock = hasShop
+      ? `【门店】${shopName}${shopAddress ? `\n(地址仅供你判断是哪一家门店,不要写进文案) ${shopAddress}` : ''}`
+      : '';
 
     const topic = (asset as any).meta?.topic || script?.topic || script?.title || '';
     const title = script?.title || topic || '';
@@ -79,12 +88,23 @@ Deno.serve(async (req) => {
     const kbHits = kbQuery ? await kbSearch(admin, { query: kbQuery, scope: 'copy', shopId, k: 6 }) : [];
     const kbBlock = formatKbBlock(kbHits);
 
+    const shopRules = hasShop
+      ? `【门店必写】
+- 标题或正文首/尾段**至少出现一次门店分店名称**,例如「${shopName}」或从中提取的分店简称(如「中信泰富店」)。
+- hashtags 里可以带一个城市或分店简称标签(如 #上海 #中信泰富店)。
+- **严禁**出现任何地铁线路、地铁站名、公交线路、路名、门牌号、附近地标、开车/步行导航等信息——系统里没有这些数据,不要凭空编,宁可不提,客户会自己搜索。
+- 地址字段仅供你识别是哪一家门店,严禁把详细地址、楼层号以外的路名/地标写进文案。`
+      : `【无门店信息】
+- 本次没有绑定具体门店,文案里不要提任何门店名/位置/导航信息,用「BOOMER·OFF」品牌口吻即可。`;
+
     const sys = `${presets.brand}
 ${shopBlock ? `\n${shopBlock}\n` : ""}
-${OWN_BRAND_LOCK_ZH}
 ${kbBlock}
 你的任务:为一条已经拍好的 ${duration} 秒短视频写一条**视频广告文案**,
 下发目标平台包括:抖音 / 小红书 / 视频号 / 快手 / B站,所以写法要**跨平台通用**,不做单一平台的极端体裁。
+
+${shopRules}
+
 硬性要求:
 - 文案必须紧扣视频真的说了什么、拍了什么(下面会给你视频脚本摘要),不要发挥无关内容。
 - 单条输出(不要多个候选)。
@@ -94,18 +114,17 @@ ${kbBlock}
   - 中段用视频里的一两句真话/画面点作证据;
   - 结尾一句自然的 CTA(评论 / 收藏 / 到店 / 私聊 / 下一条见),带 1 个 emoji 收束。
   - emoji 全文控制在 3–6 个,适度点缀即可,不做小红书那种堆砌。
-- **hashtags** 5–8 个,每个以 \`#\` 开头,顺序:品类/单品词 → 中古/vintage/二手好物 → 门店/城市/人群相关;不加平台专属标签(如 #小红书推荐)。
+- **hashtags** 5–8 个,每个以 \`#\` 开头,顺序:品类/单品词 → 中古/vintage/二手好物 → 门店/城市/人群相关;不加平台专属标签(如 #小红书推荐),也不加地铁/交通类标签。
 - **首评** 1 句,引导互动或补充信息,可带 1 个 emoji。
-- 严禁:淘宝体、"点击购买"、"扫码下单"、公众号腔、硬广感叹号轰炸、假大空商业话术、明显偏向单一平台的黑话。
+- 严禁:淘宝体、"点击购买"、"扫码下单"、公众号腔、硬广感叹号轰炸、假大空商业话术、明显偏向单一平台的黑话、编造地铁站/路线/周边地标。
 
 输出严格 JSON(单个对象,不要数组,不要 markdown 围栏):
 { "title": "...", "body": "...(可含 \\n)", "hashtags": ["#..."], "first_comment": "..." }`;
 
-
-    const userMsg = scrubThirdPartyBrands(`视频标题:${title}
+    const userMsg = `视频标题:${title}
 ${topic && topic !== title ? `视频立意:${topic}` : ''}
 视频节奏:共 ${duration} 秒,分镜如下:
-${scriptDigest}`);
+${scriptDigest}`;
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -133,13 +152,13 @@ ${scriptDigest}`);
     try { cand = JSON.parse(raw); } catch { /* */ }
     if (!cand || (!cand.title && !cand.body)) return json({ error: "AI 返回格式异常" }, 500);
 
+    // 只做话术层敏感词过滤,不再剥离商场/分店名。
     const sanitize = (s: string) =>
-      scrubThirdPartyBrands(
-        (s || '').toString()
-          .replace(/主播/g, '店员')
-          .replace(/直播间/g, '店里')
-          .replace(/保真|保证升值|秒杀|限时抢|全网最低|拍卖行级别/g, '')
-      ).trim();
+      (s || '').toString()
+        .replace(/主播/g, '店员')
+        .replace(/直播间/g, '店里')
+        .replace(/保真|保证升值|秒杀|限时抢|全网最低|拍卖行级别/g, '')
+        .trim();
 
     const copy = {
       title: sanitize(cand.title || '').slice(0, 40),
