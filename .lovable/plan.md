@@ -1,37 +1,40 @@
 ## 问题
 
-在「素材库 → 视频详情」里，「视频广告文案」目前的行为：
+`generate-marketing-video-copy` 用了共享工具 `formatShopContext` + `scrubThirdPartyBrands`。这两个是给**视频模型 Seedance** 准备的——Seedance 看到「中信泰富 / 万象城」这类招牌会以「版权风险」拒绝出片，所以共享层把商场名替换成「本店」，还告诉模型「不要出现第三方商场名」。
 
-1. 打开视频详情时会**自动生成一次**文案；
-2. 生成结果只写到父组件的本地 state（`onUpdated`），**没有写回数据库** `marketing_assets.meta.video_copy`；
-3. 所以关闭再打开、或刷新页面后 `asset.meta.video_copy` 仍是空，自动生成又跑一次，用户每次都要等，还会重复消耗 AI 额度。
+但这是**写文字广告文案**，不是渲染视频。结果：门店真实名（`BOOMER·OFF 上海中信泰富店`）→ 变成「本店」；文案永远不会告诉观众门店在哪家商场，用户到不了店。
 
 ## 目标
 
-- 已经成功生成过文案的视频 → 再次打开时直接展示，**不重跑**；
-- 只有用户点击「生成视频广告文案 / 重新生成」按钮，才会调用模型；
-- 一旦生成成功，立即持久化到数据库，退出后再进来仍在。
+视频文案里**自然带出门店分店名称就够了**（如：「BOOMER·OFF 中信泰富店」「上海中信泰富店 B1」）。**不要**编造地铁站、路线、附近地标——这些系统里没有、容易不准，宁可不提，客户自己会搜。视频模型侧的招牌规避链路**保持不动**。
 
 ## 改动（只动一个文件）
 
-`src/components/marketing/AssetDetailDialog.tsx`
+`supabase/functions/generate-marketing-video-copy/index.ts`
 
-1. **移除自动生成**：删掉当前 376–385 行的 `useEffect`（视频渲染完成 & 无文案时自动 `generateVideoCopy({ silent: true })`）。
-2. **生成成功后写回数据库**：`generateVideoCopy` 里在 `setVideoCopy(got)` 之后，用 `supabase.from('marketing_assets').update({ meta: nextMeta }).eq('id', asset.id)`，把新的 `meta.video_copy` 持久化；失败仅 `console.warn`，不影响 UI（本地已更新）。
-3. **保持既有 UI**：
-   - 有 `videoCopy` → 显示文案卡片 + 「重新生成」按钮（点击才会重跑并覆盖）；
-   - 无 `videoCopy` → 显示「还没生成视频广告文案 🎬」+「生成视频广告文案」按钮，点击后才生成。
-4. 其他逻辑（`onUpdated` 通知父组件同步列表 state、复制、下载 + 复制文案等）保持不变。
+1. **本函数不再 import** `formatShopContext`、`scrubThirdPartyBrands`、`OWN_BRAND_LOCK_ZH`。
+2. 本地拉店铺信息并只保留文案需要的字段：
+   ```ts
+   const { data: shop } = await admin.from('shops').select('name, address').eq('id', shopId).maybeSingle();
+   ```
+   拼一个块：`【门店】BOOMER·OFF 中信泰富店\n地址(仅供参考,不要写进文案):xxxx`——`address` **仅用于给模型定位是哪一家**，明确禁止写进输出。
+3. **系统提示新增一条硬性要求**：
+   > - 文案里必须自然带出**门店分店名称**（例：「BOOMER·OFF 中信泰富店」或「上海中信泰富店」），标题或正文首/尾段至少出现一次；
+   > - **严禁**在文案里出现任何地铁线路、地铁站名、公交、路名、周边地标、开车路线等导航信息——系统里没有这些数据，不要凭空编；
+   > - hashtags 里可以带一个城市或分店名标签（如 `#上海` `#中信泰富店`），但不加地铁/路线相关标签。
+4. **移除** `OWN_BRAND_LOCK_ZH` 追加（那是给视频渲染看的招牌约束，会误导文本模型避开分店名）。
+5. **移除**输出 `sanitize` 里的 `scrubThirdPartyBrands`；保留「主播→店员 / 直播间→店里 / 保真、秒杀、全网最低、拍卖行级别」等真正的敏感词过滤。
+6. `userMsg` 也不再 `scrubThirdPartyBrands`。
+7. 拉不到 `shop` 时：不加门店块，也不要求带门店名。
 
-## 不改动
+## 不动
 
-- Edge Function `generate-marketing-video-copy` 不动；
-- 数据结构不动（继续用 `marketing_assets.meta.video_copy`）；
-- 图片/文案类素材、脚本编辑等其它 tab 全部保持不变。
+- 视频脚本生成 / 视频渲染 (Seedance) 相关链路（`director-*`、`_shared/brand-scrub.ts`、`_shared/shop-context.ts`）——继续做招牌规避；
+- 前端 UI、数据结构、其它 edge functions；
+- 输入/输出契约 `{ asset_id } → { copy }` 不变。
 
 ## 验证
 
-1. 打开一个从未生成过文案的视频 → 不再自动跑；点击「生成视频广告文案」→ 出结果；
-2. 关闭对话框再打开同一视频 → 文案直接显示，控制台/网络没有 `generate-marketing-video-copy` 请求；
-3. 刷新整个页面再进入 → 文案仍在（证明已入库）；
-4. 点击「重新生成」→ 触发一次请求，新文案覆盖并持久化。
+1. 在素材库打开一条已有视频，点击「重新生成」；
+2. 生成的文案里出现分店名（例：「BOOMER·OFF 中信泰富店」），且**不出现**「静安寺 / 2 号线 / 步行 X 分钟」这类导航描述；
+3. 视频脚本 / 惊喜一下渲染出来的视频画面仍然不出现第三方招牌（Seedance 侧未受影响）。
