@@ -358,16 +358,25 @@ export function AssetDetailDialog({
     setEditing(null);
   }, [asset]);
 
-  // 视频详情:异步拉取原始脚本供折叠展示
+  // 视频详情:异步拉取原始脚本供折叠展示。
+  // 兼容两条链路:marketing_video_jobs.script(常规渲染)和 video_generation_jobs.script_json(惊喜一下 / Director)。
   useEffect(() => {
     if (!asset || asset.kind !== 'video') return;
     const jobId = asset.meta?.job_id;
-    if (!jobId) return;
+    const directorJobId = (asset.meta as any)?.director_job_id;
+    if (!jobId && !directorJobId) { setVideoScript(null); return; }
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await supabase.from('marketing_video_jobs' as any).select('script').eq('id', jobId).maybeSingle();
-        if (!cancelled) setVideoScript((data as any)?.script || null);
+        if (jobId) {
+          const { data } = await supabase.from('marketing_video_jobs' as any).select('script').eq('id', jobId).maybeSingle();
+          const s = (data as any)?.script;
+          if (s) { if (!cancelled) setVideoScript(s); return; }
+        }
+        if (directorJobId) {
+          const { data } = await supabase.from('video_generation_jobs' as any).select('script_json').eq('id', directorJobId).maybeSingle();
+          if (!cancelled) setVideoScript((data as any)?.script_json || null);
+        }
       } catch { /* silent */ }
     })();
     return () => { cancelled = true; };
@@ -836,7 +845,7 @@ function VideoScriptPanel({ script, open, onToggle }: { script: any; open: boole
         {clips.length > 0 ? (
           <span className="text-muted-foreground text-[11px]">· 共 {clips.length} 镜 · 总 {Math.round(total)}s</span>
         ) : (
-          <span className="text-muted-foreground text-[11px]">· {script ? '空脚本' : '脚本已过期或未保存'}</span>
+          <span className="text-muted-foreground text-[11px]">· {script ? '空脚本' : '该视频没有可回放的分镜脚本'}</span>
         )}
       </button>
       {open && clips.length > 0 && (
