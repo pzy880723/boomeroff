@@ -247,7 +247,7 @@ export function AssetDetailDialog({
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<CopyCand>({});
   const [saving, setSaving] = useState(false);
-  // 视频专用:一键生成的小红书文案
+  // 视频专用:一键生成的视频广告文案(抖音/小红书/视频号/快手/B站通用)
   const [videoCopy, setVideoCopy] = useState<CopyCand | null>(null);
   const [genCopyLoading, setGenCopyLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -407,7 +407,7 @@ export function AssetDetailDialog({
       setVideoCopy(got);
       const nextMeta = { ...(asset.meta || {}), video_copy: got };
       onUpdated?.({ ...asset, meta: nextMeta });
-      if (!opts?.silent) toast.success('小红书文案已生成');
+      if (!opts?.silent) toast.success('视频广告文案已生成');
     } catch (e: any) {
       if (!opts?.silent) toast.error(e?.message || '生成失败,请稍后重试');
     } finally {
@@ -695,14 +695,14 @@ export function AssetDetailDialog({
               <VideoScriptPanel script={videoScript} open={scriptOpen} onToggle={() => setScriptOpen(v => !v)} />
             )}
 
-            {/* 视频可用时:自动生成单条小红书文案 + 下载 */}
+            {/* 视频可用时:自动生成一条视频广告文案(全平台通用) + 下载 */}
             {asset.output_url && (
               <div className="space-y-2 pt-1">
                 {videoCopy ? (
-                  <div className="border border-pink-300/40 rounded-lg p-3 space-y-2.5 bg-gradient-to-br from-pink-50/70 via-rose-50/50 to-orange-50/40 dark:from-pink-950/20 dark:via-rose-950/15 dark:to-orange-950/10">
+                  <div className="border border-accent/30 rounded-lg p-3 space-y-2.5 bg-gradient-to-br from-accent/5 via-transparent to-accent/10">
                     <div className="flex items-center justify-between">
-                      <span className="font-display text-[11px] text-pink-600 dark:text-pink-400 tracking-[0.18em] flex items-center gap-1">
-                        📕 小红书文案
+                      <span className="font-display text-[11px] text-accent tracking-[0.18em] flex items-center gap-1">
+                        🎬 视频广告文案
                       </span>
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => { copy(videoCopyText(videoCopy)); }} title="复制全文">
@@ -718,35 +718,35 @@ export function AssetDetailDialog({
                     {videoCopy.hashtags && videoCopy.hashtags.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
                         {videoCopy.hashtags.map((tag, i) => (
-                          <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-pink-100/80 text-pink-600 dark:bg-pink-900/30 dark:text-pink-300">
+                          <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-accent/10 text-accent">
                             {tag}
                           </span>
                         ))}
                       </div>
                     )}
                     {videoCopy.first_comment && (
-                      <p className="text-[11px] text-muted-foreground border-t border-pink-200/40 dark:border-pink-800/30 pt-1.5">
-                        <span className="text-pink-600 dark:text-pink-400 font-semibold mr-1">💬 首评</span>{videoCopy.first_comment}
+                      <p className="text-[11px] text-muted-foreground border-t border-accent/20 pt-1.5">
+                        <span className="text-accent font-semibold mr-1">💬 首评</span>{videoCopy.first_comment}
                       </p>
                     )}
                     <Button
-                      className="w-full bg-pink-500 hover:bg-pink-600 text-white shadow-sm"
+                      className="w-full bg-primary text-primary-foreground shadow-sm"
                       onClick={() => {
                         navigator.clipboard.writeText(videoCopyText(videoCopy));
-                        toast.success('小红书文案已复制,快去发布吧 ✨');
+                        toast.success('视频广告文案已复制,快去发布吧 ✨');
                       }}
                     >
                       <Copy className="w-4 h-4 mr-1.5" />一键复制全文
                     </Button>
                   </div>
                 ) : (
-                  <div className="border border-dashed border-pink-300/50 rounded-lg p-3 text-center space-y-2 bg-pink-50/30 dark:bg-pink-950/10">
+                  <div className="border border-dashed border-accent/40 rounded-lg p-3 text-center space-y-2 bg-accent/5">
                     <p className="text-[11px] text-muted-foreground">
-                      {genCopyLoading ? '正在根据脚本生成小红书文案…' : '还没生成小红书文案 📝'}
+                      {genCopyLoading ? '正在根据脚本生成视频广告文案…' : '还没生成视频广告文案 🎬'}
                     </p>
                     <Button variant="outline" size="sm" onClick={() => generateVideoCopy()} disabled={genCopyLoading}>
                       {genCopyLoading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
-                      生成小红书文案
+                      生成视频广告文案
                     </Button>
                   </div>
                 )}
