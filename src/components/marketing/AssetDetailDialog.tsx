@@ -421,13 +421,30 @@ export function AssetDetailDialog({
     if (!asset?.output_url) return;
     setDownloading(true);
     try {
+      const tail = asset.meta?.storage_path?.split('/').pop() || '';
+      const filename = tail || `boomer-${kind}-${asset.id.slice(0,8)}.${kind === 'video' ? 'mp4' : 'jpg'}`;
+      const { saveToGallery, saveUrlToGallery, isNativeApp } = await import('@/lib/saveToGallery');
+
+      // 已经转存到长期 Storage 的 1080p 视频直接由系统下载到文件,不经过 JS Blob/Base64。
+      if (kind === 'video' && asset.meta?.storage_path) {
+        const { data: signed, error: signedError } = await supabase.storage
+          .from('marketing-videos')
+          .createSignedUrl(asset.meta.storage_path, 10 * 60, { download: filename });
+        if (signedError || !signed?.signedUrl) throw signedError || new Error('无法生成下载地址');
+        const save = await saveUrlToGallery(signed.signedUrl, filename, kind);
+        if (!save.ok) throw new Error(save.error || '下载失败');
+        const txt = videoCopyText(videoCopy);
+        if (txt) { try { await navigator.clipboard.writeText(txt); } catch { /* noop */ } }
+        toast.success(save.target === 'gallery' ? '已保存到相册' : '下载已开始');
+        return;
+      }
+
       const { data: sess } = await supabase.auth.getSession();
       const token = sess?.session?.access_token;
       if (!token) throw new Error('请先登录');
       const projectRef = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID || '';
       const supaUrl = (import.meta as any).env?.VITE_SUPABASE_URL || (projectRef ? `https://${projectRef}.supabase.co` : '');
       if (!supaUrl) throw new Error('无法解析下载地址');
-      const tail = asset.meta?.storage_path?.split('/').pop() || '';
       const url = `${supaUrl}/functions/v1/download-marketing-asset?asset_id=${encodeURIComponent(asset.id)}${tail ? `&filename=${encodeURIComponent(tail)}` : ''}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
@@ -438,10 +455,9 @@ export function AssetDetailDialog({
       // 文件名优先取 Content-Disposition
       const cd = res.headers.get('content-disposition') || '';
       const m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
-      const filename = m ? decodeURIComponent(m[1]) : (tail || `boomer-${kind}-${asset.id.slice(0,8)}.${kind === 'video' ? 'mp4' : 'jpg'}`);
+      const responseFilename = m ? decodeURIComponent(m[1]) : filename;
 
-      const { saveToGallery, isNativeApp } = await import('@/lib/saveToGallery');
-      const save = await saveToGallery(blob, filename, kind);
+      const save = await saveToGallery(blob, responseFilename, kind);
       if (kind === 'video') {
         const txt = videoCopyText(videoCopy);
         if (txt) { try { await navigator.clipboard.writeText(txt); } catch { /* noop */ } }
@@ -841,4 +857,3 @@ function VideoScriptPanel({ script, open, onToggle }: { script: any; open: boole
     </div>
   );
 }
-

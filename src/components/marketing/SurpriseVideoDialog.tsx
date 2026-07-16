@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { VideoJobDetailPanel } from '@/components/marketing/VideoJobDetailPanel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Sparkles, RefreshCw, ArrowRight, Wand2, Camera, MessageSquare, DoorOpen, PartyPopper } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, Sparkles, RefreshCw, ArrowRight, Wand2, Camera, MessageSquare, DoorOpen, PartyPopper, Pencil, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffectiveShop } from '@/hooks/useShops';
 import { toast } from 'sonner';
@@ -43,6 +44,8 @@ interface ScriptShape {
   total_duration_s?: number; bgm?: string;
   continuous_dialogue?: string;
   dialogue_char_count?: number;
+  visual_beats?: unknown[];
+  one_shot_prompt?: string;
 }
 interface SurpriseResult {
   ok: boolean;
@@ -69,6 +72,49 @@ const STYLE_LABEL: Record<string, string> = {
   steady: '稳重', lively: '活泼', energetic: '激动',
   elegant: '优雅', nostalgic: '怀旧', playful: '俏皮',
 };
+
+const chineseLength = (value: string) => (value.match(/[\u4e00-\u9fff]/g) || []).length;
+
+function scriptClips(script: ScriptShape): SceneClip[] {
+  return [script.hook, ...(script.scenes || []), script.outro].filter(Boolean) as SceneClip[];
+}
+
+function updateScriptClip(
+  script: ScriptShape,
+  index: number,
+  patch: Partial<Pick<SceneClip, 'scene' | 'action' | 'dialogue' | 'subtitle'>>,
+): ScriptShape {
+  const next: ScriptShape = {
+    ...script,
+    hook: script.hook ? { ...script.hook } : null,
+    scenes: (script.scenes || []).map((scene) => ({ ...scene })),
+    outro: script.outro ? { ...script.outro } : null,
+  };
+  if (index === 0 && next.hook) Object.assign(next.hook, patch);
+  else if (index > 0 && index <= (next.scenes || []).length) Object.assign(next.scenes![index - 1], patch);
+  else if (next.outro) Object.assign(next.outro, patch);
+
+  const dialogue = scriptClips(next).map((clip) => String(clip.dialogue || '').trim()).join('，');
+  return {
+    ...next,
+    continuous_dialogue: dialogue,
+    dialogue_char_count: chineseLength(dialogue),
+    // 画面和对白被修改后必须从当前五段重新编译,不能继续使用 AI 初稿的缓存 prompt/beat。
+    visual_beats: undefined,
+    one_shot_prompt: '',
+  };
+}
+
+function validateSurpriseScript(script: ScriptShape): string | null {
+  const clips = scriptClips(script);
+  if (clips.length !== 5) return '脚本必须保留完整的五段镜头';
+  if (clips.some((clip) => !clip.scene?.trim() || !clip.action?.trim() || !clip.dialogue?.trim() || !clip.subtitle?.trim())) {
+    return '每段的画面、动作、对白和字幕都必须填写';
+  }
+  const count = chineseLength(clips.map((clip) => clip.dialogue!.trim()).join('，'));
+  if (count < 90 || count > 100) return `连续对白当前 ${count} 字，请调整到 90–100 字`;
+  return null;
+}
 
 export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { shopId } = useEffectiveShop();
@@ -159,8 +205,22 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     doPick(newEx);
   };
 
+  const handleScriptChange = (script: ScriptShape) => {
+    setPick((current) => {
+      if (!current) return current;
+      const next = { ...current, script };
+      if (shopId) setSavedPick(shopId, next, excluded);
+      return next;
+    });
+  };
+
   const start = async (overrides?: { modelId?: string; resolution?: string; face_pipeline?: 'auto' | 'character_sheet' | 'illustration' | 'faceless' }) => {
     if (!shopId || !pick) return;
+    const scriptIssue = validateSurpriseScript(pick.script);
+    if (scriptIssue) {
+      toast.error(scriptIssue);
+      return;
+    }
     const useModel = overrides?.modelId || SURPRISE_DEFAULT_VIDEO_PREFS.modelId;
     const useRes = overrides?.resolution || SURPRISE_DEFAULT_VIDEO_PREFS.resolution;
     setSubmitting(true);
@@ -307,7 +367,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
         ) : (
           <>
-            <ScriptBody pick={pick} />
+            <ScriptBody pick={pick} onScriptChange={handleScriptChange} />
             <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 shrink-0" />
@@ -508,7 +568,7 @@ function RenderingBody({
   );
 }
 
-function ScriptBody({ pick }: { pick: SurpriseResult }) {
+function ScriptBody({ pick, onScriptChange }: { pick: SurpriseResult; onScriptChange: (script: ScriptShape) => void }) {
   const clips: { label: string; clip: SceneClip }[] = [];
   if (pick.script.hook) clips.push({ label: '钩子', clip: pick.script.hook });
   (pick.script.scenes || []).forEach((s, i) => clips.push({ label: `镜头${i + 1}`, clip: s }));
@@ -524,6 +584,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
 
   const [lbOpen, setLbOpen] = useState(false);
   const [lbIdx, setLbIdx] = useState(0);
+  const [editing, setEditing] = useState(false);
   const openLb = (i: number) => { setLbIdx(i); setLbOpen(true); };
 
   // 惊喜流程不再使用角色板;主角=AI 现场生成的虚构「探店博主」(persona),不绑参考图
@@ -546,6 +607,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
   const spokenScript = (pick.script.continuous_dialogue || '').trim() || derivedSpoken;
   const spokenCharCount = pick.script.dialogue_char_count
     || spokenScript.replace(/[^\u4e00-\u9fa5]/g, '').length;
+  const scriptIssue = validateSurpriseScript(pick.script);
   const paceClass = persona?.pace === 'slow'
     ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
     : persona?.pace === 'fast'
@@ -598,16 +660,28 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
       )}
 
       <div className="rounded-xl border border-accent/35 bg-accent/[0.06] px-3.5 py-3 space-y-1.5">
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-accent">
-          <MessageSquare className="w-3.5 h-3.5" />
-          15 秒连续口播 · 全片一条不停顿的人声
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-accent">
+            <MessageSquare className="w-3.5 h-3.5" />
+            15 秒连续口播 · 全片一条不停顿的人声
+          </div>
+          <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => setEditing((value) => !value)}>
+            {editing ? <Check className="w-3 h-3 mr-1" /> : <Pencil className="w-3 h-3 mr-1" />}
+            {editing ? '完成编辑' : '编辑脚本'}
+          </Button>
         </div>
         <p className="text-[13px] leading-6 font-medium text-foreground break-words">
           "{spokenScript}"
         </p>
-        <p className="text-[10px] text-muted-foreground">
+        <p className={`text-[10px] ${scriptIssue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
           共 {spokenCharCount} 字 · 0.1s 开口 · 14.9s 收尾 · 超快连续口播 · 切镜时声音不停
         </p>
+        {scriptIssue && <p className="text-[10px] text-destructive">{scriptIssue}，修正后才能生成。</p>}
+        {editing && (
+          <p className="text-[10px] text-muted-foreground">
+            修改下面五段内容。五段对白会自动合成上方唯一口播，并按修改后的画面重新编译给 Seedance。
+          </p>
+        )}
       </div>
 
 
@@ -666,23 +740,41 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
                   <span className="text-[10px] text-muted-foreground truncate">{clip.motion}</span>
                 )}
               </div>
-              {clip.scene && (
+              {editing ? (
+                <div className="space-y-2 pt-1">
+                  {([
+                    ['scene', '画面'],
+                    ['action', '动作与运镜'],
+                    ['dialogue', '对白'],
+                    ['subtitle', '字幕'],
+                  ] as const).map(([field, fieldLabel]) => (
+                    <label key={field} className="block space-y-1">
+                      <span className="text-[10px] text-muted-foreground">{fieldLabel}</span>
+                      <Textarea
+                        value={clip[field] || ''}
+                        onChange={(event) => onScriptChange(updateScriptClip(pick.script, i, { [field]: event.target.value }))}
+                        className="min-h-[56px] resize-y text-xs"
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : clip.scene && (
                 <div className="text-[12px] leading-snug break-words">
                   <span className="text-muted-foreground">场景 · </span>{clip.scene}
                 </div>
               )}
-              {clip.action && (
+              {!editing && clip.action && (
                 <div className="text-[12px] leading-snug flex gap-1 break-words">
                   <Camera className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
                   <span className="min-w-0">{clip.action}</span>
                 </div>
               )}
-              {clip.dialogue && (
+              {!editing && clip.dialogue && (
                 <div className="rounded-md bg-accent/[0.07] px-2 py-1.5 text-[12px] leading-relaxed font-medium text-foreground break-words">
                   <span className="text-accent">对白 · </span>{clip.dialogue}
                 </div>
               )}
-              {clip.subtitle && (
+              {!editing && clip.subtitle && (
                 <div className="text-[11px] leading-snug text-muted-foreground break-words">
                   字幕 · {clip.subtitle}
                 </div>

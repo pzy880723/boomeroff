@@ -30,12 +30,57 @@ function webDownload(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+function webDownloadUrl(url: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export type GalleryKind = 'video' | 'image';
 
 export interface SaveToGalleryResult {
   ok: boolean;
   target: 'gallery' | 'download';
   error?: string;
+}
+
+/**
+ * 直接把远端文件下载到系统缓存后保存到相册。视频不会进入 JS Blob/Base64,
+ * 避免 1080p 文件占用数倍内存导致 App 卡死或保存失败。
+ */
+export async function saveUrlToGallery(
+  url: string,
+  filename: string,
+  kind: GalleryKind,
+): Promise<SaveToGalleryResult> {
+  if (!Capacitor.isNativePlatform()) {
+    try { webDownloadUrl(url, filename); return { ok: true, target: 'download' }; }
+    catch (e) { return { ok: false, target: 'download', error: (e as Error)?.message }; }
+  }
+
+  try {
+    const downloaded = await Filesystem.downloadFile({
+      url,
+      path: filename,
+      directory: Directory.Cache,
+      progress: true,
+    });
+    let fileUri = downloaded.path;
+    if (!fileUri || !fileUri.startsWith('file://')) {
+      const resolved = await Filesystem.getUri({ path: filename, directory: Directory.Cache });
+      fileUri = resolved.uri;
+    }
+    if (kind === 'video') await Media.saveVideo({ path: fileUri });
+    else await Media.savePhoto({ path: fileUri });
+    try { await Filesystem.deleteFile({ path: filename, directory: Directory.Cache }); } catch { /* noop */ }
+    return { ok: true, target: 'gallery' };
+  } catch (e) {
+    return { ok: false, target: 'gallery', error: (e as Error)?.message || '保存到相册失败' };
+  }
 }
 
 /**

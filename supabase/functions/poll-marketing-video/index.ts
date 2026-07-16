@@ -81,16 +81,20 @@ async function updateAssetMeta(
 ) {
   const { data: asset } = await admin
     .from("marketing_assets")
-    .select("id, meta")
+    .select("id, meta, output_url")
     .eq("user_id", userId)
     .eq("kind", "video")
     .filter("meta->>job_id", "eq", jobId)
     .maybeSingle();
-  if (!asset) return;
+  if (!asset) return { url: outputUrl || null, mirrored: false };
   let finalUrl: string | null | undefined = outputUrl;
   const extraMeta: Record<string, unknown> = {};
+  const storedPath = typeof asset.meta?.storage_path === "string" ? asset.meta.storage_path : null;
+  if (storedPath && typeof asset.output_url === "string" && !isVolcesTosUrl(asset.output_url)) {
+    finalUrl = asset.output_url;
+  }
   // 火山 TOS 签名 URL 只有 24h 有效,成功时立刻转存到 Storage 拿长期链接
-  if (typeof outputUrl === "string" && isVolcesTosUrl(outputUrl)) {
+  if (!storedPath && typeof outputUrl === "string" && isVolcesTosUrl(outputUrl)) {
     try {
       const r = await mirrorTosVideoToStorage(admin, userId, asset.id as string, outputUrl);
       if (r.ok) {
@@ -101,6 +105,7 @@ async function updateAssetMeta(
       } else {
         console.warn("[poll] mirror failed", asset.id, r.error);
         extraMeta.mirror_error = r.error;
+        extraMeta.mirror_retry_at = new Date().toISOString();
       }
     } catch (e) {
       console.warn("[poll] mirror exception", asset.id, e);
@@ -110,6 +115,11 @@ async function updateAssetMeta(
   const update: Record<string, unknown> = { meta: newMeta };
   if (finalUrl !== undefined) update.output_url = finalUrl;
   await admin.from("marketing_assets").update(update).eq("id", asset.id);
+  return {
+    url: finalUrl || asset.output_url || null,
+    mirrored: Boolean(extraMeta.storage_path || storedPath),
+    error: typeof extraMeta.mirror_error === "string" ? extraMeta.mirror_error : null,
+  };
 }
 
 async function submitQueuedChild(admin: any, arkKey: string, child: any, userId: string) {
@@ -538,7 +548,21 @@ Deno.serve(async (req) => {
 
     // ============ 单段任务(或子段) ============
     if (job.status === "succeeded" || job.status === "failed") {
-      return json({ status: job.status, video_url: job.video_url, error: job.error });
+      let stableUrl = job.video_url;
+      if (job.status === "succeeded" && !job.parent_job_id && job.video_url) {
+        const mirrored = await updateAssetMeta(
+          admin,
+          u.user.id,
+          jobId,
+          { status: "succeeded", error: null },
+          job.video_url,
+        );
+        stableUrl = mirrored?.url || stableUrl;
+        if (stableUrl && stableUrl !== job.video_url) {
+          await admin.from("marketing_video_jobs").update({ video_url: stableUrl }).eq("id", jobId);
+        }
+      }
+      return json({ status: job.status, video_url: stableUrl, error: job.error });
     }
     if (!job.provider_task_id) {
       if (job.status === "queued" && (job.script || {}).__render_payload) {
@@ -565,14 +589,19 @@ Deno.serve(async (req) => {
     }).eq("id", jobId);
 
     // 只有单段任务才同步素材库(子段不应在素材库出现)
+    let responseVideoUrl = r.video_url || null;
     if (!job.parent_job_id) {
-      await updateAssetMeta(admin, u.user.id, jobId,
+      const mirrored = await updateAssetMeta(admin, u.user.id, jobId,
         { status: r.mapped, ...(r.error ? { error: r.error } : {}) },
         r.video_url || null,
       );
+      responseVideoUrl = mirrored?.url || responseVideoUrl;
+      if (r.mapped === "succeeded" && responseVideoUrl && responseVideoUrl !== r.video_url) {
+        await admin.from("marketing_video_jobs").update({ video_url: responseVideoUrl }).eq("id", jobId);
+      }
     }
 
-    return json({ status: r.mapped, video_url: r.video_url || null, error: r.error || null, ark_status: r.status });
+    return json({ status: r.mapped, video_url: responseVideoUrl, error: r.error || null, ark_status: r.status });
   } catch (e) {
     console.error("[poll] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);

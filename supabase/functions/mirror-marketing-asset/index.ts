@@ -52,11 +52,17 @@ Deno.serve(async (req) => {
 
       const result = await mirrorTosVideoToStorage(admin, asset.user_id as string, assetId, url);
       if (!result.ok) {
-        // 源已过期 —— 标记 asset,让前端不再无限重试
+        // 只有源站明确返回无权限/不存在才永久标记过期。网络或 Storage
+        // 临时故障保留重试能力，避免一个瞬时错误毁掉仍有效的视频。
+        const failedAt = new Date().toISOString();
         await admin.from("marketing_assets").update({
-          meta: { ...(asset.meta || {}), status: "expired", expired_at: new Date().toISOString(), mirror_error: result.error },
+          meta: result.sourceExpired
+            ? { ...(asset.meta || {}), status: "expired", expired_at: failedAt, mirror_error: result.error }
+            : { ...(asset.meta || {}), status: "mirror_failed", mirror_failed_at: failedAt, mirror_error: result.error },
         }).eq("id", assetId);
-        return json({ error: result.error, expired: true }, 410);
+        return result.sourceExpired
+          ? json({ error: result.error, expired: true }, 410)
+          : json({ error: result.error, retryable: true }, 502);
       }
       await admin.from("marketing_assets").update({
         output_url: result.url,
@@ -89,10 +95,13 @@ Deno.serve(async (req) => {
         if (meta.status === "expired") { results.push({ id: row.id, skipped: "expired" }); continue; }
         const r = await mirrorTosVideoToStorage(admin, row.user_id, row.id, row.output_url);
         if (!r.ok) {
+          const failedAt = new Date().toISOString();
           await admin.from("marketing_assets").update({
-            meta: { ...meta, status: "expired", expired_at: new Date().toISOString(), mirror_error: r.error },
+            meta: r.sourceExpired
+              ? { ...meta, status: "expired", expired_at: failedAt, mirror_error: r.error }
+              : { ...meta, status: "mirror_failed", mirror_failed_at: failedAt, mirror_error: r.error },
           }).eq("id", row.id);
-          results.push({ id: row.id, expired: true, error: r.error });
+          results.push({ id: row.id, expired: r.sourceExpired, retryable: !r.sourceExpired, error: r.error });
         } else {
           await admin.from("marketing_assets").update({
             output_url: r.url,

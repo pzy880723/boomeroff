@@ -1,3 +1,28 @@
+-- 同步放开大众点评和 Worker 队列状态。旧环境的 constraint 名称保持不变,
+-- 因此用 drop/add 让本 migration 可以在已上线数据库中重复执行。
+alter table public.social_accounts
+  drop constraint if exists social_accounts_platform_check;
+alter table public.social_accounts
+  add constraint social_accounts_platform_check
+  check (platform in ('xiaohongshu', 'douyin', 'wechat_video', 'wechat_channels', 'kuaishou', 'dianping', 'bilibili', 'tiktok'));
+
+alter table public.social_publish_jobs
+  drop constraint if exists social_publish_jobs_status_check;
+alter table public.social_publish_jobs
+  add constraint social_publish_jobs_status_check
+  check (status in ('queued', 'scheduled', 'running', 'success', 'partial_success', 'done', 'partial', 'failed', 'cancelled'));
+
+alter table public.social_publish_targets
+  drop constraint if exists social_publish_targets_status_check;
+alter table public.social_publish_targets
+  add constraint social_publish_targets_status_check
+  check (status in ('queued', 'scheduled', 'pending', 'claimed', 'running', 'success', 'failed', 'cancelled'));
+
+alter table public.social_publish_targets
+  add column if not exists claim_token text;
+alter table public.social_publish_targets
+  add column if not exists claim_expires_at timestamptz;
+
 insert into public.social_platform_specs (
   platform,
   label,
