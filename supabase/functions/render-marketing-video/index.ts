@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { pickSegmentImages, planSegments, type ScriptLike } from "../_shared/marketing-segments.ts";
-import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
+import { resolveSeedanceQuality, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 import { resolveStorefrontConstraintZh, STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
 import { OWN_BRAND_LOCK_EN } from "../_shared/brand-scrub.ts";
@@ -417,14 +417,18 @@ Deno.serve(async (req) => {
       (typeof body.model === "string" && body.model) ||
       (presets?.value as any)?.id ||
       DEFAULT_SEEDANCE_2;
-    const modelInfo = resolveSeedanceModel(requestedModel);
+    const quality = resolveSeedanceQuality(
+      requestedModel,
+      typeof body.resolution === "string" ? body.resolution : undefined,
+    );
+    const modelInfo = quality.model;
     const model = modelInfo.id;
     if (model !== requestedModel) {
       console.warn(`[render] requested model ${requestedModel} not in Seedance 2.0 whitelist, falling back to ${model}`);
     }
-    const requestedRes = typeof body.resolution === "string" ? body.resolution : "720p";
-    const resolution = clampResolution(modelInfo, requestedRes);
-    const resolutionDowngraded = resolution !== requestedRes.toLowerCase();
+    const requestedRes = quality.requestedResolution;
+    const resolution = quality.resolution;
+    const resolutionDowngraded = quality.resolutionDowngraded;
 
     const ratio = normalizeRatio(script.aspect);
     const totalDur = Number(script.total_duration_s) || 0;

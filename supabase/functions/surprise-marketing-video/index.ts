@@ -13,6 +13,7 @@ import { pickUpcomingHoliday, formatHolidayBrief } from "../_shared/holiday-cont
 import { generatePersona, formatPersonaDirective, formatPersonaBriefZh, type InfluencerPersona } from "../_shared/persona-generator.ts";
 import { resolveStorefrontOpeningEn, resolveStorefrontOpeningZh } from "../_shared/storefront-constraints.ts";
 import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
+import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -142,6 +143,7 @@ Deno.serve(async (req) => {
         summary: String(asset?.summary || (asset?.role === 'storefront' ? '门头和开放式店面' : `店内实景${index + 1}`)).slice(0, 160),
         role: asset?.role === 'storefront' ? 'storefront' : 'scene',
       }));
+      const quality = resolveSeedanceQuality(body.model, body.resolution);
       const renderBody: any = {
         script: bindSurpriseReferences(normalizeSurpriseScript({
           ...body.script,
@@ -155,9 +157,9 @@ Deno.serve(async (req) => {
         style: body.style,
         shop_id: shopId,
         render_strategy: 'one_shot',
+        model: quality.model.id,
+        resolution: quality.resolution,
       };
-      if (typeof body.model === 'string' && body.model) renderBody.model = body.model;
-      if (typeof body.resolution === 'string' && body.resolution) renderBody.resolution = body.resolution;
       if (body.realism === 'photoreal' || body.realism === 'stylized') renderBody.realism = body.realism;
       // 员工极速成片必须以店铺实景图为事实锚点，禁止退化成无参考图生成。
       renderBody.disable_references = false;

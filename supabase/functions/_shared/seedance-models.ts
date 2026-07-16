@@ -54,3 +54,23 @@ export function clampResolution(model: SeedanceModelInfo, requested: string): st
   if (model.resolutions.includes(r)) return r;
   return model.default_resolution;
 }
+
+export function resolveSeedanceQuality(
+  requestedModel?: string | null,
+  requestedResolution?: string | null,
+): {
+  model: SeedanceModelInfo;
+  requestedResolution: string;
+  resolution: string;
+  resolutionDowngraded: boolean;
+} {
+  const model = resolveSeedanceModel(requestedModel);
+  const normalizedRequest = String(requestedResolution || model.default_resolution).toLowerCase();
+  const resolution = clampResolution(model, normalizedRequest);
+  return {
+    model,
+    requestedResolution: normalizedRequest,
+    resolution,
+    resolutionDowngraded: resolution !== normalizedRequest,
+  };
+}

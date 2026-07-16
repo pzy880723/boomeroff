@@ -21,11 +21,10 @@ import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
 import { invokeFn } from '@/lib/invokeFn';
 import { DirectorProgress } from '@/components/marketing/director/DirectorProgress';
+import { SURPRISE_DEFAULT_VIDEO_PREFS } from '@/lib/videoModelPrefs';
 
 // 惊喜一下固定真人写实,不暴露切换开关
 const SURPRISE_REALISM: Realism = 'photoreal';
-const SURPRISE_MODEL = 'doubao-seedance-2-0-fast-260128';
-const SURPRISE_RESOLUTION = '720p';
 
 interface PickedAsset {
   asset_id: string;
@@ -162,11 +161,11 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 
   const start = async (overrides?: { modelId?: string; resolution?: string; face_pipeline?: 'auto' | 'character_sheet' | 'illustration' | 'faceless' }) => {
     if (!shopId || !pick) return;
-    const useModel = overrides?.modelId || SURPRISE_MODEL;
-    const useRes = overrides?.resolution || SURPRISE_RESOLUTION;
+    const useModel = overrides?.modelId || SURPRISE_DEFAULT_VIDEO_PREFS.modelId;
+    const useRes = overrides?.resolution || SURPRISE_DEFAULT_VIDEO_PREFS.resolution;
     setSubmitting(true);
     setRenderError(null);
-    // 员工极速路径:店员看到的五段脚本会被确定性编译成同一个 15 秒
+    // 员工一键成片路径:店员看到的五段脚本会被确定性编译成同一个 15 秒
     // Seedance 时间轴。专业逐镜生成只保留在独立的 AI 视频入口。
     try {
       const { data, error } = await invokeFn('surprise-marketing-video', {
