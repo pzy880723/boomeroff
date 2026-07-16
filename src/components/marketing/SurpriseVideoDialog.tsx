@@ -607,7 +607,7 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
           "{spokenScript}"
         </p>
         <p className="text-[10px] text-muted-foreground">
-          共 {spokenCharCount} 字 · 0.2s 开口 · 14.8s 收尾 · 切镜时声音不停,只切画面
+          共 {spokenCharCount} 字 · 0.1s 开口 · 14.9s 收尾 · 超快连续口播 · 切镜时声音不停
         </p>
       </div>
 
@@ -678,9 +678,14 @@ function ScriptBody({ pick }: { pick: SurpriseResult }) {
                   <span className="min-w-0">{clip.action}</span>
                 </div>
               )}
+              {clip.dialogue && (
+                <div className="rounded-md bg-accent/[0.07] px-2 py-1.5 text-[12px] leading-relaxed font-medium text-foreground break-words">
+                  <span className="text-accent">对白 · </span>{clip.dialogue}
+                </div>
+              )}
               {clip.subtitle && (
                 <div className="text-[11px] leading-snug text-muted-foreground break-words">
-                  字幕:{clip.subtitle}
+                  字幕 · {clip.subtitle}
                 </div>
               )}
             </div>

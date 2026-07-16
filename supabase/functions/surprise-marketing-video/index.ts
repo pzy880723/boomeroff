@@ -1,7 +1,7 @@
 // 「惊喜一下」一键随机推广视频(锁死洗脑探店口播)
 // 流程:
 //   1. 从店铺素材库挑实景 + 优先找一张门头/店招做开场
-//   2. 借势最近的节日(暑假/端午/中秋/国庆…)
+//   2. 低概率使用与人物和门店自然匹配的临近节日(不自动蹭暑假)
 //   3. 调 generate-marketing-video-script 出洗脑探店脚本(钩子+中段+收尾,15s 9:16)
 //   4. preview=true → 返回 { picked, assets, script, holiday, ... } 给前端展示
 //   5. preview=false → 用同一份 script 调 render-marketing-video 入队,渲染策略恒为 one_shot
@@ -284,7 +284,8 @@ Deno.serve(async (req) => {
 
 
     // 6) 节日借势
-    const holiday = pickUpcomingHoliday(new Date());
+    // 节日只做低概率可选背景，避免每条内容都机械蹭热点。
+    const holiday = pickUpcomingHoliday(new Date(), { chance: 0.2 });
     const holidayBrief = formatHolidayBrief(holiday);
 
     // 7) 动态生成「探店博主」人设(按品类/节日/店铺现场出 persona)
@@ -321,7 +322,7 @@ Deno.serve(async (req) => {
       `${openingDirective}\n` +
       `${holidayBrief ? holidayBrief + '\n' : ''}` +
       `【钩子句池】这次开场的钩子可参考(可改写,不要照抄,必须贴合博主语气与节奏):${randomHooks}。每次拍都要不一样,不要复用上次开头。\n` +
-      `【全片要求】严格 5 个 3 秒镜头:钩子 1 镜 + 递进种草 3 镜 + CTA 1 镜。主角始终是上面那位虚构博主(同人同发型同服装),每镜都有动作(指/拿/试/转身/对镜头说话);**每一镜都必须有 dialogue,严禁空台词**,五句合计 48–52 个汉字,串成一段连贯的探店日记(为什么进店 → 一进门看到什么 → 上手体验/挑到什么 → 适合谁来 → 喊大家冲)。随机变化钩子、人设和表达,但主旨永远是强力种草当前门店;门店事实和卖点只能来自店铺画像、品牌知识库与已选实景素材,严禁编造价格或活动。博主每一镜都要有情绪推进,全部用上传的店内实景;结尾必须带 CTA(参考博主 CTA「${persona.cta}」)。`;
+      `【全片要求】严格 5 个 3 秒镜头:钩子 1 镜 + 递进种草 3 镜 + CTA 1 镜。主角始终是上面那位虚构博主(同人同发型同服装),每镜都有动作(指/拿/试/转身/对镜头说话);**每一镜都必须有 dialogue 和 subtitle,严禁空台词**,五句合计 90–100 个汉字,用中文逗号连接后就是一条从 0.1 秒持续到 14.9 秒的完整口播。五段分别讲钩子 → 进店发现 → 商品细节 → 价值体验 → 行动召唤,画面、对白、字幕必须逐段对应。使用高能、兴奋、清楚的超快语速,切镜时声音不停。随机变化钩子、人设和表达,但主旨永远是强力种草当前门店;门店事实和卖点只能来自店铺画像、品牌知识库与已选实景素材,严禁编造价格或活动。博主每一镜都要有情绪推进,全部用上传的店内实景;结尾必须带 CTA(参考博主 CTA「${persona.cta}」)。`;
 
     // 9) 生成脚本
     const imageUrls = pickedAssets.map((a: any) => a.output_url);
@@ -352,6 +353,7 @@ Deno.serve(async (req) => {
           role_label: '探店博主',
           visual_signature: persona.visual,
           core_emotion: persona.vibe,
+          age_bucket: persona.age_bucket,
         },
       }),
     });

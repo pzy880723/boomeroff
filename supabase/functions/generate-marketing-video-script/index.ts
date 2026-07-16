@@ -8,6 +8,8 @@ import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
 import { resolveStorefrontConstraintZh, sanitizeStorefrontText, usesOpenFrontMallConstraint } from "../_shared/storefront-constraints.ts";
 import { scrubThirdPartyBrands, OWN_BRAND_LOCK_ZH } from "../_shared/brand-scrub.ts";
 import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
+import { DeepSeekRequestError, requestDeepSeekJson } from "../_shared/deepseek-client.ts";
+import { buildSurpriseRepairInstruction, normalizeDeepSeekSurpriseScript, validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,6 +24,7 @@ Deno.serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+    const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY") || "";
 
     const auth = req.headers.get("Authorization");
     if (!auth) return json({ error: "未授权" }, 401);
@@ -43,7 +46,7 @@ Deno.serve(async (req) => {
     const maxScenes = isTight15 ? 3 : targetClips + 1;
     const perClipMin = isTight15 ? 3 : (duration >= 25 ? 1.5 : 2);
     const perClipMax = isTight15 ? 3 : (duration >= 25 ? 3.5 : 5);
-    // 口播字数硬预算:4 汉字/秒(清晰口播),15s → 60 字
+    // 普通视频按清晰口播预算；惊喜一下使用 90–100 字超快连续口播。
     const totalSpeakBudgetCn = Math.floor(duration * 4);
     const aspect: string = ["9:16", "1:1", "16:9"].includes(body.aspect) ? body.aspect : "9:16";
     // 用户输入(topic/highlight/brief)可能带真实商场名或第三方招牌关键词,
@@ -108,15 +111,17 @@ ${approvedScript}
       ? `
 
 【惊喜一下 15 秒极速成片 · 连续口播模板】(本片必须严格按这套节奏拍,声音全程不能停)
-- 【最高优先级 · 一条连续口播】全片使用同一条连续中文口播音轨。人物从 0.2 秒开始持续说到 14.8 秒,任意位置不得有超过 0.15 秒的停顿;切镜时口播继续,不允许重新起句、不允许重复台词、不允许留白。
+- 【最高优先级 · 一条连续口播】全片使用同一条连续中文口播音轨。人物从 0.1 秒开始持续说到 14.9 秒,任意位置不得有超过 0.1 秒的停顿;切镜时口播继续,不允许重新起句、不允许重复台词、不允许留白。
 - 【continuous_dialogue 硬规则】
-  · 必须写完整的中文口播全文,58–62 个汉字。
+  · 必须写完整的中文口播全文,90–100 个汉字,目标约 96 字。
   · 只允许使用中文逗号「，」或顿号「、」连接,不使用句号、感叹号、问号、省略号。
   · 严禁"大家好 / 各位姐妹 / 嗯 / 啊 / 那个 / 然后 / 就是"这类语气词、客套词、废话词。
   · 开头直接给钩子,中间连续输出门店卖点,结尾直接给行动号召。
   · 主旨固定为强力种草当前门店,但具体表达和卖点组合每次都要有新意。
-- 【视觉分镜】仍然生成 5 段(hook + 3 scenes + outro),每段严格 3 秒,只负责画面设计与切镜时间。
-  · 每段的 dialogue 字段留空字符串或写一句该段的画面关键词摘要即可,不再决定发声。
+- 【五段等价脚本】生成 5 段(hook + 3 scenes + outro),每段严格 3 秒。
+  · 每段 dialogue 必须是 18–21 个汉字的完整口播,五段都非空。
+  · 五段 dialogue 用中文逗号连接后必须逐字等于 continuous_dialogue,不得出现两套不同台词。
+  · 每段 subtitle 必须非空且准确概括当段对白;scene/action 必须具体呈现当段对白讲到的内容。
   · 每段可以补一个 cut_on_keyword 字段(2–6 个汉字),表示"念到这个关键词时切到本镜"。关键词必须真实出现在 continuous_dialogue 里。
   · 每段的 action 描述要写清楚"一边做××一边继续对镜头说话",不能出现"停下、静默、思考"等打断口播的措辞。
 - 【贯穿主线】continuous_dialogue 是一段连贯的"探店日记":为什么走进这家店 → 一进门看到什么 → 上手体验/挑到什么 → 谁适合来 → 喊大家冲。反复点名店铺关键词(店名/品类/钩子产品)。
@@ -135,7 +140,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}\n${storefrontConstraint}\n${OWN_BRAND_LOC
 每一镜必须输出以下 4 段(全部中文)：
 - scene  场景描述：地点、环境、光线、色调、道具、画面构图、镜头景别(特写/中景/全景)。
 - action 人物动作 / 镜头运动：人物在做什么 + 镜头怎么动(推/拉/摇/移/俯/仰/手持/定格)。如无人物只描写镜头。
-- dialogue 台词 / 口播：人物说的话或画外音。没有就填空字符串 ""。
+- dialogue 台词 / 口播：人物说的话或画外音。惊喜一下五段必须全部非空，普通视频没有台词时可填空字符串 ""。
 - subtitle 屏幕字幕：叠加在画面上的字幕，≤24 字，可与台词不同(更短)。
 
 参考图(image_index)：${approvedScript
@@ -156,12 +161,10 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}\n${storefrontConstraint}\n${OWN_BRAND_LOC
 - 画幅 ${aspect}。
 - 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
 - subtitle ≤ 24 字。scene 30–80 字，action 15–50 字。
-- 【口播字数硬预算】按 4 汉字/秒清晰口播计算,全片 dialogue 汉字合计 ≤ ${totalSpeakBudgetCn} 字。${isTight15 ? `
+- 【口播字数硬预算】${isViralStoreTour ? '惊喜一下全片 dialogue 合计必须 90–100 个汉字,使用高能超快语速连续讲完。' : `按 4 汉字/秒清晰口播计算,全片 dialogue 汉字合计 ≤ ${totalSpeakBudgetCn} 字。`}${isTight15 ? `
 - 【15 秒最高优先级 · 边演边说】所有 5 段(hook + 3 中段 + outro)**都必须有非空 dialogue**,严禁纯氛围镜、严禁 dialogue 为空字符串。每一镜的 action 必须写成"边 ×× 边对镜头说 / 一边 ×× 一边讲",动作和口播在同一秒发生,不许"先做动作 → 停下 → 再说话"。
-- hook.dialogue ≤ 8 字(必须是完整钩子,不许省略,不许半句,主角边走入店里边喊)。
-- outro.dialogue ≤ 8 字(必须是完整 CTA/收尾,不许省略,不许半句,主角边定格/比手势边喊)。
-- 中段每 scene.dialogue ≤ 14 字,与该镜动作同步说出。
-- 宁可少说也不许写半句;宁可省一句中段也不许砍掉钩子或 CTA。全片说的话必须能在 ${duration} 秒内自然念完并且有头有尾。` : `- dialogue ≤ ${isViralStoreTour ? 16 : 30} 字${isViralStoreTour ? '(洗脑探店每镜必须有 dialogue,不能为空)' : '(可为空)'}。`}
+${isViralStoreTour ? `- hook、3 个 scenes、outro 的 dialogue 各 18–21 个汉字,subtitle 各 6–16 个汉字;句子必须完整且画面逐段对应。` : `- hook.dialogue ≤ 8 字,outro.dialogue ≤ 8 字,中段每 scene.dialogue ≤ 14 字。`}
+- 全片必须有头有尾,钩子、发现、商品/体验、价值、行动召唤五层信息依次推进。` : `- dialogue ≤ 30 字(可为空)。`}
 
 - 镜头总条数${isTight15 ? ' = 5(hook + 3 scenes + outro)' : ` ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间`};每条 ${perClipMin}–${perClipMax} 秒${isTight15 ? '(严格 3 秒)' : ',所有镜头 duration_s 之和 ≈ ' + duration + ' 秒(允许 ±20% 浮动)'}。
 - 不写"主播""直播间""保真""保证升值"等违禁词。`;
@@ -187,26 +190,26 @@ ${refList}
 {
   "title": "<≤14 字的中文标题，一眼看出这条视频拍的是什么，避免『视频/短片』这类无信息词>",
   "one_shot_prompt": "<${isViralStoreTour ? '必须为空字符串。惊喜一下由服务端根据 continuous_dialogue 和 visual beats 确定性编译 Seedance 提示词。' : `${isTight15 ? '【15 秒必填】' : '可留空字符串'}120–180 字中文导演稿。`}>",${isViralStoreTour ? `
-  "continuous_dialogue": "<全片唯一的连续中文口播,58-62 个汉字,只用中文逗号或顿号连接,不含语气词/客套词/句号/感叹号/省略号>",
+  "continuous_dialogue": "<全片唯一的连续中文口播,90-100 个汉字,只用中文逗号或顿号连接,不含语气词/客套词/句号/感叹号/省略号>",
   "visual_beats": [
-    { "start_s": 0,    "end_s": 2.8,  "visual": "<钩子画面>",   "action": "<边×边继续对镜头说>", "motion": "手持推镜", "image_index": 0, "cut_on_keyword": "<对应口播中出现的关键词>" },
-    { "start_s": 2.8,  "end_s": 5.8,  "visual": "<进店发现画面>", "action": "<边×边继续对镜头说>", "motion": "广角横移", "image_index": null, "cut_on_keyword": "<关键词>" },
-    { "start_s": 5.8,  "end_s": 8.8,  "visual": "<细节特写画面>", "action": "<边×边继续对镜头说>", "motion": "俯拍跟随", "image_index": null, "cut_on_keyword": "<关键词>" },
-    { "start_s": 8.8,  "end_s": 11.8, "visual": "<体验互动画面>", "action": "<边×边继续对镜头说>", "motion": "中景推近", "image_index": null, "cut_on_keyword": "<关键词>" },
-    { "start_s": 11.8, "end_s": 15,   "visual": "<CTA 画面>",    "action": "<边×边继续对镜头说>", "motion": "拉镜定格", "image_index": null, "cut_on_keyword": "<关键词>" }
+    { "start_s": 0,  "end_s": 3,  "visual": "<钩子画面>", "action": "<边×边继续对镜头说>", "motion": "手持推镜", "image_index": 0, "cut_on_keyword": "<对应口播中出现的关键词>" },
+    { "start_s": 3,  "end_s": 6,  "visual": "<进店发现画面>", "action": "<边×边继续对镜头说>", "motion": "广角横移", "image_index": null, "cut_on_keyword": "<关键词>" },
+    { "start_s": 6,  "end_s": 9,  "visual": "<细节特写画面>", "action": "<边×边继续对镜头说>", "motion": "俯拍跟随", "image_index": null, "cut_on_keyword": "<关键词>" },
+    { "start_s": 9,  "end_s": 12, "visual": "<体验互动画面>", "action": "<边×边继续对镜头说>", "motion": "中景推近", "image_index": null, "cut_on_keyword": "<关键词>" },
+    { "start_s": 12, "end_s": 15, "visual": "<CTA 画面>", "action": "<边×边继续对镜头说>", "motion": "拉镜定格", "image_index": null, "cut_on_keyword": "<关键词>" }
   ],` : ''}
-  "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "${isViralStoreTour ? '' : '<中文台词,可为空字符串>'}", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
+  "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "${isViralStoreTour ? '<18-21字完整钩子对白>' : '<中文台词,可为空字符串>'}", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
   "scenes": [
-    { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '' : '...'}", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
+    { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '<18-21字完整中段对白>' : '...'}", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
   ],
-  "outro": { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '' : '...'}", "subtitle": "<收尾字幕,可含 BOOMER·OFF>", "image_index": null, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "定格" },
+  "outro": { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '<18-21字完整CTA对白>' : '...'}", "subtitle": "<收尾字幕,可含 BOOMER·OFF>", "image_index": null, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "定格" },
   "bgm":   "<lo-fi|城市夜色|暖民谣>",
   "total_duration_s": ${duration},
   "aspect": "${aspect}",
   "mode": "text2video"
 }
 说明:${isViralStoreTour
-        ? 'continuous_dialogue 是 Seedance 唯一朗读的连续口播,人物从 0.2s 说到 14.8s,不停顿;hook/scenes/outro 与 visual_beats 只决定 5 段画面的场景/动作/运镜/参考图,不再分别决定台词,dialogue 字段留空字符串即可;one_shot_prompt 必须为空。'
+        ? 'continuous_dialogue 是 Seedance 唯一连续朗读的口播,人物从 0.1s 说到 14.9s,不停顿;hook/scenes/outro 的五段 dialogue 必须非空,它们连接后逐字等于 continuous_dialogue,并与各自 scene/action/subtitle 一一对应;one_shot_prompt 必须为空。'
         : 'hook/scenes/outro 用于分镜展示和后期;one_shot_prompt 用于兼容普通一次成片。'}
 只输出 JSON，不要 \`\`\` 包裹。`;
 
@@ -215,35 +218,79 @@ ${refList}
       for (const url of imageUrls) userContent.push({ type: "image_url", image_url: { url } });
     }
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: sys },
-          { role: "user", content: userContent },
-        ],
-        temperature: 0.85,
-      }),
-    });
-    if (!aiRes.ok) {
-      const t = await aiRes.text();
-      console.error("[script] AI", aiRes.status, t.slice(0, 400));
-      if (aiRes.status === 402) return json({ error: "AI 额度已用尽" }, 402);
-      if (aiRes.status === 429) return json({ error: "AI 限流，请稍后" }, 429);
-      return json({ error: "AI 生成失败" }, 500);
-    }
-    const data = await aiRes.json();
-    let raw: string = (data?.choices?.[0]?.message?.content || "").toString().trim();
-    raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (m) raw = m[0];
+    const generateWithLovable = async (): Promise<any> => {
+      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            { role: "system", content: sys },
+            { role: "user", content: userContent },
+          ],
+          temperature: 0.85,
+        }),
+      });
+      if (!aiRes.ok) {
+        const text = await aiRes.text();
+        console.error("[script] Lovable AI", aiRes.status, text.slice(0, 400));
+        throw new Error(aiRes.status === 429 ? "AI 限流，请稍后" : aiRes.status === 402 ? "AI 额度已用尽" : "AI 生成失败");
+      }
+      const data = await aiRes.json();
+      let raw = String(data?.choices?.[0]?.message?.content || "").trim();
+      raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
+      const match = raw.match(/\{[\s\S]*\}/);
+      return JSON.parse(match ? match[0] : raw);
+    };
+
     let script: any = null;
-    try { script = JSON.parse(raw); } catch { /* */ }
+    let scriptProvider = "lovable";
+    if (isViralStoreTour && DEEPSEEK_API_KEY) {
+      const factContext = [shopBlock, kbBlock, imgDescBlock, topic, highlight, briefTranscript].filter(Boolean).join("\n");
+      let repair = "";
+      let lastCandidate: any = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const candidate = await requestDeepSeekJson({
+            apiKey: DEEPSEEK_API_KEY,
+            systemPrompt: sys,
+            userPrompt: `${userPrompt}${repair ? `\n\n${repair}\n上一次 JSON：\n${JSON.stringify(lastCandidate)}` : ""}`,
+            model: Deno.env.get("DEEPSEEK_SCRIPT_MODEL") || "deepseek-v4-pro",
+            temperature: attempt === 0 ? 0.85 : 0.55,
+          });
+          lastCandidate = candidate;
+          const validation = validateSurpriseScript(candidate as any, {
+            ageBucket: character?.age_bucket || null,
+            factContext,
+          });
+          if (!validation.errors.length) {
+            script = normalizeDeepSeekSurpriseScript(candidate as any);
+            scriptProvider = "deepseek";
+            break;
+          }
+          console.warn(`[script] DeepSeek attempt ${attempt + 1} rejected`, validation.errors);
+          repair = buildSurpriseRepairInstruction(validation.errors);
+        } catch (error) {
+          const status = error instanceof DeepSeekRequestError ? error.status : 0;
+          console.error(`[script] DeepSeek attempt ${attempt + 1} failed`, status, error);
+          if (status === 401 || status === 402) break;
+          repair = buildSurpriseRepairInstruction([error instanceof Error ? error.message : "返回格式异常"]);
+        }
+      }
+      if (!script && lastCandidate?.hook && Array.isArray(lastCandidate?.scenes) && lastCandidate?.outro) {
+        console.warn("[script] DeepSeek repair exhausted; applying deterministic normalization");
+        script = normalizeDeepSeekSurpriseScript(lastCandidate as any);
+        scriptProvider = "deepseek_repaired";
+      }
+    }
+    if (!script) {
+      if (isViralStoreTour && !DEEPSEEK_API_KEY) console.warn("[script] DEEPSEEK_API_KEY missing, falling back to Lovable AI");
+      script = await generateWithLovable();
+    }
     if (!script || !script.hook || !Array.isArray(script.scenes) || !script.outro) {
       return json({ error: "AI 返回格式异常" }, 500);
     }
+    script.script_provider = scriptProvider;
 
     const clean = (s: any, max: number) =>
       scrubThirdPartyBrands(
@@ -262,7 +309,7 @@ ${refList}
     const sanitizeScene = (sc: any) => ({
       scene: clean(sc?.scene, 200),
       action: clean(sc?.action, 120),
-      dialogue: clean(sc?.dialogue, isTight15 ? 14 : (isViralStoreTour ? 16 : 60)),
+      dialogue: clean(sc?.dialogue, isViralStoreTour ? 24 : (isTight15 ? 14 : 60)),
       subtitle: clean(sc?.subtitle ?? sc?.text, 24),
       image_index: clampIdx(sc?.image_index),
       duration_s: Math.min(Math.max(Number(sc?.duration_s) || 3, 1), perClipMax + 1),
@@ -280,13 +327,13 @@ ${refList}
     const cnLen = (s: string) => (s || '').replace(/[^\u4e00-\u9fa5]/g, '').length;
 
     if (isTight15 && isViralStoreTour) {
-      // === 惊喜一下：全片一条连续口播，每段固定 3s，不再逐段强制 dialogue ===
+      // === 惊喜一下：五段可读对白组成同一条连续口播，每段固定 3s ===
       while (script.scenes.length < 3) {
         script.scenes.push({
           scene: script.hook.scene || '店内继续展示商品',
           action: '手持镜头顺移，边拿起一件商品边继续对镜头说',
-          dialogue: '',
-          subtitle: '',
+          dialogue: '镜头继续展示店里的真实好物和逛店体验',
+          subtitle: '继续探索店内惊喜',
           image_index: null,
           duration_s: 3,
           motion: '手持',

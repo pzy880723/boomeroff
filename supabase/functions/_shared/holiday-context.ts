@@ -43,8 +43,6 @@ const FIXED_HOLIDAYS: Holiday[] = [
     ["520 礼物在这", "520 送她这个!"]),
   H("儿童节", 6, 1, 5, "playful pastel colors, whimsical motion",
     ["六一童心大爆发", "大人也过儿童节!"]),
-  H("暑假", 7, 1, 14, "bright summer afternoon, cicada vibe, vacation rush",
-    ["暑假冲鸭", "暑假必去清单 +1!", "放假就来这"], "(7-8 月整段)"),
   H("教师节", 9, 10, 5, "warm classroom-like nostalgia, soft afternoon light",
     ["教师节送礼来这", "老师们也爱逛!"]),
   H("国庆", 10, 1, 14, "festive red-gold accents, crowded street, holiday energy",
@@ -96,17 +94,16 @@ function diffDays(a: Date, b: Date) {
 
 /**
  * 返回距离今天 ≤ windowDays 且最近的一个节日。没有命中返回 null。
- * 对暑假这类长周期,如果今天在 7.1–8.31 之间也算"正在进行中" → daysAway=0。
  */
-export function pickUpcomingHoliday(now: Date = new Date()): (Holiday & { daysAway: number }) | null {
+export function pickUpcomingHoliday(
+  now: Date = new Date(),
+  options: { chance?: number; random?: () => number } = {},
+): (Holiday & { daysAway: number }) | null {
+  const chance = Math.min(1, Math.max(0, options.chance ?? 1));
+  if ((options.random || Math.random)() > chance) return null;
   const candidates: (Holiday & { daysAway: number })[] = [];
 
   for (const h of FIXED_HOLIDAYS) {
-    // 暑假特例:整段都算"现在"
-    if (h.name === "暑假") {
-      const inSeason = (now.getMonth() + 1 === 7) || (now.getMonth() + 1 === 8);
-      if (inSeason) { candidates.push({ ...h, daysAway: 0 }); continue; }
-    }
     // 找今年和明年里最近的一次
     for (const y of [now.getFullYear(), now.getFullYear() + 1]) {
       const d = new Date(y, h.month - 1, h.day);
@@ -142,5 +139,5 @@ export function formatHolidayBrief(h: (Holiday & { daysAway: number }) | null): 
   if (!h) return "";
   const when = h.daysAway === 0 ? "正在" : `还有 ${h.daysAway} 天就到`;
   const hints = h.hookHints.slice(0, 2).map((s) => `"${s}"`).join(" / ");
-  return `【借势提示】现在${when}【${h.name}】,脚本的氛围、对白和钩子句请蹭这个节日。建议钩子句:${hints}。整体调性:${h.vibe}。`;
+  return `【可选节日背景】现在${when}【${h.name}】。仅当它与当前人物年龄、门店卖点和素材自然匹配时才可轻量使用；不匹配就完全忽略，禁止硬蹭。可参考钩子:${hints}。氛围:${h.vibe}。`;
 }

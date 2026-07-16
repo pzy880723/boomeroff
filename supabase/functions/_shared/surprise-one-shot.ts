@@ -1,10 +1,10 @@
-// 「惊喜一下」15秒极速成片：全片一条连续中文口播 + 5 段画面切点。
-// 不再让 Seedance 按镜逐字重新起句；镜头只切画面，声音持续不停。
+// 「惊喜一下」15秒极速成片：一条连续中文口播 + 5 段等价对白时间锚点。
+// 店员看五段清晰脚本，Seedance 朗读同一份连续全文；切镜只切画面，不重开人声。
 
 export interface SurpriseClip {
   scene?: string;
   action?: string;
-  dialogue?: string; // 兼容旧字段；不再用于 Seedance 提示词
+  dialogue?: string;
   subtitle?: string;
   image_index?: number | null;
   duration_s?: number;
@@ -60,17 +60,17 @@ export interface SurpriseReferencePlan {
 }
 
 const BEAT_WINDOWS: Array<[number, number]> = [
-  [0, 2.8],
-  [2.8, 5.8],
-  [5.8, 8.8],
-  [8.8, 11.8],
-  [11.8, 15],
+  [0, 3],
+  [3, 6],
+  [6, 9],
+  [9, 12],
+  [12, 15],
 ];
 
 const BEAT_LABELS = ['强钩子', '进店发现', '上手体验', '核心种草', '行动召唤'];
 
-const MIN_CN = 58;
-const MAX_CN = 62;
+export const SURPRISE_MIN_CN = 90;
+export const SURPRISE_MAX_CN = 100;
 
 // 会拖慢连续口播的语气词/客套词，一律清掉
 const FILLER_PATTERNS: RegExp[] = [
@@ -89,13 +89,21 @@ const FILLER_PATTERNS: RegExp[] = [
   /所以说+/g,
 ];
 
-const HOOK_FALLBACK = '姐妹们这家店真的太会藏惊喜了';
-const MID_FALLBACKS = [
-  '一进来每排都想停下翻翻',
-  '随手拿起都是很有意思的特别单品',
-  '价格也友好一个人也能放心逛',
+const FALLBACK_DIALOGUES = [
+  '来逛中古店别错过这个藏满惊喜的宝藏空间',
+  '一走进去满眼复古杂货每排货架都值得认真翻',
+  '玩具瓷器唱片和生活小物随手一拿都很有故事',
+  '预算不用太高也能挑到一件属于自己的独特纪念',
+  '现在把这家宝藏店放进攻略到店认真翻上一圈',
 ];
-const CTA_FALLBACK = '周末别犹豫直接来BOOMER认真逛一圈';
+
+const FALLBACK_SUBTITLES = [
+  '藏满惊喜的中古空间',
+  '每排都值得认真翻',
+  '每件小物都有故事',
+  '低预算也能淘到惊喜',
+  '放进攻略现在就来',
+];
 
 function chineseLength(value: string): number {
   return (value || '').replace(/[^\u4e00-\u9fa5]/g, '').length;
@@ -111,7 +119,7 @@ function normalizePunctuation(value: string): string {
   return (value || '')
     // 句号 / 感叹号 / 省略号 → 逗号，保持一条不停的语流
     .replace(/[。.!！?？]+/g, '，')
-    .replace(/[…\.]{2,}/g, '，')
+    .replace(/…{2,}|\.{2,}/g, '，')
     .replace(/[;；:：]+/g, '，')
     // 合并重复逗号 / 顿号
     .replace(/[，,、]{2,}/g, '，')
@@ -137,48 +145,69 @@ function truncateToChinese(value: string, maxCn: number): string {
   return out.replace(/[，、,]+$/u, '');
 }
 
-function padContinuousDialogue(value: string): string {
-  const fillers = ['真心闭眼冲', '越逛越上头', '姐妹别错过', '真的巨值得', '现在冲最合适'];
-  let out = value;
-  let idx = 0;
-  while (chineseLength(out) < MIN_CN && idx < fillers.length * 3) {
-    const piece = fillers[idx % fillers.length];
-    out = `${out}，${piece}`;
-    out = normalizePunctuation(out);
-    idx += 1;
-  }
-  return out;
-}
-
-function buildContinuousFromClips(script: SurpriseScript): string {
+function dialogueChunksFromClips(script: SurpriseScript): string[] {
   const clips = [script.hook, ...(script.scenes || []), script.outro];
-  const raw = clips
+  return clips
     .map((c) => stripFillers(String(c?.dialogue || '').trim()))
-    .filter(Boolean)
-    .join('，');
-  return normalizePunctuation(raw);
+    .map(normalizePunctuation);
 }
 
-function ensureContinuousDialogue(raw: string, script: SurpriseScript): string {
-  let dialogue = normalizePunctuation(stripFillers(raw || ''));
-  if (chineseLength(dialogue) < MIN_CN) {
-    // 用分镜台词补齐
-    const fromClips = buildContinuousFromClips(script);
-    if (fromClips) {
-      dialogue = dialogue
-        ? normalizePunctuation(`${dialogue}，${fromClips}`)
-        : fromClips;
+function splitContinuousDialogue(value: string): string[] {
+  const chunks = normalizePunctuation(stripFillers(value || ''))
+    .split(/[，、]/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  if (chunks.length === 5) return chunks;
+  if (chunks.length < 5) return [];
+
+  const groups: string[] = [];
+  let remainingLength = chunks.reduce((sum, chunk) => sum + chineseLength(chunk), 0);
+  let cursor = 0;
+  for (let groupIndex = 0; groupIndex < 5; groupIndex += 1) {
+    const remainingGroups = 5 - groupIndex;
+    const target = Math.max(1, Math.round(remainingLength / remainingGroups));
+    const group: string[] = [];
+    let length = 0;
+    while (cursor < chunks.length && (group.length === 0 || length < target)) {
+      const chunksLeft = chunks.length - cursor;
+      if (chunksLeft <= remainingGroups - 1 && group.length > 0) break;
+      const chunk = chunks[cursor];
+      group.push(chunk);
+      length += chineseLength(chunk);
+      cursor += 1;
     }
+    groups.push(group.join('、'));
+    remainingLength -= length;
   }
-  if (chineseLength(dialogue) < MIN_CN) {
-    const fallback = [HOOK_FALLBACK, ...MID_FALLBACKS, CTA_FALLBACK].join('，');
-    dialogue = dialogue ? normalizePunctuation(`${dialogue}，${fallback}`) : fallback;
+  return groups.length === 5 && groups.every(Boolean) ? groups : [];
+}
+
+function fitDialogue(value: string, fallback: string, maxCn: number): string {
+  let out = normalizePunctuation(stripFillers(value));
+  if (chineseLength(out) < maxCn - 3) {
+    const addition = normalizePunctuation(fallback);
+    out = out ? `${out}${addition}` : addition;
   }
-  dialogue = padContinuousDialogue(dialogue);
-  if (chineseLength(dialogue) > MAX_CN) {
-    dialogue = truncateToChinese(dialogue, MAX_CN);
+  return truncateToChinese(normalizePunctuation(out), maxCn);
+}
+
+function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
+  const clipChunks = dialogueChunksFromClips(script);
+  const rawChunks = splitContinuousDialogue(raw);
+  let source = clipChunks.length === 5 && clipChunks.every(Boolean) ? clipChunks : rawChunks;
+  const joined = source.join('，');
+  const joinedLength = chineseLength(joined);
+  if (source.length === 5 && source.every(Boolean)
+      && joinedLength >= SURPRISE_MIN_CN && joinedLength <= SURPRISE_MAX_CN) {
+    return source;
   }
-  return dialogue;
+
+  if (source.length !== 5 || !source.some(Boolean)) source = rawChunks.length === 5 ? rawChunks : FALLBACK_DIALOGUES;
+  const budgets = [19, 20, 20, 20, 20];
+  const repaired = budgets.map((budget, index) => fitDialogue(source[index] || '', FALLBACK_DIALOGUES[index], budget));
+  const repairedLength = chineseLength(repaired.join('，'));
+  if (repairedLength >= SURPRISE_MIN_CN && repairedLength <= SURPRISE_MAX_CN) return repaired;
+  return [...FALLBACK_DIALOGUES];
 }
 
 function normalizeClip(value: unknown): SurpriseClip {
@@ -237,8 +266,8 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     scenes.push(normalizeClip({
       scene: hook.scene || 'BOOMER·OFF 店内货架与翻筐区',
       action: '边逛边拿起一件好物对镜头继续说话',
-      dialogue: MID_FALLBACKS[index],
-      subtitle: '',
+      dialogue: FALLBACK_DIALOGUES[index + 1],
+      subtitle: FALLBACK_SUBTITLES[index + 1],
       image_index: null,
       motion: '手持跟拍',
     }));
@@ -252,16 +281,21 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     total_duration_s: 15,
     aspect: '9:16',
     one_shot_prompt: '',
-    speech_start_s: 0.2,
-    speech_end_s: 14.8,
-    speech_rate: 'fast_clear',
-    max_silence_s: 0.15,
+    speech_start_s: 0.1,
+    speech_end_s: 14.9,
+    speech_rate: 'very_fast_clear',
+    max_silence_s: 0.1,
   };
 
-  const continuous = ensureContinuousDialogue(
-    String(script.continuous_dialogue || ''),
-    nextScript,
-  );
+  const clips = [nextScript.hook, ...nextScript.scenes, nextScript.outro];
+  const dialogues = ensureBeatDialogues(String(script.continuous_dialogue || ''), nextScript);
+  clips.forEach((clip, index) => {
+    clip.dialogue = dialogues[index];
+    clip.subtitle = String(clip.subtitle || '').trim()
+      || FALLBACK_SUBTITLES[index]
+      || truncateToChinese(dialogues[index], 12);
+  });
+  const continuous = dialogues.join('，');
   nextScript.continuous_dialogue = continuous;
   nextScript.dialogue_char_count = chineseLength(continuous);
 
@@ -396,13 +430,21 @@ export function compileSurpriseOneShotPrompt(options: {
   lines.push('');
   lines.push('【声音硬规则】');
   lines.push('1. 这是全片唯一的一条连续中文口播音轨，由 Seedance 直接生成同步人声，不使用后配 TTS。');
-  lines.push('2. 0.2 秒内立即开口，持续说到 14.8 秒左右。');
-  lines.push('3. 全程连续发声，任何位置不得出现超过 0.15 秒的停顿。');
+  lines.push('2. 0.1 秒内立即开口，持续说到 14.9 秒左右。');
+  lines.push('3. 全程连续发声，任何位置不得出现超过 0.1 秒的停顿。');
   lines.push('4. 切换镜头时声音必须继续，不得停止、重新起句或重复台词。');
   lines.push('5. 严格逐字朗读口播全文，不得改写、遗漏、合并或增加对白。');
-  lines.push('6. 使用偏快、清楚、自然、有感染力的中文口播，语速约每分钟 230–250 汉字。');
+  lines.push('6. 使用很快、清楚、兴奋、有感染力的中文口播，语速约每分钟 390–430 汉字；语句紧凑但咬字仍须清楚。');
   lines.push('7. 不要片头音乐、呼吸空白、语气词、停顿或结尾拖音。');
   lines.push('8. 背景音乐和环境声保持低音量，不得遮挡人声。');
+
+  const clips = [script.hook, ...script.scenes, script.outro];
+  lines.push('');
+  lines.push('【五段对白时间锚点】以下五段连接后就是上面的唯一口播全文，只用于对齐画面、字幕和切点，不是五次重新开口。相邻段之间零停顿、零吸气空白，声音必须跨切镜连续。');
+  clips.forEach((clip, index) => {
+    const [start, end] = BEAT_WINDOWS[index];
+    lines.push(`${start}-${end} 秒｜对白："${compactText(clip.dialogue, 80)}"｜字幕："${compactText(clip.subtitle, 40)}"`);
+  });
 
   // === 画面切点 ===
   lines.push('');
@@ -427,7 +469,7 @@ export function compileSurpriseOneShotPrompt(options: {
 
   lines.push('');
   lines.push('【连续性】五段是同一次探店经历，人物身份、衣着、声音、门店空间、商品外观、光线和色调必须连续一致；转场使用自然硬切或动作匹配剪辑，不做黑场、不做慢淡。');
-  lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字、长时间空镜或任何超过 0.15 秒的静默。');
+  lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字、长时间空镜或任何超过 0.1 秒的静默。');
   for (const constraint of (options.globalConstraints || []).slice(0, 4)) {
     if (constraint?.trim()) lines.push(compactText(constraint, 240));
   }
