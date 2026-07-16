@@ -87,7 +87,7 @@ async function processJob(admin: any, job: any, env: { arkKey: string; supabaseU
     .eq("job_id", job.id)
     .order("shot_index");
   const shots = shotsRaw || [];
-  const hasSubmitted = shots.some((s: any) => s.seedance_task_id || ["submitting", "running", "succeeded"].includes(String(s.status || "")));
+  const hasSubmitted = shots.some((s: any) => s.seedance_task_id || String(s.status || "") === "succeeded");
 
   if (["queued", "character", "shooting"].includes(String(job.status || "")) && !hasSubmitted) {
     await triggerFunction("director-run-pipeline", job.id, env.supabaseUrl, env.serviceKey);

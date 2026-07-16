@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
       .select("id,status,seedance_task_id")
       .eq("job_id", jobId);
     const alreadySubmitted = (existingShots || []).some((s: any) =>
-      s.seedance_task_id || ['submitting', 'running', 'succeeded'].includes(String(s.status || '')),
+      s.seedance_task_id || String(s.status || '') === 'succeeded',
     );
     if (alreadySubmitted || !['queued', 'character', 'shooting'].includes(String(job.status || ''))) {
       return json({ ok: true, job_id: jobId, already_started: true, status: job.status });
