@@ -373,16 +373,8 @@ export function AssetDetailDialog({
     return () => { cancelled = true; };
   }, [asset]);
 
-  // 视频渲染完成后 & 还没生成文案 → 自动生成一次
-  useEffect(() => {
-    if (!asset || asset.kind !== 'video') return;
-    if (!asset.output_url) return;
-    if (videoCopy) return;
-    if (genCopyLoading) return;
-    if (!asset.meta?.job_id) return;
-    void generateVideoCopy({ silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asset?.id, asset?.output_url]);
+  // 视频广告文案:只在用户点击「生成 / 重新生成」时才调用模型;
+  // 生成成功后会写回 marketing_assets.meta.video_copy,再次打开直接展示。
 
   if (!asset) return null;
 
@@ -407,6 +399,15 @@ export function AssetDetailDialog({
       setVideoCopy(got);
       const nextMeta = { ...(asset.meta || {}), video_copy: got };
       onUpdated?.({ ...asset, meta: nextMeta });
+      try {
+        const { error: upErr } = await supabase
+          .from('marketing_assets' as any)
+          .update({ meta: nextMeta })
+          .eq('id', asset.id);
+        if (upErr) console.warn('[video-ad-copy] persist meta failed', upErr);
+      } catch (e) {
+        console.warn('[video-ad-copy] persist meta threw', e);
+      }
       if (!opts?.silent) toast.success('视频广告文案已生成');
     } catch (e: any) {
       if (!opts?.silent) toast.error(e?.message || '生成失败,请稍后重试');
