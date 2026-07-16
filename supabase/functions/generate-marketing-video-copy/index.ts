@@ -153,7 +153,7 @@ ${scriptDigest}`);
 
     return json({ success: true, copy, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
-    console.error("[video-copy] error", e);
+    console.error("[video-ad-copy] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
   }
 });
