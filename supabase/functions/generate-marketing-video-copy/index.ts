@@ -144,13 +144,17 @@ ${scriptDigest}`;
     try { cand = JSON.parse(raw); } catch { /* */ }
     if (!cand || (!cand.title && !cand.body)) return json({ error: "AI 返回格式异常" }, 500);
 
-    // 只做话术层敏感词过滤,不再剥离商场/分店名。
+    // 只做话术层敏感词过滤 + 把「本店 / 我们门店 / 小店」这类奇怪口播兜底换成品牌名。
     const sanitize = (s: string) =>
       (s || '').toString()
         .replace(/主播/g, '店员')
         .replace(/直播间/g, '店里')
+        .replace(/(我们的?|咱们)(门店|小店|店铺|店)/g, 'BOOMER·OFF')
+        .replace(/本店|小店/g, 'BOOMER·OFF')
+        .replace(/(BOOMER·OFF\s*){2,}/g, 'BOOMER·OFF')
         .replace(/保真|保证升值|秒杀|限时抢|全网最低|拍卖行级别/g, '')
         .trim();
+
 
     const copy = {
       title: sanitize(cand.title || '').slice(0, 40),
