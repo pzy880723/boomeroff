@@ -121,7 +121,7 @@ ${approvedScript}
 - 【五段等价脚本】生成 5 段(hook + 3 scenes + outro),每段严格 3 秒。
   · 每段 dialogue 必须是 18–21 个汉字的完整口播,五段都非空。
   · 五段 dialogue 用中文逗号连接后必须逐字等于 continuous_dialogue,不得出现两套不同台词。
-  · 每段 subtitle 必须非空且准确概括当段对白;scene/action 必须具体呈现当段对白讲到的内容。
+  · 每段 subtitle 必须非空且逐字等于当段 dialogue;scene/action 必须具体呈现当段对白讲到的内容。
   · 每段可以补一个 cut_on_keyword 字段(2–6 个汉字),表示"念到这个关键词时切到本镜"。关键词必须真实出现在 continuous_dialogue 里。
   · 每段的 action 描述要写清楚"一边做××一边继续对镜头说话",不能出现"停下、静默、思考"等打断口播的措辞。
 - 【贯穿主线】continuous_dialogue 是一段连贯的"探店日记":为什么走进这家店 → 一进门看到什么 → 上手体验/挑到什么 → 谁适合来 → 喊大家冲。反复点名店铺关键词(店名/品类/钩子产品)。
@@ -141,7 +141,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}\n${storefrontConstraint}\n${OWN_BRAND_LOC
 - scene  场景描述：地点、环境、光线、色调、道具、画面构图、镜头景别(特写/中景/全景)。
 - action 人物动作 / 镜头运动：人物在做什么 + 镜头怎么动(推/拉/摇/移/俯/仰/手持/定格)。如无人物只描写镜头。
 - dialogue 台词 / 口播：人物说的话或画外音。惊喜一下五段必须全部非空，普通视频没有台词时可填空字符串 ""。
-- subtitle 屏幕字幕：叠加在画面上的字幕，≤24 字，可与台词不同(更短)。
+- subtitle 屏幕字幕：叠加在画面上的字幕，≤24 字，必须逐字复制对应 dialogue。
 
 参考图(image_index)：${approvedScript
         ? '严格按草稿里的 [图 #N] 标记取值,不要自己挑。'
@@ -198,7 +198,7 @@ ${refList}
     { "start_s": 9,  "end_s": 12, "visual": "<体验互动画面>", "action": "<边×边继续对镜头说>", "motion": "中景推近", "image_index": null, "cut_on_keyword": "<关键词>" },
     { "start_s": 12, "end_s": 15, "visual": "<CTA 画面>", "action": "<边×边继续对镜头说>", "motion": "拉镜定格", "image_index": null, "cut_on_keyword": "<关键词>" }
   ],` : ''}
-  "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "${isViralStoreTour ? '<18-21字完整钩子对白>' : '<中文台词,可为空字符串>'}", "subtitle": "<≤24字中文字幕>", "image_index": 0, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
+  "hook":  { "scene": "<中文场景描述>", "action": "<中文人物动作/镜头运动>", "dialogue": "${isViralStoreTour ? '<18-21字完整钩子对白>' : '<中文台词,可为空字符串>'}", "subtitle": "<逐字复制 dialogue>", "image_index": 0, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "推镜|拉镜|摇镜|移镜|手持|定格" },
   "scenes": [
     { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '<18-21字完整中段对白>' : '...'}", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
   ],
@@ -277,10 +277,8 @@ ${refList}
           repair = buildSurpriseRepairInstruction([error instanceof Error ? error.message : "返回格式异常"]);
         }
       }
-      if (!script && lastCandidate?.hook && Array.isArray(lastCandidate?.scenes) && lastCandidate?.outro) {
-        console.warn("[script] DeepSeek repair exhausted; applying deterministic normalization");
-        script = normalizeDeepSeekSurpriseScript(lastCandidate as any);
-        scriptProvider = "deepseek_repaired";
+      if (!script && lastCandidate) {
+        console.warn("[script] DeepSeek repair exhausted; rejecting candidate instead of padding it with fixed dialogue");
       }
     }
     if (!script) {

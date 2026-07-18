@@ -58,6 +58,20 @@ Deno.serve(async (req) => {
     // 2) 兜底从 video_generation_jobs.script_json (Director / 惊喜一下 链路);
     // 3) 再兜底用 asset.meta.publish_copy/topic/summary 拼一个最小脚本。
     const meta: any = (asset as any).meta || {};
+    // 生成结果是成片的一部分:已存在就直接返回,不因重复打开详情而重新采样。
+    const savedCopy = meta.video_copy || meta.publish_copy;
+    if (savedCopy && typeof savedCopy === 'object') {
+      const copy = {
+        title: savedCopy.title || savedCopy.cover_title || '',
+        body: savedCopy.body || savedCopy.caption || savedCopy.douyin_caption || '',
+        hashtags: Array.isArray(savedCopy.hashtags) ? savedCopy.hashtags : [],
+        first_comment: savedCopy.first_comment || '',
+      };
+      if (!meta.video_copy) {
+        await admin.from('marketing_assets').update({ meta: { ...meta, video_copy: copy } }).eq('id', assetId);
+      }
+      return json({ success: true, copy, cached: true });
+    }
     let script: any = null;
     if (meta.job_id) {
       const { data: job } = await admin.from('marketing_video_jobs' as any).select('script').eq('id', meta.job_id).maybeSingle();

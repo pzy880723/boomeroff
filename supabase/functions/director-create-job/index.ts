@@ -3,6 +3,7 @@
 // 然后异步触发 director-run-pipeline 去跑真正的流水线。返回 job_id 立刻给前端做进度轮询。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { buildDirectorShotPlan, type DirectorScript } from "../_shared/director-utils.ts";
+import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,11 +34,20 @@ Deno.serve(async (req) => {
     const resolution: string | undefined = typeof body.resolution === 'string' ? body.resolution : undefined;
     const style: string | undefined = typeof body.style === 'string' ? body.style : undefined;
     const promptOverrides = body.prompt_overrides && typeof body.prompt_overrides === 'object' ? body.prompt_overrides : null;
+    const draftJobId: string | null = typeof body.draft_job_id === 'string' && body.draft_job_id
+      ? body.draft_job_id : null;
     const userPrompt: string | null = typeof body.user_prompt === 'string' && body.user_prompt.trim()
       ? body.user_prompt.trim().slice(0, 500)
       : (typeof script?.title === 'string' ? String(script.title).slice(0, 500) : null);
     if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
     if (!script) return json({ ok: false, error: "缺少脚本" });
+
+    if (draftJobId) {
+      const scriptValidation = validateSurpriseScript(script, { factContext: JSON.stringify(pickedAssets) });
+      if (scriptValidation.errors.length) {
+        return json({ ok: false, error: `脚本未通过校验: ${scriptValidation.errors.join("；")}`, errors: scriptValidation.errors }, 422);
+      }
+    }
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
@@ -55,12 +65,28 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: `导演分镜计划异常:${shotPlan.length} 镜 / ${plannedDuration} 秒` }, 422);
     }
 
-    // 1) insert job
-    const { data: job, error: jErr } = await admin
-      .from("video_generation_jobs")
-      .insert({
-        user_id: u.user.id,
-        shop_id: shopId,
+    // 1) 新建视频任务,或把已保存的惊喜脚本草稿升级成视频任务。
+    let job: any = null;
+    let jErr: any = null;
+    if (draftJobId) {
+      const existing = await admin.from("video_generation_jobs")
+        .select("*")
+        .eq("id", draftJobId)
+        .eq("user_id", u.user.id)
+        .eq("shop_id", shopId)
+        .single();
+      if (existing.error || !existing.data) {
+        return json({ ok: false, error: '脚本草稿不存在或无权访问' }, 404);
+      }
+      const draftStage = existing.data?.meta?.surprise_stage;
+      if (!['script_generating', 'script_ready'].includes(String(existing.data.status)) || draftStage !== 'script_ready') {
+        return json({ ok: false, error: '脚本还未准备好，无法开始生成视频' }, 409);
+      }
+      const existingShots = await admin.from("video_generation_shots")
+        .select("id", { count: "exact", head: true }).eq("job_id", draftJobId);
+      if (existingShots.count) return json({ ok: false, error: '该脚本已经开始生成视频' }, 409);
+
+      const updated = await admin.from("video_generation_jobs").update({
         user_prompt: userPrompt,
         source_pick_json: { picked_assets: pickedAssets, persona, model: modelId, resolution, style, prompt_overrides: promptOverrides },
         brief_json: brief,
@@ -68,15 +94,46 @@ Deno.serve(async (req) => {
         status: 'queued',
         duration: plannedDuration,
         aspect_ratio: '9:16',
+        error_message: null,
         meta: {
+          ...(existing.data.meta || {}),
+          flow: 'surprise',
+          consumed: true,
+          surprise_stage: 'video_queued',
           pipeline_version: 'director-v2',
           planned_shot_count: shotPlan.length,
           publish_copy_status: 'pending',
           background: true,
+          draft_consumed_at: new Date().toISOString(),
         },
-      })
-      .select()
-      .single();
+      }).eq("id", draftJobId).select().single();
+      job = updated.data;
+      jErr = updated.error;
+    } else {
+      const inserted = await admin
+        .from("video_generation_jobs")
+        .insert({
+          user_id: u.user.id,
+          shop_id: shopId,
+          user_prompt: userPrompt,
+          source_pick_json: { picked_assets: pickedAssets, persona, model: modelId, resolution, style, prompt_overrides: promptOverrides },
+          brief_json: brief,
+          script_json: script,
+          status: 'queued',
+          duration: plannedDuration,
+          aspect_ratio: '9:16',
+          meta: {
+            pipeline_version: 'director-v2',
+            planned_shot_count: shotPlan.length,
+            publish_copy_status: 'pending',
+            background: true,
+          },
+        })
+        .select()
+        .single();
+      job = inserted.data;
+      jErr = inserted.error;
+    }
     if (jErr || !job) return json({ ok: false, error: '建任务失败: ' + (jErr?.message || 'unknown') }, 500);
 
     // 2) insert shots
@@ -101,7 +158,15 @@ Deno.serve(async (req) => {
     const { error: sErr } = await admin.from("video_generation_shots").insert(shotRows);
     if (sErr) {
       console.error("[director-create-job] shots insert", sErr);
-      await admin.from("video_generation_jobs").delete().eq("id", job.id);
+      if (draftJobId) {
+        await admin.from("video_generation_jobs").update({
+          status: 'failed',
+          error_message: '创建分镜失败: ' + sErr.message,
+          meta: { ...(job.meta || {}), surprise_stage: 'failed' },
+        }).eq("id", job.id);
+      } else {
+        await admin.from("video_generation_jobs").delete().eq("id", job.id);
+      }
       return json({ ok: false, error: '创建分镜失败:' + sErr.message }, 500);
     }
 

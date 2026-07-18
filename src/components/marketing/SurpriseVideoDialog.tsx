@@ -11,17 +11,21 @@ import { Link } from 'react-router-dom';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
 import {
   getActiveRenderJob, setActiveRenderJob, clearActiveRenderJob,
-  pollRenderJob, getInflightPick, setInflightPick,
-  getSavedPick, setSavedPick, clearSavedPick,
+  pollRenderJob, clearSavedPick,
   type ActiveRenderJob,
 } from '@/lib/surpriseJob';
 import { createVideoJob } from '@/api/videoGeneration';
+import {
+  startSurpriseScriptJob,
+  pollSurpriseScriptJob,
+  saveSurpriseScriptJob,
+  discardSurpriseScriptJob,
+} from '@/api/surpriseScriptJob';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { toastVideoFailure } from '@/lib/toastVideoFailure';
 import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
-import { invokeFn } from '@/lib/invokeFn';
 import { DirectorProgress } from '@/components/marketing/director/DirectorProgress';
 import { SURPRISE_DEFAULT_VIDEO_PREFS } from '@/lib/videoModelPrefs';
 
@@ -96,6 +100,12 @@ function updateScriptClip(
   else if (next.outro) Object.assign(next.outro, patch);
 
   const dialogue = scriptClips(next).map((clip) => String(clip.dialogue || '').trim()).join('，');
+  const editedDialogue = typeof patch.dialogue === 'string' ? patch.dialogue.trim() : null;
+  if (editedDialogue !== null) {
+    const target = index === 0 ? next.hook : index > 0 && index <= (next.scenes || []).length
+      ? next.scenes![index - 1] : next.outro;
+    if (target) target.subtitle = editedDialogue;
+  }
   return {
     ...next,
     continuous_dialogue: dialogue,
@@ -112,8 +122,21 @@ function validateSurpriseScript(script: ScriptShape): string | null {
   if (clips.some((clip) => !clip.scene?.trim() || !clip.action?.trim() || !clip.dialogue?.trim() || !clip.subtitle?.trim())) {
     return '每段的画面、动作、对白和字幕都必须填写';
   }
+  const clipLengths = clips.map((clip) => chineseLength(String(clip.dialogue || '')));
+  if (clipLengths.some((length) => length < 18 || length > 21)) return '每一镜对白必须是 18–21 个汉字,不足就重新生成脚本';
   const count = chineseLength(clips.map((clip) => clip.dialogue!.trim()).join('，'));
   if (count < 90 || count > 100) return `连续对白当前 ${count} 字，请调整到 90–100 字`;
+  if (clips.some((clip) => String(clip.subtitle || '').trim() !== String(clip.dialogue || '').trim())) {
+    return '字幕必须和每一镜最终对白一致';
+  }
+  const normalized = clips.map((clip) => String(clip.dialogue || '').replace(/[，,、。.!！?？\s]/g, ''));
+  for (let i = 0; i < normalized.length; i += 1) {
+    for (let j = i + 1; j < normalized.length; j += 1) {
+      for (let start = 0; start <= normalized[i].length - 6; start += 1) {
+        if (normalized[j].includes(normalized[i].slice(start, start + 6))) return '五段对白存在重复短语,请重新生成脚本';
+      }
+    }
+  }
   return null;
 }
 
@@ -127,11 +150,18 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [scriptJobId, setScriptJobId] = useState<string | null>(null);
   const realism: Realism = SURPRISE_REALISM;
   const pollRef = useRef<number | null>(null);
+  const scriptPollRef = useRef<number | null>(null);
+  const scriptSaveRef = useRef<number | null>(null);
 
   const stopPolling = () => {
     if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
+  };
+
+  const stopScriptPolling = () => {
+    if (scriptPollRef.current) { window.clearInterval(scriptPollRef.current); scriptPollRef.current = null; }
   };
 
   const startPolling = (jobId: string, shop: string) => {
@@ -156,24 +186,47 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     pollRef.current = window.setInterval(tick, 4000);
   };
 
+  const applyScriptState = (state: any) => {
+    setScriptJobId(state.job_id);
+    if (state.result && state.script) {
+      setPick({ ...state.result, script: state.script });
+      setPicking(false);
+    } else if (state.status === 'script_generating') {
+      setPicking(true);
+    }
+    if (state.status === 'failed') {
+      setPicking(false);
+      toast.error(state.error || '脚本生成失败,请重试');
+    }
+  };
+
+  const pollScriptDraft = (jobId: string) => {
+    stopScriptPolling();
+    const tick = async () => {
+      try {
+        const state = await pollSurpriseScriptJob(jobId);
+        applyScriptState(state);
+        if (state.status === 'script_ready' || state.status === 'failed') stopScriptPolling();
+      } catch (e: any) {
+        console.warn('[surprise] script draft poll failed', e);
+      }
+    };
+    void tick();
+    scriptPollRef.current = window.setInterval(tick, 3500);
+  };
+
   const doPick = async (exclude: string[] = []) => {
     if (!shopId) return;
     setPicking(true); setPick(null);
-    const existing = getInflightPick(shopId);
-    const promise = existing || setInflightPick(shopId, invokeFn('surprise-marketing-video', {
-      body: { shop_id: shopId, preview: true, exclude_asset_ids: exclude, realism },
-    }));
     try {
-      const { data, error } = await promise as any;
-      if (error) throw error;
-      const d = data as any;
-      if (d?.ok === false) throw new Error(d.error || '随机失败');
-      setPick(d as SurpriseResult);
-      setSavedPick(shopId, d, exclude);
+      const state = await startSurpriseScriptJob(shopId, exclude, realism);
+      applyScriptState(state);
+      if (state.status === 'script_generating') pollScriptDraft(state.job_id);
     } catch (e: any) {
-      toast.error(e?.message || '随机失败');
+      setPicking(false);
+      toast.error(e?.message || '脚本任务启动失败');
       onOpenChange(false);
-    } finally { setPicking(false); }
+    }
   };
 
   useEffect(() => {
@@ -186,23 +239,26 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       return;
     }
     setActiveJob(null);
-    const saved = getSavedPick<SurpriseResult>(shopId);
-    if (saved) {
-      setPick(saved.pick);
-      setExcluded(saved.excluded || []);
-      return () => { stopPolling(); };
-    }
     if (!pick) doPick(excluded);
-    return () => { stopPolling(); };
+    return () => { stopPolling(); stopScriptPolling(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, shopId]);
 
-  useEffect(() => () => stopPolling(), []);
+  useEffect(() => () => {
+    stopPolling();
+    stopScriptPolling();
+    if (scriptSaveRef.current) window.clearTimeout(scriptSaveRef.current);
+  }, []);
 
-  const reroll = () => {
-    if (shopId) clearSavedPick(shopId);
+  const reroll = async () => {
+    if (scriptJobId) {
+      try { await discardSurpriseScriptJob(scriptJobId); } catch (e) { console.warn('[surprise] discard draft failed', e); }
+    }
+    stopScriptPolling();
     const newEx = pick ? Array.from(new Set([...excluded, pick.picked.asset_id])).slice(-20) : excluded;
     setExcluded(newEx);
+    setScriptJobId(null);
+    setPick(null);
     doPick(newEx);
   };
 
@@ -210,7 +266,14 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     setPick((current) => {
       if (!current) return current;
       const next = { ...current, script };
-      if (shopId) setSavedPick(shopId, next, excluded);
+      if (scriptJobId) {
+        if (scriptSaveRef.current) window.clearTimeout(scriptSaveRef.current);
+        scriptSaveRef.current = window.setTimeout(() => {
+          void saveSurpriseScriptJob(scriptJobId, script).catch((error) => {
+            toast.error(error?.message || '脚本保存失败');
+          });
+        }, 450);
+      }
       return next;
     });
   };
@@ -239,6 +302,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         resolution: useRes,
         prompt_overrides: pick.prompt_overrides,
         user_prompt: pick.picked?.summary || pick.script?.continuous_dialogue || 'BOOMER 探店短片',
+        draft_job_id: scriptJobId || undefined,
       });
       const job: ActiveRenderJob = {
         jobId: result.job_id,
@@ -249,6 +313,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       };
       setActiveRenderJob(shopId, job);
       clearSavedPick(shopId);
+      setScriptJobId(null);
+      stopScriptPolling();
       setActiveJob(job);
       setRenderPhase('queued');
       setProgress({ done: 0, total: result.shot_count || 3 });
@@ -310,6 +376,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       clearActiveRenderJob(shopId);
       clearSavedPick(shopId);
     }
+    setScriptJobId(null);
+    stopScriptPolling();
     setActiveJob(null);
     setRenderPhase('running');
     setProgress(null);

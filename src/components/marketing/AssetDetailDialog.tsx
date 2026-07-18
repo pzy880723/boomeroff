@@ -224,9 +224,10 @@ import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { invokeFn } from '@/lib/invokeFn';
 import { completeMarketingVideoFromSegments } from '@/lib/completeMarketingVideo';
 import { useAuth } from '@/hooks/useAuth';
+import { resolveVideoAssetCopy, type VideoAssetCopy } from '@/lib/videoAssetCopy';
 
 
-interface CopyCand {
+interface CopyCand extends VideoAssetCopy {
   title?: string;
   body?: string;
   hashtags?: string[];
@@ -348,8 +349,7 @@ export function AssetDetailDialog({
       setCands([]);
     }
     if (asset.kind === 'video') {
-      const saved = asset.meta?.video_copy;
-      setVideoCopy(saved && (saved.title || saved.body) ? saved : null);
+      setVideoCopy(resolveVideoAssetCopy(asset.meta));
     } else {
       setVideoCopy(null);
     }
@@ -396,6 +396,8 @@ export function AssetDetailDialog({
 
   const generateVideoCopy = async (opts?: { silent?: boolean }) => {
     if (!asset || asset.kind !== 'video') return;
+    const existing = resolveVideoAssetCopy(asset.meta);
+    if (existing) { setVideoCopy(existing); return; }
     setGenCopyLoading(true);
     try {
       const { data, error } = await invokeFnTop('generate-marketing-video-copy', {
@@ -435,13 +437,23 @@ export function AssetDetailDialog({
       const filename = tail || `boomer-${kind}-${asset.id.slice(0,8)}.${kind === 'video' ? 'mp4' : 'jpg'}`;
       const { saveToGallery, saveUrlToGallery, isNativeApp } = await import('@/lib/saveToGallery');
 
-      // 已经转存到长期 Storage 的 1080p 视频直接由系统下载到文件,不经过 JS Blob/Base64。
-      if (kind === 'video' && asset.meta?.storage_path) {
-        const { data: signed, error: signedError } = await supabase.storage
-          .from('marketing-videos')
-          .createSignedUrl(asset.meta.storage_path, 10 * 60, { download: filename });
-        if (signedError || !signed?.signedUrl) throw signedError || new Error('无法生成下载地址');
-        const save = await saveUrlToGallery(signed.signedUrl, filename, kind);
+      // 原生视频始终走文件流:1080p 不进入 JS Blob/Base64,下载后直接写系统相册。
+      if (kind === 'video' && isNativeApp()) {
+        let directUrl: string | null = null;
+        if (asset.meta?.storage_path) {
+          const { data: signed, error: signedError } = await supabase.storage
+            .from('marketing-videos')
+            .createSignedUrl(asset.meta.storage_path, 10 * 60, { download: filename });
+          if (signedError || !signed?.signedUrl) throw signedError || new Error('无法生成下载地址');
+          directUrl = signed.signedUrl;
+        } else {
+          const { data: mirrored, error: mirrorError } = await invokeFnTop('mirror-marketing-asset', {
+            body: { asset_id: asset.id },
+          });
+          if (mirrorError || !(mirrored as any)?.url) throw mirrorError || new Error('视频正在转存,请稍后再试');
+          directUrl = (mirrored as any).url;
+        }
+        const save = await saveUrlToGallery(directUrl, filename, kind);
         if (!save.ok) throw new Error(save.error || '下载失败');
         const txt = videoCopyText(videoCopy);
         if (txt) { try { await navigator.clipboard.writeText(txt); } catch { /* noop */ } }
@@ -468,11 +480,11 @@ export function AssetDetailDialog({
       const responseFilename = m ? decodeURIComponent(m[1]) : filename;
 
       const save = await saveToGallery(blob, responseFilename, kind);
-      if (kind === 'video') {
-        const txt = videoCopyText(videoCopy);
-        if (txt) { try { await navigator.clipboard.writeText(txt); } catch { /* noop */ } }
-      }
       if (save.ok) {
+        if (kind === 'video') {
+          const txt = videoCopyText(videoCopy);
+          if (txt) { try { await navigator.clipboard.writeText(txt); } catch { /* noop */ } }
+        }
         if (save.target === 'gallery') toast.success('已保存到相册');
         else toast.success('下载完成');
       } else if (isNativeApp()) {
@@ -481,9 +493,7 @@ export function AssetDetailDialog({
         toast.error(save.error || '下载失败');
       }
     } catch (e: any) {
-      // 兜底:直接打开原链接
-      toast.message(e?.message || '下载失败,已尝试在新窗口打开,请长按保存');
-      try { window.open(asset.output_url, '_blank', 'noreferrer'); } catch { /* noop */ }
+      toast.error(e?.message || '下载失败,请检查网络或相册权限');
     } finally { setDownloading(false); }
   };
 
@@ -717,9 +727,6 @@ export function AssetDetailDialog({
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => { copy(videoCopyText(videoCopy)); }} title="复制全文">
                           <Copy className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => generateVideoCopy()} disabled={genCopyLoading} title="重新生成">
-                          {genCopyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshIconTop className="w-3.5 h-3.5" />}
                         </Button>
                       </div>
                     </div>

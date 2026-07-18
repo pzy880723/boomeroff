@@ -37,6 +37,23 @@ function normalizeComparable(value: unknown): string {
     .replace(/\s+/g, '');
 }
 
+function hasRepeatedDialoguePhrase(dialogues: string[]): boolean {
+  const normalized = dialogues
+    .map((dialogue) => normalizeComparable(dialogue).replace(/，/g, ''))
+    .filter(Boolean);
+  for (let i = 0; i < normalized.length; i += 1) {
+    for (let j = i + 1; j < normalized.length; j += 1) {
+      if (normalized[i] === normalized[j]) return true;
+      // 6 个汉字已经足以区分“本段独有表达”和跨镜头复制的固定句。
+      for (let start = 0; start <= normalized[i].length - 6; start += 1) {
+        const phrase = normalized[i].slice(start, start + 6);
+        if (phrase.length === 6 && normalized[j].includes(phrase)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function validateSurpriseScript(
   input: Partial<SurpriseScript> | null | undefined,
   options: SurpriseValidationOptions = {},
@@ -51,16 +68,29 @@ export function validateSurpriseScript(
     if (!String(clip?.action || '').trim()) errors.push(`第 ${index + 1} 段 action 为空`);
     if (!String(clip?.dialogue || '').trim()) errors.push(`第 ${index + 1} 段 dialogue 为空`);
     if (!String(clip?.subtitle || '').trim()) errors.push(`第 ${index + 1} 段 subtitle 为空`);
+    const clipLength = chineseDialogueLength(clip?.dialogue);
+    if (clipLength < 18 || clipLength > 21) errors.push(`第 ${index + 1} 段对白必须 18-21 个汉字，当前 ${clipLength}`);
   });
 
   const continuous = normalizeComparable(script.continuous_dialogue);
   const joined = normalizeComparable(clips.slice(0, 5).map((clip) => clip?.dialogue || '').join('，'));
+  const dialogues = clips.slice(0, 5).map((clip) => normalizeComparable(clip?.dialogue || ''));
   const dialogueLength = chineseDialogueLength(continuous || joined);
   if (dialogueLength < SURPRISE_MIN_CN || dialogueLength > SURPRISE_MAX_CN) {
     errors.push(`continuous_dialogue 必须 ${SURPRISE_MIN_CN}-${SURPRISE_MAX_CN} 个汉字，当前 ${dialogueLength}`);
   }
   if (!continuous) errors.push('continuous_dialogue 为空');
   if (continuous && joined && continuous !== joined) errors.push('五段 dialogue 连接后必须与 continuous_dialogue 完全一致');
+  clips.slice(0, 5).forEach((clip, index) => {
+    const dialogue = normalizeComparable(clip?.dialogue || '');
+    const subtitle = normalizeComparable(clip?.subtitle || '');
+    if (dialogue && subtitle !== dialogue) {
+      errors.push(`第 ${index + 1} 段字幕必须与最终对白一致`);
+    }
+  });
+  if (dialogues.length === 5 && hasRepeatedDialoguePhrase(dialogues)) {
+    errors.push('五段对白包含重复句或重复短语，必须整条重写');
+  }
   if (/(大家好|各位姐妹|嗯|呃|那个|然后就是)/.test(continuous)) errors.push('连续口播包含客套词或语气词');
 
   if (options.ageBucket === 'senior' && SENIOR_BANNED_TOPICS.test(continuous)) {

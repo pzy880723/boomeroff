@@ -46,6 +46,12 @@ Deno.serve(async (req) => {
     if (!assetId) {
       const script = job.script_json as any;
       const publishCopy = (job.meta as any)?.publish_copy || null;
+      const videoCopy = publishCopy ? {
+        title: publishCopy.title || publishCopy.cover_title || '',
+        body: publishCopy.body || publishCopy.caption || publishCopy.douyin_caption || '',
+        hashtags: Array.isArray(publishCopy.hashtags) ? publishCopy.hashtags : [],
+        first_comment: publishCopy.first_comment || '',
+      } : null;
       const title = publishCopy?.cover_title || script?.title || 'BOOMER 惊喜一下 · 探店短片';
       const tags = publishCopy?.hashtags?.length
         ? publishCopy.hashtags.slice(0, 5).map((h: string) => h.replace(/^#/, ''))
@@ -64,6 +70,7 @@ Deno.serve(async (req) => {
           director_job_id: jobId,
           duration_s: job.duration,
           publish_copy: publishCopy,
+          video_copy: videoCopy,
           subtitles: (job.meta as any)?.subtitles || null,
         } as any,
       }).select("id").single();

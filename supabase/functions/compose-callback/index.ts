@@ -44,6 +44,12 @@ Deno.serve(async (req) => {
 
     const script = (job.script_json as any) || {};
     const publishCopy = (job.meta as any)?.publish_copy || null;
+    const videoCopy = publishCopy ? {
+      title: publishCopy.title || publishCopy.cover_title || '',
+      body: publishCopy.body || publishCopy.caption || publishCopy.douyin_caption || '',
+      hashtags: Array.isArray(publishCopy.hashtags) ? publishCopy.hashtags : [],
+      first_comment: publishCopy.first_comment || '',
+    } : null;
     const finalCover = coverUrl || (job.character_json as any)?.reference_image_url || null;
 
     await admin.from("video_generation_jobs").update({
@@ -80,6 +86,7 @@ Deno.serve(async (req) => {
           director_job_id: jobId,
           duration_s: duration || job.duration,
           publish_copy: publishCopy,
+          video_copy: videoCopy,
           subtitles: (job.meta as any)?.subtitles || null,
         } as any,
       };

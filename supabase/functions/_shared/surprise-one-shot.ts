@@ -182,15 +182,6 @@ function splitContinuousDialogue(value: string): string[] {
   return groups.length === 5 && groups.every(Boolean) ? groups : [];
 }
 
-function fitDialogue(value: string, fallback: string, maxCn: number): string {
-  let out = normalizePunctuation(stripFillers(value));
-  if (chineseLength(out) < maxCn - 3) {
-    const addition = normalizePunctuation(fallback);
-    out = out ? `${out}${addition}` : addition;
-  }
-  return truncateToChinese(normalizePunctuation(out), maxCn);
-}
-
 function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
   const clipChunks = dialogueChunksFromClips(script);
   const rawChunks = splitContinuousDialogue(raw);
@@ -201,12 +192,8 @@ function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
       && joinedLength >= SURPRISE_MIN_CN && joinedLength <= SURPRISE_MAX_CN) {
     return source;
   }
-
-  if (source.length !== 5 || !source.some(Boolean)) source = rawChunks.length === 5 ? rawChunks : FALLBACK_DIALOGUES;
-  const budgets = [19, 20, 20, 20, 20];
-  const repaired = budgets.map((budget, index) => fitDialogue(source[index] || '', FALLBACK_DIALOGUES[index], budget));
-  const repairedLength = chineseLength(repaired.join('，'));
-  if (repairedLength >= SURPRISE_MIN_CN && repairedLength <= SURPRISE_MAX_CN) return repaired;
+  // 不再把短对白和固定句拼在一起。拼接会制造重复台词，且新增的句子通常与当前镜头无关。
+  // 上游生成器会收到校验错误并整条重写；只有完全缺失结构时才使用完整、互不重复的保底脚本。
   return [...FALLBACK_DIALOGUES];
 }
 
@@ -291,9 +278,8 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
   const dialogues = ensureBeatDialogues(String(script.continuous_dialogue || ''), nextScript);
   clips.forEach((clip, index) => {
     clip.dialogue = dialogues[index];
-    clip.subtitle = String(clip.subtitle || '').trim()
-      || FALLBACK_SUBTITLES[index]
-      || truncateToChinese(dialogues[index], 12);
+    // 字幕只允许来自最终对白，避免模型同时返回两套文本后发生错位。
+    clip.subtitle = dialogues[index];
   });
   const continuous = dialogues.join('，');
   nextScript.continuous_dialogue = continuous;

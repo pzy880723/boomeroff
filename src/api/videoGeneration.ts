@@ -69,6 +69,7 @@ export interface CreateVideoJobPayload {
   resolution?: string;
   prompt_overrides?: any;
   user_prompt?: string;
+  draft_job_id?: string;
 }
 
 export async function createVideoJob(payload: CreateVideoJobPayload): Promise<{ job_id: string; shot_count: number }> {

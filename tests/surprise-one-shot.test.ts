@@ -104,7 +104,7 @@ test('一次成片提示词只包含一条连续口播、5 段画面切点和参
   assert.match(prompt, /【五段对白时间锚点】/);
   assert.match(prompt, /0-3 秒.*来上海旅行别错过/);
   assert.match(prompt, /3-6 秒.*一走进去满眼复古杂货/);
-  assert.match(prompt, /字幕.*每排都值得认真翻/);
+  assert.match(prompt, /字幕.*一走进去满眼复古杂货每排货架都值得认真翻/);
   assert.match(prompt, /不是五次重新开口/);
   assert.match(prompt, /0-3 秒/);
   assert.match(prompt, /3-6 秒/);
