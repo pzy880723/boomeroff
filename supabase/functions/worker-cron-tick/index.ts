@@ -66,6 +66,27 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const nowIso = new Date().toISOString();
 
+    // 0. 到点定时任务入队: scheduled → queued/pending
+    {
+      const { data: dueJobs } = await admin.from("social_publish_jobs")
+        .select("id")
+        .eq("status", "scheduled")
+        .lte("schedule_at", nowIso)
+        .order("schedule_at", { ascending: true })
+        .limit(20);
+      const dueJobIds = uniqStrings((dueJobs || []).map((j: any) => j.id));
+      if (dueJobIds.length) {
+        await admin.from("social_publish_jobs")
+          .update({ status: "queued", updated_at: nowIso })
+          .in("id", dueJobIds)
+          .eq("status", "scheduled");
+        await admin.from("social_publish_targets")
+          .update({ status: "pending", progress: 0, error_message: null, last_step: "scheduled_queued", updated_at: nowIso })
+          .in("job_id", dueJobIds)
+          .eq("status", "scheduled");
+      }
+    }
+
     // 1. 回收过期 claim
     await admin.from("social_publish_targets")
       .update({ status: "pending", claim_token: null, claim_expires_at: null, worker_task_id: null })
