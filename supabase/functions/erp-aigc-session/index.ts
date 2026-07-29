@@ -19,15 +19,17 @@ const ALLOWED_ROLES = new Set([
   "store_staff",
 ]);
 
+const REVISION = "erp-aigc-session-20260730-1";
+
 function json(status: number, body: Record<string, unknown>) {
-  return new Response(JSON.stringify(body), {
+  return new Response(JSON.stringify({ revision: REVISION, ...body }), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
 function fail(status: number, code: string, extra: Record<string, unknown> = {}) {
-  console.log(JSON.stringify({ evt: "erp_aigc_session_fail", status, code }));
+  console.log(JSON.stringify({ evt: "erp_aigc_session_fail", status, code, revision: REVISION }));
   return json(status, { ok: false, code, ...extra });
 }
 
@@ -356,7 +358,10 @@ Deno.serve(async (req) => {
         if (!alreadyExists) {
           console.log(JSON.stringify({ evt: "erp_create_err", status, code }));
         }
-        return fail(500, "shadow_user_create_failed");
+        return fail(500, "shadow_user_create_failed", {
+          detailStatus: Number.isFinite(status) ? status : 0,
+          detailCode: code || "",
+        });
       }
     }
   }
