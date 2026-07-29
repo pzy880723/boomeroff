@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.worker-callback]
 verify_jwt = false
+
+[functions.erp-aigc-session]
+verify_jwt = false
