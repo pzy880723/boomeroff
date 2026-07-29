@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
     const imageUrls: string[] = Array.isArray(body.image_urls) ? body.image_urls.slice(0, 20) : [];
     const videoType: VideoType = (Object.keys(presets.videoRules) as VideoType[]).includes(body.video_type)
       ? body.video_type : "store_tour";
-    const duration: number = [15, 20, 30].includes(Number(body.duration)) ? Number(body.duration) : 15;
+    const duration: number = [15, 20, 30, 45, 60].includes(Number(body.duration)) ? Number(body.duration) : 15;
     // 15s 走严格路径：固定 hook + 3 scenes + outro,每段 3s;>15s 沿用原公式
     const isTight15 = duration <= 15;
     const targetClips = isTight15 ? 5 : Math.max(3, Math.round(duration / 2.5));
