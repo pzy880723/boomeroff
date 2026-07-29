@@ -30,9 +30,14 @@ Deno.serve(async (req) => {
     const script: DirectorScript | null = body.script && typeof body.script === 'object' ? body.script : null;
     const pickedAssets: unknown[] = Array.isArray(body.picked_assets) ? body.picked_assets : [];
     const persona = body.persona && typeof body.persona === 'object' ? body.persona : null;
+    const selectedCharacter = body.selected_character && typeof body.selected_character === 'object' ? body.selected_character : null;
+    const characterMode: string = typeof body.character_mode === 'string' && body.character_mode
+      ? body.character_mode
+      : (selectedCharacter ? 'library' : 'auto');
     const modelId: string | undefined = typeof body.model === 'string' ? body.model : undefined;
     const resolution: string | undefined = typeof body.resolution === 'string' ? body.resolution : undefined;
     const style: string | undefined = typeof body.style === 'string' ? body.style : undefined;
+    const aspectRatio: string = typeof body.aspect === 'string' && body.aspect ? body.aspect : '9:16';
     const promptOverrides = body.prompt_overrides && typeof body.prompt_overrides === 'object' ? body.prompt_overrides : null;
     const draftJobId: string | null = typeof body.draft_job_id === 'string' && body.draft_job_id
       ? body.draft_job_id : null;
@@ -51,19 +56,19 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
+    const shotPlan = buildDirectorShotPlan(script);
+    const plannedDuration = shotPlan.reduce((sum, shot) => sum + shot.duration, 0);
+    if (plannedDuration < 1 || plannedDuration > 60) {
+      return json({ ok: false, error: `导演分镜总时长超出范围(1–60s):${plannedDuration}s` }, 422);
+    }
+
     const brief = {
       goal: '门店探店 · 高转化短视频',
       platform: '通用短视频',
-      duration_s: 15,
-      aspect_ratio: '9:16',
-      style: '复古生活方式 · BOOMER-OFF',
+      duration_s: plannedDuration,
+      aspect_ratio: aspectRatio,
+      style: style || '复古生活方式 · BOOMER-OFF',
     };
-
-    const shotPlan = buildDirectorShotPlan(script);
-    const plannedDuration = shotPlan.reduce((sum, shot) => sum + shot.duration, 0);
-    if (shotPlan.length !== 3 || plannedDuration !== 15) {
-      return json({ ok: false, error: `导演分镜计划异常:${shotPlan.length} 镜 / ${plannedDuration} 秒` }, 422);
-    }
 
     // 1) 新建视频任务,或把已保存的惊喜脚本草稿升级成视频任务。
     let job: any = null;
