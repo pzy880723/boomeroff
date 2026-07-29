@@ -358,7 +358,10 @@ Deno.serve(async (req) => {
         if (!alreadyExists) {
           console.log(JSON.stringify({ evt: "erp_create_err", status, code }));
         }
-        return fail(500, "shadow_user_create_failed");
+        return fail(500, "shadow_user_create_failed", {
+          detailStatus: Number.isFinite(status) ? status : 0,
+          detailCode: code || "",
+        });
       }
     }
   }
