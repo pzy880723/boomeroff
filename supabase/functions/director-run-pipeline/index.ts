@@ -70,34 +70,51 @@ Deno.serve(async (req) => {
     const resolution = clampResolution(modelInfo, src.resolution || modelInfo.default_resolution);
     const aspectRatio = job.aspect_ratio || '9:16';
 
-    // ---- step4: 生成角色参考图 ----
+    // ---- step4: 角色参考图（auto=生成新的；library=使用素材库已选角色） ----
     await updateJob(admin, jobId, { status: 'character' });
     let characterRefUrl: string | null = null;
     let characterCard: Record<string, unknown> = {};
+    const characterMode: string = typeof src.character_mode === 'string' && src.character_mode ? src.character_mode : 'auto';
+    const selectedCharacter = src.selected_character && typeof src.selected_character === 'object' ? src.selected_character : null;
     try {
-      const { dataUrl, card } = await generateCharacterReferenceImage({
-        apiKey: LOVABLE_API_KEY,
-        persona: {
-          label: persona.label,
-          gender: persona.gender,
-          age: persona.age,
-          visual: persona.visual,
-          vibe: persona.vibe,
-        },
-      });
-      characterCard = card;
-      const bytes = await dataUrlToBytes(dataUrl);
-      const path = `director-characters/${shopId || 'no-shop'}/${jobId}.png`;
-      const up = await admin.storage.from("marketing-videos").upload(path, bytes, {
-        contentType: "image/png", upsert: true,
-      });
-      if (up.error) throw new Error("角色图上传失败: " + up.error.message);
-      const signed = await admin.storage.from("marketing-videos").createSignedUrl(path, 60 * 60 * 24 * 365);
-      characterRefUrl = signed.data?.signedUrl || null;
-      if (!characterRefUrl) throw new Error("角色图签名失败");
-      await updateJob(admin, jobId, {
-        character_json: { ...characterCard, reference_image_url: characterRefUrl },
-      });
+      if (characterMode === 'library') {
+        const verifiedUri = typeof selectedCharacter?.verified_asset_uri === 'string' ? selectedCharacter.verified_asset_uri : null;
+        const coverUrl = typeof selectedCharacter?.cover_url === 'string' ? selectedCharacter.cover_url : null;
+        characterRefUrl = verifiedUri || coverUrl || null;
+        if (!characterRefUrl) throw new Error('素材库角色缺少 verified_asset_uri 与 cover_url');
+        characterCard = {
+          source: 'library',
+          character_id: selectedCharacter?.id || null,
+          label: selectedCharacter?.label || selectedCharacter?.name || '素材库角色',
+        };
+        await updateJob(admin, jobId, {
+          character_json: { ...characterCard, reference_image_url: characterRefUrl },
+        });
+      } else {
+        const { dataUrl, card } = await generateCharacterReferenceImage({
+          apiKey: LOVABLE_API_KEY,
+          persona: {
+            label: persona.label,
+            gender: persona.gender,
+            age: persona.age,
+            visual: persona.visual,
+            vibe: persona.vibe,
+          },
+        });
+        characterCard = card;
+        const bytes = await dataUrlToBytes(dataUrl);
+        const path = `director-characters/${shopId || 'no-shop'}/${jobId}.png`;
+        const up = await admin.storage.from("marketing-videos").upload(path, bytes, {
+          contentType: "image/png", upsert: true,
+        });
+        if (up.error) throw new Error("角色图上传失败: " + up.error.message);
+        const signed = await admin.storage.from("marketing-videos").createSignedUrl(path, 60 * 60 * 24 * 365);
+        characterRefUrl = signed.data?.signedUrl || null;
+        if (!characterRefUrl) throw new Error("角色图签名失败");
+        await updateJob(admin, jobId, {
+          character_json: { ...characterCard, reference_image_url: characterRefUrl },
+        });
+      }
     } catch (e) {
       const message = `角色参考图生成失败:${(e as Error).message || String(e)}`;
       console.error("[director-run-pipeline] character gen failed", e);
