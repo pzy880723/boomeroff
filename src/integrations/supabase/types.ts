@@ -929,6 +929,45 @@ export type Database = {
         }
         Relationships: []
       }
+      erp_user_links: {
+        Row: {
+          aigc_user_id: string
+          created_at: string
+          display_name: string | null
+          erp_user_id: string
+          last_login_at: string
+          permissions: string[]
+          phone: string | null
+          roles: string[]
+          shops: Json
+          updated_at: string
+        }
+        Insert: {
+          aigc_user_id: string
+          created_at?: string
+          display_name?: string | null
+          erp_user_id: string
+          last_login_at?: string
+          permissions?: string[]
+          phone?: string | null
+          roles?: string[]
+          shops?: Json
+          updated_at?: string
+        }
+        Update: {
+          aigc_user_id?: string
+          created_at?: string
+          display_name?: string | null
+          erp_user_id?: string
+          last_login_at?: string
+          permissions?: string[]
+          phone?: string | null
+          roles?: string[]
+          shops?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       exp_pending: {
         Row: {
           amount: number
