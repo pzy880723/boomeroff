@@ -27,6 +27,7 @@ function json(status: number, body: Record<string, unknown>) {
 }
 
 function fail(status: number, code: string, extra: Record<string, unknown> = {}) {
+  console.log(JSON.stringify({ evt: "erp_aigc_session_fail", status, code }));
   return json(status, { ok: false, code, ...extra });
 }
 
@@ -41,6 +42,68 @@ function randomPassword() {
 function normStringArray(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.filter((x): x is string => typeof x === "string" && x.length > 0);
+}
+
+async function findAuthUserByEmail(
+  admin: ReturnType<typeof createClient>,
+  email: string,
+): Promise<{ id: string } | null> {
+  const target = email.toLowerCase();
+  let page = 1;
+  while (page <= 20) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    });
+    if (error) throw error;
+    const match = data?.users?.find(
+      (u: any) => (u.email ?? "").toLowerCase() === target,
+    );
+    if (match) return { id: match.id };
+    if (!data || data.users.length < 200) return null;
+    page += 1;
+  }
+  return null;
+}
+
+async function findAuthUserByPhone(
+  admin: ReturnType<typeof createClient>,
+  phone: string,
+): Promise<{ id: string } | null> {
+  let page = 1;
+  let matches: { id: string }[] = [];
+  while (page <= 20) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    });
+    if (error) throw error;
+    for (const u of data?.users ?? []) {
+      if ((u as any).phone && String((u as any).phone) === phone) {
+        matches.push({ id: u.id });
+        if (matches.length > 1) return null; // not unique
+      }
+    }
+    if (!data || data.users.length < 200) break;
+    page += 1;
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
+async function claimIfFree(
+  admin: ReturnType<typeof createClient>,
+  aigcUserId: string,
+  erpUserId: string,
+): Promise<"free" | "same" | "conflict"> {
+  const { data, error } = await admin
+    .from("erp_user_links")
+    .select("erp_user_id")
+    .eq("aigc_user_id", aigcUserId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return "free";
+  if (data.erp_user_id === erpUserId) return "same";
+  return "conflict";
 }
 
 Deno.serve(async (req) => {
@@ -71,7 +134,6 @@ Deno.serve(async (req) => {
     return fail(400, "invalid_ticket");
   }
 
-  // Exchange with ERP
   let erpResp: Response;
   try {
     erpResp = await fetch(ERP_EXCHANGE_URL, {
@@ -134,9 +196,8 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const email = `erp+${erpUserId}@aigc.boomeroff.local`;
+  const email = `erp+${erpUserId}@aigc.boomeroff.local`.toLowerCase();
 
-  // primary shop metadata
   const primaryShop = shops[0] && typeof shops[0] === "object" ? shops[0] : null;
   const shopId =
     primaryShop && typeof (primaryShop as any).id === "string"
@@ -147,19 +208,61 @@ Deno.serve(async (req) => {
       ? (primaryShop as any).name
       : null;
 
-  // 1. Lookup existing mapping
   let aigcUserId: string | null = null;
-  {
+
+  // Step 1: existing mapping by erp_user_id
+  try {
     const { data, error } = await admin
       .from("erp_user_links")
       .select("aigc_user_id")
       .eq("erp_user_id", erpUserId)
       .maybeSingle();
-    if (error) return fail(500, "link_lookup_failed");
-    if (data?.aigc_user_id) aigcUserId = data.aigc_user_id as string;
+    if (error) throw error;
+    if (data?.aigc_user_id) {
+      // verify auth user still exists
+      const { data: u, error: getErr } = await admin.auth.admin.getUserById(
+        data.aigc_user_id as string,
+      );
+      if (getErr) throw getErr;
+      if (u?.user?.id) {
+        aigcUserId = u.user.id;
+      }
+    }
+  } catch (e) {
+    console.log(JSON.stringify({ evt: "erp_map_lookup_err", msg: (e as any)?.message }));
+    return fail(500, "shadow_user_lookup_failed");
   }
 
-  // 2. Create shadow auth user if missing
+  // Step 2: try to find existing auth user by email, then phone
+  if (!aigcUserId) {
+    try {
+      const byEmail = await findAuthUserByEmail(admin, email);
+      if (byEmail) {
+        const state = await claimIfFree(admin, byEmail.id, erpUserId);
+        if (state === "conflict") return fail(409, "shadow_user_conflict");
+        aigcUserId = byEmail.id;
+      }
+    } catch (e) {
+      console.log(JSON.stringify({ evt: "erp_lookup_email_err", msg: (e as any)?.message }));
+      return fail(500, "shadow_user_lookup_failed");
+    }
+  }
+
+  if (!aigcUserId && phone) {
+    try {
+      const byPhone = await findAuthUserByPhone(admin, phone);
+      if (byPhone) {
+        const state = await claimIfFree(admin, byPhone.id, erpUserId);
+        if (state === "conflict") return fail(409, "shadow_user_conflict");
+        aigcUserId = byPhone.id;
+      }
+    } catch (e) {
+      console.log(JSON.stringify({ evt: "erp_lookup_phone_err", msg: (e as any)?.message }));
+      return fail(500, "shadow_user_lookup_failed");
+    }
+  }
+
+  // Step 3: create if still missing
   if (!aigcUserId) {
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
@@ -182,55 +285,44 @@ Deno.serve(async (req) => {
     if (created?.user?.id) {
       aigcUserId = created.user.id;
     } else {
-      // Email may already exist; find via listUsers
-      const msg = (createErr as any)?.message ?? "";
-      const status = (createErr as any)?.status ?? 0;
+      const msg = String((createErr as any)?.message ?? "");
+      const status = Number((createErr as any)?.status ?? 0);
+      const code = String((createErr as any)?.code ?? "");
       const alreadyExists =
         status === 422 ||
-        /already registered|exists|duplicate/i.test(msg);
+        /email_exists|phone_exists|user_already_exists|already registered|exists|duplicate/i.test(
+          `${code} ${msg}`,
+        );
       if (!alreadyExists) {
+        console.log(JSON.stringify({ evt: "erp_create_err", status, code }));
         return fail(500, "shadow_user_create_failed");
       }
-      let page = 1;
-      while (page <= 20 && !aigcUserId) {
-        const { data: list, error: listErr } =
-          await admin.auth.admin.listUsers({ page, perPage: 200 });
-        if (listErr) return fail(500, "shadow_user_lookup_failed");
-        const match = list?.users?.find(
-          (u) => (u.email ?? "").toLowerCase() === email.toLowerCase(),
-        );
-        if (match) {
-          aigcUserId = match.id;
-          break;
+      // Re-lookup by email, then phone
+      try {
+        const byEmail = await findAuthUserByEmail(admin, email);
+        if (byEmail) {
+          const state = await claimIfFree(admin, byEmail.id, erpUserId);
+          if (state === "conflict") return fail(409, "shadow_user_conflict");
+          aigcUserId = byEmail.id;
+        } else if (phone) {
+          const byPhone = await findAuthUserByPhone(admin, phone);
+          if (byPhone) {
+            const state = await claimIfFree(admin, byPhone.id, erpUserId);
+            if (state === "conflict") return fail(409, "shadow_user_conflict");
+            aigcUserId = byPhone.id;
+          }
         }
-        if (!list || list.users.length < 200) break;
-        page += 1;
+      } catch (e) {
+        console.log(JSON.stringify({ evt: "erp_relookup_err", msg: (e as any)?.message }));
+        return fail(500, "shadow_user_lookup_failed");
       }
       if (!aigcUserId) {
-        return fail(500, "shadow_user_not_found");
+        return fail(500, "shadow_user_create_failed");
       }
     }
-
-    // Concurrency-safe upsert of mapping (unique on aigc_user_id + PK on erp_user_id)
-    const { error: upsertErr } = await admin
-      .from("erp_user_links")
-      .upsert(
-        {
-          erp_user_id: erpUserId,
-          aigc_user_id: aigcUserId,
-          phone,
-          display_name: displayName,
-          roles,
-          permissions,
-          shops,
-          last_login_at: new Date().toISOString(),
-        },
-        { onConflict: "erp_user_id" },
-      );
-    if (upsertErr) return fail(500, "link_upsert_failed");
   }
 
-  // 3. Refresh auth user metadata (idempotent)
+  // Step 5: refresh metadata
   {
     const { error: updateErr } = await admin.auth.admin.updateUserById(
       aigcUserId!,
@@ -250,32 +342,47 @@ Deno.serve(async (req) => {
         },
       },
     );
-    if (updateErr) return fail(500, "auth_user_update_failed");
+    if (updateErr) {
+      console.log(JSON.stringify({ evt: "erp_update_err", status: (updateErr as any)?.status }));
+      return fail(500, "shadow_user_update_failed");
+    }
   }
 
-  // 4. Update audit fields
+  // Upsert mapping
   {
-    const { error: auditErr } = await admin
+    const { error: upsertErr } = await admin
       .from("erp_user_links")
-      .update({
-        phone,
-        display_name: displayName,
-        roles,
-        permissions,
-        shops,
-        last_login_at: new Date().toISOString(),
-      })
-      .eq("erp_user_id", erpUserId);
-    if (auditErr) return fail(500, "link_update_failed");
+      .upsert(
+        {
+          erp_user_id: erpUserId,
+          aigc_user_id: aigcUserId,
+          phone,
+          display_name: displayName,
+          roles,
+          permissions,
+          shops,
+          last_login_at: new Date().toISOString(),
+        },
+        { onConflict: "erp_user_id" },
+      );
+    if (upsertErr) {
+      console.log(JSON.stringify({ evt: "erp_link_err", code: (upsertErr as any)?.code }));
+      // If unique violation on aigc_user_id, another erp user owns it.
+      if ((upsertErr as any)?.code === "23505") {
+        return fail(409, "shadow_user_conflict");
+      }
+      return fail(500, "shadow_user_link_failed");
+    }
   }
 
-  // 5. Generate magic link
+  // Generate magic link
   const { data: linkData, error: linkErr } =
     await admin.auth.admin.generateLink({
       type: "magiclink",
       email,
     });
   if (linkErr || !linkData?.properties?.hashed_token) {
+    console.log(JSON.stringify({ evt: "erp_magiclink_err", status: (linkErr as any)?.status }));
     return fail(500, "magiclink_failed");
   }
 
