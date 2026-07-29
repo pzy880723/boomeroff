@@ -3,72 +3,49 @@ import test from 'node:test';
 
 import { buildDirectorShotPlan } from '../supabase/functions/_shared/director-utils.ts';
 
-const script = {
-  hook: {
-    scene: '商场走廊与门店门头',
-    action: '博主边走进门店边喊',
-    dialogue: '姐妹快来',
-    subtitle: '周末探店',
-    image_index: 0,
-    duration_s: 3,
-  },
+const script15 = {
+  hook: { scene: '门店门头', action: '博主走进门店', dialogue: '姐妹快来', subtitle: '周末探店', image_index: 0, duration_s: 3 },
   scenes: [
-    {
-      scene: '中古服饰货架',
-      action: '博主拿起夹克展示细节',
-      dialogue: '这件质感绝了',
-      subtitle: '复古夹克',
-      image_index: 1,
-      duration_s: 3,
-    },
-    {
-      scene: '穿衣镜前',
-      action: '博主试穿后转身展示',
-      dialogue: '上身真的显瘦',
-      subtitle: '显瘦好搭',
-      image_index: 2,
-      duration_s: 3,
-    },
-    {
-      scene: '配饰陈列区',
-      action: '博主拿起配饰对镜头讲解',
-      dialogue: '配饰也很好挑',
-      subtitle: '细节加分',
-      image_index: 3,
-      duration_s: 3,
-    },
+    { scene: '货架', action: '展示夹克', dialogue: '这件质感绝了', subtitle: '复古夹克', image_index: 1, duration_s: 3 },
+    { scene: '穿衣镜', action: '试穿转身', dialogue: '上身真的显瘦', subtitle: '显瘦好搭', image_index: 2, duration_s: 3 },
+    { scene: '配饰区', action: '讲解配饰', dialogue: '配饰也很好挑', subtitle: '细节加分', image_index: 3, duration_s: 3 },
   ],
-  outro: {
-    scene: '门店全景',
-    action: '博主挥手并指向门店',
-    dialogue: '周末快来逛',
-    subtitle: '到店打卡',
-    image_index: 4,
-    duration_s: 3,
-  },
+  outro: { scene: '门店全景', action: '挥手邀约', dialogue: '周末快来逛', subtitle: '到店打卡', image_index: 4, duration_s: 3 },
   total_duration_s: 15,
 };
 
-test('15 秒脚本编译为三个独立的 5 秒 Seedance 镜头', () => {
-  const shots = buildDirectorShotPlan(script);
-
-  assert.equal(shots.length, 3);
-  assert.deepEqual(shots.map((shot) => shot.duration), [5, 5, 5]);
-  assert.equal(shots.reduce((sum, shot) => sum + shot.duration, 0), 15);
-  assert.deepEqual(shots.flatMap((shot) => shot.sourceLabels), [
-    '钩子', '镜头1', '镜头2', '镜头3', '收尾',
+test('15 秒五镜脚本按脚本保留五镜与时长', () => {
+  const shots = buildDirectorShotPlan(script15);
+  assert.equal(shots.length, 5);
+  assert.deepEqual(shots.map(s => s.duration), [3, 3, 3, 3, 3]);
+  assert.deepEqual(shots.flatMap(s => s.imageIndices), [0, 1, 2, 3, 4]);
+  assert.deepEqual(shots.map(s => s.dialogue), [
+    '姐妹快来', '这件质感绝了', '上身真的显瘦', '配饰也很好挑', '周末快来逛',
   ]);
-  assert.deepEqual(shots.flatMap((shot) => shot.imageIndices), [0, 1, 2, 3, 4]);
-
-  for (const line of ['姐妹快来', '这件质感绝了', '上身真的显瘦', '配饰也很好挑', '周末快来逛']) {
-    assert.ok(shots.some((shot) => shot.prompt.includes(line)), `镜头提示词缺少脚本台词: ${line}`);
-  }
 });
 
-test('不完整脚本不能降级为单次 15 秒生成', () => {
+test('30 秒五镜脚本原样保留 4/6/8/7/5 秒时长', () => {
+  const script30 = {
+    hook: { scene: 'A', action: 'a', dialogue: 'd1', subtitle: 's1', image_index: 0, duration_s: 4 },
+    scenes: [
+      { scene: 'B', action: 'b', dialogue: 'd2', subtitle: 's2', image_index: 1, duration_s: 6 },
+      { scene: 'C', action: 'c', dialogue: 'd3', subtitle: 's3', image_index: 2, duration_s: 8 },
+      { scene: 'D', action: 'd', dialogue: 'd4', subtitle: 's4', image_index: 3, duration_s: 7 },
+    ],
+    outro: { scene: 'E', action: 'e', dialogue: 'd5', subtitle: 's5', image_index: 4, duration_s: 5 },
+    total_duration_s: 30,
+  };
+  const shots = buildDirectorShotPlan(script30);
+  assert.equal(shots.length, 5);
+  assert.deepEqual(shots.map(s => s.duration), [4, 6, 8, 7, 5]);
+  assert.equal(shots.reduce((sum, s) => sum + s.duration, 0), 30);
+  assert.deepEqual(shots.flatMap(s => s.imageIndices), [0, 1, 2, 3, 4]);
+});
+
+test('不足 3 镜的脚本会被拒绝', () => {
   let message = '';
   try {
-    buildDirectorShotPlan({ hook: script.hook, scenes: [], total_duration_s: 15 });
+    buildDirectorShotPlan({ hook: script15.hook, scenes: [], total_duration_s: 3 });
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   }
