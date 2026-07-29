@@ -23,6 +23,7 @@ export interface SocialAccount {
   account_name: string | null;
   avatar_url: string | null;
   worker_account_id: number | null;
+  worker_account_key?: string | null;
   cookie_status: string;
   online?: boolean | null;
   worker_online?: boolean;

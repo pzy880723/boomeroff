@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { PermissionsProvider } from "@/hooks/usePermissions";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -78,6 +78,12 @@ function RouteFallback() {
   );
 }
 
+function LegacyPublishRedirect() {
+  const { assetId } = useParams();
+  if (!assetId) return <Navigate to="/me/marketing/dispatch" replace />;
+  return <Navigate to={`/me/marketing/dispatch/workbench?asset_id=${assetId}`} replace />;
+}
+
 const App = () => {
   useEffect(() => { void loadPublicBaseUrl(); }, []);
   return (
@@ -144,7 +150,7 @@ const App = () => {
               {/* 旧路由兼容 */}
               <Route path="/me/marketing/social-accounts" element={<Navigate to="/me/marketing/dispatch?tab=accounts" replace />} />
               <Route path="/me/marketing/publish-history" element={<Navigate to="/me/marketing/dispatch?tab=history" replace />} />
-              <Route path="/me/marketing/publish/:assetId" element={<Navigate to="/me/marketing/dispatch/workbench" replace />} />
+              <Route path="/me/marketing/publish/:assetId" element={<LegacyPublishRedirect />} />
 
               {/* 火山真人认证 H5 回跳页(免登录) */}
               <Route path="/verify-callback" element={<VerifyCallback />} />

@@ -68,6 +68,9 @@ Deno.serve(async (req) => {
     }
     const shopId = accounts[0].shop_id;
     if (accounts.some((a) => a.shop_id !== shopId)) return j({ error: "accounts must belong to same shop" }, 400);
+    if (asset && asset.shop_id !== shopId) {
+      return j({ error: "素材与发布账号不属于同一门店" }, 400);
+    }
 
     // 权限
     const { data: roleRow } = await supa.from("user_roles").select("role").eq("user_id", userId).maybeSingle();

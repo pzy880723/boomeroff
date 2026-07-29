@@ -779,13 +779,13 @@ export function AssetDetailDialog({
                   </Button>
                 </div>
                 <Button
-                  className="w-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-purple-500 text-white hover:opacity-90"
+                  className="w-full bg-primary text-primary-foreground shadow-sm"
                   onClick={() => {
                     onOpenChange(false);
                     window.location.href = `/me/marketing/dispatch/workbench?asset_id=${asset.id}`;
                   }}
                 >
-                  ✈️ 一键发布到自媒体平台
+                  去发布
                 </Button>
                 <Button
                   variant="outline"

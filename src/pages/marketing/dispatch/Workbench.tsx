@@ -1,7 +1,18 @@
 // 发布工作台:选素材(视频/图文) -> 选账号(按支持类型灰度) -> AI 文案 -> 立即发或定时
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, Send, Calendar, Image as ImageIcon, Film, Sparkles, FolderOpen } from 'lucide-react';
+import {
+  AlertCircle,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Film,
+  FolderOpen,
+  Image as ImageIcon,
+  Loader2,
+  Send,
+  Sparkles,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,6 +26,12 @@ import type { PlatformSpec, SocialAccount } from '@/lib/dispatch';
 import { LibraryAssetPickerDialog, type PickedAsset } from './LibraryAssetPickerDialog';
 import { AiCopySheet } from './AiCopySheet';
 import { invokeFn } from '@/lib/invokeFn';
+import {
+  buildDefaultAccountSelection,
+  isPublishableAccount,
+  PUBLISH_PLATFORMS,
+  resolvePublishDraft,
+} from '@/lib/publishFlow';
 
 type Kind = 'video' | 'image_text';
 
@@ -40,6 +57,8 @@ export default function Workbench() {
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const autoSelectionKey = useRef('');
 
   // URL 预填(默认视频)
   useEffect(() => {
@@ -50,10 +69,10 @@ export default function Workbench() {
         setAsset(data);
         setKind(data.kind === 'photo' ? 'image_text' : 'video');
         if (data.kind === 'photo' && data.output_url) setImages([data.output_url]);
-        const meta = (data.meta as any) || {};
-        setTitle(((meta.note_title || meta.title || '') as string).slice(0, 30));
-        setBody((meta.note_body || data.output_text || '') as string);
-        setTagsRaw(((data.tags as string[]) || []).join(' '));
+        const draft = resolvePublishDraft(data);
+        setTitle(draft.title);
+        setBody(draft.body);
+        setTagsRaw(draft.tagsRaw);
       }
     })();
   }, [presetAssetId]);
@@ -77,6 +96,11 @@ export default function Workbench() {
     })();
   }, [shopId]);
 
+  const visibleAccounts = useMemo(
+    () => accounts.filter((account) => PUBLISH_PLATFORMS.includes(account.platform as any)),
+    [accounts],
+  );
+
   // 平台是否支持当前 kind
   const supports = (platform: string): { ok: boolean; reason?: string } => {
     const s = specs[platform];
@@ -97,9 +121,9 @@ export default function Workbench() {
     setSelected((prev) => {
       const next: Record<string, boolean> = {};
       let dropped = 0;
-      accounts.forEach((a) => {
+      visibleAccounts.forEach((a) => {
         if (prev[a.id]) {
-          if (supports(a.platform).ok) next[a.id] = true;
+          if (supports(a.platform).ok && isPublishableAccount(a)) next[a.id] = true;
           else dropped++;
         }
       });
@@ -107,9 +131,28 @@ export default function Workbench() {
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, images.length, accounts.length, Object.keys(specs).length]);
+  }, [kind, images.length, visibleAccounts.length, Object.keys(specs).length]);
 
-  const selectedAccounts = useMemo(() => accounts.filter((a) => selected[a.id]), [accounts, selected]);
+  // 首次进入、切换门店或素材类型时，默认选择全部可发布账号。
+  useEffect(() => {
+    if (!visibleAccounts.length || !Object.keys(specs).length) return;
+    const key = [
+      shopId || '',
+      kind,
+      images.length,
+      visibleAccounts.map((account) => `${account.id}:${account.online}:${account.cookie_status}`).join('|'),
+      Object.keys(specs).sort().join('|'),
+    ].join('::');
+    if (autoSelectionKey.current === key) return;
+    autoSelectionKey.current = key;
+    setSelected(buildDefaultAccountSelection(visibleAccounts, (platform) => supports(platform).ok));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shopId, kind, images.length, visibleAccounts, specs]);
+
+  const selectedAccounts = useMemo(
+    () => visibleAccounts.filter((account) => selected[account.id] && isPublishableAccount(account)),
+    [visibleAccounts, selected],
+  );
   const selectedPlatforms = useMemo(() => Array.from(new Set(selectedAccounts.map((a) => a.platform))), [selectedAccounts]);
   const tags = tagsRaw.split(/[\s,，]+/).filter(Boolean).map((t) => t.replace(/^#/, ''));
 
@@ -118,10 +161,10 @@ export default function Workbench() {
       setAsset(p.asset);
       setKind('video');
       setImages([]);
-      const meta = (p.asset.meta as any) || {};
-      if (!title) setTitle(((meta.note_title || meta.title || '') as string).slice(0, 30));
-      if (!body) setBody((meta.note_body || p.asset.output_text || '') as string);
-      if (!tagsRaw) setTagsRaw(((p.asset.tags as string[]) || []).join(' '));
+      const draft = resolvePublishDraft(p.asset);
+      setTitle(draft.title);
+      setBody(draft.body);
+      setTagsRaw(draft.tagsRaw);
     } else {
       setAsset(null);
       setKind('image_text');
@@ -178,156 +221,258 @@ export default function Workbench() {
   const aiPlatform = selectedPlatforms.length === 1 ? selectedPlatforms[0] : 'xhs';
 
   return (
-    <div className="min-h-screen pb-32 bg-background">
-      <PageHeader title="发布工作台" back="/me/marketing/dispatch" />
+    <div className="min-h-screen pb-32 bg-muted/25">
+      <PageHeader title="新建发布" back="/me/marketing/dispatch" subtitle="选内容 → 确认文案 → 选择账号 → 发布" />
 
-      <div className="px-4 space-y-5 pt-3">
-        {/* 1. 素材类型 + 选择 */}
-        <section>
-          <div className="text-[11px] text-muted-foreground mb-1.5 tracking-wider">1. 素材</div>
-          <div className="flex gap-2 mb-2">
-            <button
-              onClick={() => { setKind('video'); }}
-              className={['flex-1 h-9 rounded-lg border text-xs flex items-center justify-center gap-1.5 transition',
-                kind === 'video' ? 'bg-accent text-accent-foreground border-accent' : 'bg-card'].join(' ')}>
-              <Film className="w-3.5 h-3.5" /> 视频
-            </button>
-            <button
-              onClick={() => { setKind('image_text'); setAsset(null); }}
-              className={['flex-1 h-9 rounded-lg border text-xs flex items-center justify-center gap-1.5 transition',
-                kind === 'image_text' ? 'bg-accent text-accent-foreground border-accent' : 'bg-card'].join(' ')}>
-              <ImageIcon className="w-3.5 h-3.5" /> 图文
-            </button>
+      <main className="container mx-auto max-w-screen-md px-4 pt-3 space-y-3">
+        <div className="flex items-center px-1 pb-1">
+          {[1, 2, 3, 4].map((step, index) => (
+            <div key={step} className={`flex items-center ${index < 3 ? 'flex-1' : ''}`}>
+              <span className={`grid h-6 w-6 place-items-center rounded-full text-[10px] font-bold ${
+                step === 1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+              }`}>
+                {step}
+              </span>
+              {index < 3 && <span className="mx-1 h-px flex-1 bg-border" />}
+            </div>
+          ))}
+        </div>
+
+        <section className="rounded-2xl border bg-card p-3.5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">1. 选择内容</div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground">视频或 1-9 张图片</div>
+            </div>
+            <div className="flex rounded-lg bg-muted p-0.5">
+              <button
+                type="button"
+                onClick={() => { setKind('video'); setImages([]); autoSelectionKey.current = ''; }}
+                className={`flex h-8 items-center gap-1 rounded-md px-2.5 text-[11px] ${
+                  kind === 'video' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground'
+                }`}
+              >
+                <Film className="h-3.5 w-3.5" />视频
+              </button>
+              <button
+                type="button"
+                onClick={() => { setKind('image_text'); setAsset(null); autoSelectionKey.current = ''; }}
+                className={`flex h-8 items-center gap-1 rounded-md px-2.5 text-[11px] ${
+                  kind === 'image_text' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground'
+                }`}
+              >
+                <ImageIcon className="h-3.5 w-3.5" />图文
+              </button>
+            </div>
           </div>
 
           {kind === 'video' && asset ? (
-            <div className="flex items-center gap-3 p-3 bg-card rounded-xl border">
-              {(asset.meta?.poster_url || asset.output_url) ? (
-                <img src={asset.meta?.poster_url || asset.output_url} className="w-14 h-20 rounded-md object-cover" />
-              ) : <div className="w-14 h-20 rounded-md bg-muted" />}
-              <div className="flex-1 min-w-0 text-xs">
-                <div className="font-medium truncate">{(asset.meta as any)?.title || '视频素材'}</div>
-                <div className="text-muted-foreground mt-1">视频</div>
+            <div className="flex items-center gap-3 rounded-xl bg-muted/45 p-2.5">
+              {(asset.meta?.poster_url || asset.meta?.cover_url || asset.output_url) ? (
+                <img
+                  src={asset.meta?.poster_url || asset.meta?.cover_url || asset.output_url}
+                  alt=""
+                  className="h-20 w-14 rounded-lg object-cover"
+                />
+              ) : <div className="h-20 w-14 rounded-lg bg-muted" />}
+              <div className="min-w-0 flex-1">
+                <div className="line-clamp-2 text-sm font-semibold">
+                  {(asset.meta as any)?.video_copy?.title || (asset.meta as any)?.title || '视频素材'}
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground">AIGC 素材库 · 文案自动带入</div>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)}>换</Button>
+              <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)}>更换</Button>
             </div>
           ) : kind === 'image_text' && images.length > 0 ? (
-            <div className="p-3 bg-card rounded-xl border">
+            <div className="rounded-xl bg-muted/45 p-2.5">
               <div className="grid grid-cols-5 gap-1.5">
-                {images.map((u, i) => (
-                  <div key={i} className="relative aspect-square rounded overflow-hidden">
-                    <img src={u} className="w-full h-full object-cover" />
-                    <span className="absolute top-0.5 left-0.5 text-[9px] bg-foreground/60 text-background px-1 rounded">{i + 1}</span>
+                {images.map((url, index) => (
+                  <div key={url} className="relative aspect-square overflow-hidden rounded-lg">
+                    <img src={url} alt="" className="h-full w-full object-cover" />
+                    <span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[9px] text-white">{index + 1}</span>
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between items-center mt-2">
-                <span className="text-[11px] text-muted-foreground">{images.length} 张</span>
-                <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)}>换</Button>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">已选 {images.length} 张</span>
+                <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)}>更换</Button>
               </div>
             </div>
           ) : (
-            <button onClick={() => setPickerOpen(true)}
-              className="w-full py-6 border-2 border-dashed rounded-xl text-sm text-muted-foreground flex items-center justify-center gap-2 hover:border-accent hover:text-accent transition">
-              <FolderOpen className="w-4 h-4" /> 从素材库选{kind === 'video' ? '视频' : '图片(1-9 张)'}
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-7 text-sm text-muted-foreground transition hover:border-primary/50 hover:text-primary"
+            >
+              <FolderOpen className="h-4 w-4" />从素材库选择{kind === 'video' ? '视频' : '图片'}
             </button>
           )}
         </section>
 
-        {/* 2. 账号 */}
-        <section>
-          <div className="text-[11px] text-muted-foreground mb-1.5 tracking-wider flex items-center justify-between">
-            <span>2. 选账号(已勾 {selectedAccounts.length})</span>
-            <button className="text-primary text-[11px]" onClick={() => nav('/me/marketing/dispatch?tab=accounts')}>+ 添加</button>
+        <section className="rounded-2xl border bg-card p-3.5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">2. 确认发布文案</div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground">AIGC 文案只生成一次，可在这里修改</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAiOpen(true)}
+              disabled={aiSourceImages.length === 0}
+              className="flex items-center gap-1 text-[11px] font-medium text-primary disabled:opacity-40"
+            >
+              <Sparkles className="h-3.5 w-3.5" />重新生成
+            </button>
           </div>
+          <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="标题" maxLength={100} className="mb-2" />
+          <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="正文/描述" rows={4} className="mb-2" />
+          <Input value={tagsRaw} onChange={(event) => setTagsRaw(event.target.value)} placeholder="话题，例如：上海探店 中古杂货" />
+        </section>
+
+        <section className="rounded-2xl border bg-card p-3.5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">3. 发布平台与账号</div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground">默认全选全部正常账号</div>
+            </div>
+            <button type="button" className="text-[11px] font-medium text-primary" onClick={() => nav('/me/marketing/dispatch?tab=accounts')}>
+              管理账号
+            </button>
+          </div>
+
           {loadingAccounts ? (
-            <div className="flex items-center justify-center py-6 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /></div>
-          ) : accounts.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-6 border-2 border-dashed rounded-xl">还没绑定账号</div>
+            <div className="flex justify-center py-7 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : visibleAccounts.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => nav('/me/marketing/dispatch?tab=accounts')}
+              className="w-full rounded-xl border-2 border-dashed py-7 text-sm text-muted-foreground"
+            >
+              还没有绑定账号，点击去添加
+            </button>
           ) : (
-            <div className="space-y-1.5">
-              {accounts.map((a) => {
-                const sup = supports(a.platform);
-                const disabled = !sup.ok;
+            <div className="space-y-2">
+              {visibleAccounts.map((account) => {
+                const support = supports(account.platform);
+                const available = isPublishableAccount(account);
+                const disabled = !support.ok || !available;
+                const reason = !support.ok
+                  ? support.reason
+                  : account.cookie_status === 'expired'
+                    ? '登录失效'
+                    : account.online === false
+                      ? '账号离线'
+                      : '未完成登录';
                 return (
-                  <label key={a.id}
-                    className={['flex items-center gap-3 p-2.5 bg-card rounded-lg border transition',
-                      disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'].join(' ')}>
+                  <label
+                    key={account.id}
+                    className={`flex items-center gap-3 rounded-xl border p-3 ${
+                      disabled ? 'cursor-not-allowed bg-muted/50 opacity-65' : 'cursor-pointer bg-background'
+                    }`}
+                  >
                     <Checkbox
-                      checked={!!selected[a.id]}
+                      checked={Boolean(selected[account.id])}
                       disabled={disabled}
-                      onCheckedChange={(v) => setSelected({ ...selected, [a.id]: !!v })}
+                      onCheckedChange={(checked) => setSelected((current) => ({
+                        ...current,
+                        [account.id]: Boolean(checked),
+                      }))}
                     />
-                    <PlatformBadge platform={a.platform} size="sm" />
-                    <span className="text-sm flex-1 truncate">{a.account_name || '未命名'}</span>
-                    {disabled && <span className="text-[10px] text-muted-foreground">{sup.reason}</span>}
-                    {!disabled && a.online === false && <span className="text-[10px] text-rose-600">已失效</span>}
+                    <PlatformBadge platform={account.platform} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{account.account_name || '未命名账号'}</div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">{platformLabel(account.platform)}</div>
+                    </div>
+                    {disabled ? (
+                      <span className="text-[10px] font-medium text-rose-600">{reason}</span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-emerald-600">可发布</span>
+                    )}
                   </label>
                 );
               })}
             </div>
           )}
-        </section>
 
-        {/* 3. 通用文案 + AI */}
-        <section>
-          <div className="text-[11px] text-muted-foreground mb-1.5 tracking-wider flex items-center justify-between">
-            <span>3. 通用文案</span>
-            <button
-              onClick={() => setAiOpen(true)}
-              disabled={aiSourceImages.length === 0}
-              className="text-[11px] text-accent flex items-center gap-1 disabled:opacity-40">
-              <Sparkles className="w-3 h-3" /> AI 一键生成
-            </button>
-          </div>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="标题" maxLength={100} className="mb-2" />
-          <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="正文/描述" rows={3} className="mb-2" />
-          <Input value={tagsRaw} onChange={(e) => setTagsRaw(e.target.value)} placeholder="话题(空格或逗号分隔,如 夏季 新品)" />
-        </section>
-
-        {/* 4. 分平台覆盖 */}
-        {selectedPlatforms.length > 0 && (
-          <section>
-            <div className="text-[11px] text-muted-foreground mb-1.5 tracking-wider">4. 分平台微调(留空就用上面通用文案)</div>
-            <div className="space-y-2">
-              {selectedPlatforms.map((p) => {
-                const spec = specs[p];
-                const v = perPlatform[p] || {};
-                const curTitle = v.title ?? title;
-                const overTitle = spec && curTitle.length > spec.title_max;
-                return (
-                  <div key={p} className="p-3 bg-card rounded-lg border">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2"><PlatformBadge platform={p} size="sm" /><span className="text-sm font-medium">{platformLabel(p)}</span></div>
-                      {spec && <span className={`text-[10px] ${overTitle ? 'text-rose-600 font-semibold' : 'text-muted-foreground'}`}>标题 {curTitle.length}/{spec.title_max}</span>}
-                    </div>
-                    <Input
-                      value={v.title ?? ''}
-                      onChange={(e) => setPerPlatform({ ...perPlatform, [p]: { ...v, title: e.target.value } })}
-                      placeholder={`标题(留空=${title.slice(0, 20)}…)`}
-                      className="mb-1.5 h-8 text-xs"
-                    />
-                    <Input
-                      value={v.tags ?? ''}
-                      onChange={(e) => setPerPlatform({ ...perPlatform, [p]: { ...v, tags: e.target.value } })}
-                      placeholder={`话题(留空=${tagsRaw || '无'})`}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                );
-              })}
+          {visibleAccounts.some((account) => !isPublishableAccount(account)) && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg bg-rose-50 p-2.5 text-[10px] leading-4 text-rose-800">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              失效账号会自动跳过，不会阻断其他平台。
             </div>
+          )}
+        </section>
+
+        <section className="rounded-2xl border bg-card p-3.5 shadow-sm">
+          <div className="mb-3 flex items-center gap-1.5">
+            <Calendar className="h-4 w-4 text-primary" />
+            <div>
+              <div className="text-sm font-semibold">4. 发布时间</div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground">留空就是立即发布，提交后可安全退出</div>
+            </div>
+          </div>
+          <Input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} />
+        </section>
+
+        {selectedPlatforms.length > 0 && (
+          <section className="rounded-2xl border bg-card shadow-sm">
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((open) => !open)}
+              className="flex w-full items-center justify-between p-3.5 text-left"
+            >
+              <div>
+                <div className="text-sm font-semibold">高级设置</div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">按平台单独修改标题和话题，普通发布不用调整</div>
+              </div>
+              {advancedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+
+            {advancedOpen && (
+              <div className="space-y-2 border-t px-3.5 pb-3.5 pt-3">
+                {selectedPlatforms.map((platform) => {
+                  const spec = specs[platform];
+                  const value = perPlatform[platform] || {};
+                  const currentTitle = value.title ?? title;
+                  const overTitle = spec && currentTitle.length > spec.title_max;
+                  return (
+                    <div key={platform} className="rounded-xl border bg-muted/30 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <PlatformBadge platform={platform} size="sm" />
+                          <span className="text-xs font-medium">{platformLabel(platform)}</span>
+                        </div>
+                        {spec && (
+                          <span className={`text-[10px] ${overTitle ? 'font-semibold text-rose-600' : 'text-muted-foreground'}`}>
+                            标题 {currentTitle.length}/{spec.title_max}
+                          </span>
+                        )}
+                      </div>
+                      <Input
+                        value={value.title ?? ''}
+                        onChange={(event) => setPerPlatform({
+                          ...perPlatform,
+                          [platform]: { ...value, title: event.target.value },
+                        })}
+                        placeholder="留空使用通用标题"
+                        className="mb-2 h-9 text-xs"
+                      />
+                      <Input
+                        value={value.tags ?? ''}
+                        onChange={(event) => setPerPlatform({
+                          ...perPlatform,
+                          [platform]: { ...value, tags: event.target.value },
+                        })}
+                        placeholder="留空使用通用话题"
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         )}
-
-        {/* 5. 定时 */}
-        <section>
-          <div className="text-[11px] text-muted-foreground mb-1.5 tracking-wider flex items-center gap-1.5">
-            <Calendar className="w-3 h-3" /> 5. 定时(留空=立即发布)
-          </div>
-          <Input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} />
-        </section>
-      </div>
+      </main>
 
       {/* 提交 */}
       <div className="fixed left-0 right-0 bottom-0 bg-background/95 backdrop-blur border-t px-4 py-3 z-30">
@@ -337,7 +482,7 @@ export default function Workbench() {
           disabled={submitting || selectedAccounts.length === 0 || !title.trim()}
         >
           {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-          {scheduleAt ? '加入定时发布' : `立即发布到 ${selectedAccounts.length} 个账号`}
+          {scheduleAt ? `定时发布到 ${selectedAccounts.length} 个账号` : `确认发布到 ${selectedAccounts.length} 个账号`}
         </Button>
       </div>
 
