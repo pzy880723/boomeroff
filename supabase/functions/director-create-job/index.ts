@@ -93,12 +93,12 @@ Deno.serve(async (req) => {
 
       const updated = await admin.from("video_generation_jobs").update({
         user_prompt: userPrompt,
-        source_pick_json: { picked_assets: pickedAssets, persona, model: modelId, resolution, style, prompt_overrides: promptOverrides },
+        source_pick_json: { picked_assets: pickedAssets, persona, selected_character: selectedCharacter, character_mode: characterMode, model: modelId, resolution, style, prompt_overrides: promptOverrides },
         brief_json: brief,
         script_json: script,
         status: 'queued',
         duration: plannedDuration,
-        aspect_ratio: '9:16',
+        aspect_ratio: aspectRatio,
         error_message: null,
         meta: {
           ...(existing.data.meta || {}),
@@ -121,12 +121,12 @@ Deno.serve(async (req) => {
           user_id: u.user.id,
           shop_id: shopId,
           user_prompt: userPrompt,
-          source_pick_json: { picked_assets: pickedAssets, persona, model: modelId, resolution, style, prompt_overrides: promptOverrides },
+          source_pick_json: { picked_assets: pickedAssets, persona, selected_character: selectedCharacter, character_mode: characterMode, model: modelId, resolution, style, prompt_overrides: promptOverrides },
           brief_json: brief,
           script_json: script,
           status: 'queued',
           duration: plannedDuration,
-          aspect_ratio: '9:16',
+          aspect_ratio: aspectRatio,
           meta: {
             pipeline_version: 'director-v2',
             planned_shot_count: shotPlan.length,
