@@ -297,7 +297,6 @@ Deno.serve(async (req) => {
       email_confirm: true,
       password: randomPassword(),
       user_metadata: {
-        phone: phone ?? undefined,
         display_name: displayName ?? undefined,
         shop_name: shopName ?? undefined,
       },
@@ -321,11 +320,8 @@ Deno.serve(async (req) => {
         /email_exists|phone_exists|user_already_exists|already registered|exists|duplicate/i.test(
           `${code} ${msg}`,
         );
-      if (!alreadyExists) {
-        console.log(JSON.stringify({ evt: "erp_create_err", status, code }));
-        return fail(500, "shadow_user_create_failed");
-      }
-      // Re-lookup by email, then phone
+      // Re-lookup by email, then auth/profile phone. Some Auth create failures surface
+      // profile-phone uniqueness as a generic 500, so we still attempt a safe claim.
       try {
         const byEmail = await findAuthUserByEmail(admin, email);
         if (byEmail) {
@@ -357,6 +353,9 @@ Deno.serve(async (req) => {
         return fail(500, "shadow_user_lookup_failed");
       }
       if (!aigcUserId) {
+        if (!alreadyExists) {
+          console.log(JSON.stringify({ evt: "erp_create_err", status, code }));
+        }
         return fail(500, "shadow_user_create_failed");
       }
     }
