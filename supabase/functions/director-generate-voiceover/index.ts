@@ -1,6 +1,9 @@
 // director-generate-voiceover:
-// 逐 shot 调 Lovable AI TTS 生成 mp3,上传到 storage,回写 shots.meta.voiceover_url
-// 汇总生成字幕时间轴 job.meta.subtitles / job.meta.voiceover
+// 全片一次 TTS(禁止逐镜),生成 voiceover/{jobId}/full.mp3。
+// - 按 shot_index 顺序拼接所有 dialogue/subtitle 文本,调用一次 openai/gpt-4o-mini-tts。
+// - job.meta.voiceover.url = 全片 mp3 的 signed url。
+// - job.meta.subtitles: 每镜 start_s/end_s 按 shot.duration 累加,和 shot_index 一一对应。
+// - shots.meta 写入 voiceover_text / voiceover_start_s / voiceover_duration_s;voiceover_url 固定 null。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -37,13 +40,6 @@ async function ttsToMp3(apiKey: string, text: string, voice: string, instruction
   return new Uint8Array(buf);
 }
 
-// mp3 时长精确解析太重,按字数估算 (中文 ~ 5 字/秒)
-function estimateDurationS(text: string): number {
-  const n = (text || "").replace(/\s+/g, "").length;
-  if (n <= 0) return 1;
-  return Math.max(1, Math.min(15, +(n / 5).toFixed(2)));
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -66,45 +62,22 @@ Deno.serve(async (req) => {
 
     const persona = (job.source_pick_json as any)?.persona || {};
     const voice = pickVoice(persona);
-    const instructions = persona?.tone_label
-      ? `请用${persona.tone_label}的语气,自然口语化,像在跟朋友分享,不要念广告腔。`
-      : "自然口语化,像在店里跟顾客介绍。";
+    const toneLabel = persona?.tone_label ? `${persona.tone_label}的语气` : "自然口语化的语气";
+    const instructions =
+      `全片必须保持同一个音色、同一个语速、同一个口音、同一个发音风格,不得中途切换成不同的人。` +
+      `请用${toneLabel},像在店里跟朋友分享,不要念广告腔;` +
+      `分镜之间只做极短的自然停顿,禁止重新开场或重复自我介绍。`;
 
     await admin.from("video_generation_jobs").update({ status: "generating_voice" }).eq("id", jobId);
 
-    const bucket = "marketing-videos";
+    // 1) 顺序拼接全片文本,累计每镜时间轴
     const subtitles: Array<{ shot_index: number; text: string; start_s: number; end_s: number }> = [];
+    const textParts: string[] = [];
     let cursor = 0;
-    let hadError: string | null = null;
-
     for (const shot of shots) {
-      const text = String(shot.subtitle || shot.dialogue || "").trim();
-      const shotMeta = (shot.meta as any) || {};
-      let voiceoverUrl: string | null = null;
-      let durS = Number(shot.duration) || estimateDurationS(text);
-
-      if (text) {
-        try {
-          const bytes = await ttsToMp3(LOVABLE_API_KEY, text, voice, instructions);
-          const path = `voiceover/${jobId}/shot-${String(shot.shot_index).padStart(2, "0")}.mp3`;
-          const up = await admin.storage.from(bucket).upload(path, bytes, {
-            contentType: "audio/mpeg", upsert: true,
-          });
-          if (up.error) throw new Error(up.error.message);
-          const signed = await admin.storage.from(bucket).createSignedUrl(path, 60 * 60 * 24 * 365);
-          voiceoverUrl = signed.data?.signedUrl || null;
-          durS = estimateDurationS(text);
-        } catch (e) {
-          const msg = (e as Error).message || String(e);
-          console.warn("[voiceover] shot", shot.shot_index, "failed", msg);
-          hadError = hadError || msg;
-        }
-      }
-
-      await admin.from("video_generation_shots").update({
-        meta: { ...shotMeta, voiceover_url: voiceoverUrl, voiceover_text: text, voiceover_duration_s: durS },
-      }).eq("id", shot.id);
-
+      const text = String(shot.dialogue || shot.subtitle || "").trim();
+      const durS = Math.max(1, Math.min(15, Number(shot.duration) || 3));
+      if (text) textParts.push(text);
       subtitles.push({
         shot_index: shot.shot_index,
         text,
@@ -112,6 +85,43 @@ Deno.serve(async (req) => {
         end_s: +(cursor + durS).toFixed(2),
       });
       cursor += durS;
+    }
+    const fullText = textParts.join(" ").trim();
+
+    // 2) 一次 TTS 生成整段
+    const bucket = "marketing-videos";
+    let voiceoverUrl: string | null = null;
+    let hadError: string | null = null;
+    if (fullText) {
+      try {
+        const bytes = await ttsToMp3(LOVABLE_API_KEY, fullText, voice, instructions);
+        const path = `voiceover/${jobId}/full.mp3`;
+        const up = await admin.storage.from(bucket).upload(path, bytes, {
+          contentType: "audio/mpeg", upsert: true,
+        });
+        if (up.error) throw new Error(up.error.message);
+        const signed = await admin.storage.from(bucket).createSignedUrl(path, 60 * 60 * 24 * 365);
+        voiceoverUrl = signed.data?.signedUrl || null;
+      } catch (e) {
+        hadError = (e as Error).message || String(e);
+        console.warn("[voiceover] full-mix failed", hadError);
+      }
+    }
+
+    // 3) 每镜写 meta：voiceover_url 固定 null;文本 + 起止 + 时长
+    for (const sub of subtitles) {
+      const shot = shots.find((s: any) => s.shot_index === sub.shot_index);
+      if (!shot) continue;
+      const shotMeta = (shot.meta as any) || {};
+      await admin.from("video_generation_shots").update({
+        meta: {
+          ...shotMeta,
+          voiceover_url: null,
+          voiceover_text: sub.text,
+          voiceover_start_s: sub.start_s,
+          voiceover_duration_s: +(sub.end_s - sub.start_s).toFixed(2),
+        },
+      }).eq("id", shot.id);
     }
 
     const jobMeta = (job.meta as any) || {};
@@ -122,6 +132,7 @@ Deno.serve(async (req) => {
         voiceover: {
           model: TTS_MODEL,
           voice,
+          url: voiceoverUrl,
           total_duration_s: +cursor.toFixed(2),
           error: hadError,
           generated_at: new Date().toISOString(),
@@ -129,7 +140,7 @@ Deno.serve(async (req) => {
       },
     }).eq("id", jobId);
 
-    return json({ ok: true, subtitles, total_duration_s: cursor, voice, error: hadError });
+    return json({ ok: true, subtitles, total_duration_s: cursor, voice, url: voiceoverUrl, error: hadError });
   } catch (e) {
     console.error("[director-generate-voiceover] fatal", e);
     return json({ ok: false, error: (e as Error).message || String(e) }, 500);
