@@ -90,6 +90,27 @@ async function findAuthUserByPhone(
   return matches.length === 1 ? matches[0] : null;
 }
 
+async function findAuthUserByProfilePhone(
+  admin: ReturnType<typeof createClient>,
+  phone: string,
+): Promise<{ id: string } | null> {
+  const { data, error } = await admin
+    .from("profiles")
+    .select("user_id")
+    .eq("phone", phone)
+    .limit(2);
+  if (error) throw error;
+  if (!data || data.length !== 1) return null;
+  const userId = data[0]?.user_id;
+  if (typeof userId !== "string" || !userId) return null;
+
+  const { data: authUser, error: authErr } = await admin.auth.admin.getUserById(
+    userId,
+  );
+  if (authErr) throw authErr;
+  return authUser?.user?.id ? { id: authUser.user.id } : null;
+}
+
 async function claimIfFree(
   admin: ReturnType<typeof createClient>,
   aigcUserId: string,
@@ -250,10 +271,17 @@ Deno.serve(async (req) => {
 
   if (!aigcUserId && phone) {
     try {
-      const byPhone = await findAuthUserByPhone(admin, phone);
+      const byPhone =
+        (await findAuthUserByPhone(admin, phone)) ??
+        (await findAuthUserByProfilePhone(admin, phone));
       if (byPhone) {
         const state = await claimIfFree(admin, byPhone.id, erpUserId);
-        if (state === "conflict") return fail(409, "shadow_user_conflict");
+        if (state === "conflict") {
+          return fail(409, "shadow_user_conflict", {
+            conflict_count: 1,
+            reason: "phone_user_already_linked_to_other_erp_user",
+          });
+        }
         aigcUserId = byPhone.id;
       }
     } catch (e) {
@@ -269,7 +297,6 @@ Deno.serve(async (req) => {
       email_confirm: true,
       password: randomPassword(),
       user_metadata: {
-        phone: phone ?? undefined,
         display_name: displayName ?? undefined,
         shop_name: shopName ?? undefined,
       },
@@ -293,22 +320,31 @@ Deno.serve(async (req) => {
         /email_exists|phone_exists|user_already_exists|already registered|exists|duplicate/i.test(
           `${code} ${msg}`,
         );
-      if (!alreadyExists) {
-        console.log(JSON.stringify({ evt: "erp_create_err", status, code }));
-        return fail(500, "shadow_user_create_failed");
-      }
-      // Re-lookup by email, then phone
+      // Re-lookup by email, then auth/profile phone. Some Auth create failures surface
+      // profile-phone uniqueness as a generic 500, so we still attempt a safe claim.
       try {
         const byEmail = await findAuthUserByEmail(admin, email);
         if (byEmail) {
           const state = await claimIfFree(admin, byEmail.id, erpUserId);
-          if (state === "conflict") return fail(409, "shadow_user_conflict");
+          if (state === "conflict") {
+            return fail(409, "shadow_user_conflict", {
+              conflict_count: 1,
+              reason: "email_user_already_linked_to_other_erp_user",
+            });
+          }
           aigcUserId = byEmail.id;
         } else if (phone) {
-          const byPhone = await findAuthUserByPhone(admin, phone);
+          const byPhone =
+            (await findAuthUserByPhone(admin, phone)) ??
+            (await findAuthUserByProfilePhone(admin, phone));
           if (byPhone) {
             const state = await claimIfFree(admin, byPhone.id, erpUserId);
-            if (state === "conflict") return fail(409, "shadow_user_conflict");
+            if (state === "conflict") {
+              return fail(409, "shadow_user_conflict", {
+                conflict_count: 1,
+                reason: "phone_user_already_linked_to_other_erp_user",
+              });
+            }
             aigcUserId = byPhone.id;
           }
         }
@@ -317,6 +353,9 @@ Deno.serve(async (req) => {
         return fail(500, "shadow_user_lookup_failed");
       }
       if (!aigcUserId) {
+        if (!alreadyExists) {
+          console.log(JSON.stringify({ evt: "erp_create_err", status, code }));
+        }
         return fail(500, "shadow_user_create_failed");
       }
     }
@@ -369,7 +408,10 @@ Deno.serve(async (req) => {
       console.log(JSON.stringify({ evt: "erp_link_err", code: (upsertErr as any)?.code }));
       // If unique violation on aigc_user_id, another erp user owns it.
       if ((upsertErr as any)?.code === "23505") {
-        return fail(409, "shadow_user_conflict");
+        return fail(409, "shadow_user_conflict", {
+          conflict_count: 1,
+          reason: "aigc_user_already_linked_to_other_erp_user",
+        });
       }
       return fail(500, "shadow_user_link_failed");
     }
