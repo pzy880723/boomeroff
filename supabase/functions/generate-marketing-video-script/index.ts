@@ -218,17 +218,24 @@ ${refList}
       for (const url of imageUrls) userContent.push({ type: "image_url", image_url: { url } });
     }
 
-    const generateWithLovable = async (): Promise<any> => {
+    const generateWithLovable = async (repair = "", lastCandidate: any = null): Promise<any> => {
+      const messages: any[] = [
+        { role: "system", content: sys },
+        { role: "user", content: userContent },
+      ];
+      if (repair) {
+        messages.push({
+          role: "user",
+          content: `${repair}\n上一次 JSON：\n${JSON.stringify(lastCandidate)}`,
+        });
+      }
       const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
         body: JSON.stringify({
           model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: sys },
-            { role: "user", content: userContent },
-          ],
-          temperature: 0.85,
+          messages,
+          temperature: repair ? 0.55 : 0.85,
         }),
       });
       if (!aiRes.ok) {
@@ -245,8 +252,9 @@ ${refList}
 
     let script: any = null;
     let scriptProvider = "lovable";
+    const factContext = [shopBlock, kbBlock, imgDescBlock, topic, highlight, briefTranscript]
+      .filter(Boolean).join("\n");
     if (isViralStoreTour && DEEPSEEK_API_KEY) {
-      const factContext = [shopBlock, kbBlock, imgDescBlock, topic, highlight, briefTranscript].filter(Boolean).join("\n");
       let repair = "";
       let lastCandidate: any = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -283,7 +291,27 @@ ${refList}
     }
     if (!script) {
       if (isViralStoreTour && !DEEPSEEK_API_KEY) console.warn("[script] DEEPSEEK_API_KEY missing, falling back to Lovable AI");
-      script = await generateWithLovable();
+      if (isViralStoreTour) {
+        let repair = "";
+        let lastCandidate: any = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          lastCandidate = await generateWithLovable(repair, lastCandidate);
+          const validation = validateSurpriseScript(lastCandidate as any, {
+            ageBucket: character?.age_bucket || null,
+            factContext,
+          });
+          if (!validation.errors.length) {
+            script = normalizeDeepSeekSurpriseScript(lastCandidate as any);
+            scriptProvider = "lovable";
+            break;
+          }
+          console.warn(`[script] Lovable AI attempt ${attempt + 1} rejected`, validation.errors);
+          repair = buildSurpriseRepairInstruction(validation.errors);
+        }
+        if (!script) throw new Error("AI 连续三次未生成合格脚本，请重新生成");
+      } else {
+        script = await generateWithLovable();
+      }
     }
     if (!script || !script.hook || !Array.isArray(script.scenes) || !script.outro) {
       return json({ error: "AI 返回格式异常" }, 500);

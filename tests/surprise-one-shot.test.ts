@@ -135,7 +135,7 @@ test('无效图片索引会确定性回退到真实参考图', () => {
   assert.match(prompt, /画面严格参考图片2/);
 });
 
-test('缺少 continuous_dialogue 时按 clips 合成并修复到 90-100 字', () => {
+test('对白不足时不注入无关固定台词，而是保留原稿交给校验触发整条重写', () => {
   const raw = structuredClone(rawScript);
   delete (raw as any).continuous_dialogue;
   raw.hook.dialogue = '这家店真的绝了';
@@ -146,9 +146,16 @@ test('缺少 continuous_dialogue 时按 clips 合成并修复到 90-100 字', ()
 
   const script = normalizeSurpriseScript(raw);
   const cn = surpriseSpokenText(script).replace(/[^\u4e00-\u9fa5]/g, '').length;
-  assert.ok(cn >= 90 && cn <= 100, `合成口播字数越界: ${cn}`);
   const clips = [script.hook, ...script.scenes, script.outro];
-  assert.ok(clips.every((clip) => clip.dialogue && clip.subtitle));
+  assert.ok(cn < 90, `不足的原稿不应被固定台词伪装成合格脚本: ${cn}`);
+  assert.deepEqual(clips.map((clip) => clip.dialogue), [
+    '这家店真的绝了',
+    '每排都想停下翻翻',
+    '随手拿起都是好物',
+    '平价好逛新手也能放心',
+    '姐妹周末快来逛',
+  ]);
+  assert.ok(clips.every((clip) => clip.subtitle === clip.dialogue));
   assert.equal(clips.map((clip) => clip.dialogue).join('，'), script.continuous_dialogue);
 });
 

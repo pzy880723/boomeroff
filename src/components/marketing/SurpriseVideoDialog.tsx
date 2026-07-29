@@ -20,6 +20,7 @@ import {
   pollSurpriseScriptJob,
   saveSurpriseScriptJob,
   discardSurpriseScriptJob,
+  dismissSurpriseVideoJob,
 } from '@/api/surpriseScriptJob';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
@@ -187,6 +188,24 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   };
 
   const applyScriptState = (state: any) => {
+    if (state.task_kind === 'video') {
+      const job: ActiveRenderJob = {
+        jobId: state.job_id,
+        coverUrl: state.cover_url || null,
+        createdAt: state.created_at ? new Date(state.created_at).getTime() : Date.now(),
+        kind: 'director',
+      };
+      setActiveJob(job);
+      if (shopId) setActiveRenderJob(shopId, job);
+      setScriptJobId(null);
+      setPick(null);
+      setPicking(false);
+      stopScriptPolling();
+      return;
+    }
+
+    setActiveJob(null);
+    if (shopId) clearActiveRenderJob(shopId);
     setScriptJobId(state.job_id);
     if (state.result && state.script) {
       setPick({ ...state.result, script: state.script });
@@ -231,15 +250,17 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 
   useEffect(() => {
     if (!open || !shopId) return;
-    const job = getActiveRenderJob(shopId);
-    if (job) {
-      setActiveJob(job);
+    const cachedJob = getActiveRenderJob(shopId);
+    if (cachedJob) {
+      setActiveJob(cachedJob);
       setRenderPhase('running');
-      if (job.kind !== 'director') startPolling(job.jobId, shopId);
-      return;
+      if (cachedJob.kind !== 'director') {
+        startPolling(cachedJob.jobId, shopId);
+        return () => { stopPolling(); stopScriptPolling(); };
+      }
     }
-    setActiveJob(null);
-    if (!pick) doPick(excluded);
+    // 数据库是当前任务的唯一真相。本地缓存只负责让弹窗先显示，随后必须和服务端对齐。
+    void doPick(excluded);
     return () => { stopPolling(); stopScriptPolling(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, shopId]);
@@ -331,6 +352,9 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const handleFix = async (fix: VideoFix) => {
     if (!shopId) return;
     if (fix.kind === 'delete') {
+      if (activeJob?.jobId) {
+        try { await dismissSurpriseVideoJob(activeJob.jobId); } catch (e) { console.warn('[surprise] dismiss failed job', e); }
+      }
       setActiveJob(null); setRenderError(null);
       clearActiveRenderJob(shopId);
       toast.message('已清除失败任务');
@@ -370,11 +394,20 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   };
 
   // 手动结束当前任务(完成/失败/卡死都可用),回到"挑素材"步骤,立刻可以再拍一条
-  const resetToPicker = () => {
+  const resetToPicker = async () => {
     stopPolling();
+    const previousJobId = activeJob?.jobId;
     if (shopId) {
       clearActiveRenderJob(shopId);
       clearSavedPick(shopId);
+    }
+    if (previousJobId) {
+      try {
+        await dismissSurpriseVideoJob(previousJobId);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '结束当前任务失败');
+        return;
+      }
     }
     setScriptJobId(null);
     stopScriptPolling();

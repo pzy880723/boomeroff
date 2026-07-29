@@ -2,6 +2,10 @@
 // 只负责“抽素材 + 生成脚本 + 保存草稿”，不创建视频镜头；用户确认后由 director-create-job 消费。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
+import {
+  selectCurrentSurpriseTask,
+  type SurpriseTaskRow,
+} from "../_shared/surprise-task-state.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,12 +22,27 @@ function state(job: any) {
   const source = (job?.source_pick_json || {}) as any;
   return {
     ok: true,
+    task_kind: "script",
     job_id: job.id,
     status: job.status,
     stage: job.meta?.surprise_stage || job.status,
     script: job.script_json || null,
     result: source.surprise_result || null,
     error: job.error_message || null,
+    updated_at: job.updated_at,
+  };
+}
+
+function videoState(job: any) {
+  return {
+    ok: true,
+    task_kind: "video",
+    job_id: job.id,
+    status: job.status,
+    stage: job.meta?.surprise_stage || job.status,
+    final_video_url: job.final_video_url || null,
+    cover_url: job.cover_url || null,
+    created_at: job.created_at,
     updated_at: job.updated_at,
   };
 }
@@ -36,18 +55,16 @@ async function getUser(req: Request, supabaseUrl: string, anonKey: string) {
   return data.user || null;
 }
 
-async function findDraft(admin: AdminClient, userId: string, shopId: string) {
+async function findCurrentTask(admin: AdminClient, userId: string, shopId: string) {
   const { data, error } = await admin
     .from("video_generation_jobs")
     .select("*")
     .eq("user_id", userId)
     .eq("shop_id", shopId)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(30);
   if (error) throw error;
-  return (data || []).find((job: any) =>
-    job?.meta?.surprise_stage === "script_generating" || job?.meta?.surprise_stage === "script_ready"
-  ) || null;
+  return selectCurrentSurpriseTask((data || []) as SurpriseTaskRow[]);
 }
 
 async function runScriptGeneration({
@@ -138,8 +155,9 @@ Deno.serve(async (req) => {
 
     if (action === "start") {
       if (!shopId) return json({ ok: false, error: "缺少 shop_id" }, 400);
-      const existing = await findDraft(admin, user.id, shopId);
-      if (existing) return json(state(existing));
+      const current = await findCurrentTask(admin, user.id, shopId);
+      if (current?.kind === "script") return json(state(current.job));
+      if (current?.kind === "video") return json(videoState(current.job));
 
       const exclude = Array.isArray(body.exclude_asset_ids)
         ? body.exclude_asset_ids.map((x: unknown) => String(x)).slice(0, 50)
@@ -174,7 +192,25 @@ Deno.serve(async (req) => {
       .from("video_generation_jobs").select("*").eq("id", jobId).eq("user_id", user.id).single();
     if (jobError || !job) return json({ ok: false, error: "脚本任务不存在" }, 404);
 
-    if (action === "poll") return json(state(job));
+    if (action === "poll") {
+      const meta = (job.meta || {}) as Record<string, unknown>;
+      return json(meta.flow === "surprise" && meta.consumed === true ? videoState(job) : state(job));
+    }
+
+    if (action === "dismiss") {
+      const meta = (job.meta || {}) as Record<string, unknown>;
+      if (meta.flow !== "surprise" || meta.consumed !== true) {
+        return json({ ok: false, error: "当前任务不是已生成的视频任务" }, 409);
+      }
+      const { error } = await admin.from("video_generation_jobs").update({
+        meta: {
+          ...meta,
+          surprise_dismissed_at: new Date().toISOString(),
+        },
+      }).eq("id", jobId);
+      if (error) return json({ ok: false, error: error.message || "结束任务失败" }, 500);
+      return json({ ok: true, dismissed: true, job_id: jobId });
+    }
 
     if (action === "save") {
       if (!['script_generating', 'script_ready'].includes(String(job.status))) {

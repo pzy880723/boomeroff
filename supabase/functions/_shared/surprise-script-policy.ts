@@ -19,6 +19,9 @@ export interface SurpriseValidationResult {
 
 const SENIOR_BANNED_TOPICS = /暑假|寒假|开学|追星|入坑|摸鱼|加班|上班族/;
 const YOUNG_BANNED_TOPICS = /退休|退休金|老伴|孙子|孙女|接孙辈|我们那年代/;
+const SILENT_ACTIONS = /停下|停顿|静默|沉默|思考|等待|闭嘴|不说话/;
+const CONTINUOUS_SPEAKING_ACTION =
+  /(?:边|一边).{0,24}(?:说|讲|喊|口播|介绍)|(?:继续|持续).{0,12}(?:说|讲|喊|口播)|对镜头.{0,16}(?:说|讲|喊|口播|介绍)/;
 const UNSUPPORTED_FACTS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /全(?:部|是).*日本进口|全(?:部|是).*漂洋过海/, label: '全部日本进口' },
   { pattern: /东京大阪.*一模一样|和东京大阪.*一样/, label: '东京大阪同款体验' },
@@ -68,6 +71,10 @@ export function validateSurpriseScript(
     if (!String(clip?.action || '').trim()) errors.push(`第 ${index + 1} 段 action 为空`);
     if (!String(clip?.dialogue || '').trim()) errors.push(`第 ${index + 1} 段 dialogue 为空`);
     if (!String(clip?.subtitle || '').trim()) errors.push(`第 ${index + 1} 段 subtitle 为空`);
+    const action = String(clip?.action || '').trim();
+    if (action && (SILENT_ACTIONS.test(action) || !CONTINUOUS_SPEAKING_ACTION.test(action))) {
+      errors.push(`第 ${index + 1} 段 action 必须明确边表演边连续说话，不能停顿`);
+    }
     const clipLength = chineseDialogueLength(clip?.dialogue);
     if (clipLength < 18 || clipLength > 21) errors.push(`第 ${index + 1} 段对白必须 18-21 个汉字，当前 ${clipLength}`);
   });

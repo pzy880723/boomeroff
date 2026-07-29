@@ -185,15 +185,17 @@ function splitContinuousDialogue(value: string): string[] {
 function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
   const clipChunks = dialogueChunksFromClips(script);
   const rawChunks = splitContinuousDialogue(raw);
-  let source = clipChunks.length === 5 && clipChunks.every(Boolean) ? clipChunks : rawChunks;
+  const source = clipChunks.length === 5 && clipChunks.every(Boolean) ? clipChunks : rawChunks;
   const joined = source.join('，');
   const joinedLength = chineseLength(joined);
   if (source.length === 5 && source.every(Boolean)
       && joinedLength >= SURPRISE_MIN_CN && joinedLength <= SURPRISE_MAX_CN) {
     return source;
   }
-  // 不再把短对白和固定句拼在一起。拼接会制造重复台词，且新增的句子通常与当前镜头无关。
-  // 上游生成器会收到校验错误并整条重写；只有完全缺失结构时才使用完整、互不重复的保底脚本。
+  // 五段结构完整但对白过短/过长时保留原稿，让上游校验触发整条重写。
+  // 这里绝不能替换成固定通用文案，否则虽然字数合格，画面、对白和门店事实会失去对应。
+  if (source.length === 5 && source.every(Boolean)) return source;
+  // 只有模型完全没有返回可用五段结构时，才使用保底脚本避免空对象继续向下游扩散。
   return [...FALLBACK_DIALOGUES];
 }
 

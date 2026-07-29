@@ -121,3 +121,26 @@ test('脚本校验拒绝对白不足，不能用固定台词补齐', () => {
   const result = validateSurpriseScript(script);
   assert.ok(result.errors.some((error) => error.includes('第 1 段对白必须 18-21')));
 });
+
+test('脚本校验拒绝停顿动作，五镜必须边演边连续说', () => {
+  const dialogues = [
+    '来上海一定要逛这家藏满惊喜的中古宝藏店',
+    '一进门满眼复古货架每一排都值得认真翻找',
+    '昭和玩具日式瓷器老唱片随手拿都有故事感',
+    '预算不用太高也能挑到独特又实用的纪念好物',
+    '把这家店放进攻略今天就来认真翻上一圈吧',
+  ];
+  const script: any = {
+    continuous_dialogue: dialogues.join('，'),
+    hook: { scene: '门头', action: '站定后停下思考', dialogue: dialogues[0], subtitle: dialogues[0] },
+    scenes: dialogues.slice(1, 4).map((dialogue, i) => ({
+      scene: `店内场景${i + 1}`,
+      action: '边拿商品边对镜头继续说',
+      dialogue,
+      subtitle: dialogue,
+    })),
+    outro: { scene: '店内全景', action: '边招手边对镜头继续说', dialogue: dialogues[4], subtitle: dialogues[4] },
+  };
+  const result = validateSurpriseScript(script);
+  assert.ok(result.errors.some((error) => error.includes('连续说话')));
+});
