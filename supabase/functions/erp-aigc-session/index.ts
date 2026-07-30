@@ -21,6 +21,8 @@ const ALLOWED_ROLES = new Set([
 
 const REVISION = "erp-aigc-session-20260730-1";
 
+type AuthUserInfo = { id: string; email: string | null };
+
 function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify({ revision: REVISION, ...body }), {
     status,
@@ -49,7 +51,7 @@ function normStringArray(v: unknown): string[] {
 async function findAuthUserByEmail(
   admin: ReturnType<typeof createClient>,
   email: string,
-): Promise<{ id: string } | null> {
+): Promise<AuthUserInfo | null> {
   const target = email.toLowerCase();
   let page = 1;
   while (page <= 20) {
@@ -61,7 +63,7 @@ async function findAuthUserByEmail(
     const match = data?.users?.find(
       (u: any) => (u.email ?? "").toLowerCase() === target,
     );
-    if (match) return { id: match.id };
+    if (match) return { id: match.id, email: match.email ?? null };
     if (!data || data.users.length < 200) return null;
     page += 1;
   }
@@ -71,9 +73,9 @@ async function findAuthUserByEmail(
 async function findAuthUserByPhone(
   admin: ReturnType<typeof createClient>,
   phone: string,
-): Promise<{ id: string } | null> {
+): Promise<AuthUserInfo | null> {
   let page = 1;
-  let matches: { id: string }[] = [];
+  let matches: AuthUserInfo[] = [];
   while (page <= 20) {
     const { data, error } = await admin.auth.admin.listUsers({
       page,
@@ -82,7 +84,7 @@ async function findAuthUserByPhone(
     if (error) throw error;
     for (const u of data?.users ?? []) {
       if ((u as any).phone && String((u as any).phone) === phone) {
-        matches.push({ id: u.id });
+        matches.push({ id: u.id, email: u.email ?? null });
         if (matches.length > 1) return null; // not unique
       }
     }
@@ -95,7 +97,7 @@ async function findAuthUserByPhone(
 async function findAuthUserByProfilePhone(
   admin: ReturnType<typeof createClient>,
   phone: string,
-): Promise<{ id: string } | null> {
+): Promise<AuthUserInfo | null> {
   const { data, error } = await admin
     .from("profiles")
     .select("user_id")
@@ -110,7 +112,34 @@ async function findAuthUserByProfilePhone(
     userId,
   );
   if (authErr) throw authErr;
-  return authUser?.user?.id ? { id: authUser.user.id } : null;
+  return authUser?.user?.id
+    ? { id: authUser.user.id, email: authUser.user.email ?? null }
+    : null;
+}
+
+async function getAuthUserInfo(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<AuthUserInfo | null> {
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error) throw error;
+  return data?.user?.id ? { id: data.user.id, email: data.user.email ?? null } : null;
+}
+
+async function deleteCreatedUserQuietly(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+) {
+  try {
+    const { error } = await admin.auth.admin.deleteUser(userId);
+    if (error) {
+      console.log(JSON.stringify({ evt: "erp_created_orphan_delete_err", user_id_prefix: userId.slice(0, 8), status: (error as any)?.status }));
+    } else {
+      console.log(JSON.stringify({ evt: "erp_created_orphan_deleted", user_id_prefix: userId.slice(0, 8) }));
+    }
+  } catch (e) {
+    console.log(JSON.stringify({ evt: "erp_created_orphan_delete_throw", msg: (e as any)?.message }));
+  }
 }
 
 async function claimIfFree(
