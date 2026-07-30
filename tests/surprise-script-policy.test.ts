@@ -119,7 +119,7 @@ test('脚本校验拒绝对白不足，不能用固定台词补齐', () => {
     outro: { scene: '店内全景', action: '边招手边说', dialogue: dialogues[4], subtitle: dialogues[4] },
   };
   const result = validateSurpriseScript(script);
-  assert.ok(result.errors.some((error) => error.includes('第 1 段对白必须')));
+  assert.ok(result.errors.some((error) => error.includes('continuous_dialogue 必须')));
 });
 
 test('脚本校验拒绝停顿动作，五镜必须边演边连续说', () => {
