@@ -280,7 +280,7 @@ ${presetBlock}${contextBlock}${strictBlock}${viralBlock}${kbBlock}
             reviewed.push({ ...c, fact_check: { supported: false, unsupported_claims: guard.unsupported_claims, checker: "deterministic" } });
             continue;
           }
-          const review = await runFactReview(LOVABLE_API_KEY, factsText, allowedBrands, c);
+          const review = await runFactReview(LOVABLE_API_KEY, factsText, allowedBrands, { title: c.title, body: c.body });
           if (!review) {
             reviewed.push({ ...c, fact_check: { supported: false, unsupported_claims: ["事实审校失败"], checker: "ai" } });
             continue;
