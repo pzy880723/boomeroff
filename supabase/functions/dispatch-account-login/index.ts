@@ -43,6 +43,9 @@ Deno.serve(async (req) => {
   );
   const { data: claims } = await supaUser.auth.getClaims(auth.replace("Bearer ", ""));
   const userId = claims?.claims?.sub as string | undefined;
+  const authSource = (claims?.claims as any)?.app_metadata?.auth_source
+    || (claims?.claims as any)?.user_metadata?.auth_source;
+  const isErpUser = authSource === "erp";
   if (!userId) {
     return new Response(JSON.stringify({ error: "登录状态已失效,请重新登录" }), {
       status: 401, headers: jsonHeaders,
@@ -50,15 +53,19 @@ Deno.serve(async (req) => {
   }
 
   const supa = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: roleRow } = await supa.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
-  if (roleRow?.role !== "admin") {
-    const { data: sp } = await supa.from("staff_profiles").select("shop_id").eq("user_id", userId).maybeSingle();
-    if (sp?.shop_id !== shopId) {
-      return new Response(JSON.stringify({ error: "你没有这个门店的账号绑定权限" }), {
-        status: 403, headers: jsonHeaders,
-      });
+  // ERP 协同用户共享社媒账号,不做门店隔离;BOOMER GO 门店账号仍严格校验同店铺。
+  if (!isErpUser) {
+    const { data: roleRow } = await supa.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+    if (roleRow?.role !== "admin") {
+      const { data: sp } = await supa.from("staff_profiles").select("shop_id").eq("user_id", userId).maybeSingle();
+      if (sp?.shop_id !== shopId) {
+        return new Response(JSON.stringify({ error: "你没有这个门店的账号绑定权限" }), {
+          status: 403, headers: jsonHeaders,
+        });
+      }
     }
   }
+
 
   // 提前抓一次旧账号列表,用来在 success 时挑出"新增的那一条"
   let beforeIds = new Set<number>();
