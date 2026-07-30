@@ -260,9 +260,11 @@ Deno.serve(async (req) => {
       ? (primaryShop as any).name
       : null;
 
-  let aigcUserId: string | null = null;
+  let aigcUser: AuthUserInfo | null = null;
+  let createdShadowUserId: string | null = null;
 
-  // Step 1: existing mapping by erp_user_id
+  // Step 1: canonical mapping by erp_user_id always wins.
+  // Never sign a token for a deterministic-email orphan when a canonical AIGC user is already linked.
   try {
     const { data, error } = await admin
       .from("erp_user_links")
@@ -271,13 +273,9 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (error) throw error;
     if (data?.aigc_user_id) {
-      // verify auth user still exists
-      const { data: u, error: getErr } = await admin.auth.admin.getUserById(
-        data.aigc_user_id as string,
-      );
-      if (getErr) throw getErr;
-      if (u?.user?.id) {
-        aigcUserId = u.user.id;
+      aigcUser = await getAuthUserInfo(admin, data.aigc_user_id as string);
+      if (!aigcUser) {
+        return fail(500, "canonical_shadow_user_missing");
       }
     }
   } catch (e) {
@@ -286,13 +284,13 @@ Deno.serve(async (req) => {
   }
 
   // Step 2: try to find existing auth user by email, then phone
-  if (!aigcUserId) {
+  if (!aigcUser) {
     try {
       const byEmail = await findAuthUserByEmail(admin, email);
       if (byEmail) {
         const state = await claimIfFree(admin, byEmail.id, erpUserId);
         if (state === "conflict") return fail(409, "shadow_user_conflict");
-        aigcUserId = byEmail.id;
+        aigcUser = byEmail;
       }
     } catch (e) {
       console.log(JSON.stringify({ evt: "erp_lookup_email_err", msg: (e as any)?.message }));
@@ -300,7 +298,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (!aigcUserId && phone) {
+  if (!aigcUser && phone) {
     try {
       const byPhone =
         (await findAuthUserByPhone(admin, phone)) ??
@@ -313,7 +311,7 @@ Deno.serve(async (req) => {
             reason: "phone_user_already_linked_to_other_erp_user",
           });
         }
-        aigcUserId = byPhone.id;
+        aigcUser = byPhone;
       }
     } catch (e) {
       console.log(JSON.stringify({ evt: "erp_lookup_phone_err", msg: (e as any)?.message }));
@@ -322,7 +320,7 @@ Deno.serve(async (req) => {
   }
 
   // Step 3: create if still missing
-  if (!aigcUserId) {
+  if (!aigcUser) {
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
       email_confirm: true,
@@ -341,7 +339,8 @@ Deno.serve(async (req) => {
       },
     });
     if (created?.user?.id) {
-      aigcUserId = created.user.id;
+      createdShadowUserId = created.user.id;
+      aigcUser = { id: created.user.id, email: created.user.email ?? email };
     } else {
       const msg = String((createErr as any)?.message ?? "");
       const status = Number((createErr as any)?.status ?? 0);
@@ -363,7 +362,7 @@ Deno.serve(async (req) => {
               reason: "email_user_already_linked_to_other_erp_user",
             });
           }
-          aigcUserId = byEmail.id;
+          aigcUser = byEmail;
         } else if (phone) {
           const byPhone =
             (await findAuthUserByPhone(admin, phone)) ??
@@ -376,14 +375,14 @@ Deno.serve(async (req) => {
                 reason: "phone_user_already_linked_to_other_erp_user",
               });
             }
-            aigcUserId = byPhone.id;
+            aigcUser = byPhone;
           }
         }
       } catch (e) {
         console.log(JSON.stringify({ evt: "erp_relookup_err", msg: (e as any)?.message }));
         return fail(500, "shadow_user_lookup_failed");
       }
-      if (!aigcUserId) {
+      if (!aigcUser) {
         if (!alreadyExists) {
           console.log(JSON.stringify({ evt: "erp_create_err", status, code }));
         }
