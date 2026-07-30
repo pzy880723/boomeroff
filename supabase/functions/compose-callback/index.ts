@@ -80,19 +80,24 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
+      // 注意:marketing_assets 只有 kind/output_url/output_text/meta/category/tags 等字段,
+      // 没有 cover_url/title/file_url,封面必须放进 meta。
       const payload = {
         user_id: job.user_id,
         shop_id: job.shop_id,
         kind: "video",
         output_url: finalVideoUrl,
-        cover_url: finalCover,
+        output_text: videoCopy?.body || publishCopy?.caption || title,
         category: "惊喜一下",
         tags: publishCopy?.hashtags?.slice(0, 5).map((h: string) => h.replace(/^#/, "")) || ["惊喜一下", "探店", "BOOMER"],
         meta: {
           ...((existing?.meta as any) || {}),
+          title,
           summary: title,
           source: "director-worker",
           director_job_id: jobId,
+          cover_url: finalCover,
+          poster_url: finalCover,
           duration_s: duration || job.duration,
           publish_copy: publishCopy,
           video_copy: videoCopy,
@@ -101,7 +106,8 @@ Deno.serve(async (req) => {
       };
 
       if (existing?.id) {
-        await admin.from("marketing_assets").update(payload).eq("id", existing.id);
+        const { error: updErr } = await admin.from("marketing_assets").update(payload).eq("id", existing.id);
+        if (updErr) throw updErr;
         assetId = existing.id;
       } else {
         const { data: created, error: createError } = await admin.from("marketing_assets")
@@ -112,8 +118,10 @@ Deno.serve(async (req) => {
         assetId = created?.id || null;
       }
     } catch (e) {
-      console.warn("[compose-callback] insert asset failed", e);
+      assetError = (e as Error).message || String(e);
+      console.error("[compose-callback] insert asset failed", assetError);
     }
+
 
     if (assetId) {
       await admin.from("video_generation_jobs").update({
