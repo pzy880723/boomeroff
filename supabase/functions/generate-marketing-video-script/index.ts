@@ -254,6 +254,25 @@ ${refList}
     let scriptProvider = "lovable";
     const factContext = [shopBlock, kbBlock, imgDescBlock, topic, highlight, briefTranscript]
       .filter(Boolean).join("\n");
+    // 关键：先做确定性规范化（拆分五段 / 字幕对齐 / 动作补“边演边说”），再校验规范化后的结果，
+    // 否则模型只是分段方式不同就会被判不合格，出现“连续三次未生成合格脚本”。
+    const evaluate = (candidate: any, relaxed = false) => {
+      const normalized = normalizeDeepSeekSurpriseScript(candidate as any);
+      const validation = validateSurpriseScript(normalized as any, {
+        ageBucket: character?.age_bucket || null,
+        factContext,
+        relaxed,
+      });
+      return { normalized, validation };
+    };
+    let bestCandidate: any = null;
+    let bestErrorCount = Number.POSITIVE_INFINITY;
+    const trackBest = (candidate: any, errorCount: number) => {
+      if (candidate && errorCount < bestErrorCount) {
+        bestCandidate = candidate;
+        bestErrorCount = errorCount;
+      }
+    };
     if (isViralStoreTour && DEEPSEEK_API_KEY) {
       let repair = "";
       let lastCandidate: any = null;
@@ -267,15 +286,13 @@ ${refList}
             temperature: attempt === 0 ? 0.85 : 0.55,
           });
           lastCandidate = candidate;
-          const validation = validateSurpriseScript(candidate as any, {
-            ageBucket: character?.age_bucket || null,
-            factContext,
-          });
+          const { normalized, validation } = evaluate(candidate);
           if (!validation.errors.length) {
-            script = normalizeDeepSeekSurpriseScript(candidate as any);
+            script = normalized;
             scriptProvider = "deepseek";
             break;
           }
+          trackBest(candidate, validation.errors.length);
           console.warn(`[script] DeepSeek attempt ${attempt + 1} rejected`, validation.errors);
           repair = buildSurpriseRepairInstruction(validation.errors);
         } catch (error) {
@@ -285,9 +302,6 @@ ${refList}
           repair = buildSurpriseRepairInstruction([error instanceof Error ? error.message : "返回格式异常"]);
         }
       }
-      if (!script && lastCandidate) {
-        console.warn("[script] DeepSeek repair exhausted; rejecting candidate instead of padding it with fixed dialogue");
-      }
     }
     if (!script) {
       if (isViralStoreTour && !DEEPSEEK_API_KEY) console.warn("[script] DEEPSEEK_API_KEY missing, falling back to Lovable AI");
@@ -296,23 +310,33 @@ ${refList}
         let lastCandidate: any = null;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           lastCandidate = await generateWithLovable(repair, lastCandidate);
-          const validation = validateSurpriseScript(lastCandidate as any, {
-            ageBucket: character?.age_bucket || null,
-            factContext,
-          });
+          const { normalized, validation } = evaluate(lastCandidate);
           if (!validation.errors.length) {
-            script = normalizeDeepSeekSurpriseScript(lastCandidate as any);
+            script = normalized;
             scriptProvider = "lovable";
             break;
           }
+          trackBest(lastCandidate, validation.errors.length);
           console.warn(`[script] Lovable AI attempt ${attempt + 1} rejected`, validation.errors);
           repair = buildSurpriseRepairInstruction(validation.errors);
+        }
+        if (!script && bestCandidate) {
+          // 兜底：用错误最少的一版做宽松校验，只要内容真实可用就放行，不用固定套词补齐。
+          const { normalized, validation } = evaluate(bestCandidate, true);
+          if (!validation.errors.length) {
+            script = normalized;
+            scriptProvider = "relaxed";
+            console.warn("[script] accepted best candidate under relaxed validation");
+          } else {
+            console.warn("[script] relaxed validation still rejected", validation.errors);
+          }
         }
         if (!script) throw new Error("AI 连续三次未生成合格脚本，请重新生成");
       } else {
         script = await generateWithLovable();
       }
     }
+
     if (!script || !script.hook || !Array.isArray(script.scenes) || !script.outro) {
       return json({ error: "AI 返回格式异常" }, 500);
     }
