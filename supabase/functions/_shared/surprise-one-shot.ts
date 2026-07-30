@@ -69,8 +69,15 @@ const BEAT_WINDOWS: Array<[number, number]> = [
 
 const BEAT_LABELS = ['强钩子', '进店发现', '上手体验', '核心种草', '行动召唤'];
 
-export const SURPRISE_MIN_CN = 90;
-export const SURPRISE_MAX_CN = 100;
+// 15 秒原生 Seedance 人声：60–72 汉字是自然偏快（约 270–320 字/分钟）且不吞字的安全区间。
+export const SURPRISE_MIN_CN = 60;
+export const SURPRISE_MAX_CN = 72;
+// 兜底轮次（最后一次校验）允许的宽松区间，仍以 72 为硬上限。
+export const SURPRISE_RELAXED_MIN_CN = 52;
+export const SURPRISE_RELAXED_MAX_CN = 72;
+// 单个节拍建议字数
+export const SURPRISE_BEAT_MIN_CN = 8;
+export const SURPRISE_BEAT_MAX_CN = 18;
 
 // 会拖慢连续口播的语气词/客套词，一律清掉
 const FILLER_PATTERNS: RegExp[] = [
@@ -90,11 +97,11 @@ const FILLER_PATTERNS: RegExp[] = [
 ];
 
 const FALLBACK_DIALOGUES = [
-  '来逛中古店别错过这个藏满惊喜的宝藏空间',
-  '一走进去满眼复古杂货每排货架都值得认真翻',
-  '玩具瓷器唱片和生活小物随手一拿都很有故事',
-  '预算不用太高也能挑到一件属于自己的独特纪念',
-  '现在把这家宝藏店放进攻略到店认真翻上一圈',
+  '来上海别错过这家中古宝藏店',
+  '一走进店满眼复古杂货和老物件',
+  '玩具瓷器唱片随手一拿都有故事',
+  '预算不高也能挑到独特小惊喜',
+  '放进攻略到店认真翻上一圈',
 ];
 
 const FALLBACK_SUBTITLES = [
