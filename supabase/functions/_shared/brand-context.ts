@@ -1,7 +1,8 @@
 // 营销中心共用的品牌上下文与预设加载器。改一处全改。
 // 现在所有预设(品牌话术/平台描述/口吻描述/视频镜位规则)都可以由管理员在后台
 // `营销预设` 中修改;edge function 会先读 marketing_presets 表,缺失项 fallback 到下面的默认常量。
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+// 注意:supabase-js 采用惰性 import,保证本文件的纯函数可以在 Node 测试环境直接引入。
+
 
 export const DEFAULT_BRAND_SYSTEM_PROMPT = `你正在为「BOOMER·OFF Vintage」做社交媒体内容。
 品牌定位：国内首家标准化中古连锁品牌；平价、海量、标准化中古杂货铺；30,000+ SKU 高密度陈列。
