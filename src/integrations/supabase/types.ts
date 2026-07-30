@@ -366,6 +366,60 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_tasks: {
+        Row: {
+          asset_filter: Json
+          config: Json
+          created_at: string
+          created_by: string | null
+          enabled: boolean
+          id: string
+          interval_minutes: number
+          last_error: string | null
+          last_run_at: string | null
+          last_status: string | null
+          name: string
+          next_run_at: string | null
+          platforms: string[]
+          shop_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          asset_filter?: Json
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          interval_minutes?: number
+          last_error?: string | null
+          last_run_at?: string | null
+          last_status?: string | null
+          name: string
+          next_run_at?: string | null
+          platforms?: string[]
+          shop_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          asset_filter?: Json
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          interval_minutes?: number
+          last_error?: string | null
+          last_run_at?: string | null
+          last_status?: string | null
+          name?: string
+          next_run_at?: string | null
+          platforms?: string[]
+          shop_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       backup_file_failures: {
         Row: {
           attempt_count: number
@@ -2424,6 +2478,7 @@ export type Database = {
       social_publish_jobs: {
         Row: {
           asset_id: string | null
+          automation_task_id: string | null
           body: string | null
           cover_url: string | null
           created_at: string
@@ -2444,6 +2499,7 @@ export type Database = {
         }
         Insert: {
           asset_id?: string | null
+          automation_task_id?: string | null
           body?: string | null
           cover_url?: string | null
           created_at?: string
@@ -2464,6 +2520,7 @@ export type Database = {
         }
         Update: {
           asset_id?: string | null
+          automation_task_id?: string | null
           body?: string | null
           cover_url?: string | null
           created_at?: string
@@ -2488,6 +2545,13 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "marketing_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_publish_jobs_automation_task_id_fkey"
+            columns: ["automation_task_id"]
+            isOneToOne: false
+            referencedRelation: "automation_tasks"
             referencedColumns: ["id"]
           },
           {
@@ -3434,6 +3498,7 @@ export type Database = {
         Args: { _room: string; _user: string }
         Returns: boolean
       }
+      is_erp_user: { Args: never; Returns: boolean }
       kb_enqueue: {
         Args: { _op?: string; _source_id: string; _source_type: string }
         Returns: undefined
