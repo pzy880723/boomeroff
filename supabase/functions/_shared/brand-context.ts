@@ -219,6 +219,7 @@ export async function loadMarketingPresets(): Promise<MarketingPresets> {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!SUPABASE_URL || !SERVICE_KEY) return fallback;
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.0");
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const { data } = await admin.from("marketing_presets").select("key, value");
     if (!data || !data.length) return fallback;
