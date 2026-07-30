@@ -224,6 +224,7 @@ Deno.serve(async (req) => {
       } catch (e) {
         try { send({ step: "fail", msg: String((e as Error).message || e) }); } catch { /* noop */ }
       } finally {
+        clearInterval(heartbeat);
         try { controller.close(); } catch { /* noop */ }
       }
     },
