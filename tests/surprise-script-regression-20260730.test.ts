@@ -10,20 +10,20 @@ import {
 } from '../supabase/functions/_shared/surprise-script-policy.ts';
 
 const CONTINUOUS =
-  '来上海旅行别错过这家藏满惊喜的中古宝藏店，一走进去满眼复古杂货每排货架都值得认真翻，' +
-  '昭和玩具日式瓷器老唱片随手一拿都很有故事，预算不用太高也能挑到一件独特的旅行纪念，' +
-  '现在把宝藏中古店放进攻略到店认真翻一圈';
+  '来上海别错过这家中古宝藏店，一进门满眼复古杂货和老物件，' +
+  '玩具瓷器唱片随手一拿都有故事，预算不高也能挑到独特小惊喜，' +
+  '放进攻略到店认真翻上一圈';
 
 test('分段畸形 + 动作缺“边说” + 五段与全文不一致时，规范化后应通过校验', () => {
   const raw: any = {
     continuous_dialogue: CONTINUOUS,
-    hook: { scene: '门头', action: '站定看向镜头', dialogue: '来上海旅行别错过这家藏满惊喜的中古宝藏店一走进去满眼复古杂货', subtitle: '门头惊喜', image_index: 0 },
+    hook: { scene: '门头', action: '站定看向镜头', dialogue: '来上海别错过这家中古宝藏店一走进去满眼复古杂货', subtitle: '门头惊喜', image_index: 0 },
     scenes: [
-      { scene: '货架', action: '思考停顿', dialogue: '每排货架都值得认真翻昭和玩具日式瓷器老唱片随手一拿都很有故事', subtitle: '货架' },
+      { scene: '货架', action: '思考停顿', dialogue: '每排货架都值得认真翻玩具瓷器唱片随手一拿都有故事', subtitle: '货架' },
       { scene: '特写', action: '拿起商品', dialogue: '预算不用太高', subtitle: '特写' },
       { scene: '体验', action: '翻找', dialogue: '也能挑到一件独特的旅行纪念', subtitle: '体验' },
     ],
-    outro: { scene: '全景', action: '招手', dialogue: '现在把宝藏中古店放进攻略到店认真翻一圈', subtitle: 'CTA' },
+    outro: { scene: '全景', action: '招手', dialogue: '放进攻略到店认真翻上一圈', subtitle: 'CTA' },
   };
   const normalized = normalizeDeepSeekSurpriseScript(raw);
   const result = validateSurpriseScript(normalized as any);

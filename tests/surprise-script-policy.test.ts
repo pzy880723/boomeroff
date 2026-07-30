@@ -31,18 +31,18 @@ test('节日提示是可选背景而不是强制蹭热点', () => {
 test('DeepSeek 脚本规范化后五段对白、字幕和连续全文严格一致', () => {
   const script = normalizeDeepSeekSurpriseScript({
     title: '上海旅行隐藏副本',
-    continuous_dialogue: '来上海旅行别错过这家藏满惊喜的中古宝藏店，一走进去满眼复古杂货每排货架都值得认真翻，昭和玩具日式瓷器老唱片随手一拿都很有故事，预算不用太高也能挑到一件独特的旅行纪念，现在把宝藏中古店放进攻略到店认真翻一圈',
-    hook: { scene: '真实门头', action: '边走边说', dialogue: '来上海旅行别错过这家藏满惊喜的中古宝藏店', subtitle: '来上海旅行别错过这家藏满惊喜的中古宝藏店', image_index: 0 },
+    continuous_dialogue: '来上海别错过这家中古宝藏店，一进门满眼复古杂货和老物件，玩具瓷器唱片随手一拿都有故事，预算不高也能挑到独特小惊喜，放进攻略到店认真翻上一圈',
+    hook: { scene: '真实门头', action: '边走边说', dialogue: '来上海别错过这家中古宝藏店', subtitle: '来上海别错过这家中古宝藏店', image_index: 0 },
     scenes: [
-      { scene: '货架', action: '边走边说', dialogue: '一走进去满眼复古杂货每排货架都值得认真翻', subtitle: '一走进去满眼复古杂货每排货架都值得认真翻', image_index: 1 },
-      { scene: '商品特写', action: '边拿边说', dialogue: '昭和玩具日式瓷器老唱片随手一拿都很有故事', subtitle: '昭和玩具日式瓷器老唱片随手一拿都很有故事', image_index: 2 },
-      { scene: '翻筐体验', action: '边翻边说', dialogue: '预算不用太高也能挑到一件独特的旅行纪念', subtitle: '预算不用太高也能挑到一件独特的旅行纪念', image_index: 3 },
+      { scene: '货架', action: '边走边说', dialogue: '一进门满眼复古杂货和老物件', subtitle: '一进门满眼复古杂货和老物件', image_index: 1 },
+      { scene: '商品特写', action: '边拿边说', dialogue: '玩具瓷器唱片随手一拿都有故事', subtitle: '玩具瓷器唱片随手一拿都有故事', image_index: 2 },
+      { scene: '翻筐体验', action: '边翻边说', dialogue: '预算不高也能挑到独特小惊喜', subtitle: '预算不高也能挑到独特小惊喜', image_index: 3 },
     ],
-    outro: { scene: '店内全景', action: '边招手边说', dialogue: '现在把宝藏中古店放进攻略到店认真翻一圈', subtitle: '现在把宝藏中古店放进攻略到店认真翻一圈', image_index: 4 },
+    outro: { scene: '店内全景', action: '边招手边说', dialogue: '放进攻略到店认真翻上一圈', subtitle: '放进攻略到店认真翻上一圈', image_index: 4 },
   });
   const result = validateSurpriseScript(script);
   assert.deepEqual(result.errors, []);
-  assert.equal(result.dialogueLength >= 90 && result.dialogueLength <= 100, true);
+  assert.equal(result.dialogueLength >= 60 && result.dialogueLength <= 72, true);
 });
 
 test('脚本校验拒绝空对白、空字幕和年龄错配话题', () => {
