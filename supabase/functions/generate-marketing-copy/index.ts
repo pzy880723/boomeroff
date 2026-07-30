@@ -110,6 +110,15 @@ Deno.serve(async (req) => {
     const viralStyle: ViralStyle | null = VIRAL_STYLES.includes(body.style) ? body.style : null;
     if (!imageUrls.length) return json({ error: "至少上传一张图" }, 400);
 
+    // strict_facts：只有受信任的自动化调用可开启；人工调用行为完全不变。
+    const strictFacts = isTrustedService && isAutomationMode && body?.strict_facts === true;
+    const allowedBrands: string[] = strictFacts && Array.isArray(body.allowed_brand_names) && body.allowed_brand_names.length
+      ? body.allowed_brand_names.map((x: any) => String(x)).filter(Boolean)
+      : ALLOWED_BRAND_DEFAULT;
+    const factsText = strictFacts ? formatVerifiedFacts(body.verified_facts) : "";
+    const strictBlock = strictFacts ? buildStrictFactsBlock(factsText, allowedBrands) : "";
+
+
     const VIRAL_BRIEF: Record<ViralStyle, string> = {
       scream: "🔥 尖叫安利体：大量感叹号 + emoji + 抓马口吻（'姐妹些!!!''救命''会哭'），情绪拉满，每句必须带至少一个 emoji。",
       heal: "✨ 治愈日记体：慢节奏日记 + 小图标点缀（☕️🥛☀️🌿），每句开头或结尾必带 emoji，分行像呼吸。",
