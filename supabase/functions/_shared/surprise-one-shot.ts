@@ -198,9 +198,17 @@ function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
     });
   const rebalance = (chunks: string[]) => {
     if (balanced(chunks)) return chunks;
-    const next = splitContinuousDialogue(chunks.join('，'));
-    return next.length === 5 && next.every(Boolean) ? next : chunks;
+    const byComma = splitContinuousDialogue(chunks.join('，'));
+    if (byComma.length === 5 && byComma.every(Boolean) && balanced(byComma)) return byComma;
+    // 逗号分组仍然畸形（模型把两三句塞进一段），按字数均切，内容顺序保持不变。
+    const flat = chunks.join('').replace(/[，、\s]/g, '');
+    if (!flat) return chunks;
+    const size = Math.ceil(flat.length / 5);
+    const cut: string[] = [];
+    for (let i = 0; i < 5; i += 1) cut.push(flat.slice(i * size, Math.min((i + 1) * size, flat.length)));
+    return cut.every(Boolean) ? cut : (byComma.length === 5 && byComma.every(Boolean) ? byComma : chunks);
   };
+
   if (inRange(clipChunks)) return rebalance(clipChunks);
   if (inRange(rawChunks)) return rebalance(rawChunks);
 
