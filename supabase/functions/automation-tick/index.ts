@@ -20,8 +20,31 @@ function timingSafeEqual(a: string, b: string) {
   return diff === 0;
 }
 
+// 与发布中心口径一致:未失效(非 expired)且有 worker 账号标识即可发布。
 const PUBLISHABLE = (a: any) =>
-  a && a.cookie_status === "valid" && (a.worker_account_id || a.worker_account_key);
+  a && a.cookie_status !== "expired" && (a.worker_account_id || a.worker_account_key);
+
+// 严格 ERP 判定:app_metadata.auth_source='erp' → erp_user_links canonical → deterministic email 兜底。
+// 不做域名泛匹配,普通 BOOMER GO 用户一律 false。
+async function isErpUserId(supa: any, userId: string | null): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const { data: authUser } = await supa.auth.admin.getUserById(userId);
+    const meta = (authUser?.user?.app_metadata || {}) as any;
+    if (meta.auth_source === "erp") return true;
+    const { data: link } = await supa
+      .from("erp_user_links").select("aigc_user_id").eq("aigc_user_id", userId).maybeSingle();
+    if (link) return true;
+    const email = String(authUser?.user?.email || "").toLowerCase();
+    const m = email.match(/^erp\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@aigc\.boomeroff\.local$/);
+    if (m?.[1]) {
+      const { data: canonical } = await supa
+        .from("erp_user_links").select("aigc_user_id").eq("erp_user_id", m[1]).maybeSingle();
+      return Boolean(canonical?.aigc_user_id);
+    }
+  } catch { /* keep strict */ }
+  return false;
+}
 
 function resolveDraft(asset: any, task: any) {
   const meta = asset?.meta || {};
@@ -106,16 +129,29 @@ Deno.serve(async (req) => {
 async function runTask(supa: any, task: any, actorId: string | null) {
   const platforms: string[] = Array.isArray(task.platforms) ? task.platforms.filter(Boolean) : [];
 
-  // 1. 真实可用账号:cookie_status = 'valid'
-  let accQuery = supa.from("social_accounts").select("*").eq("cookie_status", "valid");
+  // 1. 真实可用账号。ERP 协同用户 = 共享账号库,不按 task.shop_id 过滤;
+  //    BOOMER GO 门店用户仍严格门店隔离。
+  const erpShared = await isErpUserId(supa, task.created_by || null);
+
+  let accQuery = supa.from("social_accounts").select("*").neq("cookie_status", "expired");
   if (platforms.length) accQuery = accQuery.in("platform", platforms);
-  if (task.shop_id) accQuery = accQuery.eq("shop_id", task.shop_id);
+  if (!erpShared && task.shop_id) accQuery = accQuery.eq("shop_id", task.shop_id);
   const { data: accountsRaw } = await accQuery;
   const accounts = (accountsRaw || []).filter(PUBLISHABLE);
   if (!accounts.length) return { ok: false, error: "no_valid_accounts" };
 
-  const shopId = task.shop_id || accounts[0].shop_id;
-  const scoped = accounts.filter((a: any) => a.shop_id === shopId);
+  let scoped: any[];
+  let shopId: string;
+  if (erpShared) {
+    // 每个平台取一个账号
+    const byPlatform = new Map<string, any>();
+    for (const a of accounts) if (!byPlatform.has(a.platform)) byPlatform.set(a.platform, a);
+    scoped = [...byPlatform.values()];
+    shopId = task.shop_id || scoped[0].shop_id;
+  } else {
+    shopId = task.shop_id || accounts[0].shop_id;
+    scoped = accounts.filter((a: any) => a.shop_id === shopId);
+  }
   if (!scoped.length) return { ok: false, error: "no_valid_accounts" };
 
   // 2. 真实可发布素材:已成片视频且尚未被发布任务使用过
