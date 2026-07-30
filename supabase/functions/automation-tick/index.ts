@@ -235,8 +235,8 @@ export async function buildPlatformCopies(
   return { ok: true, platformCopies };
 }
 
-export async function runTask(supa: any, task: any, actorId: string | null) {
 /** 选出本次任务真实可用的平台账号(与正式入队完全一致的口径)。 */
+
 export async function selectAccounts(
   supa: any,
   task: any,
