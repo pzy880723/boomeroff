@@ -196,10 +196,14 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json', Authorization: auth },
         body: JSON.stringify(renderBody),
       });
-      const renderData = await renderRes.json().catch(() => ({}));
+      const renderText = await renderRes.text();
+      let renderData: any = {};
+      try { renderData = JSON.parse(renderText); } catch { renderData = {}; }
       if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {
-        return json({ ok: false, error: renderData?.error || '渲染提交失败' });
+        console.error(`[surprise submit] render failed status=${renderRes.status} body=${renderText.slice(0, 400)}`);
+        return json({ ok: false, error: renderData?.error || `渲染提交失败(${renderRes.status})` });
       }
+      console.log(`[surprise submit] job=${renderData.job_id}`);
       return json({ ok: true, job_id: renderData.job_id, segment_total: renderData.segment_total || 1 });
     }
 
