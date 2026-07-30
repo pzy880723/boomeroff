@@ -156,7 +156,6 @@ async function runTask(supa: any, task: any, actorId: string | null) {
     status: "queued",
     created_by: actorId || task.created_by || asset.user_id,
     automation_task_id: task.id,
-    meta: { automation_task_id: task.id },
   }).select("id").single();
   if (jobErr || !jobRow) return { ok: false, error: `create_job_failed: ${jobErr?.message || "unknown"}` };
 
