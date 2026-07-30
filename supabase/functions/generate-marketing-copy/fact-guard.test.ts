@@ -25,9 +25,9 @@ Deno.test("未核实数字 30,000+ 被判不通过", () => {
   assertEquals(bad, ["30000"]);
 });
 
-Deno.test("B1 作为整体 token 放行", () => {
+Deno.test("B1 只在事实含 B1 时放行", () => {
   assertEquals(findUnsupportedNumbers("下到 B1 层就看到店", FACTS), []);
-  assertEquals(findUnsupportedNumbers("在B1闲逛", "（无楼层信息）"), []);
+  assertEquals(findUnsupportedNumbers("在B1闲逛", "（无楼层信息）"), ["B1"]);
 });
 
 Deno.test("事实里出现过的数字可通过", () => {
