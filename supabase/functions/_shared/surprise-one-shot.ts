@@ -191,8 +191,18 @@ function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
     return length >= SURPRISE_MIN_CN && length <= SURPRISE_MAX_CN;
   };
   // 优先使用长度合格的一套；模型经常把 continuous_dialogue 写对、五段写歪（或反过来）。
-  if (inRange(clipChunks)) return clipChunks;
-  if (inRange(rawChunks)) return rawChunks;
+  const balanced = (chunks: string[]) =>
+    chunks.every((chunk) => {
+      const length = chineseLength(chunk);
+      return length >= 13 && length <= 28;
+    });
+  const rebalance = (chunks: string[]) => {
+    if (balanced(chunks)) return chunks;
+    const next = splitContinuousDialogue(chunks.join('，'));
+    return next.length === 5 && next.every(Boolean) ? next : chunks;
+  };
+  if (inRange(clipChunks)) return rebalance(clipChunks);
+  if (inRange(rawChunks)) return rebalance(rawChunks);
 
   const source = clipChunks.length === 5 && clipChunks.every(Boolean) ? clipChunks : rawChunks;
   if (source.length === 5 && source.every(Boolean)) {
@@ -204,7 +214,7 @@ function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
   return [...FALLBACK_DIALOGUES];
 }
 
-const SILENT_ACTION_WORDS = /停下|停顿|静默|沉默|等待|闭嘴|不说话/g;
+const SILENT_ACTION_WORDS = /停下来|停下|停顿|静默|沉默|思考|等待|闭嘴|不说话/g;
 const SPEAKING_ACTION_HINT =
   /(?:边|一边).{0,24}(?:说|讲|喊|口播|介绍)|(?:继续|持续).{0,12}(?:说|讲|喊|口播)|对镜头.{0,16}(?:说|讲|喊|口播|介绍)/;
 
