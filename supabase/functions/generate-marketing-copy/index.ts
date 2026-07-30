@@ -154,7 +154,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}
 平台：${presets.platforms[platformKey] || presets.platforms.xhs}
 平台硬性限制：标题 ≤${limits.title_max} 字；正文 ${limits.body_min}–${limits.body_max} 字；话题 ${limits.tag_min}–${limits.tag_max} 个。
 口吻：${presets.tones[toneKey]}
-${presetBlock}${contextBlock}${viralBlock}${kbBlock}
+${presetBlock}${contextBlock}${strictBlock}${viralBlock}${kbBlock}
 输出格式：严格 JSON 数组，3 个对象，每个对象字段：
 {
   "title": "标题",
