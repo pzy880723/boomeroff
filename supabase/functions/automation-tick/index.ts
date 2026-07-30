@@ -139,6 +139,26 @@ export function pickCandidate(
 }
 
 
+/** 视频号短标题：语义完整的 6-16 字片段，禁止半句硬截断。 */
+export function deriveShortTitle(presetShort: unknown, candidateShort: unknown, title: unknown): string {
+  const ok = (s: string) => {
+    const n = [...s].length;
+    return n >= 6 && n <= 16;
+  };
+  const p = String(presetShort ?? "").trim();
+  if (ok(p)) return p;
+  const c = String(candidateShort ?? "").trim();
+  if (ok(c)) return c;
+  const t = String(title ?? "").trim();
+  if (!t) return "";
+  const segs = t.split(/[，。！？：；、,.!?:;|｜—\-~～\s]+/).map((s) => s.trim()).filter(Boolean);
+  for (const s of segs) {
+    if (ok(s)) return s;
+  }
+  if ([...t].length <= 16) return t;
+  return [...t].slice(0, 16).join("");
+}
+
 /** 把账号预设的静态发布选项固化进平台 copy。返回 error 字符串表示拦截。 */
 export function applyPresetStatics(
   platform: string,
@@ -149,6 +169,11 @@ export function applyPresetStatics(
   const preset = (presetRaw && typeof presetRaw === "object") ? presetRaw as Record<string, any> : {};
   const poiMap = (preset.shop_poi_map && typeof preset.shop_poi_map === "object") ? preset.shop_poi_map as Record<string, any> : {};
   const poi = (poiMap[shopId] && typeof poiMap[shopId] === "object") ? poiMap[shopId] as Record<string, any> : null;
+
+  // 标签以账号预设为唯一权威，模型生成的动态标签一律丢弃
+  const presetTags = normalizeTags(preset.fixed_tags);
+  if (!presetTags.length) return { ok: false, error: `${platform}_fixed_tags_missing` };
+  copy.tags = presetTags;
 
   if (platform === "xhs" || platform === "douyin") {
     const locationName = String(poi?.location_name || "").trim();
@@ -161,11 +186,11 @@ export function applyPresetStatics(
 
     // 真实后台字段：视频描述+话题、短标题、位置(POI)、视频标注。没有"分类/原创类型"必填项。
     copy.original_declaration = preset.original_declaration === false ? false : true;
-    const shortTitle = String(preset.short_title || "").trim() || String(copy.short_title || "").trim()
-      || [...String(copy.title || "")].slice(0, 16).join("");
+    const shortTitle = deriveShortTitle(preset.short_title, copy.short_title, copy.title);
     const len = [...shortTitle].length;
     if (len < 6 || len > 16) return { ok: false, error: `${platform}_short_title_invalid` };
     copy.short_title = shortTitle;
+
 
     const annotation = String(preset.video_annotation || "").trim();
     if (!annotation) return { ok: false, error: `${platform}_annotation_preset_missing` };
