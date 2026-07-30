@@ -445,3 +445,28 @@ Deno.test("dry-run 审校失败时 would_enqueue=false 且零写库", async () =
   assertEquals(r.would_enqueue, false);
   assertEquals(supa.writes.length, 0);
 });
+
+Deno.test("选中第二条候选时带第二条自己的 fact_check", async () => {
+  const FC1 = { supported: true, unsupported_claims: [], checker: "ai", note: "第一条" };
+  const FC2 = { supported: true, unsupported_claims: [], checker: "ai", note: "第二条" };
+  const supa = makeSupa(() => ({
+    data: {
+      candidates: [
+        // 第一条标题超长,应被跳过
+        { title: "这个标题非常非常非常非常非常非常长超过限制了", body: "正文".repeat(40), hashtags: ["中古"], fact_check: FC1 },
+        { title: "南京西路的中古杂货铺", body: "正文".repeat(40), hashtags: ["中古"], fact_check: FC2 },
+      ],
+    },
+  }));
+  const r: any = await mod.buildPlatformCopies(supa, { scoped: [account("xhs")], asset: ASSET, task: TASK, shopId: "shop-1" });
+  assert(r.ok, JSON.stringify(r));
+  assertEquals(r.platformCopies.xhs.title, "南京西路的中古杂货铺");
+  assertEquals(r.platformCopies.xhs.fact_check, FC2);
+});
+
+Deno.test("pickCandidate 直接返回被选中候选的 fact_check", () => {
+  const a = { title: "标题太长太长太长太长太长太长太长太长太长太长太长", body: "b", hashtags: ["t"], fact_check: { supported: true, id: "a" } };
+  const b = { title: "合规标题", body: "正文", hashtags: ["t"], fact_check: { supported: true, id: "b" } };
+  assertEquals(mod.pickCandidate("xhs", [a, b])?.fact_check, { supported: true, id: "b" });
+  assertEquals(mod.pickCandidate("xhs", [a]), null);
+});
