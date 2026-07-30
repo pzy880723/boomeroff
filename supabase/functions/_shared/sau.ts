@@ -83,14 +83,16 @@ export async function sauListAccounts(): Promise<SauAccount[]> {
   if (!r.ok) throw new Error(`sau accounts ${r.status}`);
   const j = await r.json().catch(() => ({}));
   const arr = Array.isArray(j?.data) ? j.data : [];
-  return arr.map((row: any[]) => ({
-    worker_id: Number(row[0]),
-    platform_code: Number(row[1]),
-    platform: CODE_PLATFORM[Number(row[1])] || "unknown",
-    name: String(row[2] || ""),
-    avatar: String(row[3] || ""),
-    status: Number(row[4] ?? 1),
-  }));
+  return arr
+    .map((row: any[]) => ({
+      worker_id: Number(row[0]),
+      platform_code: Number(row[1]),
+      platform: CODE_PLATFORM[Number(row[1])] || "unknown",
+      name: String(row[2] || ""),
+      avatar: String(row[3] || ""),
+      status: Number(row[4] ?? 1),
+    }))
+    .filter((account) => account.status === 1);
 }
 
 export async function sauDeleteAccount(workerId: number): Promise<void> {

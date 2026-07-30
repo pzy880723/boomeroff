@@ -9,6 +9,11 @@ test('批量发布兼容旧 SAU 接口要求的 JSON 数组', () => {
   assert.ok(source.includes('body: JSON.stringify([payload])'));
 });
 
+test('账号适配层只把 Worker 确认有效的账号返回给发布中心', () => {
+  const source = read('../supabase/functions/_shared/sau.ts');
+  assert.match(source, /\.filter\(\(account\)\s*=>\s*account\.status\s*===\s*1\)/);
+});
+
 test('新建发布只写入 Worker 队列，不在 Edge Function 内等待浏览器发布', () => {
   const source = read('../supabase/functions/dispatch-job-create/index.ts');
   assert.doesNotMatch(source, /sauUpload|sauPostVideoBatch|sauPostImageBatch/);
