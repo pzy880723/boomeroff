@@ -2359,6 +2359,7 @@ export type Database = {
       social_accounts: {
         Row: {
           account_name: string | null
+          account_remark: string | null
           avatar_url: string | null
           capabilities: Json
           content_kinds: string[]
@@ -2369,6 +2370,9 @@ export type Database = {
           last_check_at: string | null
           meta: Json
           platform: string
+          platform_account_id: string | null
+          profile_bio: string | null
+          profile_synced_at: string | null
           shop_id: string
           updated_at: string
           worker_account_id: number | null
@@ -2376,6 +2380,7 @@ export type Database = {
         }
         Insert: {
           account_name?: string | null
+          account_remark?: string | null
           avatar_url?: string | null
           capabilities?: Json
           content_kinds?: string[]
@@ -2386,6 +2391,9 @@ export type Database = {
           last_check_at?: string | null
           meta?: Json
           platform: string
+          platform_account_id?: string | null
+          profile_bio?: string | null
+          profile_synced_at?: string | null
           shop_id: string
           updated_at?: string
           worker_account_id?: number | null
@@ -2393,6 +2401,7 @@ export type Database = {
         }
         Update: {
           account_name?: string | null
+          account_remark?: string | null
           avatar_url?: string | null
           capabilities?: Json
           content_kinds?: string[]
@@ -2403,6 +2412,9 @@ export type Database = {
           last_check_at?: string | null
           meta?: Json
           platform?: string
+          platform_account_id?: string | null
+          profile_bio?: string | null
+          profile_synced_at?: string | null
           shop_id?: string
           updated_at?: string
           worker_account_id?: number | null

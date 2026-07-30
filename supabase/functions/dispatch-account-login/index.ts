@@ -7,6 +7,17 @@ import { canonicalPlatform, PLATFORM_CODE, SAU_BASE, SAU_TOKEN, sauListAccounts 
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// 只给"拿到响应头"设超时:fetch 在响应头到达时 resolve,之后清掉定时器,不会打断 SSE 长连。
+async function fetchWithHeaderTimeout(url: string, headers: Record<string, string>, ms: number) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { headers, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const url = new URL(req.url);
@@ -97,56 +108,65 @@ Deno.serve(async (req) => {
 
 
 
-  // 提前抓一次旧账号列表,用来在 success 时挑出"新增的那一条"
-  let beforeIds = new Set<number>();
-  try {
-    const before = await sauListAccounts();
-    beforeIds = new Set(before.filter(a => a.platform_code === code).map(a => a.worker_id));
-  } catch { /* noop */ }
-
+  // 候选顺序按 worker 实际实现收敛:/login_qrcode 优先,减少无效挂起
   const candidates = [
-    `/login?type=${code}`,
     `/login_qrcode?type=${code}`,
+    `/login?type=${code}`,
     `/loginQrcode?type=${code}`,
     `/account/login?type=${code}`,
   ];
   const baseHeaders: Record<string, string> = { Accept: "text/event-stream" };
   if (SAU_TOKEN) baseHeaders["X-Sau-Token"] = SAU_TOKEN;
-  let upstream: Response | null = null;
-  let lastStatus = 0;
-  const tried: string[] = [];
-  for (const path of candidates) {
-    try {
-      const r = await fetch(`${SAU_BASE}${path}`, { headers: baseHeaders });
-      tried.push(`${path}=${r.status}`);
-      if (r.ok && r.body) { upstream = r; break; }
-      lastStatus = r.status;
-      try { await r.body?.cancel(); } catch { /* noop */ }
-    } catch {
-      tried.push(`${path}=ERR`);
-    }
-  }
-  if (!upstream) {
-    return new Response(JSON.stringify({
-      error: `发布服务器登录接口异常(${lastStatus || 404})`,
-      hint: "发布服务器未开放扫码端点",
-      tried,
-    }), {
-      status: 502, headers: jsonHeaders,
-    });
-  }
 
   const enc = new TextEncoder();
   const dec = new TextDecoder();
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
-      const reader = upstream!.body!.getReader();
+      // 先把 SSE 建起来并推首个事件 + 心跳,探测阶段前端不会再"永远 connecting"
+      send({ step: "connecting", msg: "正在连接发布服务器" });
+      const heartbeat = setInterval(() => {
+        try { controller.enqueue(enc.encode(": ping\n\n")); } catch { /* closed */ }
+      }, 10_000);
+
+      // 提前抓一次旧账号列表,用来在 success 时挑出"新增的那一条"
+      let beforeIds = new Set<number>();
+      try {
+        const before = await sauListAccounts();
+        beforeIds = new Set(before.filter(a => a.platform_code === code).map(a => a.worker_id));
+      } catch { /* noop */ }
+
+      let upstream: Response | null = null;
+      let lastStatus = 0;
+      const tried: string[] = [];
+      for (const path of candidates) {
+        try {
+          // worker(Flask)可能不受理连接导致 fetch 永久 pending — 必须给响应头超时
+          const r = await fetchWithHeaderTimeout(`${SAU_BASE}${path}`, baseHeaders, 8000);
+          tried.push(`${path}=${r.status}`);
+          if (r.ok && r.body) { upstream = r; break; }
+          lastStatus = r.status;
+          try { await r.body?.cancel(); } catch { /* noop */ }
+        } catch (e) {
+          tried.push(`${path}=${(e as Error)?.name === "AbortError" ? "TIMEOUT" : "ERR"}`);
+        }
+      }
+      if (!upstream) {
+        send({
+          step: "fail",
+          msg: `发布服务器登录接口无响应(${lastStatus || 504}),请稍后重试`,
+          tried,
+        });
+        clearInterval(heartbeat);
+        try { controller.close(); } catch { /* noop */ }
+        return;
+      }
+
+      const reader = upstream.body!.getReader();
       let buf = "";
       let sawQr = false;
       let finished = false;
       try {
-        send({ step: "connecting", msg: "正在连接发布服务器" });
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
@@ -215,6 +235,7 @@ Deno.serve(async (req) => {
       } catch (e) {
         try { send({ step: "fail", msg: String((e as Error).message || e) }); } catch { /* noop */ }
       } finally {
+        clearInterval(heartbeat);
         try { controller.close(); } catch { /* noop */ }
       }
     },
