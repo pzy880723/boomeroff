@@ -14,20 +14,19 @@ import {
   pollRenderJob, clearSavedPick,
   type ActiveRenderJob,
 } from '@/lib/surpriseJob';
-import { createVideoJob } from '@/api/videoGeneration';
 import {
   startSurpriseScriptJob,
   pollSurpriseScriptJob,
   saveSurpriseScriptJob,
   discardSurpriseScriptJob,
   dismissSurpriseVideoJob,
+  renderSurpriseVideo,
 } from '@/api/surpriseScriptJob';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { toastVideoFailure } from '@/lib/toastVideoFailure';
 import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
-import { DirectorProgress } from '@/components/marketing/director/DirectorProgress';
 import { SURPRISE_DEFAULT_VIDEO_PREFS } from '@/lib/videoModelPrefs';
 
 // 惊喜一下固定真人写实,不暴露切换开关
@@ -188,22 +187,6 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   };
 
   const applyScriptState = (state: any) => {
-    if (state.task_kind === 'video') {
-      const job: ActiveRenderJob = {
-        jobId: state.job_id,
-        coverUrl: state.cover_url || null,
-        createdAt: state.created_at ? new Date(state.created_at).getTime() : Date.now(),
-        kind: 'director',
-      };
-      setActiveJob(job);
-      if (shopId) setActiveRenderJob(shopId, job);
-      setScriptJobId(null);
-      setPick(null);
-      setPicking(false);
-      stopScriptPolling();
-      return;
-    }
-
     setActiveJob(null);
     if (shopId) clearActiveRenderJob(shopId);
     setScriptJobId(state.job_id);
@@ -238,7 +221,13 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     if (!shopId) return;
     setPicking(true); setPick(null);
     try {
-      const state = await startSurpriseScriptJob(shopId, exclude, realism);
+      let state = await startSurpriseScriptJob(shopId, exclude, realism);
+      // 旧版本可能留下 Director 任务。它不再属于“BOOMER 帮我拍”，隐藏后创建一次成片脚本。
+      if (state.task_kind === 'video') {
+        await dismissSurpriseVideoJob(state.job_id);
+        state = await startSurpriseScriptJob(shopId, exclude, realism);
+      }
+      if (state.task_kind === 'video') throw new Error('旧视频任务清理失败，请稍后重试');
       applyScriptState(state);
       if (state.status === 'script_generating') pollScriptDraft(state.job_id);
     } catch (e: any) {
@@ -251,13 +240,18 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   useEffect(() => {
     if (!open || !shopId) return;
     const cachedJob = getActiveRenderJob(shopId);
-    if (cachedJob) {
+    if (cachedJob && cachedJob.kind !== 'director') {
       setActiveJob(cachedJob);
       setRenderPhase('running');
-      if (cachedJob.kind !== 'director') {
-        startPolling(cachedJob.jobId, shopId);
-        return () => { stopPolling(); stopScriptPolling(); };
-      }
+      startPolling(cachedJob.jobId, shopId);
+      return () => { stopPolling(); stopScriptPolling(); };
+    }
+    if (cachedJob?.kind === 'director') {
+      clearActiveRenderJob(shopId);
+      void dismissSurpriseVideoJob(cachedJob.jobId)
+        .catch((error) => console.warn('[surprise] dismiss old director task failed', error))
+        .finally(() => { void doPick(excluded); });
+      return () => { stopPolling(); stopScriptPolling(); };
     }
     // 数据库是当前任务的唯一真相。本地缓存只负责让弹窗先显示，随后必须和服务端对齐。
     void doPick(excluded);
@@ -310,27 +304,38 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     const useRes = overrides?.resolution || SURPRISE_DEFAULT_VIDEO_PREFS.resolution;
     setSubmitting(true);
     setRenderError(null);
-    // 员工一键成片路径:确认脚本后立刻落库成导演任务。
-    // 后续拍摄、文案、合成都由后台推进,不再依赖弹窗保持打开。
+    // 员工一键成片路径：保存店员看到的最终脚本后，直接提交 Seedance 15 秒 one-shot。
+    // “AI 视频”才使用多镜头 Director 流程。
     try {
-      const result = await createVideoJob({
+      if (scriptSaveRef.current) {
+        window.clearTimeout(scriptSaveRef.current);
+        scriptSaveRef.current = null;
+      }
+      if (scriptJobId) await saveSurpriseScriptJob(scriptJobId, pick.script);
+      const result = await renderSurpriseVideo({
         shop_id: shopId,
         script: pick.script,
         picked_assets: pick.assets,
-        persona: pick.persona,
         style: pick.style,
+        realism,
         model: useModel,
         resolution: useRes,
         prompt_overrides: pick.prompt_overrides,
-        user_prompt: pick.picked?.summary || pick.script?.continuous_dialogue || 'BOOMER 探店短片',
-        draft_job_id: scriptJobId || undefined,
+        face_pipeline: overrides?.face_pipeline,
       });
+      if (scriptJobId) {
+        try {
+          await discardSurpriseScriptJob(scriptJobId);
+        } catch (error) {
+          console.warn('[surprise] render started but draft cleanup failed', error);
+        }
+      }
       const job: ActiveRenderJob = {
         jobId: result.job_id,
         coverUrl: pick.picked.cover_url,
         createdAt: Date.now(),
-        kind: 'director',
-        segmentTotal: result.shot_count || 3,
+        kind: 'legacy',
+        segmentTotal: result.segment_total || 1,
       };
       setActiveRenderJob(shopId, job);
       clearSavedPick(shopId);
@@ -338,12 +343,12 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       stopScriptPolling();
       setActiveJob(job);
       setRenderPhase('queued');
-      setProgress({ done: 0, total: result.shot_count || 3 });
+      setProgress({ done: 0, total: result.segment_total || 1 });
       setRenderError(null);
       toast.success('已开拍 · 关掉页面也会在后台继续跑');
     } catch (e: any) {
       const message = e?.message || '15 秒视频生成任务启动失败';
-      console.error('[surprise] director path failed', e);
+      console.error('[surprise] one-shot path failed', e);
       setRenderError(message);
       toast.error(message);
     } finally { setSubmitting(false); }
@@ -401,7 +406,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       clearActiveRenderJob(shopId);
       clearSavedPick(shopId);
     }
-    if (previousJobId) {
+    if (previousJobId && activeJob?.kind === 'director') {
       try {
         await dismissSurpriseVideoJob(previousJobId);
       } catch (error) {
@@ -433,22 +438,14 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         </DialogHeader>
 
         {activeJob ? (
-          activeJob.kind === 'director' ? (
-            <DirectorProgress
-              jobId={activeJob.jobId}
-              onClose={() => onOpenChange(false)}
-              onReset={resetToPicker}
-            />
-          ) : (
-            <RenderingBody
-              job={activeJob} phase={renderPhase} progress={progress}
-              error={renderError}
-              onApplyFix={handleFix}
-              busy={submitting}
-              onClose={() => onOpenChange(false)}
-              onReset={resetToPicker}
-            />
-          )
+          <RenderingBody
+            job={activeJob} phase={renderPhase} progress={progress}
+            error={renderError}
+            onApplyFix={handleFix}
+            busy={submitting}
+            onClose={() => onOpenChange(false)}
+            onReset={resetToPicker}
+          />
         ) : picking || !pick ? (
           <div className="py-16 px-4 flex flex-col items-center gap-3 text-sm text-muted-foreground">
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
