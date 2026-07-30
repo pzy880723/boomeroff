@@ -17,9 +17,28 @@
 export const SAU_BASE = (Deno.env.get("SAU_WORKER_URL") || "").replace(/\/+$/, "");
 export const SAU_TOKEN = Deno.env.get("SAU_WORKER_TOKEN") || "";
 
+// 平台别名归一:前端/ERP 历史上会传 wechat_channels,canonical 一律 wechat_video。
+export const PLATFORM_ALIAS: Record<string, string> = {
+  wechat_channels: "wechat_video",
+  wechat_video: "wechat_video",
+};
+
+export function canonicalPlatform(input: string): string {
+  const key = String(input || "").trim().toLowerCase();
+  return PLATFORM_ALIAS[key] || key;
+}
+
+// 账号 cookie 健康状态:历史数据写过 active,新链路统一写 valid,读取两者都认。
+export const HEALTHY_COOKIE_STATUSES = ["active", "valid"] as const;
+
+export function isHealthyCookieStatus(status: unknown): boolean {
+  return HEALTHY_COOKIE_STATUSES.includes(String(status || "").trim().toLowerCase() as any);
+}
+
 export const PLATFORM_CODE: Record<string, number> = {
   xhs: 1,
   wechat_video: 2,
+  wechat_channels: 2,
   douyin: 3,
   kuaishou: 4,
   tiktok: 5,
