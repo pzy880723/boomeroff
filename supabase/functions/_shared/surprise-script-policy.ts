@@ -65,6 +65,11 @@ export function validateSurpriseScript(
   options: SurpriseValidationOptions = {},
 ): SurpriseValidationResult {
   const script = input || {};
+  const relaxed = options.relaxed === true;
+  const clipMin = relaxed ? 8 : 13;
+  const clipMax = relaxed ? 40 : 28;
+  const totalMin = relaxed ? 78 : SURPRISE_MIN_CN;
+  const totalMax = relaxed ? 112 : SURPRISE_MAX_CN;
   const clips = [script.hook, ...(Array.isArray(script.scenes) ? script.scenes : []), script.outro];
   const errors: string[] = [];
   if (clips.length !== 5) errors.push(`必须恰好 5 段，当前 ${clips.length} 段`);
@@ -79,16 +84,19 @@ export function validateSurpriseScript(
       errors.push(`第 ${index + 1} 段 action 必须明确边表演边连续说话，不能停顿`);
     }
     const clipLength = chineseDialogueLength(clip?.dialogue);
-    if (clipLength < 18 || clipLength > 21) errors.push(`第 ${index + 1} 段对白必须 18-21 个汉字，当前 ${clipLength}`);
+    if (clipLength < clipMin || clipLength > clipMax) {
+      errors.push(`第 ${index + 1} 段对白必须 ${clipMin}-${clipMax} 个汉字，当前 ${clipLength}`);
+    }
   });
 
   const continuous = normalizeComparable(script.continuous_dialogue);
   const joined = normalizeComparable(clips.slice(0, 5).map((clip) => clip?.dialogue || '').join('，'));
   const dialogues = clips.slice(0, 5).map((clip) => normalizeComparable(clip?.dialogue || ''));
   const dialogueLength = chineseDialogueLength(continuous || joined);
-  if (dialogueLength < SURPRISE_MIN_CN || dialogueLength > SURPRISE_MAX_CN) {
-    errors.push(`continuous_dialogue 必须 ${SURPRISE_MIN_CN}-${SURPRISE_MAX_CN} 个汉字，当前 ${dialogueLength}`);
+  if (dialogueLength < totalMin || dialogueLength > totalMax) {
+    errors.push(`continuous_dialogue 必须 ${totalMin}-${totalMax} 个汉字，当前 ${dialogueLength}`);
   }
+
   if (!continuous) errors.push('continuous_dialogue 为空');
   if (continuous && joined && continuous !== joined) errors.push('五段 dialogue 连接后必须与 continuous_dialogue 完全一致');
   clips.slice(0, 5).forEach((clip, index) => {
