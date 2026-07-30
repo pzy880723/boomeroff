@@ -49,7 +49,7 @@ function normStringArray(v: unknown): string[] {
 }
 
 async function findAuthUserByEmail(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   email: string,
 ): Promise<AuthUserInfo | null> {
   const target = email.toLowerCase();
@@ -71,7 +71,7 @@ async function findAuthUserByEmail(
 }
 
 async function findAuthUserByPhone(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   phone: string,
 ): Promise<AuthUserInfo | null> {
   let page = 1;
@@ -95,7 +95,7 @@ async function findAuthUserByPhone(
 }
 
 async function findAuthUserByProfilePhone(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   phone: string,
 ): Promise<AuthUserInfo | null> {
   const { data, error } = await admin
@@ -118,7 +118,7 @@ async function findAuthUserByProfilePhone(
 }
 
 async function getAuthUserInfo(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   userId: string,
 ): Promise<AuthUserInfo | null> {
   const { data, error } = await admin.auth.admin.getUserById(userId);
@@ -127,7 +127,7 @@ async function getAuthUserInfo(
 }
 
 async function deleteCreatedUserQuietly(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   userId: string,
 ) {
   try {
@@ -143,7 +143,7 @@ async function deleteCreatedUserQuietly(
 }
 
 async function claimIfFree(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   aigcUserId: string,
   erpUserId: string,
 ): Promise<"free" | "same" | "conflict"> {
