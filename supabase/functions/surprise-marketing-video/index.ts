@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
       const quality = resolveSeedanceQuality(body.model, body.resolution);
       const renderBody: any = {
         script: bindSurpriseReferences(normalizeSurpriseScript({
-          ...body.script,
+          ...submittedScript,
           video_type: 'store_tour',
           surprise_mode: true,
           intent: 'viral_store_tour',
@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
           image_descriptions: submittedDescriptions,
           reference_manifest: submittedDescriptions,
         }), submittedImageUrls.length),
-        style: body.style,
+        style: submittedStyle,
         shop_id: shopId,
         render_strategy: 'one_shot',
         model: quality.model.id,
