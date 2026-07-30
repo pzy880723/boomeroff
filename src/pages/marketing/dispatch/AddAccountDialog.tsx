@@ -191,8 +191,8 @@ export default function AddAccountDialog({ open, onOpenChange, shopId, onAdded }
         {step === 'syncing' && (
           <div className="flex flex-col items-center gap-3 py-8">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <div className="text-sm">正在同步账号</div>
-            <div className="text-[11px] text-muted-foreground text-center px-4">{statusMsg || '手机端已确认，正在写入账号'}</div>
+            <div className="text-sm">正在保存账号关联</div>
+            <div className="text-[11px] text-muted-foreground text-center px-4">{statusMsg || '手机端已确认，正在关联到当前门店'}</div>
           </div>
         )}
         {step === 'expired' && (

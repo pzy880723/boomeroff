@@ -22,6 +22,10 @@ export interface SocialAccount {
   platform: string;
   account_name: string | null;
   avatar_url: string | null;
+  profile_bio?: string | null;
+  platform_account_id?: string | null;
+  account_remark?: string | null;
+  profile_synced_at?: string | null;
   worker_account_id: number | null;
   worker_account_key?: string | null;
   cookie_status: string;

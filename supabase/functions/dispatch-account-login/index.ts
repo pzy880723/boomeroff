@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
             } else if (status === "scanned" || status === "scan" || status === "confirmed" || status === "confirm") {
               send({ step: status === "scanned" || status === "scan" ? "scanned" : "syncing", msg: j.message || j.msg });
             } else if (status === "success" || status === "succeeded" || status === "done") {
-              send({ step: "syncing", msg: "手机端已确认,正在同步账号" });
+              send({ step: "syncing", msg: "手机端已确认，正在读取主页资料并保存账号关联" });
               let acct = normalizeWorkerAccount(j, code);
               if (!acct) acct = await findAccountAfterLogin(code, beforeIds);
               if (acct) {
@@ -206,17 +206,31 @@ Deno.serve(async (req) => {
                   worker_account_key: `${platform}:${acct.worker_id}`,
                   account_name: acct.name || null,
                   avatar_url: acct.avatar || null,
+                  profile_bio: acct.bio || null,
+                  platform_account_id: acct.platform_account_id || null,
+                  profile_synced_at: acct.name ? new Date().toISOString() : null,
                   cookie_status: acct.status === 0 ? "expired" : "valid",
                   created_by: userId,
                   last_check_at: new Date().toISOString(),
-                  meta: { worker_platform_code: acct.platform_code, source: "sau_worker" },
+                  meta: {
+                    worker_platform_code: acct.platform_code,
+                    platform_user_id: acct.platform_user_id || null,
+                    source: "sau_worker",
+                  },
                 }, { onConflict: "shop_id,platform,worker_account_key" });
                 if (error) {
                   finished = true;
-                  send({ step: "fail", msg: `账号已登录,但写入素材系统失败:${error.message}` });
+                  send({ step: "fail", msg: `账号已登录,但保存账号关联失败:${error.message}` });
                 } else {
                   finished = true;
-                  send({ step: "success", account_id: acct.worker_id, name: acct.name, avatar: acct.avatar });
+                  send({
+                    step: "success",
+                    account_id: acct.worker_id,
+                    name: acct.name,
+                    avatar: acct.avatar,
+                    bio: acct.bio,
+                    platform_account_id: acct.platform_account_id,
+                  });
                 }
               } else {
                 finished = true;
@@ -260,6 +274,9 @@ function normalizeWorkerAccount(raw: any, platformCode: number) {
     platform_code: Number(raw.platform_code ?? raw.type ?? platformCode),
     name: String(raw.name ?? raw.account_name ?? raw.nickname ?? ""),
     avatar: String(raw.avatar ?? raw.avatar_url ?? ""),
+    bio: String(raw.bio ?? raw.profile_bio ?? raw.description ?? ""),
+    platform_account_id: String(raw.platform_account_id ?? raw.red_id ?? ""),
+    platform_user_id: String(raw.platform_user_id ?? raw.user_id ?? ""),
     status: Number(raw.status_code ?? raw.cookie_status ?? 1),
   };
 }

@@ -12,6 +12,9 @@ verify_jwt = false
 [functions.dispatch-account-login]
 verify_jwt = false
 
+[functions.dispatch-account-profile]
+verify_jwt = true
+
 [functions.director-create-job]
 verify_jwt = true
 

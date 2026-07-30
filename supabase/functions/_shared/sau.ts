@@ -122,6 +122,36 @@ export async function sauDeleteAccount(workerId: number): Promise<void> {
   }
 }
 
+export interface SauAccountProfile {
+  name: string;
+  avatar: string;
+  bio: string;
+  platform_account_id: string;
+  platform_user_id: string;
+}
+
+export async function sauGetAccountProfile(
+  platform: string,
+  workerId: number,
+): Promise<SauAccountProfile> {
+  const query = new URLSearchParams({
+    platform,
+    id: String(workerId),
+  });
+  const r = await sauFetch(`/getAccountProfile?${query.toString()}`);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j?.data?.name) {
+    throw new Error(j?.msg || `读取${PLATFORM_LABEL[platform] || platform}主页资料失败`);
+  }
+  return {
+    name: String(j.data.name || ""),
+    avatar: String(j.data.avatar || ""),
+    bio: String(j.data.bio || ""),
+    platform_account_id: String(j.data.platform_account_id || ""),
+    platform_user_id: String(j.data.platform_user_id || ""),
+  };
+}
+
 // ========== 上传 ==========
 
 export interface SauUploadResult { path: string; size: number; }
