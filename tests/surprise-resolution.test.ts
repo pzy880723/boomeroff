@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { buildSurpriseRenderBody, SURPRISE_OUTPUT_RESOLUTION } from '../src/api/surpriseScriptJob';
 import { SURPRISE_DEFAULT_VIDEO_PREFS } from '../src/lib/videoModelPrefs';
