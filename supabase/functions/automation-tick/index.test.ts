@@ -470,3 +470,50 @@ Deno.test("pickCandidate 直接返回被选中候选的 fact_check", () => {
   assertEquals(mod.pickCandidate("xhs", [a, b])?.fact_check, { supported: true, id: "b" });
   assertEquals(mod.pickCandidate("xhs", [a]), null);
 });
+
+// ---------------- 发布质量：标签权威 + 短标题语义完整 ----------------
+
+Deno.test("最终 tags 严格等于 preset.fixed_tags，模型动态标签被丢弃", () => {
+  const r = mod.applyPresetStatics(
+    "xhs",
+    { title: "t", body: "b", tags: ["限定好物", "优惠", "限量"] },
+    { fixed_tags: ["#上海探店", "中古", "BOOMEROFF", "中古"], shop_poi_map: PRESET_BASE.shop_poi_map },
+    "shop-1",
+  );
+  assert(r.ok, JSON.stringify(r));
+  assertEquals((r as any).copy.tags, ["上海探店", "中古", "BOOMEROFF"]);
+});
+
+Deno.test("buildPlatformCopies 输出的 tags 只有预设三项", async () => {
+  const supa = makeSupa((_n, o) => ({
+    data: { candidates: [{ title: "南京西路的中古杂货铺", body: "正文".repeat(40), hashtags: ["限定好物", "优惠"], fact_check: FACT_OK }] },
+  }));
+  const preset = { ...PRESET_BASE, fixed_tags: ["上海探店", "中古", "BOOMEROFF"] };
+  const r: any = await mod.buildPlatformCopies(supa, {
+    scoped: [account("xhs", preset), account("wechat_video", preset)],
+    asset: ASSET, task: TASK, shopId: "shop-1",
+  });
+  assert(r.ok, JSON.stringify(r));
+  assertEquals(r.platformCopies.xhs.tags, ["上海探店", "中古", "BOOMEROFF"]);
+  assertEquals(r.platformCopies.wechat_video.tags, ["上海探店", "中古", "BOOMEROFF"]);
+});
+
+Deno.test("deriveShortTitle 取语义完整片段", () => {
+  assertEquals(mod.deriveShortTitle(null, null, "偶遇南京西路B1层，藏在转角的中古杂货铺"), "偶遇南京西路B1层");
+  assertEquals(mod.deriveShortTitle("门店短标题", null, "任意"), "门店短标题");
+  assertEquals(mod.deriveShortTitle(null, "候选短标题吧", "任意标题内容"), "候选短标题吧");
+  assertEquals(mod.deriveShortTitle(null, null, "南京西路寻宝记"), "南京西路寻宝记");
+  assertEquals([...mod.deriveShortTitle(null, null, "偶遇南京西路B1层，藏在转角的中古杂货铺")].length <= 16, true);
+});
+
+Deno.test("视频号 short_title 不再半句硬截断", () => {
+  const r: any = mod.applyPresetStatics(
+    "wechat_video",
+    { title: "偶遇南京西路B1层，藏在转角的中古杂货铺", body: "b", tags: ["x"] },
+    { fixed_tags: ["上海探店", "中古", "BOOMEROFF"], video_annotation: "含AI生成内容", shop_poi_map: PRESET_BASE.shop_poi_map },
+    "shop-1",
+  );
+  assert(r.ok, JSON.stringify(r));
+  assertEquals(r.copy.short_title, "偶遇南京西路B1层");
+  assertEquals(r.copy.tags, ["上海探店", "中古", "BOOMEROFF"]);
+});
