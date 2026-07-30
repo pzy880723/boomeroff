@@ -5,8 +5,7 @@ const config: CapacitorConfig = {
   appName: 'BOOMER GO',
   webDir: 'dist',
   server: {
-    url: 'https://bef32724-503e-467a-af03-2062176cf921.lovableproject.com?forceHideBadge=true',
-    cleartext: true,
+    url: 'https://ai.boomeroff.com',
   },
 };
 
