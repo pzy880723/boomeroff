@@ -57,7 +57,47 @@ async function isVerifiedServiceRoleToken(SUPABASE_URL: string, token: string): 
   }
 }
 
-Deno.serve(async (req) => {
+/** 第二道 AI 事实审校。任何失败/解析异常都返回 null(调用方必须判不通过)。 */
+export async function runFactReview(
+  apiKey: string,
+  factsText: string,
+  allowedBrands: string[],
+  candidate: { title?: string; body?: string; hashtags?: string[] },
+): Promise<{ supported: boolean; unsupported_claims: string[] } | null> {
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        temperature: 0,
+        messages: [
+          { role: "system", content: buildFactReviewPrompt(factsText, allowedBrands) },
+          {
+            role: "user",
+            content: JSON.stringify({
+              title: candidate?.title || "",
+              body: candidate?.body || "",
+              tags: candidate?.hashtags || [],
+            }),
+          },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      console.error("[copy] fact review http", res.status);
+      await res.text();
+      return null;
+    }
+    const data = await res.json();
+    return parseFactReview(data?.choices?.[0]?.message?.content || "");
+  } catch (e) {
+    console.error("[copy] fact review error", e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+export async function handleCopyRequest(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
