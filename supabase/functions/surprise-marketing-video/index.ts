@@ -128,12 +128,30 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
     // ====== 提交模式:前端回传 preview 时生成的 script,直接渲染 ======
-    if (!preview && body.script && body.picked_assets && body.style) {
-      const submittedAssets = Array.isArray(body.picked_assets) ? body.picked_assets : [];
-      const submittedReferences = submittedAssets
-        .map((asset: any) => ({ asset, url: String(asset?.url || asset?.output_url || '').trim() }))
-        .filter((entry: any) => Boolean(entry.url))
-        .slice(0, 9);
+    // 只要 preview=false 且带了脚本,就必须走「快速提交」;
+    // 绝不能因为缺 style / picked_assets 字段名不同而回落到「重新跑全流程」——
+    // 那条路要 100s+,线上网关会先超时 5xx,用户看到「AI 服务暂时不可用」,job 也拿不回来。
+    const submittedScript = body.script && typeof body.script === 'object' ? body.script : null;
+    const hasScriptShape = !!submittedScript
+      && !!submittedScript.hook
+      && Array.isArray(submittedScript.scenes)
+      && !!submittedScript.outro;
+    if (!preview && hasScriptShape) {
+      const rawAssets = Array.isArray(body.picked_assets)
+        ? body.picked_assets
+        : (Array.isArray(body.assets) ? body.assets : []);
+      const scriptImageUrls: string[] = Array.isArray(submittedScript.image_urls)
+        ? submittedScript.image_urls.filter((u: any) => typeof u === 'string' && u.trim())
+        : [];
+      const submittedReferences = (rawAssets.length
+        ? rawAssets.map((asset: any) => ({
+            asset,
+            url: String(
+              (typeof asset === 'string' ? asset : (asset?.url || asset?.output_url || asset?.image_url || '')),
+            ).trim(),
+          }))
+        : scriptImageUrls.map((url: string) => ({ asset: {}, url: url.trim() }))
+      ).filter((entry: any) => Boolean(entry.url)).slice(0, 9);
       const submittedImageUrls = submittedReferences.map((entry: any) => entry.url);
       if (!submittedImageUrls.length) {
         return json({ ok: false, error: '惊喜一下必须选择至少一张店铺实景图' });
@@ -143,10 +161,14 @@ Deno.serve(async (req) => {
         summary: String(asset?.summary || (asset?.role === 'storefront' ? '门头和开放式店面' : `店内实景${index + 1}`)).slice(0, 160),
         role: asset?.role === 'storefront' ? 'storefront' : 'scene',
       }));
+      const submittedStyle = (typeof body.style === 'string' && body.style)
+        || (typeof submittedScript.style === 'string' && submittedScript.style)
+        || 'energetic';
+      console.log(`[surprise submit] refs=${submittedImageUrls.length} style=${submittedStyle} assets_field=${Array.isArray(body.picked_assets) ? 'picked_assets' : (Array.isArray(body.assets) ? 'assets' : 'script.image_urls')}`);
       const quality = resolveSeedanceQuality(body.model, body.resolution);
       const renderBody: any = {
         script: bindSurpriseReferences(normalizeSurpriseScript({
-          ...body.script,
+          ...submittedScript,
           video_type: 'store_tour',
           surprise_mode: true,
           intent: 'viral_store_tour',
@@ -154,7 +176,7 @@ Deno.serve(async (req) => {
           image_descriptions: submittedDescriptions,
           reference_manifest: submittedDescriptions,
         }), submittedImageUrls.length),
-        style: body.style,
+        style: submittedStyle,
         shop_id: shopId,
         render_strategy: 'one_shot',
         model: quality.model.id,
@@ -174,10 +196,14 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json', Authorization: auth },
         body: JSON.stringify(renderBody),
       });
-      const renderData = await renderRes.json().catch(() => ({}));
+      const renderText = await renderRes.text();
+      let renderData: any = {};
+      try { renderData = JSON.parse(renderText); } catch { renderData = {}; }
       if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {
-        return json({ ok: false, error: renderData?.error || '渲染提交失败' });
+        console.error(`[surprise submit] render failed status=${renderRes.status} body=${renderText.slice(0, 400)}`);
+        return json({ ok: false, error: renderData?.error || `渲染提交失败(${renderRes.status})` });
       }
+      console.log(`[surprise submit] job=${renderData.job_id}`);
       return json({ ok: true, job_id: renderData.job_id, segment_total: renderData.segment_total || 1 });
     }
 
