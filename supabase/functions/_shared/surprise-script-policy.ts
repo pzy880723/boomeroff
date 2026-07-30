@@ -66,10 +66,10 @@ export function validateSurpriseScript(
 ): SurpriseValidationResult {
   const script = input || {};
   const relaxed = options.relaxed === true;
-  const clipMin = relaxed ? 8 : 13;
-  const clipMax = relaxed ? 40 : 28;
-  const totalMin = relaxed ? 75 : SURPRISE_MIN_CN;
-  const totalMax = relaxed ? 112 : SURPRISE_MAX_CN;
+  const clipMin = relaxed ? 6 : 8;
+  const clipMax = relaxed ? 22 : 18;
+  const totalMin = relaxed ? 52 : SURPRISE_MIN_CN;
+  const totalMax = SURPRISE_MAX_CN;
   const clips = [script.hook, ...(Array.isArray(script.scenes) ? script.scenes : []), script.outro];
   const errors: string[] = [];
   if (clips.length !== 5) errors.push(`必须恰好 5 段，当前 ${clips.length} 段`);
