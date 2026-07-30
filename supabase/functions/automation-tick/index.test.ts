@@ -162,13 +162,14 @@ Deno.test("视频号无 category 但真实字段齐全可通过；点评缺商�
 });
 
 Deno.test("候选不合格 / 调用失败都不创建 job", async () => {
-  let supa = makeSupa(() => ({ data: { candidates: [{ title: "这个标题非常非常非常非常非常非常长超过限制了", body: "x", hashtags: ["a"] }] } }));
+  let supa = makeSupa(() => ({ data: { candidates: [{ title: "这个标题非常非常非常非常非常非常长超过限制了", body: "x", hashtags: ["a"], fact_check: FACT_OK }] } }));
   let r = await mod.buildPlatformCopies(supa, { scoped: [account("xhs")], asset: ASSET, task: TASK, shopId: "shop-1" });
   assertEquals((r as any).error, "xhs_copy_invalid");
 
-  supa = makeSupa(() => ({ data: { candidates: [{ title: "标题", body: "正文", hashtags: [] }] } }));
+  supa = makeSupa(() => ({ data: { candidates: [{ title: "标题", body: "正文", hashtags: [], fact_check: FACT_OK }] } }));
   r = await mod.buildPlatformCopies(supa, { scoped: [account("xhs")], asset: ASSET, task: TASK, shopId: "shop-1" });
   assertEquals((r as any).error, "xhs_copy_invalid");
+
 
   supa = makeSupa(() => ({ error: { message: "boom" } }));
   r = await mod.buildPlatformCopies(supa, { scoped: [account("xhs")], asset: ASSET, task: TASK, shopId: "shop-1" });
