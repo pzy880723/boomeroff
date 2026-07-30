@@ -39,13 +39,16 @@ const ASSET = {
 };
 const TASK = { id: "task-1", name: "每日探店", shop_id: "shop-1", config: { content_strategy: "记录逛店" } };
 
-function makeSupa(invokeImpl: (name: string, opts: any) => any) {
+function makeSupa(invokeImpl: (name: string, opts: any) => any, script: any = null) {
   const inserted: any[] = [];
   return {
     inserted,
     functions: { invoke: async (name: string, opts: any) => invokeImpl(name, opts) },
     from(table: string) {
-      return {
+      const q: any = {
+        select: () => q,
+        eq: () => q,
+        maybeSingle: async () => ({ data: table === "marketing_video_jobs" ? { script } : null, error: null }),
         insert(rows: any) {
           inserted.push({ table, rows });
           return {
@@ -54,15 +57,19 @@ function makeSupa(invokeImpl: (name: string, opts: any) => any) {
             error: null,
           } as any;
         },
-      } as any;
+      };
+      return q as any;
     },
   } as any;
 }
 
+const FACT_OK = { supported: true, unsupported_claims: [], checker: "ai" };
+
 function okCandidate(platform: string) {
   const title = platform === "dianping" ? "中古杂货铺逛一圈超治愈" : "翻筐两小时的快乐";
-  return { candidates: [{ title, body: "正文内容".repeat(20), hashtags: ["#中古", "上海探店"] }] };
+  return { candidates: [{ title, body: "正文内容".repeat(20), hashtags: ["#中古", "上海探店"], fact_check: FACT_OK }] };
 }
+
 
 Deno.test("参考图优先 input_image_urls，最多 9 张", () => {
   assertEquals(mod.collectReferenceImages(ASSET), ["https://cdn/1.jpg", "https://cdn/2.jpg"]);
