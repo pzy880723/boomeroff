@@ -70,8 +70,8 @@ test('automation：service key 或可验证 service_role JWT + mode=automation �
   const s = fn();
   assert.match(s, /timingSafeEqualString\(bearer, SERVICE_KEY\)/);
   assert.match(s, /timingSafeEqualString\(apiKey, SERVICE_KEY\)/);
-  assert.match(s, /isVerifiedServiceRoleJwt\(SUPABASE_URL, ANON, bearer\)/);
-  assert.match(s, /data\.claims\.role === "service_role"/);
+  assert.match(s, /isVerifiedServiceRoleToken\(SUPABASE_URL, bearer\)/);
+  assert.match(s, /\/auth\/v1\/admin\/users\?page=1&per_page=1/);
   assert.match(s, /body\?\.mode === "automation"/);
   assert.match(s, /if \(!isAutomationMode\) return json\(\{ error: "未授权" \}, 401\)/);
   // 自动化分支必须在插入 marketing_assets 之前 return
@@ -90,7 +90,7 @@ test('automation：只接受 service-role 的 Authorization Bearer 或 apikey，
   assert.match(s, /const isTrustedService = isDirectServiceKey \|\| isCompatibleServiceJwt/);
   assert.doesNotMatch(s, /apiKey === ANON/);
   assert.doesNotMatch(s, /bearer === ANON/);
-  assert.doesNotMatch(s, /data\.claims\.role !== "anon"/);
+  assert.doesNotMatch(s, /getUser\(\).*service/i);
   assert.match(s, /if \(isAutomationMode\) return json\(\{ error: "未授权" \}, 401\)/);
 });
 
