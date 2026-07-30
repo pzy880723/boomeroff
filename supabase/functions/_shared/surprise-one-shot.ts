@@ -471,7 +471,7 @@ export function compileSurpriseOneShotPrompt(options: {
   const beats = script.visual_beats || deriveVisualBeats(script, continuous);
 
   const lines: string[] = [];
-  lines.push('【生成任务】严格生成一条15秒、9:16、真人写实、高密度门店种草短视频。全片使用同一条连续中文口播音轨，人物从头说到尾，切镜时声音继续，不停顿、不重开、不重复。');
+  lines.push('【生成任务】严格生成一条15秒、9:16、真人写实、门店种草短视频。全片使用同一条连续中文口播音轨，人物从头说到尾，切镜时人声延续，不重开、不重复、不吞字。');
   lines.push(`【整体风格】${compactText(options.styleLabel || '高能真实探店 vlog，手持跟拍，明亮自然，节奏紧凑。', 180)}`);
   if (options.shopContext) lines.push(`【门店事实】${compactText(options.shopContext, 900)}`);
 
