@@ -338,10 +338,13 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     total_duration_s: 15,
     aspect: '9:16',
     one_shot_prompt: '',
-    speech_start_s: 0.1,
-    speech_end_s: 14.9,
-    speech_rate: 'very_fast_clear',
-    max_silence_s: 0.1,
+    speech_start_s: 0.2,
+    speech_end_s: 14.5,
+    speech_rate: 'natural_fast_clear',
+    speech_cpm_min: 270,
+    speech_cpm_max: 320,
+    min_pause_s: 0.15,
+    max_silence_s: 0.35,
   };
 
   const clips = [nextScript.hook, ...nextScript.scenes, nextScript.outro];
