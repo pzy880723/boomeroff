@@ -282,51 +282,61 @@ export async function buildPlatformCopies(
     const poi = poiMap && typeof poiMap === "object" ? poiMap[shopId] : null;
     const verifiedFacts = buildVerifiedFacts({ asset, task, script, poi, shopId });
 
-    let res: any;
-    try {
-      res = await supa.functions.invoke("generate-marketing-copy", {
-        body: {
-          mode: "automation",
-          platform,
-          shop_id: shopId,
-          image_urls: imageUrls,
-          content_context: contentContext,
-          preset,
-          strict_facts: true,
-          verified_facts: verifiedFacts,
-          allowed_brand_names: ALLOWED_BRAND_NAMES,
-        },
-      });
-    } catch (e) {
-      return { ok: false, error: `${platform}_copy_failed: ${String((e as Error).message || e)}` };
-    }
-    if (res?.error || !res?.data?.candidates) {
-      let msg = String(res?.error?.message || res?.error || "no_candidates");
-      let detail: any = null;
-      const ctx = (res?.error as any)?.context;
-      if (ctx && typeof ctx.clone === "function") {
-        try {
-          detail = await ctx.clone().json();
-          if (detail?.error) msg = String(detail.error);
-        } catch { /* 非 JSON 忽略 */ }
+    // 最多两次尝试：候选可能因标题超长而全部不可用,允许再生成一轮
+    let picked: any = null;
+    let lastError: any = null;
+    for (let attempt = 0; attempt < 2 && !picked; attempt++) {
+      let res: any;
+      try {
+        res = await supa.functions.invoke("generate-marketing-copy", {
+          body: {
+            mode: "automation",
+            platform,
+            shop_id: shopId,
+            image_urls: imageUrls,
+            content_context: contentContext,
+            preset,
+            strict_facts: true,
+            verified_facts: verifiedFacts,
+            allowed_brand_names: ALLOWED_BRAND_NAMES,
+            retry_attempt: attempt,
+          },
+        });
+      } catch (e) {
+        return { ok: false, error: `${platform}_copy_failed: ${String((e as Error).message || e)}` };
       }
-      if (msg.includes("no_fact_safe_candidate")) {
-        return {
-          ok: false,
-          error: `${platform}_copy_fact_check_failed`,
-          fact_check_rejected: detail?.rejected ?? null,
-        } as any;
+      if (res?.error || !res?.data?.candidates) {
+        let msg = String(res?.error?.message || res?.error || "no_candidates");
+        let detail: any = null;
+        const ctx = (res?.error as any)?.context;
+        if (ctx && typeof ctx.clone === "function") {
+          try {
+            detail = await ctx.clone().json();
+            if (detail?.error) msg = String(detail.error);
+          } catch { /* 非 JSON 忽略 */ }
+        }
+        if (msg.includes("no_fact_safe_candidate")) {
+          lastError = {
+            ok: false,
+            error: `${platform}_copy_fact_check_failed`,
+            fact_check_rejected: detail?.rejected ?? null,
+          };
+          continue;
+        }
+        return { ok: false, error: `${platform}_copy_failed: ${msg}` };
       }
-      return { ok: false, error: `${platform}_copy_failed: ${msg}` };
+
+      // 只接受通过事实审校的候选
+      const factSafe = (res.data.candidates as any[]).filter((c) => c?.fact_check?.supported === true);
+      if (!factSafe.length) {
+        lastError = { ok: false, error: `${platform}_copy_fact_check_failed` };
+        continue;
+      }
+      picked = pickCandidate(platform, factSafe);
+      if (!picked) lastError = { ok: false, error: `${platform}_copy_invalid` };
     }
+    if (!picked) return (lastError ?? { ok: false, error: `${platform}_copy_invalid` }) as any;
 
-
-    // 只接受通过事实审校的候选
-    const factSafe = (res.data.candidates as any[]).filter((c) => c?.fact_check?.supported === true);
-    if (!factSafe.length) return { ok: false, error: `${platform}_copy_fact_check_failed` };
-
-    const picked = pickCandidate(platform, factSafe);
-    if (!picked) return { ok: false, error: `${platform}_copy_invalid` };
 
     // 保留被选中候选自己的审校摘要,避免候选与 fact_check 错配
     const applied = applyPresetStatics(platform, { ...picked }, presetRaw, shopId);
