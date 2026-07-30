@@ -13,6 +13,16 @@ import {
 } from "../_shared/brand-context.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
+import {
+  ALLOWED_BRAND_DEFAULT,
+  buildFactReviewPrompt,
+  buildStrictFactsBlock,
+  deterministicFactGuard,
+  formatVerifiedFacts,
+  parseFactReview,
+  redactThirdPartyNames,
+} from "./fact-guard.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,7 +58,47 @@ async function isVerifiedServiceRoleToken(SUPABASE_URL: string, token: string): 
   }
 }
 
-Deno.serve(async (req) => {
+/** 第二道 AI 事实审校。任何失败/解析异常都返回 null(调用方必须判不通过)。 */
+export async function runFactReview(
+  apiKey: string,
+  factsText: string,
+  allowedBrands: string[],
+  candidate: { title?: string; body?: string; hashtags?: string[] },
+): Promise<{ supported: boolean; unsupported_claims: string[] } | null> {
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        temperature: 0,
+        messages: [
+          { role: "system", content: buildFactReviewPrompt(factsText, allowedBrands) },
+          {
+            role: "user",
+            content: JSON.stringify({
+              title: candidate?.title || "",
+              body: candidate?.body || "",
+              tags: candidate?.hashtags || [],
+            }),
+          },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      console.error("[copy] fact review http", res.status);
+      await res.text();
+      return null;
+    }
+    const data = await res.json();
+    return parseFactReview(data?.choices?.[0]?.message?.content || "");
+  } catch (e) {
+    console.error("[copy] fact review error", e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+export async function handleCopyRequest(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -101,6 +151,15 @@ Deno.serve(async (req) => {
     const viralStyle: ViralStyle | null = VIRAL_STYLES.includes(body.style) ? body.style : null;
     if (!imageUrls.length) return json({ error: "至少上传一张图" }, 400);
 
+    // strict_facts：只有受信任的自动化调用可开启；人工调用行为完全不变。
+    const strictFacts = isTrustedService && isAutomationMode && body?.strict_facts === true;
+    const allowedBrands: string[] = strictFacts && Array.isArray(body.allowed_brand_names) && body.allowed_brand_names.length
+      ? body.allowed_brand_names.map((x: any) => String(x)).filter(Boolean)
+      : ALLOWED_BRAND_DEFAULT;
+    const factsText = strictFacts ? redactThirdPartyNames(formatVerifiedFacts(body.verified_facts)) : "";
+    const strictBlock = strictFacts ? buildStrictFactsBlock(factsText, allowedBrands) : "";
+
+
     const VIRAL_BRIEF: Record<ViralStyle, string> = {
       scream: "🔥 尖叫安利体：大量感叹号 + emoji + 抓马口吻（'姐妹些!!!''救命''会哭'），情绪拉满，每句必须带至少一个 emoji。",
       heal: "✨ 治愈日记体：慢节奏日记 + 小图标点缀（☕️🥛☀️🌿），每句开头或结尾必带 emoji，分行像呼吸。",
@@ -145,7 +204,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}
 平台：${presets.platforms[platformKey] || presets.platforms.xhs}
 平台硬性限制：标题 ≤${limits.title_max} 字；正文 ${limits.body_min}–${limits.body_max} 字；话题 ${limits.tag_min}–${limits.tag_max} 个。
 口吻：${presets.tones[toneKey]}
-${presetBlock}${contextBlock}${viralBlock}${kbBlock}
+${presetBlock}${contextBlock}${strictBlock}${viralBlock}${kbBlock}
 输出格式：严格 JSON 数组，3 个对象，每个对象字段：
 {
   "title": "标题",
@@ -213,6 +272,30 @@ ${presetBlock}${contextBlock}${viralBlock}${kbBlock}
 
     if (isTrustedService) {
       // 自动化模式：不落库，只回候选
+      if (strictFacts) {
+        const reviewed: any[] = [];
+        for (const c of candidates) {
+          const guard = deterministicFactGuard(c, factsText, allowedBrands);
+          if (!guard.ok) {
+            reviewed.push({ ...c, fact_check: { supported: false, unsupported_claims: guard.unsupported_claims, checker: "deterministic" } });
+            continue;
+          }
+          const review = await runFactReview(LOVABLE_API_KEY, factsText, allowedBrands, { title: c.title, body: c.body });
+          if (!review) {
+            reviewed.push({ ...c, fact_check: { supported: false, unsupported_claims: ["事实审校失败"], checker: "ai" } });
+            continue;
+          }
+          reviewed.push({ ...c, fact_check: { ...review, checker: "ai" } });
+        }
+        const safe = reviewed.filter((c) => c.fact_check?.supported === true);
+        if (!safe.length) {
+          return json({
+            error: "no_fact_safe_candidate",
+            rejected: reviewed.map((c) => ({ title: c.title, fact_check: c.fact_check })),
+          }, 422);
+        }
+        return json({ success: true, candidates: safe, platform: platformKey, style: viralStyle, strict_facts: true, __kb_sources: kbSourcesMeta(kbHits) });
+      }
       return json({ success: true, candidates, platform: platformKey, style: viralStyle, __kb_sources: kbSourcesMeta(kbHits) });
     }
 
@@ -231,4 +314,9 @@ ${presetBlock}${contextBlock}${viralBlock}${kbBlock}
     console.error("[copy] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
   }
-});
+}
+
+if (!Deno.env.get("MARKETING_COPY_TEST")) {
+  Deno.serve(handleCopyRequest);
+}
+
