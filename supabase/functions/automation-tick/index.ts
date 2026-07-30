@@ -459,7 +459,7 @@ export async function dryRunTask(
     asset: publicAssetSummary(asset),
     accounts: acc.scoped.map(publicAccountSummary),
   };
-  if (!copies.ok) return { ok: false, ...base, would_enqueue: false, error: copies.error };
+  if (!copies.ok) return { ok: false, ...base, would_enqueue: false, error: copies.error, fact_check_rejected: (copies as any).fact_check_rejected ?? null };
 
   return {
     ok: true,
