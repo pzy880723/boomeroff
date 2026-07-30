@@ -18,18 +18,20 @@ export function normalizeNumericText(input: string): string {
     .replace(/[,，\s]/g, "");
 }
 
-/** 允许整体保留的“字母+数字”token(如 B1 楼层)。 */
+/** 形如 B1 的“字母+数字”整体 token(仍需在事实中出现才放行)。 */
 export function isWholeAlnumToken(token: string): boolean {
   return /^[A-Za-z]\d{1,3}$/.test(token);
 }
 
 /**
  * 候选文本中出现的数字必须能在 verified_facts 中找到。
- * 返回未被支撑的数字 token 列表(空数组=通过)。
+ * 字母+数字 token(B1/A99)必须整体出现在事实中才放行。
+ * 返回未被支撑的 token 列表(空数组=通过)。
  */
 export function findUnsupportedNumbers(text: string, factsText: string): string[] {
   const src = normalizeNumericText(text);
   const facts = normalizeNumericText(factsText);
+  const factsUpper = facts.toUpperCase();
   const bad: string[] = [];
   const re = /([A-Za-z]?)(\d+(?:\.\d+)?)/g;
   let m: RegExpExecArray | null;
@@ -37,12 +39,18 @@ export function findUnsupportedNumbers(text: string, factsText: string): string[
     const prefix = m[1] || "";
     const digits = m[2];
     const whole = `${prefix}${digits}`;
-    if (prefix && isWholeAlnumToken(whole)) continue; // B1 等整体 token 放行
+    if (prefix && isWholeAlnumToken(whole)) {
+      // B1 这类 token 只有在事实中原样出现时才放行
+      if (factsUpper.includes(whole.toUpperCase())) continue;
+      if (!bad.includes(whole)) bad.push(whole);
+      continue;
+    }
     if (facts.includes(digits)) continue;
     if (!bad.includes(whole)) bad.push(whole);
   }
   return bad;
 }
+
 
 /** 候选文本中点名的第三方品牌 / IP(空数组=通过)。 */
 export function findForbiddenBrands(text: string, allowedBrands: string[]): string[] {

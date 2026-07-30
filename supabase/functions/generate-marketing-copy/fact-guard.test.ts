@@ -25,9 +25,9 @@ Deno.test("未核实数字 30,000+ 被判不通过", () => {
   assertEquals(bad, ["30000"]);
 });
 
-Deno.test("B1 作为整体 token 放行", () => {
+Deno.test("B1 只在事实含 B1 时放行", () => {
   assertEquals(findUnsupportedNumbers("下到 B1 层就看到店", FACTS), []);
-  assertEquals(findUnsupportedNumbers("在B1闲逛", "（无楼层信息）"), []);
+  assertEquals(findUnsupportedNumbers("在B1闲逛", "（无楼层信息）"), ["B1"]);
 });
 
 Deno.test("事实里出现过的数字可通过", () => {
@@ -87,4 +87,13 @@ Deno.test("非 automation 路径不引入 strict_facts（源码断言）", async
   assert(src.includes('error: "no_fact_safe_candidate"'));
   const userPath = src.slice(src.indexOf("const admin = admin0;"));
   assert(!userPath.includes("deterministicFactGuard"), "人工调用路径不得改变");
+});
+
+Deno.test("字母+数字 token 必须整体出现在事实中", () => {
+  const facts = "- 门店位置：南京西路 B1 层";
+  assertEquals(findUnsupportedNumbers("下到 B1 就到店", facts), []);
+  assertEquals(findUnsupportedNumbers("A99 号铺位", facts), ["A99"]);
+  assertEquals(findUnsupportedNumbers("在 B2 层", facts), ["B2"]);
+  assertEquals(findUnsupportedNumbers("X9 展柜", "（无楼层信息）"), ["X9"]);
+  assert(deterministicFactGuard({ title: "B2 层新店", body: "来逛", hashtags: [] }, facts, ALLOWED).ok === false);
 });
