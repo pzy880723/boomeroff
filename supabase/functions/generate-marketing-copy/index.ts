@@ -20,6 +20,7 @@ import {
   deterministicFactGuard,
   formatVerifiedFacts,
   parseFactReview,
+  redactThirdPartyNames,
 } from "./fact-guard.ts";
 
 
@@ -155,7 +156,7 @@ export async function handleCopyRequest(req: Request): Promise<Response> {
     const allowedBrands: string[] = strictFacts && Array.isArray(body.allowed_brand_names) && body.allowed_brand_names.length
       ? body.allowed_brand_names.map((x: any) => String(x)).filter(Boolean)
       : ALLOWED_BRAND_DEFAULT;
-    const factsText = strictFacts ? formatVerifiedFacts(body.verified_facts) : "";
+    const factsText = strictFacts ? redactThirdPartyNames(formatVerifiedFacts(body.verified_facts)) : "";
     const strictBlock = strictFacts ? buildStrictFactsBlock(factsText, allowedBrands) : "";
 
 

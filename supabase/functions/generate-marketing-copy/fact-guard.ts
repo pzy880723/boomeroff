@@ -104,6 +104,17 @@ export function formatVerifiedFacts(facts: any): string {
   return lines.join("\n").slice(0, 6000);
 }
 
+/** 把已核实事实里的第三方品牌/IP 名抹成通用词,避免模型顺手抄进文案。 */
+export function redactThirdPartyNames(text: string): string {
+  let out = String(text || "");
+  for (const kw of [...THIRD_PARTY_IP_DENY].sort((a, b) => b.length - a.length)) {
+    if (!kw) continue;
+    const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    out = out.replace(re, "中古玩偶");
+  }
+  return out;
+}
+
 /** strict_facts 模式的系统提示词补丁。 */
 export function buildStrictFactsBlock(factsText: string, allowedBrands: string[]): string {
   const allowed = (allowedBrands.length ? allowedBrands : ALLOWED_BRAND_DEFAULT).join(" / ");
