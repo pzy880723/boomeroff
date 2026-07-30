@@ -4,6 +4,7 @@
 //   X-Worker-Signature: hex(HMAC-SHA256(COMPOSE_WORKER_TOKEN, `${timestamp}.${rawBody}`))
 // 时间偏差 > 300s 或签名错误 → 401。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { isHealthyCookieStatus } from "../_shared/sau.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -192,7 +193,7 @@ Deno.serve(async (req) => {
       const workerAccountId = pick(payload, data, "worker_account_id");
       const accountName = pick<string>(payload, data, "account_name");
       const avatarUrl = pick<string>(payload, data, "avatar_url");
-      const upd: any = { cookie_status: "active", last_check_at: nowIso, updated_at: nowIso };
+      const upd: any = { cookie_status: "valid", last_check_at: nowIso, updated_at: nowIso };
       if (workerAccountId !== undefined && workerAccountId !== null) upd.worker_account_id = Number(workerAccountId);
       if (accountName) upd.account_name = accountName;
       if (avatarUrl) upd.avatar_url = avatarUrl;
@@ -212,7 +213,9 @@ Deno.serve(async (req) => {
 
     if (event === "account.checked") {
       if (!accountId) return json({ ok: false, error: "缺少 account_id" }, 400);
-      const status = String(pick(payload, data, "cookie_status") ?? "active");
+      const reported = String(pick(payload, data, "cookie_status") ?? "valid");
+      // 读取兼容历史 active,写入统一 valid。
+      const status = isHealthyCookieStatus(reported) ? "valid" : reported;
       await admin.from("social_accounts").update({
         cookie_status: status,
         last_check_at: nowIso,

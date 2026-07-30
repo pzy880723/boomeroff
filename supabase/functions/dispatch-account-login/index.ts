@@ -2,7 +2,7 @@
 // worker(aigc.boomeroff.top)只暴露 /login?type=N。成功时通常不带 account_id,需要回调 /getValidAccounts 取最新一条并由后端落库。
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { PLATFORM_CODE, SAU_BASE, SAU_TOKEN, sauListAccounts } from "../_shared/sau.ts";
+import { canonicalPlatform, PLATFORM_CODE, SAU_BASE, SAU_TOKEN, sauListAccounts } from "../_shared/sau.ts";
 
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -10,7 +10,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const url = new URL(req.url);
-  const platform = url.searchParams.get("platform") || "";
+  // wechat_channels / wechat_video 都接受,落库与传给 Worker 统一 canonical。
+  const platform = canonicalPlatform(url.searchParams.get("platform") || "");
   const shopId = url.searchParams.get("shop_id") || "";
   const code = PLATFORM_CODE[platform];
   if (!code) {
