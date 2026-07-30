@@ -502,7 +502,7 @@ export function compileSurpriseOneShotPrompt(options: {
 
   const clips = [script.hook, ...script.scenes, script.outro];
   lines.push('');
-  lines.push('【五段对白时间锚点】以下五段连接后就是上面的唯一口播全文，只用于对齐画面、字幕和切点，不是五次重新开口。相邻段之间零停顿、零吸气空白，声音必须跨切镜连续。');
+  lines.push('【五段对白时间锚点】以下五段连接后就是上面的唯一口播全文，只用于对齐画面、字幕和切点，不是五次重新开口。段与段之间只允许 0.15–0.35 秒的自然换气，声音必须跨切镜延续，严禁在此处重复上一段或回读。');
   clips.forEach((clip, index) => {
     const [start, end] = BEAT_WINDOWS[index];
     lines.push(`${start}-${end} 秒｜对白："${compactText(clip.dialogue, 80)}"｜字幕："${compactText(clip.subtitle, 40)}"`);
@@ -510,7 +510,7 @@ export function compileSurpriseOneShotPrompt(options: {
 
   // === 画面切点 ===
   lines.push('');
-  lines.push('【画面切点】画面根据下方切点切换，声音在整条 15 秒内不间断。禁止等到某句说完再切镜；所有切镜必须发生在连续口播过程中。');
+  lines.push('【画面切点】画面根据下方切点切换，人声在整条 15 秒内保持同一段连续朗读。切镜不得让人声中断或重开；所有切镜必须发生在口播过程中。');
   beats.forEach((beat, i) => {
     const label = BEAT_LABELS[i];
     const start = beat.start_s.toFixed(1).replace(/\.0$/, '');
@@ -531,7 +531,7 @@ export function compileSurpriseOneShotPrompt(options: {
 
   lines.push('');
   lines.push('【连续性】五段是同一次探店经历，人物身份、衣着、声音、门店空间、商品外观、光线和色调必须连续一致；转场使用自然硬切或动作匹配剪辑，不做黑场、不做慢淡。');
-  lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字、长时间空镜或任何超过 0.1 秒的静默。');
+  lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字或长时间空镜；不得重复词、重复短语、回读、卡顿式重启或吞字。');
   for (const constraint of (options.globalConstraints || []).slice(0, 4)) {
     if (constraint?.trim()) lines.push(compactText(constraint, 240));
   }
