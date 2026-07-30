@@ -440,21 +440,49 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     let isWorker = false;
     let userId: string | null = null;
+    let isService = false;
+
+    const apikey = (req.headers.get("apikey") || "").trim();
+    if (SERVICE_KEY && (timingSafeEqual(bearer, SERVICE_KEY) || timingSafeEqual(apikey, SERVICE_KEY))) {
+      isService = true;
+    }
 
     if (WORKER_SECRET && (timingSafeEqual(workerToken, WORKER_SECRET) || timingSafeEqual(bearer, WORKER_SECRET))) {
       isWorker = true;
-    } else if (bearer) {
+    } else if (!isService && bearer) {
       const supaUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
         global: { headers: { Authorization: `Bearer ${bearer}` } },
       });
       const { data: claims } = await supaUser.auth.getClaims(bearer);
       userId = (claims?.claims?.sub as string) || null;
+      // 兼容旧式 service-role JWT(env 中为新式 sb_secret 时无法直接比对):
+      // 只读探测 admin 接口,能列用户才认定为 service-role。
+      if (!userId && bearer) {
+        try {
+          const probe = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=1`, {
+            headers: { Authorization: `Bearer ${bearer}`, apikey: bearer },
+          });
+          if (probe.ok) isService = true;
+          await probe.text();
+        } catch { /* keep denied */ }
+      }
     }
-    if (!isWorker && !userId) return json({ ok: false, error: "unauthorized" }, 401);
+    if (!isWorker && !userId && !isService) return json({ ok: false, error: "unauthorized" }, 401);
 
     const supa = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const body = await req.json().catch(() => ({} as any));
     const forceTaskId: string | undefined = body.force_task_id;
+    const dryRun = body.dry_run === true;
+
+    // dry-run:只读预检,必须在任何写操作之前返回
+    if (dryRun) {
+      const taskId = String(body.task_id || forceTaskId || "").trim();
+      if (!taskId) return json({ ok: false, error: "task_id_required" }, 400);
+      const { data: task } = await supa.from("automation_tasks").select("*").eq("id", taskId).maybeSingle();
+      if (!task) return json({ ok: false, error: "task_not_found" }, 404);
+      const result = await dryRunTask(supa, { task, assetId: body.asset_id ? String(body.asset_id) : null });
+      return json(result, result.ok ? 200 : 422);
+    }
 
     let tasks: any[] = [];
     if (forceTaskId) {
@@ -462,6 +490,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (!data) return json({ ok: false, error: "task_not_found" }, 404);
       tasks = [data];
     } else {
+
       if (!isWorker) return json({ ok: false, error: "force_task_id_required" }, 400);
       const nowIso = new Date().toISOString();
       const { data } = await supa
