@@ -79,14 +79,43 @@ async function pollOne(arkKey: string, taskId: string) {
 async function updateAssetMeta(
   admin: any, userId: string, jobId: string, patch: Record<string, unknown>, outputUrl?: string | null,
 ) {
-  const { data: asset } = await admin
+  const { data: found } = await admin
     .from("marketing_assets")
     .select("id, meta, output_url")
     .eq("user_id", userId)
     .eq("kind", "video")
     .filter("meta->>job_id", "eq", jobId)
     .maybeSingle();
-  if (!asset) return { url: outputUrl || null, mirrored: false };
+  let asset = found;
+  // 素材行缺失(被删/从未创建)时按 job_id 补建，避免成片 URL 丢失
+  if (!asset) {
+    const { data: job } = await admin
+      .from("marketing_video_jobs")
+      .select("id, user_id, shop_id, script")
+      .eq("id", jobId)
+      .maybeSingle();
+    const script = (job?.script as any) || {};
+    const { data: created } = await admin
+      .from("marketing_assets")
+      .insert({
+        user_id: userId,
+        shop_id: job?.shop_id ?? null,
+        kind: "video",
+        output_url: null,
+        category: script.topic || null,
+        meta: {
+          job_id: jobId,
+          title: (script.title || script.topic || "").toString().slice(0, 24),
+          source: "poll-marketing-video-backfill",
+          backfilled_at: new Date().toISOString(),
+        },
+      })
+      .select("id, meta, output_url")
+      .maybeSingle();
+    if (!created) return { url: outputUrl || null, mirrored: false };
+    asset = created;
+  }
+
   let finalUrl: string | null | undefined = outputUrl;
   const extraMeta: Record<string, unknown> = {};
   const storedPath = typeof asset.meta?.storage_path === "string" ? asset.meta.storage_path : null;
