@@ -13,6 +13,15 @@ import {
 } from "../_shared/brand-context.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
+import {
+  ALLOWED_BRAND_DEFAULT,
+  buildFactReviewPrompt,
+  buildStrictFactsBlock,
+  deterministicFactGuard,
+  formatVerifiedFacts,
+  parseFactReview,
+} from "./fact-guard.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
