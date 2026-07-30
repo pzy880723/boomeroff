@@ -26,8 +26,92 @@ export const DEFAULT_PLATFORM_BRIEF: Record<string, string> = {
   xhs: "小红书：标题 ≤20 字带钩子和 emoji，正文 150–220 字、分 3–4 短段，结尾留一句行动召唤；3–6 个 # 话题标签。",
   douyin: "抖音：标题 ≤20 字、口语化制造悬念；正文 80–140 字偏口播稿，分句短、便于读字幕；2–5 个 # 话题。",
   shipinhao: "视频号：标题 ≤22 字稳一点，正文 100–180 字克制有质感，2–4 个 # 话题。",
+  kuaishou: "快手：标题口语化、像跟老铁说话，≤20 字；正文 80–140 字，短句直给、别端着；最多 3 个 # 话题。",
+  dianping: "大众点评：标题 ≤30 字；正文 120–220 字，必须是到店体验和门店信息表达（怎么逛、看到什么、适合谁、几点去），3–6 个话题；不能虚构优惠、折扣、评分、排名。",
   pyq: "朋友圈：不要标题，只输出 1–3 段短文，几乎不用 emoji，像随手记，结尾不喊话；不要 # 话题。",
 };
+
+/** 发布平台别名 → 文案平台 key。 */
+export const COPY_PLATFORM_ALIAS: Record<string, string> = {
+  xhs: "xhs",
+  xiaohongshu: "xhs",
+  douyin: "douyin",
+  wechat_video: "shipinhao",
+  wechat_channels: "shipinhao",
+  tencent: "shipinhao",
+  shipinhao: "shipinhao",
+  kuaishou: "kuaishou",
+  dianping: "dianping",
+  pyq: "pyq",
+};
+
+export function canonicalCopyPlatform(input: unknown, fallback = "xhs"): string {
+  const key = typeof input === "string" ? input.trim().toLowerCase() : "";
+  return COPY_PLATFORM_ALIAS[key] || fallback;
+}
+
+export interface CopyPlatformLimit {
+  title_max: number;
+  body_min: number;
+  body_max: number;
+  tag_min: number;
+  tag_max: number;
+}
+
+export const COPY_PLATFORM_LIMITS: Record<string, CopyPlatformLimit> = {
+  xhs: { title_max: 20, body_min: 150, body_max: 220, tag_min: 3, tag_max: 6 },
+  douyin: { title_max: 20, body_min: 80, body_max: 140, tag_min: 2, tag_max: 5 },
+  shipinhao: { title_max: 22, body_min: 100, body_max: 180, tag_min: 2, tag_max: 4 },
+  kuaishou: { title_max: 20, body_min: 80, body_max: 140, tag_min: 1, tag_max: 3 },
+  dianping: { title_max: 30, body_min: 120, body_max: 220, tag_min: 3, tag_max: 6 },
+  pyq: { title_max: 0, body_min: 0, body_max: 200, tag_min: 0, tag_max: 0 },
+};
+
+const normalizeTag = (tag: unknown): string => {
+  const raw = String(tag ?? "").trim().replace(/\s+/g, "");
+  if (!raw) return "";
+  return raw.startsWith("#") ? raw : `#${raw}`;
+};
+
+/** 固定标签优先、去重合并，最终数量服从平台上限。 */
+export function mergeHashtags(generated: unknown[], fixed: unknown[], platform: string): string[] {
+  const limit = (COPY_PLATFORM_LIMITS[platform] || COPY_PLATFORM_LIMITS.xhs).tag_max;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const tag of [...(fixed || []), ...(generated || [])]) {
+    const t = normalizeTag(tag);
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** 账号发布预设，仅读取白名单字段。 */
+export interface AccountCopyPreset {
+  tone?: string;
+  title_instruction?: string;
+  body_instruction?: string;
+  fixed_tags: string[];
+  dynamic_tag_limit?: number;
+}
+
+export function parseAccountPreset(input: unknown): AccountCopyPreset | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const p = input as Record<string, unknown>;
+  const preset: AccountCopyPreset = {
+    tone: typeof p.tone === "string" ? p.tone.slice(0, 40) : undefined,
+    title_instruction: typeof p.title_instruction === "string" ? p.title_instruction.slice(0, 300) : undefined,
+    body_instruction: typeof p.body_instruction === "string" ? p.body_instruction.slice(0, 500) : undefined,
+    fixed_tags: Array.isArray(p.fixed_tags) ? p.fixed_tags.map(normalizeTag).filter(Boolean).slice(0, 10) : [],
+    dynamic_tag_limit: Number.isFinite(Number(p.dynamic_tag_limit)) ? Number(p.dynamic_tag_limit) : undefined,
+  };
+  return preset;
+}
+
 
 export const DEFAULT_TONE_BRIEF: Record<string, string> = {
   种草: "用第一人称'我'，描述偶遇/被打中的感觉，不写商品介绍。",
