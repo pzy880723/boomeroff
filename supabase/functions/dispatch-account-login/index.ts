@@ -54,7 +54,8 @@ Deno.serve(async (req) => {
 
   const supa = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   // 老的 ERP 影子用户 JWT 可能在 app_metadata 写入之前签发，只看 claim 会误判成 BOOMER GO 用户。
-  // 因此再用 service-role 确认 erp_user_links 里确实存在该 aigc_user_id 的映射（只取存在性，不返回映射内容）。
+  // 先确认 canonical 映射;再严格兜底 deterministic email: erp+<uuid>@aigc.boomeroff.local。
+  // 不能用域名泛匹配,也不能放宽普通 BOOMER GO 门店隔离。
   let erpLinked = isErpUser;
   if (!erpLinked) {
     const { data: link } = await supa
@@ -63,6 +64,22 @@ Deno.serve(async (req) => {
       .eq("aigc_user_id", userId)
       .maybeSingle();
     erpLinked = !!link;
+  }
+  if (!erpLinked) {
+    try {
+      const { data: authUser } = await supa.auth.admin.getUserById(userId);
+      const email = String(authUser?.user?.email || "").toLowerCase();
+      const m = email.match(/^erp\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@aigc\.boomeroff\.local$/);
+      const erpUserId = m?.[1] || "";
+      if (erpUserId) {
+        const { data: canonical } = await supa
+          .from("erp_user_links")
+          .select("aigc_user_id")
+          .eq("erp_user_id", erpUserId)
+          .maybeSingle();
+        erpLinked = Boolean(canonical?.aigc_user_id);
+      }
+    } catch { /* keep BOOMER GO path strict */ }
   }
   // ERP 协同用户共享社媒账号,不做门店隔离;BOOMER GO 门店账号仍严格校验同店铺。
   if (!erpLinked) {
