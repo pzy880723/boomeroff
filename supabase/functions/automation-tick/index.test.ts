@@ -17,7 +17,7 @@ const PRESET_BASE = {
       merchant_poi_id: "dp-777",
     },
   },
-  category: "生活",
+  video_annotation: "含AI生成内容",
 };
 
 function account(platform: string, preset: any = PRESET_BASE) {
@@ -106,7 +106,10 @@ Deno.test("五个平台分别写入独立 per_platform", async () => {
   assertEquals(copies.xhs.location_verified, true);
   assertEquals(copies.xhs.platform_poi_id, "poi-123");
   assertEquals(copies.douyin.location_name, "BOOMER·OFF 中信泰富店");
-  assertEquals(copies.wechat_video.category, "生活");
+  assertEquals(copies.wechat_video.video_annotation, "含AI生成内容");
+  assertEquals(copies.wechat_video.location_name, "BOOMER·OFF 中信泰富店");
+  assertEquals(copies.wechat_video.location_verified, true);
+  assertEquals(copies.wechat_video.category, undefined);
   assertEquals(copies.wechat_video.original_declaration, true);
   assertEquals([...copies.wechat_video.short_title].length >= 6, true);
   assertEquals(copies.kuaishou.original_declaration, true);
@@ -136,12 +139,13 @@ Deno.test("小红书未确认 POI 被拦截", async () => {
   assertEquals((r as any).error, "xhs_poi_not_verified");
 });
 
-Deno.test("视频号缺 category 被拦截；点评缺商户被拦截", async () => {
+Deno.test("视频号无 category 但真实字段齐全可通过；点评缺商户被拦截", async () => {
   const supa = makeSupa((_n, o) => ({ data: okCandidate(o.body.platform) }));
   const p1: any = { ...PRESET_BASE };
   delete p1.category;
   let r = await mod.buildPlatformCopies(supa, { scoped: [account("wechat_video", p1)], asset: ASSET, task: TASK, shopId: "shop-1" });
-  assertEquals((r as any).error, "wechat_video_category_missing");
+  assert(r.ok, JSON.stringify(r));
+  assertEquals((r as any).platformCopies.wechat_video.video_annotation, "含AI生成内容");
 
   r = await mod.buildPlatformCopies(supa, {
     scoped: [account("dianping", { ...PRESET_BASE, shop_poi_map: { "shop-1": { verified: true, location_name: "x" } } })],
@@ -170,4 +174,37 @@ Deno.test("runTask 不再调用 resolveDraft 草稿路径", async () => {
   const runTaskSrc = src.slice(src.indexOf("export async function runTask"));
   assert(!runTaskSrc.includes("resolveDraft("), "runTask 仍在调用 resolveDraft");
   assert(runTaskSrc.includes("per_platform: platformCopies"));
+});
+
+Deno.test("视频号缺 video_annotation / 缺 POI 在建 job 前被阻断", async () => {
+  const supa = makeSupa((_n, o) => ({ data: okCandidate(o.body.platform) }));
+  const noAnno: any = { ...PRESET_BASE };
+  delete noAnno.video_annotation;
+  let r = await mod.buildPlatformCopies(supa, { scoped: [account("wechat_video", noAnno)], asset: ASSET, task: TASK, shopId: "shop-1" });
+  assertEquals((r as any).error, "wechat_video_annotation_preset_missing");
+  assertEquals(supa.inserted.length, 0);
+
+  r = await mod.buildPlatformCopies(supa, {
+    scoped: [account("wechat_video", { ...PRESET_BASE, shop_poi_map: {} })],
+    asset: ASSET, task: TASK, shopId: "shop-1",
+  });
+  assertEquals((r as any).error, "wechat_video_location_preset_missing");
+  assertEquals(supa.inserted.length, 0);
+});
+
+Deno.test("真实门店 POI + 含AI生成内容 全字段落入 per_platform", async () => {
+  const supa = makeSupa((_n, o) => ({ data: okCandidate(o.body.platform) }));
+  const preset = {
+    tone: "探店",
+    fixed_tags: ["中古"],
+    video_annotation: "含AI生成内容",
+    shop_poi_map: { "shop-1": { verified: true, location_name: "BOOMER·OFF vintage(中信泰富店)", platform_poi_id: "poi-xin" } },
+  };
+  const r = await mod.buildPlatformCopies(supa, { scoped: [account("wechat_video", preset)], asset: ASSET, task: TASK, shopId: "shop-1" });
+  assert(r.ok, JSON.stringify(r));
+  const c = (r as any).platformCopies.wechat_video;
+  assertEquals(c.location_name, "BOOMER·OFF vintage(中信泰富店)");
+  assertEquals(c.location_verified, true);
+  assertEquals(c.video_annotation, "含AI生成内容");
+  assertEquals([...c.short_title].length >= 6, true);
 });
