@@ -69,8 +69,15 @@ const BEAT_WINDOWS: Array<[number, number]> = [
 
 const BEAT_LABELS = ['强钩子', '进店发现', '上手体验', '核心种草', '行动召唤'];
 
-export const SURPRISE_MIN_CN = 90;
-export const SURPRISE_MAX_CN = 100;
+// 15 秒原生 Seedance 人声：60–72 汉字是自然偏快（约 270–320 字/分钟）且不吞字的安全区间。
+export const SURPRISE_MIN_CN = 60;
+export const SURPRISE_MAX_CN = 72;
+// 兜底轮次（最后一次校验）允许的宽松区间，仍以 72 为硬上限。
+export const SURPRISE_RELAXED_MIN_CN = 52;
+export const SURPRISE_RELAXED_MAX_CN = 72;
+// 单个节拍建议字数
+export const SURPRISE_BEAT_MIN_CN = 8;
+export const SURPRISE_BEAT_MAX_CN = 18;
 
 // 会拖慢连续口播的语气词/客套词，一律清掉
 const FILLER_PATTERNS: RegExp[] = [
@@ -90,11 +97,11 @@ const FILLER_PATTERNS: RegExp[] = [
 ];
 
 const FALLBACK_DIALOGUES = [
-  '来逛中古店别错过这个藏满惊喜的宝藏空间',
-  '一走进去满眼复古杂货每排货架都值得认真翻',
-  '玩具瓷器唱片和生活小物随手一拿都很有故事',
-  '预算不用太高也能挑到一件属于自己的独特纪念',
-  '现在把这家宝藏店放进攻略到店认真翻上一圈',
+  '来上海别错过这家中古宝藏店',
+  '一走进店满眼复古杂货和老物件',
+  '玩具瓷器唱片随手一拿都有故事',
+  '预算不高也能挑到独特小惊喜',
+  '放进攻略到店认真翻上一圈',
 ];
 
 const FALLBACK_SUBTITLES = [
@@ -182,6 +189,34 @@ function splitContinuousDialogue(value: string): string[] {
   return groups.length === 5 && groups.every(Boolean) ? groups : [];
 }
 
+function splitFlatIntoFive(flat: string): string[] {
+  const chars = flat.replace(/[，、\s]/g, '');
+  if (!chars) return [];
+  const base = Math.floor(chars.length / 5);
+  const extra = chars.length % 5;
+  const out: string[] = [];
+  let cursor = 0;
+  for (let i = 0; i < 5; i += 1) {
+    const size = base + (i < extra ? 1 : 0);
+    out.push(chars.slice(cursor, cursor + size));
+    cursor += size;
+  }
+  return out.every(Boolean) ? out : [];
+}
+
+// 硬上限：连续口播不得超过 SURPRISE_MAX_CN 个汉字（吞字/卡顿的主因）。
+// 只做截断，绝不重复内容去补下限。
+function clampBeatDialogues(chunks: string[]): string[] {
+  if (chunks.length !== 5 || !chunks.every(Boolean)) return chunks;
+  const total = chineseLength(chunks.join('，'));
+  if (total <= SURPRISE_MAX_CN) return chunks;
+  const clipped = truncateToChinese(chunks.join('，'), SURPRISE_MAX_CN);
+  const byComma = splitContinuousDialogue(clipped);
+  if (byComma.length === 5 && byComma.every(Boolean)) return byComma;
+  const flat = splitFlatIntoFive(clipped);
+  return flat.length === 5 ? flat : chunks;
+}
+
 function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
   const clipChunks = dialogueChunksFromClips(script);
   const rawChunks = splitContinuousDialogue(raw);
@@ -194,29 +229,26 @@ function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
   const balanced = (chunks: string[]) =>
     chunks.every((chunk) => {
       const length = chineseLength(chunk);
-      return length >= 13 && length <= 28;
+      return length >= SURPRISE_BEAT_MIN_CN && length <= SURPRISE_BEAT_MAX_CN;
     });
   const rebalance = (chunks: string[]) => {
     if (balanced(chunks)) return chunks;
     const byComma = splitContinuousDialogue(chunks.join('，'));
     if (byComma.length === 5 && byComma.every(Boolean) && balanced(byComma)) return byComma;
     // 逗号分组仍然畸形（模型把两三句塞进一段），按字数均切，内容顺序保持不变。
-    const flat = chunks.join('').replace(/[，、\s]/g, '');
-    if (!flat) return chunks;
-    const size = Math.ceil(flat.length / 5);
-    const cut: string[] = [];
-    for (let i = 0; i < 5; i += 1) cut.push(flat.slice(i * size, Math.min((i + 1) * size, flat.length)));
-    return cut.every(Boolean) ? cut : (byComma.length === 5 && byComma.every(Boolean) ? byComma : chunks);
+    const cut = splitFlatIntoFive(chunks.join(''));
+    return cut.length === 5 ? cut : (byComma.length === 5 && byComma.every(Boolean) ? byComma : chunks);
   };
 
-  if (inRange(clipChunks)) return rebalance(clipChunks);
-  if (inRange(rawChunks)) return rebalance(rawChunks);
+  if (inRange(clipChunks)) return clampBeatDialogues(rebalance(clipChunks));
+  if (inRange(rawChunks)) return clampBeatDialogues(rebalance(rawChunks));
 
   const source = clipChunks.length === 5 && clipChunks.every(Boolean) ? clipChunks : rawChunks;
   if (source.length === 5 && source.every(Boolean)) {
     // 内容不改，只把逗号短句重新均分成 5 段，避免出现 30 字/8 字这种畸形分段。
     const rebalanced = splitContinuousDialogue(source.join('，'));
-    return rebalanced.length === 5 && rebalanced.every(Boolean) ? rebalanced : source;
+    const picked = rebalanced.length === 5 && rebalanced.every(Boolean) ? rebalanced : source;
+    return clampBeatDialogues(picked);
   }
   // 只有模型完全没有返回可用五段结构时，才使用保底脚本避免空对象继续向下游扩散。
   return [...FALLBACK_DIALOGUES];
@@ -306,10 +338,13 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     total_duration_s: 15,
     aspect: '9:16',
     one_shot_prompt: '',
-    speech_start_s: 0.1,
-    speech_end_s: 14.9,
-    speech_rate: 'very_fast_clear',
-    max_silence_s: 0.1,
+    speech_start_s: 0.2,
+    speech_end_s: 14.5,
+    speech_rate: 'natural_fast_clear',
+    speech_cpm_min: 270,
+    speech_cpm_max: 320,
+    min_pause_s: 0.15,
+    max_silence_s: 0.35,
   };
 
   const clips = [nextScript.hook, ...nextScript.scenes, nextScript.outro];
@@ -436,7 +471,7 @@ export function compileSurpriseOneShotPrompt(options: {
   const beats = script.visual_beats || deriveVisualBeats(script, continuous);
 
   const lines: string[] = [];
-  lines.push('【生成任务】严格生成一条15秒、9:16、真人写实、高密度门店种草短视频。全片使用同一条连续中文口播音轨，人物从头说到尾，切镜时声音继续，不停顿、不重开、不重复。');
+  lines.push('【生成任务】严格生成一条15秒、9:16、真人写实、门店种草短视频。全片使用同一条连续中文口播音轨，人物从头说到尾，切镜时人声延续，不重开、不重复、不吞字。');
   lines.push(`【整体风格】${compactText(options.styleLabel || '高能真实探店 vlog，手持跟拍，明亮自然，节奏紧凑。', 180)}`);
   if (options.shopContext) lines.push(`【门店事实】${compactText(options.shopContext, 900)}`);
 
@@ -457,17 +492,17 @@ export function compileSurpriseOneShotPrompt(options: {
   lines.push('');
   lines.push('【声音硬规则】');
   lines.push('1. 这是全片唯一的一条连续中文口播音轨，由 Seedance 直接生成同步人声，不使用后配 TTS。');
-  lines.push('2. 0.1 秒内立即开口，持续说到 14.9 秒左右。');
-  lines.push('3. 全程连续发声，任何位置不得出现超过 0.1 秒的停顿。');
-  lines.push('4. 切换镜头时声音必须继续，不得停止、重新起句或重复台词。');
-  lines.push('5. 严格逐字朗读口播全文，不得改写、遗漏、合并或增加对白。');
-  lines.push('6. 使用很快、清楚、兴奋、有感染力的中文口播，语速约每分钟 390–430 汉字；语句紧凑但咬字仍须清楚。');
-  lines.push('7. 不要片头音乐、呼吸空白、语气词、停顿或结尾拖音。');
+  lines.push('2. 0.2 秒左右自然开口，说到 14.5 秒左右自然收尾。');
+  lines.push('3. 语速自然偏快且清晰，约每分钟 270–320 汉字；宁可稍慢一点，也必须每个字咬清楚，不得吞字、含糊或加速赶字。');
+  lines.push('4. 允许在逗号、句号处有 0.15–0.35 秒的自然微停顿和换气，其余位置保持连贯，不要出现长时间静默。');
+  lines.push('5. 切换镜头时人声继续，不得在切镜处重新起句、重开这段话或重新自我介绍。');
+  lines.push('6. 严格按最终口播全文只读一次，不得改写、遗漏、合并或增加对白。');
+  lines.push('7. 严禁重复词、重复短语、回读同一句、卡顿式重启、结巴或结尾拖音。');
   lines.push('8. 背景音乐和环境声保持低音量，不得遮挡人声。');
 
   const clips = [script.hook, ...script.scenes, script.outro];
   lines.push('');
-  lines.push('【五段对白时间锚点】以下五段连接后就是上面的唯一口播全文，只用于对齐画面、字幕和切点，不是五次重新开口。相邻段之间零停顿、零吸气空白，声音必须跨切镜连续。');
+  lines.push('【五段对白时间锚点】以下五段连接后就是上面的唯一口播全文，只用于对齐画面、字幕和切点，不是五次重新开口。段与段之间只允许 0.15–0.35 秒的自然换气，声音必须跨切镜延续，严禁在此处重复上一段或回读。');
   clips.forEach((clip, index) => {
     const [start, end] = BEAT_WINDOWS[index];
     lines.push(`${start}-${end} 秒｜对白："${compactText(clip.dialogue, 80)}"｜字幕："${compactText(clip.subtitle, 40)}"`);
@@ -475,7 +510,7 @@ export function compileSurpriseOneShotPrompt(options: {
 
   // === 画面切点 ===
   lines.push('');
-  lines.push('【画面切点】画面根据下方切点切换，声音在整条 15 秒内不间断。禁止等到某句说完再切镜；所有切镜必须发生在连续口播过程中。');
+  lines.push('【画面切点】画面根据下方切点切换，人声在整条 15 秒内保持同一段连续朗读。切镜不得让人声中断或重开；所有切镜必须发生在口播过程中。');
   beats.forEach((beat, i) => {
     const label = BEAT_LABELS[i];
     const start = beat.start_s.toFixed(1).replace(/\.0$/, '');
@@ -496,7 +531,7 @@ export function compileSurpriseOneShotPrompt(options: {
 
   lines.push('');
   lines.push('【连续性】五段是同一次探店经历，人物身份、衣着、声音、门店空间、商品外观、光线和色调必须连续一致；转场使用自然硬切或动作匹配剪辑，不做黑场、不做慢淡。');
-  lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字、长时间空镜或任何超过 0.1 秒的静默。');
+  lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字或长时间空镜；不得重复词、重复短语、回读、卡顿式重启或吞字。');
   for (const constraint of (options.globalConstraints || []).slice(0, 4)) {
     if (constraint?.trim()) lines.push(compactText(constraint, 240));
   }

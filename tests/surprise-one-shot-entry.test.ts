@@ -34,5 +34,5 @@ test('惊喜一下后端固定把确认脚本提交为 one_shot', () => {
   const endpoint = read('../supabase/functions/surprise-marketing-video/index.ts');
 
   assert.match(endpoint, /render_strategy:\s*['"]one_shot['"]/);
-  assert.match(endpoint, /body\.script\s*&&\s*body\.picked_assets/);
+  assert.match(endpoint, /if \(!preview && hasScriptShape\)/);
 });

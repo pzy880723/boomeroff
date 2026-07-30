@@ -17,7 +17,7 @@ const rawScript = {
   hook: {
     scene: '商场走廊正对 BOOMER·OFF 开放式门店',
     action: '博主边走进店边对镜头喊',
-    dialogue: '来上海旅行别错过这家藏满惊喜的中古宝藏店',
+    dialogue: '来上海别错过这家中古宝藏店',
     subtitle: '上海旅行隐藏副本',
     image_index: 0,
     duration_s: 3,
@@ -25,21 +25,21 @@ const rawScript = {
     cut_on_keyword: '姐妹们',
   },
   scenes: [
-    { scene: '店内整面中古货架', action: '博主边指向密集货架边继续说', dialogue: '一走进去满眼复古杂货每排货架都值得认真翻', subtitle: '每排都值得认真翻', image_index: 1, duration_s: 3, motion: '广角横移', cut_on_keyword: '一走进去' },
-    { scene: '中古杂货翻筐区', action: '博主边翻筐边继续说', dialogue: '昭和玩具日式瓷器老唱片随手一拿都很有故事', subtitle: '玩具瓷器老唱片', image_index: 2, duration_s: 3, motion: '俯拍跟随', cut_on_keyword: '昭和玩具' },
-    { scene: '复古陈列和试戴镜前', action: '博主边试戴边继续说', dialogue: '预算不用太高也能挑到一件独特的旅行纪念', subtitle: '低预算也能淘到惊喜', image_index: 3, duration_s: 3, motion: '中景推近', cut_on_keyword: '预算不用太高' },
+    { scene: '店内整面中古货架', action: '博主边指向密集货架边继续说', dialogue: '一进门满眼复古杂货和老物件', subtitle: '每排都值得认真翻', image_index: 1, duration_s: 3, motion: '广角横移', cut_on_keyword: '一走进去' },
+    { scene: '中古杂货翻筐区', action: '博主边翻筐边继续说', dialogue: '玩具瓷器唱片随手一拿都有故事', subtitle: '玩具瓷器老唱片', image_index: 2, duration_s: 3, motion: '俯拍跟随', cut_on_keyword: '昭和玩具' },
+    { scene: '复古陈列和试戴镜前', action: '博主边试戴边继续说', dialogue: '预算不高也能挑到独特小惊喜', subtitle: '低预算也能淘到惊喜', image_index: 3, duration_s: 3, motion: '中景推近', cut_on_keyword: '预算不用太高' },
   ],
   outro: {
     scene: 'BOOMER·OFF 店内全景',
     action: '博主边挥手边继续说',
-    dialogue: '现在把宝藏中古店放进攻略到店认真翻一圈',
+    dialogue: '放进攻略到店认真翻上一圈',
     subtitle: '现在就来认真翻一圈',
     image_index: 4,
     duration_s: 3,
     motion: '拉镜定格',
     cut_on_keyword: 'BOOMER',
   },
-  continuous_dialogue: '来上海旅行别错过这家藏满惊喜的中古宝藏店，一走进去满眼复古杂货每排货架都值得认真翻，昭和玩具日式瓷器老唱片随手一拿都很有故事，预算不用太高也能挑到一件独特的旅行纪念，现在把宝藏中古店放进攻略到店认真翻一圈',
+  continuous_dialogue: '来上海别错过这家中古宝藏店，一进门满眼复古杂货和老物件，玩具瓷器唱片随手一拿都有故事，预算不高也能挑到独特小惊喜，放进攻略到店认真翻上一圈',
   total_duration_s: 15,
   aspect: '9:16',
 };
@@ -52,19 +52,20 @@ const imageUrls = [
   'https://cdn.example.com/wide.jpg',
 ];
 
-test('惊喜脚本产出一条 90-100 字连续口播并保留 5 段可读对白和字幕', () => {
+test('惊喜脚本产出一条 60-72 字连续口播并保留 5 段可读对白和字幕', () => {
   const script = normalizeSurpriseScript(structuredClone(rawScript));
   const clips = [script.hook, ...script.scenes, script.outro];
 
   assert.equal(clips.length, 5);
   assert.deepEqual(clips.map((c) => c.duration_s), [3, 3, 3, 3, 3]);
-  assert.equal(script.speech_start_s, 0.1);
-  assert.equal(script.speech_end_s, 14.9);
-  assert.equal(script.max_silence_s, 0.1);
+  assert.equal(script.speech_start_s, 0.2);
+  assert.equal(script.speech_end_s, 14.5);
+  assert.equal(script.max_silence_s, 0.35);
+  assert.equal(script.min_pause_s, 0.15);
 
   const spoken = surpriseSpokenText(script);
   const cn = spoken.replace(/[^\u4e00-\u9fa5]/g, '').length;
-  assert.ok(cn >= 90 && cn <= 100, `连续口播字数越界: ${cn}`);
+  assert.ok(cn >= 60 && cn <= 72, `连续口播字数越界: ${cn}`);
   assert.doesNotMatch(spoken, /[。!！?？…]/);
   assert.doesNotMatch(spoken, /大家好|嗯|然后|就是/);
   assert.ok(clips.every((clip) => String(clip.dialogue || '').trim()), '五段 dialogue 都必须非空');
@@ -96,15 +97,19 @@ test('一次成片提示词只包含一条连续口播、5 段画面切点和参
 
   assert.match(prompt, /【15秒连续口播】/);
   assert.match(prompt, /【声音硬规则】/);
-  assert.match(prompt, /0\.1 秒内立即开口/);
-  assert.match(prompt, /14\.9 秒/);
-  assert.match(prompt, /任何位置不得出现超过 0\.1 秒的停顿/);
-  assert.match(prompt, /切换镜头时声音必须继续/);
+  assert.match(prompt, /0\.2 秒左右自然开口/);
+  assert.match(prompt, /14\.5 秒/);
+  assert.match(prompt, /0\.15–0\.35 秒的自然微停顿/);
+  assert.match(prompt, /270–320 汉字/);
+  assert.match(prompt, /严禁重复词、重复短语、回读同一句、卡顿式重启/);
+  assert.doesNotMatch(prompt, /390–430/);
+  assert.doesNotMatch(prompt, /任何位置不得出现超过 0\.1 秒的停顿/);
+  assert.match(prompt, /切换镜头时人声继续/);
   assert.match(prompt, /【画面切点】/);
   assert.match(prompt, /【五段对白时间锚点】/);
-  assert.match(prompt, /0-3 秒.*来上海旅行别错过/);
-  assert.match(prompt, /3-6 秒.*一走进去满眼复古杂货/);
-  assert.match(prompt, /字幕.*一走进去满眼复古杂货每排货架都值得认真翻/);
+  assert.match(prompt, /0-3 秒.*来上海别错过/);
+  assert.match(prompt, /3-6 秒.*一进门满眼复/);
+  assert.match(prompt, /字幕.*一进门满眼复古杂货和老物件/);
   assert.match(prompt, /不是五次重新开口/);
   assert.match(prompt, /0-3 秒/);
   assert.match(prompt, /3-6 秒/);
@@ -147,7 +152,7 @@ test('对白不足时不注入无关固定台词，而是保留原稿交给校�
   const script = normalizeSurpriseScript(raw);
   const cn = surpriseSpokenText(script).replace(/[^\u4e00-\u9fa5]/g, '').length;
   const clips = [script.hook, ...script.scenes, script.outro];
-  assert.ok(cn < 90, `不足的原稿不应被固定台词伪装成合格脚本: ${cn}`);
+  assert.ok(cn < 60, `不足的原稿不应被固定台词伪装成合格脚本: ${cn}`);
   assert.deepEqual(clips.map((clip) => clip.dialogue), [
     '这家店真的绝了',
     '每排都想停下翻翻',
