@@ -443,8 +443,44 @@ Deno.serve(async (req) => {
         results.push({ id: j.id, status: r.mapped });
 
       }
-      return json({ swept: results.length, results });
+      // ---- 转存失败重试:TOS 签名链接 24h 过期,必须真正重试而不是只记 mirror_error ----
+      const retried: any[] = [];
+      const { data: brokenAssets } = await admin
+        .from("marketing_assets")
+        .select("id, user_id, meta, output_url")
+        .eq("kind", "video")
+        .not("output_url", "is", null)
+        .not("meta->>mirror_error", "is", null)
+        .is("meta->>storage_path", null)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      for (const a of brokenAssets || []) {
+        if (!isVolcesTosUrl(a.output_url)) continue;
+        try {
+          const r = await mirrorTosVideoToStorage(admin, a.user_id, a.id, a.output_url);
+          const meta: Record<string, unknown> = { ...((a.meta as any) || {}) };
+          if (r.ok) {
+            meta.storage_path = r.path;
+            meta.tos_url_original = a.output_url;
+            meta.mirrored_at = new Date().toISOString();
+            delete meta.mirror_error;
+            delete meta.mirror_retry_at;
+            await admin.from("marketing_assets").update({ meta, output_url: r.url }).eq("id", a.id);
+            retried.push({ id: a.id, ok: true });
+          } else {
+            meta.mirror_error = r.error;
+            meta.mirror_retry_at = new Date().toISOString();
+            await admin.from("marketing_assets").update({ meta }).eq("id", a.id);
+            retried.push({ id: a.id, ok: false, error: r.error });
+          }
+        } catch (e) {
+          retried.push({ id: a.id, ok: false, error: String(e) });
+        }
+      }
+
+      return json({ swept: results.length, results, mirror_retried: retried });
     }
+
 
     const auth = req.headers.get("Authorization");
     if (!auth) return json({ error: "未授权" }, 401);
