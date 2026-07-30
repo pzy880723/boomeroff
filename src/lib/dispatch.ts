@@ -31,6 +31,8 @@ export interface SocialAccount {
   cookie_status: string;
   online?: boolean | null;
   worker_online?: boolean;
+  worker_message?: string | null;
+
   content_kinds?: string[];
 }
 

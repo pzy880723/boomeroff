@@ -149,14 +149,26 @@ export function applyPresetStatics(
     copy.platform_poi_id = String(poi.platform_poi_id || poi.poi_id || "").trim();
     copy.location_verified = true;
   } else if (platform === "wechat_video" || platform === "wechat_channels") {
-    const category = String(preset.category || "").trim();
-    if (!category) return { ok: false, error: `${platform}_category_missing` };
-    copy.category = category;
+    // 真实后台字段：视频描述+话题、短标题、位置(POI)、视频标注。没有"分类/原创类型"必填项。
     copy.original_declaration = preset.original_declaration === false ? false : true;
-    const shortTitle = String(preset.short_title || "").trim() || [...String(copy.title || "")].slice(0, 16).join("");
+    const shortTitle = String(preset.short_title || "").trim() || String(copy.short_title || "").trim()
+      || [...String(copy.title || "")].slice(0, 16).join("");
     const len = [...shortTitle].length;
     if (len < 6 || len > 16) return { ok: false, error: `${platform}_short_title_invalid` };
     copy.short_title = shortTitle;
+
+    const annotation = String(preset.video_annotation || "").trim();
+    if (!annotation) return { ok: false, error: `${platform}_annotation_preset_missing` };
+    copy.video_annotation = annotation;
+
+    const locationName = String(poi?.location_name || "").trim();
+    if (!poi || poi.verified !== true || !locationName) {
+      return { ok: false, error: `${platform}_location_preset_missing` };
+    }
+    copy.location_name = locationName;
+    copy.platform_poi_id = String(poi.platform_poi_id || poi.poi_id || "").trim();
+    copy.location_verified = true;
+
   } else if (platform === "kuaishou") {
     copy.original_declaration = preset.original_declaration === false ? false : true;
   } else if (platform === "dianping") {
