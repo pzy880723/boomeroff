@@ -78,7 +78,7 @@ export default function AccountsTab() {
           ...account,
           online: workerAccount?.online,
           worker_online: workerAccount?.worker_online,
-          worker_message: (workerAccount as any)?.worker_message,
+          worker_message: workerAccount?.worker_message,
         };
       });
       setAccounts(rows);
