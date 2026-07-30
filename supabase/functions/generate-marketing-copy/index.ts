@@ -222,6 +222,30 @@ ${presetBlock}${contextBlock}${viralBlock}${kbBlock}
 
     if (isTrustedService) {
       // 自动化模式：不落库，只回候选
+      if (strictFacts) {
+        const reviewed: any[] = [];
+        for (const c of candidates) {
+          const guard = deterministicFactGuard(c, factsText, allowedBrands);
+          if (!guard.ok) {
+            reviewed.push({ ...c, fact_check: { supported: false, unsupported_claims: guard.unsupported_claims, checker: "deterministic" } });
+            continue;
+          }
+          const review = await runFactReview(LOVABLE_API_KEY, factsText, allowedBrands, c);
+          if (!review) {
+            reviewed.push({ ...c, fact_check: { supported: false, unsupported_claims: ["事实审校失败"], checker: "ai" } });
+            continue;
+          }
+          reviewed.push({ ...c, fact_check: { ...review, checker: "ai" } });
+        }
+        const safe = reviewed.filter((c) => c.fact_check?.supported === true);
+        if (!safe.length) {
+          return json({
+            error: "no_fact_safe_candidate",
+            rejected: reviewed.map((c) => ({ title: c.title, fact_check: c.fact_check })),
+          }, 422);
+        }
+        return json({ success: true, candidates: safe, platform: platformKey, style: viralStyle, strict_facts: true, __kb_sources: kbSourcesMeta(kbHits) });
+      }
       return json({ success: true, candidates, platform: platformKey, style: viralStyle, __kb_sources: kbSourcesMeta(kbHits) });
     }
 
@@ -240,4 +264,9 @@ ${presetBlock}${contextBlock}${viralBlock}${kbBlock}
     console.error("[copy] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
   }
-});
+}
+
+if (!Deno.env.get("MARKETING_COPY_TEST")) {
+  Deno.serve(handleCopyRequest);
+}
+
