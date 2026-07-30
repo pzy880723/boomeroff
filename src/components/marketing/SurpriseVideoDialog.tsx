@@ -461,7 +461,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 shrink-0" />
-                <span>固定 9:16 · 15 秒 · Seedance 原生中文对白</span>
+                <span>固定 9:16 · 时长 15s · 一段直出 · 1080p · Seedance 原生中文对白</span>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
@@ -711,7 +711,7 @@ function ScriptBody({ pick, onScriptChange }: { pick: SurpriseResult; onScriptCh
     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-w-0">
       <div className="flex items-center gap-1.5 flex-wrap min-w-0">
         <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-semibold">
-          9:16 · 15s
+          9:16 · 时长 15s · 一段直出 · 1080p
         </span>
         <Chip>路线 · 探店</Chip>
         {persona?.tone_label && (
