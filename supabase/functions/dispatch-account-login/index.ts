@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
                   worker_account_key: `${platform}:${acct.worker_id}`,
                   account_name: acct.name || null,
                   avatar_url: acct.avatar || null,
-                  cookie_status: acct.status === 0 ? "expired" : "active",
+                  cookie_status: acct.status === 0 ? "expired" : "valid",
                   created_by: userId,
                   last_check_at: new Date().toISOString(),
                   meta: { worker_platform_code: acct.platform_code, source: "sau_worker" },
