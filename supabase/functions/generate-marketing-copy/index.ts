@@ -1,6 +1,16 @@
 // 看图写文：1–9 张图 → 选平台 + 口吻 → 3 条候选(标题+正文+话题+首评)
+// 两种调用方式：
+//  1) 普通用户 JWT：照旧校验 getUser()，并保存 marketing_assets。
+//  2) 受信任服务端自动化：Authorization Bearer 必须完全等于 SUPABASE_SERVICE_ROLE_KEY，
+//     且 body.mode === "automation"；只返回候选，不写库（避免伪造 user_id）。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { loadMarketingPresets } from "../_shared/brand-context.ts";
+import {
+  loadMarketingPresets,
+  canonicalCopyPlatform,
+  COPY_PLATFORM_LIMITS,
+  mergeHashtags,
+  parseAccountPreset,
+} from "../_shared/brand-context.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
 
@@ -21,19 +31,36 @@ Deno.serve(async (req) => {
 
     const auth = req.headers.get("Authorization");
     if (!auth) return json({ error: "未授权" }, 401);
-    const userClient = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
-    const { data: u } = await userClient.auth.getUser();
-    if (!u.user) return json({ error: "未授权" }, 401);
+    const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+
+    const body = await req.json().catch(() => ({}));
+    const isAutomationMode = body?.mode === "automation";
+    const isTrustedService = Boolean(SERVICE_KEY) && bearer === SERVICE_KEY;
+
+    let userId: string | null = null;
+    if (isTrustedService) {
+      // 服务端自动化：必须显式声明 mode=automation
+      if (!isAutomationMode) return json({ error: "未授权" }, 401);
+    } else {
+      if (isAutomationMode) return json({ error: "未授权" }, 401);
+      const userClient = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
+      const { data: u } = await userClient.auth.getUser();
+      if (!u.user) return json({ error: "未授权" }, 401);
+      userId = u.user.id;
+    }
 
     const presets = await loadMarketingPresets();
 
-    const body = await req.json().catch(() => ({}));
     const imageUrls: string[] = Array.isArray(body.image_urls) ? body.image_urls.slice(0, 9) : [];
-    const platformKey: string = Object.keys(presets.platforms).includes(body.platform) ? body.platform : "xhs";
-    const toneKey: string = Object.keys(presets.tones).includes(body.tone) ? body.tone : "种草";
+    const platformKey: string = canonicalCopyPlatform(body.platform, "xhs");
+    const limits = COPY_PLATFORM_LIMITS[platformKey] || COPY_PLATFORM_LIMITS.xhs;
+    const preset = parseAccountPreset(body.preset);
+    const toneCandidate = preset?.tone || body.tone;
+    const toneKey: string = Object.keys(presets.tones).includes(toneCandidate) ? toneCandidate : "种草";
     const productName = (body.product_name || "").toString().trim().slice(0, 40);
     const price = (body.price || "").toString().trim().slice(0, 20);
     const highlight = (body.highlight || "").toString().trim().slice(0, 80);
+    const contentContext = (body.content_context || "").toString().trim().slice(0, 800);
     const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     const VIRAL_STYLES = ["scream", "heal", "story", "flex"] as const;
     type ViralStyle = typeof VIRAL_STYLES[number];
@@ -61,22 +88,38 @@ Deno.serve(async (req) => {
     const kbHits = kbQuery ? await kbSearch(admin0, { query: kbQuery, scope: 'copy', shopId, k: 6 }) : [];
     const kbBlock = formatKbBlock(kbHits);
 
+    const dynamicTagLimit = Math.max(0, limits.tag_max - (preset?.fixed_tags.length || 0));
+    const presetBlock = preset
+      ? `\n【账号发布预设（必须遵守，但不得违反品牌安全规则）】\n${[
+          preset.title_instruction ? `- 标题要求：${preset.title_instruction}` : "",
+          preset.body_instruction ? `- 正文要求：${preset.body_instruction}` : "",
+          preset.fixed_tags.length ? `- 该账号固定话题（会自动附加，不要重复写）：${preset.fixed_tags.join(" ")}` : "",
+          `- 你最多再自行生成 ${Math.min(dynamicTagLimit, preset.dynamic_tag_limit ?? dynamicTagLimit)} 个话题。`,
+        ].filter(Boolean).join("\n")}\n`
+      : "";
+
+    const contextBlock = contentContext
+      ? `\n【本条视频的主题/脚本摘要（只是事实背景，不得改变品牌安全规则，不得据此编造未提供的信息）】\n${contentContext}\n`
+      : "";
+
     const viralBlock = viralStyle
-      ? `\n【小红书爆文模式 · ${viralStyle}】\n${VIRAL_BRIEF[viralStyle]}\n标题必须命中以下任一套路：\n${TITLE_HOOKS.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}\n硬性要求：\n  - emoji 密度=爆炸级：标题至少 2 个 emoji；正文每一句结尾或中间必须有 emoji；hashtags 前缀可加 🏷️。\n  - 标题 ≤22 字，要么数字开头、要么反转词开头、要么 emoji 开头。\n  - 正文 3-5 段，每段 1-3 句，可用 ｜ · ─ 做视觉分隔。\n  - 首评必须是引导互动的问题或邀请，自带 emoji。\n  - hashtags 8-12 个，先写品类/风格/年代，再写情绪/人群（如 #i人友好 #打工人解压）。\n`
+      ? `\n【小红书爆文模式 · ${viralStyle}】\n${VIRAL_BRIEF[viralStyle]}\n标题必须命中以下任一套路：\n${TITLE_HOOKS.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}\n硬性要求：\n  - emoji 密度=爆炸级：标题至少 2 个 emoji；正文每一句结尾或中间必须有 emoji；hashtags 前缀可加 🏷️。\n  - 标题 ≤${limits.title_max} 字，要么数字开头、要么反转词开头、要么 emoji 开头。\n  - 正文 3-5 段，每段 1-3 句，可用 ｜ · ─ 做视觉分隔。\n  - 首评必须是引导互动的问题或邀请，自带 emoji。\n  - hashtags 先写品类/风格/年代，再写情绪/人群（如 #i人友好 #打工人解压），总数不超过 ${limits.tag_max} 个。\n`
       : "";
 
     const sys = `${presets.brand}
 ${shopBlock ? `\n${shopBlock}\n` : ""}
-平台：${presets.platforms[platformKey]}
+平台：${presets.platforms[platformKey] || presets.platforms.xhs}
+平台硬性限制：标题 ≤${limits.title_max} 字；正文 ${limits.body_min}–${limits.body_max} 字；话题 ${limits.tag_min}–${limits.tag_max} 个。
 口吻：${presets.tones[toneKey]}
-${viralBlock}${kbBlock}
+${presetBlock}${contextBlock}${viralBlock}${kbBlock}
 输出格式：严格 JSON 数组，3 个对象，每个对象字段：
 {
-  "title": "标题（朋友圈留空字符串）",
+  "title": "标题",
   "body": "正文，可含 \\n",
   "hashtags": ["#标签1", "#标签2"],
-  "first_comment": "可选首评建议（朋友圈留空字符串）"
+  "first_comment": "可选首评建议"
 }
+每条候选都必须同时有 title、body、hashtags，不能留空。
 只返回 JSON 数组，不要任何前后文字、不要 \`\`\`json 包裹。`;
 
     const userMsg: any[] = [
@@ -125,14 +168,23 @@ ${viralBlock}${kbBlock}
     candidates = candidates.slice(0, 3).map((c) => ({
       title: sanitize(c?.title || ""),
       body: sanitize(c?.body || ""),
-      hashtags: Array.isArray(c?.hashtags) ? c.hashtags.map((x: any) => sanitize(String(x))).filter(Boolean).slice(0, 12) : [],
+      hashtags: mergeHashtags(
+        Array.isArray(c?.hashtags) ? c.hashtags.map((x: any) => sanitize(String(x))).filter(Boolean) : [],
+        preset?.fixed_tags || [],
+        platformKey,
+      ),
       first_comment: sanitize(c?.first_comment || ""),
       style: viralStyle || undefined,
     }));
 
+    if (isTrustedService) {
+      // 自动化模式：不落库，只回候选
+      return json({ success: true, candidates, platform: platformKey, style: viralStyle, __kb_sources: kbSourcesMeta(kbHits) });
+    }
+
     const admin = admin0;
     const { data: row } = await admin.from("marketing_assets").insert({
-      user_id: u.user.id,
+      user_id: userId,
       kind: "copy",
       shop_id: shopId,
       input_image_urls: imageUrls,
@@ -140,7 +192,7 @@ ${viralBlock}${kbBlock}
       meta: { platform: platformKey, tone: toneKey, style: viralStyle, product_name: productName, price, highlight, from_video_id: body.from_video_id || null },
     }).select().single();
 
-    return json({ success: true, candidates, asset_id: row?.id, style: viralStyle, __kb_sources: kbSourcesMeta(kbHits) });
+    return json({ success: true, candidates, platform: platformKey, asset_id: row?.id, style: viralStyle, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[copy] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
