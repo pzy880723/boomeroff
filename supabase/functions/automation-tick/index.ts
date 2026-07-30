@@ -183,6 +183,70 @@ export function applyPresetStatics(
   return { ok: true, copy };
 }
 
+/** 允许在自动化文案里出现的品牌名(白名单之外一律不许点名)。 */
+export const ALLOWED_BRAND_NAMES = ["BOOMER", "BOOMER.OFF", "BOOMER·OFF"];
+
+/** 从 asset.meta.job_id 只读加载成片脚本(失败/缺失都返回 null,不阻断)。 */
+export async function loadLinkedScript(supa: any, asset: any): Promise<any | null> {
+  const jobId = String(asset?.meta?.job_id || "").trim();
+  if (!jobId) return null;
+  try {
+    const { data } = await supa.from("marketing_video_jobs").select("script").eq("id", jobId).maybeSingle();
+    return data?.script ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 收集脚本里的连续口播 + 画面节拍(只用脚本已有内容)。 */
+export function extractScriptFacts(script: any): { continuous_dialogue: string; visual_beats: any[] } {
+  if (!script || typeof script !== "object") return { continuous_dialogue: "", visual_beats: [] };
+  const beatsSrc: any[] = [];
+  if (script.hook) beatsSrc.push(script.hook);
+  if (Array.isArray(script.scenes)) beatsSrc.push(...script.scenes);
+  if (Array.isArray(script.visual_beats)) beatsSrc.push(...script.visual_beats);
+  if (script.outro) beatsSrc.push(script.outro);
+
+  const dialogue = String(script.continuous_dialogue || "").trim()
+    || beatsSrc.map((b) => String(b?.dialogue || b?.subtitle || "").trim()).filter(Boolean).join(" ");
+
+  const visual_beats = beatsSrc.map((b) => ({
+    visual: String(b?.visual || b?.scene || "").trim().slice(0, 200),
+    action: String(b?.action || "").trim().slice(0, 200),
+  })).filter((b) => b.visual || b.action).slice(0, 12);
+
+  return { continuous_dialogue: dialogue.slice(0, 1200), visual_beats };
+}
+
+/** 构造只含已核实事实的 verified_facts。缺 linked script 时只用 asset meta/manifest。 */
+export function buildVerifiedFacts(opts: { asset: any; task: any; script: any; poi: any; shopId: string }) {
+  const { asset, task, script, poi, shopId } = opts;
+  const meta = asset?.meta || {};
+  const s = extractScriptFacts(script);
+  const manifest = Array.isArray(meta.reference_manifest)
+    ? meta.reference_manifest.map((r: any) => String(r?.summary || "").trim()).filter(Boolean).slice(0, 9)
+    : [];
+
+  const store: Record<string, any> = { brand_name: "BOOMER·OFF", category: "中古杂货门店" };
+  if (poi?.location_name) store.verified_poi_name = String(poi.location_name);
+  if (poi?.merchant_name) store.verified_merchant_name = String(poi.merchant_name);
+  if (poi?.address) store.address = String(poi.address);
+  if (poi?.business_hours) store.business_hours = String(poi.business_hours);
+
+  return {
+    video_title: String(script?.title || meta.title || "").trim(),
+    video_topic: String(script?.topic || meta.topic || "").trim(),
+    duration_seconds: meta.duration_seconds ?? meta.duration ?? script?.duration_s ?? null,
+    continuous_dialogue: s.continuous_dialogue,
+    visual_beats: s.visual_beats,
+    reference_summaries: manifest,
+    store,
+    shop_id: shopId,
+    task_strategy: String(task?.config?.content_strategy || task?.content_strategy || "").trim(),
+    has_linked_script: Boolean(script),
+  };
+}
+
 /** 为所有 scoped 账号生成平台文案。任何一个失败都直接返回 error,不创建 job。 */
 export async function buildPlatformCopies(
   supa: any,
@@ -192,6 +256,7 @@ export async function buildPlatformCopies(
   const imageUrls = collectReferenceImages(asset);
   if (!imageUrls.length) return { ok: false, error: "no_copy_reference_images" };
   const contentContext = buildContentContext(task, asset);
+  const script = await loadLinkedScript(supa, asset);
 
   const platformCopies: Record<string, any> = {};
   for (const account of scoped) {
@@ -205,6 +270,10 @@ export async function buildPlatformCopies(
       return { ok: false, error: `${platform}_fixed_tags_missing` };
     }
 
+    const poiMap = (presetRaw as any).shop_poi_map;
+    const poi = poiMap && typeof poiMap === "object" ? poiMap[shopId] : null;
+    const verifiedFacts = buildVerifiedFacts({ asset, task, script, poi, shopId });
+
     let res: any;
     try {
       res = await supa.functions.invoke("generate-marketing-copy", {
@@ -215,25 +284,35 @@ export async function buildPlatformCopies(
           image_urls: imageUrls,
           content_context: contentContext,
           preset,
+          strict_facts: true,
+          verified_facts: verifiedFacts,
+          allowed_brand_names: ALLOWED_BRAND_NAMES,
         },
       });
     } catch (e) {
       return { ok: false, error: `${platform}_copy_failed: ${String((e as Error).message || e)}` };
     }
     if (res?.error || !res?.data?.candidates) {
-      return { ok: false, error: `${platform}_copy_failed: ${String(res?.error?.message || res?.error || "no_candidates")}` };
+      const msg = String(res?.error?.message || res?.error || "no_candidates");
+      if (msg.includes("no_fact_safe_candidate")) return { ok: false, error: `${platform}_copy_fact_check_failed` };
+      return { ok: false, error: `${platform}_copy_failed: ${msg}` };
     }
 
-    const picked = pickCandidate(platform, res.data.candidates);
+    // 只接受通过事实审校的候选
+    const factSafe = (res.data.candidates as any[]).filter((c) => c?.fact_check?.supported === true);
+    if (!factSafe.length) return { ok: false, error: `${platform}_copy_fact_check_failed` };
+
+    const picked = pickCandidate(platform, factSafe);
     if (!picked) return { ok: false, error: `${platform}_copy_invalid` };
 
-    const applied = applyPresetStatics(platform, { ...picked }, presetRaw, shopId);
+    const applied = applyPresetStatics(platform, { ...picked, fact_check: factSafe[0].fact_check }, presetRaw, shopId);
     if (!applied.ok) return { ok: false, error: applied.error };
     platformCopies[platform] = applied.copy;
   }
   if (!Object.keys(platformCopies).length) return { ok: false, error: "no_platform_copies" };
   return { ok: true, platformCopies };
 }
+
 
 /** 选出本次任务真实可用的平台账号(与正式入队完全一致的口径)。 */
 
