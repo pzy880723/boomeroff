@@ -21,6 +21,8 @@ const ALLOWED_ROLES = new Set([
 
 const REVISION = "erp-aigc-session-20260730-1";
 
+type AuthUserInfo = { id: string; email: string | null };
+
 function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify({ revision: REVISION, ...body }), {
     status,
@@ -47,9 +49,9 @@ function normStringArray(v: unknown): string[] {
 }
 
 async function findAuthUserByEmail(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   email: string,
-): Promise<{ id: string } | null> {
+): Promise<AuthUserInfo | null> {
   const target = email.toLowerCase();
   let page = 1;
   while (page <= 20) {
@@ -61,7 +63,7 @@ async function findAuthUserByEmail(
     const match = data?.users?.find(
       (u: any) => (u.email ?? "").toLowerCase() === target,
     );
-    if (match) return { id: match.id };
+    if (match) return { id: match.id, email: match.email ?? null };
     if (!data || data.users.length < 200) return null;
     page += 1;
   }
@@ -69,11 +71,11 @@ async function findAuthUserByEmail(
 }
 
 async function findAuthUserByPhone(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   phone: string,
-): Promise<{ id: string } | null> {
+): Promise<AuthUserInfo | null> {
   let page = 1;
-  let matches: { id: string }[] = [];
+  let matches: AuthUserInfo[] = [];
   while (page <= 20) {
     const { data, error } = await admin.auth.admin.listUsers({
       page,
@@ -82,7 +84,7 @@ async function findAuthUserByPhone(
     if (error) throw error;
     for (const u of data?.users ?? []) {
       if ((u as any).phone && String((u as any).phone) === phone) {
-        matches.push({ id: u.id });
+        matches.push({ id: u.id, email: u.email ?? null });
         if (matches.length > 1) return null; // not unique
       }
     }
@@ -93,9 +95,9 @@ async function findAuthUserByPhone(
 }
 
 async function findAuthUserByProfilePhone(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   phone: string,
-): Promise<{ id: string } | null> {
+): Promise<AuthUserInfo | null> {
   const { data, error } = await admin
     .from("profiles")
     .select("user_id")
@@ -110,11 +112,38 @@ async function findAuthUserByProfilePhone(
     userId,
   );
   if (authErr) throw authErr;
-  return authUser?.user?.id ? { id: authUser.user.id } : null;
+  return authUser?.user?.id
+    ? { id: authUser.user.id, email: authUser.user.email ?? null }
+    : null;
+}
+
+async function getAuthUserInfo(
+  admin: any,
+  userId: string,
+): Promise<AuthUserInfo | null> {
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error) throw error;
+  return data?.user?.id ? { id: data.user.id, email: data.user.email ?? null } : null;
+}
+
+async function deleteCreatedUserQuietly(
+  admin: any,
+  userId: string,
+) {
+  try {
+    const { error } = await admin.auth.admin.deleteUser(userId);
+    if (error) {
+      console.log(JSON.stringify({ evt: "erp_created_orphan_delete_err", user_id_prefix: userId.slice(0, 8), status: (error as any)?.status }));
+    } else {
+      console.log(JSON.stringify({ evt: "erp_created_orphan_deleted", user_id_prefix: userId.slice(0, 8) }));
+    }
+  } catch (e) {
+    console.log(JSON.stringify({ evt: "erp_created_orphan_delete_throw", msg: (e as any)?.message }));
+  }
 }
 
 async function claimIfFree(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   aigcUserId: string,
   erpUserId: string,
 ): Promise<"free" | "same" | "conflict"> {
@@ -231,9 +260,11 @@ Deno.serve(async (req) => {
       ? (primaryShop as any).name
       : null;
 
-  let aigcUserId: string | null = null;
+  let aigcUser: AuthUserInfo | null = null;
+  let createdShadowUserId: string | null = null;
 
-  // Step 1: existing mapping by erp_user_id
+  // Step 1: canonical mapping by erp_user_id always wins.
+  // Never sign a token for a deterministic-email orphan when a canonical AIGC user is already linked.
   try {
     const { data, error } = await admin
       .from("erp_user_links")
@@ -242,13 +273,9 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (error) throw error;
     if (data?.aigc_user_id) {
-      // verify auth user still exists
-      const { data: u, error: getErr } = await admin.auth.admin.getUserById(
-        data.aigc_user_id as string,
-      );
-      if (getErr) throw getErr;
-      if (u?.user?.id) {
-        aigcUserId = u.user.id;
+      aigcUser = await getAuthUserInfo(admin, data.aigc_user_id as string);
+      if (!aigcUser) {
+        return fail(500, "canonical_shadow_user_missing");
       }
     }
   } catch (e) {
@@ -257,13 +284,13 @@ Deno.serve(async (req) => {
   }
 
   // Step 2: try to find existing auth user by email, then phone
-  if (!aigcUserId) {
+  if (!aigcUser) {
     try {
       const byEmail = await findAuthUserByEmail(admin, email);
       if (byEmail) {
         const state = await claimIfFree(admin, byEmail.id, erpUserId);
         if (state === "conflict") return fail(409, "shadow_user_conflict");
-        aigcUserId = byEmail.id;
+        aigcUser = byEmail;
       }
     } catch (e) {
       console.log(JSON.stringify({ evt: "erp_lookup_email_err", msg: (e as any)?.message }));
@@ -271,7 +298,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (!aigcUserId && phone) {
+  if (!aigcUser && phone) {
     try {
       const byPhone =
         (await findAuthUserByPhone(admin, phone)) ??
@@ -284,7 +311,7 @@ Deno.serve(async (req) => {
             reason: "phone_user_already_linked_to_other_erp_user",
           });
         }
-        aigcUserId = byPhone.id;
+        aigcUser = byPhone;
       }
     } catch (e) {
       console.log(JSON.stringify({ evt: "erp_lookup_phone_err", msg: (e as any)?.message }));
@@ -293,7 +320,7 @@ Deno.serve(async (req) => {
   }
 
   // Step 3: create if still missing
-  if (!aigcUserId) {
+  if (!aigcUser) {
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
       email_confirm: true,
@@ -312,7 +339,8 @@ Deno.serve(async (req) => {
       },
     });
     if (created?.user?.id) {
-      aigcUserId = created.user.id;
+      createdShadowUserId = created.user.id;
+      aigcUser = { id: created.user.id, email: created.user.email ?? email };
     } else {
       const msg = String((createErr as any)?.message ?? "");
       const status = Number((createErr as any)?.status ?? 0);
@@ -334,7 +362,7 @@ Deno.serve(async (req) => {
               reason: "email_user_already_linked_to_other_erp_user",
             });
           }
-          aigcUserId = byEmail.id;
+          aigcUser = byEmail;
         } else if (phone) {
           const byPhone =
             (await findAuthUserByPhone(admin, phone)) ??
@@ -347,14 +375,14 @@ Deno.serve(async (req) => {
                 reason: "phone_user_already_linked_to_other_erp_user",
               });
             }
-            aigcUserId = byPhone.id;
+            aigcUser = byPhone;
           }
         }
       } catch (e) {
         console.log(JSON.stringify({ evt: "erp_relookup_err", msg: (e as any)?.message }));
         return fail(500, "shadow_user_lookup_failed");
       }
-      if (!aigcUserId) {
+      if (!aigcUser) {
         if (!alreadyExists) {
           console.log(JSON.stringify({ evt: "erp_create_err", status, code }));
         }
@@ -366,10 +394,39 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Step 5: refresh metadata
+  // Step 4: race guard. If another request linked this ERP user while this request
+  // was creating/finding a deterministic-email shadow user, switch back to canonical
+  // and delete only the just-created orphan. Existing orphan users are preserved.
+  try {
+    if (!aigcUser?.id) return fail(500, "shadow_user_lookup_failed");
+    const { data: latestLink, error: latestErr } = await admin
+      .from("erp_user_links")
+      .select("aigc_user_id")
+      .eq("erp_user_id", erpUserId)
+      .maybeSingle();
+    if (latestErr) throw latestErr;
+    const latestCanonicalId = typeof latestLink?.aigc_user_id === "string"
+      ? latestLink.aigc_user_id
+      : "";
+    if (latestCanonicalId && latestCanonicalId !== aigcUser.id) {
+      if (createdShadowUserId && createdShadowUserId === aigcUser.id) {
+        await deleteCreatedUserQuietly(admin, createdShadowUserId);
+      }
+      const canonical = await getAuthUserInfo(admin, latestCanonicalId);
+      if (!canonical) return fail(500, "canonical_shadow_user_missing");
+      aigcUser = canonical;
+      createdShadowUserId = null;
+    }
+  } catch (e) {
+    console.log(JSON.stringify({ evt: "erp_race_guard_err", msg: (e as any)?.message }));
+    return fail(500, "shadow_user_lookup_failed");
+  }
+
+  // Step 5: refresh metadata on the canonical user only.
   {
+    if (!aigcUser?.id) return fail(500, "shadow_user_lookup_failed");
     const { error: updateErr } = await admin.auth.admin.updateUserById(
-      aigcUserId!,
+      aigcUser.id,
       {
         user_metadata: {
           phone: phone ?? undefined,
@@ -392,41 +449,91 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Upsert mapping
+  // Step 6: write link without ever overwriting an existing canonical aigc_user_id.
   {
-    const { error: upsertErr } = await admin
+    if (!aigcUser?.id) return fail(500, "shadow_user_lookup_failed");
+    const linkUpdatedAt = new Date().toISOString();
+    const { data: currentLink, error: currentErr } = await admin
       .from("erp_user_links")
-      .upsert(
-        {
-          erp_user_id: erpUserId,
-          aigc_user_id: aigcUserId,
+      .select("aigc_user_id")
+      .eq("erp_user_id", erpUserId)
+      .maybeSingle();
+    if (currentErr) {
+      console.log(JSON.stringify({ evt: "erp_link_read_err", code: (currentErr as any)?.code }));
+      return fail(500, "shadow_user_link_failed");
+    }
+
+    const currentCanonicalId = typeof currentLink?.aigc_user_id === "string"
+      ? currentLink.aigc_user_id
+      : "";
+    if (currentCanonicalId && currentCanonicalId !== aigcUser.id) {
+      if (createdShadowUserId && createdShadowUserId === aigcUser.id) {
+        await deleteCreatedUserQuietly(admin, createdShadowUserId);
+      }
+      return fail(409, "shadow_user_conflict", {
+        conflict_count: 1,
+        reason: "erp_user_already_linked_to_canonical_user",
+      });
+    }
+
+    if (currentCanonicalId) {
+      const { error: updateLinkErr } = await admin
+        .from("erp_user_links")
+        .update({
           phone,
           display_name: displayName,
           roles,
           permissions,
           shops,
-          last_login_at: new Date().toISOString(),
-        },
-        { onConflict: "erp_user_id" },
-      );
-    if (upsertErr) {
-      console.log(JSON.stringify({ evt: "erp_link_err", code: (upsertErr as any)?.code }));
-      // If unique violation on aigc_user_id, another erp user owns it.
-      if ((upsertErr as any)?.code === "23505") {
-        return fail(409, "shadow_user_conflict", {
-          conflict_count: 1,
-          reason: "aigc_user_already_linked_to_other_erp_user",
-        });
+          last_login_at: linkUpdatedAt,
+        })
+        .eq("erp_user_id", erpUserId)
+        .eq("aigc_user_id", aigcUser.id);
+      if (updateLinkErr) {
+        console.log(JSON.stringify({ evt: "erp_link_update_err", code: (updateLinkErr as any)?.code }));
+        return fail(500, "shadow_user_link_failed");
       }
-      return fail(500, "shadow_user_link_failed");
+    } else {
+      const { error: insertLinkErr } = await admin
+        .from("erp_user_links")
+        .insert({
+          erp_user_id: erpUserId,
+          aigc_user_id: aigcUser.id,
+          phone,
+          display_name: displayName,
+          roles,
+          permissions,
+          shops,
+          last_login_at: linkUpdatedAt,
+        });
+      if (insertLinkErr) {
+        console.log(JSON.stringify({ evt: "erp_link_insert_err", code: (insertLinkErr as any)?.code }));
+        if ((insertLinkErr as any)?.code === "23505") {
+          if (createdShadowUserId && createdShadowUserId === aigcUser.id) {
+            await deleteCreatedUserQuietly(admin, createdShadowUserId);
+          }
+          return fail(409, "shadow_user_conflict", {
+            conflict_count: 1,
+            reason: "canonical_link_created_concurrently",
+          });
+        }
+        return fail(500, "shadow_user_link_failed");
+      }
     }
   }
 
-  // Generate magic link
+  const sessionEmail = typeof aigcUser?.email === "string" && aigcUser.email
+    ? aigcUser.email
+    : null;
+  if (!sessionEmail) {
+    return fail(500, "canonical_user_email_missing");
+  }
+
+  // Generate magic link for the canonical auth user only.
   const { data: linkData, error: linkErr } =
     await admin.auth.admin.generateLink({
       type: "magiclink",
-      email,
+      email: sessionEmail,
     });
   if (linkErr || !linkData?.properties?.hashed_token) {
     console.log(JSON.stringify({ evt: "erp_magiclink_err", status: (linkErr as any)?.status }));
@@ -435,7 +542,7 @@ Deno.serve(async (req) => {
 
   return json(200, {
     ok: true,
-    email,
+    email: sessionEmail,
     tokenHash: linkData.properties.hashed_token,
     displayName,
   });
