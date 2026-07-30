@@ -56,18 +56,23 @@ Deno.serve(async (req) => {
       const tags = publishCopy?.hashtags?.length
         ? publishCopy.hashtags.slice(0, 5).map((h: string) => h.replace(/^#/, ''))
         : ['惊喜一下', '探店', 'BOOMER'];
+      const finalCover = coverUrl || (job.character_json as any)?.reference_image_url || null;
+      // marketing_assets 没有 cover_url 列，封面必须放进 meta（与 compose-callback 对齐）。
       const { data: createdAsset, error: assetError } = await admin.from("marketing_assets").insert({
         user_id: job.user_id,
         shop_id: job.shop_id,
         kind: 'video',
         output_url: finalVideoUrl,
-        cover_url: coverUrl || (job.character_json as any)?.reference_image_url || null,
+        output_text: videoCopy?.body || publishCopy?.caption || title,
         category: '惊喜一下',
         tags,
         meta: {
+          title,
           summary: title,
           source: 'director',
           director_job_id: jobId,
+          cover_url: finalCover,
+          poster_url: finalCover,
           duration_s: job.duration,
           publish_copy: publishCopy,
           video_copy: videoCopy,
