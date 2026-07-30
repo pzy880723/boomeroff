@@ -129,16 +129,29 @@ Deno.serve(async (req) => {
 async function runTask(supa: any, task: any, actorId: string | null) {
   const platforms: string[] = Array.isArray(task.platforms) ? task.platforms.filter(Boolean) : [];
 
-  // 1. 真实可用账号:cookie_status = 'valid'
-  let accQuery = supa.from("social_accounts").select("*").eq("cookie_status", "valid");
+  // 1. 真实可用账号。ERP 协同用户 = 共享账号库,不按 task.shop_id 过滤;
+  //    BOOMER GO 门店用户仍严格门店隔离。
+  const erpShared = await isErpUserId(supa, task.created_by || null);
+
+  let accQuery = supa.from("social_accounts").select("*").neq("cookie_status", "expired");
   if (platforms.length) accQuery = accQuery.in("platform", platforms);
-  if (task.shop_id) accQuery = accQuery.eq("shop_id", task.shop_id);
+  if (!erpShared && task.shop_id) accQuery = accQuery.eq("shop_id", task.shop_id);
   const { data: accountsRaw } = await accQuery;
   const accounts = (accountsRaw || []).filter(PUBLISHABLE);
   if (!accounts.length) return { ok: false, error: "no_valid_accounts" };
 
-  const shopId = task.shop_id || accounts[0].shop_id;
-  const scoped = accounts.filter((a: any) => a.shop_id === shopId);
+  let scoped: any[];
+  let shopId: string;
+  if (erpShared) {
+    // 每个平台取一个账号
+    const byPlatform = new Map<string, any>();
+    for (const a of accounts) if (!byPlatform.has(a.platform)) byPlatform.set(a.platform, a);
+    scoped = [...byPlatform.values()];
+    shopId = task.shop_id || scoped[0].shop_id;
+  } else {
+    shopId = task.shop_id || accounts[0].shop_id;
+    scoped = accounts.filter((a: any) => a.shop_id === shopId);
+  }
   if (!scoped.length) return { ok: false, error: "no_valid_accounts" };
 
   // 2. 真实可发布素材:已成片视频且尚未被发布任务使用过
