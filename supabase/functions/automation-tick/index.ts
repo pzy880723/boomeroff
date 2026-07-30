@@ -20,9 +20,12 @@ function timingSafeEqual(a: string, b: string) {
   return diff === 0;
 }
 
-// 与发布中心口径一致:未失效(非 expired)且有 worker 账号标识即可发布。
+// 健康账号口径:cookie_status 必须是 active 或 valid(生产真实数据用的是 active),
+// 且有 worker 账号标识。expired/invalid 等一律不可发布。
+const HEALTHY_COOKIE_STATUS = ["active", "valid"];
 const PUBLISHABLE = (a: any) =>
-  a && a.cookie_status !== "expired" && (a.worker_account_id || a.worker_account_key);
+  a && HEALTHY_COOKIE_STATUS.includes(String(a.cookie_status || "")) &&
+  (a.worker_account_id || a.worker_account_key);
 
 // 严格 ERP 判定:app_metadata.auth_source='erp' → erp_user_links canonical → deterministic email 兜底。
 // 不做域名泛匹配,普通 BOOMER GO 用户一律 false。
@@ -133,7 +136,7 @@ async function runTask(supa: any, task: any, actorId: string | null) {
   //    BOOMER GO 门店用户仍严格门店隔离。
   const erpShared = await isErpUserId(supa, task.created_by || null);
 
-  let accQuery = supa.from("social_accounts").select("*").neq("cookie_status", "expired");
+  let accQuery = supa.from("social_accounts").select("*").in("cookie_status", HEALTHY_COOKIE_STATUS);
   if (platforms.length) accQuery = accQuery.in("platform", platforms);
   if (!erpShared && task.shop_id) accQuery = accQuery.eq("shop_id", task.shop_id);
   const { data: accountsRaw } = await accQuery;
