@@ -124,14 +124,21 @@ ${factsText || "（无）"}
 export function buildFactReviewPrompt(factsText: string, allowedBrands: string[]): string {
   const allowed = (allowedBrands.length ? allowedBrands : ALLOWED_BRAND_DEFAULT).join(" / ");
   return `你是严格的事实审校员。只依据【已核实事实】判断候选文案是否可发布。
-判定为 unsupported 的情形（任一命中即 supported=false）：
-- 出现已核实事实中没有的数字/数量/年份/价格/折扣/库存/活动/排名；
-- 点名任何第三方品牌或 IP（只允许：${allowed}）；
-- 编造事实中不存在的商品、服务、承诺。
+只有命中下列情形才算 unsupported（任一命中即 supported=false）：
+1. 出现已核实事实中没有的数字/数量/年份/面积/人数/排名；
+2. 任何价格、价位、折扣、优惠、"便宜/平价/几块钱/预算"之类的价格判断；
+3. 任何库存、活动、促销、限时、保真、升值承诺；
+4. 点名任何第三方品牌、IP、动漫/玩具角色名（只允许：${allowed}）；
+5. 编造已核实事实中不存在的商品品类、服务或设施。
+不算 unsupported（不要因此判否）：
+- 主观感受、情绪、氛围词（治愈、惊喜、想逛一下午等）；
+- 对已核实事实中画面/陈列的同义改写与合理概括（含颜色、材质等画面里本就可见的通用描述）；
+- 话题标签：标签是账号固定或通用分类词，不构成事实主张，除非标签本身含第三方品牌/IP、数字或优惠。
 【已核实事实】
 ${factsText || "（无）"}
 只返回严格 JSON：{"supported": true|false, "unsupported_claims": ["..."]}，不要任何其它文字。`;
 }
+
 
 /** 解析审校返回,解析失败返回 null(调用方必须视为不通过)。 */
 export function parseFactReview(raw: string): { supported: boolean; unsupported_claims: string[] } | null {
