@@ -31,8 +31,16 @@ Deno.serve(async (req) => {
     const { data: job } = await admin.from("video_generation_jobs").select("*").eq("id", jobId).maybeSingle();
     if (!job) return json({ ok: false, error: "任务不存在" }, 404);
 
+    // 幂等:已完成的任务不再重复处理(但允许补建缺失的素材)
+    const alreadyDone = job.status === "done" && !!job.final_video_url;
+    const existingAssetId = (job.meta as any)?.generated_asset_id || null;
+    if (alreadyDone && existingAssetId) {
+      return json({ ok: true, idempotent: true, asset_id: existingAssetId });
+    }
+
     // 失败上报
     if (errorMessage || !finalVideoUrl) {
+      if (alreadyDone) return json({ ok: true, idempotent: true, ignored: "job_already_done" });
       await admin.from("video_generation_jobs").update({
         compose_status: "failed",
         compose_error: errorMessage || "Worker 未返回视频 URL",
@@ -41,6 +49,7 @@ Deno.serve(async (req) => {
       }).eq("id", jobId);
       return json({ ok: true, marked: "failed" });
     }
+
 
     const script = (job.script_json as any) || {};
     const publishCopy = (job.meta as any)?.publish_copy || null;
