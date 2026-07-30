@@ -106,7 +106,9 @@ export function parseAccountPreset(input: unknown): AccountCopyPreset | null {
     tone: typeof p.tone === "string" ? p.tone.slice(0, 40) : undefined,
     title_instruction: typeof p.title_instruction === "string" ? p.title_instruction.slice(0, 300) : undefined,
     body_instruction: typeof p.body_instruction === "string" ? p.body_instruction.slice(0, 500) : undefined,
-    fixed_tags: Array.isArray(p.fixed_tags) ? p.fixed_tags.map(normalizeTag).filter(Boolean).slice(0, 10) : [],
+    fixed_tags: Array.isArray(p.fixed_tags)
+      ? [...new Set(p.fixed_tags.map(normalizeTag).filter(Boolean))].slice(0, 10)
+      : [],
     dynamic_tag_limit: Number.isFinite(Number(p.dynamic_tag_limit)) ? Number(p.dynamic_tag_limit) : undefined,
   };
   return preset;
