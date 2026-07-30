@@ -500,7 +500,7 @@ Deno.test("buildPlatformCopies 输出的 tags 只有预设三项", async () => {
 
 Deno.test("deriveShortTitle 取语义完整片段", () => {
   assertEquals(mod.deriveShortTitle(null, null, "偶遇南京西路B1层，藏在转角的中古杂货铺"), "偶遇南京西路B1层");
-  assertEquals(mod.deriveShortTitle("门店短标题", null, "任意"), "门店短标题");
+  assertEquals(mod.deriveShortTitle("门店专属短标题", null, "任意"), "门店专属短标题");
   assertEquals(mod.deriveShortTitle(null, "候选短标题吧", "任意标题内容"), "候选短标题吧");
   assertEquals(mod.deriveShortTitle(null, null, "南京西路寻宝记"), "南京西路寻宝记");
   assertEquals([...mod.deriveShortTitle(null, null, "偶遇南京西路B1层，藏在转角的中古杂货铺")].length <= 16, true);
