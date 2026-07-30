@@ -3,7 +3,7 @@
 //  1) 普通用户 JWT：照旧校验 getUser()，并保存 marketing_assets。
 //  2) 受信任服务端自动化：Authorization Bearer 或 apikey 必须是 service-role 密钥，
 //     或经后端验证为 service_role 兼容 JWT，且 body.mode === "automation"；只返回候选，不写库（避免伪造 user_id）。
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.111.0";
 import {
   loadMarketingPresets,
   canonicalCopyPlatform,
