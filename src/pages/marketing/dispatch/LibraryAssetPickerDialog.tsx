@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, Check, Play, Maximize2, Camera, Sparkles } from 'lucide-react';
+import { Loader2, Check, Play, Maximize2, Camera, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { thumbUrl, thumbSrcSet } from '@/lib/imageUrl';
@@ -35,6 +35,8 @@ export function LibraryAssetPickerDialog({
   const [lbIdx, setLbIdx] = useState<number | null>(null);
   const [loadedImgs, setLoadedImgs] = useState<Set<string>>(new Set());
   const [imgSource, setImgSource] = useState<AssetSource | 'all'>('upload');
+  const [loadError, setLoadError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => { if (open) { setTab(defaultTab); setSelVideo(null); setSelImgs(new Map()); setLbIdx(null); setLoadedImgs(new Set()); setImgSource('upload'); } }, [open, defaultTab]);
 
@@ -42,20 +44,39 @@ export function LibraryAssetPickerDialog({
     if (!open || !user) return;
     (async () => {
       setLoading(true);
-      const base = supabase
+      setLoadError('');
+      const columns = 'id, kind, output_url, meta, tags, category, created_at, shop_id, user_id';
+      let videoQuery = supabase
         .from('marketing_assets' as any)
-        .select('id, kind, output_url, meta, tags, category, created_at, shop_id, user_id')
+        .select(columns)
+        .eq('kind', 'video')
         .not('output_url', 'is', null)
         .order('created_at', { ascending: false })
         .limit(60);
-      const q1 = shopId ? base.eq('shop_id', shopId) : base.eq('user_id', user.id);
-      const { data } = await q1;
-      const all = (data as any[]) || [];
-      setVideos(all.filter((a) => a.kind === 'video'));
-      setImages(all.filter((a) => a.kind === 'photo'));
-      setLoading(false);
+      let imageQuery = supabase
+        .from('marketing_assets' as any)
+        .select(columns)
+        .eq('kind', 'photo')
+        .not('output_url', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(120);
+      videoQuery = shopId ? videoQuery.eq('shop_id', shopId) : videoQuery.eq('user_id', user.id);
+      imageQuery = shopId ? imageQuery.eq('shop_id', shopId) : imageQuery.eq('user_id', user.id);
+      try {
+        const [videoResult, imageResult] = await Promise.all([videoQuery, imageQuery]);
+        if (videoResult.error) throw videoResult.error;
+        if (imageResult.error) throw imageResult.error;
+        setVideos((videoResult.data as any[]) || []);
+        setImages((imageResult.data as any[]) || []);
+      } catch (error: any) {
+        setVideos([]);
+        setImages([]);
+        setLoadError(error?.message || '素材加载失败');
+      } finally {
+        setLoading(false);
+      }
     })();
-  }, [open, user, shopId]);
+  }, [open, user, shopId, reloadKey]);
 
   const toggleImg = (it: any) => {
     const next = new Map(selImgs);
@@ -91,6 +112,8 @@ export function LibraryAssetPickerDialog({
           <TabsContent value="video" className="mt-3">
             {loading ? (
               <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-accent" /></div>
+            ) : loadError ? (
+              <LoadError message={loadError} onRetry={() => setReloadKey((key) => key + 1)} />
             ) : videos.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">暂无视频素材</div>
             ) : (
@@ -157,6 +180,7 @@ export function LibraryAssetPickerDialog({
               };
               const imgList = images.filter(matchSrc);
               if (loading) return (<div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-accent" /></div>);
+              if (loadError) return (<LoadError message={loadError} onRetry={() => setReloadKey((key) => key + 1)} />);
               if (imgList.length === 0) return (<div className="py-8 text-center text-sm text-muted-foreground">暂无图片素材</div>);
               return (
               <div className="grid grid-cols-3 gap-2">
@@ -221,5 +245,18 @@ export function LibraryAssetPickerDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-6 text-center">
+      <AlertCircle className="h-5 w-5 text-rose-600" />
+      <div className="text-sm font-medium text-rose-700">素材加载失败</div>
+      <div className="max-w-full break-all text-[11px] text-rose-600">{message}</div>
+      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+        <RefreshCw className="mr-1 h-3.5 w-3.5" /> 重新加载
+      </Button>
+    </div>
   );
 }

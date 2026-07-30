@@ -62,6 +62,14 @@ test('素材库视频保留去发布入口，并携带当前素材 ID', () => {
   assert.match(source, /去发布|一键发布到自媒体平台/);
 });
 
+test('发布素材选择器在数据库侧分别筛选视频和图片后再限量', () => {
+  const source = read('../src/pages/marketing/dispatch/LibraryAssetPickerDialog.tsx');
+  assert.match(source, /\.eq\(['"]kind['"],\s*['"]video['"]\)[\s\S]*?\.limit\(60\)/);
+  assert.match(source, /\.eq\(['"]kind['"],\s*['"]photo['"]\)[\s\S]*?\.limit\(120\)/);
+  assert.match(source, /setLoadError/);
+  assert.match(source, /素材加载失败/);
+});
+
 test('旧的一键发布地址也会把素材 ID 带进新建发布', () => {
   const source = read('../src/App.tsx');
   assert.match(source, /asset_id=\$\{assetId\}/);
@@ -71,4 +79,13 @@ test('发布后端拒绝素材门店和账号门店不一致', () => {
   const source = read('../supabase/functions/dispatch-job-create/index.ts');
   assert.match(source, /asset\.shop_id\s*!==\s*shopId/);
   assert.match(source, /素材与发布账号不属于同一门店/);
+});
+
+test('发布账号平台约束接受 xhs，平台图文能力与 Worker 实现一致', () => {
+  const migration = read('../supabase/migrations/20260730000100_fix_publish_platform_contract.sql');
+  assert.match(migration, /'xhs'/);
+  assert.match(migration, /where platform = 'kuaishou'/);
+  assert.match(migration, /supports_image_text = true/);
+  assert.match(migration, /where platform = 'dianping'/);
+  assert.match(migration, /supports_image_text = false/);
 });
