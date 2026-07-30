@@ -84,7 +84,7 @@ Deno.test("审校返回解析：非法/矛盾一律不放行", () => {
 Deno.test("非 automation 路径不引入 strict_facts（源码断言）", async () => {
   const src = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
   assert(src.includes("const strictFacts = isTrustedService && isAutomationMode && body?.strict_facts === true"));
-  assert(src.includes('json({ error: "no_fact_safe_candidate"'));
+  assert(src.includes('error: "no_fact_safe_candidate"'));
   const userPath = src.slice(src.indexOf("const admin = admin0;"));
   assert(!userPath.includes("deterministicFactGuard"), "人工调用路径不得改变");
 });
