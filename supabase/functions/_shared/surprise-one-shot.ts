@@ -189,6 +189,34 @@ function splitContinuousDialogue(value: string): string[] {
   return groups.length === 5 && groups.every(Boolean) ? groups : [];
 }
 
+function splitFlatIntoFive(flat: string): string[] {
+  const chars = flat.replace(/[，、\s]/g, '');
+  if (!chars) return [];
+  const base = Math.floor(chars.length / 5);
+  const extra = chars.length % 5;
+  const out: string[] = [];
+  let cursor = 0;
+  for (let i = 0; i < 5; i += 1) {
+    const size = base + (i < extra ? 1 : 0);
+    out.push(chars.slice(cursor, cursor + size));
+    cursor += size;
+  }
+  return out.every(Boolean) ? out : [];
+}
+
+// 硬上限：连续口播不得超过 SURPRISE_MAX_CN 个汉字（吞字/卡顿的主因）。
+// 只做截断，绝不重复内容去补下限。
+function clampBeatDialogues(chunks: string[]): string[] {
+  if (chunks.length !== 5 || !chunks.every(Boolean)) return chunks;
+  const total = chineseLength(chunks.join('，'));
+  if (total <= SURPRISE_MAX_CN) return chunks;
+  const clipped = truncateToChinese(chunks.join('，'), SURPRISE_MAX_CN);
+  const byComma = splitContinuousDialogue(clipped);
+  if (byComma.length === 5 && byComma.every(Boolean)) return byComma;
+  const flat = splitFlatIntoFive(clipped);
+  return flat.length === 5 ? flat : chunks;
+}
+
 function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
   const clipChunks = dialogueChunksFromClips(script);
   const rawChunks = splitContinuousDialogue(raw);
@@ -201,29 +229,26 @@ function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
   const balanced = (chunks: string[]) =>
     chunks.every((chunk) => {
       const length = chineseLength(chunk);
-      return length >= 13 && length <= 28;
+      return length >= SURPRISE_BEAT_MIN_CN && length <= SURPRISE_BEAT_MAX_CN;
     });
   const rebalance = (chunks: string[]) => {
     if (balanced(chunks)) return chunks;
     const byComma = splitContinuousDialogue(chunks.join('，'));
     if (byComma.length === 5 && byComma.every(Boolean) && balanced(byComma)) return byComma;
     // 逗号分组仍然畸形（模型把两三句塞进一段），按字数均切，内容顺序保持不变。
-    const flat = chunks.join('').replace(/[，、\s]/g, '');
-    if (!flat) return chunks;
-    const size = Math.ceil(flat.length / 5);
-    const cut: string[] = [];
-    for (let i = 0; i < 5; i += 1) cut.push(flat.slice(i * size, Math.min((i + 1) * size, flat.length)));
-    return cut.every(Boolean) ? cut : (byComma.length === 5 && byComma.every(Boolean) ? byComma : chunks);
+    const cut = splitFlatIntoFive(chunks.join(''));
+    return cut.length === 5 ? cut : (byComma.length === 5 && byComma.every(Boolean) ? byComma : chunks);
   };
 
-  if (inRange(clipChunks)) return rebalance(clipChunks);
-  if (inRange(rawChunks)) return rebalance(rawChunks);
+  if (inRange(clipChunks)) return clampBeatDialogues(rebalance(clipChunks));
+  if (inRange(rawChunks)) return clampBeatDialogues(rebalance(rawChunks));
 
   const source = clipChunks.length === 5 && clipChunks.every(Boolean) ? clipChunks : rawChunks;
   if (source.length === 5 && source.every(Boolean)) {
     // 内容不改，只把逗号短句重新均分成 5 段，避免出现 30 字/8 字这种畸形分段。
     const rebalanced = splitContinuousDialogue(source.join('，'));
-    return rebalanced.length === 5 && rebalanced.every(Boolean) ? rebalanced : source;
+    const picked = rebalanced.length === 5 && rebalanced.every(Boolean) ? rebalanced : source;
+    return clampBeatDialogues(picked);
   }
   // 只有模型完全没有返回可用五段结构时，才使用保底脚本避免空对象继续向下游扩散。
   return [...FALLBACK_DIALOGUES];
