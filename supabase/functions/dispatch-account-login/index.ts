@@ -7,6 +7,17 @@ import { canonicalPlatform, PLATFORM_CODE, SAU_BASE, SAU_TOKEN, sauListAccounts 
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// 只给"拿到响应头"设超时:fetch 在响应头到达时 resolve,之后清掉定时器,不会打断 SSE 长连。
+async function fetchWithHeaderTimeout(url: string, headers: Record<string, string>, ms: number) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { headers, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const url = new URL(req.url);
