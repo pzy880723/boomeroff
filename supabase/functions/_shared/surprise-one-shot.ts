@@ -300,7 +300,10 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     clip.dialogue = dialogues[index];
     // 字幕只允许来自最终对白，避免模型同时返回两套文本后发生错位。
     clip.subtitle = dialogues[index];
+    // 动作必须是“边演边连续说”，否则 Seedance 会在切镜处停声。
+    clip.action = ensureSpeakingAction(String(clip.action || ''), index);
   });
+
   const continuous = dialogues.join('，');
   nextScript.continuous_dialogue = continuous;
   nextScript.dialogue_char_count = chineseLength(continuous);
