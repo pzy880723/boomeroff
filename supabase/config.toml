@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.erp-aigc-session]
 verify_jwt = false
+
+[functions.automation-tick]
+verify_jwt = false
