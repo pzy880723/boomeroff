@@ -219,7 +219,7 @@ Deno.test("真实门店 POI + 含AI生成内容 全字段落入 per_platform", a
 
 // ---------------- dry-run 预检 ----------------
 
-function makeDryRunSupa(opts: { asset?: any; assets?: any[]; accounts?: any[] }) {
+function makeDryRunSupa(opts: { asset?: any; assets?: any[]; accounts?: any[]; invoke?: (n: string, o: any) => any }) {
   const writes: any[] = [];
   const queries: any[] = [];
   const accounts = opts.accounts ?? [account("xhs"), account("wechat_video")];
