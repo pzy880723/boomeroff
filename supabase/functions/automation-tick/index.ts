@@ -148,7 +148,9 @@ export function applyPresetStatics(
     copy.location_name = locationName;
     copy.platform_poi_id = String(poi.platform_poi_id || poi.poi_id || "").trim();
     copy.location_verified = true;
+    copy.original_declaration = preset.original_declaration === false ? false : true;
   } else if (platform === "wechat_video" || platform === "wechat_channels") {
+
     // 真实后台字段：视频描述+话题、短标题、位置(POI)、视频标注。没有"分类/原创类型"必填项。
     copy.original_declaration = preset.original_declaration === false ? false : true;
     const shortTitle = String(preset.short_title || "").trim() || String(copy.short_title || "").trim()
