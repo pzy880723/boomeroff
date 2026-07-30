@@ -282,10 +282,10 @@ export async function buildPlatformCopies(
     const poi = poiMap && typeof poiMap === "object" ? poiMap[shopId] : null;
     const verifiedFacts = buildVerifiedFacts({ asset, task, script, poi, shopId });
 
-    // 最多两次尝试：候选可能因标题超长而全部不可用,允许再生成一轮
+    // 最多三次尝试：候选可能因标题超长/审校不过而全部不可用,允许重新生成
     let picked: any = null;
     let lastError: any = null;
-    for (let attempt = 0; attempt < 2 && !picked; attempt++) {
+    for (let attempt = 0; attempt < 3 && !picked; attempt++) {
       let res: any;
       try {
         res = await supa.functions.invoke("generate-marketing-copy", {
