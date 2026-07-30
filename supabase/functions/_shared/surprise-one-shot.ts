@@ -185,19 +185,37 @@ function splitContinuousDialogue(value: string): string[] {
 function ensureBeatDialogues(raw: string, script: SurpriseScript): string[] {
   const clipChunks = dialogueChunksFromClips(script);
   const rawChunks = splitContinuousDialogue(raw);
+  const inRange = (chunks: string[]) => {
+    if (chunks.length !== 5 || !chunks.every(Boolean)) return false;
+    const length = chineseLength(chunks.join('，'));
+    return length >= SURPRISE_MIN_CN && length <= SURPRISE_MAX_CN;
+  };
+  // 优先使用长度合格的一套；模型经常把 continuous_dialogue 写对、五段写歪（或反过来）。
+  if (inRange(clipChunks)) return clipChunks;
+  if (inRange(rawChunks)) return rawChunks;
+
   const source = clipChunks.length === 5 && clipChunks.every(Boolean) ? clipChunks : rawChunks;
-  const joined = source.join('，');
-  const joinedLength = chineseLength(joined);
-  if (source.length === 5 && source.every(Boolean)
-      && joinedLength >= SURPRISE_MIN_CN && joinedLength <= SURPRISE_MAX_CN) {
-    return source;
+  if (source.length === 5 && source.every(Boolean)) {
+    // 内容不改，只把逗号短句重新均分成 5 段，避免出现 30 字/8 字这种畸形分段。
+    const rebalanced = splitContinuousDialogue(source.join('，'));
+    return rebalanced.length === 5 && rebalanced.every(Boolean) ? rebalanced : source;
   }
-  // 五段结构完整但对白过短/过长时保留原稿，让上游校验触发整条重写。
-  // 这里绝不能替换成固定通用文案，否则虽然字数合格，画面、对白和门店事实会失去对应。
-  if (source.length === 5 && source.every(Boolean)) return source;
   // 只有模型完全没有返回可用五段结构时，才使用保底脚本避免空对象继续向下游扩散。
   return [...FALLBACK_DIALOGUES];
 }
+
+const SILENT_ACTION_WORDS = /停下|停顿|静默|沉默|等待|闭嘴|不说话/g;
+const SPEAKING_ACTION_HINT =
+  /(?:边|一边).{0,24}(?:说|讲|喊|口播|介绍)|(?:继续|持续).{0,12}(?:说|讲|喊|口播)|对镜头.{0,16}(?:说|讲|喊|口播|介绍)/;
+
+function ensureSpeakingAction(value: string, index: number): string {
+  let action = String(value || '').replace(SILENT_ACTION_WORDS, '').replace(/[，,、]{2,}/g, '，').trim();
+  action = action.replace(/^[，,、]+|[，,、]+$/g, '');
+  if (!action) action = `${BEAT_LABELS[index]}镜头跟随`;
+  if (!SPEAKING_ACTION_HINT.test(action)) action = `${action}，边演示边对镜头继续说`;
+  return action;
+}
+
 
 function normalizeClip(value: unknown): SurpriseClip {
   const clip = value && typeof value === 'object' ? { ...(value as SurpriseClip) } : {};
