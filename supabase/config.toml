@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.automation-tick]
 verify_jwt = false
+
+[functions.tmp-surprise-selftest]
+verify_jwt = false
