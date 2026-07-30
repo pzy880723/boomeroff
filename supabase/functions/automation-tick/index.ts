@@ -20,8 +20,31 @@ function timingSafeEqual(a: string, b: string) {
   return diff === 0;
 }
 
+// 与发布中心口径一致:未失效(非 expired)且有 worker 账号标识即可发布。
 const PUBLISHABLE = (a: any) =>
-  a && a.cookie_status === "valid" && (a.worker_account_id || a.worker_account_key);
+  a && a.cookie_status !== "expired" && (a.worker_account_id || a.worker_account_key);
+
+// 严格 ERP 判定:app_metadata.auth_source='erp' → erp_user_links canonical → deterministic email 兜底。
+// 不做域名泛匹配,普通 BOOMER GO 用户一律 false。
+async function isErpUserId(supa: any, userId: string | null): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const { data: authUser } = await supa.auth.admin.getUserById(userId);
+    const meta = (authUser?.user?.app_metadata || {}) as any;
+    if (meta.auth_source === "erp") return true;
+    const { data: link } = await supa
+      .from("erp_user_links").select("aigc_user_id").eq("aigc_user_id", userId).maybeSingle();
+    if (link) return true;
+    const email = String(authUser?.user?.email || "").toLowerCase();
+    const m = email.match(/^erp\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@aigc\.boomeroff\.local$/);
+    if (m?.[1]) {
+      const { data: canonical } = await supa
+        .from("erp_user_links").select("aigc_user_id").eq("erp_user_id", m[1]).maybeSingle();
+      return Boolean(canonical?.aigc_user_id);
+    }
+  } catch { /* keep strict */ }
+  return false;
+}
 
 function resolveDraft(asset: any, task: any) {
   const meta = asset?.meta || {};
