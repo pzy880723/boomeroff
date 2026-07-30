@@ -119,17 +119,25 @@ function normalizeTags(input: unknown): string[] {
 }
 
 /** 校验第一个候选,返回标准化 copy 或 null。 */
-export function pickCandidate(platform: string, candidates: any): { title: string; body: string; tags: string[] } | null {
-  const c = Array.isArray(candidates) ? candidates[0] : null;
-  if (!c) return null;
-  const title = String(c.title || "").trim();
-  const body = String(c.body || "").trim();
-  const tags = normalizeTags(c.hashtags ?? c.tags);
-  if (!title || !body || !tags.length) return null;
+export function pickCandidate(
+  platform: string,
+  candidates: any,
+): { title: string; body: string; tags: string[]; fact_check?: any } | null {
+  const list = Array.isArray(candidates) ? candidates : [];
   const max = PLATFORM_TITLE_MAX[platform] ?? 20;
-  if ([...title].length > max) return null;
-  return { title, body, tags };
+  for (const c of list) {
+    if (!c) continue;
+    const title = String(c.title || "").trim();
+    const body = String(c.body || "").trim();
+    const tags = normalizeTags(c.hashtags ?? c.tags);
+    if (!title || !body || !tags.length) continue;
+    if ([...title].length > max) continue;
+    // 带上这一条候选自己的审校摘要
+    return c.fact_check !== undefined ? { title, body, tags, fact_check: c.fact_check } : { title, body, tags };
+  }
+  return null;
 }
+
 
 /** 把账号预设的静态发布选项固化进平台 copy。返回 error 字符串表示拦截。 */
 export function applyPresetStatics(
