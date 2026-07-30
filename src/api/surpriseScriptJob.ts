@@ -17,6 +17,10 @@ export interface SurpriseScriptJobState {
   updated_at?: string;
 }
 
+// 「BOOMER 帮我拍」固定 15 秒一段直出,输出分辨率恒为 1080p。
+// 小红书发布后台会对 720p 判定「清晰度低」,所以这里兜底强制 1080p。
+export const SURPRISE_OUTPUT_RESOLUTION = '1080p';
+
 export interface SurpriseRenderPayload {
   shop_id: string;
   script: unknown;
@@ -24,7 +28,7 @@ export interface SurpriseRenderPayload {
   style: string;
   realism: string;
   model: string;
-  resolution: string;
+  resolution?: string;
   prompt_overrides?: Record<string, unknown>;
   face_pipeline?: 'auto' | 'character_sheet' | 'illustration' | 'faceless';
 }
@@ -59,10 +63,17 @@ export function discardSurpriseScriptJob(jobId: string) {
   return call({ action: 'discard', job_id: jobId });
 }
 
+export function buildSurpriseRenderBody(payload: SurpriseRenderPayload): Record<string, unknown> {
+  const resolution = (payload.resolution || '').toLowerCase() === '1080p'
+    ? '1080p'
+    : SURPRISE_OUTPUT_RESOLUTION;
+  return { ...payload, resolution, preview: false };
+}
+
 export async function renderSurpriseVideo(payload: SurpriseRenderPayload): Promise<SurpriseRenderResult> {
   const { data, error } = await invokeFn<SurpriseRenderResult>(
     'surprise-marketing-video',
-    { body: { ...payload, preview: false } },
+    { body: buildSurpriseRenderBody(payload) },
   );
   if (error) throw new Error(error.message);
   if (!data?.ok || !data.job_id) throw new Error(data?.error || '15 秒视频生成任务启动失败');
