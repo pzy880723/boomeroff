@@ -1,8 +1,8 @@
 // 看图写文：1–9 张图 → 选平台 + 口吻 → 3 条候选(标题+正文+话题+首评)
 // 两种调用方式：
 //  1) 普通用户 JWT：照旧校验 getUser()，并保存 marketing_assets。
-//  2) 受信任服务端自动化：Authorization Bearer 必须完全等于 SUPABASE_SERVICE_ROLE_KEY，
-//     且 body.mode === "automation"；只返回候选，不写库（避免伪造 user_id）。
+//  2) 受信任服务端自动化：Authorization Bearer 或 apikey 必须是 service-role 密钥，
+//     或经后端验证为 service_role 兼容 JWT，且 body.mode === "automation"；只返回候选，不写库（避免伪造 user_id）。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import {
   loadMarketingPresets,
@@ -21,6 +21,31 @@ const corsHeaders = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+export function timingSafeEqualString(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const encoder = new TextEncoder();
+  const aa = encoder.encode(a);
+  const bb = encoder.encode(b);
+  let diff = aa.length ^ bb.length;
+  const max = Math.max(aa.length, bb.length);
+  for (let i = 0; i < max; i += 1) {
+    diff |= (aa[i] ?? 0) ^ (bb[i] ?? 0);
+  }
+  return diff === 0;
+}
+
+function looksLikeJwt(token: string): boolean {
+  return token.split(".").length === 3;
+}
+
+async function isVerifiedServiceRoleJwt(SUPABASE_URL: string, ANON: string, token: string): Promise<boolean> {
+  if (!token || !looksLikeJwt(token)) return false;
+  const verifier = createClient(SUPABASE_URL, ANON, { auth: { persistSession: false } });
+  const { data, error } = await verifier.auth.getClaims(token);
+  if (error || !data?.claims) return false;
+  return data.claims.role === "service_role";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -29,13 +54,19 @@ Deno.serve(async (req) => {
     const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
-    const auth = req.headers.get("Authorization");
-    if (!auth) return json({ error: "未授权" }, 401);
-    const bearer = auth.replace(/^Bearer\s+/i, "").trim();
-
     const body = await req.json().catch(() => ({}));
+    const auth = req.headers.get("Authorization");
+    const bearer = auth?.replace(/^Bearer\s+/i, "").trim() || "";
+    const apiKey = req.headers.get("apikey")?.trim() || "";
     const isAutomationMode = body?.mode === "automation";
-    const isTrustedService = Boolean(SERVICE_KEY) && bearer === SERVICE_KEY;
+    const isDirectServiceKey = Boolean(SERVICE_KEY) && (
+      timingSafeEqualString(bearer, SERVICE_KEY) || timingSafeEqualString(apiKey, SERVICE_KEY)
+    );
+    const isCompatibleServiceJwt = isAutomationMode && !isDirectServiceKey && (
+      await isVerifiedServiceRoleJwt(SUPABASE_URL, ANON, bearer)
+      || await isVerifiedServiceRoleJwt(SUPABASE_URL, ANON, apiKey)
+    );
+    const isTrustedService = isDirectServiceKey || isCompatibleServiceJwt;
 
     let userId: string | null = null;
     if (isTrustedService) {
@@ -43,6 +74,7 @@ Deno.serve(async (req) => {
       if (!isAutomationMode) return json({ error: "未授权" }, 401);
     } else {
       if (isAutomationMode) return json({ error: "未授权" }, 401);
+      if (!auth) return json({ error: "未授权" }, 401);
       const userClient = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
       const { data: u } = await userClient.auth.getUser();
       if (!u.user) return json({ error: "未授权" }, 401);

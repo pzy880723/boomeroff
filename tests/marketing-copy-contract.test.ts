@@ -66,9 +66,12 @@ test('preset 只读取白名单字段', () => {
   assert.equal(parseAccountPreset(null), null);
 });
 
-test('automation：service key + mode=automation 才放行，且不写 marketing_assets', () => {
+test('automation：service key 或可验证 service_role JWT + mode=automation 才放行，且不写 marketing_assets', () => {
   const s = fn();
-  assert.match(s, /bearer === SERVICE_KEY/);
+  assert.match(s, /timingSafeEqualString\(bearer, SERVICE_KEY\)/);
+  assert.match(s, /timingSafeEqualString\(apiKey, SERVICE_KEY\)/);
+  assert.match(s, /isVerifiedServiceRoleJwt\(SUPABASE_URL, ANON, bearer\)/);
+  assert.match(s, /data\.claims\.role === "service_role"/);
   assert.match(s, /body\?\.mode === "automation"/);
   assert.match(s, /if \(!isAutomationMode\) return json\(\{ error: "未授权" \}, 401\)/);
   // 自动化分支必须在插入 marketing_assets 之前 return
@@ -77,6 +80,18 @@ test('automation：service key + mode=automation 才放行，且不写 marketing
   assert.ok(trustedReturn > 0 && insertAt > trustedReturn, '自动化分支必须先于写库返回');
   // 绝不下发 service key
   assert.doesNotMatch(s, /json\([^)]*SERVICE_KEY/);
+});
+
+test('automation：只接受 service-role 的 Authorization Bearer 或 apikey，不接受匿名 key 放宽', () => {
+  const s = fn();
+  assert.match(s, /req\.headers\.get\("apikey"\)/);
+  assert.match(s, /const isDirectServiceKey = Boolean\(SERVICE_KEY\) && \(/);
+  assert.match(s, /timingSafeEqualString\(bearer, SERVICE_KEY\) \|\| timingSafeEqualString\(apiKey, SERVICE_KEY\)/);
+  assert.match(s, /const isTrustedService = isDirectServiceKey \|\| isCompatibleServiceJwt/);
+  assert.doesNotMatch(s, /apiKey === ANON/);
+  assert.doesNotMatch(s, /bearer === ANON/);
+  assert.doesNotMatch(s, /data\.claims\.role !== "anon"/);
+  assert.match(s, /if \(isAutomationMode\) return json\(\{ error: "未授权" \}, 401\)/);
 });
 
 test('viral 模式标题上限跟随平台限制，不再硬编码 22', () => {
