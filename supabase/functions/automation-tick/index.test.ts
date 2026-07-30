@@ -227,7 +227,7 @@ function makeDryRunSupa(opts: { asset?: any; assets?: any[]; accounts?: any[]; i
     writes,
     queries,
     auth: { admin: { getUserById: async () => ({ data: { user: { email: "x@y.z", app_metadata: {} } } }) } },
-    functions: { invoke: async (_n: string, o: any) => ({ data: okCandidate(o.body.platform) }) },
+    functions: { invoke: async (n: string, o: any) => (opts.invoke ? opts.invoke(n, o) : { data: okCandidate(o.body.platform) }) },
     from(table: string) {
       const q: any = {
         _table: table,
