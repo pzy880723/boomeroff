@@ -10,7 +10,10 @@ export type SurpriseAgeBucket = 'young' | 'middle' | 'senior';
 export interface SurpriseValidationOptions {
   ageBucket?: SurpriseAgeBucket | null;
   factContext?: string;
+  /** 最后一轮兜底校验：放宽字数区间，只拦真正不可用的脚本。 */
+  relaxed?: boolean;
 }
+
 
 export interface SurpriseValidationResult {
   errors: string[];
