@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
 
     // 入素材库
     let assetId: string | null = null;
+    let assetError: string | null = null;
     try {
       const title = publishCopy?.cover_title || script?.title || "BOOMER 惊喜一下 · 探店短片";
       const { data: existing } = await admin.from("marketing_assets")
@@ -129,7 +130,7 @@ Deno.serve(async (req) => {
       }).eq("id", jobId);
     }
 
-    return json({ ok: true, asset_id: assetId });
+    return json({ ok: true, asset_id: assetId, asset_error: assetError });
   } catch (e) {
     console.error("[compose-callback] fatal", e);
     return json({ ok: false, error: (e as Error).message || String(e) }, 500);
