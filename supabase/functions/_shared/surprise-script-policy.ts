@@ -68,7 +68,7 @@ export function validateSurpriseScript(
   const relaxed = options.relaxed === true;
   const clipMin = relaxed ? 8 : 13;
   const clipMax = relaxed ? 40 : 28;
-  const totalMin = relaxed ? 78 : SURPRISE_MIN_CN;
+  const totalMin = relaxed ? 75 : SURPRISE_MIN_CN;
   const totalMax = relaxed ? 112 : SURPRISE_MAX_CN;
   const clips = [script.hook, ...(Array.isArray(script.scenes) ? script.scenes : []), script.outro];
   const errors: string[] = [];
