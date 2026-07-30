@@ -2,7 +2,7 @@
 // 两种调用方式：
 //  1) 普通用户 JWT：照旧校验 getUser()，并保存 marketing_assets。
 //  2) 受信任服务端自动化：Authorization Bearer 或 apikey 必须是 service-role 密钥，
-//     或经后端验证为 service_role 兼容 JWT，且 body.mode === "automation"；只返回候选，不写库（避免伪造 user_id）。
+//     或经后端 Admin API 验证为 service-role 兼容 token，且 body.mode === "automation"；只返回候选，不写库（避免伪造 user_id）。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.111.0";
 import {
   loadMarketingPresets,
@@ -34,16 +34,18 @@ export function timingSafeEqualString(a: string | null | undefined, b: string | 
   return diff === 0;
 }
 
-function looksLikeJwt(token: string): boolean {
-  return token.split(".").length === 3;
-}
-
-async function isVerifiedServiceRoleJwt(SUPABASE_URL: string, ANON: string, token: string): Promise<boolean> {
-  if (!token || !looksLikeJwt(token)) return false;
-  const verifier = createClient(SUPABASE_URL, ANON, { auth: { persistSession: false } });
-  const { data, error } = await verifier.auth.getClaims(token);
-  if (error || !data?.claims) return false;
-  return data.claims.role === "service_role";
+async function isVerifiedServiceRoleToken(SUPABASE_URL: string, token: string): Promise<boolean> {
+  if (!token) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=1`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: token },
+    });
+    await res.text();
+    return res.ok;
+  } catch (error) {
+    console.warn("[copy] service auth probe failed", error instanceof Error ? error.message : String(error));
+    return false;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -63,8 +65,8 @@ Deno.serve(async (req) => {
       timingSafeEqualString(bearer, SERVICE_KEY) || timingSafeEqualString(apiKey, SERVICE_KEY)
     );
     const isCompatibleServiceJwt = isAutomationMode && !isDirectServiceKey && (
-      await isVerifiedServiceRoleJwt(SUPABASE_URL, ANON, bearer)
-      || await isVerifiedServiceRoleJwt(SUPABASE_URL, ANON, apiKey)
+      await isVerifiedServiceRoleToken(SUPABASE_URL, bearer)
+      || await isVerifiedServiceRoleToken(SUPABASE_URL, apiKey)
     );
     const isTrustedService = isDirectServiceKey || isCompatibleServiceJwt;
 
