@@ -293,10 +293,25 @@ export async function buildPlatformCopies(
       return { ok: false, error: `${platform}_copy_failed: ${String((e as Error).message || e)}` };
     }
     if (res?.error || !res?.data?.candidates) {
-      const msg = String(res?.error?.message || res?.error || "no_candidates");
-      if (msg.includes("no_fact_safe_candidate")) return { ok: false, error: `${platform}_copy_fact_check_failed` };
+      let msg = String(res?.error?.message || res?.error || "no_candidates");
+      let detail: any = null;
+      const ctx = (res?.error as any)?.context;
+      if (ctx && typeof ctx.clone === "function") {
+        try {
+          detail = await ctx.clone().json();
+          if (detail?.error) msg = String(detail.error);
+        } catch { /* 非 JSON 忽略 */ }
+      }
+      if (msg.includes("no_fact_safe_candidate")) {
+        return {
+          ok: false,
+          error: `${platform}_copy_fact_check_failed`,
+          fact_check_rejected: detail?.rejected ?? null,
+        } as any;
+      }
       return { ok: false, error: `${platform}_copy_failed: ${msg}` };
     }
+
 
     // 只接受通过事实审校的候选
     const factSafe = (res.data.candidates as any[]).filter((c) => c?.fact_check?.supported === true);
