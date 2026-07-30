@@ -372,3 +372,76 @@ Deno.test("handleRequest 的 dry-run 分支在写操作之前返回", async () =
   const branch = h.slice(dryIdx, h.indexOf("let tasks: any[]"));
   assert(!/\.insert\(|\.update\(|\.delete\(/.test(branch), "dry-run 分支不得写库");
 });
+
+// ---------------- 事实保护 ----------------
+
+const LINKED_SCRIPT = {
+  title: "BOOMER·OFF 门头探店",
+  topic: "探店 · 门头店招",
+  hook: { scene: "商场B1走廊，开放式店面", action: "博主走入", dialogue: "周末被朋友硬拉来南京西路说B1" },
+  scenes: [{ scene: "店内全景，货架高密度陈列", action: "环顾四周", dialogue: "藏了家中古杂货铺" }],
+  outro: { scene: "店中央挥手", action: "挥手", dialogue: "下班治愈翻筐好去处" },
+};
+
+Deno.test("linked script 的 facts 被传入 generate-marketing-copy", async () => {
+  let seenBody: any = null;
+  const supa = makeSupa((_n, o) => { seenBody = o.body; return { data: okCandidate(o.body.platform) }; }, LINKED_SCRIPT);
+  const asset = { ...ASSET, meta: { ...ASSET.meta, job_id: "job-uuid", reference_manifest: [{ url: "u", summary: "挂钟墙" }] } };
+  const r = await mod.buildPlatformCopies(supa, { scoped: [account("xhs")], asset, task: TASK, shopId: "shop-1" });
+  assert(r.ok, JSON.stringify(r));
+  assertEquals(seenBody.strict_facts, true);
+  assertEquals(seenBody.allowed_brand_names, ["BOOMER", "BOOMER.OFF", "BOOMER·OFF"]);
+  const vf = seenBody.verified_facts;
+  assertEquals(vf.has_linked_script, true);
+  assert(vf.continuous_dialogue.includes("藏了家中古杂货铺"));
+  assert(vf.visual_beats.length >= 3);
+  assert(vf.visual_beats.some((b: any) => b.visual.includes("货架高密度陈列")));
+  assertEquals(vf.reference_summaries, ["挂钟墙"]);
+  assertEquals(vf.store.verified_poi_name, "BOOMER·OFF 中信泰富店");
+  assertEquals(vf.video_title, "BOOMER·OFF 门头探店");
+});
+
+Deno.test("无 linked script 时只用 asset meta / manifest", () => {
+  const facts = mod.buildVerifiedFacts({
+    asset: { meta: { title: "新片", topic: "探店", reference_manifest: [{ summary: "玩具架" }] } },
+    task: TASK, script: null, poi: null, shopId: "shop-1",
+  });
+  assertEquals(facts.has_linked_script, false);
+  assertEquals(facts.continuous_dialogue, "");
+  assertEquals(facts.visual_beats.length, 0);
+  assertEquals(facts.reference_summaries, ["玩具架"]);
+  assertEquals(facts.video_title, "新片");
+});
+
+Deno.test("未通过 fact_check 的候选在建 job 前被拒", async () => {
+  let supa = makeSupa(() => ({
+    data: { candidates: [{ title: "翻筐两小时的快乐", body: "正文".repeat(40), hashtags: ["中古"], fact_check: { supported: false, unsupported_claims: ["未核实数字：30000"] } }] },
+  }));
+  let r = await mod.buildPlatformCopies(supa, { scoped: [account("xhs")], asset: ASSET, task: TASK, shopId: "shop-1" });
+  assertEquals((r as any).error, "xhs_copy_fact_check_failed");
+  assertEquals(supa.inserted.length, 0);
+
+  // 没有 fact_check 字段的旧式候选同样不放行
+  supa = makeSupa(() => ({ data: { candidates: [{ title: "翻筐两小时的快乐", body: "正文".repeat(40), hashtags: ["中古"] }] } }));
+  r = await mod.buildPlatformCopies(supa, { scoped: [account("xhs")], asset: ASSET, task: TASK, shopId: "shop-1" });
+  assertEquals((r as any).error, "xhs_copy_fact_check_failed");
+
+  // 函数层直接返回 no_fact_safe_candidate
+  supa = makeSupa(() => ({ error: { message: "no_fact_safe_candidate" } }));
+  r = await mod.buildPlatformCopies(supa, { scoped: [account("xhs")], asset: ASSET, task: TASK, shopId: "shop-1" });
+  assertEquals((r as any).error, "xhs_copy_fact_check_failed");
+  assertEquals(supa.inserted.length, 0);
+});
+
+Deno.test("dry-run 审校失败时 would_enqueue=false 且零写库", async () => {
+  const supa = makeDryRunSupa({
+    assets: [NEW_ASSET],
+    accounts: [account("xhs")],
+    invoke: () => ({ error: { message: "no_fact_safe_candidate" } }),
+  });
+  const r = await mod.dryRunTask(supa, { task: { ...TASK, platforms: ["xhs"] }, assetId: "asset-1080" });
+  assertEquals(r.ok, false);
+  assertEquals(r.error, "xhs_copy_fact_check_failed");
+  assertEquals(r.would_enqueue, false);
+  assertEquals(supa.writes.length, 0);
+});
