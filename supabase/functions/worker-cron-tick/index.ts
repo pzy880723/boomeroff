@@ -3,6 +3,7 @@
 // social_publish_targets。原子改为 claimed 并返回完整发布包(账号 + 素材 + 每平台文案)。
 // 同时把 claimed 且 claim_expires_at 已过期的 target 回退为 pending，防止僵死。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { isHealthyCookieStatus } from "../_shared/sau.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -110,16 +111,49 @@ Deno.serve(async (req) => {
       .select("*").in("id", jobIds);
     const jobMap = new Map<string, any>((jobs || []).map((j: any) => [j.id, j]));
 
+    // 3.1 账号 cookie 健康状态:失效账号的 target 直接判 failed,不能发给 Worker,也不能永久 pending。
+    const candAccountIds = uniqStrings(candidates.map((c: any) => c.account_id));
+    const healthMap = new Map<string, boolean>();
+    if (candAccountIds.length) {
+      const { data: candAccounts } = await admin.from("social_accounts")
+        .select("id, cookie_status").in("id", candAccountIds);
+      for (const a of candAccounts || []) healthMap.set(a.id, isHealthyCookieStatus(a.cookie_status));
+    }
+
     const eligible: any[] = [];
+    const invalidIds: string[] = [];
+    const invalidJobIds = new Set<string>();
     for (const c of candidates) {
       const job = jobMap.get(c.job_id);
       if (!job) continue;
       if (job.status === "cancelled" || job.status === "failed") continue;
       if (job.schedule_at && new Date(job.schedule_at).getTime() > Date.now()) continue;
+      if (!healthMap.get(c.account_id)) {
+        invalidIds.push(c.id);
+        invalidJobIds.add(c.job_id);
+        continue;
+      }
       eligible.push(c);
       if (eligible.length >= maxBatch) break;
     }
-    if (eligible.length === 0) return json({ ok: true, targets: [] });
+
+    if (invalidIds.length) {
+      await admin.from("social_publish_targets")
+        .update({
+          status: "failed",
+          error_message: "account_cookie_invalid",
+          last_step: "account_cookie_invalid",
+          finished_at: nowIso,
+          claim_token: null,
+          claim_expires_at: null,
+          updated_at: nowIso,
+        })
+        .in("id", invalidIds)
+        .eq("status", "pending");
+      for (const jid of invalidJobIds) await rollupJobStatus(admin, jid, nowIso);
+    }
+
+    if (eligible.length === 0) return json({ ok: true, targets: [], skipped_invalid_accounts: invalidIds.length });
 
     // 4. 原子 CAS: pending → claimed
     const claimToken = randomToken();
@@ -230,3 +264,22 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: (e as Error).message || String(e) }, 500);
   }
 });
+
+// 与 worker-callback 保持同一套父 job 汇总规则。
+async function rollupJobStatus(admin: any, jobId: string, nowIso: string) {
+  if (!jobId) return;
+  const { data: targets } = await admin.from("social_publish_targets")
+    .select("status").eq("job_id", jobId);
+  if (!targets || targets.length === 0) return;
+  const statuses = targets.map((t: any) => t.status);
+  const pending = statuses.filter((s: string) => ["pending", "queued", "scheduled", "claimed", "running"].includes(s)).length;
+  if (pending > 0) return;
+  const succ = statuses.filter((s: string) => s === "success").length;
+  const failed = statuses.filter((s: string) => s === "failed").length;
+  const cancelled = statuses.filter((s: string) => s === "cancelled").length;
+  let jobStatus = "failed";
+  if (succ === statuses.length) jobStatus = "done";
+  else if (succ > 0 && (failed > 0 || cancelled > 0)) jobStatus = "partial";
+  else if (cancelled === statuses.length) jobStatus = "cancelled";
+  await admin.from("social_publish_jobs").update({ status: jobStatus, updated_at: nowIso }).eq("id", jobId);
+}
