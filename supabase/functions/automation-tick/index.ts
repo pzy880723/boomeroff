@@ -320,7 +320,9 @@ export async function buildPlatformCopies(
     const picked = pickCandidate(platform, factSafe);
     if (!picked) return { ok: false, error: `${platform}_copy_invalid` };
 
-    const applied = applyPresetStatics(platform, { ...picked, fact_check: factSafe[0].fact_check }, presetRaw, shopId);
+    // 保留被选中候选自己的审校摘要,避免候选与 fact_check 错配
+    const applied = applyPresetStatics(platform, { ...picked }, presetRaw, shopId);
+
     if (!applied.ok) return { ok: false, error: applied.error };
     platformCopies[platform] = applied.copy;
   }
