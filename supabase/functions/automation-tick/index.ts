@@ -148,7 +148,9 @@ export function applyPresetStatics(
     copy.location_name = locationName;
     copy.platform_poi_id = String(poi.platform_poi_id || poi.poi_id || "").trim();
     copy.location_verified = true;
+    copy.original_declaration = preset.original_declaration === false ? false : true;
   } else if (platform === "wechat_video" || platform === "wechat_channels") {
+
     // 真实后台字段：视频描述+话题、短标题、位置(POI)、视频标注。没有"分类/原创类型"必填项。
     copy.original_declaration = preset.original_declaration === false ? false : true;
     const shortTitle = String(preset.short_title || "").trim() || String(copy.short_title || "").trim()
@@ -233,11 +235,16 @@ export async function buildPlatformCopies(
   return { ok: true, platformCopies };
 }
 
-export async function runTask(supa: any, task: any, actorId: string | null) {
+/** 选出本次任务真实可用的平台账号(与正式入队完全一致的口径)。 */
+
+export async function selectAccounts(
+  supa: any,
+  task: any,
+): Promise<{ ok: true; scoped: any[]; shopId: string } | { ok: false; error: string }> {
   const platforms: string[] = Array.isArray(task.platforms) ? task.platforms.filter(Boolean) : [];
 
-  // 1. 真实可用账号。ERP 协同用户 = 共享账号库,不按 task.shop_id 过滤;
-  //    BOOMER GO 门店用户仍严格门店隔离。
+  // 真实可用账号。ERP 协同用户 = 共享账号库,不按 task.shop_id 过滤;
+  // BOOMER GO 门店用户仍严格门店隔离。
   const erpShared = await isErpUserId(supa, task.created_by || null);
 
   let accQuery = supa.from("social_accounts").select("*").in("cookie_status", HEALTHY_COOKIE_STATUS);
@@ -260,8 +267,11 @@ export async function runTask(supa: any, task: any, actorId: string | null) {
     scoped = accounts.filter((a: any) => a.shop_id === shopId);
   }
   if (!scoped.length) return { ok: false, error: "no_valid_accounts" };
+  return { ok: true, scoped, shopId };
+}
 
-  // 2. 真实可发布素材:已成片视频且尚未被发布任务使用过
+/** 自动挑选下一条可发布素材(正式入队路径)。 */
+export async function selectAsset(supa: any, task: any): Promise<any | null> {
   const filter = task.asset_filter || {};
   let assetQuery = supa
     .from("marketing_assets")
@@ -275,14 +285,105 @@ export async function runTask(supa: any, task: any, actorId: string | null) {
   if (task.shop_id) assetQuery = assetQuery.eq("shop_id", task.shop_id);
   const { data: assetsRaw } = await assetQuery;
   const assets = assetsRaw || [];
-  if (!assets.length) return { ok: false, error: "no_publishable_assets" };
+  if (!assets.length) return null;
 
   const { data: usedJobs } = await supa
     .from("social_publish_jobs")
     .select("asset_id")
     .in("asset_id", assets.map((a: any) => a.id));
   const used = new Set((usedJobs || []).map((r: any) => r.asset_id));
-  const asset = assets.find((a: any) => !used.has(a.id));
+  return assets.find((a: any) => !used.has(a.id)) || null;
+}
+
+/** 只读账号摘要:绝不外泄 cookie / token / 密钥。 */
+export function publicAccountSummary(a: any) {
+  return {
+    id: a?.id,
+    platform: a?.platform,
+    shop_id: a?.shop_id,
+    cookie_status: a?.cookie_status,
+    has_worker_account: Boolean(a?.worker_account_id || a?.worker_account_key),
+    display_name: a?.display_name ?? a?.nickname ?? null,
+  };
+}
+
+/** 只读素材摘要。 */
+export function publicAssetSummary(a: any) {
+  const meta = a?.meta || {};
+  return {
+    id: a?.id,
+    kind: a?.kind ?? null,
+    status: a?.status ?? null,
+    resolution: meta.resolution ?? meta.quality ?? a?.resolution ?? null,
+    duration_seconds: meta.duration_seconds ?? meta.duration ?? null,
+    has_output_url: Boolean(a?.output_url),
+    reference_image_count: collectReferenceImages(a).length,
+    created_at: a?.created_at ?? null,
+  };
+}
+
+/**
+ * dry-run 预检:执行与正式入队完全相同的账号筛选、文案生成与字段校验,
+ * 但在任何 INSERT/UPDATE 之前返回。不写 automation_tasks / social_publish_jobs /
+ * social_publish_targets / marketing_assets。
+ */
+export async function dryRunTask(
+  supa: any,
+  opts: { task: any; assetId?: string | null },
+): Promise<Record<string, any>> {
+  const { task } = opts;
+  const assetId = opts.assetId ? String(opts.assetId) : null;
+
+  const acc = await selectAccounts(supa, task);
+  if (!acc.ok) {
+    return { ok: false, dry_run: true, would_enqueue: false, task_id: task.id, asset_id: assetId, error: acc.error };
+  }
+
+  let asset: any = null;
+  if (assetId) {
+    const { data } = await supa.from("marketing_assets").select("*").eq("id", assetId).maybeSingle();
+    asset = data || null;
+    if (!asset) {
+      return { ok: false, dry_run: true, would_enqueue: false, task_id: task.id, asset_id: assetId, error: "asset_not_found" };
+    }
+    if (!asset.output_url) {
+      return { ok: false, dry_run: true, would_enqueue: false, task_id: task.id, asset_id: assetId, error: "asset_not_rendered" };
+    }
+  } else {
+    asset = await selectAsset(supa, task);
+    if (!asset) {
+      return { ok: false, dry_run: true, would_enqueue: false, task_id: task.id, asset_id: null, error: "no_publishable_assets" };
+    }
+  }
+
+  const copies = await buildPlatformCopies(supa, { scoped: acc.scoped, asset, task, shopId: acc.shopId });
+  const base = {
+    dry_run: true,
+    task_id: task.id,
+    shop_id: acc.shopId,
+    asset_id: asset.id,
+    asset: publicAssetSummary(asset),
+    accounts: acc.scoped.map(publicAccountSummary),
+  };
+  if (!copies.ok) return { ok: false, ...base, would_enqueue: false, error: copies.error };
+
+  return {
+    ok: true,
+    ...base,
+    platform_copies: copies.platformCopies,
+    per_platform: copies.platformCopies,
+    would_enqueue: true,
+  };
+}
+
+export async function runTask(supa: any, task: any, actorId: string | null) {
+  // 1. 真实可用账号
+  const acc = await selectAccounts(supa, task);
+  if (!acc.ok) return { ok: false, error: acc.error };
+  const { scoped, shopId } = acc;
+
+  // 2. 真实可发布素材:已成片视频且尚未被发布任务使用过
+  const asset = await selectAsset(supa, task);
   if (!asset) return { ok: false, error: "no_publishable_assets" };
 
   // 3. 平台文案:必须全部成功才继续,否则不产生半成品 job/target
@@ -290,6 +391,7 @@ export async function runTask(supa: any, task: any, actorId: string | null) {
   if (!copies.ok) return { ok: false, error: copies.error };
   const platformCopies = copies.platformCopies;
   const primary = platformCopies[String(scoped[0].platform)];
+
 
   const { data: jobRow, error: jobErr } = await supa.from("social_publish_jobs").insert({
     shop_id: shopId,
@@ -338,21 +440,49 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     let isWorker = false;
     let userId: string | null = null;
+    let isService = false;
+
+    const apikey = (req.headers.get("apikey") || "").trim();
+    if (SERVICE_KEY && (timingSafeEqual(bearer, SERVICE_KEY) || timingSafeEqual(apikey, SERVICE_KEY))) {
+      isService = true;
+    }
 
     if (WORKER_SECRET && (timingSafeEqual(workerToken, WORKER_SECRET) || timingSafeEqual(bearer, WORKER_SECRET))) {
       isWorker = true;
-    } else if (bearer) {
+    } else if (!isService && bearer) {
       const supaUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
         global: { headers: { Authorization: `Bearer ${bearer}` } },
       });
       const { data: claims } = await supaUser.auth.getClaims(bearer);
       userId = (claims?.claims?.sub as string) || null;
+      // 兼容旧式 service-role JWT(env 中为新式 sb_secret 时无法直接比对):
+      // 只读探测 admin 接口,能列用户才认定为 service-role。
+      if (!userId && bearer) {
+        try {
+          const probe = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=1`, {
+            headers: { Authorization: `Bearer ${bearer}`, apikey: bearer },
+          });
+          if (probe.ok) isService = true;
+          await probe.text();
+        } catch { /* keep denied */ }
+      }
     }
-    if (!isWorker && !userId) return json({ ok: false, error: "unauthorized" }, 401);
+    if (!isWorker && !userId && !isService) return json({ ok: false, error: "unauthorized" }, 401);
 
     const supa = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const body = await req.json().catch(() => ({} as any));
     const forceTaskId: string | undefined = body.force_task_id;
+    const dryRun = body.dry_run === true;
+
+    // dry-run:只读预检,必须在任何写操作之前返回
+    if (dryRun) {
+      const taskId = String(body.task_id || forceTaskId || "").trim();
+      if (!taskId) return json({ ok: false, error: "task_id_required" }, 400);
+      const { data: task } = await supa.from("automation_tasks").select("*").eq("id", taskId).maybeSingle();
+      if (!task) return json({ ok: false, error: "task_not_found" }, 404);
+      const result = await dryRunTask(supa, { task, assetId: body.asset_id ? String(body.asset_id) : null });
+      return json(result, result.ok ? 200 : 422);
+    }
 
     let tasks: any[] = [];
     if (forceTaskId) {
@@ -360,6 +490,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (!data) return json({ ok: false, error: "task_not_found" }, 404);
       tasks = [data];
     } else {
+
       if (!isWorker) return json({ ok: false, error: "force_task_id_required" }, 400);
       const nowIso = new Date().toISOString();
       const { data } = await supa

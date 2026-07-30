@@ -208,3 +208,159 @@ Deno.test("真实门店 POI + 含AI生成内容 全字段落入 per_platform", a
   assertEquals(c.video_annotation, "含AI生成内容");
   assertEquals([...c.short_title].length >= 6, true);
 });
+
+// ---------------- dry-run 预检 ----------------
+
+function makeDryRunSupa(opts: { asset?: any; assets?: any[]; accounts?: any[] }) {
+  const writes: any[] = [];
+  const queries: any[] = [];
+  const accounts = opts.accounts ?? [account("xhs"), account("wechat_video")];
+  const supa: any = {
+    writes,
+    queries,
+    auth: { admin: { getUserById: async () => ({ data: { user: { email: "x@y.z", app_metadata: {} } } }) } },
+    functions: { invoke: async (_n: string, o: any) => ({ data: okCandidate(o.body.platform) }) },
+    from(table: string) {
+      const q: any = {
+        _table: table,
+        _eq: {} as Record<string, any>,
+        select() { return q; },
+        eq(col: string, val: any) { q._eq[col] = val; return q; },
+        in() { return q; },
+        not() { return q; },
+        overlaps() { return q; },
+        order() { return q; },
+        limit() { return q; },
+        insert(rows: any) { writes.push({ op: "insert", table, rows }); return { select: () => ({ single: async () => ({ data: { id: "job-x" }, error: null }) }) }; },
+        update(rows: any) { writes.push({ op: "update", table, rows }); return { eq: async () => ({ error: null }) }; },
+        delete() { writes.push({ op: "delete", table }); return { eq: async () => ({ error: null }) }; },
+        async maybeSingle() {
+          queries.push({ table, eq: { ...q._eq } });
+          if (table === "marketing_assets") {
+            const found = (opts.assets ?? (opts.asset ? [opts.asset] : [])).find((a: any) => a.id === q._eq.id) || null;
+            return { data: found, error: null };
+          }
+          if (table === "erp_user_links") return { data: null, error: null };
+          return { data: null, error: null };
+        },
+        then(res: any) {
+          queries.push({ table, eq: { ...q._eq } });
+          if (table === "social_accounts") return Promise.resolve({ data: accounts, error: null }).then(res);
+          if (table === "marketing_assets") return Promise.resolve({ data: opts.assets ?? [], error: null }).then(res);
+          if (table === "social_publish_jobs") return Promise.resolve({ data: [], error: null }).then(res);
+          return Promise.resolve({ data: [], error: null }).then(res);
+        },
+      };
+      return q;
+    },
+  };
+  return supa;
+}
+
+const NEW_ASSET = {
+  id: "asset-1080",
+  kind: "video",
+  status: "ready",
+  output_url: "https://cdn/new-1080.mp4",
+  input_image_urls: ["https://cdn/n1.jpg"],
+  shop_id: "shop-1",
+  meta: { resolution: "1080p", title: "新片", cover_url: "https://cdn/nc.jpg" },
+};
+const OLD_ASSET = {
+  id: "asset-720",
+  kind: "video",
+  status: "ready",
+  output_url: "https://cdn/old-720.mp4",
+  input_image_urls: ["https://cdn/o1.jpg"],
+  shop_id: "shop-1",
+  meta: { resolution: "720p", title: "旧片" },
+};
+
+Deno.test("dry-run 不产生任何 INSERT/UPDATE，且使用指定 asset_id 不退回旧 720p", async () => {
+  const supa = makeDryRunSupa({ assets: [OLD_ASSET, NEW_ASSET] });
+  const r = await mod.dryRunTask(supa, { task: { ...TASK, platforms: ["xhs", "wechat_video"] }, assetId: "asset-1080" });
+  assert(r.ok, JSON.stringify(r));
+  assertEquals(supa.writes.length, 0);
+  assertEquals(r.dry_run, true);
+  assertEquals(r.would_enqueue, true);
+  assertEquals(r.asset_id, "asset-1080");
+  assertEquals(r.asset.resolution, "1080p");
+  assertEquals(r.asset.status, "ready");
+  assertEquals(r.task_id, "task-1");
+});
+
+Deno.test("dry-run 返回值不含 cookie / token / 密钥", async () => {
+  const acc = [
+    { ...account("xhs"), cookie: "SECRETCOOKIE", cookie_json: "{}", worker_account_key: "k1" },
+    { ...account("wechat_video"), cookie: "SECRETCOOKIE2" },
+  ];
+  const supa = makeDryRunSupa({ assets: [NEW_ASSET], accounts: acc });
+  const r = await mod.dryRunTask(supa, { task: { ...TASK, platforms: ["xhs", "wechat_video"] }, assetId: "asset-1080" });
+  assert(r.ok);
+  const dumped = JSON.stringify(r);
+  assert(!dumped.includes("SECRETCOOKIE"), "泄漏 cookie");
+  assert(!/"cookie"|"cookie_json"|"token"|worker_account_key/.test(dumped), "泄漏敏感字段");
+  for (const a of r.accounts) {
+    assertEquals(Object.keys(a).sort(), ["cookie_status", "display_name", "has_worker_account", "id", "platform", "shop_id"]);
+  }
+});
+
+Deno.test("dry-run 的 xhs / wechat_video 字段完整", async () => {
+  const supa = makeDryRunSupa({ assets: [NEW_ASSET] });
+  const r = await mod.dryRunTask(supa, { task: { ...TASK, platforms: ["xhs", "wechat_video"] }, assetId: "asset-1080" });
+  assert(r.ok, JSON.stringify(r));
+  const pp = r.per_platform;
+  assertEquals(r.platform_copies, pp);
+
+  const x = pp.xhs;
+  assert(x.title && x.body);
+  assert(x.tags.length > 0);
+  assertEquals(x.original_declaration, true);
+  assertEquals(x.location_name, "BOOMER·OFF 中信泰富店");
+  assertEquals(x.location_verified, true);
+  assertEquals(x.platform_poi_id, "poi-123");
+
+  const w = pp.wechat_video;
+  assert(w.body && w.tags.length > 0);
+  const stLen = [...w.short_title].length;
+  assert(stLen >= 6 && stLen <= 16, `short_title 长度 ${stLen}`);
+  assertEquals(w.video_annotation, "含AI生成内容");
+  assertEquals(w.location_name, "BOOMER·OFF 中信泰富店");
+  assertEquals(w.location_verified, true);
+  assertEquals(supa.writes.length, 0);
+});
+
+Deno.test("dry-run 素材不存在 / 未成片时不写库", async () => {
+  let supa = makeDryRunSupa({ assets: [NEW_ASSET] });
+  let r = await mod.dryRunTask(supa, { task: { ...TASK, platforms: ["xhs"] }, assetId: "nope" });
+  assertEquals(r.ok, false);
+  assertEquals(r.error, "asset_not_found");
+  assertEquals(r.would_enqueue, false);
+  assertEquals(supa.writes.length, 0);
+
+  supa = makeDryRunSupa({ assets: [{ ...NEW_ASSET, output_url: null }] });
+  r = await mod.dryRunTask(supa, { task: { ...TASK, platforms: ["xhs"] }, assetId: "asset-1080" });
+  assertEquals(r.error, "asset_not_rendered");
+  assertEquals(supa.writes.length, 0);
+});
+
+Deno.test("dry-run 缺 POI/annotation 时 would_enqueue=false 且不写库", async () => {
+  const noAnno: any = { ...PRESET_BASE };
+  delete noAnno.video_annotation;
+  const supa = makeDryRunSupa({ assets: [NEW_ASSET], accounts: [account("wechat_video", noAnno)] });
+  const r = await mod.dryRunTask(supa, { task: { ...TASK, platforms: ["wechat_video"] }, assetId: "asset-1080" });
+  assertEquals(r.ok, false);
+  assertEquals(r.error, "wechat_video_annotation_preset_missing");
+  assertEquals(r.would_enqueue, false);
+  assertEquals(supa.writes.length, 0);
+});
+
+Deno.test("handleRequest 的 dry-run 分支在写操作之前返回", async () => {
+  const src = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  const h = src.slice(src.indexOf("export async function handleRequest"));
+  const dryIdx = h.indexOf("if (dryRun)");
+  const runIdx = h.indexOf("runTask(supa, task");
+  assert(dryIdx > 0 && runIdx > dryIdx, "dry-run 必须在 runTask 之前返回");
+  const branch = h.slice(dryIdx, h.indexOf("let tasks: any[]"));
+  assert(!/\.insert\(|\.update\(|\.delete\(/.test(branch), "dry-run 分支不得写库");
+});
