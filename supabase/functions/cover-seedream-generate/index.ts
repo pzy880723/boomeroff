@@ -2,7 +2,7 @@
 // 鉴权复用封面 Worker token(COVER_WORKER_TOKEN > WORKER_SHARED_SECRET > COMPOSE_WORKER_TOKEN)。
 // 不记录 prompt、图片内容或任何密钥。
 import { resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
-import { ARK_IMAGE_ENDPOINT, buildArkBody, sanitizeUpstreamError, validateRequest } from "./validate.ts";
+import { ARK_IMAGE_ENDPOINT, buildArkBody, mapCaughtError, sanitizeUpstreamError, validateRequest } from "./validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
