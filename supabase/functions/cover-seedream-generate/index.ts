@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const TOKEN = resolveCoverWorkerToken();
-    if (!TOKEN) return json({ error: "COVER_WORKER_TOKEN / WORKER_SHARED_SECRET 未配置" }, 500);
+    if (!TOKEN) return json({ error: "封面 Worker Token 未配置" }, 500);
     if (req.headers.get("x-worker-token") !== TOKEN) return json({ error: "未授权" }, 401);
 
     const ARK_API_KEY = Deno.env.get("ARK_API_KEY");
