@@ -5,6 +5,7 @@ import {
   ARK_MODEL,
   base64ByteLength,
   buildArkBody,
+  mapCaughtError,
   MAX_PROMPT_LENGTH,
   sanitizeUpstreamError,
   validateRequest,
