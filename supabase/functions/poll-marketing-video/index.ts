@@ -5,6 +5,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
 import { isVolcesTosUrl, mirrorTosVideoToStorage } from "../_shared/mirror-tos-video.ts";
+import { coverPollFields, ensureCoverQueued } from "../_shared/cover-generation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -439,6 +440,13 @@ Deno.serve(async (req) => {
             { status: r.mapped, ...(r.error ? { error: r.error } : {}) },
             r.video_url || null,
           );
+          if (r.mapped === "succeeded" && r.video_url) {
+            const { data: fresh } = await admin
+              .from("marketing_video_jobs")
+              .select("id, user_id, shop_id, video_url, script, fallback_notes")
+              .eq("id", j.id).maybeSingle();
+            if (fresh) await ensureCoverQueued(admin, fresh).catch(() => null);
+          }
         }
         results.push({ id: j.id, status: r.mapped });
 
@@ -627,7 +635,14 @@ Deno.serve(async (req) => {
           await admin.from("marketing_video_jobs").update({ video_url: stableUrl }).eq("id", jobId);
         }
       }
-      return json({ status: job.status, video_url: stableUrl, error: job.error });
+      let coverFields = coverPollFields(job.fallback_notes);
+      if (job.status === "succeeded" && !job.parent_job_id && stableUrl && !coverFields.cover_status) {
+        await ensureCoverQueued(admin, { ...job, video_url: stableUrl }).catch(() => null);
+        const { data: refreshed } = await admin
+          .from("marketing_video_jobs").select("fallback_notes").eq("id", jobId).maybeSingle();
+        coverFields = coverPollFields(refreshed?.fallback_notes ?? job.fallback_notes);
+      }
+      return json({ status: job.status, video_url: stableUrl, error: job.error, ...coverFields });
     }
     if (!job.provider_task_id) {
       if (job.status === "queued" && (job.script || {}).__render_payload) {
@@ -666,7 +681,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    return json({ status: r.mapped, video_url: responseVideoUrl, error: r.error || null, ark_status: r.status });
+    let coverFieldsLive = coverPollFields(job.fallback_notes);
+    if (r.mapped === "succeeded" && !job.parent_job_id && responseVideoUrl) {
+      const { data: fresh } = await admin
+        .from("marketing_video_jobs")
+        .select("id, user_id, shop_id, video_url, script, fallback_notes")
+        .eq("id", jobId).maybeSingle();
+      if (fresh) {
+        await ensureCoverQueued(admin, { ...fresh, video_url: responseVideoUrl }).catch(() => null);
+        const { data: refreshed } = await admin
+          .from("marketing_video_jobs").select("fallback_notes").eq("id", jobId).maybeSingle();
+        coverFieldsLive = coverPollFields(refreshed?.fallback_notes ?? fresh.fallback_notes);
+      }
+    }
+    return json({ status: r.mapped, video_url: responseVideoUrl, error: r.error || null, ark_status: r.status, ...coverFieldsLive });
   } catch (e) {
     console.error("[poll] error", e);
     return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);

@@ -11,7 +11,7 @@ type Job = {
   segment_index: number | null;
   segment_total: number | null;
   parent_job_id: string | null;
-  fallback_notes: string[] | null;
+  fallback_notes: unknown;
   error: string | null;
   script?: any;
 };
@@ -47,6 +47,12 @@ function payloadInfo(job: Job) {
 
 const STATUS_LABEL: Record<string, string> = {
   queued: '排队中', running: '生成中', succeeded: '已完成', failed: '失败', cancelled: '已取消',
+};
+
+const readNotes = (raw: unknown): string[] => {
+  if (Array.isArray(raw)) return raw as string[];
+  if (raw && typeof raw === 'object' && Array.isArray((raw as any).notes)) return (raw as any).notes as string[];
+  return [];
 };
 
 export function VideoJobDetailPanel({ jobId, defaultExpanded = true }: { jobId: string; defaultExpanded?: boolean }) {
@@ -89,7 +95,7 @@ export function VideoJobDetailPanel({ jobId, defaultExpanded = true }: { jobId: 
   const done = segs.filter((s) => s.status === 'succeeded').length;
   const failed = segs.filter((s) => s.status === 'failed').length;
   const total = parent?.segment_total || segs.length || 1;
-  const parentNotes = (parent?.fallback_notes || []) as string[];
+  const parentNotes = readNotes(parent?.fallback_notes);
   const strategyLabel = useMemo(() => {
     const s = parent?.script?.__render_payload?.render_strategy
       || parent?.script?.render_strategy
@@ -120,7 +126,7 @@ export function VideoJobDetailPanel({ jobId, defaultExpanded = true }: { jobId: 
       {expanded && (
         <ul className="divide-y divide-border">
           {segs.map((s) => {
-            const notes = (s.fallback_notes || []) as string[];
+            const notes = readNotes(s.fallback_notes);
             const info = payloadInfo(s);
             const icon = s.status === 'succeeded' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
               : s.status === 'failed' ? <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
