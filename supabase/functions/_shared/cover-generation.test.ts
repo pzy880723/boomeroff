@@ -56,7 +56,7 @@ function fakeAdmin(rows: any[], opts: { claimWins?: boolean } = {}) {
         is: (k: string, v: unknown) => { state.filters.push(["is", k, v]); return builder; },
         filter: () => builder,
         order: () => builder,
-        limit: () => Promise.resolve({ data: rows }),
+        limit: () => builder,
         update: (patch: any) => { state.update = patch; calls.push(patch); return builder; },
         maybeSingle: () => {
           if (state.update) {
