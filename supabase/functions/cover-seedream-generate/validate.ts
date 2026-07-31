@@ -7,7 +7,7 @@ export const ARK_MODEL = "doubao-seedream-5-0-lite-260128";
 export const MAX_PROMPT_LENGTH = 4000;
 export const MAX_IMAGES = 4;
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 单张 8MB
-export const MAX_TOTAL_BYTES = 24 * 1024 * 1024; // 总计 24MB
+export const MAX_TOTAL_BYTES = 16 * 1024 * 1024; // 总计 16MB
 
 const DATA_IMAGE_RE = /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=\s]+$/;
 
