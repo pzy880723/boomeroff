@@ -9,6 +9,7 @@ import {
   mergeCoverGeneration,
   normalizeFallbackNotes,
   readCoverGeneration,
+  resolveCoverWorkerToken,
   variationKey,
 } from "./cover-generation.ts";
 
@@ -163,4 +164,13 @@ Deno.test("poll 字段:未成功时不暴露 cover_url,成功后暴露", () => {
   assertEquals(f2.cover_status, "succeeded");
   assertEquals(f2.cover_url, "https://cdn/cover.jpg");
   assertEquals(f2.cover_error, null);
+});
+
+Deno.test("worker token:优先 COVER_WORKER_TOKEN,缺失回退 WORKER_SHARED_SECRET", () => {
+  const mk = (m: Record<string, string>) => (k: string) => m[k];
+  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "a", WORKER_SHARED_SECRET: "b" })), "a");
+  assertEquals(resolveCoverWorkerToken(mk({ WORKER_SHARED_SECRET: "b" })), "b");
+  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "   ", WORKER_SHARED_SECRET: "b" })), "b");
+  assertEquals(resolveCoverWorkerToken(mk({})), null);
+  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "", WORKER_SHARED_SECRET: "" })), null);
 });

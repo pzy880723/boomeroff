@@ -1,6 +1,6 @@
 // cover-heartbeat: Worker 每 30-60s 汇报一次进度,防止封面任务被回收。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { mergeCoverGeneration } from "../_shared/cover-generation.ts";
+import { mergeCoverGeneration, resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,8 +12,8 @@ const json = (b: unknown, s = 200) =>
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const TOKEN = Deno.env.get("COVER_WORKER_TOKEN");
-    if (!TOKEN) return json({ ok: false, error: "COVER_WORKER_TOKEN 未配置" }, 500);
+    const TOKEN = resolveCoverWorkerToken();
+    if (!TOKEN) return json({ ok: false, error: "COVER_WORKER_TOKEN / WORKER_SHARED_SECRET 未配置" }, 500);
     if (req.headers.get("x-worker-token") !== TOKEN) return json({ ok: false, error: "未授权" }, 401);
 
     const { job_id, worker_id, progress } = await req.json().catch(() => ({}));
