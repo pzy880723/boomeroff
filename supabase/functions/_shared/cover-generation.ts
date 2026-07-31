@@ -300,15 +300,16 @@ export function coverPollFields(raw: unknown): {
 
 /**
  * 封面 Worker 鉴权 token:优先专用 COVER_WORKER_TOKEN,
- * 缺失时复用生产发布 Worker 已有的 WORKER_SHARED_SECRET。
- * 两者都缺失返回 null(调用方返回 500)。
+ * 其次 WORKER_SHARED_SECRET,最后复用同一受控 Worker 主机的 COMPOSE_WORKER_TOKEN。
+ * 全部缺失返回 null(调用方返回 500)。
  */
 export function resolveCoverWorkerToken(
   env: (k: string) => string | undefined = (k) => Deno.env.get(k),
 ): string | null {
-  const dedicated = (env("COVER_WORKER_TOKEN") || "").trim();
-  if (dedicated) return dedicated;
-  const shared = (env("WORKER_SHARED_SECRET") || "").trim();
-  if (shared) return shared;
+  for (const key of ["COVER_WORKER_TOKEN", "WORKER_SHARED_SECRET", "COMPOSE_WORKER_TOKEN"]) {
+    const v = (env(key) || "").trim();
+    if (v) return v;
+  }
   return null;
 }
+
