@@ -2,7 +2,7 @@
 // 成功 { job_id, cover_url, reference_frame_count, copy_fingerprint, variation_key }
 // 失败 { job_id, error } → 直接写 failed,绝不用视频帧截图降级。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { mergeCoverGeneration, readCoverGeneration } from "../_shared/cover-generation.ts";
+import { mergeCoverGeneration, readCoverGeneration, resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,8 +16,8 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const TOKEN = Deno.env.get("COVER_WORKER_TOKEN");
-    if (!TOKEN) return json({ ok: false, error: "COVER_WORKER_TOKEN 未配置" }, 500);
+    const TOKEN = resolveCoverWorkerToken();
+    if (!TOKEN) return json({ ok: false, error: "COVER_WORKER_TOKEN / WORKER_SHARED_SECRET 未配置" }, 500);
     if (req.headers.get("x-worker-token") !== TOKEN) return json({ ok: false, error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));

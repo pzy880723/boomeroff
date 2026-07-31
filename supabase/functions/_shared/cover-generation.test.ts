@@ -9,6 +9,7 @@ import {
   mergeCoverGeneration,
   normalizeFallbackNotes,
   readCoverGeneration,
+  resolveCoverWorkerToken,
   variationKey,
 } from "./cover-generation.ts";
 
