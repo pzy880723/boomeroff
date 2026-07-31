@@ -2,7 +2,7 @@
 // 鉴权复用封面 Worker token(COVER_WORKER_TOKEN > WORKER_SHARED_SECRET > COMPOSE_WORKER_TOKEN)。
 // 不记录 prompt、图片内容或任何密钥。
 import { resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
-import { ARK_IMAGE_ENDPOINT, buildArkBody, sanitizeUpstreamError, validateRequest } from "./validate.ts";
+import { ARK_IMAGE_ENDPOINT, buildArkBody, mapCaughtError, sanitizeUpstreamError, validateRequest } from "./validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,10 +44,11 @@ Deno.serve(async (req) => {
     } catch {
       return json({ error: "上游响应解析失败", upstream_status: resp.status }, 502);
     }
-    // 保持 Ark 原始 {data:[{b64_json}]} 结构
+    // 保持 Ark 原始 {data:[{url}]} 结构
     return json(parsed, 200);
   } catch (e) {
-    console.error("[cover-seedream-generate] error", (e as Error)?.name || "unknown");
-    return json({ error: "内部错误" }, 500);
+    const mapped = mapCaughtError(e);
+    console.error("[cover-seedream-generate] error", (e as Error)?.name || "unknown", mapped.status);
+    return json(mapped.body, mapped.status);
   }
 });

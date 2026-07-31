@@ -5,6 +5,7 @@ import {
   ARK_MODEL,
   base64ByteLength,
   buildArkBody,
+  mapCaughtError,
   MAX_PROMPT_LENGTH,
   sanitizeUpstreamError,
   validateRequest,
@@ -51,17 +52,30 @@ Deno.test("单张与总大小超限返回错误", () => {
   assert(base64ByteLength("data:image/png;base64,AAAA") === 3);
 });
 
-Deno.test("固定模型 / size 默认 2K / b64_json / 无水印", () => {
+Deno.test("固定模型 / size 默认 2K / response_format=url / 无水印", () => {
   const v = validateRequest({ prompt: " 封面 ", image: [img()] });
   assert(!("error" in v));
   const body = buildArkBody(v as never);
   assertEquals(body.model, ARK_MODEL);
   assertEquals(body.prompt, "封面");
   assertEquals(body.size, "2K");
-  assertEquals(body.response_format, "b64_json");
+  assertEquals(body.response_format, "url");
   assertEquals(body.watermark, false);
   assertEquals((body.image as string[]).length, 1);
   assert((validateRequest({ prompt: "p", image: [img()], size: "4K" }) as { error: string }).error.includes("2K"));
+});
+
+Deno.test("外层异常映射:网络层 TypeError → 504,其它 → 500", () => {
+  const t = mapCaughtError(new TypeError("error sending request"));
+  assertEquals(t.status, 504);
+  assertEquals(t.body.code, "seedream_upstream_timeout");
+  assertEquals(t.body.error, "Seedream 上游请求超时或连接中断");
+
+  const other = mapCaughtError(new Error("boom"));
+  assertEquals(other.status, 500);
+  assertEquals(other.body.error, "内部错误");
+  assertEquals(other.body.code, undefined);
+  assertEquals(mapCaughtError("string throw").status, 500);
 });
 
 Deno.test("上游错误脱敏:不泄露密钥/图片/prompt", () => {

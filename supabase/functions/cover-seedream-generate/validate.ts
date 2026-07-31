@@ -56,9 +56,22 @@ export function buildArkBody(input: ValidatedInput): Record<string, unknown> {
     prompt: input.prompt,
     image: input.image,
     size: input.size,
-    response_format: "b64_json",
+    // 2K 图不再经 Edge Function 回传 base64,改为返回 URL 由 Worker 自行下载
+    response_format: "url",
     watermark: false,
   };
+}
+
+/** 外层异常安全映射:fetch 网络层 TypeError → 504,其它 → 500。不含敏感内容。 */
+export function mapCaughtError(e: unknown): { status: number; body: { error: string; code?: string } } {
+  const name = (e as Error)?.name;
+  if (name === "TypeError") {
+    return {
+      status: 504,
+      body: { error: "Seedream 上游请求超时或连接中断", code: "seedream_upstream_timeout" },
+    };
+  }
+  return { status: 500, body: { error: "内部错误" } };
 }
 
 /** 上游错误只返回安全摘要:不含密钥、图片、prompt。 */
