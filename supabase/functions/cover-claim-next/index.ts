@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const TOKEN = resolveCoverWorkerToken();
-    if (!TOKEN) return json({ ok: false, error: "COVER_WORKER_TOKEN / WORKER_SHARED_SECRET 未配置" }, 500);
+    if (!TOKEN) return json({ ok: false, error: "封面 Worker Token 未配置" }, 500);
     if (req.headers.get("x-worker-token") !== TOKEN) return json({ ok: false, error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));

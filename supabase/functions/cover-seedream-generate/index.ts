@@ -1,5 +1,5 @@
 // cover-seedream-generate: 内部 Seedream 代理,避免腾讯云 Worker 复制 ARK_API_KEY。
-// 鉴权复用封面 Worker token(COVER_WORKER_TOKEN 优先,WORKER_SHARED_SECRET fallback)。
+// 鉴权复用封面 Worker token(COVER_WORKER_TOKEN > WORKER_SHARED_SECRET > COMPOSE_WORKER_TOKEN)。
 // 不记录 prompt、图片内容或任何密钥。
 import { resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
 import { ARK_IMAGE_ENDPOINT, buildArkBody, sanitizeUpstreamError, validateRequest } from "./validate.ts";
@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const TOKEN = resolveCoverWorkerToken();
-    if (!TOKEN) return json({ error: "COVER_WORKER_TOKEN / WORKER_SHARED_SECRET 未配置" }, 500);
+    if (!TOKEN) return json({ error: "封面 Worker Token 未配置" }, 500);
     if (req.headers.get("x-worker-token") !== TOKEN) return json({ error: "未授权" }, 401);
 
     const ARK_API_KEY = Deno.env.get("ARK_API_KEY");

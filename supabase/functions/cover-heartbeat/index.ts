@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const TOKEN = resolveCoverWorkerToken();
-    if (!TOKEN) return json({ ok: false, error: "COVER_WORKER_TOKEN / WORKER_SHARED_SECRET 未配置" }, 500);
+    if (!TOKEN) return json({ ok: false, error: "封面 Worker Token 未配置" }, 500);
     if (req.headers.get("x-worker-token") !== TOKEN) return json({ ok: false, error: "未授权" }, 401);
 
     const { job_id, worker_id, progress } = await req.json().catch(() => ({}));
