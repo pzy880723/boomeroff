@@ -166,11 +166,13 @@ Deno.test("poll 字段:未成功时不暴露 cover_url,成功后暴露", () => {
   assertEquals(f2.cover_error, null);
 });
 
-Deno.test("worker token:优先 COVER_WORKER_TOKEN,缺失回退 WORKER_SHARED_SECRET", () => {
+Deno.test("worker token:COVER_WORKER_TOKEN > WORKER_SHARED_SECRET > COMPOSE_WORKER_TOKEN", () => {
   const mk = (m: Record<string, string>) => (k: string) => m[k];
-  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "a", WORKER_SHARED_SECRET: "b" })), "a");
-  assertEquals(resolveCoverWorkerToken(mk({ WORKER_SHARED_SECRET: "b" })), "b");
-  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "   ", WORKER_SHARED_SECRET: "b" })), "b");
+  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "a", WORKER_SHARED_SECRET: "b", COMPOSE_WORKER_TOKEN: "c" })), "a");
+  assertEquals(resolveCoverWorkerToken(mk({ WORKER_SHARED_SECRET: "b", COMPOSE_WORKER_TOKEN: "c" })), "b");
+  assertEquals(resolveCoverWorkerToken(mk({ COMPOSE_WORKER_TOKEN: "c" })), "c");
+  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "   ", WORKER_SHARED_SECRET: "  ", COMPOSE_WORKER_TOKEN: "c" })), "c");
   assertEquals(resolveCoverWorkerToken(mk({})), null);
-  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "", WORKER_SHARED_SECRET: "" })), null);
+  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "", WORKER_SHARED_SECRET: "", COMPOSE_WORKER_TOKEN: "" })), null);
 });
+
