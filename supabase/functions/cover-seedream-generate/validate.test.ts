@@ -14,8 +14,9 @@ const img = (kind: "jpeg" | "png" = "jpeg") => `data:image/${kind};base64,AAAABB
 
 Deno.test("鉴权:token 优先级与 fallback,都缺失为 null", () => {
   const mk = (m: Record<string, string>) => (k: string) => m[k];
-  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "a", WORKER_SHARED_SECRET: "b" })), "a");
-  assertEquals(resolveCoverWorkerToken(mk({ WORKER_SHARED_SECRET: "b" })), "b");
+  assertEquals(resolveCoverWorkerToken(mk({ COVER_WORKER_TOKEN: "a", WORKER_SHARED_SECRET: "b", COMPOSE_WORKER_TOKEN: "c" })), "a");
+  assertEquals(resolveCoverWorkerToken(mk({ WORKER_SHARED_SECRET: "b", COMPOSE_WORKER_TOKEN: "c" })), "b");
+  assertEquals(resolveCoverWorkerToken(mk({ COMPOSE_WORKER_TOKEN: "c" })), "c");
   assertEquals(resolveCoverWorkerToken(mk({})), null);
 });
 
