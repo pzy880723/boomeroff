@@ -59,6 +59,54 @@ export function buildArkBody(input: ValidatedInput): Record<string, unknown> {
     // 2K 图不再经 Edge Function 回传 base64,改为返回 URL 由 Worker 自行下载
     response_format: "url",
     watermark: false,
+    // 流式返回:Edge 只做透传,避免同步等待触发 150s 墙钟超时
+    stream: true,
+    sequential_image_generation: "disabled",
+  };
+}
+
+/** 上游非 2xx 时最多读取的错误体字节数,避免大响应拖垮函数 */
+export const MAX_ERROR_BODY_BYTES = 8 * 1024;
+
+/** 只读取有限长度的错误体(流式安全) */
+export async function readLimitedText(
+  body: ReadableStream<Uint8Array> | null,
+  limit = MAX_ERROR_BODY_BYTES,
+): Promise<string> {
+  if (!body) return "";
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < limit) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        total += value.byteLength;
+      }
+    }
+  } finally {
+    try { await reader.cancel(); } catch { /* ignore */ }
+  }
+  const merged = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { merged.set(c, off); off += c.byteLength; }
+  return new TextDecoder().decode(merged.slice(0, limit));
+}
+
+/** 透传响应头:保留上游 Content-Type(SSE 或 JSON),并禁用缓存 */
+export function passthroughHeaders(
+  upstreamContentType: string | null,
+  cors: Record<string, string>,
+): Record<string, string> {
+  const ct = (upstreamContentType || "").trim() || "application/json";
+  return {
+    ...cors,
+    "Content-Type": ct,
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
   };
 }
 
