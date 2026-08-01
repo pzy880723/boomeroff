@@ -6,6 +6,8 @@ import {
   base64ByteLength,
   buildArkBody,
   mapCaughtError,
+  passthroughHeaders,
+  readLimitedText,
   MAX_PROMPT_LENGTH,
   sanitizeUpstreamError,
   validateRequest,
@@ -93,4 +95,64 @@ Deno.test("上游错误脱敏:不泄露密钥/图片/prompt", () => {
   const nonJson = sanitizeUpstreamError(500, "<html>sk-leak</html>");
   assert(!JSON.stringify(nonJson).includes("sk-leak"));
   assertEquals(nonJson.upstream_code, undefined);
+});
+
+Deno.test("流式透传:请求体显式声明 stream 与 sequential_image_generation", () => {
+  const v = validateRequest({ prompt: "封面", image: [img(), img(), img(), img("png")] });
+  assert(!("error" in v));
+  const body = buildArkBody(v as never);
+  assertEquals(body.stream, true);
+  assertEquals(body.sequential_image_generation, "disabled");
+  assertEquals(body.response_format, "url");
+  assertEquals(body.watermark, false);
+  assertEquals(body.size, "2K");
+  assertEquals((body.image as string[]).length, 4);
+});
+
+Deno.test("透传响应头:保留 SSE Content-Type + no-cache", () => {
+  const cors = { "Access-Control-Allow-Origin": "*" };
+  const sse = passthroughHeaders("text/event-stream; charset=utf-8", cors);
+  assertEquals(sse["Content-Type"], "text/event-stream; charset=utf-8");
+  assert(sse["Cache-Control"].includes("no-cache"));
+  assertEquals(sse["Access-Control-Allow-Origin"], "*");
+  // 上游若非流式 JSON,也原样透传
+  assertEquals(passthroughHeaders("application/json", cors)["Content-Type"], "application/json");
+  assertEquals(passthroughHeaders(null, cors)["Content-Type"], "application/json");
+});
+
+Deno.test("响应是流式透传,而不是 await json 后重建", async () => {
+  const chunks = ["data: {\"a\":1}\n\n", "data: [DONE]\n\n"];
+  const enc = new TextEncoder();
+  let pulled = 0;
+  const upstream = new ReadableStream<Uint8Array>({
+    pull(c) {
+      if (pulled < chunks.length) c.enqueue(enc.encode(chunks[pulled++]));
+      else c.close();
+    },
+  });
+  const out = new Response(upstream, {
+    status: 200,
+    headers: passthroughHeaders("text/event-stream", { "Access-Control-Allow-Origin": "*" }),
+  });
+  assertEquals(out.headers.get("Content-Type"), "text/event-stream");
+  const reader = out.body!.getReader();
+  const first = await reader.read();
+  // 第一块可读时上游尚未全部消费 → 证明是透传而非 await 完整结果
+  assertEquals(new TextDecoder().decode(first.value), chunks[0]);
+  assertEquals(pulled, 1);
+  await reader.cancel();
+});
+
+Deno.test("上游非 2xx:只读取有限错误体并脱敏", async () => {
+  const enc = new TextEncoder();
+  const huge = JSON.stringify({ error: { code: "SensitiveContentDetected", message: "x".repeat(50000) } });
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) { c.enqueue(enc.encode(huge)); c.close(); },
+  });
+  const text = await readLimitedText(stream, 8 * 1024);
+  assert(text.length <= 8 * 1024);
+  assertEquals(await readLimitedText(null), "");
+  const safe = sanitizeUpstreamError(400, JSON.stringify({ error: { code: "SensitiveContentDetected" } }));
+  assertEquals(safe.upstream_code, "SensitiveContentDetected");
+  assertEquals(safe.upstream_status, 400);
 });
