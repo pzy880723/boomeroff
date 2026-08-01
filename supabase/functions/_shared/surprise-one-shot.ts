@@ -42,6 +42,8 @@ export interface SurpriseScript {
   speech_rate?: string;
   max_silence_s?: number;
   visual_beats?: SurpriseVisualBeat[];
+  publish_copy?: SurprisePublishCopy;
+
   [key: string]: unknown;
 }
 
