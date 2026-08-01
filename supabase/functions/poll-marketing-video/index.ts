@@ -635,12 +635,12 @@ Deno.serve(async (req) => {
           await admin.from("marketing_video_jobs").update({ video_url: stableUrl }).eq("id", jobId);
         }
       }
-      let coverFields = coverPollFields(job.fallback_notes);
+      let coverFields = coverPollFields(job.fallback_notes, job.script);
       if (job.status === "succeeded" && !job.parent_job_id && stableUrl && !coverFields.cover_status) {
         await ensureCoverQueued(admin, { ...job, video_url: stableUrl }).catch(() => null);
         const { data: refreshed } = await admin
           .from("marketing_video_jobs").select("fallback_notes").eq("id", jobId).maybeSingle();
-        coverFields = coverPollFields(refreshed?.fallback_notes ?? job.fallback_notes);
+        coverFields = coverPollFields(refreshed?.fallback_notes ?? job.fallback_notes, job.script);
       }
       return json({ status: job.status, video_url: stableUrl, error: job.error, ...coverFields });
     }
@@ -681,7 +681,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    let coverFieldsLive = coverPollFields(job.fallback_notes);
+    let coverFieldsLive = coverPollFields(job.fallback_notes, job.script);
     if (r.mapped === "succeeded" && !job.parent_job_id && responseVideoUrl) {
       const { data: fresh } = await admin
         .from("marketing_video_jobs")
@@ -691,7 +691,7 @@ Deno.serve(async (req) => {
         await ensureCoverQueued(admin, { ...fresh, video_url: responseVideoUrl }).catch(() => null);
         const { data: refreshed } = await admin
           .from("marketing_video_jobs").select("fallback_notes").eq("id", jobId).maybeSingle();
-        coverFieldsLive = coverPollFields(refreshed?.fallback_notes ?? fresh.fallback_notes);
+        coverFieldsLive = coverPollFields(refreshed?.fallback_notes ?? fresh.fallback_notes, fresh.script ?? job.script);
       }
     }
     return json({ status: r.mapped, video_url: responseVideoUrl, error: r.error || null, ark_status: r.status, ...coverFieldsLive });
