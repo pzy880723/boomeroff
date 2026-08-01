@@ -281,22 +281,32 @@ export async function ensureCoverQueued(
   return { queued: Boolean(data) };
 }
 
-/** poll-marketing-video 对外暴露的封面字段 */
-export function coverPollFields(raw: unknown): {
+/** poll-marketing-video 对外暴露的封面 + 发布文案字段 */
+export function coverPollFields(raw: unknown, script?: unknown): {
   cover_status: CoverStatus | null;
   cover_url: string | null;
   cover_error: string | null;
   cover_progress: { percent: number; stage: string; message: string } | null;
+  publish_copy: SurprisePublishCopy | null;
 } {
+  const s = (script && typeof script === "object" ? script : {}) as Record<string, any>;
+  const publish_copy = s.publish_copy || s.title || s.continuous_dialogue
+    ? normalizePublishCopy(s.publish_copy, {
+        title: String(s.title || s.topic || "").trim(),
+        body: String(s.continuous_dialogue || "").trim(),
+      })
+    : null;
   const cg = readCoverGeneration(raw);
-  if (!cg) return { cover_status: null, cover_url: null, cover_error: null, cover_progress: null };
+  if (!cg) return { cover_status: null, cover_url: null, cover_error: null, cover_progress: null, publish_copy };
   return {
     cover_status: cg.status || null,
     cover_url: cg.status === "succeeded" ? (cg.cover_url || null) : null,
     cover_error: cg.status === "failed" ? (cg.error || "封面生成失败") : null,
     cover_progress: cg.progress || null,
+    publish_copy,
   };
 }
+
 
 /**
  * 封面 Worker 鉴权 token:优先专用 COVER_WORKER_TOKEN,
