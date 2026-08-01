@@ -12,7 +12,7 @@ import boomerIdle from '@/assets/boomer/boomer-idle.png';
 import {
   getActiveRenderJob, setActiveRenderJob, clearActiveRenderJob,
   pollRenderJob, clearSavedPick,
-  type ActiveRenderJob,
+  type ActiveRenderJob, type CoverProgress, type RenderPhase,
 } from '@/lib/surpriseJob';
 import {
   startSurpriseScriptJob,
@@ -147,8 +147,9 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [pick, setPick] = useState<SurpriseResult | null>(null);
   const [excluded, setExcluded] = useState<string[]>([]);
   const [activeJob, setActiveJob] = useState<ActiveRenderJob | null>(null);
-  const [renderPhase, setRenderPhase] = useState<'queued' | 'running' | 'done' | 'failed'>('running');
+  const [renderPhase, setRenderPhase] = useState<RenderPhase>('running');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [coverProgress, setCoverProgress] = useState<CoverProgress | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [scriptJobId, setScriptJobId] = useState<string | null>(null);
   const realism: Realism = SURPRISE_REALISM;
@@ -170,12 +171,21 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       const r = await pollRenderJob(jobId);
       setRenderPhase(r.phase);
       if (r.progress) setProgress(r.progress);
+      setCoverProgress(r.cover_progress || null);
+      if (r.cover_url) {
+        setActiveJob((current) => {
+          if (!current || current.jobId !== jobId || current.coverUrl === r.cover_url) return current;
+          const next = { ...current, coverUrl: r.cover_url };
+          setActiveRenderJob(shop, next);
+          return next;
+        });
+      }
       if (r.phase === 'done') {
         setProgress((p) => p ? { done: p.total, total: p.total } : { done: 1, total: 1 });
         setRenderError(null);
         clearActiveRenderJob(shop);
         stopPolling();
-        toast.success('🎬 视频拍好了,去素材库看看');
+        toast.success('🎬 视频和封面都做好了,去素材库看看');
       } else if (r.phase === 'failed') {
         setRenderError(r.error || '渲染失败');
         clearActiveRenderJob(shop);
@@ -243,6 +253,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     if (cachedJob && cachedJob.kind !== 'director') {
       setActiveJob(cachedJob);
       setRenderPhase('running');
+      setCoverProgress(null);
       startPolling(cachedJob.jobId, shopId);
       return () => { stopPolling(); stopScriptPolling(); };
     }
@@ -332,7 +343,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       }
       const job: ActiveRenderJob = {
         jobId: result.job_id,
-        coverUrl: pick.picked.cover_url,
+        coverUrl: null,
         createdAt: Date.now(),
         kind: 'legacy',
         segmentTotal: result.segment_total || 1,
@@ -344,6 +355,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       setActiveJob(job);
       setRenderPhase('queued');
       setProgress({ done: 0, total: result.segment_total || 1 });
+      setCoverProgress(null);
       setRenderError(null);
       toast.success('已开拍 · 关掉页面也会在后台继续跑');
     } catch (e: any) {
@@ -419,6 +431,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     setActiveJob(null);
     setRenderPhase('running');
     setProgress(null);
+    setCoverProgress(null);
     setRenderError(null);
     setPick(null);
     doPick(excluded);
@@ -440,6 +453,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         {activeJob ? (
           <RenderingBody
             job={activeJob} phase={renderPhase} progress={progress}
+            coverProgress={coverProgress}
             error={renderError}
             onApplyFix={handleFix}
             busy={submitting}
@@ -489,10 +503,11 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 }
 
 function RenderingBody({
-  job, phase, progress, onClose, error, onApplyFix, busy, onReset,
+  job, phase, progress, coverProgress, onClose, error, onApplyFix, busy, onReset,
 }: {
-  job: ActiveRenderJob; phase: 'queued' | 'running' | 'done' | 'failed';
+  job: ActiveRenderJob; phase: RenderPhase;
   progress: { done: number; total: number } | null;
+  coverProgress: CoverProgress | null;
   onClose: () => void;
   error?: string | null;
   onApplyFix?: (fix: VideoFix) => void | Promise<void>;
@@ -511,6 +526,10 @@ function RenderingBody({
   const pct = (() => {
     if (phase === 'done') return 100;
     if (phase === 'failed') return 0;
+    if (phase === 'covering') {
+      const coverPct = Math.max(0, Math.min(100, Number(coverProgress?.percent) || 0));
+      return Math.min(99, 96 + Math.round(coverPct * 0.03));
+    }
     if (progress && progress.total > 0) {
       return Math.min(99, Math.round((progress.done / progress.total) * 100));
     }
@@ -521,6 +540,10 @@ function RenderingBody({
   const stage = (() => {
     if (phase === 'done') return { title: '拍好啦 🎬', hint: '已上传到素材库,点下方查看' };
     if (phase === 'failed') return { title: '这次没拍成', hint: '别急,下面给你修复方案,一键重试' };
+    if (phase === 'covering') return {
+      title: '视频已拍好 · 正在制作封面…',
+      hint: coverProgress?.message || '正在用成片与脚本生成配套封面',
+    };
     if (phase === 'queued') return { title: '排队中…', hint: '正在向 Seedance 提交任务,通常 5-15 秒内开始' };
     if (progress && progress.total > 0) {
       const ratio = progress.done / progress.total;
@@ -585,8 +608,11 @@ function RenderingBody({
         <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
           <span>
             {progress && progress.total > 0
-              ? `分镜 ${Math.min(progress.done, progress.total)}/${progress.total}`
+              ? phase === 'covering'
+                ? `封面 ${Math.max(0, Math.min(100, Number(coverProgress?.percent) || 0))}%`
+                : `分镜 ${Math.min(progress.done, progress.total)}/${progress.total}`
               : phase === 'queued' ? '排队中'
+              : phase === 'covering' ? '封面生成中'
               : phase === 'done' ? '已完成'
               : phase === 'failed' ? '已停止'
               : '渲染中'}

@@ -2,6 +2,14 @@
 // 关弹窗/切页面不丢任务，再次打开恢复进度。
 import { supabase } from '@/integrations/supabase/client';
 import { invokeFn } from '@/lib/invokeFn';
+import {
+  resolveSurpriseRenderState,
+  type CoverProgress,
+  type CoverStatus,
+  type RenderPhase,
+} from '@/lib/surpriseRenderState';
+
+export type { CoverProgress, CoverStatus, RenderPhase } from '@/lib/surpriseRenderState';
 
 const TTL_MS = 6 * 60 * 60 * 1000;
 const PICK_TTL_MS = 60 * 60 * 1000;
@@ -79,11 +87,12 @@ export function clearActiveRenderJob(shopId: string) {
   } catch {}
 }
 
-export type RenderPhase = 'queued' | 'running' | 'done' | 'failed';
-
 export async function pollRenderJob(jobId: string): Promise<{
   phase: RenderPhase; video_url?: string | null; error?: string;
   progress?: { done: number; total: number };
+  cover_status?: CoverStatus | null;
+  cover_url?: string | null;
+  cover_progress?: CoverProgress | null;
   ready_to_stitch?: boolean;
   segment_urls?: string[];
 }> {
@@ -95,13 +104,19 @@ export async function pollRenderJob(jobId: string): Promise<{
     const total = Number(d?.segment_total) || 0;
     const done = Number(d?.segment_done) || 0;
     const progress = total > 0 ? { done: Math.min(done, total), total } : undefined;
-    if (s === 'succeeded') return { phase: 'done', video_url: d?.video_url || null, progress };
-    if (s === 'failed') return { phase: 'failed', error: d?.error, progress };
     if (s === 'ready_to_stitch' && Array.isArray(d?.segment_urls)) {
       return { phase: 'running', progress, ready_to_stitch: true, segment_urls: d.segment_urls.filter(Boolean) };
     }
-    if (s === 'queued') return { phase: 'queued', progress };
-    return { phase: 'running', progress };
+    const resolved = resolveSurpriseRenderState(d);
+    return {
+      phase: resolved.phase,
+      video_url: resolved.videoUrl,
+      error: resolved.error,
+      progress,
+      cover_status: resolved.coverStatus,
+      cover_url: resolved.coverUrl,
+      cover_progress: resolved.coverProgress,
+    };
   } catch (e: any) {
     return { phase: 'running', error: e?.message };
   }
