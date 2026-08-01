@@ -1,8 +1,17 @@
 // cover-seedream-generate: 内部 Seedream 代理,避免腾讯云 Worker 复制 ARK_API_KEY。
 // 鉴权复用封面 Worker token(COVER_WORKER_TOKEN > WORKER_SHARED_SECRET > COMPOSE_WORKER_TOKEN)。
+// 关键:以 stream:true 请求 Ark,并把 upstream.body 直接透传,不在 Edge 内消费完整结果。
 // 不记录 prompt、图片内容或任何密钥。
 import { resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
-import { ARK_IMAGE_ENDPOINT, buildArkBody, mapCaughtError, sanitizeUpstreamError, validateRequest } from "./validate.ts";
+import {
+  ARK_IMAGE_ENDPOINT,
+  buildArkBody,
+  mapCaughtError,
+  passthroughHeaders,
+  readLimitedText,
+  sanitizeUpstreamError,
+  validateRequest,
+} from "./validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,25 +36,26 @@ Deno.serve(async (req) => {
 
     const resp = await fetch(ARK_IMAGE_ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${ARK_API_KEY}` },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        Authorization: `Bearer ${ARK_API_KEY}`,
+      },
       body: JSON.stringify(buildArkBody(validated)),
     });
 
-    const text = await resp.text();
     if (!resp.ok) {
+      const text = await readLimitedText(resp.body);
       const safe = sanitizeUpstreamError(resp.status, text);
       console.error("[cover-seedream-generate] upstream failed", safe.upstream_status, safe.upstream_code ?? "");
       return json(safe, 502);
     }
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      return json({ error: "上游响应解析失败", upstream_status: resp.status }, 502);
-    }
-    // 保持 Ark 原始 {data:[{url}]} 结构
-    return json(parsed, 200);
+    // 直接透传上游流(SSE)或非流式 JSON,Edge 不消费、不解析
+    return new Response(resp.body, {
+      status: 200,
+      headers: passthroughHeaders(resp.headers.get("content-type"), corsHeaders),
+    });
   } catch (e) {
     const mapped = mapCaughtError(e);
     console.error("[cover-seedream-generate] error", (e as Error)?.name || "unknown", mapped.status);
