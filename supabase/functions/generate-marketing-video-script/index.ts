@@ -7,7 +7,7 @@ import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
 import { resolveStorefrontConstraintZh, sanitizeStorefrontText, usesOpenFrontMallConstraint } from "../_shared/storefront-constraints.ts";
 import { scrubThirdPartyBrands, OWN_BRAND_LOCK_ZH } from "../_shared/brand-scrub.ts";
-import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
+import { bindSurpriseReferences, normalizePublishCopy, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 import { DeepSeekRequestError, requestDeepSeekJson } from "../_shared/deepseek-client.ts";
 import { buildSurpriseRepairInstruction, normalizeDeepSeekSurpriseScript, validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 
@@ -203,6 +203,11 @@ ${refList}
     { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '<18-21字完整中段对白>' : '...'}", "subtitle": "...", "image_index": null, "duration_s": 3, "motion": "..." }
   ],
   "outro": { "scene": "...", "action": "...", "dialogue": "${isViralStoreTour ? '<18-21字完整CTA对白>' : '...'}", "subtitle": "<收尾字幕,可含 BOOMER·OFF>", "image_index": null, "duration_s": ${isViralStoreTour ? 3 : 2}, "motion": "定格" },
+  "publish_copy": {
+    "title": "<12-20 个汉字的发布标题,只用当前门店上下文/知识库/所选素材描述/本脚本事实>",
+    "body": "<2-4 句中文正文,不得以标题原样开头,不得编造地点/门店/品牌/商品/价格/折扣/活动/Logo>",
+    "topics": ["<3-6 个中文事实话题标签,每个以 # 开头>"]
+  },
   "bgm":   "<lo-fi|城市夜色|暖民谣>",
   "total_duration_s": ${duration},
   "aspect": "${aspect}",
@@ -211,6 +216,7 @@ ${refList}
 说明:${isViralStoreTour
         ? 'continuous_dialogue 是 Seedance 唯一连续朗读的口播,人物从 0.1s 说到 14.9s,不停顿;hook/scenes/outro 的五段 dialogue 必须非空,它们连接后逐字等于 continuous_dialogue,并与各自 scene/action/subtitle 一一对应;one_shot_prompt 必须为空。'
         : 'hook/scenes/outro 用于分镜展示和后期;one_shot_prompt 用于兼容普通一次成片。'}
+- 【publish_copy 硬规则】必须输出 publish_copy:title 12–20 个汉字;body 2–4 句且不得把标题原样当开头;topics 3–6 个中文事实话题(每个以 # 开头)。全部只能来自当前门店上下文、知识库、所选素材描述与本脚本事实,严禁编造地点、门店、品牌、商品、价格、折扣、活动或 Logo。
 只输出 JSON，不要 \`\`\` 包裹。`;
 
     const userContent: any[] = [{ type: "text", text: userPrompt }];
@@ -550,6 +556,11 @@ ${refList}
       const cleaned = clean(rawTitle, 24).replace(/[「」『』"'\s]+$/g, "").trim();
       script.title = cleaned || (topic ? clean(topic, 14) : rule.label);
     }
+    // 发布文案:确定性归一化(去重复标题前缀 / 规范话题标签),缺失时只用当前脚本事实兜底
+    script.publish_copy = normalizePublishCopy(script.publish_copy, {
+      title: script.title,
+      body: script.continuous_dialogue || script.one_shot_prompt || "",
+    });
     if (character) script.character = character;
 
     return json({ success: true, script, video_type: videoType, video_type_label: rule.label, __kb_sources: kbSourcesMeta(kbHits) });
