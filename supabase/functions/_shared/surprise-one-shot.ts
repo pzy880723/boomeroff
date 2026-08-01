@@ -397,6 +397,11 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
   const continuous = dialogues.join('，');
   nextScript.continuous_dialogue = continuous;
   nextScript.dialogue_char_count = chineseLength(continuous);
+  nextScript.publish_copy = normalizePublishCopy(script.publish_copy, {
+    title: String((script as Record<string, unknown>).title ?? '').trim(),
+    body: continuous,
+  });
+
 
   // 用 AI 提供的 visual_beats（若合法）或按 clips 派生。
   const providedBeats = Array.isArray(script.visual_beats) ? script.visual_beats : null;
