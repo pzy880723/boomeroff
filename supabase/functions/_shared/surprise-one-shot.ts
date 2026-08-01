@@ -23,6 +23,12 @@ export interface SurpriseVisualBeat {
   cut_on_keyword: string;
 }
 
+export interface SurprisePublishCopy {
+  title: string;
+  body: string;
+  topics: string[];
+}
+
 export interface SurpriseScript {
   hook: SurpriseClip;
   scenes: SurpriseClip[];
@@ -36,6 +42,8 @@ export interface SurpriseScript {
   speech_rate?: string;
   max_silence_s?: number;
   visual_beats?: SurpriseVisualBeat[];
+  publish_copy?: SurprisePublishCopy;
+
   [key: string]: unknown;
 }
 
@@ -310,6 +318,35 @@ function deriveVisualBeats(script: SurpriseScript, continuous: string): Surprise
   });
 }
 
+/** 发布文案确定性归一化：只清洗，不编造事实。 */
+export function normalizePublishCopy(
+  input: unknown,
+  fallback?: { title?: string; body?: string },
+): SurprisePublishCopy {
+  const raw = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  let title = String(raw.title ?? '').trim();
+  let body = String(raw.body ?? '').trim();
+  if (!title) title = String(fallback?.title ?? '').trim();
+  if (!body) body = String(fallback?.body ?? '').trim();
+
+  // 正文不得以标题原样开头
+  if (title && body) {
+    const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    body = body.replace(new RegExp(`^${escaped}[\\s，,。.：:！!？?、—-]*`), '').trim();
+  }
+
+  const topicsRaw = Array.isArray(raw.topics) ? raw.topics : [];
+  const topics: string[] = [];
+  for (const t of topicsRaw) {
+    const cleaned = String(t ?? '').trim().replace(/^[#＃\s]+/, '').replace(/[#＃\s]+$/, '').trim();
+    if (!cleaned) continue;
+    const tag = `#${cleaned}`;
+    if (!topics.includes(tag)) topics.push(tag);
+  }
+
+  return { title, body, topics: topics.slice(0, 6) };
+}
+
 export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
   const script = input && typeof input === 'object' ? { ...input } : ({} as SurpriseScript);
   const hook = normalizeClip(script.hook);
@@ -360,6 +397,11 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
   const continuous = dialogues.join('，');
   nextScript.continuous_dialogue = continuous;
   nextScript.dialogue_char_count = chineseLength(continuous);
+  nextScript.publish_copy = normalizePublishCopy(script.publish_copy, {
+    title: String((script as Record<string, unknown>).title ?? '').trim(),
+    body: continuous,
+  });
+
 
   // 用 AI 提供的 visual_beats（若合法）或按 clips 派生。
   const providedBeats = Array.isArray(script.visual_beats) ? script.visual_beats : null;

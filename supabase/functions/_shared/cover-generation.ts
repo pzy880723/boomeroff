@@ -1,3 +1,5 @@
+import { normalizePublishCopy, type SurprisePublishCopy } from "./surprise-one-shot.ts";
+
 // 一键视频完成后的「全新封面」生成任务共享逻辑。
 // 说明:
 // - marketing_video_jobs.fallback_notes 历史上一直是 string[](渲染降级提示)。
@@ -110,30 +112,11 @@ export function variationKey(v: CoverVariation): string {
     .join("|");
 }
 
-const HEADLINES = [
-  "这家店我不许你不知道",
-  "下班顺路挖到的宝",
-  "一进门就走不动路",
-  "中古控的快乐星球",
-  "藏在商场里的杂货铺",
-  "逛完只想再逛一遍",
-];
-const SUBTITLES = [
-  "随手一翻都是惊喜",
-  "每一层都值得慢慢看",
-  "翻着翻着就到打烊",
-  "看一眼就想搬回家",
-  "老物件的温柔时刻",
-  "上头指数直接拉满",
-];
-const KEYWORDS = ["中古", "宝藏", "探店", "淘货", "复古", "惊喜"];
 const ACTIONS = ["拿起端详", "回头微笑", "指向货架", "翻找中", "抬手比划", "低头挑选"];
 const CAMERAS = ["中景平视", "低角度仰拍", "近景特写", "过肩跟拍", "斜侧中近景", "俯视桌面"];
 const PEOPLE = [1, 1, 2];
 
-const GENERIC_PRODUCTS = ["店内中古好物", "货架上的老物件", "复古小杂货"];
-
-/** 商品只能来自本次脚本 / 已选素材,不杜撰品牌与门头 logo */
+/** 只允许来自本次脚本 / 已选素材,不杜撰品牌与门头 logo */
 export function extractProducts(script: unknown, assets?: unknown): string[] {
   const out: string[] = [];
   const push = (v: unknown) => {
@@ -151,8 +134,38 @@ export function extractProducts(script: unknown, assets?: unknown): string[] {
   if (Array.isArray(assets)) {
     for (const a of assets) push((a as any)?.title || (a as any)?.meta?.title);
   }
-  return out.length ? out : GENERIC_PRODUCTS.slice();
+  return out;
 }
+
+/** 脚本事实里的中性兜底短语:仍来自当前脚本,不引入新事实 */
+function neutralProduct(script: unknown): string {
+  const s = (script && typeof script === "object" ? script : {}) as Record<string, any>;
+  const pc = (s.publish_copy && typeof s.publish_copy === "object" ? s.publish_copy : {}) as Record<string, any>;
+  const firstTopic = Array.isArray(pc.topics) && pc.topics.length
+    ? String(pc.topics[0]).replace(/^[#＃]+/, "").trim()
+    : "";
+  const candidates = [firstTopic, String(pc.title || "").trim(), String(s.title || "").trim(), String(s.topic || "").trim()];
+  for (const c of candidates) {
+    if (c) return c.slice(0, 20);
+  }
+  return "画面中出现的物品";
+}
+
+/** 封面文案只能来自当前脚本的 publish_copy / 脚本事实 */
+function deriveCoverCopy(script: unknown): CoverCopy {
+  const s = (script && typeof script === "object" ? script : {}) as Record<string, any>;
+  const pc = (s.publish_copy && typeof s.publish_copy === "object" ? s.publish_copy : {}) as Record<string, any>;
+  const headline = String(pc.title || s.title || s.topic || "").trim();
+  const bodyRaw = String(pc.body || s.continuous_dialogue || "").trim();
+  const firstSentence = bodyRaw.split(/[。！？!?\n，,]/).map((x) => x.trim()).filter(Boolean)[0] || "";
+  const subtitle = (firstSentence && firstSentence !== headline ? firstSentence : bodyRaw).slice(0, 24);
+  const topic0 = Array.isArray(pc.topics) && pc.topics.length
+    ? String(pc.topics[0]).replace(/^[#＃]+/, "").trim()
+    : "";
+  const highlight = topic0 || headline.slice(0, 4);
+  return { headline, subtitle, highlight_keyword: highlight };
+}
+
 
 function pick<T>(arr: T[], i: number): T {
   return arr[((i % arr.length) + arr.length) % arr.length];
@@ -166,28 +179,16 @@ export interface CoverPlanInput {
   usedVariationKeys?: string[];
 }
 
-/** 稳定但可避让碰撞的候选:同一 job 恒定起点,碰撞则顺延到下一个候选 */
+/** 文案完全由当前脚本事实决定;只有画面变体在池中避让碰撞 */
 export function buildCoverPlan(input: CoverPlanInput): { copy: CoverCopy; variation: CoverVariation; copy_fingerprint: string; variation_key: string } {
-  const products = extractProducts(input.script, input.assets);
+  const productsRaw = extractProducts(input.script, input.assets);
+  const products = productsRaw.length ? productsRaw : [neutralProduct(input.script)];
   const seedHex = stableHash(input.jobId);
   const seed = parseInt(seedHex.slice(0, 8), 16);
-  const usedCopy = new Set(input.usedCopyFingerprints || []);
   const usedVar = new Set(input.usedVariationKeys || []);
 
-  const maxTries = HEADLINES.length * SUBTITLES.length;
-  let copy: CoverCopy | null = null;
-  let fp = "";
-  for (let i = 0; i < maxTries; i++) {
-    const cand: CoverCopy = {
-      headline: pick(HEADLINES, seed + i),
-      subtitle: pick(SUBTITLES, seed + i * 2 + 1),
-      highlight_keyword: pick(KEYWORDS, seed + i * 3 + 2),
-    };
-    const f = copyFingerprint(cand);
-    copy = copy || cand;
-    fp = fp || f;
-    if (!usedCopy.has(f)) { copy = cand; fp = f; break; }
-  }
+  const copy = deriveCoverCopy(input.script);
+  const fp = copyFingerprint(copy);
 
   const maxVarTries = ACTIONS.length * CAMERAS.length * products.length;
   let variation: CoverVariation | null = null;
@@ -204,6 +205,7 @@ export function buildCoverPlan(input: CoverPlanInput): { copy: CoverCopy; variat
     vk = vk || k;
     if (!usedVar.has(k)) { variation = cand; vk = k; break; }
   }
+
 
   return { copy: copy!, variation: variation!, copy_fingerprint: fp, variation_key: vk };
 }
@@ -281,22 +283,32 @@ export async function ensureCoverQueued(
   return { queued: Boolean(data) };
 }
 
-/** poll-marketing-video 对外暴露的封面字段 */
-export function coverPollFields(raw: unknown): {
+/** poll-marketing-video 对外暴露的封面 + 发布文案字段 */
+export function coverPollFields(raw: unknown, script?: unknown): {
   cover_status: CoverStatus | null;
   cover_url: string | null;
   cover_error: string | null;
   cover_progress: { percent: number; stage: string; message: string } | null;
+  publish_copy: SurprisePublishCopy | null;
 } {
+  const s = (script && typeof script === "object" ? script : {}) as Record<string, any>;
+  const publish_copy = s.publish_copy || s.title || s.continuous_dialogue
+    ? normalizePublishCopy(s.publish_copy, {
+        title: String(s.title || s.topic || "").trim(),
+        body: String(s.continuous_dialogue || "").trim(),
+      })
+    : null;
   const cg = readCoverGeneration(raw);
-  if (!cg) return { cover_status: null, cover_url: null, cover_error: null, cover_progress: null };
+  if (!cg) return { cover_status: null, cover_url: null, cover_error: null, cover_progress: null, publish_copy };
   return {
     cover_status: cg.status || null,
     cover_url: cg.status === "succeeded" ? (cg.cover_url || null) : null,
     cover_error: cg.status === "failed" ? (cg.error || "封面生成失败") : null,
     cover_progress: cg.progress || null,
+    publish_copy,
   };
 }
+
 
 /**
  * 封面 Worker 鉴权 token:优先专用 COVER_WORKER_TOKEN,
