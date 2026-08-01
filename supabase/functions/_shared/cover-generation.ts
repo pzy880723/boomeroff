@@ -110,30 +110,11 @@ export function variationKey(v: CoverVariation): string {
     .join("|");
 }
 
-const HEADLINES = [
-  "这家店我不许你不知道",
-  "下班顺路挖到的宝",
-  "一进门就走不动路",
-  "中古控的快乐星球",
-  "藏在商场里的杂货铺",
-  "逛完只想再逛一遍",
-];
-const SUBTITLES = [
-  "随手一翻都是惊喜",
-  "每一层都值得慢慢看",
-  "翻着翻着就到打烊",
-  "看一眼就想搬回家",
-  "老物件的温柔时刻",
-  "上头指数直接拉满",
-];
-const KEYWORDS = ["中古", "宝藏", "探店", "淘货", "复古", "惊喜"];
 const ACTIONS = ["拿起端详", "回头微笑", "指向货架", "翻找中", "抬手比划", "低头挑选"];
 const CAMERAS = ["中景平视", "低角度仰拍", "近景特写", "过肩跟拍", "斜侧中近景", "俯视桌面"];
 const PEOPLE = [1, 1, 2];
 
-const GENERIC_PRODUCTS = ["店内中古好物", "货架上的老物件", "复古小杂货"];
-
-/** 商品只能来自本次脚本 / 已选素材,不杜撰品牌与门头 logo */
+/** 只允许来自本次脚本 / 已选素材,不杜撰品牌与门头 logo */
 export function extractProducts(script: unknown, assets?: unknown): string[] {
   const out: string[] = [];
   const push = (v: unknown) => {
@@ -151,8 +132,38 @@ export function extractProducts(script: unknown, assets?: unknown): string[] {
   if (Array.isArray(assets)) {
     for (const a of assets) push((a as any)?.title || (a as any)?.meta?.title);
   }
-  return out.length ? out : GENERIC_PRODUCTS.slice();
+  return out;
 }
+
+/** 脚本事实里的中性兜底短语:仍来自当前脚本,不引入新事实 */
+function neutralProduct(script: unknown): string {
+  const s = (script && typeof script === "object" ? script : {}) as Record<string, any>;
+  const pc = (s.publish_copy && typeof s.publish_copy === "object" ? s.publish_copy : {}) as Record<string, any>;
+  const firstTopic = Array.isArray(pc.topics) && pc.topics.length
+    ? String(pc.topics[0]).replace(/^[#＃]+/, "").trim()
+    : "";
+  const candidates = [firstTopic, String(pc.title || "").trim(), String(s.title || "").trim(), String(s.topic || "").trim()];
+  for (const c of candidates) {
+    if (c) return c.slice(0, 20);
+  }
+  return "画面中出现的物品";
+}
+
+/** 封面文案只能来自当前脚本的 publish_copy / 脚本事实 */
+function deriveCoverCopy(script: unknown): CoverCopy {
+  const s = (script && typeof script === "object" ? script : {}) as Record<string, any>;
+  const pc = (s.publish_copy && typeof s.publish_copy === "object" ? s.publish_copy : {}) as Record<string, any>;
+  const headline = String(pc.title || s.title || s.topic || "").trim();
+  const bodyRaw = String(pc.body || s.continuous_dialogue || "").trim();
+  const firstSentence = bodyRaw.split(/[。！？!?\n，,]/).map((x) => x.trim()).filter(Boolean)[0] || "";
+  const subtitle = (firstSentence && firstSentence !== headline ? firstSentence : bodyRaw).slice(0, 24);
+  const topic0 = Array.isArray(pc.topics) && pc.topics.length
+    ? String(pc.topics[0]).replace(/^[#＃]+/, "").trim()
+    : "";
+  const highlight = topic0 || headline.slice(0, 4);
+  return { headline, subtitle, highlight_keyword: highlight };
+}
+
 
 function pick<T>(arr: T[], i: number): T {
   return arr[((i % arr.length) + arr.length) % arr.length];
