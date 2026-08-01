@@ -98,7 +98,7 @@ Deno.test("没有 video_url 不入队;入队后状态为 queued", async () => {
   const noUrl = await ensureCoverQueued(fakeAdmin([]), { id: "j", video_url: null } as any);
   assertEquals(noUrl.reason, "no_video_url");
 
-  const job = { id: "job-3", user_id: "u1", shop_id: "s1", video_url: "https://cdn/v.mp4", script: { hero_product: "老相机" }, fallback_notes: ["旧提示"] };
+  const job = { id: "job-3", user_id: "u1", shop_id: "s1", video_url: "https://cdn/v.mp4", script: { title: "中古店翻筐实录", hero_product: "老相机" }, fallback_notes: ["旧提示"] };
   const admin = fakeAdmin([job]);
   const r = await ensureCoverQueued(admin, job);
   assertEquals(r.queued, true);
@@ -117,7 +117,8 @@ Deno.test("90 天去重:碰撞时换候选", () => {
     usedCopyFingerprints: [base.copy_fingerprint],
     usedVariationKeys: [base.variation_key],
   });
-  assert(next.copy_fingerprint !== base.copy_fingerprint, "标题组合必须换一套");
+  // 文案完全由脚本事实决定,不再靠通用文案池换一套
+  assertEquals(next.copy_fingerprint, base.copy_fingerprint);
   assert(next.variation_key !== base.variation_key, "变体必须换一套");
   assertEquals(copyFingerprint(next.copy), next.copy_fingerprint);
   assertEquals(variationKey(next.variation), next.variation_key);
@@ -128,8 +129,8 @@ Deno.test("90 天去重:碰撞时换候选", () => {
 Deno.test("商品只来自脚本/素材,不杜撰品牌", () => {
   const plan = buildCoverPlan({ jobId: "job-y", script: { shots: [{ product: "搪瓷杯" }] } });
   assertEquals(plan.variation.product, "搪瓷杯");
-  const generic = buildCoverPlan({ jobId: "job-z", script: {} });
-  assert(["店内中古好物", "货架上的老物件", "复古小杂货"].includes(generic.variation.product));
+  const generic = buildCoverPlan({ jobId: "job-z", script: { title: "中古店翻筐实录" } });
+  assertEquals(generic.variation.product, "中古店翻筐实录");
 });
 
 Deno.test("90 天签名读取只取有 cover_generation 的任务", async () => {
