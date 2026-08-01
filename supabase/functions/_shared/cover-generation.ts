@@ -177,28 +177,16 @@ export interface CoverPlanInput {
   usedVariationKeys?: string[];
 }
 
-/** 稳定但可避让碰撞的候选:同一 job 恒定起点,碰撞则顺延到下一个候选 */
+/** 文案完全由当前脚本事实决定;只有画面变体在池中避让碰撞 */
 export function buildCoverPlan(input: CoverPlanInput): { copy: CoverCopy; variation: CoverVariation; copy_fingerprint: string; variation_key: string } {
-  const products = extractProducts(input.script, input.assets);
+  const productsRaw = extractProducts(input.script, input.assets);
+  const products = productsRaw.length ? productsRaw : [neutralProduct(input.script)];
   const seedHex = stableHash(input.jobId);
   const seed = parseInt(seedHex.slice(0, 8), 16);
-  const usedCopy = new Set(input.usedCopyFingerprints || []);
   const usedVar = new Set(input.usedVariationKeys || []);
 
-  const maxTries = HEADLINES.length * SUBTITLES.length;
-  let copy: CoverCopy | null = null;
-  let fp = "";
-  for (let i = 0; i < maxTries; i++) {
-    const cand: CoverCopy = {
-      headline: pick(HEADLINES, seed + i),
-      subtitle: pick(SUBTITLES, seed + i * 2 + 1),
-      highlight_keyword: pick(KEYWORDS, seed + i * 3 + 2),
-    };
-    const f = copyFingerprint(cand);
-    copy = copy || cand;
-    fp = fp || f;
-    if (!usedCopy.has(f)) { copy = cand; fp = f; break; }
-  }
+  const copy = deriveCoverCopy(input.script);
+  const fp = copyFingerprint(copy);
 
   const maxVarTries = ACTIONS.length * CAMERAS.length * products.length;
   let variation: CoverVariation | null = null;
@@ -215,6 +203,7 @@ export function buildCoverPlan(input: CoverPlanInput): { copy: CoverCopy; variat
     vk = vk || k;
     if (!usedVar.has(k)) { variation = cand; vk = k; break; }
   }
+
 
   return { copy: copy!, variation: variation!, copy_fingerprint: fp, variation_key: vk };
 }
