@@ -59,8 +59,8 @@ export function buildArkBody(input: ValidatedInput): Record<string, unknown> {
     // 2K 图不再经 Edge Function 回传 base64,改为返回 URL 由 Worker 自行下载
     response_format: "url",
     watermark: false,
-    // 流式返回:Edge 只做透传,避免同步等待触发 150s 墙钟超时
-    stream: true,
+    // Seedream 5.0 lite 不支持 stream(官方仅 4.0 支持),必须非流式
+    stream: false,
     sequential_image_generation: "disabled",
   };
 }
