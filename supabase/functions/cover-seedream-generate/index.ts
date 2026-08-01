@@ -1,6 +1,6 @@
 // cover-seedream-generate: 内部 Seedream 代理,避免腾讯云 Worker 复制 ARK_API_KEY。
 // 鉴权复用封面 Worker token(COVER_WORKER_TOKEN > WORKER_SHARED_SECRET > COMPOSE_WORKER_TOKEN)。
-// 关键:以 stream:true 请求 Ark,并把 upstream.body 直接透传,不在 Edge 内消费完整结果。
+// 关键:Seedream 5.0 lite 不支持 stream,使用非流式 JSON 请求;上游成功后仍原样透传 body。
 // 不记录 prompt、图片内容或任何密钥。
 import { resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
 import {
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "text/event-stream",
+        Accept: "application/json",
         Authorization: `Bearer ${ARK_API_KEY}`,
       },
       body: JSON.stringify(buildArkBody(validated)),
@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       return json(safe, 502);
     }
 
-    // 直接透传上游流(SSE)或非流式 JSON,Edge 不消费、不解析
+    // 上游非流式 JSON:不解析、不重建,原样透传 body
     return new Response(resp.body, {
       status: 200,
       headers: passthroughHeaders(resp.headers.get("content-type"), corsHeaders),

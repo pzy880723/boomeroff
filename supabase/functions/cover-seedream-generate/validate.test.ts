@@ -63,6 +63,7 @@ Deno.test("固定模型 / size 默认 2K / response_format=url / 无水印", () 
   assertEquals(body.size, "2K");
   assertEquals(body.response_format, "url");
   assertEquals(body.watermark, false);
+  assertEquals(body.stream, false);
   assertEquals((body.image as string[]).length, 1);
   assert((validateRequest({ prompt: "p", image: [img()], size: "4K" }) as { error: string }).error.includes("2K"));
 });
@@ -97,11 +98,11 @@ Deno.test("上游错误脱敏:不泄露密钥/图片/prompt", () => {
   assertEquals(nonJson.upstream_code, undefined);
 });
 
-Deno.test("流式透传:请求体显式声明 stream 与 sequential_image_generation", () => {
+Deno.test("Seedream 5.0 不使用流式:stream 显式为 false", () => {
   const v = validateRequest({ prompt: "封面", image: [img(), img(), img(), img("png")] });
   assert(!("error" in v));
   const body = buildArkBody(v as never);
-  assertEquals(body.stream, true);
+  assertEquals(body.stream, false);
   assertEquals(body.sequential_image_generation, "disabled");
   assertEquals(body.response_format, "url");
   assertEquals(body.watermark, false);
@@ -109,19 +110,17 @@ Deno.test("流式透传:请求体显式声明 stream 与 sequential_image_genera
   assertEquals((body.image as string[]).length, 4);
 });
 
-Deno.test("透传响应头:保留 SSE Content-Type + no-cache", () => {
+Deno.test("透传响应头:非流式 JSON Content-Type + no-cache", () => {
   const cors = { "Access-Control-Allow-Origin": "*" };
-  const sse = passthroughHeaders("text/event-stream; charset=utf-8", cors);
-  assertEquals(sse["Content-Type"], "text/event-stream; charset=utf-8");
-  assert(sse["Cache-Control"].includes("no-cache"));
-  assertEquals(sse["Access-Control-Allow-Origin"], "*");
-  // 上游若非流式 JSON,也原样透传
-  assertEquals(passthroughHeaders("application/json", cors)["Content-Type"], "application/json");
+  const j = passthroughHeaders("application/json; charset=utf-8", cors);
+  assertEquals(j["Content-Type"], "application/json; charset=utf-8");
+  assert(j["Cache-Control"].includes("no-cache"));
+  assertEquals(j["Access-Control-Allow-Origin"], "*");
   assertEquals(passthroughHeaders(null, cors)["Content-Type"], "application/json");
 });
 
-Deno.test("响应是流式透传,而不是 await json 后重建", async () => {
-  const chunks = ["data: {\"a\":1}\n\n", "data: [DONE]\n\n"];
+Deno.test("响应是 body 透传,而不是 await json 后重建", async () => {
+  const chunks = ["{\"data\":[{\"url\":", "\"https://x/y.png\"}]}"];
   const enc = new TextEncoder();
   let pulled = 0;
   const upstream = new ReadableStream<Uint8Array>({
@@ -132,9 +131,9 @@ Deno.test("响应是流式透传,而不是 await json 后重建", async () => {
   });
   const out = new Response(upstream, {
     status: 200,
-    headers: passthroughHeaders("text/event-stream", { "Access-Control-Allow-Origin": "*" }),
+    headers: passthroughHeaders("application/json", { "Access-Control-Allow-Origin": "*" }),
   });
-  assertEquals(out.headers.get("Content-Type"), "text/event-stream");
+  assertEquals(out.headers.get("Content-Type"), "application/json");
   const reader = out.body!.getReader();
   const first = await reader.read();
   // 第一块可读时上游尚未全部消费 → 证明是透传而非 await 完整结果
