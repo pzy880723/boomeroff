@@ -1,3 +1,5 @@
+import { normalizePublishCopy, type SurprisePublishCopy } from "./surprise-one-shot.ts";
+
 // 一键视频完成后的「全新封面」生成任务共享逻辑。
 // 说明:
 // - marketing_video_jobs.fallback_notes 历史上一直是 string[](渲染降级提示)。
