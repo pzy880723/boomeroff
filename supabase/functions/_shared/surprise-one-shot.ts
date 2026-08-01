@@ -23,6 +23,12 @@ export interface SurpriseVisualBeat {
   cut_on_keyword: string;
 }
 
+export interface SurprisePublishCopy {
+  title: string;
+  body: string;
+  topics: string[];
+}
+
 export interface SurpriseScript {
   hook: SurpriseClip;
   scenes: SurpriseClip[];
