@@ -318,6 +318,35 @@ function deriveVisualBeats(script: SurpriseScript, continuous: string): Surprise
   });
 }
 
+/** 发布文案确定性归一化：只清洗，不编造事实。 */
+export function normalizePublishCopy(
+  input: unknown,
+  fallback?: { title?: string; body?: string },
+): SurprisePublishCopy {
+  const raw = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  let title = String(raw.title ?? '').trim();
+  let body = String(raw.body ?? '').trim();
+  if (!title) title = String(fallback?.title ?? '').trim();
+  if (!body) body = String(fallback?.body ?? '').trim();
+
+  // 正文不得以标题原样开头
+  if (title && body) {
+    const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    body = body.replace(new RegExp(`^${escaped}[\\s，,。.：:！!？?、—-]*`), '').trim();
+  }
+
+  const topicsRaw = Array.isArray(raw.topics) ? raw.topics : [];
+  const topics: string[] = [];
+  for (const t of topicsRaw) {
+    const cleaned = String(t ?? '').trim().replace(/^[#＃\s]+/, '').replace(/[#＃\s]+$/, '').trim();
+    if (!cleaned) continue;
+    const tag = `#${cleaned}`;
+    if (!topics.includes(tag)) topics.push(tag);
+  }
+
+  return { title, body, topics: topics.slice(0, 6) };
+}
+
 export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
   const script = input && typeof input === 'object' ? { ...input } : ({} as SurpriseScript);
   const hook = normalizeClip(script.hook);
