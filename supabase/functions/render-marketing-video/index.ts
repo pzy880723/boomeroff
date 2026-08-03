@@ -537,6 +537,7 @@ Deno.serve(async (req) => {
           storyboard_ref_count: storyboardRefs.length,
           topic: script.topic || "", style: styleKey,
           title: (script.title || script.topic || "").toString().slice(0, 24),
+          publish_copy: script.publish_copy || null,
           style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
           warnings: [
             ...(resolutionDowngraded ? ["resolution_downgraded"] : []),
@@ -588,6 +589,7 @@ Deno.serve(async (req) => {
         auto_decision_reason: autoReason,
         topic: script.topic || "", style: styleKey,
         title: (script.title || script.topic || "").toString().slice(0, 24),
+        publish_copy: script.publish_copy || null,
         style_label: VIDEO_STYLE_LABELS[styleKey], model, model_label: modelInfo.label, resolution,
         warnings: [
           ...(resolutionDowngraded ? ["resolution_downgraded"] : []),

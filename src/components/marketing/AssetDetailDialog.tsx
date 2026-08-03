@@ -1,5 +1,5 @@
 // 营销素材详情 / 编辑抽屉。支持文案、图片、视频三种 kind。
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Play, RefreshCw as RefreshIconTop, Loader2 as SpinTop, ImageDown } from 'lucide-react';
 import { invokeFn as invokeFnTop } from '@/lib/invokeFn';
 import { toast as toastTop } from 'sonner';
@@ -225,6 +225,8 @@ import { invokeFn } from '@/lib/invokeFn';
 import { completeMarketingVideoFromSegments } from '@/lib/completeMarketingVideo';
 import { useAuth } from '@/hooks/useAuth';
 import { resolveVideoAssetCopy, type VideoAssetCopy } from '@/lib/videoAssetCopy';
+import { resolveVideoDeliverables } from '@/lib/videoDeliverables';
+import { copyTextFromUserAction } from '@/lib/copyText';
 
 
 interface CopyCand extends VideoAssetCopy {
@@ -252,6 +254,7 @@ export function AssetDetailDialog({
   const [videoCopy, setVideoCopy] = useState<CopyCand | null>(null);
   const [genCopyLoading, setGenCopyLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingCover, setDownloadingCover] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [stitching, setStitching] = useState(false);
   // 视频详情:折叠的原始脚本
@@ -358,6 +361,25 @@ export function AssetDetailDialog({
     setEditing(null);
   }, [asset]);
 
+  const restoreFixedVideoCopy = useCallback(async (script: unknown) => {
+    if (!asset) return;
+    const existing = resolveVideoAssetCopy(asset.meta);
+    if (existing) {
+      setVideoCopy(existing);
+      return;
+    }
+    const recovered = resolveVideoAssetCopy(asset.meta, script);
+    if (!recovered) return;
+    setVideoCopy(recovered);
+    const nextMeta = { ...(asset.meta || {}), video_copy: recovered };
+    onUpdated?.({ ...asset, meta: nextMeta });
+    const { error } = await supabase
+      .from('marketing_assets' as any)
+      .update({ meta: nextMeta })
+      .eq('id', asset.id);
+    if (error) console.warn('[video-ad-copy] restore fixed copy failed', error);
+  }, [asset, onUpdated]);
+
   // 视频详情:异步拉取原始脚本供折叠展示。
   // 兼容两条链路:marketing_video_jobs.script(常规渲染)和 video_generation_jobs.script_json(惊喜一下 / Director)。
   useEffect(() => {
@@ -371,23 +393,38 @@ export function AssetDetailDialog({
         if (jobId) {
           const { data } = await supabase.from('marketing_video_jobs' as any).select('script').eq('id', jobId).maybeSingle();
           const s = (data as any)?.script;
-          if (s) { if (!cancelled) setVideoScript(s); return; }
+          if (s) {
+            if (!cancelled) {
+              setVideoScript(s);
+              await restoreFixedVideoCopy(s);
+            }
+            return;
+          }
         }
         if (directorJobId) {
           const { data } = await supabase.from('video_generation_jobs' as any).select('script_json').eq('id', directorJobId).maybeSingle();
-          if (!cancelled) setVideoScript((data as any)?.script_json || null);
+          const s = (data as any)?.script_json || null;
+          if (!cancelled) {
+            setVideoScript(s);
+            await restoreFixedVideoCopy(s);
+          }
         }
       } catch { /* silent */ }
     })();
     return () => { cancelled = true; };
-  }, [asset]);
+  }, [asset, restoreFixedVideoCopy]);
 
   // 视频广告文案:只在用户点击「生成 / 重新生成」时才调用模型;
   // 生成成功后会写回 marketing_assets.meta.video_copy,再次打开直接展示。
 
   if (!asset) return null;
+  const deliverables = resolveVideoDeliverables(asset);
 
-  const copy = (text: string) => { navigator.clipboard.writeText(text); toast.success('已复制'); };
+  const copy = async (text: string) => {
+    const copied = await copyTextFromUserAction(text);
+    if (copied) toast.success('已复制');
+    else toast.error('复制失败，请长按文案复制');
+  };
 
   const videoCopyText = (c: CopyCand | null) => {
     if (!c) return '';
@@ -431,6 +468,9 @@ export function AssetDetailDialog({
 
   const downloadAsset = async (kind: 'video' | 'image') => {
     if (!asset?.output_url) return;
+    const txt = kind === 'video' ? videoCopyText(videoCopy) : '';
+    // 剪贴板必须在用户点击的当下触发，不能等 1080p 下载结束。
+    const copyPromise = txt ? copyTextFromUserAction(txt) : Promise.resolve(false);
     setDownloading(true);
     try {
       const tail = asset.meta?.storage_path?.split('/').pop() || '';
@@ -455,9 +495,11 @@ export function AssetDetailDialog({
         }
         const save = await saveUrlToGallery(directUrl, filename, kind);
         if (!save.ok) throw new Error(save.error || '下载失败');
-        const txt = videoCopyText(videoCopy);
-        if (txt) { try { await navigator.clipboard.writeText(txt); } catch { /* noop */ } }
-        toast.success(save.target === 'gallery' ? '已保存到相册' : '下载已开始');
+        const copied = await copyPromise;
+        toast.success(save.target === 'gallery'
+          ? `视频已保存到相册${copied ? '，文案已复制' : ''}`
+          : `下载已开始${copied ? '，文案已复制' : ''}`);
+        if (txt && !copied) toast.error('视频已保存，但文案复制失败');
         return;
       }
 
@@ -481,12 +523,12 @@ export function AssetDetailDialog({
 
       const save = await saveToGallery(blob, responseFilename, kind);
       if (save.ok) {
+        const copied = await copyPromise;
         if (kind === 'video') {
-          const txt = videoCopyText(videoCopy);
-          if (txt) { try { await navigator.clipboard.writeText(txt); } catch { /* noop */ } }
+          if (txt && !copied) toast.error('视频已保存，但文案复制失败');
         }
-        if (save.target === 'gallery') toast.success('已保存到相册');
-        else toast.success('下载完成');
+        if (save.target === 'gallery') toast.success(`已保存到相册${copied ? '，文案已复制' : ''}`);
+        else toast.success(`下载完成${copied ? '，文案已复制' : ''}`);
       } else if (isNativeApp()) {
         toast.error(save.error || '保存到相册失败，可能是相册权限被拒');
       } else {
@@ -498,6 +540,22 @@ export function AssetDetailDialog({
   };
 
   const downloadVideo = () => downloadAsset('video');
+
+  const downloadCover = async () => {
+    const cover = resolveVideoDeliverables(asset).cover;
+    if (!cover) { toast.error('当前视频还没有封面'); return; }
+    setDownloadingCover(true);
+    try {
+      const { saveUrlToGallery } = await import('@/lib/saveToGallery');
+      const save = await saveUrlToGallery(cover.url, cover.filename, 'image');
+      if (!save.ok) throw new Error(save.error || '封面保存失败');
+      toast.success(save.target === 'gallery' ? '封面已保存到相册' : '封面下载已开始');
+    } catch (e: any) {
+      toast.error(e?.message || '封面保存失败，请检查网络或相册权限');
+    } finally {
+      setDownloadingCover(false);
+    }
+  };
 
   const beginEdit = (i: number) => {
     setEditing(i);
@@ -661,14 +719,75 @@ export function AssetDetailDialog({
               </div>
             )}
             {asset.output_url ? (
-              <LazyVideoPlayer
-                src={asset.output_url}
-                assetId={asset.id}
-                expired={asset.meta?.status === 'expired'}
-                onRefreshed={(nextUrl) => onUpdated?.({ ...asset, output_url: nextUrl })}
-                onPosterUpdated={(nextPoster) => onUpdated?.({ ...asset, meta: { ...(asset.meta || {}), poster_url: nextPoster } })}
-                poster={asset.meta?.poster_url || asset.meta?.cover_url || undefined}
-              />
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1.5">成片预览</p>
+                  <LazyVideoPlayer
+                    src={asset.output_url}
+                    assetId={asset.id}
+                    expired={asset.meta?.status === 'expired'}
+                    onRefreshed={(nextUrl) => onUpdated?.({ ...asset, output_url: nextUrl })}
+                    onPosterUpdated={(nextPoster) => onUpdated?.({ ...asset, meta: { ...(asset.meta || {}), poster_url: nextPoster } })}
+                    poster={asset.meta?.poster_url || asset.meta?.cover_url || undefined}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-sm">成片交付</p>
+                      <p className="text-[11px] text-muted-foreground">视频和封面分开保存到系统相册</p>
+                    </div>
+                    <span className="text-[10px] rounded-full bg-emerald-500/10 text-emerald-600 px-2 py-1">已就绪</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg border border-border bg-background p-2.5 flex flex-col gap-2">
+                      <div className="aspect-[9/12] rounded-md bg-black flex items-center justify-center overflow-hidden">
+                        {deliverables.cover?.url ? (
+                          <img src={deliverables.cover.url} alt="视频封面" className="w-full h-full object-cover" />
+                        ) : (
+                          <Play className="w-7 h-7 text-white" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium">视频成片</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {asset.meta?.resolution || '1080p'} · {asset.meta?.duration || 15}s
+                        </p>
+                      </div>
+                      <Button size="sm" onClick={downloadVideo} disabled={downloading}>
+                        {downloading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1" />}
+                        保存视频
+                      </Button>
+                    </div>
+
+                    <div className="rounded-lg border border-border bg-background p-2.5 flex flex-col gap-2">
+                      <div className="aspect-[9/12] rounded-md bg-muted flex items-center justify-center overflow-hidden">
+                        {deliverables.cover?.url ? (
+                          <img src={deliverables.cover.url} alt="独立封面图" className="w-full h-full object-cover" />
+                        ) : (
+                          <ImageDown className="w-7 h-7 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium">封面图</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {deliverables.cover ? '可单独保存' : '尚未生成'}
+                        </p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={downloadCover} disabled={!deliverables.cover || downloadingCover}>
+                        {downloadingCover ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <ImageDown className="w-3.5 h-3.5 mr-1" />}
+                        保存封面
+                      </Button>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    点击“保存视频”时会同时复制这条成片的固定发布文案
+                  </p>
+                </div>
+              </div>
 
             ) : asset.meta?.status === 'failed' ? (
               <div className="space-y-2">
@@ -748,10 +867,7 @@ export function AssetDetailDialog({
                     )}
                     <Button
                       className="w-full bg-primary text-primary-foreground shadow-sm"
-                      onClick={() => {
-                        navigator.clipboard.writeText(videoCopyText(videoCopy));
-                        toast.success('视频广告文案已复制,快去发布吧 ✨');
-                      }}
+                      onClick={() => copy(videoCopyText(videoCopy))}
                     >
                       <Copy className="w-4 h-4 mr-1.5" />一键复制全文
                     </Button>
@@ -773,9 +889,8 @@ export function AssetDetailDialog({
                   <Button variant="outline" className="flex-1" onClick={() => copy(asset.output_url)}>
                     <Copy className="w-3.5 h-3.5 mr-1" />复制链接
                   </Button>
-                  <Button className="flex-1" onClick={downloadVideo} disabled={downloading}>
-                    {downloading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1" />}
-                    下载视频{videoCopy ? ' + 复制文案' : ''}
+                  <Button variant="outline" className="flex-1" onClick={() => copy(videoCopyText(videoCopy))} disabled={!videoCopy}>
+                    <Copy className="w-3.5 h-3.5 mr-1" />复制文案
                   </Button>
                 </div>
                 <Button

@@ -33,6 +33,23 @@ test('手机下载直接流式写入文件，不把 1080p 视频转成 Base64', 
   assert.match(detail, /saveUrlToGallery/);
 });
 
+test('成片详情分开交付视频和封面，下载前立即复制固定文案', () => {
+  const detail = read('../src/components/marketing/AssetDetailDialog.tsx');
+  assert.match(detail, /成片交付/);
+  assert.match(detail, /保存视频/);
+  assert.match(detail, /保存封面/);
+  assert.match(detail, /copyTextFromUserAction/);
+  assert.ok(
+    detail.indexOf('const copyPromise = txt ? copyTextFromUserAction(txt)') < detail.indexOf('setDownloading(true)'),
+    '剪贴板复制必须在耗时下载开始前触发',
+  );
+});
+
+test('新生成的视频素材直接带入脚本的 publish_copy', () => {
+  const render = read('../supabase/functions/render-marketing-video/index.ts');
+  assert.equal((render.match(/publish_copy:\s*script\.publish_copy\s*\|\|\s*null/g) || []).length, 2);
+});
+
 test('惊喜一下可修改五段脚本，并用修改后的唯一口播提交', () => {
   const dialog = read('../src/components/marketing/SurpriseVideoDialog.tsx');
   assert.match(dialog, /编辑脚本/);

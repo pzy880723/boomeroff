@@ -62,7 +62,21 @@ export async function saveUrlToGallery(
     catch (e) { return { ok: false, target: 'download', error: (e as Error)?.message }; }
   }
 
+  if (!Capacitor.isPluginAvailable('Media')) {
+    return { ok: false, target: 'gallery', error: '当前 App 版本缺少系统相册能力，请更新 BOOMER GO' };
+  }
+
   try {
+    // Media 原生插件支持远程 URL，先让 iOS/Android 自己下载并写入相册。
+    // 这条路径不经过 JS Blob，对 1080p 视频最稳定。
+    try {
+      if (kind === 'video') await Media.saveVideo({ path: url });
+      else await Media.savePhoto({ path: url });
+      return { ok: true, target: 'gallery' };
+    } catch {
+      // 某些带鉴权跳转的 URL 无法被原生下载器直接解析，再退回本地缓存。
+    }
+
     const downloaded = await Filesystem.downloadFile({
       url,
       path: filename,
@@ -95,6 +109,10 @@ export async function saveToGallery(
   if (!Capacitor.isNativePlatform()) {
     try { webDownload(blob, filename); return { ok: true, target: 'download' }; }
     catch (e) { return { ok: false, target: 'download', error: (e as Error)?.message }; }
+  }
+
+  if (!Capacitor.isPluginAvailable('Media')) {
+    return { ok: false, target: 'gallery', error: '当前 App 版本缺少系统相册能力，请更新 BOOMER GO' };
   }
 
   try {

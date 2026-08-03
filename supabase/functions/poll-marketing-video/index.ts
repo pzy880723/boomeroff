@@ -107,6 +107,7 @@ async function updateAssetMeta(
         meta: {
           job_id: jobId,
           title: (script.title || script.topic || "").toString().slice(0, 24),
+          publish_copy: script.publish_copy || null,
           source: "poll-marketing-video-backfill",
           backfilled_at: new Date().toISOString(),
         },
