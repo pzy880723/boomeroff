@@ -94,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const roleRequestIdRef = useRef(0);
   const activeUserIdRef = useRef<string | null>(null);
   const bootstrapRef = useRef<AppBootstrap | null>(null);
+  const bootstrapRequestRef = useRef<{ userId: string; promise: Promise<void> } | null>(null);
 
   const applyBootstrap = useCallback((userId: string, value: AppBootstrap, cache: boolean) => {
     bootstrapRef.current = value;
@@ -107,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const loadBootstrap = useCallback(async (userId: string) => {
+  const fetchBootstrap = useCallback(async (userId: string) => {
     const requestId = ++roleRequestIdRef.current;
     setBootstrapLoading(true);
 
@@ -166,6 +167,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [applyBootstrap]);
 
+  const loadBootstrap = useCallback((userId: string): Promise<void> => {
+    const current = bootstrapRequestRef.current;
+    if (current?.userId === userId) return current.promise;
+
+    const promise = fetchBootstrap(userId).finally(() => {
+      if (bootstrapRequestRef.current?.promise === promise) {
+        bootstrapRequestRef.current = null;
+      }
+    });
+    bootstrapRequestRef.current = { userId, promise };
+    return promise;
+  }, [fetchBootstrap]);
+
   const beginUserSession = useCallback((nextSession: Session, forceRefresh = false) => {
     const nextUser = nextSession.user;
     const changedUser = activeUserIdRef.current !== nextUser.id;
@@ -194,6 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearSession = useCallback(() => {
     activeUserIdRef.current = null;
     roleRequestIdRef.current += 1;
+    bootstrapRequestRef.current = null;
     bootstrapRef.current = null;
     setSession(null);
     setUser(null);
