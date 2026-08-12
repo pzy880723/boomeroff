@@ -8,6 +8,12 @@ import {
 import { RecognitionProgress, type RecognitionPhase } from './RecognitionProgress';
 import { RecognitionFailure } from './RecognitionFailure';
 import { HintInputSheet } from './HintInputSheet';
+import {
+  captureNativePhoto,
+  isNativeCameraCancellation,
+  isNativeCameraRuntime,
+  NativeCameraUpdateRequired,
+} from '@/lib/nativeCamera';
 
 type CaptureMode = 'single' | 'multi';
 const MAX_MULTI_IMAGES = 5;
@@ -91,6 +97,29 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
 
   const startCamera = async (mode?: 'environment' | 'user') => {
     const targetMode = mode || facingMode;
+    if (isNativeCameraRuntime()) {
+      try {
+        const raw = await captureNativePhoto(targetMode);
+        if (!raw) return;
+        const frame = await compressImage(raw);
+        if (captureMode === 'single') {
+          setCapturedImage(frame);
+          await runRecognize([frame]);
+        } else if (capturedImages.length >= MAX_MULTI_IMAGES) {
+          toast({ title: `最多 ${MAX_MULTI_IMAGES} 张` });
+        } else {
+          setCapturedImages((prev) => [...prev, frame]);
+        }
+      } catch (error) {
+        if (isNativeCameraCancellation(error)) return;
+        toast({
+          title: error instanceof NativeCameraUpdateRequired ? '需要更新 App' : '无法启动摄像头',
+          description: error instanceof Error ? error.message : '请授权摄像头访问权限',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
     const md = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
     if (!md || typeof md.getUserMedia !== 'function') {
       const isWeChat = typeof navigator !== 'undefined' && /MicroMessenger|QQ\//i.test(navigator.userAgent);
@@ -442,7 +471,7 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
           </div>
 
           {/* 多角度缩略图条 */}
-          {captureMode === 'multi' && isStreaming && capturedImages.length > 0 && !capturedImage && (
+          {captureMode === 'multi' && capturedImages.length > 0 && !capturedImage && (
             <div className="absolute left-3 right-3 bottom-24 sm:bottom-28 flex gap-1.5 overflow-x-auto pb-1">
               {capturedImages.map((src, i) => (
                 <div key={i} className="relative shrink-0">
@@ -476,17 +505,29 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
                     className="gap-2 h-12 px-6 rounded-full bg-accent hover:bg-accent/90 text-accent-foreground shadow-glow font-medium"
                   >
                     <Camera className="w-5 h-5" />
-                    启动摄像头
+                    {captureMode === 'multi' && capturedImages.length > 0 ? '继续拍照' : '启动摄像头'}
                   </Button>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="gap-2 h-12 px-5 rounded-full bg-white/10 backdrop-blur text-white border-white/20 hover:bg-white/20 hover:text-white"
-                  >
-                    <Upload className="w-5 h-5" />
-                    上传
-                  </Button>
+                  {captureMode === 'multi' && capturedImages.length > 0 ? (
+                    <Button
+                      size="lg"
+                      onClick={finishMultiCapture}
+                      disabled={isRecognizing}
+                      className="h-12 px-4 rounded-full bg-accent text-accent-foreground hover:bg-accent/90 gap-1.5"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      识别 ({capturedImages.length})
+                    </Button>
+                  ) : (
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="gap-2 h-12 px-5 rounded-full bg-white/10 backdrop-blur text-white border-white/20 hover:bg-white/20 hover:text-white"
+                    >
+                      <Upload className="w-5 h-5" />
+                      上传
+                    </Button>
+                  )}
                   <input
                     ref={fileInputRef}
                     type="file"
