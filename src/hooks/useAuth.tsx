@@ -1,86 +1,216 @@
-import { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import {
+  useState, useEffect, useRef, useCallback, createContext, useContext, type ReactNode,
+} from 'react';
+import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { AppRole } from '@/types';
+import type { AppRole } from '@/types';
+import { clearUserCache, readUserCache, writeUserCache } from '@/lib/appCache';
 import { toast } from 'sonner';
+
+export interface AppBootstrap {
+  date: string;
+  user_role: {
+    role: AppRole;
+    role_code: string | null;
+    suspended: boolean;
+  } | null;
+  permissions: string[];
+  profile: {
+    display_name: string | null;
+    avatar_url: string | null;
+    phone: string | null;
+  } | null;
+  staff_profile: {
+    real_name: string | null;
+    shop_id: string | null;
+  } | null;
+  shifts: Array<{ work_date: string; shift_code: string }>;
+  shift_definitions: Array<{
+    code: string;
+    name: string;
+    start_time: string;
+    end_time: string;
+    color: string | null;
+  }>;
+  checked_today: boolean;
+  activity: {
+    id: string;
+    name: string;
+    cover_url: string | null;
+    ends_at: string | null;
+    voucher_id: string | null;
+  } | null;
+  okrs: Array<{
+    id: string;
+    title: string;
+    objective: string | null;
+    key_results: unknown;
+    tags: string[] | null;
+  }>;
+  encouragement: string | null;
+}
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   role: AppRole | null;
+  roleCode: string | null;
   suspended: boolean;
   loading: boolean;
+  bootstrap: AppBootstrap | null;
+  bootstrapLoading: boolean;
+  refreshBootstrap: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const BOOTSTRAP_CACHE = 'app-bootstrap';
+const USER_CACHE_SCOPES = [BOOTSTRAP_CACHE, 'permissions', 'notifications', 'tasks'];
+
+function clearCachedUserData(userId: string): void {
+  USER_CACHE_SCOPES.forEach((scope) => clearUserCache(scope, userId));
+}
+
+function roleCodeFallback(role: AppRole | null): string | null {
+  if (!role) return null;
+  return role === 'admin' ? 'super_admin' : 'staff';
+}
+
+function isBootstrap(value: unknown): value is AppBootstrap {
+  return !!value && typeof value === 'object' && Array.isArray((value as AppBootstrap).permissions);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [roleCode, setRoleCode] = useState<string | null>(null);
   const [suspended, setSuspended] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [bootstrap, setBootstrap] = useState<AppBootstrap | null>(null);
+  const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const roleRequestIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(null);
+  const bootstrapRef = useRef<AppBootstrap | null>(null);
 
-  const fetchUserRole = async (userId: string) => {
+  const applyBootstrap = useCallback((userId: string, value: AppBootstrap, cache: boolean) => {
+    bootstrapRef.current = value;
+    setBootstrap(value);
+    const nextRole = value.user_role?.role ?? 'anchor';
+    setRole(nextRole);
+    setRoleCode(value.user_role?.role_code ?? roleCodeFallback(nextRole));
+    setSuspended(!!value.user_role?.suspended);
+    if (cache && !value.user_role?.suspended) {
+      writeUserCache(BOOTSTRAP_CACHE, userId, value);
+    }
+  }, []);
+
+  const loadBootstrap = useCallback(async (userId: string) => {
     const requestId = ++roleRequestIdRef.current;
-    console.log('[Auth] Fetching role for user:', userId);
-
-    const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 5000)
-    );
+    setBootstrapLoading(true);
 
     try {
-      const queryPromise = supabase
-        .from('user_roles')
-        .select('role, suspended')
-        .eq('user_id', userId)
-        .single();
-
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) => {
+        window.setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 5000);
+      });
+      const queryPromise = supabase.rpc('app_bootstrap_v1' as never);
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
-      if (requestId !== roleRequestIdRef.current) return;
+      if (requestId !== roleRequestIdRef.current || activeUserIdRef.current !== userId) return;
 
-      console.log('[Auth] Role query result:', { data, error });
-
-      if (error) {
-        console.error('[Auth] Error fetching user role:', error);
-        setRole('anchor');
-        setSuspended(false);
-      } else if (data && 'role' in data) {
-        setRole(data.role as AppRole);
-        setSuspended(data.suspended || false);
-        console.log('[Auth] Role set to:', data.role, 'Suspended:', data.suspended);
-        
-        // If user is suspended (pending approval or manually suspended), sign them out
-        if (data.suspended) {
-          console.log('[Auth] User is suspended, signing out...');
+      if (!error && isBootstrap(data)) {
+        applyBootstrap(userId, data, true);
+        if (data.user_role?.suspended) {
+          clearCachedUserData(userId);
           toast.error('账号待管理员审核通过后方可登录');
           await supabase.auth.signOut();
         }
-      } else {
-        console.log('[Auth] No role data, using default');
+        return;
+      }
+
+      // Migration may not be deployed yet. Keep the app usable during staged rollout.
+      const { data: roleRow, error: roleError } = await supabase
+        .from('user_roles')
+        .select('role, suspended, role_code')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (requestId !== roleRequestIdRef.current || activeUserIdRef.current !== userId) return;
+
+      if (roleError || !roleRow) {
         setRole('anchor');
+        setRoleCode('staff');
+        setSuspended(false);
+        return;
+      }
+
+      const nextRole = roleRow.role as AppRole;
+      setRole(nextRole);
+      setRoleCode(roleRow.role_code ?? roleCodeFallback(nextRole));
+      setSuspended(!!roleRow.suspended);
+      if (roleRow.suspended) {
+        clearCachedUserData(userId);
+        toast.error('账号待管理员审核通过后方可登录');
+        await supabase.auth.signOut();
+      }
+    } catch {
+      if (requestId !== roleRequestIdRef.current) return;
+      // Cached bootstrap remains visible; RLS remains the authorization boundary.
+      if (!bootstrapRef.current) {
+        setRole('anchor');
+        setRoleCode('staff');
         setSuspended(false);
       }
-    } catch (error) {
-      if (requestId !== roleRequestIdRef.current) return;
-      console.error('[Auth] Unexpected error fetching role:', error);
-      setRole('anchor');
-      setSuspended(false);
     } finally {
-      if (requestId !== roleRequestIdRef.current) return;
-      console.log('[Auth] Setting loading to false');
-      setLoading(false);
+      if (requestId === roleRequestIdRef.current) setBootstrapLoading(false);
     }
-  };
+  }, [applyBootstrap]);
+
+  const beginUserSession = useCallback((nextSession: Session, forceRefresh = false) => {
+    const nextUser = nextSession.user;
+    const changedUser = activeUserIdRef.current !== nextUser.id;
+    activeUserIdRef.current = nextUser.id;
+    setSession(nextSession);
+    setUser(nextUser);
+    setLoading(false);
+
+    if (changedUser) {
+      const cached = readUserCache<AppBootstrap>(BOOTSTRAP_CACHE, nextUser.id);
+      if (cached && isBootstrap(cached)) applyBootstrap(nextUser.id, cached, false);
+      else {
+        bootstrapRef.current = null;
+        setBootstrap(null);
+        setRole(null);
+        setRoleCode(null);
+        setSuspended(false);
+      }
+    }
+
+    if (changedUser || forceRefresh || !bootstrapRef.current) {
+      void loadBootstrap(nextUser.id);
+    }
+  }, [applyBootstrap, loadBootstrap]);
+
+  const clearSession = useCallback(() => {
+    activeUserIdRef.current = null;
+    roleRequestIdRef.current += 1;
+    bootstrapRef.current = null;
+    setSession(null);
+    setUser(null);
+    setRole(null);
+    setRoleCode(null);
+    setSuspended(false);
+    setBootstrap(null);
+    setBootstrapLoading(false);
+    setLoading(false);
+  }, []);
+
+  const refreshBootstrap = useCallback(async () => {
+    const userId = activeUserIdRef.current;
+    if (userId) await loadBootstrap(userId);
+  }, [loadBootstrap]);
 
   useEffect(() => {
-    console.log('[Auth] Initializing auth state...');
-    
-    // 仅本地 / Lovable 沙盒里自动登录；线上正式域名不再触发，避免 “打不开的兜底页面”
     const tryDevAutoLogin = async () => {
       try {
         const host = window.location.hostname;
@@ -89,113 +219,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           host === '127.0.0.1' ||
           host.endsWith('.lovableproject.com') ||
           host.startsWith('id-preview--');
-        if (!isSandbox) return;
-        if (sessionStorage.getItem('dev-autologin-tried') === '1') return;
+        if (!isSandbox || sessionStorage.getItem('dev-autologin-tried') === '1') return;
         sessionStorage.setItem('dev-autologin-tried', '1');
-        console.log('[Auth] Sandbox detected, auto-login dev account...');
-        const { error } = await supabase.auth.signInWithPassword({
+        await supabase.auth.signInWithPassword({
           email: '87113911@qq.com',
           password: 'pzy5565283',
         });
-        if (error) console.warn('[Auth] Dev auto-login failed:', error.message);
-      } catch (e) {
-        console.warn('[Auth] Dev auto-login error:', e);
+      } catch {
+        // Sandbox login is only a development convenience.
       }
     };
 
-    // 获取初始会话
     supabase.auth.getSession()
-      .then(async ({ data: { session } }) => {
-        console.log('[Auth] Initial session:', session ? 'exists' : 'null');
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchUserRole(session.user.id);
-        } else {
-          console.log('[Auth] No session, setting loading to false');
-          setRole(null);
-          setSuspended(false);
-          setLoading(false);
-          await tryDevAutoLogin();
+      .then(({ data: { session: initialSession } }) => {
+        if (initialSession) beginUserSession(initialSession);
+        else {
+          clearSession();
+          void tryDevAutoLogin();
         }
       })
-      .catch((error) => {
-        console.error('[Auth] Initial session error:', error);
-        setSession(null);
-        setUser(null);
-        setRole(null);
-        setSuspended(false);
-        setLoading(false);
-      });
+      .catch(clearSession);
 
-    // 监听认证状态变化
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        console.log('[Auth] Auth state changed:', _event);
-        setLoading(true);
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          // 使用 setTimeout(0) 避免死锁
-          setTimeout(() => {
-            fetchUserRole(session.user.id);
-          }, 0);
-        } else {
-          roleRequestIdRef.current += 1;
-          setRole(null);
-          setSuspended(false);
-          setLoading(false);
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!nextSession) {
+        clearSession();
+        return;
       }
-    );
+
+      // Token refreshes should not restart the entire app bootstrap sequence.
+      if (event === 'TOKEN_REFRESHED' && activeUserIdRef.current === nextSession.user.id) {
+        setSession(nextSession);
+        setUser(nextSession.user);
+        setLoading(false);
+        return;
+      }
+      beginUserSession(nextSession, event === 'USER_UPDATED');
+    });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [beginUserSession, clearSession]);
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setLoading(false);
       throw error;
     }
-    const nextSession = data.session ?? null;
-    setSession(nextSession);
-    setUser(nextSession?.user ?? null);
-    if (nextSession?.user) {
-      // 异步写审计日志，不阻塞登录流程
-      import('@/lib/audit').then(({ logAudit }) => {
-        logAudit({ action: 'login.password', detail: { email } });
-      }).catch(() => {});
-      await fetchUserRole(nextSession.user.id);
-    } else {
-      setLoading(false);
-    }
+    if (data.session) beginUserSession(data.session, true);
+    else setLoading(false);
+
+    import('@/lib/audit').then(({ logAudit }) => {
+      logAudit({ action: 'login.password', detail: { email } });
+    }).catch(() => {});
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          display_name: displayName,
-        },
-      },
+      options: { data: { display_name: displayName } },
     });
     if (error) throw error;
   };
 
   const signOut = async () => {
+    const userId = activeUserIdRef.current;
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    if (userId) clearCachedUserData(userId);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, suspended, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{
+      user, session, role, roleCode, suspended, loading,
+      bootstrap, bootstrapLoading, refreshBootstrap,
+      signIn, signUp, signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -203,8 +303,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }

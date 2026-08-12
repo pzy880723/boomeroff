@@ -127,12 +127,12 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Noto Sans SC', 'HarmonyOS Sans SC', system-ui, -apple-system, sans-serif;
+    font-family: 'PingFang SC', 'HarmonyOS Sans SC', system-ui, -apple-system, sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
   .font-display {
-    font-family: 'Noto Sans SC', 'HarmonyOS Sans SC', system-ui, sans-serif;
+    font-family: 'PingFang SC', 'HarmonyOS Sans SC', system-ui, sans-serif;
     font-weight: 900;
     letter-spacing: -0.02em;
   }

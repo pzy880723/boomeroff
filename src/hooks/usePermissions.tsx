@@ -3,6 +3,7 @@ import {
 } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { readUserCache, writeUserCache } from '@/lib/appCache';
 
 export type PermissionKey =
   // 人员
@@ -43,7 +44,13 @@ interface Ctx {
 const PermissionsContext = createContext<Ctx | undefined>(undefined);
 
 export function PermissionsProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const {
+    user,
+    roleCode: authRoleCode,
+    bootstrap,
+    bootstrapLoading,
+    refreshBootstrap,
+  } = useAuth();
   const [loading, setLoading] = useState(true);
   const [roleCode, setRoleCode] = useState<string | null>(null);
   const [perms, setPerms] = useState<Set<string>>(new Set());
@@ -57,15 +64,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true);
     try {
-      const { data: roleRow } = await supabase
-        .from('user_roles')
-        .select('role, role_code')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      const code: string =
-        (roleRow as { role_code?: string | null } | null)?.role_code
-        ?? (roleRow?.role === 'admin' ? 'super_admin' : 'staff');
+      const code = authRoleCode ?? 'staff';
       setRoleCode(code);
 
       const { data: rp } = await supabase
@@ -73,22 +72,55 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
         .select('permission_key')
         .eq('role_code', code);
 
-      setPerms(new Set((rp || []).map((r: any) => r.permission_key)));
+      const keys = (rp || []).map((r: any) => r.permission_key as string);
+      setPerms(new Set(keys));
+      writeUserCache('permissions', user.id, { roleCode: code, permissions: keys });
     } catch (e) {
       console.error('[Permissions] load error', e);
       setPerms(new Set());
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, authRoleCode]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!user) {
+      setRoleCode(null);
+      setPerms(new Set());
+      setLoading(false);
+      return;
+    }
+
+    if (bootstrap) {
+      const code = bootstrap.user_role?.role_code ?? authRoleCode ?? 'staff';
+      setRoleCode(code);
+      setPerms(new Set(bootstrap.permissions));
+      setLoading(false);
+      writeUserCache('permissions', user.id, { roleCode: code, permissions: bootstrap.permissions });
+      return;
+    }
+
+    const cached = readUserCache<{ roleCode: string; permissions: string[] }>('permissions', user.id);
+    if (cached) {
+      setRoleCode(cached.roleCode);
+      setPerms(new Set(cached.permissions));
+      setLoading(false);
+    }
+
+    if (bootstrapLoading) return;
+    void load();
+  }, [user, bootstrap, bootstrapLoading, authRoleCode, load]);
+
+  const refresh = useCallback(async () => {
+    await refreshBootstrap();
+    if (!bootstrap) await load();
+  }, [refreshBootstrap, bootstrap, load]);
 
   const can = useCallback((perm: string) => perms.has(perm), [perms]);
 
   const value = useMemo<Ctx>(
-    () => ({ loading, roleCode, permissions: perms, can, refresh: load }),
-    [loading, roleCode, perms, can, load]
+    () => ({ loading, roleCode, permissions: perms, can, refresh }),
+    [loading, roleCode, perms, can, refresh]
   );
 
   return <PermissionsContext.Provider value={value}>{children}</PermissionsContext.Provider>;

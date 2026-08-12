@@ -14,7 +14,9 @@ import { Loader2, Phone } from 'lucide-react';
  * 强制补录手机号 —— 已登录用户若 profiles.phone 为空则弹窗，不允许关闭。
  */
 export function RequirePhoneGate() {
-  const { user, loading: authLoading } = useAuth();
+  const {
+    user, loading: authLoading, bootstrap, bootstrapLoading, refreshBootstrap,
+  } = useAuth();
   const [checking, setChecking] = useState(true);
   const [needBind, setNeedBind] = useState(false);
   const [phone, setPhone] = useState('');
@@ -26,6 +28,12 @@ export function RequirePhoneGate() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) { setChecking(false); setNeedBind(false); return; }
+    if (bootstrap) {
+      setNeedBind(!bootstrap.profile?.phone);
+      setChecking(false);
+      return;
+    }
+    if (bootstrapLoading) return;
     let cancelled = false;
     (async () => {
       setChecking(true);
@@ -36,7 +44,7 @@ export function RequirePhoneGate() {
       setChecking(false);
     })();
     return () => { cancelled = true; };
-  }, [user, authLoading]);
+  }, [user, authLoading, bootstrap, bootstrapLoading]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -69,6 +77,7 @@ export function RequirePhoneGate() {
       await logAudit({ action: 'phone.bind', detail: { phone: phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') } });
       toast.success('手机号绑定成功');
       setNeedBind(false);
+      void refreshBootstrap();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '绑定失败');
     } finally { setVerifying(false); }

@@ -18,6 +18,7 @@ import bannerDefault from '@/assets/banner-default.jpg';
 import brandWordmarkUrl from '@/assets/boomer-go-wordmark.png';
 import xhsIcon from '@/assets/icon-xhs-activity.png';
 import { addDaysISO, formatShiftTime, shortDateLabel, weekdayLabel } from '@/lib/scheduleUtils';
+import { runAfterFirstPaint } from '@/lib/appCache';
 
 interface ShiftInfo {
   work_date: string;
@@ -54,7 +55,7 @@ function okrProgress(kr: any): number {
 }
 
 export default function Home() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, bootstrap, bootstrapLoading } = useAuth();
   const { items: notes, loading: notesLoading } = useNotifications();
 
   const [name, setName] = useState<string>('店员');
@@ -72,6 +73,44 @@ export default function Home() {
     if (!user) return;
     const today = todayShanghai();
     const tomorrow = addDaysISO(today, 1);
+
+    if (bootstrap) {
+      setName(
+        bootstrap.staff_profile?.real_name ||
+        bootstrap.profile?.display_name ||
+        user.email?.split('@')[0] ||
+        '店员'
+      );
+      if (bootstrap.encouragement) setEncouragement(bootstrap.encouragement);
+
+      if (bootstrap.date === today) {
+        const shiftMap = new Map(bootstrap.shift_definitions.map((shift) => [shift.code, shift]));
+        const buildInfo = (row: { work_date: string; shift_code: string }): ShiftInfo => ({
+          work_date: row.work_date,
+          shift_code: row.shift_code,
+          shift: shiftMap.get(row.shift_code) || null,
+        });
+        const todayRow = bootstrap.shifts.find((row) => row.work_date === today);
+        const tomorrowRow = bootstrap.shifts.find((row) => row.work_date === tomorrow);
+        setTodayShift(todayRow ? buildInfo(todayRow) : null);
+        setTomorrowShift(tomorrowRow ? buildInfo(tomorrowRow) : null);
+        setCheckedToday(bootstrap.checked_today);
+        setAct(bootstrap.activity);
+        setOkrs(bootstrap.okrs as StoreOkr[]);
+      }
+
+      if (!bootstrap.encouragement) {
+        return runAfterFirstPaint(() => {
+          void supabase.functions.invoke('generate-daily-encouragement').then(({ data }) => {
+            if ((data as any)?.text) setEncouragement((data as any).text);
+          }).catch(() => {});
+        }, 1200);
+      }
+      return;
+    }
+
+    // During staged deployment, preserve the existing queries until app_bootstrap_v1 is available.
+    if (bootstrapLoading) return;
 
     void (async () => {
       try {
@@ -154,7 +193,7 @@ export default function Home() {
         } catch { /* ignore */ }
       }
     })();
-  }, [user]);
+  }, [user, bootstrap, bootstrapLoading]);
 
   // Banner：只取「资讯」分类最新一条
   useEffect(() => {

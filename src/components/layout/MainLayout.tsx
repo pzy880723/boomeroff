@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { BottomTabBar } from './BottomTabBar';
@@ -8,6 +8,7 @@ import { PullToRefresh } from '@/components/system/PullToRefresh';
 import { lazyWithRetry as lazy } from '@/lib/lazyWithRetry';
 import { NotificationsProvider } from '@/hooks/useNotifications';
 import { TasksProvider } from '@/hooks/useTasks';
+import { runAfterFirstPaint } from '@/lib/appCache';
 
 const FloatingDashboard = lazy(() =>
   import('@/components/dashboard/FloatingDashboard').then(m => ({ default: m.FloatingDashboard }))
@@ -18,6 +19,19 @@ const LevelUpWatcher = lazy(() =>
 const PushBootstrap = lazy(() =>
   import('@/components/system/PushBootstrap').then(m => ({ default: m.PushBootstrap }))
 );
+
+function DeferredShellFeatures() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => runAfterFirstPaint(() => setReady(true), 1200), []);
+  if (!ready) return null;
+  return (
+    <Suspense fallback={null}>
+      <FloatingDashboard />
+      <LevelUpWatcher />
+      <PushBootstrap />
+    </Suspense>
+  );
+}
 
 export function MainLayout() {
   return (
@@ -45,11 +59,7 @@ export function MainLayout() {
           <BottomTabBar />
           <EdgeSwipeBack />
           <PullToRefresh />
-          <Suspense fallback={null}>
-            <FloatingDashboard />
-            <LevelUpWatcher />
-            <PushBootstrap />
-          </Suspense>
+          <DeferredShellFeatures />
         </div>
       </TasksProvider>
     </NotificationsProvider>

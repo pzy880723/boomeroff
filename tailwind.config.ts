@@ -66,8 +66,8 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        display: ['"Playfair Display"', '"Noto Sans SC"', "serif"],
-        sans: ['"Noto Sans SC"', "system-ui", "sans-serif"],
+        display: ['"PingFang SC"', '"HarmonyOS Sans SC"', "system-ui", "sans-serif"],
+        sans: ['"PingFang SC"', '"HarmonyOS Sans SC"', "system-ui", "sans-serif"],
       },
       keyframes: {
         "accordion-down": {

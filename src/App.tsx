@@ -68,7 +68,17 @@ const DispatchHome = lazy(() => import("./pages/marketing/dispatch/DispatchHome"
 const DispatchWorkbench = lazy(() => import("./pages/marketing/dispatch/Workbench"));
 const DispatchJobDetail = lazy(() => import("./pages/marketing/dispatch/JobDetail"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      gcTime: 24 * 60 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+    },
+  },
+});
 
 function RouteFallback() {
   return (

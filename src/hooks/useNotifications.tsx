@@ -1,8 +1,9 @@
 import {
-  createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode,
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode,
 } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { readUserCache, runAfterFirstPaint, writeUserCache } from '@/lib/appCache';
 
 export interface NotificationItem {
   id: string;
@@ -43,51 +44,73 @@ function bucketOf(cat: string | null | undefined): 'news' | 'message' | 'notice'
 }
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const hydratedRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!user) { setItems([]); setLoading(false); return; }
-    setLoading(true);
-    // 判定是否管理员：非管理员不应看到备份等运维通知
-    let isAdmin = false;
+    if (!hydratedRef.current) setLoading(true);
     try {
-      const { data } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' as any });
-      isAdmin = !!data;
-    } catch { /* ignore */ }
-    let notesQuery = supabase.from('notifications' as any)
-      .select('id, title, body, summary, type, created_at, expires_at, image_url, category, created_by')
-      .order('created_at', { ascending: false })
-      .limit(60);
-    if (!isAdmin) notesQuery = notesQuery.neq('type', 'backup');
-    const [{ data: notes }, { data: reads }] = await Promise.all([
-      notesQuery,
-      supabase.from('notification_reads' as any)
-        .select('notification_id')
-        .eq('user_id', user.id),
-    ]);
-    const readSet = new Set(((reads as any[]) || []).map(r => r.notification_id));
-    const rawNotes = ((notes as any[]) || []);
-    const authorIds = Array.from(new Set(rawNotes.map(n => n.created_by).filter(Boolean)));
-    let authorMap: Record<string, { name: string | null; avatar: string | null }> = {};
-    if (authorIds.length) {
-      const { data: profs } = await supabase.from('profiles' as any)
-        .select('user_id, display_name, avatar_url')
-        .in('user_id', authorIds);
-      for (const p of ((profs as any[]) || [])) {
-        authorMap[p.user_id] = { name: p.display_name, avatar: p.avatar_url };
+      let notesQuery = supabase.from('notifications' as any)
+        .select('id, title, body, summary, type, created_at, expires_at, image_url, category, created_by')
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(60);
+      if (role !== 'admin') notesQuery = notesQuery.neq('type', 'backup');
+      const [{ data: notes }, { data: reads }] = await Promise.all([
+        notesQuery,
+        supabase.from('notification_reads' as any)
+          .select('notification_id')
+          .eq('user_id', user.id),
+      ]);
+      const readSet = new Set(((reads as any[]) || []).map(r => r.notification_id));
+      const rawNotes = ((notes as any[]) || []);
+      const authorIds = Array.from(new Set(rawNotes.map(n => n.created_by).filter(Boolean)));
+      const authorMap: Record<string, { name: string | null; avatar: string | null }> = {};
+      if (authorIds.length) {
+        const { data: profs } = await supabase.from('profiles' as any)
+          .select('user_id, display_name, avatar_url')
+          .in('user_id', authorIds);
+        for (const p of ((profs as any[]) || [])) {
+          authorMap[p.user_id] = { name: p.display_name, avatar: p.avatar_url };
+        }
       }
+      const nextItems = rawNotes.map(n => ({
+        ...n,
+        read: readSet.has(n.id),
+        author: n.created_by ? (authorMap[n.created_by] ?? null) : null,
+      })) as NotificationItem[];
+      hydratedRef.current = true;
+      setItems(nextItems);
+      writeUserCache('notifications', user.id, nextItems);
+    } catch {
+      // Keep the cached notifications visible when the refresh fails.
+    } finally {
+      setLoading(false);
     }
-    setItems(rawNotes.map(n => ({
-      ...n,
-      read: readSet.has(n.id),
-      author: n.created_by ? (authorMap[n.created_by] ?? null) : null,
-    })));
-    setLoading(false);
-  }, [user]);
+  }, [user, role]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!user) {
+      hydratedRef.current = false;
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    const cached = readUserCache<NotificationItem[]>('notifications', user.id);
+    if (cached) {
+      hydratedRef.current = true;
+      setItems(cached);
+      setLoading(false);
+    }
+    return runAfterFirstPaint(() => { void load(); }, 650);
+  }, [user, load]);
+
+  useEffect(() => {
+    if (user && hydratedRef.current) writeUserCache('notifications', user.id, items);
+  }, [user, items]);
 
   const markRead = useCallback(async (id: string) => {
     if (!user) return;
