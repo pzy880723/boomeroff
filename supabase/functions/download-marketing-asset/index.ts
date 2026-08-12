@@ -5,7 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, range",
-  "Access-Control-Expose-Headers": "content-disposition, content-length, content-type",
+  "Access-Control-Expose-Headers": "content-disposition, content-length, content-type, content-range, accept-ranges",
 };
 
 const ALLOWED_HOSTS = new Set<string>([
@@ -95,7 +95,8 @@ Deno.serve(async (req) => {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!asset.output_url) {
+    const storagePath = typeof asset.meta?.storage_path === "string" ? asset.meta.storage_path : "";
+    if (!asset.output_url && !storagePath) {
       return new Response(JSON.stringify({ error: "素材尚未生成完成" }), {
         status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -103,7 +104,20 @@ Deno.serve(async (req) => {
 
     // 登录用户即可下载素材库内容(素材本身已经按 shop_id 在前端读取做了过滤)
 
-    const remoteUrl = asset.output_url as string;
+    // output_url 可能是历史长签名或火山临时地址。已经转存的素材始终按
+    // storage_path 现场签发短链接，避免数据库里的旧 URL 失效后无法下载。
+    let remoteUrl = asset.output_url as string;
+    if (storagePath) {
+      const { data: signed, error: signedError } = await admin.storage
+        .from("marketing-videos")
+        .createSignedUrl(storagePath, 5 * 60);
+      if (signedError || !signed?.signedUrl) {
+        return new Response(JSON.stringify({ error: "无法生成下载地址" }), {
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      remoteUrl = signed.signedUrl;
+    }
     let host = "";
     try { host = new URL(remoteUrl).hostname; } catch {
       return new Response(JSON.stringify({ error: "素材地址异常" }), {

@@ -66,34 +66,29 @@ export async function saveUrlToGallery(
     return { ok: false, target: 'gallery', error: '当前 App 版本缺少系统相册能力，请更新 BOOMER GO' };
   }
 
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]+/g, '_') || `${kind}-${Date.now()}`;
+  const cachePath = `gallery-${Date.now()}-${safeFilename}`;
   try {
-    // Media 原生插件支持远程 URL，先让 iOS/Android 自己下载并写入相册。
-    // 这条路径不经过 JS Blob，对 1080p 视频最稳定。
-    try {
-      if (kind === 'video') await Media.saveVideo({ path: url });
-      else await Media.savePhoto({ path: url });
-      return { ok: true, target: 'gallery' };
-    } catch {
-      // 某些带鉴权跳转的 URL 无法被原生下载器直接解析，再退回本地缓存。
-    }
-
+    // 先流式落到 App 缓存，再交给相册插件。这样不会让 Media 插件在
+    // 原生桥接线程里同步等待 1080p 远程下载，也不会进入 JS Blob/Base64。
     const downloaded = await Filesystem.downloadFile({
       url,
-      path: filename,
+      path: cachePath,
       directory: Directory.Cache,
       progress: true,
     });
     let fileUri = downloaded.path;
     if (!fileUri || !fileUri.startsWith('file://')) {
-      const resolved = await Filesystem.getUri({ path: filename, directory: Directory.Cache });
+      const resolved = await Filesystem.getUri({ path: cachePath, directory: Directory.Cache });
       fileUri = resolved.uri;
     }
     if (kind === 'video') await Media.saveVideo({ path: fileUri });
     else await Media.savePhoto({ path: fileUri });
-    try { await Filesystem.deleteFile({ path: filename, directory: Directory.Cache }); } catch { /* noop */ }
     return { ok: true, target: 'gallery' };
   } catch (e) {
     return { ok: false, target: 'gallery', error: (e as Error)?.message || '保存到相册失败' };
+  } finally {
+    try { await Filesystem.deleteFile({ path: cachePath, directory: Directory.Cache }); } catch { /* noop */ }
   }
 }
 

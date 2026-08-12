@@ -29,8 +29,19 @@ test('手机下载直接流式写入文件，不把 1080p 视频转成 Base64', 
   const detail = read('../src/components/marketing/AssetDetailDialog.tsx');
   assert.match(gallery, /saveUrlToGallery/);
   assert.match(gallery, /Filesystem\.downloadFile/);
+  assert.doesNotMatch(gallery, /Media\.saveVideo\(\{ path: url \}\)/);
+  assert.ok(
+    gallery.indexOf('Filesystem.downloadFile') < gallery.indexOf("Media.saveVideo({ path: fileUri })"),
+    '1080p 视频必须先下载到本地缓存，再交给相册插件保存',
+  );
   assert.match(detail, /createSignedUrl/);
   assert.match(detail, /saveUrlToGallery/);
+});
+
+test('下载接口按 storage_path 生成新签名，不依赖可能过期的 output_url', () => {
+  const download = read('../supabase/functions/download-marketing-asset/index.ts');
+  assert.match(download, /meta\?\.storage_path/);
+  assert.match(download, /createSignedUrl\(storagePath/);
 });
 
 test('成片详情分开交付视频和封面，下载前立即复制固定文案', () => {

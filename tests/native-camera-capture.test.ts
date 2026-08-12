@@ -34,8 +34,8 @@ test('iOS 和 Android 声明摄像头权限并升级原生构建号', () => {
 
   assert.match(infoPlist, /NSCameraUsageDescription/);
   assert.match(androidManifest, /android\.permission\.CAMERA/);
-  assert.match(xcodeProject, /CURRENT_PROJECT_VERSION = 2;/);
-  assert.match(xcodeProject, /MARKETING_VERSION = 1\.0\.1;/);
-  assert.match(androidBuild, /versionCode 2/);
-  assert.match(androidBuild, /versionName "1\.0\.1"/);
+  assert.match(xcodeProject, /CURRENT_PROJECT_VERSION = 3;/);
+  assert.match(xcodeProject, /MARKETING_VERSION = 1\.0\.2;/);
+  assert.match(androidBuild, /versionCode 3/);
+  assert.match(androidBuild, /versionName "1\.0\.2"/);
 });
