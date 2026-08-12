@@ -149,7 +149,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.app_bootstrap_v1() FROM PUBLIC;
+-- Lovable/Supabase may install explicit default grants in addition to PUBLIC.
+REVOKE ALL ON FUNCTION public.app_bootstrap_v1() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.app_bootstrap_v1() TO authenticated;
 
 CREATE INDEX IF NOT EXISTS activities_active_starts_idx
