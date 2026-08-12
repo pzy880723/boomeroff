@@ -3467,6 +3467,7 @@ export type Database = {
         Args: { _phone: string; _real_name: string; _user_id: string }
         Returns: undefined
       }
+      app_bootstrap_v1: { Args: never; Returns: Json }
       bind_my_phone: { Args: { _phone: string }; Returns: undefined }
       can_assign_role_code: {
         Args: { _actor: string; _target_role_code: string }
