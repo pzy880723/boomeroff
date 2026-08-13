@@ -12,6 +12,7 @@ import boomerIdle from '@/assets/boomer/boomer-idle.png';
 import { SurpriseVideoDialog } from '@/components/marketing/SurpriseVideoDialog';
 import { clearActiveRenderJob, getActiveRenderJob } from '@/lib/surpriseJob';
 import { getVideoJob } from '@/api/videoGeneration';
+import { MarketingShopSwitcher } from '@/components/marketing/MarketingShopSwitcher';
 
 interface RecentItem { id: string; kind: string; output_url: string | null; created_at: string; }
 
@@ -22,7 +23,8 @@ export default function MyMarketing() {
   const [recents, setRecents] = useState<RecentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [surpriseOpen, setSurpriseOpen] = useState(false);
-  const { shopId } = useEffectiveShop();
+  const { shopId, setShopId, shops, myShopId, loading: shopLoading } = useEffectiveShop();
+  const currentShop = shops.find((shop) => shop.id === shopId) || null;
   const [hasActiveJob, setHasActiveJob] = useState(false);
 
   useEffect(() => {
@@ -55,7 +57,13 @@ export default function MyMarketing() {
 
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !shopId) {
+      setCounts({ photo: 0, copy: 0, video: 0 });
+      setToday(0);
+      setRecents([]);
+      setLoading(false);
+      return;
+    }
     (async () => {
       setLoading(true);
       const since30 = new Date(); since30.setDate(since30.getDate() - 30);
@@ -63,18 +71,18 @@ export default function MyMarketing() {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const todayISO = todayStart.toISOString();
       const [p, c, v, t, recent] = await Promise.all([
-        supabase.from('marketing_assets' as any).select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('kind', 'photo').gte('created_at', sinceISO),
-        supabase.from('marketing_assets' as any).select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('kind', 'copy').gte('created_at', sinceISO),
-        supabase.from('marketing_assets' as any).select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('kind', 'video').gte('created_at', sinceISO),
-        supabase.from('marketing_assets' as any).select('id', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', todayISO),
-        supabase.from('marketing_assets' as any).select('id, kind, output_url, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3),
+        supabase.from('marketing_assets' as any).select('id', { count: 'exact', head: true }).eq('shop_id', shopId).eq('kind', 'photo').gte('created_at', sinceISO),
+        supabase.from('marketing_assets' as any).select('id', { count: 'exact', head: true }).eq('shop_id', shopId).eq('kind', 'copy').gte('created_at', sinceISO),
+        supabase.from('marketing_assets' as any).select('id', { count: 'exact', head: true }).eq('shop_id', shopId).eq('kind', 'video').gte('created_at', sinceISO),
+        supabase.from('marketing_assets' as any).select('id', { count: 'exact', head: true }).eq('shop_id', shopId).gte('created_at', todayISO),
+        supabase.from('marketing_assets' as any).select('id, kind, output_url, created_at').eq('shop_id', shopId).order('created_at', { ascending: false }).limit(3),
       ]);
       setCounts({ photo: p.count || 0, copy: c.count || 0, video: v.count || 0 });
       setToday(t.count || 0);
       setRecents(((recent.data as any[]) || []) as RecentItem[]);
       setLoading(false);
     })();
-  }, [user]);
+  }, [user, shopId]);
 
   if (authLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!user) return <AuthPage />;
@@ -83,6 +91,14 @@ export default function MyMarketing() {
     <>
       <PageHeader title="营销中心" back="/me" subtitle="一键出图 · 一键出文 · 一键出片" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 pb-12 space-y-5">
+
+        <MarketingShopSwitcher
+          value={shopId}
+          shops={shops}
+          boundShopId={myShopId}
+          loading={shopLoading}
+          onChange={(id) => setShopId(id)}
+        />
 
         {/* ===== Hero · 年鉴封面 ===== */}
         <section className="relative bg-card rounded-[0.875rem] border border-accent/15 shadow-sm overflow-hidden animate-card-enter">
@@ -126,7 +142,7 @@ export default function MyMarketing() {
               让 BOOMER 替你拍一条
             </h3>
             <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug truncate">
-              自动选图 · 完整脚本 · 15 秒快速成片
+              使用{currentShop?.name || '当前门店'}素材 · 完整脚本 · 15 秒快速成片
             </p>
           </div>
           {hasActiveJob ? (
@@ -297,4 +313,3 @@ function ToolTile({
     </Link>
   );
 }
-

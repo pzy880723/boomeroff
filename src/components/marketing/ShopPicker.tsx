@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useShops, rememberShop } from '@/hooks/useShops';
+import { useShops } from '@/hooks/useShops';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Store, Lock } from 'lucide-react';
 
@@ -47,7 +47,7 @@ export function ShopPicker({
       ) : (
         <Select
           value={value || ''}
-          onValueChange={(v) => { onChange(v || null); rememberShop(v || null); }}
+          onValueChange={(v) => onChange(v || null)}
         >
           <SelectTrigger className="h-10 bg-transparent border-border">
             <SelectValue placeholder={loading ? '加载中…' : '请选择门店'} />

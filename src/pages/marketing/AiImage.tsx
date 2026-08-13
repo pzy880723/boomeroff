@@ -31,7 +31,7 @@ const uid = () => Math.random().toString(36).slice(2);
 export default function AiImage() {
   const { user } = useAuth();
   const nav = useNavigate();
-  const { shopId, setShopId, isAdmin } = useEffectiveShop();
+  const { shopId, setShopId } = useEffectiveShop();
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -229,7 +229,7 @@ export default function AiImage() {
       <div className="flex flex-col h-[calc(100dvh-3.5rem-4rem)]">
         {/* 顶部:店铺选择 */}
         <div className="container mx-auto max-w-screen-md w-full px-4 pt-3 pb-2 shrink-0">
-          <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
+          <ShopPicker value={shopId} onChange={setShopId} locked={false} />
         </div>
 
         {/* 对话流 */}

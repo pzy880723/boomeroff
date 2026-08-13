@@ -59,7 +59,7 @@ const ASPECTS = ['9:16', '1:1', '16:9'] as const;
 
 export default function MarketingVideo() {
   const loc = useLocation();
-  const { shopId, setShopId, isAdmin } = useEffectiveShop();
+  const { shopId, setShopId } = useEffectiveShop();
   const { user } = useAuth();
   const [urls, setUrls] = useState<string[]>((loc.state as any)?.image_urls || []);
   const [vtype, setVtype] = useState<VType>('store_tour');
@@ -562,7 +562,7 @@ export default function MarketingVideo() {
       <PageHeader title="AI 视频" back="/me/marketing" subtitle="营销中心 / 文生视频" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
 
-        <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
+        <ShopPicker value={shopId} onChange={setShopId} locked={false} />
 
         {shopId && restoredAt && (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-accent/20 bg-accent/5 px-3 py-2 text-[11px]">
@@ -1419,4 +1419,3 @@ function StoryboardStrip({ script, busy, warn }: { script: any; busy: boolean; w
     </div>
   );
 }
-

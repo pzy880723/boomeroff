@@ -31,7 +31,7 @@ export default function MarketingCopy() {
   const loc = useLocation();
 
   const initial: string[] = (loc.state as any)?.image_urls || [];
-  const { shopId, setShopId, isAdmin } = useEffectiveShop();
+  const { shopId, setShopId } = useEffectiveShop();
   const [urls, setUrls] = useState<string[]>(initial);
   const [platform, setPlatform] = useState<Platform>('xhs');
   const [tone, setTone] = useState<string>('种草');
@@ -63,7 +63,7 @@ export default function MarketingCopy() {
       <PageHeader title="AI 文案" back="/me/marketing" subtitle="营销中心 / 写文案" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
 
-        <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
+        <ShopPicker value={shopId} onChange={setShopId} locked={false} />
 
         {shopId && <UploadGrid urls={urls} onChange={setUrls} max={9} preset="thumb" title="素材" shopId={shopId} />}
 

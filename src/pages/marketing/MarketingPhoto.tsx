@@ -19,7 +19,7 @@ interface Toggles { exposure: boolean; geometry: boolean; denoise: boolean; decl
 export default function MarketingPhoto() {
   const { user } = useAuth();
   const nav = useNavigate();
-  const { shopId, setShopId, isAdmin } = useEffectiveShop();
+  const { shopId, setShopId } = useEffectiveShop();
   const [origUrl, setOrigUrl] = useState<string | null>(null);
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -66,7 +66,7 @@ export default function MarketingPhoto() {
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-5 pb-12">
         
 
-        <ShopPicker value={shopId} onChange={setShopId} locked={!isAdmin} />
+        <ShopPicker value={shopId} onChange={setShopId} locked={false} />
 
         {!shopId && (
           <p className="text-center text-[12px] text-muted-foreground py-6">请先选择店铺，再开始优化图片。</p>

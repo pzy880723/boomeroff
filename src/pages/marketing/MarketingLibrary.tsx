@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Lock, Play, X, Tags } from 'lucide-react';
+import { Loader2, Image as ImageIcon, FileText, Video, Trash2, Check, Pencil, Store, Building2, Plus, Play, X, Tags } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -33,7 +33,7 @@ type KindTab = 'all' | 'photo' | 'copy' | 'video' | 'character' | 'profile';
 
 export default function MarketingLibrary() {
   const { user } = useAuth();
-  const { shopId, setShopId, shops, isAdmin, loading: shopLoading } = useEffectiveShop();
+  const { shopId, setShopId, shops } = useEffectiveShop();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -65,7 +65,6 @@ export default function MarketingLibrary() {
   useEffect(() => { try { localStorage.setItem('lib.imgSource', imgSource); } catch {} }, [imgSource]);
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
-  const currentShop = shops.find((s) => s.id === shopId);
 
   const PAGE_SIZE = 60;
   // 只显式取需要的列,避免将来 marketing_assets 新增大字段拖慢首屏。
@@ -469,34 +468,18 @@ export default function MarketingLibrary() {
       <PageHeader title="素材库" back="/me/marketing" subtitle="营销中心 / 按店铺管理" />
 
       <div className="container mx-auto max-w-screen-md px-4 py-4 space-y-4 pb-12">
-        {/* 店铺：管理员可切，店员锁定 */}
+        {/* 当前营销门店：所有用户都可以切换 */}
         <section className="bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-3 space-y-2">
           <div className="flex items-center gap-2 px-1">
             <Store className="w-3.5 h-3.5 text-accent" />
             <span className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">当前店铺</span>
-            {!isAdmin && (
-              <span className="ml-auto text-[10px] text-muted-foreground flex items-center gap-1">
-                <Lock className="w-2.5 h-2.5" />已锁定本店
-              </span>
-            )}
           </div>
-          {isAdmin ? (
-            <ShopFilterChips
-              value={shopId}
-              onChange={(v) => setShopId(typeof v === 'string' ? v : null)}
-              includeAll={false}
-              includeUnassigned={false}
-            />
-          ) : (
-            <div className="px-1 text-sm">
-              {shopLoading ? '加载中…' : currentShop ? (
-                <>
-                  <span className="font-medium">{currentShop.name}</span>
-                  {currentShop.address && <span className="text-muted-foreground ml-2 text-[12px]">· {currentShop.address}</span>}
-                </>
-              ) : '未绑定门店，请联系管理员'}
-            </div>
-          )}
+          <ShopFilterChips
+            value={shopId}
+            onChange={(v) => setShopId(typeof v === 'string' ? v : null)}
+            includeAll={false}
+            includeUnassigned={false}
+          />
         </section>
 
         {/* Tab 切换 */}
@@ -1016,4 +999,3 @@ function LoadMoreSentinel({ onVisible, loading }: { onVisible: () => void; loadi
     </div>
   );
 }
-
