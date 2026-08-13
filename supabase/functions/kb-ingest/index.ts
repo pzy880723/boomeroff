@@ -68,15 +68,24 @@ async function buildDoc(admin: any, source_type: string, source_id: string): Pro
   }
 
   if (source_type === 'shop_profile') {
-    const { data } = await admin.from('shop_marketing_profiles').select('*').eq('id', source_id).maybeSingle();
+    const { data } = await admin.from('shop_marketing_profiles').select('*').eq('shop_id', source_id).maybeSingle();
     if (!data) return null;
-    const fields = ['positioning', 'audience', 'selling_points', 'tone', 'do_list', 'dont_list', 'extra']
-      .map((k) => {
-        const v = (data as any)[k];
-        if (!v) return '';
-        return `【${k}】\n${typeof v === 'string' ? v : JSON.stringify(v)}`;
-      })
-      .filter(Boolean).join('\n\n');
+    const sellingPoints = Array.isArray(data.selling_points)
+      ? data.selling_points.map((x: any) => typeof x === 'string' ? x : x?.text || '').filter(Boolean).join('、')
+      : '';
+    const fields = [
+      data.tagline ? `【一句话定位】\n${data.tagline}` : '',
+      data.description ? `【详细介绍】\n${data.description}` : '',
+      sellingPoints ? `【核心卖点】\n${sellingPoints}` : '',
+      data.target_audience ? `【目标人群】\n${data.target_audience}` : '',
+      data.tone ? `【偏好口吻】\n${data.tone}` : '',
+      Array.isArray(data.brand_keywords) && data.brand_keywords.length
+        ? `【品牌关键词】\n${data.brand_keywords.join('、')}`
+        : '',
+      Array.isArray(data.default_hashtags) && data.default_hashtags.length
+        ? `【默认话题】\n${data.default_hashtags.join('、')}`
+        : '',
+    ].filter(Boolean).join('\n\n');
     if (!fields) return null;
     return [{ title: `门店营销画像`, content: fields, shop_id: data.shop_id, metadata: {}, scopes: all }];
   }
@@ -182,11 +191,11 @@ async function processOne(admin: any, item: any): Promise<void> {
 }
 
 async function enqueueBackfill(admin: any) {
-  const sources: Array<{ type: string; table: string; extra?: string }> = [
+  const sources: Array<{ type: string; table: string; idColumn?: string; extra?: string }> = [
     { type: 'official', table: 'official_knowledge' },
     { type: 'product_kb', table: 'product_knowledge' },
     { type: 'shop', table: 'shops' },
-    { type: 'shop_profile', table: 'shop_marketing_profiles' },
+    { type: 'shop_profile', table: 'shop_marketing_profiles', idColumn: 'shop_id' },
     { type: 'shop_kb', table: 'shop_kb_entries' },
     { type: 'preset', table: 'marketing_presets' },
     { type: 'asset', table: 'marketing_assets' },
@@ -197,11 +206,12 @@ async function enqueueBackfill(admin: any) {
   ];
   let total = 0;
   for (const s of sources) {
-    let q = admin.from(s.table).select('id');
+    const idColumn = s.idColumn || 'id';
+    let q = admin.from(s.table).select(idColumn);
     if (s.extra) q = q.eq('is_featured', true);
     const { data } = await q;
     for (const row of (data || []) as any[]) {
-      await admin.from('kb_ingest_queue').insert({ source_type: s.type, source_id: String(row.id), op: 'upsert' });
+      await admin.from('kb_ingest_queue').insert({ source_type: s.type, source_id: String(row[idColumn]), op: 'upsert' });
       total++;
     }
   }
