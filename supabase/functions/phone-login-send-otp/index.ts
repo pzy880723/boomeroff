@@ -1,6 +1,7 @@
 // 手机验证码登录：发送 OTP（白名单制）
 // 仅当手机号已登记在 profiles.phone 时才发送验证码
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { sendTencentSms } from '../_shared/tencent-sms.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,18 +60,9 @@ Deno.serve(async (req) => {
     });
     if (e2) return json({ error: e2.message }, 400);
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const smsResp = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-      },
-      body: JSON.stringify({ phone, template: 'otp', params: { code } }),
-    }).catch(() => null);
-    const smsResult = smsResp ? await smsResp.json().catch(() => null) : null;
-    if (!smsResp || !smsResp.ok) {
-      return json({ error: smsResult?.message || '短信发送失败，请稍后再试' }, 400);
+    const smsResult = await sendTencentSms(String(phone), 'otp', [code]);
+    if (!smsResult.ok) {
+      return json({ error: smsResult.message || '短信发送失败，请稍后再试' }, 400);
     }
 
     console.log(JSON.stringify({ event: 'phone_login_otp_sent', duration_ms: Math.round(performance.now() - startedAt) }));

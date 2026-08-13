@@ -53,12 +53,15 @@ export function PhoneLoginForm({ onSuccess }: { onSuccess?: () => void }) {
     if (!/^\d{6}$/.test(code)) { toast.error('请输入 6 位验证码'); return; }
     setVerifying(true);
     try {
-      const { data, error } = await invokeFn('phone-login-verify-otp', { body: { phone, code } });
+      const { data, error } = await invokeFn<{ access_token: string; refresh_token: string }>(
+        'phone-login-verify-otp',
+        { body: { phone, code } },
+      );
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      const { error: eV } = await supabase.auth.verifyOtp({
-        type: 'magiclink',
-        token_hash: data.token_hash,
+      if (!data?.access_token || !data.refresh_token) throw new Error('登录会话创建失败');
+      const { error: eV } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
       });
       if (eV) throw eV;
       import('@/lib/audit').then(({ logAudit }) => {

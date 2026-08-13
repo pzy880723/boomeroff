@@ -1,4 +1,4 @@
-// 手机验证码登录：校验 OTP 并返回一次性 magic link，供前端调 verifyOtp 登录
+// 手机验证码登录：校验 OTP 并直接返回会话，避免客户端再发一次跨境 Auth 请求。
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -72,6 +72,19 @@ Deno.serve(async (req) => {
       return json({ error: eLink?.message || '登录票据生成失败' }, 500);
     }
 
+    const authClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    const { data: verified, error: verifyError } = await authClient.auth.verifyOtp({
+      type: 'magiclink',
+      token_hash: link.properties.hashed_token,
+    });
+    if (verifyError || !verified.session) {
+      return json({ error: verifyError?.message || '登录票据校验失败' }, 500);
+    }
+
     // 历史 ERP 账号只把手机号写进 profiles。验证码验证成功后同步 Auth，
     // 保持账号唯一性数据一致，并为后续启用原生手机登录做好准备。
     const normalizedPhone = String(phone);
@@ -87,8 +100,8 @@ Deno.serve(async (req) => {
 
     return json({
       ok: true,
-      email: userInfo.user.email,
-      token_hash: link.properties.hashed_token,
+      access_token: verified.session.access_token,
+      refresh_token: verified.session.refresh_token,
     });
   } catch (e) {
     return json({ error: String(e) }, 500);
