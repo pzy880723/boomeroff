@@ -59,6 +59,12 @@ Deno.serve(async (req) => {
       .select('user_id').eq('phone', String(phone)).neq('user_id', uid).limit(1);
     if (exists && exists.length > 0) return json({ error: '该手机号已被其他账号占用' }, 400);
 
+    const { error: authPhoneError } = await admin.auth.admin.updateUserById(uid, {
+      phone: String(phone),
+      phone_confirm: true,
+    });
+    if (authPhoneError) return json({ error: authPhoneError.message }, 400);
+
     const { error: eUpd } = await admin.from('profiles')
       .update({ phone: String(phone), updated_at: new Date().toISOString() })
       .eq('user_id', uid);

@@ -127,8 +127,9 @@ Deno.serve(async (req) => {
       await admin.auth.admin.createUser({
         email,
         password,
+        ...(phone ? { phone, phone_confirm: true } : {}),
         email_confirm: true,
-        user_metadata: { display_name: displayName },
+        user_metadata: { display_name: displayName, phone },
       });
 
     if (createErr || !created.user) {
@@ -170,10 +171,13 @@ Deno.serve(async (req) => {
     }
 
     // Sync display_name to profiles table
-    if (real_name) {
+    if (real_name || phone) {
       await admin
         .from("profiles")
-        .update({ display_name: real_name })
+        .update({
+          ...(real_name ? { display_name: real_name } : {}),
+          ...(phone ? { phone } : {}),
+        })
         .eq("user_id", newUserId);
     }
 

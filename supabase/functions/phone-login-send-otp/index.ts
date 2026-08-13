@@ -26,18 +26,25 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
+    const startedAt = performance.now();
+    const since = new Date(Date.now() - 60_000).toISOString();
+    const [uidResult, recentResult] = await Promise.all([
+      admin.rpc('find_user_id_by_phone', { _phone: String(phone) }),
+      admin.from('phone_login_otp')
+        .select('id')
+        .eq('phone', String(phone))
+        .gt('created_at', since)
+        .limit(1),
+    ]);
+
     // 白名单：手机号必须已登记
-    const { data: uid, error: eUid } = await admin.rpc('find_user_id_by_phone', { _phone: String(phone) });
+    const { data: uid, error: eUid } = uidResult;
     if (eUid) return json({ error: eUid.message }, 500);
     if (!uid) return json({ error: '该手机号尚未在系统中登记，请联系管理员' }, 404);
 
     // 60s 限流
-    const since = new Date(Date.now() - 60_000).toISOString();
-    const { data: recent } = await admin.from('phone_login_otp')
-      .select('id')
-      .eq('phone', String(phone))
-      .gt('created_at', since)
-      .limit(1);
+    const { data: recent, error: recentError } = recentResult;
+    if (recentError) return json({ error: recentError.message }, 500);
     if (recent && recent.length > 0) {
       return json({ error: '验证码已发送，请 60 秒后再试' }, 429);
     }
@@ -66,6 +73,7 @@ Deno.serve(async (req) => {
       return json({ error: smsResult?.message || '短信发送失败，请稍后再试' }, 400);
     }
 
+    console.log(JSON.stringify({ event: 'phone_login_otp_sent', duration_ms: Math.round(performance.now() - startedAt) }));
     return json({ ok: true });
   } catch (e) {
     return json({ error: String(e) }, 500);

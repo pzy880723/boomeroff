@@ -28,17 +28,22 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    const { data: uid } = await admin.rpc('find_user_id_by_phone', { _phone: String(phone) });
+    const startedAt = performance.now();
+    const [uidResult, otpResult] = await Promise.all([
+      admin.rpc('find_user_id_by_phone', { _phone: String(phone) }),
+      admin.from('phone_login_otp')
+        .select('id, code_hash, expires_at, used_at, attempts')
+        .eq('phone', String(phone))
+        .is('used_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1),
+    ]);
+    const { data: uid } = uidResult;
     if (!uid) return json({ error: '该手机号尚未在系统中登记' }, 404);
 
     // 找最新 5 分钟内、未使用的验证码
-    const { data: otps } = await admin.from('phone_login_otp')
-      .select('id, code_hash, expires_at, used_at, attempts')
-      .eq('phone', String(phone))
-      .is('used_at', null)
-      .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false })
-      .limit(1);
+    const { data: otps } = otpResult;
     const otp = otps?.[0];
     if (!otp) return json({ error: '验证码已过期，请重新获取' }, 400);
     if (otp.attempts >= 5) return json({ error: '验证码错误次数过多，请重新获取' }, 400);
@@ -49,11 +54,14 @@ Deno.serve(async (req) => {
       return json({ error: '验证码不正确' }, 400);
     }
 
-    // 标记已使用
-    await admin.from('phone_login_otp').update({ used_at: new Date().toISOString() }).eq('id', otp.id);
+    const [usedResult, userResult] = await Promise.all([
+      admin.from('phone_login_otp').update({ used_at: new Date().toISOString() }).eq('id', otp.id),
+      admin.auth.admin.getUserById(String(uid)),
+    ]);
+    if (usedResult.error) return json({ error: usedResult.error.message }, 500);
 
     // 用 admin 生成 magic link，让前端拿 token 完成会话
-    const { data: userInfo, error: eUser } = await admin.auth.admin.getUserById(String(uid));
+    const { data: userInfo, error: eUser } = userResult;
     if (eUser || !userInfo?.user?.email) return json({ error: '账号数据异常' }, 500);
 
     const { data: link, error: eLink } = await admin.auth.admin.generateLink({
@@ -63,6 +71,19 @@ Deno.serve(async (req) => {
     if (eLink || !link?.properties?.hashed_token) {
       return json({ error: eLink?.message || '登录票据生成失败' }, 500);
     }
+
+    // 历史 ERP 账号只把手机号写进 profiles。验证码验证成功后同步 Auth，
+    // 保持账号唯一性数据一致，并为后续启用原生手机登录做好准备。
+    const normalizedPhone = String(phone);
+    if (userInfo.user.phone !== normalizedPhone) {
+      const { error: phoneSyncError } = await admin.auth.admin.updateUserById(String(uid), {
+        phone: normalizedPhone,
+        phone_confirm: true,
+      });
+      if (phoneSyncError) console.error('[phone-login] auth phone sync failed', phoneSyncError.message);
+    }
+
+    console.log(JSON.stringify({ event: 'phone_login_otp_verified', duration_ms: Math.round(performance.now() - startedAt) }));
 
     return json({
       ok: true,

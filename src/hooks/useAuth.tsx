@@ -5,6 +5,8 @@ import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { AppRole } from '@/types';
 import { clearUserCache, readUserCache, writeUserCache } from '@/lib/appCache';
+import { normalizeLoginIdentity } from '@/lib/loginIdentity';
+import { invokeFn } from '@/lib/invokeFn';
 import { toast } from 'sonner';
 
 export interface AppBootstrap {
@@ -60,7 +62,7 @@ interface AuthContextType {
   bootstrap: AppBootstrap | null;
   bootstrapLoading: boolean;
   refreshBootstrap: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (account: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -226,32 +228,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadBootstrap]);
 
   useEffect(() => {
-    const tryDevAutoLogin = async () => {
-      try {
-        const host = window.location.hostname;
-        const isSandbox =
-          host === 'localhost' ||
-          host === '127.0.0.1' ||
-          host.endsWith('.lovableproject.com') ||
-          host.startsWith('id-preview--');
-        if (!isSandbox || sessionStorage.getItem('dev-autologin-tried') === '1') return;
-        sessionStorage.setItem('dev-autologin-tried', '1');
-        await supabase.auth.signInWithPassword({
-          email: '87113911@qq.com',
-          password: 'pzy5565283',
-        });
-      } catch {
-        // Sandbox login is only a development convenience.
-      }
-    };
-
     supabase.auth.getSession()
       .then(({ data: { session: initialSession } }) => {
         if (initialSession) beginUserSession(initialSession);
-        else {
-          clearSession();
-          void tryDevAutoLogin();
-        }
+        else clearSession();
       })
       .catch(clearSession);
 
@@ -274,9 +254,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [beginUserSession, clearSession]);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (account: string, password: string) => {
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const identity = normalizeLoginIdentity(account);
+    let data;
+    let error;
+    if ('phone' in identity) {
+      const result = await invokeFn<{ access_token: string; refresh_token: string }>(
+        'phone-password-login',
+        { body: { phone: identity.phone, password } },
+      );
+      if (result.error || !result.data?.access_token || !result.data?.refresh_token) {
+        setLoading(false);
+        throw new Error(result.error?.message || '账号或密码错误');
+      }
+      ({ data, error } = await supabase.auth.setSession({
+        access_token: result.data.access_token,
+        refresh_token: result.data.refresh_token,
+      }));
+    } else {
+      ({ data, error } = await supabase.auth.signInWithPassword({
+        email: identity.email,
+        password,
+      }));
+    }
     if (error) {
       setLoading(false);
       throw error;
@@ -285,7 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     else setLoading(false);
 
     import('@/lib/audit').then(({ logAudit }) => {
-      logAudit({ action: 'login.password', detail: { email } });
+      logAudit({ action: 'login.password', detail: { account_type: 'phone' in identity ? 'phone' : 'email' } });
     }).catch(() => {});
   };
 

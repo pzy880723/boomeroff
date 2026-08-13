@@ -447,6 +447,18 @@ Deno.serve(async (req) => {
       console.log(JSON.stringify({ evt: "erp_update_err", status: (updateErr as any)?.status }));
       return fail(500, "shadow_user_update_failed");
     }
+
+    // ERP 历史账号可能只有 profiles/user_metadata 手机号。单独同步 Auth phone，
+    // 失败时不阻断 ERP SSO 主链路（例如历史重复手机号）。
+    if (phone && /^1[3-9]\d{9}$/.test(phone)) {
+      const { error: phoneUpdateErr } = await admin.auth.admin.updateUserById(
+        aigcUser.id,
+        { phone, phone_confirm: true },
+      );
+      if (phoneUpdateErr) {
+        console.log(JSON.stringify({ evt: "erp_auth_phone_sync_err", status: (phoneUpdateErr as any)?.status }));
+      }
+    }
   }
 
   // Step 6: write link without ever overwriting an existing canonical aigc_user_id.

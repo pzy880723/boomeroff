@@ -49,11 +49,7 @@ export function LoginForm({ onForgotPassword, onRegister, variant = 'card' }: Lo
     setLoading(true);
 
     try {
-      const trimmed = parsed.data.account;
-      const loginEmail = trimmed.includes('@')
-        ? trimmed
-        : `${trimmed.toLowerCase()}@boomeroff.local`;
-      await signIn(loginEmail, password);
+      await signIn(parsed.data.account, password);
       navigate('/', { replace: true });
     } catch (error) {
       const raw = error instanceof Error ? error.message : '';
@@ -74,13 +70,13 @@ export function LoginForm({ onForgotPassword, onRegister, variant = 'card' }: Lo
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="account">用户名</Label>
+          <Label htmlFor="account">账号</Label>
           <Input
             id="account"
             type="text"
             value={account}
             onChange={(e) => setAccount(e.target.value)}
-            placeholder="请输入用户名"
+            placeholder="手机号 / 用户名 / 邮箱"
             autoComplete="username"
             required
           />
