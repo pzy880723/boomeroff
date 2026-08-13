@@ -119,7 +119,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 5000);
       });
       const queryPromise = supabase.rpc('app_bootstrap_v1' as never);
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+      const raced = await Promise.race([queryPromise, timeoutPromise]);
+      const error = raced.error as unknown;
+      const data = raced.data as unknown;
       if (requestId !== roleRequestIdRef.current || activeUserIdRef.current !== userId) return;
 
       if (!error && isBootstrap(data)) {
