@@ -28,6 +28,7 @@ import { toastVideoFailure } from '@/lib/toastVideoFailure';
 import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
 import { SURPRISE_DEFAULT_VIDEO_PREFS } from '@/lib/videoModelPrefs';
+import { resolveSurpriseScriptView } from '@/lib/surpriseScriptView';
 
 // 惊喜一下固定真人写实,不暴露切换开关
 const SURPRISE_REALISM: Realism = 'photoreal';
@@ -151,6 +152,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [coverProgress, setCoverProgress] = useState<CoverProgress | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [scriptError, setScriptError] = useState<string | null>(null);
   const [scriptJobId, setScriptJobId] = useState<string | null>(null);
   const realism: Realism = SURPRISE_REALISM;
   const pollRef = useRef<number | null>(null);
@@ -202,11 +204,15 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     setScriptJobId(state.job_id);
     if (state.result && state.script) {
       setPick({ ...state.result, script: state.script });
+      setScriptError(null);
       setPicking(false);
     } else if (state.status === 'script_generating') {
+      setScriptError(null);
       setPicking(true);
     }
     if (state.status === 'failed') {
+      setPick(null);
+      setScriptError(state.error || '脚本生成失败，请重试');
       setPicking(false);
       toast.error(state.error || '脚本生成失败,请重试');
     }
@@ -229,6 +235,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 
   const doPick = async (exclude: string[] = []) => {
     if (!shopId) return;
+    setScriptError(null);
     setPicking(true); setPick(null);
     try {
       let state = await startSurpriseScriptJob(shopId, exclude, realism);
@@ -242,8 +249,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       if (state.status === 'script_generating') pollScriptDraft(state.job_id);
     } catch (e: any) {
       setPicking(false);
+      setScriptError(e?.message || '脚本任务启动失败');
       toast.error(e?.message || '脚本任务启动失败');
-      onOpenChange(false);
     }
   };
 
@@ -284,8 +291,9 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     const newEx = pick ? Array.from(new Set([...excluded, pick.picked.asset_id])).slice(-20) : excluded;
     setExcluded(newEx);
     setScriptJobId(null);
+    setScriptError(null);
     setPick(null);
-    doPick(newEx);
+    void doPick(newEx);
   };
 
   const handleScriptChange = (script: ScriptShape) => {
@@ -440,6 +448,13 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   // 完成/失败时,自动让用户回到"再拍一条"入口(不强制,但把弹窗底部的按钮变成"再拍一条")
   // 这里不清 activeJob(用户可能想在完成态看一下详情),只在他们点按钮时清
 
+  const scriptView = resolveSurpriseScriptView({
+    hasActiveJob: Boolean(activeJob),
+    picking,
+    hasPick: Boolean(pick),
+    scriptError,
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[88vh] overflow-hidden flex flex-col p-0 rounded-2xl gap-0">
@@ -450,7 +465,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           </DialogTitle>
         </DialogHeader>
 
-        {activeJob ? (
+        {scriptView === 'rendering' && activeJob ? (
           <RenderingBody
             job={activeJob} phase={renderPhase} progress={progress}
             coverProgress={coverProgress}
@@ -460,7 +475,30 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             onClose={() => onOpenChange(false)}
             onReset={resetToPicker}
           />
-        ) : picking || !pick ? (
+        ) : scriptView === 'error' ? (
+          <div className="py-10 px-5 flex flex-col items-center gap-4 text-center">
+            <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center">
+              <Camera className="w-7 h-7 text-destructive" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-semibold">这次脚本没有生成成功</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">{scriptError}</p>
+            </div>
+            <div className="w-full rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground text-left">
+              “BOOMER 帮你拍一条”会优先使用当前门店的实景图片。上传后重新生成，后台任务仍会在退出页面后继续运行。
+            </div>
+            <div className="w-full flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => void reroll()}>
+                <RefreshCw className="w-4 h-4 mr-1" /> 重新尝试
+              </Button>
+              <Button asChild className="flex-1">
+                <Link to="/me/marketing/library" onClick={() => onOpenChange(false)}>
+                  去上传素材 <ArrowRight className="w-4 h-4 ml-1" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        ) : scriptView === 'loading' ? (
           <div className="py-16 px-4 flex flex-col items-center gap-3 text-sm text-muted-foreground">
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
             <Loader2 className="w-5 h-5 animate-spin text-accent" />

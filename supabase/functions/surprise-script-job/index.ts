@@ -239,12 +239,20 @@ Deno.serve(async (req) => {
     }
 
     if (action === "discard") {
-      if (String(job.status) !== "script_ready" && String(job.status) !== "script_generating") {
+      if (!["script_ready", "script_generating", "failed"].includes(String(job.status))) {
         return json({ ok: false, error: "任务已进入视频生成，不能丢弃" }, 409);
       }
       const { count } = await admin.from("video_generation_shots").select("id", { count: "exact", head: true }).eq("job_id", jobId);
       if (count) return json({ ok: false, error: "任务已经有视频镜头，不能丢弃" }, 409);
-      await admin.from("video_generation_jobs").delete().eq("id", jobId);
+      const deleteQuery = admin.from("video_generation_jobs").delete();
+      const { error: deleteError } = String(job.status) === "failed"
+        ? await deleteQuery
+          .eq("user_id", user.id)
+          .eq("shop_id", job.shop_id)
+          .eq("status", "failed")
+          .contains("meta", { flow: "surprise" })
+        : await deleteQuery.eq("id", jobId);
+      if (deleteError) return json({ ok: false, error: deleteError.message || "清理旧脚本失败" }, 500);
       return json({ ok: true, discarded: true });
     }
 

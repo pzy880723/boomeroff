@@ -13,11 +13,15 @@ export type CurrentSurpriseTask =
   | { kind: 'script'; job: SurpriseTaskRow }
   | { kind: 'video'; job: SurpriseTaskRow };
 
-function isScriptDraft(job: SurpriseTaskRow): boolean {
+function isScriptTask(job: SurpriseTaskRow): boolean {
   const meta = job.meta || {};
   return meta.flow === 'surprise'
     && meta.consumed !== true
-    && (meta.surprise_stage === 'script_generating' || meta.surprise_stage === 'script_ready');
+    && (
+      meta.surprise_stage === 'script_generating'
+      || meta.surprise_stage === 'script_ready'
+      || meta.surprise_stage === 'failed'
+    );
 }
 
 function isSurpriseVideo(job: SurpriseTaskRow): boolean {
@@ -29,7 +33,7 @@ function isSurpriseVideo(job: SurpriseTaskRow): boolean {
 export function selectCurrentSurpriseTask(
   rows: SurpriseTaskRow[],
 ): CurrentSurpriseTask | null {
-  const draft = rows.find(isScriptDraft);
+  const draft = rows.find(isScriptTask);
   if (draft) return { kind: 'script', job: draft };
 
   const latestVideo = rows.find(isSurpriseVideo);

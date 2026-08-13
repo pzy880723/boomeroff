@@ -72,3 +72,16 @@ test('用户明确点再拍一条后，已结束的视频不再阻挡新脚本',
 
   assert.equal(current, null);
 });
+
+test('脚本生成失败后重新进入仍恢复同一任务，不能悄悄重复创建', () => {
+  const current = selectCurrentSurpriseTask([
+    row({
+      id: 'failed-script',
+      status: 'failed',
+      meta: { flow: 'surprise', consumed: false, surprise_stage: 'failed' },
+    }),
+  ]);
+
+  assert.equal(current?.kind, 'script');
+  assert.equal(current?.job.id, 'failed-script');
+});
