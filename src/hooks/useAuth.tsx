@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
       if (requestId !== roleRequestIdRef.current || activeUserIdRef.current !== userId) return;
 
-      if (!error && isBootstrap(data)) {
+      if (!error && data && isBootstrap(data)) {
         applyBootstrap(userId, data, true);
         if (data.user_role?.suspended) {
           clearCachedUserData(userId);
