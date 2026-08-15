@@ -6,6 +6,24 @@ import { computeImageHash } from '@/lib/imageHash';
 import { invokeFn } from '@/lib/invokeFn';
 
 export type RecognitionPhase = 'reading' | 'matching' | 'generating' | 'done';
+const RECOGNITION_TIMEOUT_MS = 25_000;
+
+async function invokeRecognition(body: Record<string, unknown>) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      invokeFn('recognize-product', { body }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error('识别等待超时，请检查网络后重试')),
+          RECOGNITION_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 interface RecognizeOptions {
   forceRefresh?: boolean;
@@ -44,7 +62,7 @@ export function useProductRecognition() {
       options.onPhase?.('matching');
 
       const tInvoke = Date.now();
-      const { data, error } = await invokeFn('recognize-product', { body });
+      const { data, error } = await invokeRecognition(body);
       console.log('[FE] edge invoke:', Date.now() - tInvoke, 'ms');
 
       if (error) throw new Error(error.message);

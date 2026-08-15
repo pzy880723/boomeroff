@@ -18,6 +18,7 @@ import { RecognitionFailure } from '@/components/recognition/RecognitionFailure'
 import { HintInputSheet } from '@/components/recognition/HintInputSheet';
 import { serializeTips, normalizeSellingPoints, normalizeTips } from '@/lib/script';
 import { invokeFn } from '@/lib/invokeFn';
+import { compressCameraImage } from '@/lib/cameraImage';
 import {
   captureNativePhoto,
   isNativeCameraCancellation,
@@ -158,6 +159,44 @@ export function LiveStreamPanel() {
 
   const startCamera = async (mode?: 'environment' | 'user') => {
     const targetMode = mode || facingMode;
+    const md = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+
+    if (md && typeof md.getUserMedia === 'function') {
+      try {
+        const stream = await md.getUserMedia({
+          video: {
+            facingMode: { ideal: targetMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            try {
+              videoRef.current?.play().catch(() => { /* play 在某些浏览器会因策略被打断，忽略 */ });
+            } catch { /* noop */ }
+          };
+          setIsStreaming(true);
+        } else {
+          stream.getTracks().forEach((track) => track.stop());
+          throw new Error('取景框尚未就绪');
+        }
+        return;
+      } catch (error) {
+        if (!isNativeCameraRuntime()) {
+          toast({
+            title: '无法启动摄像头',
+            description: error instanceof Error ? error.message : '请授权摄像头访问权限',
+            variant: 'destructive',
+          });
+          return;
+        }
+        console.warn('[Camera] inline preview unavailable, falling back to native camera', error);
+      }
+    }
+
     if (isNativeCameraRuntime()) {
       try {
         const raw = await captureNativePhoto(targetMode);
@@ -181,42 +220,15 @@ export function LiveStreamPanel() {
       }
       return;
     }
-    // 微信 / QQ / 老旧 WebView 里 navigator.mediaDevices 可能不存在
-    const md = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
-    if (!md || typeof md.getUserMedia !== 'function') {
-      const isWeChat = typeof navigator !== 'undefined' && /MicroMessenger|QQ\//i.test(navigator.userAgent);
-      toast({
-        title: '当前浏览器不支持摄像头',
-        description: isWeChat
-          ? '请点击右上角「···」选择「在浏览器中打开」，或改用「上传」按钮'
-          : '请改用「上传」按钮选择图片',
-        variant: 'destructive',
-      });
-      return;
-    }
-    try {
-      const stream = await md.getUserMedia({
-        video: { facingMode: targetMode, width: 1920, height: 1080 },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          try {
-            videoRef.current?.play().catch(() => { /* play 在某些浏览器会因策略被打断，忽略 */ });
-          } catch { /* noop */ }
-        };
-        setIsStreaming(true);
-      } else {
-        stream.getTracks().forEach(t => t.stop());
-      }
-    } catch (error) {
-      toast({
-        title: '无法启动摄像头',
-        description: error instanceof Error ? error.message : '请授权摄像头访问权限',
-        variant: 'destructive',
-      });
-    }
+
+    const isWeChat = typeof navigator !== 'undefined' && /MicroMessenger|QQ\//i.test(navigator.userAgent);
+    toast({
+      title: '当前浏览器不支持摄像头',
+      description: isWeChat
+        ? '请点击右上角「···」选择「在浏览器中打开」，或改用「上传」按钮'
+        : '请改用「上传」按钮选择图片',
+      variant: 'destructive',
+    });
   };
 
   const switchCamera = async () => {
@@ -243,28 +255,7 @@ export function LiveStreamPanel() {
     const isMulti = captureMode === 'multi';
     const w = maxWidth ?? (isMulti ? 576 : 640);
     const q = quality ?? (isMulti ? 0.6 : 0.62);
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        if (width > w) {
-          height = (height * w) / width;
-          width = w;
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', q));
-        } else {
-          resolve(imageData);
-        }
-      };
-      img.src = imageData;
-    });
+    return compressCameraImage(imageData, { maxWidth: w, quality: q });
   };
 
   const grabFrame = (): string | null => {

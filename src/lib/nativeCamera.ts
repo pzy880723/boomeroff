@@ -36,12 +36,13 @@ export async function captureNativePhoto(
   const photo = await Camera.getPhoto({
     source: CameraSource.Camera,
     direction: facingMode === 'user' ? CameraDirection.Front : CameraDirection.Rear,
-    resultType: CameraResultType.DataUrl,
-    quality: 90,
+    resultType: CameraResultType.Uri,
+    quality: 82,
     correctOrientation: true,
     saveToGallery: false,
     allowEditing: false,
   });
 
-  return photo.dataUrl || null;
+  if (photo.webPath) return photo.webPath;
+  return photo.path ? Capacitor.convertFileSrc(photo.path) : null;
 }
