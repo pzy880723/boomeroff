@@ -4,6 +4,7 @@
 import { SEEDANCE_MAX_REFS } from "./seedance-models.ts";
 
 const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
+const SEEDANCE_SUBMIT_TIMEOUT_MS = 25_000;
 
 export type FacePipeline = 'auto' | 'character_sheet' | 'illustration' | 'faceless';
 
@@ -31,6 +32,7 @@ export interface SubmitSegmentResult {
   duration?: number;
   error?: string;
   raw?: unknown;
+  retryable?: boolean;
   fallbackNotes: string[];
   referenceCount: number;
 }
@@ -56,7 +58,7 @@ async function submitArkTask(opts: {
   duration: number;
   resolution: string;
   referenceImages?: string[];
-}): Promise<{ ok: true; id: string; mode: string; duration: number } | { ok: false; error: string; raw?: unknown }> {
+}): Promise<{ ok: true; id: string; mode: string; duration: number } | { ok: false; error: string; raw?: unknown; retryable?: boolean }> {
   const content: any[] = [{ type: "text", text: opts.prompt }];
   const refs = (opts.referenceImages || []).filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
   for (const url of refs) {
@@ -75,17 +77,32 @@ async function submitArkTask(opts: {
     generate_audio: true,
   };
 
-  const arkRes = await fetch(ARK_ENDPOINT, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${opts.arkKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(arkBody),
-  });
+  let arkRes: Response;
+  try {
+    arkRes = await fetch(ARK_ENDPOINT, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${opts.arkKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(arkBody),
+      signal: AbortSignal.timeout(SEEDANCE_SUBMIT_TIMEOUT_MS),
+    });
+  } catch (error) {
+    const errorName = error instanceof DOMException ? error.name : "";
+    const aborted = errorName === "TimeoutError" || errorName === "AbortError";
+    return {
+      ok: false,
+      error: aborted
+        ? "Seedance 创建任务请求超时，系统将自动重试"
+        : `Seedance 创建任务网络异常: ${error instanceof Error ? error.message : String(error)}`,
+      retryable: true,
+    };
+  }
   const arkJson: any = await arkRes.json().catch(() => ({}));
   if (!arkRes.ok || !arkJson?.id) {
     return {
       ok: false,
       error: arkJson?.error?.message || arkJson?.message || `Seedance 创建任务失败(${arkRes.status})`,
       raw: arkJson,
+      retryable: arkRes.status === 408 || arkRes.status === 429 || arkRes.status >= 500,
     };
   }
   return { ok: true, id: arkJson.id, mode, duration: effectiveDuration };
@@ -201,7 +218,7 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
   }
 
   if (!r.ok) {
-    return { ok: false, error: r.error, raw: (r as any).raw, fallbackNotes, referenceCount: effectiveRefs.length };
+    return { ok: false, error: r.error, raw: (r as any).raw, retryable: (r as any).retryable, fallbackNotes, referenceCount: effectiveRefs.length };
   }
 
   return {

@@ -16,6 +16,80 @@ const json = (b: unknown, s = 200) =>
 
 const ARK_TASK_BASE = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
 const ARK_PROXY_PREFIX = "/functions/v1/poll-marketing-video?segment=";
+const SEEDANCE_SUBMIT_STALE_MS = 60_000;
+const SEEDANCE_SUBMIT_MAX_ATTEMPTS = 2;
+
+type SeedanceSubmitState = {
+  submit_attempts: number;
+  submit_started_at: string | null;
+  submit_retry_at: string | null;
+  submit_last_error: string | null;
+};
+
+function fallbackMeta(raw: unknown): Record<string, unknown> {
+  if (Array.isArray(raw)) return { notes: raw };
+  return raw && typeof raw === "object" ? { ...(raw as Record<string, unknown>) } : {};
+}
+
+function readSeedanceSubmitState(raw: unknown): SeedanceSubmitState {
+  const meta = fallbackMeta(raw);
+  const state = meta.submit_state && typeof meta.submit_state === "object"
+    ? meta.submit_state as Record<string, unknown>
+    : {};
+  return {
+    submit_attempts: Math.max(0, Number(state.submit_attempts) || 0),
+    submit_started_at: typeof state.submit_started_at === "string" ? state.submit_started_at : null,
+    submit_retry_at: typeof state.submit_retry_at === "string" ? state.submit_retry_at : null,
+    submit_last_error: typeof state.submit_last_error === "string" ? state.submit_last_error : null,
+  };
+}
+
+function withSeedanceSubmitState(raw: unknown, patch: Partial<SeedanceSubmitState>, notes?: string[]) {
+  const meta = fallbackMeta(raw);
+  const state = { ...readSeedanceSubmitState(raw), ...patch };
+  if (notes) meta.notes = notes;
+  meta.submit_state = state;
+  return meta;
+}
+
+function isStaleSeedanceSubmission(job: any, now = Date.now()): boolean {
+  if (!job || job.provider_task_id || job.status !== "running") return false;
+  if (!job.parent_job_id && (Number(job.segment_total) || 0) > 1) return false;
+  const state = readSeedanceSubmitState(job.fallback_notes);
+  const startedAt = state.submit_started_at || job.last_polled_at;
+  if (!startedAt) return true;
+  const startedMs = new Date(startedAt).getTime();
+  return !Number.isFinite(startedMs) || now - startedMs >= SEEDANCE_SUBMIT_STALE_MS;
+}
+
+async function recoverSeedanceSubmission(admin: any, job: any, message: string) {
+  const now = new Date();
+  const state = readSeedanceSubmitState(job.fallback_notes);
+  const { submit_attempts } = state;
+  if (submit_attempts >= SEEDANCE_SUBMIT_MAX_ATTEMPTS) {
+    const error = `${message}，自动重试 ${submit_attempts} 次后仍未取得 Seedance 任务编号，请重试本次视频`;
+    const fallback_notes = withSeedanceSubmitState(job.fallback_notes, {
+      submit_started_at: null,
+      submit_retry_at: null,
+      submit_last_error: error,
+    });
+    await admin.from("marketing_video_jobs").update({
+      status: "failed", error, fallback_notes, last_polled_at: now.toISOString(),
+    }).eq("id", job.id).is("provider_task_id", null);
+    return { requeued: false, failed: true, error, fallback_notes };
+  }
+
+  const retryAt = new Date(now.getTime() + SEEDANCE_SUBMIT_STALE_MS).toISOString();
+  const fallback_notes = withSeedanceSubmitState(job.fallback_notes, {
+    submit_started_at: null,
+    submit_retry_at: retryAt,
+    submit_last_error: message,
+  });
+  await admin.from("marketing_video_jobs").update({
+    status: "queued", error: null, fallback_notes, last_polled_at: now.toISOString(),
+  }).eq("id", job.id).is("provider_task_id", null);
+  return { requeued: true, failed: false, retry_at: retryAt, fallback_notes };
+}
 
 function mapArkStatus(s: string): string {
   if (s === "succeeded") return "succeeded";
@@ -157,10 +231,21 @@ async function submitQueuedChild(admin: any, arkKey: string, child: any, userId:
   if (!child?.id || child.status !== "queued" || child.provider_task_id) {
     return { submitted: false, reason: "not_queued" };
   }
+  const priorState = readSeedanceSubmitState(child.fallback_notes);
+  if (priorState.submit_retry_at && new Date(priorState.submit_retry_at).getTime() > Date.now()) {
+    return { submitted: false, retrying: true, retry_at: priorState.submit_retry_at };
+  }
+  const submitStartedAt = new Date().toISOString();
+  const fallback_notes = withSeedanceSubmitState(child.fallback_notes, {
+    submit_attempts: priorState.submit_attempts + 1,
+    submit_started_at: submitStartedAt,
+    submit_retry_at: null,
+    submit_last_error: null,
+  });
   // 乐观锁:避免前端轮询和 sweep 同时提交同一段。
   const { data: locked, error: lockErr } = await admin
     .from("marketing_video_jobs")
-    .update({ status: "running", last_polled_at: new Date().toISOString() })
+    .update({ status: "running", error: null, fallback_notes, last_polled_at: submitStartedAt })
     .eq("id", child.id)
     .eq("status", "queued")
     .is("provider_task_id", null)
@@ -175,29 +260,42 @@ async function submitQueuedChild(admin: any, arkKey: string, child: any, userId:
     return { submitted: false, failed: true, error: msg };
   }
 
-  const result = await submitSeedanceSegment({
-    arkKey,
-    admin,
-    userId,
-    model: payload.model,
-    prompt: payload.prompt,
-    ratio: payload.ratio || "9:16",
-    duration: Number(payload.duration) || 10,
-    resolution: payload.resolution || "720p",
-    referenceImages: Array.isArray(payload.reference_images) ? payload.reference_images : [],
-    storyboardRefs: Array.isArray(payload.storyboard_refs) ? payload.storyboard_refs : [],
-    requireStoryboard: Number(payload.storyboard_ref_count || 0) > 0,
-    requireReferences: payload.require_references === true,
-    requiredReferenceCount: Number(payload.required_reference_count || 0),
-    facePipeline: payload.face_pipeline || 'auto',
-  });
+  let result;
+  try {
+    result = await submitSeedanceSegment({
+      arkKey,
+      admin,
+      userId,
+      model: payload.model,
+      prompt: payload.prompt,
+      ratio: payload.ratio || "9:16",
+      duration: Number(payload.duration) || 10,
+      resolution: payload.resolution || "720p",
+      referenceImages: Array.isArray(payload.reference_images) ? payload.reference_images : [],
+      storyboardRefs: Array.isArray(payload.storyboard_refs) ? payload.storyboard_refs : [],
+      requireStoryboard: Number(payload.storyboard_ref_count || 0) > 0,
+      requireReferences: payload.require_references === true,
+      requiredReferenceCount: Number(payload.required_reference_count || 0),
+      facePipeline: payload.face_pipeline || 'auto',
+    });
+  } catch (error) {
+    const msg = `第 ${(locked.segment_index ?? 0) + 1} 段提交异常: ${error instanceof Error ? error.message : String(error)}`;
+    return { submitted: false, retrying: true, ...(await recoverSeedanceSubmission(admin, locked, msg)) };
+  }
 
   if (!result.ok) {
     const msg = `第 ${(locked.segment_index ?? 0) + 1} 段创建失败: ${result.error || '火山没有接受请求'}`;
+    if (result.retryable) {
+      return { submitted: false, retrying: true, ...(await recoverSeedanceSubmission(admin, locked, msg)) };
+    }
     await admin.from("marketing_video_jobs").update({
       status: "failed",
       error: msg,
-      fallback_notes: result.fallbackNotes || [],
+      fallback_notes: withSeedanceSubmitState(locked.fallback_notes, {
+        submit_started_at: null,
+        submit_retry_at: null,
+        submit_last_error: msg,
+      }, result.fallbackNotes || []),
       last_polled_at: new Date().toISOString(),
     }).eq("id", locked.id);
     return { submitted: false, failed: true, error: msg };
@@ -206,7 +304,11 @@ async function submitQueuedChild(admin: any, arkKey: string, child: any, userId:
   await admin.from("marketing_video_jobs").update({
     status: "running",
     provider_task_id: result.id,
-    fallback_notes: result.fallbackNotes || [],
+    fallback_notes: withSeedanceSubmitState(locked.fallback_notes, {
+      submit_started_at: null,
+      submit_retry_at: null,
+      submit_last_error: null,
+    }, result.fallbackNotes || []),
     last_polled_at: new Date().toISOString(),
   }).eq("id", locked.id);
   return { submitted: true, provider_task_id: result.id, notes: result.fallbackNotes, mode: result.mode };
@@ -215,7 +317,7 @@ async function submitQueuedChild(admin: any, arkKey: string, child: any, userId:
 async function summarizeParentSegments(admin: any, parent: any) {
   const { data: children } = await admin
     .from("marketing_video_jobs")
-    .select("id,status,segment_index,segment_total,parent_job_id,error,video_url,segment_url")
+    .select("id,user_id,status,provider_task_id,segment_index,segment_total,parent_job_id,error,video_url,segment_url,last_polled_at,fallback_notes,script")
     .eq("parent_job_id", parent.id)
     .order("segment_index", { ascending: true });
 
@@ -305,7 +407,7 @@ Deno.serve(async (req) => {
       const HARD_LOOKBACK_MIN = 60; // 只看最近 1 小时
       const { data: jobs } = await admin
         .from("marketing_video_jobs")
-          .select("id, user_id, status, provider_task_id, parent_job_id, created_at, script, segment_index, segment_total")
+          .select("id, user_id, status, provider_task_id, parent_job_id, created_at, script, segment_index, segment_total, last_polled_at, fallback_notes, error")
         .in("status", ["queued", "running"])
         .gt("created_at", new Date(Date.now() - HARD_LOOKBACK_MIN * 60_000).toISOString())
         .limit(30);
@@ -336,9 +438,46 @@ Deno.serve(async (req) => {
         const overTimeout = ageMs > TIMEOUT_MIN * 60_000;
 
         if (!j.provider_task_id) {
+          if (isStaleSeedanceSubmission(j)) {
+            const recovered = await recoverSeedanceSubmission(
+              admin,
+              j,
+              `第 ${(j.segment_index ?? 0) + 1} 段提交中断，未取得 Seedance 任务编号`,
+            );
+            if (!j.parent_job_id) {
+              await updateAssetMeta(admin, j.user_id, j.id, recovered.failed
+                ? { status: "failed", error: recovered.error }
+                : { status: "queued", stage: "retrying_submit", error: null });
+            }
+            results.push({
+              id: j.id,
+              status: recovered.failed ? "failed" : "queued",
+              reason: "recovered_stale_submission",
+              error: recovered.error,
+            });
+            continue;
+          }
           const isParentJob = !j.parent_job_id && (Number(j.segment_total) || 0) > 1;
           if (isParentJob) {
             const summary = await summarizeParentSegments(admin, j);
+            const staleChild = summary.segs.find((ch: any) => isStaleSeedanceSubmission(ch));
+            if (staleChild) {
+              const recovered = await recoverSeedanceSubmission(
+                admin,
+                staleChild,
+                `第 ${(staleChild.segment_index ?? 0) + 1} 段提交中断，未取得 Seedance 任务编号`,
+              );
+              if (recovered.failed) {
+                await admin.from("marketing_video_jobs").update({
+                  status: "failed", error: recovered.error, last_polled_at: new Date().toISOString(),
+                }).eq("id", j.id);
+                await updateAssetMeta(admin, j.user_id, j.id, { status: "failed", error: recovered.error, segment_done: summary.done });
+              } else {
+                await updateAssetMeta(admin, j.user_id, j.id, { status: "queued", stage: "retrying_submit", error: null, segment_done: summary.done });
+              }
+              results.push({ id: j.id, status: recovered.failed ? "failed" : "queued", reason: "recovered_stale_child", error: recovered.error });
+              continue;
+            }
             if (summary.failed) {
               await admin.from("marketing_video_jobs").update({
                 status: "failed", error: summary.failed, last_polled_at: new Date().toISOString(),
@@ -545,6 +684,19 @@ Deno.serve(async (req) => {
       let anyFailed: string | null = null;
       let submittedThisPoll: any = null;
 
+      for (const ch of segs) {
+        if (!isStaleSeedanceSubmission(ch)) continue;
+        const recovered = await recoverSeedanceSubmission(
+          admin,
+          ch,
+          `第 ${(ch.segment_index ?? 0) + 1} 段提交中断，未取得 Seedance 任务编号`,
+        );
+        ch.status = recovered.failed ? "failed" : "queued";
+        ch.error = recovered.error || null;
+        ch.fallback_notes = recovered.fallback_notes;
+        if (recovered.failed) anyFailed = recovered.error;
+      }
+
       // 推进器:每次轮询最多提交 1 个未提交的分段。
       // 这样 render-marketing-video 只负责入队,不会再因为连续图片处理/多段请求被 CPU 杀掉。
       const nextQueued = segs.find((ch: any) => ch.status === "queued" && !ch.provider_task_id);
@@ -646,6 +798,19 @@ Deno.serve(async (req) => {
       return json({ status: job.status, video_url: stableUrl, error: job.error, ...coverFields });
     }
     if (!job.provider_task_id) {
+      if (isStaleSeedanceSubmission(job)) {
+        const recovered = await recoverSeedanceSubmission(admin, job, "Seedance 提交中断，未取得任务编号");
+        await updateAssetMeta(admin, u.user.id, jobId, recovered.failed
+          ? { status: "failed", error: recovered.error, segment_done: 0 }
+          : { status: "queued", stage: "retrying_submit", error: null, segment_done: 0 });
+        return json({
+          status: recovered.failed ? "failed" : "queued",
+          error: recovered.error || null,
+          retry_at: recovered.retry_at,
+          segment_total: job.segment_total || 1,
+          segment_done: 0,
+        });
+      }
       if (job.status === "queued" && (job.script || {}).__render_payload) {
         const sub = await submitQueuedChild(admin, ARK_KEY, job, u.user.id);
         if (sub.failed) {
@@ -655,6 +820,10 @@ Deno.serve(async (req) => {
         if (sub.submitted) {
           await updateAssetMeta(admin, u.user.id, jobId, { status: "running", segment_done: 0, segment_total: job.segment_total || 1 });
           return json({ status: "running", segment_total: job.segment_total || 1, segment_done: 0, submitted_segment: true });
+        }
+        if (sub.retrying) {
+          await updateAssetMeta(admin, u.user.id, jobId, { status: "queued", stage: "retrying_submit", error: null, segment_done: 0 });
+          return json({ status: "queued", retry_at: sub.retry_at || null, segment_total: job.segment_total || 1, segment_done: 0 });
         }
       }
       return json({ status: job.status });
