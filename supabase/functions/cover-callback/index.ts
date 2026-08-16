@@ -1,5 +1,5 @@
 // cover-callback: Worker 生成完全新封面后回写。
-// 成功 { job_id, cover_url, reference_frame_count, copy_fingerprint, variation_key }
+// 成功 { job_id, cover_url, reference_frame_count, copy_fingerprint, variation_key, cover_style_key, cover_style_label }
 // 失败 { job_id, error } → 直接写 failed,绝不用视频帧截图降级。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { mergeCoverGeneration, readCoverGeneration, resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
@@ -61,6 +61,8 @@ Deno.serve(async (req) => {
     const referenceFrameCount = Number(body.reference_frame_count) || 0;
     const copyFingerprint = body.copy_fingerprint || cg.copy_fingerprint;
     const variationKey = body.variation_key || cg.variation_key;
+    const coverStyleKey = String(body.cover_style_key || "").trim() || null;
+    const coverStyleLabel = String(body.cover_style_label || "").trim() || null;
 
     await admin.from("marketing_video_jobs").update({
       fallback_notes: mergeCoverGeneration(job.fallback_notes, {
@@ -69,6 +71,8 @@ Deno.serve(async (req) => {
         reference_frame_count: referenceFrameCount,
         copy_fingerprint: copyFingerprint,
         variation_key: variationKey,
+        style_key: coverStyleKey,
+        style_label: coverStyleLabel,
         error: null,
         finished_at: nowIso,
         progress: { percent: 100, stage: "done", message: "封面已生成" },
@@ -97,6 +101,8 @@ Deno.serve(async (req) => {
           cover_variation: cg.variation,
           cover_copy_fingerprint: copyFingerprint,
           cover_variation_key: variationKey,
+          cover_style_key: coverStyleKey,
+          cover_style_label: coverStyleLabel,
         };
         const { error: updErr } = await admin.from("marketing_assets").update({ meta }).eq("id", asset.id);
         if (updErr) throw updErr;

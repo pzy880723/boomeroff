@@ -142,6 +142,21 @@ test('无效图片索引会确定性回退到真实参考图', () => {
   assert.match(prompt, /画面严格参考图片2/);
 });
 
+test('有门头素材时首镜头和首个画面切点必须锁定真实门头', () => {
+  const script = normalizeSurpriseScript(structuredClone(rawScript));
+  script.hook.image_index = 3;
+  script.visual_beats![0].image_index = 4;
+
+  const bound = bindSurpriseReferences(script, 5, [
+    { index: 0, summary: 'BOOMER·OFF 门头和 Logo', role: 'storefront' },
+    { index: 1, summary: '店内货架', role: 'scene' },
+  ]);
+
+  assert.equal(bound.hook.image_index, 0);
+  assert.equal(bound.visual_beats?.[0].image_index, 0);
+  assert.match(String(bound.hook.scene), /门头|店招|入口|Logo/i);
+});
+
 test('对白不足时不注入无关固定台词，而是保留原稿交给校验触发整条重写', () => {
   const raw = structuredClone(rawScript);
   delete (raw as any).continuous_dialogue;

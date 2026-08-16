@@ -35,6 +35,8 @@ export interface CoverGeneration {
   progress?: { percent: number; stage: string; message: string } | null;
   cover_url?: string | null;
   reference_frame_count?: number | null;
+  style_key?: string | null;
+  style_label?: string | null;
   error?: string | null;
   finished_at?: string | null;
 }
@@ -324,4 +326,3 @@ export function resolveCoverWorkerToken(
   }
   return null;
 }
-

@@ -175,7 +175,7 @@ Deno.serve(async (req) => {
           image_urls: submittedImageUrls,
           image_descriptions: submittedDescriptions,
           reference_manifest: submittedDescriptions,
-        }), submittedImageUrls.length),
+        }), submittedImageUrls.length, submittedDescriptions),
         style: submittedStyle,
         shop_id: shopId,
         render_strategy: 'one_shot',
@@ -396,7 +396,7 @@ Deno.serve(async (req) => {
       image_descriptions: imageDescriptions,
       reference_manifest: imageDescriptions,
       persona,
-    }), imageUrls.length);
+    }), imageUrls.length, imageDescriptions);
 
     // 10) 输出 assets(给前端做参考图横排展示)
     const assets = pickedAssets.map((a: any, i: number) => ({

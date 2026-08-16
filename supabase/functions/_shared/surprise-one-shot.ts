@@ -420,7 +420,11 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
   return nextScript;
 }
 
-export function bindSurpriseReferences(input: SurpriseScript, imageCount: number): SurpriseScript {
+export function bindSurpriseReferences(
+  input: SurpriseScript,
+  imageCount: number,
+  descriptions: SurpriseReferenceDescription[] = [],
+): SurpriseScript {
   const script = normalizeSurpriseScript(input);
   const count = Math.max(0, Math.floor(Number(imageCount) || 0));
   if (!count) return script;
@@ -432,6 +436,22 @@ export function bindSurpriseReferences(input: SurpriseScript, imageCount: number
     clip.image_index = Math.min(clipIndex, count - 1);
   });
 
+  // 员工极速成片的首镜必须来自真实门头素材。AI 可以改文案和动作，
+  // 但不能把首镜切到普通店内图后凭空生成一个不存在的入口。
+  const storefront = descriptions.find(
+    (entry) => entry?.role === 'storefront'
+      && Number.isInteger(entry.index)
+      && entry.index >= 0
+      && entry.index < count,
+  );
+  if (storefront) {
+    script.hook.image_index = storefront.index;
+    const currentScene = String(script.hook.scene || '').trim();
+    if (!/门头|店招|入口|logo/i.test(currentScene)) {
+      script.hook.scene = `严格复现门头参考图中的真实入口与 BOOMER·OFF Logo；${currentScene}`;
+    }
+  }
+
   // visual_beats 与 clips 保持一致
   (script.visual_beats || []).forEach((beat, i) => {
     const clip = clips[i];
@@ -441,6 +461,13 @@ export function bindSurpriseReferences(input: SurpriseScript, imageCount: number
       beat.image_index = Math.min(i, count - 1);
     }
   });
+  if (storefront && script.visual_beats?.[0]) {
+    script.visual_beats[0].image_index = storefront.index;
+    const currentVisual = String(script.visual_beats[0].visual || '').trim();
+    if (!/门头|店招|入口|logo/i.test(currentVisual)) {
+      script.visual_beats[0].visual = `严格复现门头参考图中的真实入口与 BOOMER·OFF Logo；${currentVisual}`;
+    }
+  }
   return script;
 }
 

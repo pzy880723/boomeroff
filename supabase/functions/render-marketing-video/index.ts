@@ -467,14 +467,17 @@ Deno.serve(async (req) => {
       const effectiveChar = disableReferences ? null : character;
       const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
       const isSurpriseMode = script.surprise_mode === true || script.intent === 'viral_store_tour';
-      const surpriseScript = isSurpriseMode ? bindSurpriseReferences(normalizeSurpriseScript(script), imageUrls.length) : null;
+      const surpriseDescriptions = Array.isArray(script.reference_manifest)
+        ? script.reference_manifest
+        : (Array.isArray(script.image_descriptions) ? script.image_descriptions : []);
+      const surpriseScript = isSurpriseMode
+        ? bindSurpriseReferences(normalizeSurpriseScript(script), imageUrls.length, surpriseDescriptions)
+        : null;
       const referencePlan = isSurpriseMode && !disableReferences
         ? buildSurpriseReferencePlan(
             surpriseScript!,
             imageUrls,
-            Array.isArray(script.reference_manifest)
-              ? script.reference_manifest
-              : (Array.isArray(script.image_descriptions) ? script.image_descriptions : []),
+            surpriseDescriptions,
           )
         : null;
       const refImages = disableReferences

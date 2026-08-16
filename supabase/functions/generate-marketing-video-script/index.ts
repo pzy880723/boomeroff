@@ -400,7 +400,7 @@ ${refList}
       script.outro.duration_s = 3;
       script.scenes.forEach((s: any) => { s.duration_s = 3; });
       // 保留 continuous_dialogue、visual_beats，并按可用参考图数量绑定 image_index
-      script = bindSurpriseReferences(normalizeSurpriseScript(script), imageUrls.length);
+      script = bindSurpriseReferences(normalizeSurpriseScript(script), imageUrls.length, imageDescriptions);
     } else if (isTight15) {
       // === 15 秒严格模式:每段固定 3s,hook/outro 兜底,超预算按比例截中段 ===
       if (!script.hook.dialogue) script.hook.dialogue = '进来看看 ✨';
