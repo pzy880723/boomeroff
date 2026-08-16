@@ -220,13 +220,22 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 
   const pollScriptDraft = (jobId: string) => {
     stopScriptPolling();
+    const startedAt = Date.now();
+    let consecutiveErrors = 0;
     const tick = async () => {
       try {
         const state = await pollSurpriseScriptJob(jobId);
+        consecutiveErrors = 0;
         applyScriptState(state);
         if (state.status === 'script_ready' || state.status === 'failed') stopScriptPolling();
       } catch (e: any) {
+        consecutiveErrors += 1;
         console.warn('[surprise] script draft poll failed', e);
+        if (consecutiveErrors >= 3 || Date.now() - startedAt > 25_000) {
+          stopScriptPolling();
+          setPicking(false);
+          setScriptError('脚本任务连接超时，请关闭后重新进入，系统会自动恢复');
+        }
       }
     };
     void tick();

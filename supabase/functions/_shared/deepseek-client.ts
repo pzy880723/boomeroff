@@ -4,6 +4,8 @@ export interface DeepSeekJsonRequest {
   userPrompt: string;
   model?: string;
   temperature?: number;
+  maxTokens?: number;
+  timeoutMs?: number;
 }
 
 export class DeepSeekRequestError extends Error {
@@ -29,28 +31,41 @@ function extractJsonObject(value: unknown): Record<string, unknown> {
 }
 
 export async function requestDeepSeekJson(request: DeepSeekJsonRequest): Promise<Record<string, unknown>> {
-  const response = await fetch('https://api.deepseek.com/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${request.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: request.model || 'deepseek-v4-pro',
-      messages: [
-        { role: 'system', content: request.systemPrompt },
-        { role: 'user', content: request.userPrompt },
-      ],
-      response_format: { type: 'json_object' },
-      thinking: { type: 'disabled' },
-      temperature: request.temperature ?? 0.85,
-      stream: false,
-    }),
-  });
-  if (!response.ok) {
-    const body = await response.text();
-    throw new DeepSeekRequestError(`DeepSeek ${response.status}: ${body.slice(0, 300)}`, response.status);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), request.timeoutMs ?? 12_000);
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${request.apiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: request.model || 'deepseek-v4-pro',
+        messages: [
+          { role: 'system', content: request.systemPrompt },
+          { role: 'user', content: request.userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        thinking: { type: 'disabled' },
+        temperature: request.temperature ?? 0.85,
+        max_tokens: request.maxTokens ?? 1800,
+        stream: false,
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new DeepSeekRequestError(`DeepSeek ${response.status}: ${body.slice(0, 300)}`, response.status);
+    }
+    const data = await response.json();
+    return extractJsonObject(data?.choices?.[0]?.message?.content);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new DeepSeekRequestError(`DeepSeek 请求超过 ${request.timeoutMs ?? 12_000}ms`, 408);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  const data = await response.json();
-  return extractJsonObject(data?.choices?.[0]?.message?.content);
 }

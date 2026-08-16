@@ -9,7 +9,8 @@ import { resolveStorefrontConstraintZh, sanitizeStorefrontText, usesOpenFrontMal
 import { scrubThirdPartyBrands, OWN_BRAND_LOCK_ZH } from "../_shared/brand-scrub.ts";
 import { bindSurpriseReferences, normalizePublishCopy, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 import { DeepSeekRequestError, requestDeepSeekJson } from "../_shared/deepseek-client.ts";
-import { buildSurpriseRepairInstruction, normalizeDeepSeekSurpriseScript, validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
+import { normalizeDeepSeekSurpriseScript, validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
+import { buildFastSurpriseFallback, SURPRISE_MODEL_TIMEOUT_MS } from "../_shared/surprise-script-performance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -258,6 +259,7 @@ ${refList}
 
     let script: any = null;
     let scriptProvider = "lovable";
+    const generationStartedAt = Date.now();
     const factContext = [shopBlock, kbBlock, imgDescBlock, topic, highlight, briefTranscript]
       .filter(Boolean).join("\n");
     // 关键：先做确定性规范化（拆分五段 / 字幕对齐 / 动作补“边演边说”），再校验规范化后的结果，
@@ -271,82 +273,57 @@ ${refList}
       });
       return { normalized, validation };
     };
-    let bestCandidate: any = null;
-    let bestErrorCount = Number.POSITIVE_INFINITY;
-    const trackBest = (candidate: any, errorCount: number) => {
-      if (candidate && errorCount < bestErrorCount) {
-        bestCandidate = candidate;
-        bestErrorCount = errorCount;
-      }
-    };
-    if (isViralStoreTour && DEEPSEEK_API_KEY) {
-      let repair = "";
-      let lastCandidate: any = null;
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (isViralStoreTour) {
+      if (DEEPSEEK_API_KEY) {
+        const fastSystemPrompt = `你是 BOOMER OFF 门店短视频编剧。只输出 JSON。根据真实门店和参考图，写一条 15 秒高密度探店口播。` +
+          `严格 5 个连续镜头，每镜 dialogue 18-21 个汉字，合计 90-100 个汉字；subtitle 必须逐字等于 dialogue；` +
+          `五段 dialogue 用中文逗号连接后必须逐字等于 continuous_dialogue。不能重复短语，不能编造价格、活动、地址或商品。` +
+          `第一个镜头必须展示参考图中的真实门店入口和 BOOMER OFF 门头，所有 action 都要明确边表演边连续说话。`;
+        const fastUserPrompt = `门店与品牌事实：\n${factContext.slice(0, 7000)}\n\n` +
+          `主角：${JSON.stringify(character || {})}\n参考图：${JSON.stringify(imageDescriptions.slice(0, 8))}\n` +
+          `输出字段：title,continuous_dialogue,hook,scenes,outro,publish_copy,bgm,total_duration_s,aspect,mode。` +
+          `hook/scenes/outro 每段必须包含 scene,action,dialogue,subtitle,image_index,duration_s=3,motion；scenes 必须正好 3 段。` +
+          `publish_copy 包含 title,body,topics。只输出一个完整 JSON object。`;
         try {
           const candidate = await requestDeepSeekJson({
             apiKey: DEEPSEEK_API_KEY,
-            systemPrompt: sys,
-            userPrompt: `${userPrompt}${repair ? `\n\n${repair}\n上一次 JSON：\n${JSON.stringify(lastCandidate)}` : ""}`,
-            model: Deno.env.get("DEEPSEEK_SCRIPT_MODEL") || "deepseek-v4-pro",
-            temperature: attempt === 0 ? 0.85 : 0.55,
+            systemPrompt: fastSystemPrompt,
+            userPrompt: fastUserPrompt,
+            model: Deno.env.get("DEEPSEEK_SCRIPT_MODEL") || "deepseek-v4-flash",
+            temperature: 0.85,
+            maxTokens: 1800,
+            timeoutMs: SURPRISE_MODEL_TIMEOUT_MS,
           });
-          lastCandidate = candidate;
           const { normalized, validation } = evaluate(candidate);
           if (!validation.errors.length) {
             script = normalized;
             scriptProvider = "deepseek";
-            break;
+          } else {
+            console.warn("[script] DeepSeek fast candidate rejected; using local fallback", validation.errors);
           }
-          trackBest(candidate, validation.errors.length);
-          console.warn(`[script] DeepSeek attempt ${attempt + 1} rejected`, validation.errors);
-          repair = buildSurpriseRepairInstruction(validation.errors);
         } catch (error) {
           const status = error instanceof DeepSeekRequestError ? error.status : 0;
-          console.error(`[script] DeepSeek attempt ${attempt + 1} failed`, status, error);
-          if (status === 401 || status === 402) break;
-          repair = buildSurpriseRepairInstruction([error instanceof Error ? error.message : "返回格式异常"]);
+          console.error("[script] DeepSeek fast request failed; using local fallback", status, error);
         }
-      }
-    }
-    if (!script) {
-      if (isViralStoreTour && !DEEPSEEK_API_KEY) console.warn("[script] DEEPSEEK_API_KEY missing, falling back to Lovable AI");
-      if (isViralStoreTour) {
-        let repair = "";
-        let lastCandidate: any = null;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          lastCandidate = await generateWithLovable(repair, lastCandidate);
-          const { normalized, validation } = evaluate(lastCandidate);
-          if (!validation.errors.length) {
-            script = normalized;
-            scriptProvider = "lovable";
-            break;
-          }
-          trackBest(lastCandidate, validation.errors.length);
-          console.warn(`[script] Lovable AI attempt ${attempt + 1} rejected`, validation.errors);
-          repair = buildSurpriseRepairInstruction(validation.errors);
-        }
-        if (!script && bestCandidate) {
-          // 兜底：用错误最少的一版做宽松校验，只要内容真实可用就放行，不用固定套词补齐。
-          const { normalized, validation } = evaluate(bestCandidate, true);
-          if (!validation.errors.length) {
-            script = normalized;
-            scriptProvider = "relaxed";
-            console.warn("[script] accepted best candidate under relaxed validation");
-          } else {
-            console.warn("[script] relaxed validation still rejected", validation.errors);
-          }
-        }
-        if (!script) throw new Error("AI 连续三次未生成合格脚本，请重新生成");
       } else {
-        script = await generateWithLovable();
+        console.warn("[script] DEEPSEEK_API_KEY missing; using local fallback");
       }
+      if (!script) {
+        script = buildFastSurpriseFallback({
+          shopName: shopCtx?.name || null,
+          imageDescriptions,
+        });
+        scriptProvider = "fast_fallback";
+      }
+    } else {
+      script = await generateWithLovable();
     }
 
     if (!script || !script.hook || !Array.isArray(script.scenes) || !script.outro) {
       return json({ error: "AI 返回格式异常" }, 500);
     }
     script.script_provider = scriptProvider;
+    script.script_generation_ms = Date.now() - generationStartedAt;
 
     const clean = (s: any, max: number) =>
       scrubThirdPartyBrands(

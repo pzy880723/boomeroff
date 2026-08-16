@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  isStaleSurpriseScriptTask,
   selectCurrentSurpriseTask,
   type SurpriseTaskRow,
 } from '../supabase/functions/_shared/surprise-task-state.ts';
@@ -83,4 +84,21 @@ test('脚本生成失败后重新进入不恢复旧失败任务，应允许后�
   ]);
 
   assert.equal(current, null);
+});
+
+test('生成中脚本超过 20 秒视为僵死，不能让页面永久转圈', () => {
+  const generating = row({
+    status: 'script_generating',
+    updated_at: '2026-08-16T10:00:00.000Z',
+    meta: { flow: 'surprise', consumed: false, surprise_stage: 'script_generating' },
+  });
+
+  assert.equal(
+    isStaleSurpriseScriptTask(generating, Date.parse('2026-08-16T10:00:21.000Z')),
+    true,
+  );
+  assert.equal(
+    isStaleSurpriseScriptTask(generating, Date.parse('2026-08-16T10:00:10.000Z')),
+    false,
+  );
 });

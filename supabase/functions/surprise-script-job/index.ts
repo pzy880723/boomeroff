@@ -3,6 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 import {
+  isStaleSurpriseScriptTask,
   selectCurrentSurpriseTask,
   type SurpriseTaskRow,
 } from "../_shared/surprise-task-state.ts";
@@ -78,6 +79,23 @@ async function clearFailedDrafts(admin: AdminClient, userId: string, shopId: str
   if (error) throw error;
 }
 
+async function expireStaleGeneratingDrafts(admin: AdminClient, userId: string, shopId: string) {
+  const cutoff = new Date(Date.now() - 20_000).toISOString();
+  const { error } = await admin
+    .from("video_generation_jobs")
+    .update({
+      status: "failed",
+      error_message: "脚本生成超时，系统已自动结束旧任务，请重新进入生成",
+      meta: { flow: "surprise", consumed: false, surprise_stage: "failed", background: true, stale: true },
+    })
+    .eq("user_id", userId)
+    .eq("shop_id", shopId)
+    .eq("status", "script_generating")
+    .lt("updated_at", cutoff)
+    .contains("meta", { flow: "surprise", consumed: false });
+  if (error) throw error;
+}
+
 async function runScriptGeneration({
   admin,
   supabaseUrl,
@@ -95,12 +113,21 @@ async function runScriptGeneration({
   exclude: string[];
   realism: string;
 }) {
+  const startedAt = Date.now();
   try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/surprise-marketing-video`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: auth },
-      body: JSON.stringify({ shop_id: shopId, preview: true, exclude_asset_ids: exclude, realism }),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    let response: Response;
+    try {
+      response = await fetch(`${supabaseUrl}/functions/v1/surprise-marketing-video`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: auth },
+        signal: controller.signal,
+        body: JSON.stringify({ shop_id: shopId, preview: true, exclude_asset_ids: exclude, realism }),
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     const result: any = await response.json().catch(() => ({}));
     if (!response.ok || result?.ok === false || !result?.script) {
       throw new Error(result?.error || `脚本生成失败(${response.status})`);
@@ -134,6 +161,7 @@ async function runScriptGeneration({
         surprise_stage: "script_ready",
         background: true,
         script_provider: result.script?.script_provider || null,
+        script_generation_ms: Date.now() - startedAt,
       },
     }).eq("id", jobId).eq("status", "script_generating").select("id").maybeSingle();
     if (saveError) throw saveError;
@@ -144,7 +172,13 @@ async function runScriptGeneration({
     await admin.from("video_generation_jobs").update({
       status: "failed",
       error_message: message.slice(0, 1000),
-      meta: { flow: "surprise", consumed: false, surprise_stage: "failed", background: true },
+      meta: {
+        flow: "surprise",
+        consumed: false,
+        surprise_stage: "failed",
+        background: true,
+        script_generation_ms: Date.now() - startedAt,
+      },
     }).eq("id", jobId).eq("status", "script_generating");
   }
 }
@@ -166,6 +200,7 @@ Deno.serve(async (req) => {
 
     if (action === "start") {
       if (!shopId) return json({ ok: false, error: "缺少 shop_id" }, 400);
+      await expireStaleGeneratingDrafts(admin, user.id, shopId);
       const current = await findCurrentTask(admin, user.id, shopId);
       if (current?.kind === "script") return json(state(current.job));
       if (current?.kind === "video") return json(videoState(current.job));
@@ -206,6 +241,20 @@ Deno.serve(async (req) => {
     if (jobError || !job) return json({ ok: false, error: "脚本任务不存在" }, 404);
 
     if (action === "poll") {
+      if (isStaleSurpriseScriptTask(job)) {
+        const staleJob = {
+          ...job,
+          status: "failed",
+          error_message: "脚本生成超时，系统已自动结束旧任务，请重新进入生成",
+          meta: { flow: "surprise", consumed: false, surprise_stage: "failed", background: true, stale: true },
+        };
+        await admin.from("video_generation_jobs").update({
+          status: staleJob.status,
+          error_message: staleJob.error_message,
+          meta: staleJob.meta,
+        }).eq("id", job.id).eq("status", "script_generating");
+        return json(state(staleJob));
+      }
       const meta = (job.meta || {}) as Record<string, unknown>;
       return json(meta.flow === "surprise" && meta.consumed === true ? videoState(job) : state(job));
     }
