@@ -218,8 +218,9 @@ ${ctx}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: '请生成完整商品故事和销售知识卡，必要时联网核实，并调用 submit_enrichment 提交全部字段。' },
       ],
-      tools: [ENRICH_TOOL, { type: 'google_search' }],
-      tool_choice: 'auto',
+      // Gemini 不允许函数工具与 google_search 混用（400 upstream_error），只保留结构化提交工具
+      tools: [ENRICH_TOOL],
+      tool_choice: { type: 'function', function: { name: 'submit_enrichment' } },
     };
 
     const controller = new AbortController();
