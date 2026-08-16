@@ -10,9 +10,11 @@ import {
 } from '../supabase/functions/_shared/surprise-script-policy.ts';
 
 const CONTINUOUS =
-  '来上海别错过这家中古宝藏店，一进门满眼复古杂货和老物件，' +
-  '玩具瓷器唱片随手一拿都有故事，预算不高也能挑到独特小惊喜，' +
-  '放进攻略到店认真翻上一圈';
+  '来上海旅行别错过这家藏在商场里的中古宝藏店，' +
+  '一进门满眼复古杂货每排货架都值得认真翻找，' +
+  '昭和玩具日式瓷器老唱片随手一拿都很有故事，' +
+  '预算不用太高也能挑到一件独特的旅行纪念，' +
+  '现在就把这家宝藏中古店放进攻略马上来逛';
 
 test('分段畸形 + 动作缺“边说” + 五段与全文不一致时，规范化后应通过校验', () => {
   const raw: any = {
@@ -40,7 +42,7 @@ test('分段畸形 + 动作缺“边说” + 五段与全文不一致时，规�
   assert.equal(clips.map((c) => c.dialogue).join('，'), normalized.continuous_dialogue);
 });
 
-test('全文偏短仍应被严格校验拦下，但宽松兜底可放行真实内容', () => {
+test('全文偏短在严格和兜底校验中都必须被拦下', () => {
   const short = ['来上海一定要逛这家中古店', '一进门满眼都是复古好物', '玩具瓷器唱片都很有故事', '预算不高也能淘到独特好物', '放进攻略现在就来逛逛'];
   const raw: any = {
     continuous_dialogue: short.join('，'),
@@ -50,5 +52,5 @@ test('全文偏短仍应被严格校验拦下，但宽松兜底可放行真实�
   };
   const normalized = normalizeDeepSeekSurpriseScript(raw);
   assert.ok(validateSurpriseScript(normalized as any).errors.length > 0);
-  assert.deepEqual(validateSurpriseScript(normalized as any, { relaxed: true }).errors, []);
+  assert.ok(validateSurpriseScript(normalized as any, { relaxed: true }).errors.length > 0);
 });

@@ -77,15 +77,13 @@ const BEAT_WINDOWS: Array<[number, number]> = [
 
 const BEAT_LABELS = ['强钩子', '进店发现', '上手体验', '核心种草', '行动召唤'];
 
-// 15 秒原生 Seedance 人声：60–72 汉字是自然偏快（约 270–320 字/分钟）且不吞字的安全区间。
-export const SURPRISE_MIN_CN = 60;
-export const SURPRISE_MAX_CN = 72;
-// 兜底轮次（最后一次校验）允许的宽松区间，仍以 72 为硬上限。
-export const SURPRISE_RELAXED_MIN_CN = 52;
-export const SURPRISE_RELAXED_MAX_CN = 72;
-// 单个节拍建议字数
-export const SURPRISE_BEAT_MIN_CN = 8;
-export const SURPRISE_BEAT_MAX_CN = 18;
+// 15 秒员工极速成片：90–100 汉字，五个 3 秒镜头持续高密度口播。
+export const SURPRISE_MIN_CN = 90;
+export const SURPRISE_MAX_CN = 100;
+export const SURPRISE_RELAXED_MIN_CN = 90;
+export const SURPRISE_RELAXED_MAX_CN = 100;
+export const SURPRISE_BEAT_MIN_CN = 18;
+export const SURPRISE_BEAT_MAX_CN = 21;
 
 // 会拖慢连续口播的语气词/客套词，一律清掉
 const FILLER_PATTERNS: RegExp[] = [
@@ -380,8 +378,8 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     speech_rate: 'natural_fast_clear',
     speech_cpm_min: 270,
     speech_cpm_max: 320,
-    min_pause_s: 0.15,
-    max_silence_s: 0.35,
+    min_pause_s: 0.05,
+    max_silence_s: 0.12,
   };
 
   const clips = [nextScript.hook, ...nextScript.scenes, nextScript.outro];
@@ -535,8 +533,8 @@ export function compileSurpriseOneShotPrompt(options: {
   lines.push('【声音硬规则】');
   lines.push('1. 这是全片唯一的一条连续中文口播音轨，由 Seedance 直接生成同步人声，不使用后配 TTS。');
   lines.push('2. 0.2 秒左右自然开口，说到 14.5 秒左右自然收尾。');
-  lines.push('3. 语速自然偏快且清晰，约每分钟 270–320 汉字；宁可稍慢一点，也必须每个字咬清楚，不得吞字、含糊或加速赶字。');
-  lines.push('4. 允许在逗号、句号处有 0.15–0.35 秒的自然微停顿和换气，其余位置保持连贯，不要出现长时间静默。');
+  lines.push('3. 使用高密度、清晰、激动的探店口播，约每分钟 390–430 汉字；每个字都要咬清楚，不得吞字或含糊。');
+  lines.push('4. 只允许在逗号处有 0.05–0.12 秒的节奏换气，其余位置持续发声，不得出现静默。');
   lines.push('5. 切换镜头时人声继续，不得在切镜处重新起句、重开这段话或重新自我介绍。');
   lines.push('6. 严格按最终口播全文只读一次，不得改写、遗漏、合并或增加对白。');
   lines.push('7. 严禁重复词、重复短语、回读同一句、卡顿式重启、结巴或结尾拖音。');
@@ -544,7 +542,7 @@ export function compileSurpriseOneShotPrompt(options: {
 
   const clips = [script.hook, ...script.scenes, script.outro];
   lines.push('');
-  lines.push('【五段对白时间锚点】以下五段连接后就是上面的唯一口播全文，只用于对齐画面、字幕和切点，不是五次重新开口。段与段之间只允许 0.15–0.35 秒的自然换气，声音必须跨切镜延续，严禁在此处重复上一段或回读。');
+  lines.push('【五段对白时间锚点】以下五段连接后就是上面的唯一口播全文，只用于对齐画面、字幕和切点，不是五次重新开口。段与段之间只允许 0.05–0.12 秒的节奏换气，声音必须跨切镜延续，严禁在此处重复上一段或回读。');
   clips.forEach((clip, index) => {
     const [start, end] = BEAT_WINDOWS[index];
     lines.push(`${start}-${end} 秒｜对白："${compactText(clip.dialogue, 80)}"｜字幕："${compactText(clip.subtitle, 40)}"`);

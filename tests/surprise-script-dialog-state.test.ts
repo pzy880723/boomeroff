@@ -22,12 +22,12 @@ test('后台仍在生成脚本时保持加载状态', () => {
   }), 'loading');
 });
 
-test('前端确认规则和后端 60-72 字自然快节奏规则一致', () => {
+test('前端确认规则和后端 90-100 字高密度规则一致', () => {
   const source = readFileSync(
     new URL('../src/components/marketing/SurpriseVideoDialog.tsx', import.meta.url),
     'utf8',
   );
-  assert.match(source, /length < 8 \|\| length > 18/);
-  assert.match(source, /count < 60 \|\| count > 72/);
-  assert.doesNotMatch(source, /90.100/);
+  assert.match(source, /length < 18 \|\| length > 21/);
+  assert.match(source, /count < 90 \|\| count > 100/);
+  assert.doesNotMatch(source, /60.72/);
 });

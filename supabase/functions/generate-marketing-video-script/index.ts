@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     const maxScenes = isTight15 ? 3 : targetClips + 1;
     const perClipMin = isTight15 ? 3 : (duration >= 25 ? 1.5 : 2);
     const perClipMax = isTight15 ? 3 : (duration >= 25 ? 3.5 : 5);
-    // 普通视频按清晰口播预算；惊喜一下使用 90–100 字超快连续口播。
+    // 普通视频按清晰口播预算；惊喜一下使用 90–100 字高密度连续口播。
     const totalSpeakBudgetCn = Math.floor(duration * 4);
     const aspect: string = ["9:16", "1:1", "16:9"].includes(body.aspect) ? body.aspect : "9:16";
     // 用户输入(topic/highlight/brief)可能带真实商场名或第三方招牌关键词,
@@ -111,7 +111,7 @@ ${approvedScript}
       ? `
 
 【惊喜一下 15 秒极速成片 · 连续口播模板】(本片必须严格按这套节奏拍,声音全程不能停)
-- 【最高优先级 · 一条连续口播】全片使用同一条连续中文口播音轨。人物从 0.1 秒开始持续说到 14.9 秒,任意位置不得有超过 0.1 秒的停顿;切镜时口播继续,不允许重新起句、不允许重复台词、不允许留白。
+- 【最高优先级 · 一条连续口播】全片使用同一条连续中文口播音轨。人物从约 0.2 秒开始持续说到约 14.5 秒,只允许逗号处 0.05–0.12 秒节奏换气;切镜时口播继续,不允许重新起句、不允许重复台词、不允许留白。
 - 【continuous_dialogue 硬规则】
   · 必须写完整的中文口播全文,90–100 个汉字,目标约 96 字。
   · 只允许使用中文逗号「，」或顿号「、」连接,不使用句号、感叹号、问号、省略号。
@@ -161,9 +161,9 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}\n${storefrontConstraint}\n${OWN_BRAND_LOC
 - 画幅 ${aspect}。
 - 全部内容一律简体中文(包括 scene/action/dialogue/subtitle)。
 - subtitle ≤ 24 字。scene 30–80 字，action 15–50 字。
-- 【口播字数硬预算】${isViralStoreTour ? '惊喜一下全片 dialogue 合计必须 90–100 个汉字,使用高能超快语速连续讲完。' : `按 4 汉字/秒清晰口播计算,全片 dialogue 汉字合计 ≤ ${totalSpeakBudgetCn} 字。`}${isTight15 ? `
+- 【口播字数硬预算】${isViralStoreTour ? '惊喜一下全片 dialogue 合计必须 90–100 个汉字,使用高密度超快语速连续讲完。' : `按 4 汉字/秒清晰口播计算,全片 dialogue 汉字合计 ≤ ${totalSpeakBudgetCn} 字。`}${isTight15 ? `
 - 【15 秒最高优先级 · 边演边说】所有 5 段(hook + 3 中段 + outro)**都必须有非空 dialogue**,严禁纯氛围镜、严禁 dialogue 为空字符串。每一镜的 action 必须写成"边 ×× 边对镜头说 / 一边 ×× 一边讲",动作和口播在同一秒发生,不许"先做动作 → 停下 → 再说话"。
-${isViralStoreTour ? `- hook、3 个 scenes、outro 的 dialogue 各 18–21 个汉字,subtitle 各 6–16 个汉字;句子必须完整且画面逐段对应。` : `- hook.dialogue ≤ 8 字,outro.dialogue ≤ 8 字,中段每 scene.dialogue ≤ 14 字。`}
+${isViralStoreTour ? `- hook、3 个 scenes、outro 的 dialogue 各 18–21 个汉字,subtitle 必须逐字等于 dialogue;句子必须完整且画面逐段对应。` : `- hook.dialogue ≤ 8 字,outro.dialogue ≤ 8 字,中段每 scene.dialogue ≤ 14 字。`}
 - 全片必须有头有尾,钩子、发现、商品/体验、价值、行动召唤五层信息依次推进。` : `- dialogue ≤ 30 字(可为空)。`}
 
 - 镜头总条数${isTight15 ? ' = 5(hook + 3 scenes + outro)' : ` ≈ ${targetClips} 条(含 hook 和 outro),中段 scenes 数组长度在 ${minScenes}–${maxScenes} 之间`};每条 ${perClipMin}–${perClipMax} 秒${isTight15 ? '(严格 3 秒)' : ',所有镜头 duration_s 之和 ≈ ' + duration + ' 秒(允许 ±20% 浮动)'}。

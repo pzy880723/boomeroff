@@ -124,9 +124,9 @@ function validateSurpriseScript(script: ScriptShape): string | null {
     return '每段的画面、动作、对白和字幕都必须填写';
   }
   const clipLengths = clips.map((clip) => chineseLength(String(clip.dialogue || '')));
-  if (clipLengths.some((length) => length < 8 || length > 18)) return '每一镜对白必须是 8–18 个汉字,不足就重新生成脚本';
+  if (clipLengths.some((length) => length < 18 || length > 21)) return '每一镜对白必须是 18–21 个汉字,不足就重新生成脚本';
   const count = chineseLength(clips.map((clip) => clip.dialogue!.trim()).join('，'));
-  if (count < 60 || count > 72) return `连续对白当前 ${count} 字，请调整到 60–72 字`;
+  if (count < 90 || count > 100) return `连续对白当前 ${count} 字，请调整到 90–100 字`;
   if (clips.some((clip) => String(clip.subtitle || '').trim() !== String(clip.dialogue || '').trim())) {
     return '字幕必须和每一镜最终对白一致';
   }

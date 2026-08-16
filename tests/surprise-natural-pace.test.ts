@@ -1,6 +1,6 @@
-// 2026-07-30：15 秒原生 Seedance 人声出现吞字/卡顿/重复。
-// 口播总量降到 60–72 汉字（硬上限 72），语速改为自然偏快 270–320 字/分钟，允许 0.15–0.35 秒微停顿。
+// 15 秒员工极速成片：保持 90–100 字高密度口播，五镜持续发声并严格对齐字幕。
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -23,12 +23,23 @@ function makeScript(dialogues: string[]) {
   } as any;
 }
 
-test('口播区间收敛到 60-72 汉字，硬上限 72', () => {
-  assert.equal(SURPRISE_MIN_CN, 60);
-  assert.equal(SURPRISE_MAX_CN, 72);
+test('口播区间统一为 90-100 汉字', () => {
+  assert.equal(SURPRISE_MIN_CN, 90);
+  assert.equal(SURPRISE_MAX_CN, 100);
 });
 
-test('超长脚本会被截断到 72 汉字以内，且不靠重复补长', () => {
+test('脚本生成提示词与 90-100 字校验规则保持一致', () => {
+  const source = readFileSync(
+    new URL('../supabase/functions/generate-marketing-video-script/index.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /90[–-]100 个汉字/);
+  assert.match(source, /18[–-]21 个汉字/);
+  assert.doesNotMatch(source, /60[–-]72/);
+  assert.doesNotMatch(source, /8[–-]18/);
+});
+
+test('超长脚本会被截断到 100 汉字以内，且不靠重复补长', () => {
   const long = [
     '来上海旅行别错过这家藏满惊喜的中古宝藏店真的很好逛',
     '一走进去满眼复古杂货每排货架都值得认真翻上很久',
@@ -57,7 +68,7 @@ test('偏短脚本不会被重复内容强行补到下限', () => {
   assert.ok(cn(surpriseSpokenText(script)) < SURPRISE_MIN_CN);
 });
 
-test('编译后的提示词使用自然偏快语速与微停顿规则，不再含旧约束', () => {
+test('编译后的提示词使用高密度语速和极短节奏换气', () => {
   const script = normalizeSurpriseScript(
     makeScript(['来上海别错过这家中古宝藏店', '一进门满眼复古杂货和老物件', '玩具瓷器唱片随手一拿都有故事', '预算不高也能挑到独特小惊喜', '放进攻略到店认真翻上一圈']),
   );
@@ -70,12 +81,11 @@ test('编译后的提示词使用自然偏快语速与微停顿规则，不再�
   ]);
   const prompt = compileSurpriseOneShotPrompt({ script, referencePlan });
 
-  assert.match(prompt, /270–320 汉字/);
-  assert.match(prompt, /0\.15–0\.35 秒的自然微停顿/);
+  assert.match(prompt, /390–430 汉字/);
+  assert.match(prompt, /0\.05–0\.12 秒的节奏换气/);
   assert.match(prompt, /严禁重复词、重复短语、回读同一句、卡顿式重启/);
   assert.match(prompt, /严格按最终口播全文只读一次/);
-  assert.doesNotMatch(prompt, /390–430/);
-  assert.doesNotMatch(prompt, /任何位置不得出现超过 0\.1 秒的停顿/);
+  assert.doesNotMatch(prompt, /270–320/);
   assert.doesNotMatch(prompt, /零停顿、零吸气/);
   // 画面顺序与参考图绑定保持不变
   assert.match(prompt, /0-3 秒/);
