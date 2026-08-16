@@ -69,8 +69,12 @@ export function useProductRecognition() {
       if (data.error) throw new Error(data.error);
 
       const validCategories: ProductCategory[] = [
-        'porcelain', 'incense', 'stationery', 'lacquerware',
-        'bronze', 'woodcraft', 'textile', 'jewelry', 'painting', 'other',
+        'jp_porcelain', 'eu_porcelain', 'incense', 'antique_art', 'local_craft',
+        'anime_toy', 'otaku_goods', 'luxury', 'vintage_jewelry', 'game_console',
+        'walkman', 'ccd', 'media_record', 'playback_device', 'home_appliance',
+        'hobby', 'other',
+        'porcelain', 'stationery', 'lacquerware', 'bronze', 'woodcraft',
+        'textile', 'jewelry', 'painting',
       ];
       const category = validCategories.includes(data.category) ? data.category : 'other';
 

@@ -9,12 +9,13 @@ const corsHeaders = {
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const ENRICH_MODEL = 'google/gemini-2.5-flash'; // 故事生成够用，且支持 google_search
 const ENRICH_TIMEOUT_MS = 25_000;
+const ENRICH_VERSION = 2;
 
 const ENRICH_TOOL = {
   type: 'function',
   function: {
     name: 'submit_enrichment',
-    description: '提交完整知识卡（金句 / 速记 / 客户话术 / 易混对比 / 富卖点），不再生成深度故事段',
+    description: '提交完整商品故事与销售知识卡',
     parameters: {
       type: 'object',
       properties: {
@@ -108,7 +109,7 @@ const ENRICH_TOOL = {
           },
         },
       },
-      required: ['sellingPoints', 'one_liner', 'quick_facts', 'customer_pitches', 'comparisons'],
+      required: ['story', 'highlight', 'description', 'sellingPoints', 'objection', 'memory', 'one_liner', 'quick_facts', 'customer_pitches', 'selling_points_rich', 'comparisons'],
     },
   },
 };
@@ -171,7 +172,7 @@ serve(async (req) => {
       const { data: existing } = await adminClient
         .from('products').select('ai_analysis').eq('id', productId).maybeSingle();
       const cached = (existing?.ai_analysis as any)?.enriched;
-      if (cached?.one_liner && cached?.updatedAt) {
+      if (cached?.version === ENRICH_VERSION && cached?.story && cached?.one_liner && cached?.updatedAt) {
         return new Response(JSON.stringify({ enriched: cached, fromCache: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -203,7 +204,8 @@ serve(async (req) => {
 2. 禁用空话：非常精美/极具价值/匠心独运/巧夺天工/美轮美奂。能给数字就给数字。无法核实的就讲场景类比，绝不编造数字。
 3. sellingPoints 4-6 条，每条 ≤32 字完整句，tag 必须是 身世/工艺/稀缺/场景。
 4. one_liner ≤30 字正向金句；quick_facts 5 条标签固定（创立年代/产地/工艺/代表元素/价位段）；customer_pitches 必须覆盖 送礼/自用/收藏 三场景；selling_points_rich 4-6 条带 tag/text/detail；comparisons 至少 2 条易混对比。
-5. 不需要再写长故事段（story）或单句开场（highlight），重点产出知识卡字段即可。
+5. story 180-260 字，必须讲清商品来历、年代背景、工艺特点、当年用途和今天为什么值得带走；要像店员面对顾客自然讲述，事实无法核实时明确使用场景化表达，禁止编造。
+6. highlight ≤80 字，description 200-320 字，objection ≤80 字，memory ≤30 字；所有字段都必须返回，不得只给标题或金句。
 
 【商品信息】
 ${ctx}
@@ -214,7 +216,7 @@ ${ctx}
       model: ENRICH_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: '请补充更深入的销售故事，必要时联网核实。' },
+        { role: 'user', content: '请生成完整商品故事和销售知识卡，必要时联网核实，并调用 submit_enrichment 提交全部字段。' },
       ],
       tools: [ENRICH_TOOL, { type: 'google_search' }],
       tool_choice: 'auto',
@@ -267,6 +269,7 @@ ${ctx}
     }
 
     const enriched: Record<string, unknown> = {
+      version: ENRICH_VERSION,
       story: parsed.story ? String(parsed.story) : undefined,
       highlight: parsed.highlight ? String(parsed.highlight) : undefined,
       description: parsed.description ? String(parsed.description) : undefined,

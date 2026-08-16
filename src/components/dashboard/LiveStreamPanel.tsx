@@ -348,25 +348,32 @@ export function LiveStreamPanel() {
       const sp = Array.isArray(base.sellingPoints)
         ? base.sellingPoints.map((s: any) => typeof s === 'string' ? { tag: '场景', text: s } : s)
         : [];
-      const { data, error } = await invokeFn('enrich-recognition', {
-        body: {
-          productId,
-          name: base.name,
-          category: base.category,
-          era: base.era,
-          origin: base.origin,
-          material: base.material,
-          craft: base.craft,
-          currentDescription: base.description,
-          currentStory: typeof base.pitch === 'object' ? base.pitch?.story : undefined,
-          currentSellingPoints: sp,
-        },
-      });
-      if (error) throw error;
-      if (data?.enriched && enrichKeyRef.current === key) {
-        setEnriched(data.enriched);
+      let lastError: unknown = new Error('商品故事生成失败');
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const { data, error } = await invokeFn('enrich-recognition', {
+          body: {
+            productId,
+            name: base.name,
+            category: base.category,
+            era: base.era,
+            origin: base.origin,
+            material: base.material,
+            craft: base.craft,
+            currentDescription: base.description,
+            currentStory: typeof base.pitch === 'object' ? base.pitch?.story : undefined,
+            currentSellingPoints: sp,
+          },
+        });
+        if (!error && data?.enriched) {
+          if (enrichKeyRef.current === key) setEnriched(data.enriched);
+          return;
+        }
+        lastError = error || new Error(data?.error || '商品故事返回为空');
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 800));
       }
+      throw lastError;
     } catch (e) {
+      enrichKeyRef.current = null;
       console.warn('[Enrich] failed:', e);
     } finally {
       if (enrichKeyRef.current === key) setIsEnriching(false);

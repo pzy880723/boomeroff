@@ -236,6 +236,45 @@ export function ProductDetailCard({ result, imageUrl, shareLink }: ProductDetail
         </CardContent>
       </Card>
 
+      {sellingPoints.length > 0 && !(enriched?.selling_points_rich?.length) && (
+        <Card className="border-border/60 shadow-soft">
+          <CardContent className="pt-4 pb-4">
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              商品卖点
+            </h3>
+            <div className="space-y-2">
+              {sellingPoints.map((point, index) => (
+                <div key={`${point.tag}-${index}`} className="flex items-start gap-2.5 rounded-xl bg-muted/35 px-3 py-2.5">
+                  <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    {point.tag || `卖点${index + 1}`}
+                  </span>
+                  <p className="text-sm leading-relaxed">{point.text}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {(pitch || result.isEnriching) && (
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-background to-accent/10 shadow-soft">
+          <CardContent className="pt-4 pb-4 space-y-2.5">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <Sparkles className={`w-4 h-4 text-primary ${result.isEnriching && !pitch?.story ? 'animate-pulse' : ''}`} />
+              商品故事
+            </h3>
+            {pitch?.opener && <p className="text-[15px] font-medium leading-relaxed">{pitch.opener}</p>}
+            {pitch?.highlight && <p className="text-sm leading-relaxed text-foreground/85">{pitch.highlight}</p>}
+            {pitch?.story ? (
+              <p className="whitespace-pre-wrap text-sm leading-7 text-foreground/90">{pitch.story}</p>
+            ) : result.isEnriching ? (
+              <p className="text-sm text-muted-foreground">正在补充完整来历、年代背景与销售故事，生成后会自动显示在这里…</p>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
+
 
       {/* 富知识卡：金句 / 速记卡 / 客户话术 / 易混对比 — 与官方知识卡一致 */}
       <KnowledgeCardSections

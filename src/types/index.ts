@@ -131,6 +131,7 @@ export interface RecognitionResult {
   };
   // 后台深度补充结果（identification 后异步生成）
   enriched?: {
+    version?: number;
     story?: string;
     highlight?: string;
     description?: string;
