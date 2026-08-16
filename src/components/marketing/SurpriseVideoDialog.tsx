@@ -239,7 +239,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       }
     };
     void tick();
-    scriptPollRef.current = window.setInterval(tick, 3500);
+    scriptPollRef.current = window.setInterval(tick, 1000);
   };
 
   const doPick = async (exclude: string[] = []) => {

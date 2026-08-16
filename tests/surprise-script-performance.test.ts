@@ -51,3 +51,21 @@ test('惊喜一下预览不再等待 AI 生成人设，并限制模型等待时�
   assert.ok(timeout, '应声明惊喜脚本模型超时');
   assert.ok(Number(timeout[1].replaceAll('_', '')) <= 2_500, '模型等待不能超过 2.5 秒');
 });
+
+test('惊喜一下不再通过第三层 Edge Function 生成脚本', () => {
+  const source = readFileSync(
+    new URL('../supabase/functions/surprise-marketing-video/index.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /generateFastSurpriseScript\(/);
+  assert.doesNotMatch(source, /functions\/v1\/generate-marketing-video-script/);
+});
+
+test('前端一秒轮询一次脚本结果', () => {
+  const source = readFileSync(
+    new URL('../src/components/marketing/SurpriseVideoDialog.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /window\.setInterval\(tick, 1000\)/);
+});

@@ -1,10 +1,60 @@
 import { normalizeSurpriseScript, type SurpriseScript } from './surprise-one-shot.ts';
+import { requestDeepSeekJson } from './deepseek-client.ts';
+import { normalizeDeepSeekSurpriseScript, validateSurpriseScript } from './surprise-script-policy.ts';
 
 export const SURPRISE_MODEL_TIMEOUT_MS = 2_500;
 
 interface FastFallbackOptions {
   shopName?: string | null;
   imageDescriptions?: Array<{ index: number; summary?: string | null }>;
+}
+
+interface FastGenerationOptions extends FastFallbackOptions {
+  apiKey?: string | null;
+  factContext: string;
+  character?: Record<string, unknown> | null;
+  ageBucket?: 'young' | 'middle' | 'senior' | null;
+  model?: string;
+}
+
+export async function generateFastSurpriseScript(options: FastGenerationOptions): Promise<SurpriseScript> {
+  const startedAt = Date.now();
+  let script: SurpriseScript | null = null;
+  let provider = 'fast_fallback';
+
+  if (options.apiKey) {
+    try {
+      const candidate = await requestDeepSeekJson({
+        apiKey: options.apiKey,
+        model: options.model || 'deepseek-v4-flash',
+        temperature: 0.85,
+        maxTokens: 1800,
+        timeoutMs: SURPRISE_MODEL_TIMEOUT_MS,
+        systemPrompt: '你是 BOOMER OFF 门店短视频编剧。只输出 JSON。写一条15秒高密度探店口播：严格5个连续镜头，每镜对白18-21个汉字，合计90-100字；字幕逐字等于对白；首镜必须使用真实门店入口和BOOMER OFF门头；不得重复短语或编造价格活动。',
+        userPrompt: `真实门店、素材与脚本规则：\n${options.factContext.slice(0, 7000)}\n\n` +
+          `主角：${JSON.stringify(options.character || {})}\n参考图：${JSON.stringify((options.imageDescriptions || []).slice(0, 8))}\n` +
+          '输出字段：title,continuous_dialogue,hook,scenes,outro,publish_copy,bgm,total_duration_s,aspect,mode。hook/scenes/outro每段包含scene,action,dialogue,subtitle,image_index,duration_s=3,motion；scenes正好3段。只输出JSON。',
+      });
+      const normalized = normalizeDeepSeekSurpriseScript(candidate as any);
+      const validation = validateSurpriseScript(normalized, {
+        ageBucket: options.ageBucket || null,
+        factContext: options.factContext,
+      });
+      if (!validation.errors.length) {
+        script = normalized;
+        provider = 'deepseek';
+      } else {
+        console.warn('[surprise-fast] DeepSeek candidate rejected', validation.errors);
+      }
+    } catch (error) {
+      console.warn('[surprise-fast] DeepSeek unavailable; using fallback', error);
+    }
+  }
+
+  if (!script) script = buildFastSurpriseFallback(options);
+  script.script_provider = provider;
+  script.script_generation_ms = Date.now() - startedAt;
+  return script;
 }
 
 function cleanShopName(value: unknown): string {

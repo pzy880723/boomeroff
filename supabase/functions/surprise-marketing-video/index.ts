@@ -2,7 +2,7 @@
 // 流程:
 //   1. 从店铺素材库挑实景 + 优先找一张门头/店招做开场
 //   2. 低概率使用与人物和门店自然匹配的临近节日(不自动蹭暑假)
-//   3. 调 generate-marketing-video-script 出洗脑探店脚本(钩子+中段+收尾,15s 9:16)
+//   3. 直接用快速共享生成器产出洗脑探店脚本(钩子+中段+收尾,15s 9:16)
 //   4. preview=true → 返回 { picked, assets, script, holiday, ... } 给前端展示
 //   5. preview=false → 用同一份 script 调 render-marketing-video 入队,渲染策略恒为 one_shot
 // 注意:不再做"分镜↔素材一对一"绑定;assets 就是 reference_image 池(≤9),
@@ -14,6 +14,7 @@ import { generateFastPersona, formatPersonaDirective, formatPersonaBriefZh, type
 import { resolveStorefrontOpeningEn, resolveStorefrontOpeningZh } from "../_shared/storefront-constraints.ts";
 import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
+import { generateFastSurpriseScript } from "../_shared/surprise-script-performance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -350,7 +351,7 @@ Deno.serve(async (req) => {
       `【钩子句池】这次开场的钩子可参考(可改写,不要照抄,必须贴合博主语气与节奏):${randomHooks}。每次拍都要不一样,不要复用上次开头。\n` +
       `【全片要求】严格 5 个 3 秒镜头:钩子 1 镜 + 递进种草 3 镜 + CTA 1 镜。主角始终是上面那位虚构博主(同人同发型同服装),每镜都有动作(指/拿/试/转身/对镜头说话);**每一镜都必须有 dialogue 和 subtitle,严禁空台词**,每段严格 18–21 个汉字,五句合计 90–100 个汉字(硬上限 100,严禁重复内容、重复短语或回读),用中文逗号连接后就是一条从约 0.2 秒持续到约 14.5 秒的完整口播。五段分别讲钩子 → 进店发现 → 商品细节 → 价值体验 → 行动召唤,画面、对白、字幕必须逐段对应。语速高密度且清晰(约每分钟 390–430 汉字),逗号处只允许 0.05–0.12 秒节奏换气,切镜时人声延续不重开。随机变化钩子、人设和表达,但主旨永远是强力种草当前门店;门店事实和卖点只能来自店铺画像、品牌知识库与已选实景素材,严禁编造价格或活动。博主每一镜都要有情绪推进,全部用上传的店内实景;结尾必须带 CTA(参考博主 CTA「${persona.cta}」)。`;
 
-    // 9) 生成脚本
+    // 9) 直接生成脚本，不再通过 HTTP 唤醒第三个 Edge Function。
     const imageUrls = pickedAssets.map((a: any) => a.output_url);
     const imageDescriptions = pickedAssets.map((a: any, i: number) => ({
       index: i,
@@ -358,37 +359,23 @@ Deno.serve(async (req) => {
       role: i === 0 && storefrontHit ? 'storefront' : 'scene',
     }));
 
-    const scriptRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-marketing-video-script`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: auth },
-      body: JSON.stringify({
-        shop_id: shopId,
-        image_urls: imageUrls,
-        video_type: 'store_tour',
-        duration: 15,
-        aspect: '9:16',
-        topic: `${holiday?.name ? holiday.name + ' · ' : ''}探店 · ${heroSummary}`,
-        highlight: heroSummary.slice(0, 40),
-        style,
-        intent: 'viral_store_tour',
-        brief_transcript: briefTranscript,
-        image_descriptions: imageDescriptions,
-        // 把 persona 当虚构主角喂给脚本(用 character 字段复用现有 prompt 通路),不带 cover_url 避免被加进参考图
-        character: {
-          name: persona.label,
-          role_label: '探店博主',
-          visual_signature: persona.visual,
-          core_emotion: persona.vibe,
-          age_bucket: persona.age_bucket,
-        },
-      }),
+    const generatedScript = await generateFastSurpriseScript({
+      apiKey: Deno.env.get('DEEPSEEK_API_KEY'),
+      model: Deno.env.get('DEEPSEEK_SCRIPT_MODEL') || 'deepseek-v4-flash',
+      shopName: shopCtx?.name || null,
+      imageDescriptions,
+      ageBucket: persona.age_bucket || null,
+      character: {
+        name: persona.label,
+        role_label: '探店博主',
+        visual_signature: persona.visual,
+        core_emotion: persona.vibe,
+        age_bucket: persona.age_bucket,
+      },
+      factContext: `${JSON.stringify(shopCtx || {})}\n${briefTranscript}\n${imageDescriptions.map((item) => item.summary).join('\n')}`,
     });
-    const scriptData = await scriptRes.json().catch(() => ({}));
-    if (!scriptRes.ok || !scriptData?.script) {
-      return json({ ok: false, error: scriptData?.error || '脚本生成失败' });
-    }
     const script = bindSurpriseReferences(normalizeSurpriseScript({
-      ...scriptData.script,
+      ...generatedScript,
       surprise_mode: true,
       intent: 'viral_store_tour',
       image_descriptions: imageDescriptions,
