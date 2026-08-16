@@ -58,8 +58,11 @@ test('惊喜脚本产出一条 90-100 字高密度连续口播并保留 5 段可
 
   assert.equal(clips.length, 5);
   assert.deepEqual(clips.map((c) => c.duration_s), [3, 3, 3, 3, 3]);
-  assert.equal(script.speech_start_s, 0.2);
-  assert.equal(script.speech_end_s, 14.5);
+  assert.equal(script.speech_start_s, 0.1);
+  assert.equal(script.speech_end_s, 14.9);
+  assert.equal(script.speech_rate, 'very_fast_clear');
+  assert.equal(script.speech_cpm_min, 390);
+  assert.equal(script.speech_cpm_max, 430);
   assert.equal(script.max_silence_s, 0.12);
   assert.equal(script.min_pause_s, 0.05);
 
@@ -97,8 +100,8 @@ test('一次成片提示词只包含一条连续口播、5 段画面切点和参
 
   assert.match(prompt, /【15秒连续口播】/);
   assert.match(prompt, /【声音硬规则】/);
-  assert.match(prompt, /0\.2 秒左右自然开口/);
-  assert.match(prompt, /14\.5 秒/);
+  assert.match(prompt, /0\.1 秒内立即开口/);
+  assert.match(prompt, /14\.9 秒/);
   assert.match(prompt, /0\.05–0\.12 秒的节奏换气/);
   assert.match(prompt, /390–430 汉字/);
   assert.match(prompt, /严禁重复词、重复短语、回读同一句、卡顿式重启/);

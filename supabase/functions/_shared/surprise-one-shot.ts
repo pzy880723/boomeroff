@@ -373,11 +373,11 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     total_duration_s: 15,
     aspect: '9:16',
     one_shot_prompt: '',
-    speech_start_s: 0.2,
-    speech_end_s: 14.5,
-    speech_rate: 'natural_fast_clear',
-    speech_cpm_min: 270,
-    speech_cpm_max: 320,
+    speech_start_s: 0.1,
+    speech_end_s: 14.9,
+    speech_rate: 'very_fast_clear',
+    speech_cpm_min: 390,
+    speech_cpm_max: 430,
     min_pause_s: 0.05,
     max_silence_s: 0.12,
   };
@@ -532,7 +532,7 @@ export function compileSurpriseOneShotPrompt(options: {
   lines.push('');
   lines.push('【声音硬规则】');
   lines.push('1. 这是全片唯一的一条连续中文口播音轨，由 Seedance 直接生成同步人声，不使用后配 TTS。');
-  lines.push('2. 0.2 秒左右自然开口，说到 14.5 秒左右自然收尾。');
+  lines.push('2. 画面出现后 0.1 秒内立即开口，连续说到 14.9 秒左右自然收尾。');
   lines.push('3. 使用高密度、清晰、激动的探店口播，约每分钟 390–430 汉字；每个字都要咬清楚，不得吞字或含糊。');
   lines.push('4. 只允许在逗号处有 0.05–0.12 秒的节奏换气，其余位置持续发声，不得出现静默。');
   lines.push('5. 切换镜头时人声继续，不得在切镜处重新起句、重开这段话或重新自我介绍。');
