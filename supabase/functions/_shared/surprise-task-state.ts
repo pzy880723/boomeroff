@@ -20,7 +20,6 @@ function isScriptTask(job: SurpriseTaskRow): boolean {
     && (
       meta.surprise_stage === 'script_generating'
       || meta.surprise_stage === 'script_ready'
-      || meta.surprise_stage === 'failed'
     );
 }
 

@@ -13,3 +13,8 @@ test('重试失败脚本时清理当前门店积压的旧失败草稿', () => {
   assert.match(source, /\.eq\("status", "failed"\)/);
   assert.match(source, /\.contains\("meta", \{ flow: "surprise" \}\)/);
 });
+
+test('开始新脚本前会清理历史失败草稿，旧失败单不能永久阻塞', () => {
+  assert.match(source, /async function clearFailedDrafts/);
+  assert.match(source, /await clearFailedDrafts\(admin, user\.id, shopId\)/);
+});

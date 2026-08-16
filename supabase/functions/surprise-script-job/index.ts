@@ -67,6 +67,17 @@ async function findCurrentTask(admin: AdminClient, userId: string, shopId: strin
   return selectCurrentSurpriseTask((data || []) as SurpriseTaskRow[]);
 }
 
+async function clearFailedDrafts(admin: AdminClient, userId: string, shopId: string) {
+  const { error } = await admin
+    .from("video_generation_jobs")
+    .delete()
+    .eq("user_id", userId)
+    .eq("shop_id", shopId)
+    .eq("status", "failed")
+    .contains("meta", { flow: "surprise", consumed: false });
+  if (error) throw error;
+}
+
 async function runScriptGeneration({
   admin,
   supabaseUrl,
@@ -158,6 +169,8 @@ Deno.serve(async (req) => {
       const current = await findCurrentTask(admin, user.id, shopId);
       if (current?.kind === "script") return json(state(current.job));
       if (current?.kind === "video") return json(videoState(current.job));
+      // 失败记录没有可恢复的脚本，不能在用户下次进入时永久占住当前任务。
+      await clearFailedDrafts(admin, user.id, shopId);
 
       const exclude = Array.isArray(body.exclude_asset_ids)
         ? body.exclude_asset_ids.map((x: unknown) => String(x)).slice(0, 50)
