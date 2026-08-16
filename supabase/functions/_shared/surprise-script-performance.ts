@@ -1,6 +1,6 @@
 import { normalizeSurpriseScript, type SurpriseScript } from './surprise-one-shot.ts';
 
-export const SURPRISE_MODEL_TIMEOUT_MS = 7_000;
+export const SURPRISE_MODEL_TIMEOUT_MS = 2_500;
 
 interface FastFallbackOptions {
   shopName?: string | null;

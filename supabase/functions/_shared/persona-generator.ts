@@ -178,6 +178,14 @@ function fallbackPersona(slot?: { ageBucket: AgeBucket; groupType: GroupType }):
   return { ...sorted[0], group_type: slot.groupType, age_bucket: slot.ageBucket };
 }
 
+export function generateFastPersona(opts: {
+  assetTags: string[];
+  assetCategories: string[];
+}): InfluencerPersona {
+  const slot = pickPersonaSlot(opts.assetTags || [], opts.assetCategories || []);
+  return fallbackPersona(slot);
+}
+
 // ---------- 主流程 ----------
 
 function pickStrings(v: any, max = 3): string[] {

@@ -10,7 +10,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadShopContext } from "../_shared/shop-context.ts";
 import { pickUpcomingHoliday, formatHolidayBrief } from "../_shared/holiday-context.ts";
-import { generatePersona, formatPersonaDirective, formatPersonaBriefZh, type InfluencerPersona } from "../_shared/persona-generator.ts";
+import { generateFastPersona, formatPersonaDirective, formatPersonaBriefZh, type InfluencerPersona } from "../_shared/persona-generator.ts";
 import { resolveStorefrontOpeningEn, resolveStorefrontOpeningZh } from "../_shared/storefront-constraints.ts";
 import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
@@ -210,6 +210,7 @@ Deno.serve(async (req) => {
     // ====== Preview / 兜底:全流程 ======
     // 1) 拉素材库里这家店的实景商品图(剔除合成静帧)
     const ninetyDays = new Date(Date.now() - 90 * 86400 * 1000).toISOString();
+    const shopContextPromise = loadShopContext(shopId);
 
     // 只挑用户上传的实景图,排除任何 AI 生成来源(分镜头/AI智能广告/AI 图等)
     const GENERATED_SOURCES = new Set([
@@ -316,19 +317,16 @@ Deno.serve(async (req) => {
     const holiday = pickUpcomingHoliday(new Date(), { chance: 0.2 });
     const holidayBrief = formatHolidayBrief(holiday);
 
-    // 7) 动态生成「探店博主」人设(按品类/节日/店铺现场出 persona)
-    const shopCtx = await loadShopContext(shopId);
+    // 7) 快捷流程的人设由本地规则随机生成，避免在脚本前再串行等待一次 AI。
+    const shopCtx = await shopContextPromise;
     const allTags = Array.from(new Set(pickedAssets.flatMap((a: any) =>
       Array.isArray(a.tags) ? a.tags.map((t: any) => String(t)) : []
     )));
     const allCats = Array.from(new Set(pickedAssets.map((a: any) =>
       String(a.category || '')).filter(Boolean)));
-    const persona: InfluencerPersona = await generatePersona({
+    const persona: InfluencerPersona = generateFastPersona({
       assetTags: allTags,
       assetCategories: allCats,
-      shopName: shopCtx?.name || null,
-      shopCategory: (shopCtx as any)?.category || null,
-      holidayName: holiday?.name || null,
     });
 
     // 8) 拼装 brief:门头锁开场 + 节日借势 + 博主人设

@@ -33,3 +33,21 @@ test('惊喜一下只允许一次 DeepSeek 请求并使用快速模型', () => {
   assert.match(source, /deepseek-v4-flash/);
   assert.match(source, /buildFastSurpriseFallback/);
 });
+
+test('惊喜一下预览不再等待 AI 生成人设，并限制模型等待时间', () => {
+  const source = readFileSync(
+    new URL('../supabase/functions/surprise-marketing-video/index.ts', import.meta.url),
+    'utf8',
+  );
+  const performanceSource = readFileSync(
+    new URL('../supabase/functions/_shared/surprise-script-performance.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /generateFastPersona\(/);
+  assert.doesNotMatch(source, /await generatePersona\(/);
+
+  const timeout = performanceSource.match(/SURPRISE_MODEL_TIMEOUT_MS\s*=\s*([\d_]+)/);
+  assert.ok(timeout, '应声明惊喜脚本模型超时');
+  assert.ok(Number(timeout[1].replaceAll('_', '')) <= 2_500, '模型等待不能超过 2.5 秒');
+});
