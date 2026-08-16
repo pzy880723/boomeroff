@@ -5,6 +5,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadMarketingPresets } from "../_shared/brand-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
+import { composeLockedPublishCopy } from "../_shared/publish-copy-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,16 +59,22 @@ Deno.serve(async (req) => {
     // 2) 兜底从 video_generation_jobs.script_json (Director / 惊喜一下 链路);
     // 3) 再兜底用 asset.meta.publish_copy/topic/summary 拼一个最小脚本。
     const meta: any = (asset as any).meta || {};
+    const shopId: string | null = asset.shop_id || (typeof body.shop_id === 'string' ? body.shop_id : null);
+    let shop: any = null;
+    if (shopId) {
+      const { data } = await admin.from('shops').select('name, address, business_hours').eq('id', shopId).maybeSingle();
+      shop = data;
+    }
     // 生成结果是成片的一部分:已存在就直接返回,不因重复打开详情而重新采样。
     const savedCopy = meta.video_copy || meta.publish_copy;
     if (savedCopy && typeof savedCopy === 'object') {
-      const copy = {
+      const copy = composeLockedPublishCopy({
         title: savedCopy.title || savedCopy.cover_title || '',
         body: savedCopy.body || savedCopy.caption || savedCopy.douyin_caption || '',
         hashtags: Array.isArray(savedCopy.hashtags) ? savedCopy.hashtags : [],
         first_comment: savedCopy.first_comment || '',
-      };
-      if (!meta.video_copy) {
+      }, shop);
+      if (!meta.video_copy || JSON.stringify(meta.video_copy) !== JSON.stringify(copy)) {
         await admin.from('marketing_assets').update({ meta: { ...meta, video_copy: copy } }).eq('id', assetId);
       }
       return json({ success: true, copy, cached: true });
@@ -95,19 +102,10 @@ Deno.serve(async (req) => {
       };
     }
 
-    const shopId: string | null = asset.shop_id || (typeof body.shop_id === 'string' ? body.shop_id : null);
     const presets = await loadMarketingPresets();
 
-    // 加载店铺基础信息:文案侧允许出现真实分店名/地址,种草感更真实。
-    let shopName = '';
-    let shopAddress = '';
-    let shopCity = '';
-    if (shopId) {
-      const { data: shop } = await admin.from('shops').select('name, address, city').eq('id', shopId).maybeSingle();
-      shopName = ((shop as any)?.name || '').toString().trim();
-      shopAddress = ((shop as any)?.address || '').toString().trim();
-      shopCity = ((shop as any)?.city || '').toString().trim();
-    }
+    const shopName = (shop?.name || '').toString().trim();
+    const shopAddress = (shop?.address || '').toString().trim();
 
     // 从地址里挑一个"商场关键词"(如"中信泰富"),让 AI 有明确 hashtag 素材。
     const mallHint = (() => {
@@ -117,10 +115,9 @@ Deno.serve(async (req) => {
     })();
 
     const shopBlock = shopName || shopAddress
-      ? `【店铺信息 —— 只用于文案,不进画面】
+      ? `【门店事实 —— 仅供理解内容,禁止在 AI 输出中复述】
 - 分店名:${shopName || '(未命名)'}
-${shopCity ? `- 城市:${shopCity}\n` : ''}${shopAddress ? `- 地址:${shopAddress}\n` : ''}${mallHint ? `- 所在商场关键词:${mallHint}(可以放进正文与 hashtag)\n` : ''}- 营业时间:每天 10:00–22:00(标准营业时间,文末自然带一句即可,不要单独列时刻表)
-这些字段**允许**写进正文和 hashtag —— 视频画面里不会出现商标,不会触发版权,请大胆用真实商场名让客户找得到。`
+${mallHint ? `- 所在商场关键词:${mallHint}(可以作为话题词)\n` : ''}地址与营业时间由服务端从数据库锁定追加。AI 不得输出地址、坐标、营业时间或门店详情块。`
       : `【店铺信息】未绑定门店。文案不要暗示具体位置,不要编造分店名/商场名/城市。`;
 
     const topic = meta.topic || script?.topic || script?.title || '';
@@ -145,8 +142,8 @@ ${kbBlock}
 
 【身份与口吻】
 - 你是探店博主视角。提到自己/门店时,统一用品牌名「BOOMER·OFF」(简称「BOOMER」),不要写成"本店 / 我们门店 / 小店"这类奇怪口播。
-- 如果上面【店铺信息】给了真实分店名/商场名(如"中信泰富 B1"),**鼓励**在正文里自然带一句"就在 XX B1"这种定位,让人一下能对上号;hashtag 里也可以直接放 #中信泰富 #静安中古 #上海中古店 之类。
-- 结尾附近**必须**自然带一句营业时间(比如"每天 10:00–22:00,路过随时来逛"),不要生硬列成"营业时间:10:00–22:00"。
+- 正文可以自然提到真实分店名或商场名,hashtag 也可以放商场/城市相关话题。
+- 不要输出地址、坐标、营业时间;固定门店详情由服务端追加。
 
 【严禁】
 - 地铁线路号、地铁站名、公交线路、路名、门牌号、"步行 X 分钟"这类导航信息 —— 系统里没有准确数据,宁可不写,客户会自己搜。
@@ -158,13 +155,13 @@ ${kbBlock}
 - **标题** ≤22 字,要"标题党"式的钩子:悬念 / 反差 / 数字冲击 / 身份代入 / "谁懂啊家人们" / "刷到别划走"这种小红书网红体,允许 1–2 个 emoji,不要一堆感叹号。
 - **正文** 140–200 字,分 2–3 短段(段落之间空一行),网红种草口吻;
   - 首句 3 秒 hook:反差感 / 私藏感 / 情绪拉扯 / 数字冲击择一;
-  - 中段用视频里真实出现的画面或台词种草(比如"那件羊毛外套的手感"),可以顺势带一句"就在 ${mallHint || '商场'} B1 那家 BOOMER·OFF";
-  - 末段一句自然营业时间 + CTA(评论 / 收藏 / 到店 / 私聊)。
+  - 中段用视频里真实出现的画面或台词种草(比如"那件羊毛外套的手感");
+  - 末段用 CTA 收束(评论 / 收藏 / 到店 / 私聊),不要写地址和营业时间。
 - **emoji** 全文 4–7 个,允许小红书式点缀,别堆成一片。
 - **hashtags** 6–10 个,每个以 \`#\` 开头,首个必须是 \`#BOOMEROFF\`;
-  顺序建议:品类/单品词 → 中古/vintage/二手好物 → ${mallHint ? `商场(如 #${mallHint}) → ` : ''}${shopCity ? `城市(如 #${shopCity}中古) → ` : ''}人群相关(#通勤穿搭 / #复古女孩 等)。
+  顺序建议:品类/单品词 → 中古/vintage/二手好物 → ${mallHint ? `商场(如 #${mallHint}) → ` : ''}人群相关(#通勤穿搭 / #复古女孩 等)。
   不加平台专属标签(如 #小红书推荐 #抖音推荐),不加地铁/交通类标签。
-- **首评** 1 句,可以补充营业时间/位置或引导互动,可带 1 个 emoji。
+- **首评** 1 句互动引导,不可补充营业时间或位置,可带 1 个 emoji。
 
 ${scriptFallback ? '注意:视频原始脚本没保留下来,请围绕上面的标题/立意/店铺信息发挥,画面细节不要瞎编。' : '文案必须紧扣下方视频脚本真实说了什么、拍了什么,不要发挥无关内容。'}
 
@@ -211,14 +208,12 @@ ${topic && topic !== title ? `视频立意:${topic}\n` : ''}${styleLabel ? `风�
         .trim();
 
 
-    const copy = {
+    const copy = composeLockedPublishCopy({
       title: sanitize(cand.title || '').slice(0, 40),
       body: sanitize(cand.body || '').slice(0, 800),
       hashtags: Array.isArray(cand.hashtags) ? cand.hashtags.map((x: any) => sanitize(String(x))).filter(Boolean).slice(0, 12) : [],
       first_comment: sanitize(cand.first_comment || '').slice(0, 200),
-    };
-    // 兜底:首个 hashtag 必是 #BOOMEROFF
-    if (!copy.hashtags.some((h) => /BOOMEROFF/i.test(h))) copy.hashtags.unshift('#BOOMEROFF');
+    }, shop);
 
     const nextMeta = { ...meta, video_copy: copy };
     await admin.from('marketing_assets').update({ meta: nextMeta }).eq('id', assetId);

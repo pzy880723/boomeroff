@@ -58,6 +58,7 @@ Deno.serve(async (req) => {
       body: publishCopy.body || publishCopy.caption || publishCopy.douyin_caption || '',
       hashtags: Array.isArray(publishCopy.hashtags) ? publishCopy.hashtags : [],
       first_comment: publishCopy.first_comment || '',
+      shop_details: publishCopy.shop_details || null,
     } : null;
     const finalCover = coverUrl || (job.character_json as any)?.reference_image_url || null;
 

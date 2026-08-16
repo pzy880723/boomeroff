@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
         body: publishCopy.body || publishCopy.caption || publishCopy.douyin_caption || '',
         hashtags: Array.isArray(publishCopy.hashtags) ? publishCopy.hashtags : [],
         first_comment: publishCopy.first_comment || '',
+        shop_details: publishCopy.shop_details || null,
       } : null;
       const title = publishCopy?.cover_title || script?.title || 'BOOMER 惊喜一下 · 探店短片';
       const tags = publishCopy?.hashtags?.length

@@ -2,6 +2,7 @@
 // 用大模型基于 script + user_prompt + 门店信息,一次性生成小红书/抖音文案 + hashtag + 封面标题
 // 写到 video_generation_jobs.meta.publish_copy,供 complete-job 落到 marketing_assets
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { composeLockedPublishCopy } from "../_shared/publish-copy-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,9 +15,11 @@ const CHAT_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-2.5-flash";
 
 interface PublishCopy {
+  title: string;
   caption: string;
   douyin_caption: string;
   hashtags: string[];
+  first_comment: string;
   cover_title: string;
   cover_subtitle: string;
 }
@@ -27,9 +30,11 @@ function safeParse(s: string): PublishCopy | null {
     if (!m) return null;
     const j = JSON.parse(m[0]);
     return {
+      title: String(j.title || j.cover_title || "").slice(0, 40),
       caption: String(j.caption || "").slice(0, 260),
       douyin_caption: String(j.douyin_caption || "").slice(0, 120),
       hashtags: Array.isArray(j.hashtags) ? j.hashtags.slice(0, 10).map((x: any) => String(x)) : [],
+      first_comment: String(j.first_comment || "").slice(0, 200),
       cover_title: String(j.cover_title || "").slice(0, 22),
       cover_subtitle: String(j.cover_subtitle || "").slice(0, 24),
     };
@@ -56,7 +61,7 @@ Deno.serve(async (req) => {
 
     let shop: any = null;
     if (job.shop_id) {
-      const { data: s } = await admin.from("shops").select("name, city, tags").eq("id", job.shop_id).maybeSingle();
+      const { data: s } = await admin.from("shops").select("name, address, business_hours").eq("id", job.shop_id).maybeSingle();
       shop = s;
     }
 
@@ -71,24 +76,25 @@ Deno.serve(async (req) => {
     const system = "你是 BOOMER·OFF 中古门店的网红感社媒编辑,给一条 15 秒探店短视频写发布文案。只返回 JSON,不要任何解释。";
     const user = `视频主题: ${userPrompt}
 风格: ${styleLabel}
-门店: ${shop?.name || "BOOMER 中古"}${shop?.city ? " · " + shop.city : ""}
-门店标签: ${(shop?.tags || []).slice(0, 5).join(",") || "复古/中古/日式生活方式"}
+门店: ${shop?.name || "BOOMER 中古"}
 角色: ${persona.label || "店员"} · ${persona.vibe || ""}
 分镜:
 ${scenesText}
 
 写法要求:
 - 文案可以自然出现真实分店/商场名,例如中信泰富;这是发布文案,不是视频画面提示词。
-- 结尾必须自然写清营业时间:每天 10:00–22:00。
+- 不要输出地址、营业时间或门店信息块;服务端会从门店数据库追加,禁止编造。
 - 标题更标题党,有反差/惊喜/数字感,但不要虚假承诺。
 - 正文要更活泼、更种草、更网红感,2-3 小段,可以用 4-7 个 emoji。
 - 不写地铁线路、到站、步行路线、驾车路线。
 
 请输出以下 JSON:
 {
-  "caption": "小红书正文 140-200 字,开头 3 秒钩子感,中段按视频内容种草,结尾带每天 10:00–22:00",
-  "douyin_caption": "抖音风格 50-90 字,更抓人,像探店博主口吻,带营业时间",
+  "title": "发布标题 12-22 字,有钩子且与视频一致",
+  "caption": "小红书正文 140-200 字,开头 3 秒钩子感,中段按视频内容种草,不写地址和营业时间",
+  "douyin_caption": "抖音风格 50-90 字,更抓人,像探店博主口吻,不写地址和营业时间",
   "hashtags": ["#BOOMEROFF", "#中古店", "..."] // 6-10 个,首个必须是 #BOOMEROFF,可带城市/商场/人群词
+  "first_comment": "一句互动引导,不写地址和营业时间",
   "cover_title": "封面主标题 8-18 字,标题党但真实",
   "cover_subtitle": "封面副标题 8-18 字"
 }`;
@@ -112,15 +118,37 @@ ${scenesText}
     const copy = safeParse(content);
     if (!copy) return json({ ok: false, error: "模型返回无法解析", raw: content.slice(0, 300) }, 502);
 
-    // 保底: 首个 hashtag 强制 #BOOMEROFF
-    if (!copy.hashtags.some((h) => /BOOMER/i.test(h))) copy.hashtags.unshift("#BOOMEROFF");
+    const xhsCopy = composeLockedPublishCopy({
+      title: copy.title,
+      body: copy.caption,
+      hashtags: copy.hashtags,
+      first_comment: copy.first_comment,
+    }, shop);
+    const douyinCopy = composeLockedPublishCopy({
+      title: copy.title,
+      body: copy.douyin_caption,
+      hashtags: copy.hashtags,
+      first_comment: copy.first_comment,
+    }, shop);
+    const publishCopy = {
+      ...copy,
+      title: xhsCopy.title,
+      body: xhsCopy.body,
+      caption: xhsCopy.body,
+      douyin_caption: douyinCopy.body,
+      hashtags: xhsCopy.hashtags,
+      first_comment: xhsCopy.first_comment,
+      shop_details: xhsCopy.shop_details,
+      model: MODEL,
+      generated_at: new Date().toISOString(),
+    };
 
     const jobMeta = (job.meta as any) || {};
     await admin.from("video_generation_jobs").update({
-      meta: { ...jobMeta, publish_copy: { ...copy, model: MODEL, generated_at: new Date().toISOString() } },
+      meta: { ...jobMeta, publish_copy: publishCopy },
     }).eq("id", jobId);
 
-    return json({ ok: true, publish_copy: copy });
+    return json({ ok: true, publish_copy: publishCopy });
   } catch (e) {
     console.error("[director-generate-publish-copy] fatal", e);
     return json({ ok: false, error: (e as Error).message || String(e) }, 500);
