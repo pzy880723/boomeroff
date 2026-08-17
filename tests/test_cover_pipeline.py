@@ -19,6 +19,7 @@ from worker.cover_pipeline import (
     SeedreamClient,
     SeedreamProxyClient,
     build_cover_prompt,
+    build_faststart_command,
     build_cover_clients,
     choose_cover_candidate,
     choose_reference_candidates,
@@ -88,6 +89,13 @@ class _RecordingSeedream:
 
 
 class CoverPipelineTests(unittest.TestCase):
+    def test_faststart_video_keeps_original_streams_without_reencoding(self):
+        command = build_faststart_command("input.mp4", "output.mp4")
+
+        self.assertEqual(command[:4], ["ffmpeg", "-y", "-i", "input.mp4"])
+        self.assertIn("copy", command)
+        self.assertEqual(command[-3:], ["-movflags", "+faststart", "output.mp4"])
+
     def test_cover_style_library_records_all_approved_visual_directions(self):
         self.assertEqual(
             [preset.key for preset in COVER_STYLE_PRESETS],

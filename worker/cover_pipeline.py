@@ -6,6 +6,7 @@ import io
 import json
 import os
 import random
+import subprocess
 import tempfile
 import time
 from dataclasses import dataclass
@@ -20,6 +21,38 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 class CoverPipelineError(RuntimeError):
     pass
+
+
+def build_faststart_command(input_path: str, output_path: str) -> list[str]:
+    return [
+        "ffmpeg",
+        "-y",
+        "-i",
+        input_path,
+        "-map",
+        "0",
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        output_path,
+    ]
+
+
+def optimize_video_for_streaming(video: Path, output: Path) -> Path:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    command = build_faststart_command(str(video), str(output))
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    if completed.returncode != 0 or not output.exists() or output.stat().st_size < 1024:
+        detail = (completed.stderr or completed.stdout or "unknown ffmpeg error")[-1200:]
+        raise CoverPipelineError(f"视频 Fast Start 优化失败：{detail}")
+    return output
 
 
 @dataclass(slots=True)
@@ -889,6 +922,16 @@ def generate_cover(
         temp_dir = Path(tmp)
         _progress(progress_cb, 5, "download", "正在下载 Seedance 成片")
         video = _download(video_url, temp_dir / "video.mp4")
+        _progress(progress_cb, 15, "optimize_video", "正在优化手机端视频加载")
+        optimized_filename = f"{_safe_name(job_id)}-faststart.mp4"
+        optimized_video = optimize_video_for_streaming(
+            video,
+            temp_dir / optimized_filename,
+        )
+        optimized_dir = public_dir / "optimized-videos"
+        optimized_dir.mkdir(parents=True, exist_ok=True)
+        optimized_public_path = optimized_dir / optimized_filename
+        optimized_public_path.write_bytes(optimized_video.read_bytes())
         _progress(progress_cb, 20, "extract_character", "正在从视频提取主角参考帧")
         references = select_reference_frames(video, temp_dir / "references")
         _progress(progress_cb, 45, "generate", "正在生成全新封面场景")
@@ -953,6 +996,9 @@ def generate_cover(
         _progress(progress_cb, 100, "done", "封面生成完成")
         return {
             "cover_url": f"{public_base_url}/{filename}",
+            "optimized_video_url": (
+                f"{public_base_url}/optimized-videos/{optimized_filename}"
+            ),
             "reference_frame_count": len(references),
             "candidate_count": len(candidates),
             "cover_source": selected_source,

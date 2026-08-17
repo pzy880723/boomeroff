@@ -3,6 +3,7 @@
 // 失败 { job_id, error } → 直接写 failed,绝不用视频帧截图降级。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { mergeCoverGeneration, readCoverGeneration, resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
+import { mirrorTosVideoToStorage } from "../_shared/mirror-tos-video.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,13 +24,14 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const jobId: string = body.job_id;
     const coverUrl: string | undefined = body.cover_url;
+    const optimizedVideoUrl: string | undefined = body.optimized_video_url;
     const errorMessage: string | undefined = body.error;
     if (!jobId) return json({ ok: false, error: "缺少 job_id" });
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const { data: job } = await admin
       .from("marketing_video_jobs")
-      .select("id, user_id, shop_id, fallback_notes")
+      .select("id, user_id, shop_id, fallback_notes, video_url, segment_url")
       .eq("id", jobId)
       .maybeSingle();
     if (!job) return json({ ok: false, error: "任务不存在" }, 404);
@@ -54,7 +56,7 @@ Deno.serve(async (req) => {
     }
 
     // 幂等:已成功且 URL 相同直接返回
-    if (cg.status === "succeeded" && cg.cover_url === coverUrl) {
+    if (cg.status === "succeeded" && cg.cover_url === coverUrl && !optimizedVideoUrl) {
       return json({ ok: true, idempotent: true, cover_url: coverUrl });
     }
 
@@ -79,18 +81,20 @@ Deno.serve(async (req) => {
       }),
     }).eq("id", jobId);
 
-    // 同步到素材库:只合并封面相关字段,不动视频信息
+    // 同步到素材库，并把 Worker 处理过的 Fast Start MP4 覆盖回长期地址。
     let assetId: string | null = null;
     let assetError: string | null = null;
+    let stableVideoUrl: string | null = null;
+    let streamOptimized = false;
     try {
       const { data: asset } = await admin
         .from("marketing_assets")
-        .select("id, meta")
+        .select("id, meta, output_url")
         .eq("kind", "video")
         .filter("meta->>job_id", "eq", jobId)
         .maybeSingle();
       if (asset) {
-        const meta = {
+        let meta = {
           ...((asset.meta as any) || {}),
           cover_url: coverUrl,
           poster_url: coverUrl,
@@ -104,16 +108,61 @@ Deno.serve(async (req) => {
           cover_style_key: coverStyleKey,
           cover_style_label: coverStyleLabel,
         };
-        const { error: updErr } = await admin.from("marketing_assets").update({ meta }).eq("id", asset.id);
+        if (optimizedVideoUrl) {
+          const mirrored = await mirrorTosVideoToStorage(
+            admin,
+            job.user_id,
+            asset.id,
+            optimizedVideoUrl,
+          );
+          if (mirrored.ok) {
+            stableVideoUrl = mirrored.url;
+            streamOptimized = true;
+            meta = {
+              ...meta,
+              storage_path: mirrored.path,
+              stream_faststart: true,
+              stream_optimized_at: nowIso,
+              stream_optimize_error: null,
+            };
+          } else {
+            meta = {
+              ...meta,
+              stream_faststart: false,
+              stream_optimize_error: mirrored.error,
+            };
+          }
+        }
+        const assetUpdate: Record<string, unknown> = { meta };
+        if (stableVideoUrl) assetUpdate.output_url = stableVideoUrl;
+        const { error: updErr } = await admin
+          .from("marketing_assets")
+          .update(assetUpdate)
+          .eq("id", asset.id);
         if (updErr) throw updErr;
         assetId = asset.id;
+
+        if (stableVideoUrl) {
+          const { error: jobVideoErr } = await admin
+            .from("marketing_video_jobs")
+            .update({ video_url: stableVideoUrl, segment_url: stableVideoUrl })
+            .eq("id", jobId);
+          if (jobVideoErr) throw jobVideoErr;
+        }
       }
     } catch (e) {
       assetError = (e as Error).message || String(e);
       console.error("[cover-callback] asset update failed", assetError);
     }
 
-    return json({ ok: true, cover_url: coverUrl, asset_id: assetId, asset_error: assetError });
+    return json({
+      ok: true,
+      cover_url: coverUrl,
+      asset_id: assetId,
+      asset_error: assetError,
+      video_url: stableVideoUrl,
+      stream_faststart: streamOptimized,
+    });
   } catch (e) {
     console.error("[cover-callback] fatal", e);
     return json({ ok: false, error: (e as Error).message || String(e) }, 500);
