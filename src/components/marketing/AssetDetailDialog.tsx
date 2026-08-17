@@ -304,7 +304,12 @@ import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { invokeFn } from '@/lib/invokeFn';
 import { completeMarketingVideoFromSegments } from '@/lib/completeMarketingVideo';
 import { useAuth } from '@/hooks/useAuth';
-import { resolveVideoAssetCopy, type VideoAssetCopy } from '@/lib/videoAssetCopy';
+import {
+  resolveSavedVideoAssetCopy,
+  resolveVideoAssetCopy,
+  shouldGenerateVideoAssetCopy,
+  type VideoAssetCopy,
+} from '@/lib/videoAssetCopy';
 import { resolveVideoDeliverables } from '@/lib/videoDeliverables';
 import { copyTextFromUserAction } from '@/lib/copyText';
 
@@ -340,6 +345,7 @@ export function AssetDetailDialog({
   // 视频详情:折叠的原始脚本
   const [videoScript, setVideoScript] = useState<any>(null);
   const [scriptOpen, setScriptOpen] = useState(false);
+  const videoCopyAutoAttemptRef = useRef<string | null>(null);
 
   
 
@@ -443,21 +449,28 @@ export function AssetDetailDialog({
 
   const restoreFixedVideoCopy = useCallback(async (script: unknown) => {
     if (!asset) return;
-    const existing = resolveVideoAssetCopy(asset.meta);
-    if (existing) {
-      setVideoCopy(existing);
+    const saved = resolveSavedVideoAssetCopy(asset.meta);
+    if (saved) {
+      setVideoCopy(saved);
       return;
     }
-    const recovered = resolveVideoAssetCopy(asset.meta, script);
-    if (!recovered) return;
-    setVideoCopy(recovered);
-    const nextMeta = { ...(asset.meta || {}), video_copy: recovered };
-    onUpdated?.({ ...asset, meta: nextMeta });
-    const { error } = await supabase
-      .from('marketing_assets' as any)
-      .update({ meta: nextMeta })
-      .eq('id', asset.id);
-    if (error) console.warn('[video-ad-copy] restore fixed copy failed', error);
+    const fallback = resolveVideoAssetCopy(asset.meta, script);
+    if (fallback) setVideoCopy(fallback);
+    if (!shouldGenerateVideoAssetCopy(asset.meta) || videoCopyAutoAttemptRef.current === asset.id) return;
+    videoCopyAutoAttemptRef.current = asset.id;
+    try {
+      const { data, error } = await invokeFnTop('generate-marketing-video-copy', {
+        body: { asset_id: asset.id, shop_id: asset.shop_id || null, force: false },
+      });
+      if (error) throw error;
+      const generated = (data as any)?.copy as CopyCand | undefined;
+      if (!generated || (!generated.title && !generated.body)) return;
+      setVideoCopy(generated);
+      const nextMeta = { ...(asset.meta || {}), video_copy: generated };
+      onUpdated?.({ ...asset, meta: nextMeta });
+    } catch (error) {
+      console.warn('[video-ad-copy] automatic upgrade failed', error);
+    }
   }, [asset, onUpdated]);
 
   // 视频详情:异步拉取原始脚本供折叠展示。
@@ -511,14 +524,14 @@ export function AssetDetailDialog({
     return [c.title, c.body, (c.hashtags || []).join(' ')].filter(Boolean).join('\n\n').trim();
   };
 
-  const generateVideoCopy = async (opts?: { silent?: boolean }) => {
+  const generateVideoCopy = async (opts?: { silent?: boolean; force?: boolean }) => {
     if (!asset || asset.kind !== 'video') return;
-    const existing = resolveVideoAssetCopy(asset.meta);
-    if (existing) { setVideoCopy(existing); return; }
+    const existing = resolveSavedVideoAssetCopy(asset.meta);
+    if (existing && !opts?.force) { setVideoCopy(existing); return; }
     setGenCopyLoading(true);
     try {
       const { data, error } = await invokeFnTop('generate-marketing-video-copy', {
-        body: { asset_id: asset.id, shop_id: asset.shop_id || null },
+        body: { asset_id: asset.id, shop_id: asset.shop_id || null, force: opts?.force === true },
       });
       if (error) throw error;
       const d = data as any;
@@ -924,6 +937,15 @@ export function AssetDetailDialog({
                         🎬 视频广告文案
                       </span>
                       <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => generateVideoCopy({ force: true })}
+                          disabled={genCopyLoading}
+                          title="重新生成广告文案"
+                        >
+                          {genCopyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => { copy(videoCopyText(videoCopy)); }} title="复制全文">
                           <Copy className="w-3.5 h-3.5" />
                         </Button>

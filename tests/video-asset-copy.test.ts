@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveVideoAssetCopy } from '../src/lib/videoAssetCopy.ts';
+import {
+  resolveSavedVideoAssetCopy,
+  resolveVideoAssetCopy,
+  shouldGenerateVideoAssetCopy,
+} from '../src/lib/videoAssetCopy.ts';
 
 test('已保存 video_copy 优先，重复打开不会换文案', () => {
   const copy = resolveVideoAssetCopy({
@@ -18,6 +22,34 @@ test('Director publish_copy 只做一次确定性映射', () => {
       hashtags: ['#BOOMEROFF'],
     },
   }), { title: '封面标题', body: '小红书正文', hashtags: ['#BOOMEROFF'], first_comment: undefined });
+});
+
+test('旧 publish_copy 只能临时展示，不能冒充已生成的新版广告文案', () => {
+  const meta = {
+    publish_copy: {
+      title: '旧短标题',
+      body: '旧短正文',
+      topics: ['#旧话题'],
+    },
+  };
+
+  assert.equal(resolveSavedVideoAssetCopy(meta), null);
+  assert.equal(shouldGenerateVideoAssetCopy(meta), true);
+  assert.equal(resolveVideoAssetCopy(meta)?.title, '旧短标题');
+});
+
+test('已保存 video_copy 正常命中缓存，显式重写仍会生成', () => {
+  const meta = {
+    video_copy: {
+      title: '新版标题',
+      body: '新版正文',
+      hashtags: ['#BOOMEROFF'],
+    },
+  };
+
+  assert.equal(resolveSavedVideoAssetCopy(meta)?.title, '新版标题');
+  assert.equal(shouldGenerateVideoAssetCopy(meta), false);
+  assert.equal(shouldGenerateVideoAssetCopy(meta, true), true);
 });
 
 test('旧素材 meta 没有文案时从当次生成脚本恢复固定文案', () => {

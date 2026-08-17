@@ -47,6 +47,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const assetId: string = (body.asset_id || '').toString();
+    const force = body.force === true;
     if (!assetId) return json({ error: "缺少 asset_id" }, 400);
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
@@ -66,15 +67,15 @@ Deno.serve(async (req) => {
       shop = data;
     }
     // 生成结果是成片的一部分:已存在就直接返回,不因重复打开详情而重新采样。
-    const savedCopy = meta.video_copy || meta.publish_copy;
-    if (savedCopy && typeof savedCopy === 'object') {
+    const savedCopy = meta.video_copy;
+    if (!force && savedCopy && typeof savedCopy === 'object') {
       const copy = composeLockedPublishCopy({
         title: savedCopy.title || savedCopy.cover_title || '',
         body: savedCopy.body || savedCopy.caption || savedCopy.douyin_caption || '',
         hashtags: Array.isArray(savedCopy.hashtags) ? savedCopy.hashtags : [],
         first_comment: savedCopy.first_comment || '',
       }, shop);
-      if (!meta.video_copy || JSON.stringify(meta.video_copy) !== JSON.stringify(copy)) {
+      if (JSON.stringify(meta.video_copy) !== JSON.stringify(copy)) {
         await admin.from('marketing_assets').update({ meta: { ...meta, video_copy: copy } }).eq('id', assetId);
       }
       return json({ success: true, copy, cached: true });

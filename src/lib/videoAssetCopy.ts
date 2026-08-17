@@ -5,6 +5,16 @@ export interface VideoAssetCopy {
   first_comment?: string;
 }
 
+/** Only the rich ad copy saved after generate-marketing-video-copy counts as final. */
+export function resolveSavedVideoAssetCopy(meta: unknown): VideoAssetCopy | null {
+  if (!isRecord(meta)) return null;
+  return normalize(meta.video_copy);
+}
+
+export function shouldGenerateVideoAssetCopy(meta: unknown, force = false): boolean {
+  return force || !resolveSavedVideoAssetCopy(meta);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -38,7 +48,7 @@ function normalizePublishCopy(publish: unknown): VideoAssetCopy | null {
 /** 成片文案只认一份固定结果；兼容 Director 旧字段但不重新调用模型。 */
 export function resolveVideoAssetCopy(meta: unknown, script?: unknown): VideoAssetCopy | null {
   if (isRecord(meta)) {
-    const direct = normalize(meta.video_copy);
+    const direct = resolveSavedVideoAssetCopy(meta);
     if (direct) return direct;
     const publish = normalizePublishCopy(meta.publish_copy);
     if (publish) return publish;
