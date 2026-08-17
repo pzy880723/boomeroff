@@ -1,173 +1,158 @@
-# BOOMER GO 启动性能 只读审计报告
+# 官方 API 发布改造 · 数据库与边界方案评审
 
-未修改任何代码、数据库、Edge Function，未执行任何写 SQL。
+只做评审，本文件不含任何已执行的写操作。
 
-## 0. 重要前提：生产库当前查询通道不可用
+## 现状（已核对）
 
-本轮所有实时数据库查询均失败：
+- `social_accounts`：`worker_account_key text NOT NULL`、`worker_account_id int`、`cookie_status text NOT NULL default 'active'`、`platform_account_id`、`capabilities jsonb`、`content_kinds text[]`、`meta jsonb`。现有数据仅 3 行（xhs / douyin / wechat_video，均 cookie_status=valid）。
+- `social_publish_targets`：`worker_task_id`、`status`、`progress`、`platform_post_id/url`、`claim_token`、`claim_expires_at`、`retry_count`、`last_step`。现有 6 行（success/cancelled）。
+- `social_platform_specs`：6 个平台（xhs、douyin、kuaishou、wechat_video、bilibili、dianping），全部 `enabled=true`，无“是否有官方发布权限”的字段。
+- RLS：三张表都是 `TO authenticated`，条件为 `has_role(admin)` / `is_erp_user()` / `staff_profiles.shop_id = 本行 shop_id`。**门店隔离条件是存在的**，不是裸 `TO authenticated`；真正的风险在于 `social_accounts` 的 SELECT 会把整行（未来含 token 列）暴露给同店任何店员。
+- 现有 Cookie/扫码链路：`dispatch-account-login`（SSE 扫码，写 `worker_account_key`）、`dispatch-job-create`（用 `cookie_status/worker_account_key` 判活）。
 
-- `read_query`（含 `select 1`）返回 `544 Connection terminated due to connection timeout`
-- `slow_queries`（pg_stat_statements）同样 544 失败
-- `db_health`（metrics）返回 `521`
+结论：迁移的核心不是重建表，而是**加列 + 拆表 + 收敛可见列**，可以做到最小且可回滚。
 
-因此**行数、真实索引清单、慢查询排行本轮无法取到真实值**，不做任何编造。下面的结论基于迁移文件（DDL 权威来源）与前端查询代码的静态审计；行数与慢查询待数据库恢复后补测（第 5 节给出待执行的只读 SQL）。
+## 1) social_accounts：从 cookie/worker 迁到官方授权
 
-## 1. 首页启动实际发起的查询（静态确认）
-
-登录后进入首页，串并行发起约 **17–20 次** PostgREST 请求，分布在 5 个来源：
-
-| 来源 | 查询 |
-|---|---|
-| `useAuth` | `user_roles` by user_id |
-| `usePermissions` | `user_roles` by user_id（**重复第二次**）→ 串行 `app_role_permissions` by role_code |
-| `Home.tsx` | 并行 5 条：`profiles`、`staff_profiles`、`shift_schedules`(today/tomorrow)、`shop_shifts`(全表)、`user_check_ins`；随后**串行** `activities` → `staff_profiles`(同店过滤) →（有 shop 时）`operation_okrs`；另一条链 `daily_encouragement` → 未命中则调用 edge function |
-| `useTasks` | 并行 5 条：`exp_pending`、`products` count、`knowledge_test_results` count、`community_posts` count、`task_claims` |
-| `useNotifications` | `rpc has_role` → `notifications`(limit 60) + `notification_reads` → `profiles` in(authorIds) |
-
-关键瓶颈是**串行深度**而非单条查询：`useAuth → usePermissions(2 跳) → 组件渲染` 与 `Home 的 activities → staff_profiles → operation_okrs`、`useNotifications 的 has_role → notifications → profiles` 都是 3 跳串行往返，移动端每跳含 TLS/冷启动开销。
-
-## 2. 索引现状（迁移文件中确实存在的）
-
-- `shift_schedules`: `(work_date)`、`(user_id, work_date)`、`(shop_id, work_date)` — 覆盖首页查询，充分
-- `user_check_ins`: `(user_id, check_in_date DESC)` — 充分
-- `knowledge_test_results`: `(user_id)`、`(user_id, passed_at)` — 充分
-- `exp_pending`: `(user_id) WHERE claimed_at IS NULL` — 充分
-- `notifications`: `(active, created_at DESC)`；`notification_reads`: `(user_id)`
-- `community_posts`: `(created_at DESC)`、`(user_id)`、`(category)`
-- `products`: `(image_hash)`、`(name, category)`
-- `staff_profiles`: `(shop_id)`
-- `user_roles`: 仅 `(suspended) WHERE suspended`（部分索引）
-
-## 3. 缺失或无效索引（按当前前端查询条件）
-
-| 表 | 前端条件 | 现状 | 结论 |
-|---|---|---|---|
-| `user_roles` | `.eq('user_id', …)`（每次启动至少 2 次 + has_role 内部再查） | 只有 suspended 部分索引；user_id 是否有 unique 约束未能在线确认 | **需确认**，无则必须补 |
-| `app_role_permissions` | `.eq('role_code', …)` | 迁移中未见任何索引 | **缺失** |
-| `profiles` | `.eq('user_id')`、`.in('user_id', […])` | 迁移中未见显式索引（可能靠 PK/unique） | **需确认** |
-| `staff_profiles` | `.eq('user_id')` | 只有 `(shop_id)` | **需确认 user_id 唯一约束**，无则补 |
-| `products` | `created_by + created_at` 范围 count | 只有 image_hash / name+category | **缺失**，每日任务 count 会走 seq scan |
-| `community_posts` | `user_id + created_at` 范围 count；`is_public + created_at` | 只有单列 | **建议复合索引** |
-| `task_claims` | `user_id + claim_date` | 未见索引 | **缺失**（若无同列唯一约束） |
-| `notification_reads` | `user_id`（已有） | 足够 |  |
-| `shop_shifts` | 全表 select，无过滤 | 小表 | 无需索引，但**首页取了全部字段全表**，可缓存 |
-| `activities` | `status='active'` + `order starts_at desc` | 未见索引 | **缺失** |
-| `operation_okrs` | `shop_id` + `period_start<=today<=period_end` | 未见索引 | **缺失** |
-| `daily_encouragement` | `.eq('date')` | 未见索引 | **需确认唯一约束** |
-| `notifications` | `order created_at desc limit 60`（**未过滤 active**） | 有 `(active, created_at)` | 现查询用不上该索引前缀 → **无效索引**，要么查询加 `active=true`，要么补 `(created_at DESC)` |
-| `knowledge_test_results` | `user_id + passed_at not null + 范围` | 已有 | 可选部分索引优化 |
-
-## 4. bootstrap RPC 评估：适合，且是本次收益最大的一项
-
-结论：**适合新增** `public.app_bootstrap()`，`security invoker` + `stable`，返回单个 jsonb。
-
-理由与安全边界：
-
-- 用 **SECURITY INVOKER**（不是 definer），函数内所有查询依旧受调用者 RLS 约束，权限零放宽；只把 3 跳串行网络往返压缩成 1 跳。
-- 只读、无副作用（不写 `user_check_ins`、不写 `exp_pending`），`stable` 且 `set search_path = public`。
-- 一律以 `auth.uid()` 为主体，不接受 user_id 参数，杜绝越权探测。
-- 仅授权 `authenticated`，不授权 `anon`。
-- 返回内容限定为首页首屏必需：role_code + 权限数组、profile/staff/shop、今日与明日排班、今日是否打卡、未领经验条数、未读通知数。列表类（通知全文、活动、OKR、社区）仍走原查询懒加载，避免函数变重。
-
-预期效果：首屏阻塞往返从 ~5 跳降到 1–2 跳；配合索引补齐，冷启动可见收益主要来自往返数下降。
-
-## 5. 建议 SQL 草案（仅草案，本轮不执行）
-
-### 5.1 先跑的只读核查（数据库恢复后）
+新增列（全部可空或带默认，不动旧列，保证回滚）：
 
 ```sql
--- 行数
-select relname, n_live_tup from pg_stat_user_tables
-where schemaname='public' and relname in (
- 'user_roles','app_role_permissions','profiles','staff_profiles','notifications',
- 'notification_reads','exp_pending','products','knowledge_test_results','community_posts',
- 'task_claims','shift_schedules','shop_shifts','user_check_ins','activities',
- 'operation_okrs','daily_encouragement') order by n_live_tup desc;
+alter table public.social_accounts
+  add column if not exists auth_mode text not null default 'legacy_cookie',      -- official_oauth | unavailable | legacy_cookie
+  add column if not exists provider text,                                        -- 官方开放平台标识，如 douyin_open
+  add column if not exists provider_account_id text,                             -- 平台稳定账号 ID
+  add column if not exists open_id text,
+  add column if not exists union_id text,
+  add column if not exists scopes text[] not null default '{}',
+  add column if not exists token_status text not null default 'unknown',         -- active | expiring | expired | revoked | unknown
+  add column if not exists access_token_expires_at timestamptz,
+  add column if not exists refresh_token_expires_at timestamptz,
+  add column if not exists reauth_required boolean not null default false,
+  add column if not exists authorized_at timestamptz,
+  add column if not exists last_token_check_at timestamptz;
 
--- 现有索引与约束
-select tablename, indexname, indexdef from pg_indexes
-where schemaname='public' and tablename in (/* 同上 */) order by tablename;
-
--- 未使用索引 / 顺序扫描热点
-select relname, seq_scan, seq_tup_read, idx_scan from pg_stat_user_tables
-where schemaname='public' order by seq_tup_read desc limit 20;
+create unique index if not exists social_accounts_provider_uidx
+  on public.social_accounts (platform, provider_account_id)
+  where provider_account_id is not null;
 ```
 
-### 5.2 索引草案（确认不存在后再建）
+旧列处理（分两次发版，避免一次性破坏在跑的代码）：
+
+- 第一次迁移：`alter table public.social_accounts alter column worker_account_key drop not null;`，`cookie_status` 保留但只读，不再写入。
+- 第二次迁移（官方链路验收通过后）：`drop column worker_account_key, worker_account_id, cookie_status;`。
+
+数据回填（只读现状后一次性 UPDATE，非 schema 变更）：现有 3 行标记为 `auth_mode='unavailable'`、`token_status='revoked'`、`reauth_required=true`，即刻停用 Cookie 账号，不做任何降级发布。
+
+## 2) 密钥存放与访问边界
+
+**原则：`access_token` / `refresh_token` / `client_secret` 一列都不进入 `public.social_accounts`。**
+
+新建一张 Data API 不可达的凭证表：
 
 ```sql
-create index if not exists idx_user_roles_user on public.user_roles(user_id);
-create index if not exists idx_arp_role_code on public.app_role_permissions(role_code);
-create index if not exists idx_profiles_user on public.profiles(user_id);
-create index if not exists idx_staff_profiles_user on public.staff_profiles(user_id);
-create index if not exists idx_products_creator_created on public.products(created_by, created_at desc);
-create index if not exists idx_cposts_user_created on public.community_posts(user_id, created_at desc);
-create index if not exists idx_cposts_public_created on public.community_posts(is_public, created_at desc);
-create index if not exists idx_task_claims_user_date on public.task_claims(user_id, claim_date);
-create index if not exists idx_activities_status_starts on public.activities(status, starts_at desc);
-create index if not exists idx_okrs_shop_period on public.operation_okrs(shop_id, period_start, period_end);
-create index if not exists idx_daily_enc_date on public.daily_encouragement(date);
-create index if not exists idx_notifications_created on public.notifications(created_at desc);
+create table if not exists public.social_account_secrets (
+  account_id uuid primary key references public.social_accounts(id) on delete cascade,
+  access_token text,
+  refresh_token text,
+  token_type text,
+  raw jsonb not null default '{}',
+  rotated_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+revoke all on public.social_account_secrets from anon, authenticated;
+grant all on public.social_account_secrets to service_role;
+alter table public.social_account_secrets enable row level security;
+-- 不建任何 policy：authenticated / anon 永远读不到
 ```
 
-（若某列已有 PK/unique，则对应索引跳过，不重复建。）
+- `client_id` 放 `social_platform_specs`（可公开），`client_secret` 只放 Edge Function Secrets（Project Settings → Secrets），永不入库、永不返回给浏览器。
+- 允许触碰 secrets 表的只有 service-role Edge Function：`oauth-authorize-url`（只回 302 URL）、`oauth-callback`（换 token、写 secrets、更新 `token_status`）、`oauth-refresh-tick`（定时刷新）、`publish-dispatch`（取 token 调官方 API）、`publish-poll`（查审核状态）。
+- 腾讯云 API Gateway 只做转发/回调入口，不持有 token；回调必须带签名（HMAC + 时间戳）并由 Edge Function 校验。
+- 浏览器只读 `social_accounts` 的非敏感列（见第 4 节视图），任何情况下不 invoke 返回 token 的函数。
 
-### 5.3 bootstrap RPC 草案
+## 3) social_publish_targets：官方请求与审核结果
 
 ```sql
-create or replace function public.app_bootstrap()
-returns jsonb
-language plpgsql
-stable
-security invoker
-set search_path = public
-as $$
-declare
-  uid uuid := auth.uid();
-  today date := (now() at time zone 'Asia/Shanghai')::date;
-  v_role text;
-  result jsonb;
-begin
-  if uid is null then return jsonb_build_object('error','unauthenticated'); end if;
+alter table public.social_publish_targets
+  add column if not exists provider_request_id text,     -- 官方 API 返回的任务/发布 ID
+  add column if not exists idempotency_key text,
+  add column if not exists provider_status text,         -- 平台原始状态字符串
+  add column if not exists review_status text not null default 'unknown', -- pending | approved | rejected | not_applicable
+  add column if not exists review_reason text,
+  add column if not exists review_updated_at timestamptz,
+  add column if not exists provider_error_code text,
+  add column if not exists callback_payload jsonb not null default '{}',
+  add column if not exists callback_received_at timestamptz;
 
-  select coalesce(role_code, case when role='admin' then 'super_admin' else 'staff' end)
-    into v_role from public.user_roles where user_id = uid limit 1;
-
-  select jsonb_build_object(
-    'role_code', v_role,
-    'permissions', coalesce((select jsonb_agg(permission_key)
-       from public.app_role_permissions where role_code = v_role), '[]'::jsonb),
-    'profile', (select to_jsonb(p) from (
-        select display_name, avatar_url from public.profiles where user_id = uid) p),
-    'staff', (select to_jsonb(s) from (
-        select real_name, shop_id, position from public.staff_profiles where user_id = uid) s),
-    'shifts', coalesce((select jsonb_agg(to_jsonb(x)) from (
-        select work_date, shift_code from public.shift_schedules
-        where user_id = uid and work_date between today and today + 1) x), '[]'::jsonb),
-    'shop_shifts', coalesce((select jsonb_agg(to_jsonb(y)) from (
-        select code, name, start_time, end_time, color from public.shop_shifts) y), '[]'::jsonb),
-    'checked_today', exists(select 1 from public.user_check_ins
-        where user_id = uid and check_in_date = today),
-    'pending_exp', (select count(*) from public.exp_pending
-        where user_id = uid and claimed_at is null),
-    'unread_notifications', (select count(*) from public.notifications n
-        where not exists (select 1 from public.notification_reads r
-          where r.notification_id = n.id and r.user_id = uid))
-  ) into result;
-
-  return result;
-end;
-$$;
-
-revoke all on function public.app_bootstrap() from public, anon;
-grant execute on function public.app_bootstrap() to authenticated;
+create unique index if not exists spt_idempotency_uidx
+  on public.social_publish_targets (idempotency_key)
+  where idempotency_key is not null;
 ```
 
-前端配套（不在本轮范围）：`useAuth`/`usePermissions`/`Home` 首屏改为消费一次 `rpc('app_bootstrap')`，其余保持懒加载。
+- `idempotency_key` 由服务端生成 `job_id:account_id:attempt`，重复提交直接命中唯一索引，杜绝重复发帖。
+- `worker_task_id` / `claim_token` / `claim_expires_at` 属于 Worker 抢单模型，第二次迁移随 Cookie 链路一起 drop。
 
-## 6. 建议优先级
+## 4) RLS：门店隔离 + 列级收敛
 
-1. 数据库恢复后跑 5.1 核查，确认索引真实缺口与慢查询（本轮无法取得）
-2. 补 5.2 中确认缺失的索引（低风险、立竿见影）
-3. 落地 5.3 bootstrap RPC 并改造首屏，去掉 `user_roles` 重复查询与 3 跳串行
-4. `notifications` 查询补 `active=true` 过滤，让既有复合索引生效
+现有 policy 已按 `shop_id` 隔离，保留不动；补两件事：
+
+1. 列级收敛：撤掉 authenticated 对 `social_accounts` 的整表 SELECT，改为受限视图。
+
+```sql
+create or replace view public.social_accounts_public
+with (security_invoker = true) as
+select id, shop_id, platform, provider, account_name, avatar_url, account_remark,
+       auth_mode, token_status, scopes, reauth_required,
+       access_token_expires_at, authorized_at, content_kinds, capabilities
+from public.social_accounts;
+
+grant select on public.social_accounts_public to authenticated;
+```
+
+前端一律读视图，写操作走 Edge Function。
+
+2. 防"仅 TO authenticated"越权：新增列的 UPDATE 不允许客户端改。把 `social_accounts` 的 staff UPDATE policy 收成只允许改 `account_remark/content_kinds`（用 BEFORE UPDATE 触发器锁定授权类列，policy 层无法做列级 check），授权状态只能由 service-role 写。
+
+`social_account_secrets` 无 policy、无 grant，任何 JWT 都读不到。
+
+## 5) 无官方发布权限的平台必须显式不可用
+
+```sql
+alter table public.social_platform_specs
+  add column if not exists official_publish_status text not null default 'unavailable',
+    -- available | pending_approval | unavailable
+  add column if not exists official_note text;
+
+update public.social_platform_specs
+   set enabled = false, official_publish_status = 'unavailable'
+ where platform in ('xhs','wechat_video','dianping');
+```
+
+- 服务端硬约束：`publish-dispatch` 在 `official_publish_status <> 'available'` 时直接 400，不存在任何模拟/人工补发分支。
+- 前端在这些平台上只展示"暂未开放官方发布"，禁用选择，不提供扫码入口。
+
+## Edge Function 边界
+
+| 函数 | 角色 | 能否读 token |
+| --- | --- | --- |
+| oauth-authorize-url | anon+JWT 校验 | 否 |
+| oauth-callback | service-role | 是（写入） |
+| oauth-refresh-tick | service-role / cron | 是 |
+| publish-dispatch | service-role | 是 |
+| publish-poll / publish-callback | service-role + 签名校验 | 是 |
+| 现有 dispatch-account-login / dispatch-job-create | 下线 | — |
+
+## 回滚方法
+
+- 迁移一（加列 + secrets 表 + 视图 + specs 状态）：全部 `add column if not exists`，回滚 = `drop column` / `drop table social_account_secrets` / `drop view`，旧 Cookie 列与旧 Edge Function 仍在，链路可原样恢复。
+- 迁移二（drop 旧列）：不可逆，必须在官方链路连续发布验收通过、且对现有 6 行 targets / 3 行 accounts 做过 `create table ..._backup_20260817 as select *` 之后再执行。
+
+## 验收标准
+
+1. `information_schema.columns` 里 `social_accounts` 无任何 token 列；`social_account_secrets` 对 anon/authenticated 无 grant、无 policy。
+2. 用普通店员 JWT 请求 `social_accounts` / `social_account_secrets` 均返回权限错误，只有视图可读且不含敏感字段。
+3. 跨门店 JWT 读不到他店账号与 targets。
+4. 同一 `idempotency_key` 重复调用 `publish-dispatch` 只产生一条平台发布，第二次返回既有 `provider_request_id`。
+5. xhs / wechat_video / dianping 调用发布一律 400 `official_publish_status=unavailable`，代码中不存在 Cookie / Playwright / 扫码 / 人工补发分支（`rg` 全仓无 `worker_account_key`、`login_qrcode` 引用）。
+6. token 到期前由 `oauth-refresh-tick` 自动刷新；刷新失败置 `reauth_required=true`，前端提示重新授权而非降级发布。
