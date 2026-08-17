@@ -10,6 +10,7 @@ const corsHeaders = {
 
 const ALLOWED_HOSTS = new Set<string>([
   "ark-content-generation-cn-beijing.tos-cn-beijing.volces.com",
+  "ai.boomeroff.com",
 ]);
 
 function isHostAllowed(host: string): boolean {

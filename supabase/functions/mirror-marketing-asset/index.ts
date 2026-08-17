@@ -11,6 +11,17 @@ const corsHeaders = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+function isTencentDeliveryUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      url.hostname === "ai.boomeroff.com" &&
+      url.pathname.startsWith("/media/generated-videos/");
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -47,7 +58,9 @@ Deno.serve(async (req) => {
       }
       const url = asset.output_url as string | null;
       if (!url) return json({ error: "素材还没有生成完成" }, 409);
-      if (isSupabaseStorageUrl(url)) return json({ ok: true, url, already: true });
+      if (isSupabaseStorageUrl(url) || isTencentDeliveryUrl(url)) {
+        return json({ ok: true, url, already: true });
+      }
       if (!isVolcesTosUrl(url)) return json({ error: "不支持的素材来源" }, 400);
 
       const result = await mirrorTosVideoToStorage(admin, asset.user_id as string, assetId, url);
