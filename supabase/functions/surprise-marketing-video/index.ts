@@ -15,6 +15,7 @@ import { resolveStorefrontOpeningEn, resolveStorefrontOpeningZh } from "../_shar
 import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
 import { generateFastSurpriseScript } from "../_shared/surprise-script-performance.ts";
+import { pickStorefrontAsset } from "../_shared/storefront-assets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -95,17 +96,6 @@ function summarizeAsset(a: any): string {
   return parts.join(' · ') || '店内实景';
 }
 
-const STOREFRONT_KW = ['门头', '门店', '店面', '门口', '店招', '招牌', '外观', '门头照', 'logo', 'storefront', 'facade'];
-function isStorefrontAsset(a: any): boolean {
-  const cat = String(a.category || '').toLowerCase();
-  if (STOREFRONT_KW.some((k) => cat.includes(k.toLowerCase()))) return true;
-  const tags = Array.isArray(a.tags) ? a.tags.map((t: any) => String(t || '').toLowerCase()) : [];
-  if (tags.some((t) => STOREFRONT_KW.some((k) => t.includes(k.toLowerCase())))) return true;
-  const summary = String((a.meta || {})?.summary || '').toLowerCase();
-  if (STOREFRONT_KW.some((k) => summary.includes(k.toLowerCase()))) return true;
-  return false;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -157,10 +147,32 @@ Deno.serve(async (req) => {
       if (!submittedImageUrls.length) {
         return json({ ok: false, error: '惊喜一下必须选择至少一张店铺实景图' });
       }
+      const existingManifest = Array.isArray(submittedScript.reference_manifest)
+        ? submittedScript.reference_manifest
+        : [];
+      const submittedCandidates = submittedReferences.map(({ asset }: any, index: number) => {
+        const existing = existingManifest.find((item: any) => Number(item?.index) === index) || {};
+        return {
+          id: String(index),
+          index,
+          summary: String(asset?.summary || existing?.summary || '').slice(0, 160),
+          role: asset?.role || existing?.role || 'scene',
+          category: asset?.category || null,
+          tags: asset?.tags || [],
+          meta: { summary: asset?.summary || existing?.summary || '' },
+        };
+      });
+      const submittedStorefront = pickStorefrontAsset(submittedCandidates);
+      if (!submittedStorefront) {
+        return json({
+          ok: false,
+          error: '当前脚本没有绑定可确认的真实门头照。请重新打开「BOOMER 帮我拍」，系统会从当前门店素材库重新选择真实门头。',
+        }, 409);
+      }
       const submittedDescriptions = submittedReferences.map(({ asset }: any, index: number) => ({
         index,
-        summary: String(asset?.summary || (asset?.role === 'storefront' ? '门头和开放式店面' : `店内实景${index + 1}`)).slice(0, 160),
-        role: asset?.role === 'storefront' ? 'storefront' : 'scene',
+        summary: String(submittedCandidates[index]?.summary || asset?.summary || `店内实景${index + 1}`).slice(0, 160),
+        role: index === submittedStorefront.index ? 'storefront' : 'scene',
       }));
       const submittedStyle = (typeof body.style === 'string' && body.style)
         || (typeof submittedScript.style === 'string' && submittedScript.style)
@@ -251,10 +263,16 @@ Deno.serve(async (req) => {
     }
 
 
-    // 2) 找门头:命中则锁第 1 位;没命中只标记,不阻塞
-    const storefrontHit = pool.find(isStorefrontAsset) || null;
-    const needsStorefront = !storefrontHit;
-    const remainPool = storefrontHit ? pool.filter((a: any) => a.id !== storefrontHit.id) : pool;
+    // 2) 找高置信真实门头。没有门头时直接停止，绝不让模型凭空设计 Logo 或入口。
+    const storefrontHit = pickStorefrontAsset(pool);
+    if (!storefrontHit) {
+      return json({
+        ok: false,
+        error: '当前门店素材库没有可确认的真实门头照。请先上传包含真实店铺入口与 BOOMER·OFF 店招的照片，再生成视频。',
+      }, 409);
+    }
+    const needsStorefront = false;
+    const remainPool = pool.filter((a: any) => a.id !== storefrontHit.id);
 
     // 3) 主题聚拢:按 tag/category 频次抽一个主题词,围绕它从剩余 pool 挑实景
     const themeCounter = new Map<string, number>();

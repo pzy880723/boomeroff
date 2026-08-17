@@ -96,6 +96,8 @@ class CoverCloudClient:
             "variation_key": str(result["variation_key"]),
             "cover_style_key": str(result.get("cover_style_key") or ""),
             "cover_style_label": str(result.get("cover_style_label") or ""),
+            "storefront_locked": bool(result.get("storefront_locked")),
+            "storefront_reference_url": result.get("storefront_reference_url"),
         }
         response = self.session.post(
             callback_url,

@@ -545,7 +545,15 @@ export function compileSurpriseOneShotPrompt(options: {
   if (options.referencePlan.items.length) {
     lines.push('【参考图片绑定，编号与请求中的图片顺序完全一致】');
     for (const item of options.referencePlan.items) {
-      lines.push(`图片${item.referenceNumber}：${item.summary}。仅用于锁定该门店的真实场景、商品、陈列或构图，不得改为无关内容。`);
+      if (item.role === 'storefront') {
+        lines.push(
+          `图片${item.referenceNumber}：【真实门头原件】${item.summary}。` +
+          '首镜 0-3 秒必须直接使用这张真实照片作为画面基底，只允许整张照片轻微推近或平移；' +
+          '不得重绘、改字、替换、修复或生成任何 Logo、门头或招牌，照片里的门店结构、店招文字、颜色和比例必须原样保留。',
+        );
+      } else {
+        lines.push(`图片${item.referenceNumber}：${item.summary}。仅用于锁定该门店的真实场景、商品、陈列或构图，不得改为无关内容。`);
+      }
     }
   }
 
@@ -598,6 +606,7 @@ export function compileSurpriseOneShotPrompt(options: {
 
   lines.push('');
   lines.push('【连续性】五段是同一次探店经历，人物身份、衣着、声音、门店空间、商品外观、光线和色调必须连续一致；转场使用自然硬切或动作匹配剪辑，不做黑场、不做慢淡。');
+  lines.push('【首镜门头硬规则】第一镜无法准确复现时，不得自行设计或重画门头，直接保持真实门头照片并做极轻微运镜；真实 Logo 的文字、形状、颜色和位置一律不得改变。');
   lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字或长时间空镜；不得重复词、重复短语、回读、卡顿式重启或吞字。');
   for (const constraint of (options.globalConstraints || []).slice(0, 4)) {
     if (constraint?.trim()) lines.push(compactText(constraint, 240));

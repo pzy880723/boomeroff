@@ -12,6 +12,10 @@ import {
   resolveStorefrontConstraintZh,
   usesOpenFrontMallConstraint,
 } from '../supabase/functions/_shared/storefront-constraints.ts';
+import {
+  pickStorefrontAsset,
+  scoreStorefrontAsset,
+} from '../supabase/functions/_shared/storefront-assets.ts';
 
 const rawScript = {
   hook: {
@@ -119,11 +123,50 @@ test('一次成片提示词只包含一条连续口播、5 段画面切点和参
   assert.match(prompt, /9-12 秒/);
   assert.match(prompt, /12-15 秒/);
   assert.match(prompt, /图片1.*门头和开放式店面/);
+  assert.match(prompt, /真实门头原件/);
+  assert.match(prompt, /不得重绘、改字、替换、修复或生成任何 Logo、门头或招牌/);
+  assert.match(prompt, /无法准确复现时.*直接保持真实门头照片/);
   assert.match(prompt, /图片2.*整面密集货架/);
   assert.ok(prompt.includes(`"${script.continuous_dialogue}"`), '提示词必须逐字包含连续口播');
   // 严禁再出现按镜逐字朗读的老式指令
   assert.doesNotMatch(prompt, /主角逐字说/);
   assert.doesNotMatch(prompt, /镜头\d+对白/);
+});
+
+test('门头选择必须优先真实入口店招，不能把店内陈列误判成门头', () => {
+  const wrongInterior = {
+    id: 'wrong-interior',
+    category: '店铺',
+    tags: ['佐藤象', '卡通餐具', '店面陈列', '门头'],
+    meta: {
+      summary: '佐藤象大摆件与满墙的卡通主题餐具陈列。',
+      ai_caption: { summary: '佐藤象大摆件与满墙的卡通主题餐具陈列。' },
+    },
+  };
+  const realStorefront = {
+    id: 'real-storefront',
+    category: '店铺',
+    tags: ['店铺门头', '复古氛围', '中古杂货'],
+    meta: {
+      summary: '店铺入口全景，明亮的招牌与温馨的复古陈设。',
+      ai_caption: { summary: '店铺入口全景，明亮的招牌与温馨的复古陈设。' },
+    },
+  };
+  const curatedFullEntrance = {
+    id: 'curated-full-entrance',
+    category: '店铺',
+    tags: ['探店首图', '中古店', '复古招牌', '杂货铺'],
+    meta: {
+      summary: '中古店全景门头，招牌醒目，店内堆满琳琅满目的杂货。',
+    },
+  };
+
+  assert.ok(scoreStorefrontAsset(realStorefront) > scoreStorefrontAsset(wrongInterior));
+  assert.equal(
+    pickStorefrontAsset([wrongInterior, realStorefront, curatedFullEntrance])?.id,
+    'curated-full-entrance',
+  );
+  assert.equal(pickStorefrontAsset([wrongInterior]), null);
 });
 
 test('无效图片索引会确定性回退到真实参考图', () => {

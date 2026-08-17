@@ -18,6 +18,8 @@ import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
+from worker.storefront_lock import lock_storefront_opening, resolve_storefront_reference
+
 
 class CoverPipelineError(RuntimeError):
     pass
@@ -926,10 +928,22 @@ def generate_cover(
         temp_dir = Path(tmp)
         _progress(progress_cb, 5, "download", "正在下载 Seedance 成片")
         video = _download(video_url, temp_dir / "video.mp4")
+        delivery_source = video
+        storefront_reference_url = resolve_storefront_reference(job)
+        storefront_locked = False
+        if storefront_reference_url:
+            _progress(progress_cb, 11, "lock_storefront", "正在锁定真实门头首镜")
+            storefront = _download(storefront_reference_url, temp_dir / "storefront-reference.jpg")
+            delivery_source = lock_storefront_opening(
+                video,
+                storefront,
+                temp_dir / "storefront-locked.mp4",
+            )
+            storefront_locked = True
         _progress(progress_cb, 15, "optimize_video", "正在优化手机端视频加载")
         optimized_filename = f"{_safe_name(job_id)}-faststart.mp4"
         optimized_video = optimize_video_for_streaming(
-            video,
+            delivery_source,
             temp_dir / optimized_filename,
         )
         optimized_dir = public_dir / "optimized-videos"
@@ -937,7 +951,7 @@ def generate_cover(
         optimized_public_path = optimized_dir / optimized_filename
         optimized_public_path.write_bytes(optimized_video.read_bytes())
         _progress(progress_cb, 20, "extract_character", "正在从视频提取主角参考帧")
-        references = select_reference_frames(video, temp_dir / "references")
+        references = select_reference_frames(delivery_source, temp_dir / "references")
         _progress(progress_cb, 45, "generate", "正在生成全新封面场景")
         style = select_cover_style(payload)
         style_reference = resolve_cover_style_reference()
@@ -1009,6 +1023,8 @@ def generate_cover(
             "cover_source": selected_source,
             "cover_style_key": style.key,
             "cover_style_label": style.label,
+            "storefront_locked": storefront_locked,
+            "storefront_reference_url": storefront_reference_url,
             "copy_fingerprint": _fingerprint(normalized_copy),
             "variation_key": _fingerprint(variation),
         }

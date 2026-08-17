@@ -26,6 +26,10 @@ Deno.serve(async (req) => {
     const coverUrl: string | undefined = body.cover_url;
     const optimizedVideoUrl: string | undefined = body.optimized_video_url;
     const deliveryVideoUrl: string | undefined = body.delivery_video_url;
+    const storefrontLocked: boolean = body.storefront_locked === true;
+    const storefrontReferenceUrl: string | null = typeof body.storefront_reference_url === "string"
+      ? body.storefront_reference_url
+      : null;
     const errorMessage: string | undefined = body.error;
     if (!jobId) return json({ ok: false, error: "缺少 job_id" });
 
@@ -108,6 +112,8 @@ Deno.serve(async (req) => {
           cover_variation_key: variationKey,
           cover_style_key: coverStyleKey,
           cover_style_label: coverStyleLabel,
+          storefront_opening_locked: storefrontLocked,
+          storefront_reference_url: storefrontReferenceUrl,
         };
         if (optimizedVideoUrl) {
           const mirrored = await mirrorTosVideoToStorage(
