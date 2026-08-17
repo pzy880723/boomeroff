@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Play, RefreshCw as RefreshIconTop, Loader2 as SpinTop, ImageDown } from 'lucide-react';
 import { invokeFn as invokeFnTop } from '@/lib/invokeFn';
 import { toast as toastTop } from 'sonner';
+import { Capacitor } from '@capacitor/core';
+import { Directory, Filesystem } from '@capacitor/filesystem';
 
 function LazyVideoPlayer({
   src, poster, assetId, expired, onRefreshed, onPosterUpdated,
@@ -21,10 +23,34 @@ function LazyVideoPlayer({
   const [srcNonce, setSrcNonce] = useState(0);
   const [savingPoster, setSavingPoster] = useState(false);
   const [autoPosterDone, setAutoPosterDone] = useState<boolean>(!!poster);
+  const [nativePlaybackUrl, setNativePlaybackUrl] = useState<string | null>(null);
+  const [preparingNativePlayback, setPreparingNativePlayback] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const nativeCachePathRef = useRef<string | null>(null);
+  const nativeAttemptRef = useRef(0);
+  const nativePreparingRef = useRef(false);
 
   useEffect(() => { setPosterUrl(poster); setAutoPosterDone(!!poster); }, [poster]);
-  useEffect(() => { setVideoError(false); setActive(false); }, [src]);
+  useEffect(() => {
+    nativeAttemptRef.current += 1;
+    const oldCachePath = nativeCachePathRef.current;
+    nativeCachePathRef.current = null;
+    nativePreparingRef.current = false;
+    setNativePlaybackUrl(null);
+    setPreparingNativePlayback(false);
+    setVideoError(false);
+    setActive(false);
+    if (oldCachePath) {
+      Filesystem.deleteFile({ path: oldCachePath, directory: Directory.Cache }).catch(() => {});
+    }
+  }, [src]);
+
+  useEffect(() => () => {
+    const cachePath = nativeCachePathRef.current;
+    if (cachePath) {
+      Filesystem.deleteFile({ path: cachePath, directory: Directory.Cache }).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     if (active && videoRef.current) {
@@ -107,6 +133,54 @@ function LazyVideoPlayer({
     } finally { setRefreshing(false); }
   };
 
+  const prepareNativePlayback = async () => {
+    if (nativePreparingRef.current) return;
+    if (!Capacitor.isNativePlatform() || nativePlaybackUrl) {
+      setVideoError(true);
+      return;
+    }
+    const attempt = ++nativeAttemptRef.current;
+    const cachePath = `video-preview-${assetId || 'asset'}-${Date.now()}.mp4`;
+    nativePreparingRef.current = true;
+    setPreparingNativePlayback(true);
+    try {
+      const downloaded = await Filesystem.downloadFile({
+        url: src,
+        path: cachePath,
+        directory: Directory.Cache,
+      });
+      let fileUri = downloaded.path;
+      if (!fileUri || !fileUri.startsWith('file://')) {
+        const resolved = await Filesystem.getUri({ path: cachePath, directory: Directory.Cache });
+        fileUri = resolved.uri;
+      }
+      if (attempt !== nativeAttemptRef.current) {
+        await Filesystem.deleteFile({ path: cachePath, directory: Directory.Cache }).catch(() => {});
+        return;
+      }
+      nativeCachePathRef.current = cachePath;
+      setNativePlaybackUrl(Capacitor.convertFileSrc(fileUri));
+      setVideoError(false);
+      setSrcNonce((n) => n + 1);
+    } catch (error) {
+      console.warn('[native-video] local playback fallback failed', error);
+      setVideoError(true);
+    } finally {
+      if (attempt === nativeAttemptRef.current) {
+        nativePreparingRef.current = false;
+        setPreparingNativePlayback(false);
+      }
+    }
+  };
+
+  const handleVideoError = () => {
+    if (Capacitor.isNativePlatform() && !nativePlaybackUrl) {
+      void prepareNativePlayback();
+      return;
+    }
+    setVideoError(true);
+  };
+
   if (!src) {
     return (
       <div className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex items-center justify-center text-xs text-muted-foreground">
@@ -182,18 +256,24 @@ function LazyVideoPlayer({
   return (
     <div className="relative">
       <video
-        key={`${src}#${srcNonce}`}
+        key={`${nativePlaybackUrl || src}#${srcNonce}`}
         ref={videoRef}
-        src={src}
+        src={nativePlaybackUrl || src}
         controls
         playsInline
         preload="metadata"
         poster={posterUrl}
-        onError={() => setVideoError(true)}
+        onError={handleVideoError}
         onTimeUpdate={handleTimeUpdate}
         className="w-full rounded-lg bg-black"
-        crossOrigin="anonymous"
+        crossOrigin={nativePlaybackUrl ? undefined : 'anonymous'}
       />
+      {preparingNativePlayback && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-white text-xs">
+          <SpinTop className="w-4 h-4 mr-2 animate-spin" />
+          正在准备手机播放
+        </div>
+      )}
       {assetId && (
         <button
           type="button"
