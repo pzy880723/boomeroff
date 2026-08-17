@@ -910,6 +910,10 @@ def generate_cover(
 
     public_dir_raw = os.environ.get("COVER_PUBLIC_DIR")
     public_base_url = (os.environ.get("COVER_PUBLIC_BASE_URL") or "").rstrip("/")
+    delivery_base_url = (
+        os.environ.get("COVER_VIDEO_PUBLIC_BASE_URL")
+        or f"{public_base_url}/optimized-videos"
+    ).rstrip("/")
     if not public_dir_raw or not public_base_url:
         raise CoverPipelineError("缺少 COVER_PUBLIC_DIR 或 COVER_PUBLIC_BASE_URL。")
 
@@ -999,6 +1003,7 @@ def generate_cover(
             "optimized_video_url": (
                 f"{public_base_url}/optimized-videos/{optimized_filename}"
             ),
+            "delivery_video_url": f"{delivery_base_url}/{optimized_filename}",
             "reference_frame_count": len(references),
             "candidate_count": len(candidates),
             "cover_source": selected_source,

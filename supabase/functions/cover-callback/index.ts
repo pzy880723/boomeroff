@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
     const jobId: string = body.job_id;
     const coverUrl: string | undefined = body.cover_url;
     const optimizedVideoUrl: string | undefined = body.optimized_video_url;
+    const deliveryVideoUrl: string | undefined = body.delivery_video_url;
     const errorMessage: string | undefined = body.error;
     if (!jobId) return json({ ok: false, error: "缺少 job_id" });
 
@@ -116,11 +117,13 @@ Deno.serve(async (req) => {
             optimizedVideoUrl,
           );
           if (mirrored.ok) {
-            stableVideoUrl = mirrored.url;
+            stableVideoUrl = deliveryVideoUrl || mirrored.url;
             streamOptimized = true;
             meta = {
               ...meta,
               storage_path: mirrored.path,
+              storage_backup_url: mirrored.url,
+              delivery_video_url: stableVideoUrl,
               stream_faststart: true,
               stream_optimized_at: nowIso,
               stream_optimize_error: null,

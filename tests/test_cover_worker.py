@@ -58,6 +58,7 @@ class CoverWorkerContractTests(unittest.TestCase):
             {
                 "cover_url": "https://cdn.example/job-1-cover.png",
                 "optimized_video_url": "https://cdn.example/job-1-faststart.mp4",
+                "delivery_video_url": "https://app.example/media/job-1-faststart.mp4",
                 "reference_frame_count": 4,
                 "copy_fingerprint": "copy-hash",
                 "variation_key": "variation-hash",
@@ -72,6 +73,7 @@ class CoverWorkerContractTests(unittest.TestCase):
                 "job_id": "job-1",
                 "cover_url": "https://cdn.example/job-1-cover.png",
                 "optimized_video_url": "https://cdn.example/job-1-faststart.mp4",
+                "delivery_video_url": "https://app.example/media/job-1-faststart.mp4",
                 "reference_frame_count": 4,
                 "copy_fingerprint": "copy-hash",
                 "variation_key": "variation-hash",

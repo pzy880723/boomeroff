@@ -90,6 +90,7 @@ class CoverCloudClient:
             "job_id": job_id,
             "cover_url": result["cover_url"],
             "optimized_video_url": result.get("optimized_video_url"),
+            "delivery_video_url": result.get("delivery_video_url"),
             "reference_frame_count": int(result["reference_frame_count"]),
             "copy_fingerprint": str(result["copy_fingerprint"]),
             "variation_key": str(result["variation_key"]),
