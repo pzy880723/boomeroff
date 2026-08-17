@@ -86,9 +86,9 @@ def lock_storefront_opening(
         f"[bgsrc]scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},gblur=sigma=24[bg];"
         f"[fgsrc]scale={width}:{height}:force_original_aspect_ratio=decrease[fg];"
-        f"[bg][fg]overlay=(W-w)/2:(H-h)/2,trim=duration={opening_duration_s},"
+        f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,trim=duration={opening_duration_s},"
         f"setpts=PTS-STARTPTS,fps={fps}[still];"
-        f"[1:v]trim=start={opening_duration_s},setpts=PTS-STARTPTS,fps={fps}[tail];"
+        f"[1:v]trim=start={opening_duration_s},setpts=PTS-STARTPTS,setsar=1,fps={fps}[tail];"
         "[still][tail]concat=n=2:v=1:a=0[v]"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
