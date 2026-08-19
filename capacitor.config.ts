@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'BOOMER GO',
   webDir: 'dist',
   server: {
-    url: 'https://ai.boomeroff.com/?native_release=20260816_3',
+    url: 'https://ai.boomeroff.com/?native_release=20260819_1',
   },
 };
 
