@@ -51,7 +51,10 @@ export function scoreStorefrontAsset(asset: StorefrontAssetLike): number {
     if (tagText.includes(phrase.toLowerCase())) score += 25;
   }
   if (includesAny(summaryText, ['入口全景', '门头全景'])) score += 45;
-  if (includesAny(tagText, ['探店首图', '开场首图'])) score += 110;
+  // “探店首图”由运营明确标注为该门店的标准入口原件，必须压过
+  // 仅凭 AI 摘要命中的门头近景，避免首镜和封面每次换成不同入口图。
+  if (includesAny(tagText, ['探店首图'])) score += 1000;
+  else if (includesAny(tagText, ['开场首图'])) score += 900;
   if (includesAny(summaryText, ['logo', 'boomer·off', 'boomer off'])) score += 15;
   if (asset?.role === 'storefront') score += 10;
   if (category === '店铺' || category === '门店') score += 5;

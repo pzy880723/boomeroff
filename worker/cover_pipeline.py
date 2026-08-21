@@ -161,7 +161,11 @@ COVER_STYLE_PRESETS = (
 )
 
 
-def select_cover_style(payload: dict[str, Any]) -> CoverStylePreset:
+def select_cover_style(
+    payload: dict[str, Any],
+    *,
+    allow_people: bool = True,
+) -> CoverStylePreset:
     job = payload.get("job") if isinstance(payload.get("job"), dict) else payload
     generation = (
         job.get("cover_generation") if isinstance(job.get("cover_generation"), dict) else {}
@@ -170,15 +174,31 @@ def select_cover_style(payload: dict[str, Any]) -> CoverStylePreset:
     requested = str(generation.get("style_key") or variation.get("style_key") or "").strip()
     if requested:
         matched = next((preset for preset in COVER_STYLE_PRESETS if preset.key == requested), None)
-        if matched:
+        if matched and (allow_people or matched.key in PEOPLE_OPTIONAL_STYLE_KEYS):
             return matched
 
     # 同一任务重试保持风格稳定；新任务 ID 会自然分散到不同风格。
     job_id = str(job.get("id") or "").strip()
     if not job_id:
-        return COVER_STYLE_PRESETS[0]
+        return (
+            COVER_STYLE_PRESETS[0]
+            if allow_people
+            else next(preset for preset in COVER_STYLE_PRESETS if preset.key in PEOPLE_OPTIONAL_STYLE_KEYS)
+        )
     index = int(hashlib.sha256(job_id.encode("utf-8")).hexdigest()[:16], 16)
-    return COVER_STYLE_PRESETS[index % len(COVER_STYLE_PRESETS)]
+    presets = (
+        COVER_STYLE_PRESETS
+        if allow_people
+        else tuple(preset for preset in COVER_STYLE_PRESETS if preset.key in PEOPLE_OPTIONAL_STYLE_KEYS)
+    )
+    return presets[index % len(presets)]
+
+
+PEOPLE_OPTIONAL_STYLE_KEYS = {
+    "object_macro",
+    "store_atmosphere",
+    "large_title_depth",
+}
 
 
 def choose_reference_candidates(
@@ -200,6 +220,24 @@ def choose_reference_candidates(
     return sorted(selected, key=lambda candidate: candidate.timestamp_s)
 
 
+def choose_scene_reference_candidates(
+    candidates: Iterable[FrameCandidate],
+    *,
+    max_frames: int,
+    min_gap_s: float = 1.5,
+) -> list[FrameCandidate]:
+    if max_frames <= 0:
+        return []
+    ranked = sorted(candidates, key=lambda candidate: (-candidate.quality, candidate.timestamp_s))
+    selected: list[FrameCandidate] = []
+    for candidate in ranked:
+        if all(abs(candidate.timestamp_s - item.timestamp_s) >= min_gap_s for item in selected):
+            selected.append(candidate)
+            if len(selected) == max_frames:
+                break
+    return sorted(selected, key=lambda candidate: candidate.timestamp_s)
+
+
 def select_reference_frames(
     video: Path,
     output_dir: Path,
@@ -208,17 +246,37 @@ def select_reference_frames(
     sampler: Callable[[Path], list[FrameCandidate]] | None = None,
 ) -> list[Path]:
     candidates = (sampler or _sample_video_frames)(video)
-    selected = choose_reference_candidates(candidates, max_frames=max_frames)
+    people = choose_reference_candidates(candidates, max_frames=max_frames)
+    selected_indexes = {candidate.index for candidate in people}
+    scenes = choose_scene_reference_candidates(
+        (candidate for candidate in candidates if candidate.index not in selected_indexes),
+        max_frames=max(0, max_frames - len(people)),
+    )
+    selected: list[tuple[FrameCandidate, bool]] = [
+        *((candidate, True) for candidate in people),
+        *((candidate, False) for candidate in scenes),
+    ][:max_frames]
     if not selected:
-        raise CoverPipelineError("视频里没有检测到清晰人物，不能用截图降级生成封面。")
+        raise CoverPipelineError("视频里没有可读取的清晰画面，无法生成封面参考板。")
+
+    # Seedream receives a fixed three-panel evidence board. Short videos may only
+    # expose one or two usable frames, so repeat the last valid frame instead of
+    # failing the entire delivery.
+    while len(selected) < min(3, max_frames):
+        selected.append(selected[-1])
 
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
-    for position, candidate in enumerate(selected, start=1):
-        cropped = _person_crop(candidate.image, candidate.face_boxes[0])
-        path = output_dir / f"character-ref-{position:02d}.jpg"
-        if not cv2.imwrite(str(path), cropped, [cv2.IMWRITE_JPEG_QUALITY, 94]):
-            raise CoverPipelineError(f"人物参考帧写入失败：{path.name}")
+    for position, (candidate, is_person) in enumerate(selected, start=1):
+        image = (
+            _person_crop(candidate.image, candidate.face_boxes[0])
+            if is_person
+            else candidate.image
+        )
+        prefix = "character-ref" if is_person else "scene-ref"
+        path = output_dir / f"{prefix}-{position:02d}.jpg"
+        if not cv2.imwrite(str(path), image, [cv2.IMWRITE_JPEG_QUALITY, 94]):
+            raise CoverPipelineError(f"封面参考帧写入失败：{path.name}")
         paths.append(path)
     return paths
 
@@ -227,6 +285,8 @@ def build_cover_prompt(
     payload: dict[str, Any],
     *,
     style: CoverStylePreset | None = None,
+    has_storefront_reference: bool = False,
+    has_character_reference: bool = True,
 ) -> str:
     job = payload.get("job") if isinstance(payload.get("job"), dict) else payload
     script = job.get("script") if isinstance(job.get("script"), dict) else {}
@@ -268,10 +328,21 @@ def build_cover_prompt(
         else product
     )
 
+    evidence_instruction = (
+        "图一是本条视频的三格内容证据板：第一格是真实门店门头原件，必须保持入口结构、招牌与 Logo 原样；"
+        "其余格来自本条成片。只能使用证据板里真实存在的人物、门店和商品，不得另造门店或改写 Logo。"
+        if has_storefront_reference
+        else "图一是本条视频提取的三格内容证据板，只能使用其中真实存在的人物、场景和商品。"
+    )
+    character_instruction = (
+        "若证据板中出现同一位主角，保持脸型、五官比例、发型、肤色、年龄感、服装和主要配饰一致；"
+        if has_character_reference
+        else "证据板没有可靠人物脸部参考，本张以真实门店、货架和商品为主体，禁止凭空生成人物或人脸；"
+    )
+
     return (
         "创作一张竖版 3:4 的中国社交媒体探店爆款完整封面，不是无字底图。"
-        "图一是从同一条视频提取的三格人物参考板，每一格都是同一位主角；只用它锁定人物身份："
-        "脸型、五官比例、发型、肤色、年龄感、服装和主要配饰保持一致；"
+        f"{evidence_instruction}{character_instruction}"
         "图二只参考本次生活方式杂志封面的构图、白黄粗笔刷字、涂鸦装饰和视觉密度。"
         f"本次随机版式：{style.label}。版式执行：{style.prompt}"
         "不得照抄参考图中的人物、地点、物品或文字；只学习版式、光线、字形层级和涂鸦节奏。"
@@ -313,10 +384,16 @@ def generate_cover_candidates(
     character_references: list[Path],
     style_reference: Path,
     *,
+    storefront_reference: Path | None = None,
     count: int = 4,
 ) -> list[bytes]:
-    identity_board = _build_character_reference_board(character_references[:3])
-    references = [identity_board, style_reference]
+    content_references = (
+        [storefront_reference, *character_references[:2]]
+        if storefront_reference is not None
+        else character_references[:3]
+    )
+    content_board = _build_content_reference_board(content_references)
+    references = [content_board, style_reference]
     variants = [
         "正面超广角，人物与前景商品形成三角构图",
         "略低机位斜拍，人物指向伸到镜头前的商品",
@@ -327,20 +404,23 @@ def generate_cover_candidates(
         client.generate(
             f"{prompt} 候选构图编号：{index}，本张采用：{variants[(index - 1) % len(variants)]}。"
             "图二只用于学习爆款封面的广角、层次、暖暗色调和视觉密度，"
-            "绝对不能复制其中的人物、商品、文字或标识；人物身份只参考图一的三格人物参考板。",
+            "绝对不能复制其中的人物、商品、文字或标识；人物与门店事实只参考图一的三格内容证据板。",
             references,
         )
         for index in range(1, max(1, count) + 1)
     ]
 
 
-def _build_character_reference_board(character_references: list[Path]) -> Path:
-    if len(character_references) < 3:
-        raise CoverPipelineError("生成封面需要三张视频人物参考帧。")
-    target = character_references[0].parent / "character-reference-board.jpg"
+def _build_content_reference_board(content_references: list[Path]) -> Path:
+    if not content_references:
+        raise CoverPipelineError("生成封面至少需要一张内容参考图。")
+    normalized = list(content_references[:3])
+    while len(normalized) < 3:
+        normalized.append(normalized[-1])
+    target = normalized[0].parent / "content-reference-board.jpg"
     panels: list[Image.Image] = []
     try:
-        for path in character_references[:3]:
+        for path in normalized:
             with Image.open(path) as source:
                 panels.append(
                     ImageOps.fit(
@@ -354,7 +434,7 @@ def _build_character_reference_board(character_references: list[Path]) -> Path:
             board.paste(panel, (index * 512, 0))
         board.save(target, format="JPEG", quality=88, optimize=True)
     except (OSError, ValueError) as exc:
-        raise CoverPipelineError("视频人物参考板生成失败。") from exc
+        raise CoverPipelineError("视频内容参考板生成失败。") from exc
     return target
 
 
@@ -952,14 +1032,20 @@ def generate_cover(
         optimized_public_path.write_bytes(optimized_video.read_bytes())
         _progress(progress_cb, 20, "extract_character", "正在从视频提取主角参考帧")
         references = select_reference_frames(delivery_source, temp_dir / "references")
+        has_character_reference = any(path.name.startswith("character-ref-") for path in references)
         _progress(progress_cb, 45, "generate", "正在生成全新封面场景")
-        style = select_cover_style(payload)
+        style = select_cover_style(payload, allow_people=has_character_reference)
         style_reference = resolve_cover_style_reference()
         candidate_count = max(
             1,
             min(4, int(os.environ.get("COVER_CANDIDATE_COUNT", "1"))),
         )
-        prompt = build_cover_prompt(payload, style=style)
+        prompt = build_cover_prompt(
+            payload,
+            style=style,
+            has_storefront_reference=storefront_locked,
+            has_character_reference=has_character_reference,
+        )
         candidates: list[bytes] = []
         selected_source = ""
         provider_errors: list[str] = []
@@ -970,6 +1056,7 @@ def generate_cover(
                     prompt,
                     references,
                     style_reference,
+                    storefront_reference=(storefront if storefront_locked else None),
                     count=candidate_count,
                 )
                 selected_source = source
@@ -1003,7 +1090,8 @@ def generate_cover(
         # 参考帧只用于人物身份，绝不把截图或程序排字当作最终封面。
         final_bytes = generated
 
-        filename = f"{_safe_name(job_id)}-cover.png"
+        cover_digest = hashlib.sha256(final_bytes).hexdigest()[:12]
+        filename = f"{_safe_name(job_id)}-cover-{cover_digest}.png"
         final_path = public_dir / filename
         final_path.write_bytes(final_bytes)
         variation = (

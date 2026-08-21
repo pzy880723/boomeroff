@@ -129,6 +129,19 @@ class CoverPipelineTests(unittest.TestCase):
         )
         self.assertEqual(overridden.key, "warm_store_walk")
 
+    def test_cover_without_detectable_people_uses_scene_safe_style(self):
+        selected = select_cover_style(
+            {
+                "job": {
+                    "id": "video-job-without-face",
+                    "cover_generation": {"style_key": "reaction_closeup"},
+                }
+            },
+            allow_people=False,
+        )
+
+        self.assertIn(selected.key, {"object_macro", "store_atmosphere", "large_title_depth"})
+
     def test_cover_prompt_includes_selected_lifestyle_editorial_style(self):
         prompt = build_cover_prompt(
             {
@@ -211,28 +224,67 @@ class CoverPipelineTests(unittest.TestCase):
 
         self.assertEqual([item.index for item in picked], [0, 2, 3])
 
-    def test_video_without_detectable_person_is_rejected_without_screenshot_fallback(self):
+    def test_video_without_detectable_person_uses_spaced_scene_frames(self):
         with tempfile.TemporaryDirectory() as tmp:
             video = Path(tmp) / "input.mp4"
             video.write_bytes(b"video")
             output = Path(tmp) / "refs"
 
-            with self.assertRaisesRegex(CoverPipelineError, "没有检测到清晰人物"):
-                select_reference_frames(
-                    video,
-                    output,
-                    sampler=lambda _video: [
-                        FrameCandidate(
-                            index=0,
-                            timestamp_s=0.5,
-                            image=np.zeros((40, 40, 3), dtype=np.uint8),
-                            face_boxes=[],
-                            quality=0.9,
-                        )
-                    ],
-                )
+            references = select_reference_frames(
+                video,
+                output,
+                sampler=lambda _video: [
+                    FrameCandidate(
+                        index=index,
+                        timestamp_s=float(index * 3),
+                        image=np.full((40, 40, 3), index * 30, dtype=np.uint8),
+                        face_boxes=[],
+                        quality=0.9 - index * 0.1,
+                    )
+                    for index in range(3)
+                ],
+            )
 
-            self.assertFalse(output.exists())
+            self.assertEqual(len(references), 3)
+            self.assertTrue(all(path.name.startswith("scene-ref-") for path in references))
+            self.assertTrue(all(path.exists() for path in references))
+
+    def test_reference_selection_keeps_people_then_backfills_scene_context(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video = Path(tmp) / "input.mp4"
+            video.write_bytes(b"video")
+            references = select_reference_frames(
+                video,
+                Path(tmp) / "refs",
+                sampler=lambda _video: [
+                    FrameCandidate(
+                        index=0,
+                        timestamp_s=0.5,
+                        image=np.full((80, 80, 3), 20, dtype=np.uint8),
+                        face_boxes=[(20, 20, 20, 20)],
+                        quality=0.95,
+                    ),
+                    FrameCandidate(
+                        index=1,
+                        timestamp_s=4.0,
+                        image=np.full((80, 80, 3), 60, dtype=np.uint8),
+                        face_boxes=[],
+                        quality=0.8,
+                    ),
+                    FrameCandidate(
+                        index=2,
+                        timestamp_s=8.0,
+                        image=np.full((80, 80, 3), 100, dtype=np.uint8),
+                        face_boxes=[],
+                        quality=0.7,
+                    ),
+                ],
+            )
+
+            self.assertEqual(len(references), 3)
+            self.assertEqual(references[0].name, "character-ref-01.jpg")
+            self.assertEqual(references[1].name, "scene-ref-02.jpg")
+            self.assertEqual(references[2].name, "scene-ref-03.jpg")
 
     def test_seedream_receives_every_video_reference_and_returns_generated_bytes(self):
         generated = b"new-cover-image"
@@ -374,8 +426,8 @@ class CoverPipelineTests(unittest.TestCase):
             }
         )
 
-        self.assertIn("三格人物参考板", prompt)
-        self.assertIn("每一格都是同一位主角", prompt)
+        self.assertIn("三格内容证据板", prompt)
+        self.assertIn("真实存在的人物、场景和商品", prompt)
         self.assertIn('标题必须逐字写成“南京西路B1藏着中古杂货铺”', prompt)
         self.assertIn('副标题必须逐字写成“下班顺路翻到复古玩具”', prompt)
         self.assertIn('高亮关键词必须逐字写成“中古杂货”', prompt)
@@ -434,7 +486,7 @@ class CoverPipelineTests(unittest.TestCase):
         self.assertIn("上手这只佐藤象，再翻到一张复古黑胶", prompt)
         self.assertIn("品牌名不能被当作商品", prompt)
 
-    def test_generates_four_candidates_with_three_frame_identity_board_and_style_ref(self):
+    def test_generates_four_candidates_with_storefront_content_board_and_style_ref(self):
         client = _RecordingSeedream()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -445,12 +497,15 @@ class CoverPipelineTests(unittest.TestCase):
                 character_refs.append(path)
             style_ref = root / "approved-local-shock-style.png"
             Image.new("RGB", (600, 800), (10, 20, 30)).save(style_ref)
+            storefront_ref = root / "real-storefront.jpg"
+            Image.new("RGB", (640, 480), (200, 20, 20)).save(storefront_ref)
 
             candidates = generate_cover_candidates(
                 client,
                 "editorial cover",
                 character_refs,
                 style_ref,
+                storefront_reference=storefront_ref,
                 count=4,
             )
 
@@ -460,9 +515,11 @@ class CoverPipelineTests(unittest.TestCase):
                 self.assertIn(f"候选构图编号：{index}", prompt)
                 self.assertEqual(len(references), 2)
                 self.assertEqual(references[1], style_ref)
-                self.assertEqual(references[0].name, "character-reference-board.jpg")
+                self.assertEqual(references[0].name, "content-reference-board.jpg")
                 with Image.open(references[0]) as board:
                     self.assertEqual(board.size, (1536, 768))
+                    sampled = board.getpixel((256, 384))
+                    self.assertTrue(all(abs(actual - expected) <= 3 for actual, expected in zip(sampled, (200, 20, 20))))
 
     def test_cover_candidate_selection_uses_highest_visual_score(self):
         candidates = [b"plain", b"approved-style", b"weak"]
