@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import inspect
 import json
 import tempfile
@@ -25,6 +26,7 @@ from worker.cover_pipeline import (
     choose_reference_candidates,
     generate_cover_candidates,
     generate_cover,
+    normalize_cover_png,
     select_reference_frames,
     select_cover_style,
 )
@@ -531,6 +533,17 @@ class CoverPipelineTests(unittest.TestCase):
         )
 
         self.assertEqual(selected, b"approved-style")
+
+    def test_normalize_cover_png_converts_jpeg_bytes_to_real_png(self):
+        source = io.BytesIO()
+        Image.new("RGB", (16, 16), (220, 20, 20)).save(source, format="JPEG")
+
+        normalized = normalize_cover_png(source.getvalue())
+
+        self.assertTrue(normalized.startswith(b"\x89PNG\r\n\x1a\n"))
+        with Image.open(io.BytesIO(normalized)) as image:
+            self.assertEqual(image.format, "PNG")
+            self.assertEqual(image.size, (16, 16))
 
     def test_pipeline_uses_provider_fallback_without_pillow_overlay(self):
         source = inspect.getsource(generate_cover)

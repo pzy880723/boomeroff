@@ -783,6 +783,17 @@ def render_cover_text(
     return output.getvalue()
 
 
+def normalize_cover_png(image_bytes: bytes) -> bytes:
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as source:
+            image = source.convert("RGBA" if "A" in source.getbands() else "RGB")
+            output = io.BytesIO()
+            image.save(output, format="PNG", optimize=True)
+            return output.getvalue()
+    except Exception as exc:
+        raise CoverPipelineError("封面模型返回的图片无法转换为 PNG。") from exc
+
+
 def _editorial_headline_lines(
     headline: str,
     highlight: str,
@@ -1088,7 +1099,7 @@ def generate_cover(
         }
         # GPT Image 2 直接生成包含准确标题、字幕和关键词的完整封面。
         # 参考帧只用于人物身份，绝不把截图或程序排字当作最终封面。
-        final_bytes = generated
+        final_bytes = normalize_cover_png(generated)
 
         cover_digest = hashlib.sha256(final_bytes).hexdigest()[:12]
         filename = f"{_safe_name(job_id)}-cover-{cover_digest}.png"
