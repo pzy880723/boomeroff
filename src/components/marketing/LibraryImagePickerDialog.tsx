@@ -17,6 +17,7 @@ import { DEFAULT_TAGS } from './AssetTagDialog';
 import { thumbUrl } from '@/lib/imageUrl';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { assetSource, type AssetSource } from '@/lib/assetSource';
+import { invokeFn } from '@/lib/invokeFn';
 
 type Pending = UploadTileItem & { file: File };
 
@@ -153,7 +154,7 @@ export function LibraryImagePickerDialog({
     });
     if (!finalUrl) throw new Error(finalErr || '上传失败');
 
-    // 入库异步,不阻塞下一张
+    // 入库异步,不阻塞下一张;数据库触发器负责兜底入队,这里尽快触发识图。
     void supabase.from('marketing_assets' as any).insert({
       user_id: user.id,
       shop_id: shopId,
@@ -162,8 +163,25 @@ export function LibraryImagePickerDialog({
       input_image_urls: [finalUrl],
       sha256: hash,
       tags: activeTag ? [activeTag] : [],
-      meta: { source: 'library_picker_upload', sha256: hash, filename: file.name },
-    }).then(({ error }) => { if (error) console.warn('[picker] insert failed', error.message); });
+      meta: {
+        source: 'library_picker_upload',
+        sha256: hash,
+        filename: file.name,
+        ai_tag_status: 'pending',
+        ai_tag_attempts: 0,
+      },
+    }).select('id').single().then(({ data, error }) => {
+      if (error) {
+        console.warn('[picker] insert failed', error.message);
+        return;
+      }
+      const assetId = (data as any)?.id;
+      if (!assetId) return;
+      void invokeFn('auto-tag-marketing-asset', { body: { asset_id: assetId } })
+        .then(({ error: tagError }) => {
+          if (tagError) console.warn('[picker] auto-tag failed', tagError.message);
+        });
+    });
 
     return finalUrl;
   };
