@@ -15,6 +15,8 @@ export const SURPRISE_MODEL_TIMEOUT_MS = 12_000;
 interface FastFallbackOptions {
   shopName?: string | null;
   imageDescriptions?: Array<{ index: number; summary?: string | null }>;
+  /** 每次生成传入的随机 nonce，用于让兜底稿在同一主旨下确定性地换一套文案。 */
+  variationKey?: string | null;
 }
 
 interface FastGenerationOptions extends FastFallbackOptions {
