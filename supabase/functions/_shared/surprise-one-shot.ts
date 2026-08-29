@@ -567,7 +567,7 @@ export function compileSurpriseOneShotPrompt(options: {
   lines.push('');
   lines.push('【声音硬规则】');
   lines.push('1. 这是全片唯一的一条连续中文口播音轨，由 Seedance 直接生成同步人声，不使用后配 TTS。');
-  lines.push('2. 画面出现后 0.1 秒内立即开口，连续说到 14.9 秒左右自然收尾。');
+  lines.push('2. 画面出现后 0.1 秒内立即开口，最迟在 12 秒进入收尾，14.9 秒前完整说完最后一句并完成最后画面。');
   lines.push('3. 使用高密度、清晰、激动的探店口播，约每分钟 390–430 汉字；每个字都要咬清楚，不得吞字或含糊。');
   lines.push('4. 只允许在逗号处有 0.05–0.12 秒的节奏换气，其余位置持续发声，不得出现静默。');
   lines.push('5. 切换镜头时人声继续，不得在切镜处重新起句、重开这段话或重新自我介绍。');
@@ -575,34 +575,21 @@ export function compileSurpriseOneShotPrompt(options: {
   lines.push('7. 严禁重复词、重复短语、回读同一句、卡顿式重启、结巴或结尾拖音。');
   lines.push('8. 背景音乐和环境声保持低音量，不得遮挡人声。');
 
-  const clips = [script.hook, ...script.scenes, script.outro];
+  // 只给 Seedance 一段概括性导演稿，避免五套逐字对白与逐镜硬口令挤占理解预算。
   lines.push('');
-  lines.push('【五段对白时间锚点】以下五段连接后就是上面的唯一口播全文，只用于对齐画面、字幕和切点，不是五次重新开口。段与段之间只允许 0.05–0.12 秒的节奏换气，声音必须跨切镜延续，严禁在此处重复上一段或回读。');
-  clips.forEach((clip, index) => {
-    const [start, end] = BEAT_WINDOWS[index];
-    lines.push(`${start}-${end} 秒｜对白："${compactText(clip.dialogue, 80)}"｜字幕："${compactText(clip.subtitle, 40)}"`);
-  });
-
-  // === 画面切点 ===
-  lines.push('');
-  lines.push('【画面切点】画面根据下方切点切换，人声在整条 15 秒内保持同一段连续朗读。切镜不得让人声中断或重开；所有切镜必须发生在口播过程中。');
-  beats.forEach((beat, i) => {
-    const label = BEAT_LABELS[i];
-    const start = beat.start_s.toFixed(1).replace(/\.0$/, '');
-    const end = beat.end_s.toFixed(1).replace(/\.0$/, '');
+  lines.push('【导演内容】这是一段完整连续的探店经历，不是五条独立短片。请自然完成：真实门头快速开场，主角顺势走进店内发现丰富陈列，近距离拿起并体验有代表性的中古小物，再展示逛店和挑选的价值感，最后回到能看清门店环境的稳定画面给出完整行动号召。镜头可按口播语义自然硬切，人物、服装、声音和空间始终一致。');
+  const visualSummary = beats.map((beat, i) => {
     const sourceIndex = beat.image_index;
     const referenceNumber = typeof sourceIndex === 'number'
       ? options.referencePlan.referenceNumberBySourceIndex[sourceIndex]
       : undefined;
     const refText = referenceNumber
-      ? `画面严格参考图片${referenceNumber}`
-      : '延续前后镜头已经确定的同一门店环境';
-    const keyword = beat.cut_on_keyword ? `（切点关键词："${beat.cut_on_keyword}"，切镜发生在念到该关键词时，口播不停）` : '';
-    lines.push(
-      `${start}-${end} 秒｜${label}：${refText}；画面：${compactText(beat.visual, 160)}；` +
-      `动作与运镜：${compactText(beat.action, 200)}，${compactText(beat.motion, 80)}${keyword}。`,
-    );
-  });
+      ? `参考图片${referenceNumber}`
+      : '同一门店环境';
+    return `${BEAT_LABELS[i]}使用${refText}呈现${compactText(beat.visual, 90)}`;
+  }).join('；');
+  lines.push(`【画面素材概括】${visualSummary}。这些只是内容顺序提示，由 Seedance 自然安排运镜和切换，不要机械停顿或逐段重新表演。`);
+  lines.push('【完整收尾】最后约 2.5–3 秒必须保留给行动号召：主角继续说完口播最后一句，画面稳定展示主角与真实店内环境；不得提前结束、突然截断、黑场、慢淡、拖音或用无关空镜代替结尾。');
 
   lines.push('');
   lines.push('【连续性】五段是同一次探店经历，人物身份、衣着、声音、门店空间、商品外观、光线和色调必须连续一致；转场使用自然硬切或动作匹配剪辑，不做黑场、不做慢淡。');

@@ -10,7 +10,7 @@ import { scrubThirdPartyBrands, OWN_BRAND_LOCK_ZH } from "../_shared/brand-scrub
 import { bindSurpriseReferences, normalizePublishCopy, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 import { DeepSeekRequestError, requestDeepSeekJson } from "../_shared/deepseek-client.ts";
 import { normalizeDeepSeekSurpriseScript, validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
-import { buildFastSurpriseFallback, SURPRISE_MODEL_TIMEOUT_MS } from "../_shared/surprise-script-performance.ts";
+import { buildFastSurpriseFallback, completeShortGeneratedScript, SURPRISE_MODEL_TIMEOUT_MS } from "../_shared/surprise-script-performance.ts";
 import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
@@ -291,7 +291,7 @@ ${refList}
             apiKey: DEEPSEEK_API_KEY,
             systemPrompt: fastSystemPrompt,
             userPrompt: fastUserPrompt,
-            model: Deno.env.get("DEEPSEEK_SCRIPT_MODEL") || "deepseek-v4-flash",
+            model: Deno.env.get("DEEPSEEK_SCRIPT_MODEL") || "deepseek-chat",
             temperature: 0.85,
             maxTokens: 1800,
             timeoutMs: SURPRISE_MODEL_TIMEOUT_MS,
@@ -301,7 +301,18 @@ ${refList}
             script = normalized;
             scriptProvider = "deepseek";
           } else {
-            console.warn("[script] DeepSeek fast candidate rejected; using local fallback", validation.errors);
+            const completed = completeShortGeneratedScript(candidate);
+            const completedValidation = validateSurpriseScript(completed, {
+              ageBucket: character?.age_bucket || null,
+              factContext,
+            });
+            if (!completedValidation.errors.length) {
+              script = completed;
+              scriptProvider = "deepseek";
+              script.script_provider_reason = "locally_completed_after_validation";
+            } else {
+              console.warn("[script] DeepSeek fast candidate rejected; using local fallback", completedValidation.errors);
+            }
           }
         } catch (error) {
           const status = error instanceof DeepSeekRequestError ? error.status : 0;

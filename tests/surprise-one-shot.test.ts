@@ -85,7 +85,7 @@ test('惊喜脚本产出一条 90-100 字高密度连续口播并保留 5 段可
   ]);
 });
 
-test('一次成片提示词只包含一条连续口播、5 段画面切点和参考图职责', () => {
+test('一次成片提示词只包含一条连续口播、概括导演稿和完整收尾', () => {
   const script = normalizeSurpriseScript(structuredClone(rawScript));
   const referencePlan = buildSurpriseReferencePlan(script, imageUrls, [
     { index: 0, summary: 'BOOMER·OFF 门头和开放式店面', role: 'storefront' },
@@ -105,23 +105,18 @@ test('一次成片提示词只包含一条连续口播、5 段画面切点和参
   assert.match(prompt, /【15秒连续口播】/);
   assert.match(prompt, /【声音硬规则】/);
   assert.match(prompt, /0\.1 秒内立即开口/);
-  assert.match(prompt, /14\.9 秒/);
+  assert.match(prompt, /14\.9 秒前完整说完/);
   assert.match(prompt, /0\.05–0\.12 秒的节奏换气/);
   assert.match(prompt, /390–430 汉字/);
   assert.match(prompt, /严禁重复词、重复短语、回读同一句、卡顿式重启/);
   assert.doesNotMatch(prompt, /270–320/);
   assert.match(prompt, /切换镜头时人声继续/);
-  assert.match(prompt, /【画面切点】/);
-  assert.match(prompt, /【五段对白时间锚点】/);
-  assert.match(prompt, /0-3 秒.*来上海旅行别错过/);
-  assert.match(prompt, /3-6 秒.*一进门满眼复/);
-  assert.match(prompt, /字幕.*一进门满眼复古杂货每排货架都值得认真翻找/);
-  assert.match(prompt, /不是五次重新开口/);
-  assert.match(prompt, /0-3 秒/);
-  assert.match(prompt, /3-6 秒/);
-  assert.match(prompt, /6-9 秒/);
-  assert.match(prompt, /9-12 秒/);
-  assert.match(prompt, /12-15 秒/);
+  assert.match(prompt, /【导演内容】/);
+  assert.match(prompt, /【画面素材概括】/);
+  assert.match(prompt, /【完整收尾】/);
+  assert.match(prompt, /最后约 2\.5–3 秒必须保留给行动号召/);
+  assert.doesNotMatch(prompt, /【五段对白时间锚点】/);
+  assert.doesNotMatch(prompt, /对白：/);
   assert.match(prompt, /图片1.*门头和开放式店面/);
   assert.match(prompt, /真实门头原件/);
   assert.match(prompt, /不得重绘、改字、替换、修复或生成任何 Logo、门头或招牌/);
@@ -182,7 +177,7 @@ test('无效图片索引会确定性回退到真实参考图', () => {
   assert.equal(referencePlan.urls.length, 2);
   assert.equal(bound.scenes[1].image_index, 1);
   assert.doesNotMatch(prompt, /图片100/);
-  assert.match(prompt, /画面严格参考图片2/);
+  assert.match(prompt, /参考图片2/);
 });
 
 test('有门头素材时首镜头和首个画面切点必须锁定真实门头', () => {
