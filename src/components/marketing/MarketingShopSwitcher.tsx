@@ -13,12 +13,14 @@ export function MarketingShopSwitcher({
   value,
   shops,
   boundShopId,
+  canSwitch,
   loading,
   onChange,
 }: {
   value: string | null;
   shops: Shop[];
   boundShopId: string | null;
+  canSwitch: boolean;
   loading: boolean;
   onChange: (shopId: string) => void;
 }) {
@@ -29,7 +31,7 @@ export function MarketingShopSwitcher({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => { if (canSwitch) setOpen(true); }}
         disabled={loading || shops.length === 0}
         className="w-full bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-3 flex items-center gap-3 text-left transition-all hover:border-accent/40 active:scale-[0.995] disabled:opacity-60"
       >
@@ -46,11 +48,11 @@ export function MarketingShopSwitcher({
           </span>
         </span>
         <span className="shrink-0 inline-flex items-center gap-0.5 rounded-full border border-accent/30 bg-accent/5 px-2.5 py-1.5 text-[11px] font-semibold text-accent">
-          切换 <ChevronRight className="w-3 h-3" />
+          {canSwitch ? <>切换 <ChevronRight className="w-3 h-3" /></> : '已绑定'}
         </span>
       </button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={canSwitch && open} onOpenChange={setOpen}>
         <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md max-h-[75vh] overflow-hidden p-0 gap-0 rounded-2xl">
           <DialogHeader className="px-5 pt-5 pb-4 border-b text-left">
             <DialogTitle>切换当前门店</DialogTitle>

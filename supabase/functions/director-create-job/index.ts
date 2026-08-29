@@ -4,6 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { buildDirectorShotPlan, type DirectorScript } from "../_shared/director-utils.ts";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,7 +27,7 @@ Deno.serve(async (req) => {
     if (!u.user) return json({ ok: false, error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
-    const shopId: string | null = typeof body.shop_id === 'string' && body.shop_id ? body.shop_id : null;
+    let shopId: string | null = typeof body.shop_id === 'string' && body.shop_id ? body.shop_id : null;
     const script: DirectorScript | null = body.script && typeof body.script === 'object' ? body.script : null;
     const pickedAssets: unknown[] = Array.isArray(body.picked_assets) ? body.picked_assets : [];
     const persona = body.persona && typeof body.persona === 'object' ? body.persona : null;
@@ -44,8 +45,11 @@ Deno.serve(async (req) => {
     const userPrompt: string | null = typeof body.user_prompt === 'string' && body.user_prompt.trim()
       ? body.user_prompt.trim().slice(0, 500)
       : (typeof script?.title === 'string' ? String(script.title).slice(0, 500) : null);
-    if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
     if (!script) return json({ ok: false, error: "缺少脚本" });
+
+    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
+    if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
 
     if (draftJobId) {
       const scriptValidation = validateSurpriseScript(script, { factContext: JSON.stringify(pickedAssets) });
@@ -53,8 +57,6 @@ Deno.serve(async (req) => {
         return json({ ok: false, error: `脚本未通过校验: ${scriptValidation.errors.join("；")}`, errors: scriptValidation.errors }, 422);
       }
     }
-
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
     const shotPlan = buildDirectorShotPlan(script);
     const plannedDuration = shotPlan.reduce((sum, shot) => sum + shot.duration, 0);
@@ -199,7 +201,8 @@ Deno.serve(async (req) => {
     return json({ ok: true, job_id: job.id, shot_count: shotRows.length }, 202);
   } catch (e) {
     console.error("[director-create-job] fatal", e);
-    return json({ ok: false, error: (e as Error).message || String(e) }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ ok: false, error: (e as Error).message || String(e) }, status);
   }
 });
 

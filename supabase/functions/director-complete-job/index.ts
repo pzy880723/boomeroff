@@ -2,6 +2,7 @@
 // 前端把客户端拼接后的成片 URL(或单镜 URL,当只有一段时)交回来,
 // 落最终成片 + 入 marketing_assets 素材库,job.status='done'。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { assertStoreAccess, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,7 +32,8 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const { data: job } = await admin.from("video_generation_jobs").select("*").eq("id", jobId).single();
-    if (!job || job.user_id !== u.user.id) return json({ ok: false, error: "任务不存在" }, 404);
+    if (!job) return json({ ok: false, error: "任务不存在" }, 404);
+    await assertStoreAccess(admin, u.user.id, job.shop_id || null);
 
     // 成片必须有对应素材记录，否则后续“一键发布”无法形成闭环。
     let assetId = (job.meta as any)?.generated_asset_id as string | undefined;
@@ -96,6 +98,9 @@ Deno.serve(async (req) => {
     return json({ ok: true, asset_id: assetId });
   } catch (e) {
     console.error("[director-complete-job] fatal", e);
-    return json({ ok: false, error: (e as Error).message || String(e) }, 500);
+    return json(
+      { ok: false, error: (e as Error).message || String(e) },
+      e instanceof StoreAccessError ? e.status : 500,
+    );
   }
 });

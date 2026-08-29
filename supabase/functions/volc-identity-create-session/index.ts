@@ -3,6 +3,7 @@
 // 出参: { ok, h5_url, session_id (内部 row id), byted_token }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { volcCall } from "../_shared/volc-sign.ts";
+import { assertStoreAccess, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,6 +35,7 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const { data: ch } = await admin.from("marketing_characters").select("id, shop_id, name").eq("id", characterId).maybeSingle();
     if (!ch) return json({ ok: false, error: "角色不存在" });
+    await assertStoreAccess(admin, u.user.id, (ch as any).shop_id || null);
 
     const result = await volcCall<{ BytedToken: string; H5Link: string; CallbackURL: string }>({
       action: "CreateVisualValidateSession",
@@ -67,6 +69,9 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("[volc-identity-create-session] err", e);
-    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" });
+    return json(
+      { ok: false, error: e instanceof Error ? e.message : "服务器错误" },
+      e instanceof StoreAccessError ? e.status : 200,
+    );
   }
 });

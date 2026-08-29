@@ -13,6 +13,7 @@ import {
 } from "../_shared/brand-context.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 import {
   ALLOWED_BRAND_DEFAULT,
   buildFactReviewPrompt,
@@ -145,7 +146,11 @@ export async function handleCopyRequest(req: Request): Promise<Response> {
     const price = (body.price || "").toString().trim().slice(0, 20);
     const highlight = (body.highlight || "").toString().trim().slice(0, 80);
     const contentContext = (body.content_context || "").toString().trim().slice(0, 800);
-    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    let shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    const admin0 = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    if (!isTrustedService && userId) {
+      shopId = await resolveAuthorizedShop(admin0, userId, shopId);
+    }
     const VIRAL_STYLES = ["scream", "heal", "story", "flex"] as const;
     type ViralStyle = typeof VIRAL_STYLES[number];
     const viralStyle: ViralStyle | null = VIRAL_STYLES.includes(body.style) ? body.style : null;
@@ -176,7 +181,6 @@ export async function handleCopyRequest(req: Request): Promise<Response> {
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
 
-    const admin0 = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const kbQuery = [productName, highlight, toneKey].filter(Boolean).join(' ');
     const kbHits = kbQuery ? await kbSearch(admin0, { query: kbQuery, scope: 'copy', shopId, k: 6 }) : [];
     const kbBlock = formatKbBlock(kbHits);
@@ -313,11 +317,11 @@ ${presetBlock}${contextBlock}${strictBlock}${viralBlock}${kbBlock}
     return json({ success: true, candidates, platform: platformKey, asset_id: row?.id, style: viralStyle, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[copy] error", e);
-    return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 }
 
 if (!Deno.env.get("MARKETING_COPY_TEST")) {
   Deno.serve(handleCopyRequest);
 }
-

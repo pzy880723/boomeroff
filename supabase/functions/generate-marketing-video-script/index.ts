@@ -11,6 +11,7 @@ import { bindSurpriseReferences, normalizePublishCopy, normalizeSurpriseScript }
 import { DeepSeekRequestError, requestDeepSeekJson } from "../_shared/deepseek-client.ts";
 import { normalizeDeepSeekSurpriseScript, validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 import { buildFastSurpriseFallback, SURPRISE_MODEL_TIMEOUT_MS } from "../_shared/surprise-script-performance.ts";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,7 +61,9 @@ Deno.serve(async (req) => {
     const imageDescriptions: { index: number; summary: string; best_for?: string }[] = Array.isArray(body.image_descriptions)
       ? body.image_descriptions.slice(0, 20)
       : [];
-    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    let shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    const adminKb = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+    shopId = await resolveAuthorizedShop(adminKb, u.user.id, shopId);
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
     const character = (body.character && typeof body.character === "object") ? body.character : null;
@@ -80,7 +83,6 @@ Deno.serve(async (req) => {
 请在 scene / action 描述里自然地反复出现 TA。`
       : "";
 
-    const adminKb = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
     const kbQuery = [topic, highlight, rule.label, styleKey].filter(Boolean).join(' ');
     const kbHits = kbQuery ? await kbSearch(adminKb, { query: kbQuery, scope: 'video', shopId, k: 6 }) : [];
     const kbBlock = formatKbBlock(kbHits);
@@ -543,6 +545,7 @@ ${refList}
     return json({ success: true, script, video_type: videoType, video_type_label: rule.label, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[script] error", e);
-    return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

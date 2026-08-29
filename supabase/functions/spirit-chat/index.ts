@@ -222,6 +222,7 @@ Deno.serve(async (req) => {
       { count: dayCount },
       profileRes,
       staffRes,
+      roleRes,
       shopMap,
       convCheck,
     ] = await Promise.all([
@@ -231,6 +232,7 @@ Deno.serve(async (req) => {
       admin.from('spirit_usage').select('*', { count: 'exact', head: true }).eq('user_id', uid).gte('created_at', dayStartIso),
       admin.from('profiles').select('display_name').eq('user_id', uid).maybeSingle(),
       admin.from('staff_profiles').select('shop_id, real_name, position').eq('user_id', uid).maybeSingle(),
+      admin.from('user_roles').select('role, role_code, suspended').eq('user_id', uid).maybeSingle(),
       getShopsMap(admin),
       convCheckP,
     ]);
@@ -243,6 +245,12 @@ Deno.serve(async (req) => {
     const model = String(modelCfg?.value?.model ?? 'google/gemini-3-flash-preview');
     const temperature = Number(modelCfg?.value?.temperature ?? 0.6);
     const maxTokens = Number(modelCfg?.value?.max_tokens ?? 800);
+    const managementRoleCodes = new Set(['super_admin', 'area_manager', 'shop_manager']);
+    const canManageAllStores = roleRes.data?.role === 'admin'
+      || managementRoleCodes.has(roleRes.data?.role_code || '');
+    if (roleRes.data?.suspended) return json({ error: '账号已停用' }, 403);
+    const scopedShopId = canManageAllStores ? null : (staffRes.data?.shop_id || null);
+    if (!canManageAllStores && !scopedShopId) return json({ error: '账号尚未绑定门店，请联系管理员' }, 403);
 
     // 会话校验 / 创建
     if (conversationId) {
@@ -321,17 +329,21 @@ Deno.serve(async (req) => {
         if (name === 'query_schedule') {
           const from = String(args?.date_from || today);
           const to = String(args?.date_to || addDays(from, 7));
-          const { data: rows } = await admin.from('shift_schedules')
+          let scheduleQuery = admin.from('shift_schedules')
             .select('user_id, shift_code, work_date, shop_id')
             .gte('work_date', from).lte('work_date', to)
             .order('work_date');
+          if (scopedShopId) scheduleQuery = scheduleQuery.eq('shop_id', scopedShopId);
+          const { data: rows } = await scheduleQuery;
           if (!rows || rows.length === 0) return { rows: [], note: `${from} 至 ${to} 暂无排班数据` };
 
           const ids = Array.from(new Set(rows.map((r: any) => r.user_id)));
+          let shiftsQuery = admin.from('shop_shifts').select('code, name, start_time, end_time, shop_id').eq('active', true);
+          if (scopedShopId) shiftsQuery = shiftsQuery.or(`shop_id.is.null,shop_id.eq.${scopedShopId}`);
           const [sp, pf, shiftsRes] = await Promise.all([
             admin.from('staff_profiles').select('user_id, real_name').in('user_id', ids),
             admin.from('profiles').select('user_id, display_name').in('user_id', ids),
-            admin.from('shop_shifts').select('code, name, start_time, end_time, shop_id').eq('active', true),
+            shiftsQuery,
           ]);
           const nameMap = new Map<string, string>();
           for (const r of (pf.data || []) as any[]) nameMap.set(r.user_id, r.display_name || '同事');
@@ -392,11 +404,12 @@ Deno.serve(async (req) => {
         if (name === 'search_shop_kb') {
           const q = String(args?.query || '').slice(0, 30);
           if (q.length < 2) return { rows: [] };
-          const { data } = await admin
+          let kbQuery = admin
             .from('shop_kb_entries')
             .select('title, type, body, tags')
-            .or(`title.ilike.%${q}%,body.ilike.%${q}%`)
-            .limit(5);
+            .or(`title.ilike.%${q}%,body.ilike.%${q}%`);
+          if (scopedShopId) kbQuery = kbQuery.or(`shop_id.is.null,shop_id.eq.${scopedShopId}`);
+          const { data } = await kbQuery.limit(5);
           return { rows: (data || []).map((r: any) => ({ ...r, body: String(r.body || '').slice(0, 300) })) };
         }
 

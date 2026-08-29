@@ -64,13 +64,12 @@ export function useShops() {
 }
 
 /**
- * 营销中心统一门店状态：绑定门店是首次默认值；手动切换在当前会话内同步到所有营销页面；
- * 未绑定门店的用户会长期恢复自己上一次选择。所有用户都允许切换。
+ * 营销中心统一门店状态：管理角色可以跨店切换，普通店员始终锁定绑定门店。
  */
 export function useEffectiveShop() {
-  const { user, role, bootstrap } = useAuth();
+  const { user, roleCode, bootstrap } = useAuth();
   const { shops, loading: shopsLoading } = useShops();
-  const isAdmin = role === 'admin';
+  const isAdmin = ['super_admin', 'area_manager', 'shop_manager'].includes(roleCode || '');
   const [myShopId, setMyShopId] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [shopId, setShopIdState] = useState<string | null>(null);
@@ -106,46 +105,59 @@ export function useEffectiveShop() {
 
   useEffect(() => {
     if (!user || shopsLoading || profileLoading) return;
-    if (resolvedUserId === user.id && shopId && shops.some((shop) => shop.id === shopId)) return;
+    if (resolvedUserId === user.id && shopId && shops.some((shop) => shop.id === shopId)
+      && (isAdmin || shopId === myShopId)) return;
     const effective = resolveMarketingShop({
       shopIds: shops.map((shop) => shop.id),
       boundShopId: myShopId,
       sessionShopId: recallSessionShop(user.id),
       rememberedShopId: recallShop(user.id),
+      canSwitch: isAdmin,
     });
     setShopIdState(effective);
-    rememberSessionShop(user.id, effective);
-    if (!myShopId) rememberShop(effective, user.id);
+    if (isAdmin) {
+      rememberSessionShop(user.id, effective);
+      rememberShop(effective, user.id);
+    }
     setResolvedUserId(user.id);
-  }, [user, shopsLoading, profileLoading, resolvedUserId, shopId, shops, myShopId]);
+  }, [user, shopsLoading, profileLoading, resolvedUserId, shopId, shops, myShopId, isAdmin]);
 
   useEffect(() => {
     if (!user) return;
     const syncShop = (event: Event) => {
       const detail = (event as CustomEvent<{ userId: string; shopId: string | null }>).detail;
-      if (detail?.userId === user.id) setShopIdState(detail.shopId);
+      if (detail?.userId !== user.id) return;
+      setShopIdState(isAdmin ? detail.shopId : myShopId);
     };
     window.addEventListener(SHOP_CHANGE_EVENT, syncShop);
     return () => window.removeEventListener(SHOP_CHANGE_EVENT, syncShop);
-  }, [user]);
+  }, [user, isAdmin, myShopId]);
 
   const setShopId = useCallback((id: string | null) => {
     if (!user) return;
-    const next = id && shops.some((shop) => shop.id === id) ? id : null;
+    const next = isAdmin
+      ? (id && shops.some((shop) => shop.id === id) ? id : null)
+      : myShopId;
     setShopIdState(next);
-    rememberSessionShop(user.id, next);
-    if (!myShopId) rememberShop(next, user.id);
+    if (isAdmin) {
+      rememberSessionShop(user.id, next);
+      rememberShop(next, user.id);
+    }
     window.dispatchEvent(new CustomEvent(SHOP_CHANGE_EVENT, {
       detail: { userId: user.id, shopId: next },
     }));
-  }, [user, shops, myShopId]);
+  }, [user, shops, myShopId, isAdmin]);
+
+  const accessibleShops = isAdmin
+    ? shops
+    : shops.filter((shop) => shop.id === myShopId);
 
   return {
     shopId,
     setShopId,
-    shops,
+    shops: accessibleShops,
     isAdmin,
-    canSwitch: true,
+    canSwitch: isAdmin,
     loading: shopsLoading || profileLoading || resolvedUserId !== user?.id,
     myShopId,
   };

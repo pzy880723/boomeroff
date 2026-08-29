@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_LABELS, VIDEO_STYLE_EN } from "../_shared/video-styles.ts";
 import { loadMarketingPresets, type VideoType } from "../_shared/brand-context.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,7 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
     const auth = req.headers.get("Authorization");
@@ -40,7 +42,9 @@ Deno.serve(async (req) => {
     const presets = await loadMarketingPresets();
     const rule = (presets.videoRules as any)[videoTypeKey] || presets.videoRules.store_tour;
 
-    const shopId: string | null = typeof ctx.shop_id === "string" && ctx.shop_id ? ctx.shop_id : (typeof body.shop_id === "string" ? body.shop_id : null);
+    let shopId: string | null = typeof ctx.shop_id === "string" && ctx.shop_id ? ctx.shop_id : (typeof body.shop_id === "string" ? body.shop_id : null);
+    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
 
@@ -168,6 +172,7 @@ ${shopBlock ? `\n${shopBlock}\n` : ""}${imgBlock}
     return json({ success: true, reply, options, done, mode });
   } catch (e) {
     console.error("[brief-chat] error", e);
-    return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

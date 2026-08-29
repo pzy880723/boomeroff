@@ -1,6 +1,7 @@
 // 惊喜一下脚本草稿任务。
 // 只负责“抽素材 + 生成脚本 + 保存草稿”，不创建视频镜头；用户确认后由 director-create-job 消费。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { assertStoreAccess, resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 import {
   isStaleSurpriseScriptTask,
@@ -195,10 +196,11 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "start");
-    const shopId = String(body.shop_id || "").trim();
+    let shopId = String(body.shop_id || "").trim();
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
     if (action === "start") {
+      shopId = (await resolveAuthorizedShop(admin, user.id, shopId || null)) || "";
       if (!shopId) return json({ ok: false, error: "缺少 shop_id" }, 400);
       await expireStaleGeneratingDrafts(admin, user.id, shopId);
       const current = await findCurrentTask(admin, user.id, shopId);
@@ -239,6 +241,7 @@ Deno.serve(async (req) => {
     const { data: job, error: jobError } = await admin
       .from("video_generation_jobs").select("*").eq("id", jobId).eq("user_id", user.id).single();
     if (jobError || !job) return json({ ok: false, error: "脚本任务不存在" }, 404);
+    await assertStoreAccess(admin, user.id, job.shop_id);
 
     if (action === "poll") {
       if (isStaleSurpriseScriptTask(job)) {
@@ -321,6 +324,7 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "不支持的操作" }, 400);
   } catch (error) {
     console.error("[surprise-script-job] fatal", error);
-    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+    const status = error instanceof StoreAccessError ? error.status : 500;
+    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, status);
   }
 });

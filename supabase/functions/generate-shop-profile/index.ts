@@ -1,5 +1,6 @@
 // 用自然语言一段话生成店铺营销画像（tagline / description / selling_points 等）
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,13 +25,14 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const text = (body.text || "").toString().trim().slice(0, 2000);
-    const shopId = (body.shop_id || "").toString();
+    let shopId = (body.shop_id || "").toString();
     if (!text) return json({ error: "请先输入一段店铺描述" }, 400);
 
     // 取店铺基础信息辅助生成
     let shopName = ""; let shopAddress = "";
+    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shopId = (await resolveAuthorizedShop(admin, u.user.id, shopId || null)) || "";
     if (shopId) {
-      const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
       const { data: shop } = await admin.from("shops").select("name, address").eq("id", shopId).maybeSingle();
       shopName = (shop as any)?.name || "";
       shopAddress = (shop as any)?.address || "";
@@ -102,6 +104,7 @@ JSON 字段（全部必填，缺失就给合理推断的空字符串/空数组�
     return json({ profile: out });
   } catch (e: any) {
     console.error("[generate-shop-profile] error", e);
-    return json({ error: e?.message || "服务异常" }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ error: e?.message || "服务异常" }, status);
   }
 });

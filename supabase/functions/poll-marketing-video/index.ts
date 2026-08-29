@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
 import { isVolcesTosUrl, mirrorTosVideoToStorage } from "../_shared/mirror-tos-video.ts";
 import { coverPollFields, ensureCoverQueued } from "../_shared/cover-generation.ts";
+import { assertStoreAccess, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -645,9 +646,9 @@ Deno.serve(async (req) => {
       .from("marketing_video_jobs")
       .select("*")
       .eq("id", jobId)
-      .eq("user_id", u.user.id)
       .maybeSingle();
     if (jErr || !job) return json({ error: "任务不存在" }, 404);
+    await assertStoreAccess(admin, u.user.id, job.shop_id);
 
     const isParent = (job.segment_total ?? 0) > 1 && !job.provider_task_id;
 
@@ -867,6 +868,7 @@ Deno.serve(async (req) => {
     return json({ status: r.mapped, video_url: responseVideoUrl, error: r.error || null, ark_status: r.status, ...coverFieldsLive });
   } catch (e) {
     console.error("[poll] error", e);
-    return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

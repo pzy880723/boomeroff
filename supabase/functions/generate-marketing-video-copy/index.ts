@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadMarketingPresets } from "../_shared/brand-context.ts";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
 import { composeLockedPublishCopy } from "../_shared/publish-copy-template.ts";
+import { assertStoreAccess, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,7 +54,7 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const { data: asset, error: aErr } = await admin.from('marketing_assets').select('*').eq('id', assetId).maybeSingle();
     if (aErr || !asset) return json({ error: "找不到素材" }, 404);
-    if (asset.user_id !== u.user.id) return json({ error: "无权访问" }, 403);
+    await assertStoreAccess(admin, u.user.id, asset.shop_id);
     if (asset.kind !== 'video') return json({ error: "仅支持视频类型" }, 400);
 
     // 1) 优先从 marketing_video_jobs.script 拉;
@@ -222,6 +223,7 @@ ${topic && topic !== title ? `视频立意:${topic}\n` : ''}${styleLabel ? `风�
     return json({ success: true, copy, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[video-ad-copy] error", e);
-    return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

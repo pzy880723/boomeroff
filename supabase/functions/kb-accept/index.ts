@@ -1,5 +1,6 @@
 // kb-accept：用户点击"★ 加入知识库"，把 AI 输出（含 BOOMER 对话）回流为 accepted_output
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { resolveAuthorizedShop, StoreAccessError } from '../_shared/store-access.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,11 +25,12 @@ Deno.serve(async (req) => {
     const title = String(body?.title || '已采纳的 AI 输出').slice(0, 200);
     const content = String(body?.content || '').trim();
     const scopes = Array.isArray(body?.scopes) && body.scopes.length ? body.scopes : ['image', 'copy', 'video', 'chat'];
-    const shop_id = body?.shop_id || null;
+    let shop_id = body?.shop_id || null;
     const source = String(body?.source || 'unknown');
     if (!content) return new Response(JSON.stringify({ error: 'empty content' }), { status: 400, headers: corsHeaders });
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE);
+    shop_id = await resolveAuthorizedShop(admin, u.user.id, shop_id);
     const source_id = crypto.randomUUID();
     await admin.from('kb_ingest_queue').insert({
       source_type: 'accepted_output',
@@ -53,6 +55,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ ok: true, id: source_id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {
-    return new Response(JSON.stringify({ error: String((e as any)?.message || e) }), { status: 500, headers: corsHeaders });
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return new Response(JSON.stringify({ error: String((e as any)?.message || e) }), { status, headers: corsHeaders });
   }
 });

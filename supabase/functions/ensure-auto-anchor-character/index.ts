@@ -2,6 +2,7 @@
 // 1. 查 marketing_characters where shop_id=? and auto_anchor=true and meta->>video_type=? 命中直接返回
 // 2. 否则用 Lovable AI 把 brief 压成一句"角色设定"，再调内部 generate-character-board 逻辑
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,13 +26,15 @@ Deno.serve(async (req) => {
     if (!u.user) return json({ error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
-    const shop_id = body.shop_id;
+    let shop_id = body.shop_id;
     const video_type = (body.video_type || "store_tour").toString();
     const style = (body.style || "steady").toString();
     const brief_summary = (body.brief_summary || "").toString().slice(0, 600);
     if (!shop_id) return json({ error: "缺少 shop_id" }, 400);
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shop_id = await resolveAuthorizedShop(admin, u.user.id, shop_id);
+    if (!shop_id) return json({ error: "缺少 shop_id" }, 400);
 
     // 1) 复用
     const { data: hits } = await admin
@@ -117,6 +120,7 @@ Deno.serve(async (req) => {
     return json({ success: true, character: out.character, cached: false });
   } catch (e) {
     console.error("[anchor] error", e);
-    return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

@@ -9,6 +9,7 @@ import {
   STOREFRONT_CONSTRAINT_ZH,
   STOREFRONT_CONSTRAINT_EN,
 } from "../_shared/storefront-constraints.ts";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -280,10 +281,11 @@ Deno.serve(async (req) => {
     const realism: "photoreal" | "stylized" = body.realism === "stylized" ? "stylized" : "photoreal";
     const theme: string = (body.theme || "").toString().slice(0, 200);
     const styleGrade: "documentary" | "cinematic" = body.style_grade === "cinematic" ? "cinematic" : "documentary";
-    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
-    if (!shopId) return json({ ok: false, error: "请先选择店铺" });
+    let shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
+    if (!shopId) return json({ ok: false, error: "请先选择店铺" });
 
     // 每日 50 张总额(沿用 ai-image-chat 限额口径)
     const today = new Date().toISOString().slice(0, 10);
@@ -405,7 +407,8 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("[ai-smart-ad] fatal", e);
-    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" });
+    const status = e instanceof StoreAccessError ? e.status : 200;
+    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });
 

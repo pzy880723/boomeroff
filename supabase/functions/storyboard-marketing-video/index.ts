@@ -8,6 +8,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -150,7 +151,7 @@ Deno.serve(async (req) => {
     const script = body.script;
     const assets: AssetLite[] = Array.isArray(body.assets) ? body.assets : [];
     const character = body.character || null;
-    const shopId: string = body.shop_id || '_';
+    let shopId: string = body.shop_id || '';
     const styleKey = normalizeStyle(body.style);
     const realism = normalizeRealism(body.realism);
     const sessionId: string = body.session_id || crypto.randomUUID();
@@ -159,6 +160,8 @@ Deno.serve(async (req) => {
     if (!script) return json({ ok: false, error: "缺少 script" });
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shopId = (await resolveAuthorizedShop(admin, u.user.id, shopId || null)) || '';
+    if (!shopId) return json({ ok: false, error: "缺少 shop_id" }, 400);
 
     const clipsInfo = gatherClips(script);
     const total = clipsInfo.length;
@@ -213,7 +216,7 @@ Deno.serve(async (req) => {
             const tagList = Array.from(new Set(["分镜头", styleKey, `场景${globalIdx + 1}`].filter(Boolean))) as string[];
             await admin.from("marketing_assets").insert({
               user_id: u.user.id,
-              shop_id: shopId === "_" ? null : shopId,
+              shop_id: shopId,
               kind: "photo",
               output_url: url,
               category: "分镜头",
@@ -274,6 +277,7 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("[storyboard] error", e);
-    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" });
+    const status = e instanceof StoreAccessError ? e.status : 200;
+    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

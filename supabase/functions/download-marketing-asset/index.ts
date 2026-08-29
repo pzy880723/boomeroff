@@ -1,6 +1,7 @@
 // 代理下载素材文件,强制 attachment 头,绕过浏览器跨域 fetch 限制。
 // 支持视频(asset.output_url 来自火山 TOS)与图片(Supabase Storage 公开链接)。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { assertStoreAccess, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -96,14 +97,13 @@ Deno.serve(async (req) => {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    await assertStoreAccess(admin, userData.user.id, asset.shop_id);
     const storagePath = typeof asset.meta?.storage_path === "string" ? asset.meta.storage_path : "";
     if (!asset.output_url && !storagePath) {
       return new Response(JSON.stringify({ error: "素材尚未生成完成" }), {
         status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    // 登录用户即可下载素材库内容(素材本身已经按 shop_id 在前端读取做了过滤)
 
     // output_url 可能是历史长签名或火山临时地址。已经转存的素材始终按
     // storage_path 现场签发短链接，避免数据库里的旧 URL 失效后无法下载。
@@ -171,8 +171,9 @@ Deno.serve(async (req) => {
       headers,
     });
   } catch (e) {
+    const status = e instanceof StoreAccessError ? e.status : 500;
     return new Response(JSON.stringify({ error: (e as Error)?.message || "下载失败" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

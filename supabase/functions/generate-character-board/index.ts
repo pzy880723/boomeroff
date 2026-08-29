@@ -2,6 +2,7 @@
 // 使用 Gemini Nano Banana 2 (google/gemini-3.1-flash-image-preview) 通过 chat-completions image 形状调用。
 // 上传产物到 marketing-videos bucket 下 characters/{shop_id}/{id}.png,并落 marketing_characters 一条记录。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,8 +103,7 @@ Deno.serve(async (req) => {
     if (!u.user) return json({ error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
-    const shop_id: string | null = body.shop_id || null;
-    if (!shop_id) return json({ error: "缺少 shop_id" }, 400);
+    let shop_id: string | null = body.shop_id || null;
     const name = (body.name || "").toString().trim().slice(0, 40);
     if (!name) return json({ error: "请填写角色名称" }, 400);
     const role_label = (body.role_label || "").toString().trim().slice(0, 20);
@@ -115,6 +115,9 @@ Deno.serve(async (req) => {
       : [];
     const autoAnchor = !!body.auto_anchor;
     const metaExtra = (body.meta && typeof body.meta === "object") ? body.meta : {};
+    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shop_id = await resolveAuthorizedShop(admin, u.user.id, shop_id);
+    if (!shop_id) return json({ error: "缺少 shop_id" }, 400);
 
     const subjectBlock = buildSubjectBlock(name, role_label, extra_desc, core_emotion, visual_signature);
 
@@ -123,8 +126,6 @@ Deno.serve(async (req) => {
       subjectBlock,
       refImageUrls: subject_image_urls,
     });
-
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
     const bytes = await dataUrlToBytes(imgDataUrl);
     const charId = crypto.randomUUID();
@@ -165,6 +166,7 @@ Deno.serve(async (req) => {
     return json({ success: true, character: row });
   } catch (e) {
     console.error("[char-board] error", e);
-    return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

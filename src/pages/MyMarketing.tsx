@@ -23,7 +23,7 @@ export default function MyMarketing() {
   const [recents, setRecents] = useState<RecentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [surpriseOpen, setSurpriseOpen] = useState(false);
-  const { shopId, setShopId, shops, myShopId, loading: shopLoading } = useEffectiveShop();
+  const { shopId, setShopId, shops, myShopId, canSwitch, loading: shopLoading } = useEffectiveShop();
   const currentShop = shops.find((shop) => shop.id === shopId) || null;
   const [hasActiveJob, setHasActiveJob] = useState(false);
 
@@ -96,6 +96,7 @@ export default function MyMarketing() {
           value={shopId}
           shops={shops}
           boundShopId={myShopId}
+          canSwitch={canSwitch}
           loading={shopLoading}
           onChange={(id) => setShopId(id)}
         />

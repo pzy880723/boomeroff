@@ -17,6 +17,7 @@ import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
 import { generateFastSurpriseScript } from "../_shared/surprise-script-performance.ts";
 import { pickStorefrontAsset, resolveStorefrontAsset } from "../_shared/storefront-assets.ts";
 import { selectPendingAutoTagAssetIds } from "../_shared/auto-tag-assets.ts";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -111,13 +112,14 @@ Deno.serve(async (req) => {
     if (!u.user) return json({ ok: false, error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
-    const shopId: string | null = typeof body.shop_id === 'string' && body.shop_id ? body.shop_id : null;
-    if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
+    let shopId: string | null = typeof body.shop_id === 'string' && body.shop_id ? body.shop_id : null;
     const preview: boolean = !!body.preview;
     const exclude: string[] = Array.isArray(body.exclude_asset_ids) ? body.exclude_asset_ids.slice(0, 50) : [];
     const realism: 'stylized' | 'photoreal' = body.realism === 'photoreal' ? 'photoreal' : 'stylized';
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
+    if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
 
     // ====== 提交模式:前端回传 preview 时生成的 script,直接渲染 ======
     // 只要 preview=false 且带了脚本,就必须走「快速提交」;
@@ -497,6 +499,7 @@ Deno.serve(async (req) => {
     return json({ ...result, job_id: renderData.job_id, segment_total: renderData.segment_total || 1 });
   } catch (e) {
     console.error("[surprise] error", e);
-    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" });
+    const status = e instanceof StoreAccessError ? e.status : 200;
+    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

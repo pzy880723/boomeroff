@@ -3,6 +3,7 @@
 // 模型固定 google/gemini-3.1-flash-image-preview (Nano Banana 2)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { kbSearch, formatKbBlock, kbSourcesMeta } from "../_shared/kb.ts";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -115,7 +116,7 @@ Deno.serve(async (req) => {
     const refs: string[] = Array.isArray(body.refs) ? body.refs.slice(0, 4).filter((x: any) => typeof x === "string") : [];
     const templateId: string | undefined = typeof body.template_id === "string" ? body.template_id : undefined;
     const templateFields: Record<string, string> = (body.template_fields && typeof body.template_fields === "object") ? body.template_fields : {};
-    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    let shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
 
     if (!userPrompt.trim() && !templateId) {
       return json({ ok: false, error: "请输入想要的画面描述" }, 200);
@@ -123,6 +124,7 @@ Deno.serve(async (req) => {
 
     // 每日 50 张软上限
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
     const today = new Date().toISOString().slice(0, 10);
     const { count: usedToday } = await admin
       .from("marketing_assets")
@@ -206,6 +208,7 @@ Deno.serve(async (req) => {
     return json({ ok: true, output_url: pub.publicUrl, asset_id: row?.id, __kb_sources: kbSourcesMeta(kbHits) });
   } catch (e) {
     console.error("[ai-image-chat] error", e);
-    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, 200);
+    const status = e instanceof StoreAccessError ? e.status : 200;
+    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

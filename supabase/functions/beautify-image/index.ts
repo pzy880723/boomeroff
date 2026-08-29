@@ -2,6 +2,7 @@
 // 明确不做：风格化、换背景、加贴纸/水印、美颜、改商品本体。
 // 模型：google/gemini-3.1-flash-image-preview（Nano Banana 2，擅长保留主体的轻量编辑）。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,6 +72,7 @@ Deno.serve(async (req) => {
     if (!u.user) return json({ error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
+    let shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     const imageUrl: string = body.image_url || "";
     const toggles: FixToggles = body.toggles || {};
     const custom: string = (body.custom || "").toString().slice(0, 200);
@@ -78,6 +80,7 @@ Deno.serve(async (req) => {
 
     // 每天 30 张/人 软上限
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
     const today = new Date().toISOString().slice(0, 10);
     const { count: usedToday } = await admin
       .from("marketing_assets")
@@ -138,7 +141,6 @@ Deno.serve(async (req) => {
     const { data: pub } = admin.storage.from("product-images").getPublicUrl(path);
 
     // 落到 marketing_assets
-    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     const { data: row } = await admin.from("marketing_assets").insert({
       user_id: u.user.id,
       kind: "photo",
@@ -151,6 +153,7 @@ Deno.serve(async (req) => {
     return json({ success: true, output_url: pub.publicUrl, asset_id: row?.id });
   } catch (e) {
     console.error("[beautify] error", e);
-    return json({ error: e instanceof Error ? e.message : "服务器错误" }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });

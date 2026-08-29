@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
 import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2 } from "../_shared/seedance-models.ts";
+import { assertStoreAccess, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,7 +33,8 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const { data: job } = await admin.from("video_generation_jobs").select("*").eq("id", jobId).single();
-    if (!job || job.user_id !== u.user.id) return json({ ok: false, error: "任务不存在" }, 404);
+    if (!job) return json({ ok: false, error: "任务不存在" }, 404);
+    await assertStoreAccess(admin, u.user.id, job.shop_id);
     const { data: shot } = await admin.from("video_generation_shots")
       .select("*").eq("job_id", jobId).eq("shot_index", shotIndex).single();
     if (!shot) return json({ ok: false, error: "镜头不存在" }, 404);
@@ -91,6 +93,7 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   } catch (e) {
     console.error("[director-retry-shot] fatal", e);
-    return json({ ok: false, error: (e as Error).message || String(e) }, 500);
+    const status = e instanceof StoreAccessError ? e.status : 500;
+    return json({ ok: false, error: (e as Error).message || String(e) }, status);
   }
 });

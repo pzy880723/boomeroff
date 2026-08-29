@@ -12,6 +12,7 @@ import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 import { resolveStorefrontConstraintZh, STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
 import { OWN_BRAND_LOCK_EN } from "../_shared/brand-scrub.ts";
 import { bindSurpriseReferences, buildSurpriseReferencePlan, compileSurpriseOneShotPrompt, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
+import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -404,11 +405,11 @@ Deno.serve(async (req) => {
 
     const styleKey = normalizeStyle(body.style || script.style);
     const realism = normalizeRealism(body.realism ?? script.realism);
-    const shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    let shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
+    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+    shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
-
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
     // 模型解析顺序:body.model → marketing_presets.video_model → 默认 Seedance 2.0 Pro
     // 不在白名单的回退到默认并日志告警
@@ -658,6 +659,7 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("[render] error", e);
-    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" });
+    const status = e instanceof StoreAccessError ? e.status : 200;
+    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, status);
   }
 });
