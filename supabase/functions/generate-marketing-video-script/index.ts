@@ -291,7 +291,7 @@ ${refList}
             apiKey: DEEPSEEK_API_KEY,
             systemPrompt: fastSystemPrompt,
             userPrompt: fastUserPrompt,
-            model: Deno.env.get("DEEPSEEK_SCRIPT_MODEL") || "deepseek-v4-flash",
+            model: Deno.env.get("DEEPSEEK_SCRIPT_MODEL") || "deepseek-chat",
             temperature: 0.85,
             maxTokens: 1800,
             timeoutMs: SURPRISE_MODEL_TIMEOUT_MS,

@@ -8,6 +8,8 @@ export interface DeepSeekJsonRequest {
   timeoutMs?: number;
 }
 
+export const DEFAULT_DEEPSEEK_SCRIPT_MODEL = 'deepseek-chat';
+
 export class DeepSeekRequestError extends Error {
   status: number;
 
@@ -42,13 +44,12 @@ export async function requestDeepSeekJson(request: DeepSeekJsonRequest): Promise
       },
       signal: controller.signal,
       body: JSON.stringify({
-        model: request.model || 'deepseek-v4-pro',
+        model: request.model || DEFAULT_DEEPSEEK_SCRIPT_MODEL,
         messages: [
           { role: 'system', content: request.systemPrompt },
           { role: 'user', content: request.userPrompt },
         ],
         response_format: { type: 'json_object' },
-        thinking: { type: 'disabled' },
         temperature: request.temperature ?? 0.85,
         max_tokens: request.maxTokens ?? 1800,
         stream: false,

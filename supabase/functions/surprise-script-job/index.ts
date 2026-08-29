@@ -81,7 +81,7 @@ async function clearFailedDrafts(admin: AdminClient, userId: string, shopId: str
 }
 
 async function expireStaleGeneratingDrafts(admin: AdminClient, userId: string, shopId: string) {
-  const cutoff = new Date(Date.now() - 20_000).toISOString();
+  const cutoff = new Date(Date.now() - 40_000).toISOString();
   const { error } = await admin
     .from("video_generation_jobs")
     .update({
@@ -117,7 +117,7 @@ async function runScriptGeneration({
   const startedAt = Date.now();
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
+    const timer = setTimeout(() => controller.abort(), 35_000);
     let response: Response;
     try {
       response = await fetch(`${supabaseUrl}/functions/v1/surprise-marketing-video`, {
@@ -162,6 +162,8 @@ async function runScriptGeneration({
         surprise_stage: "script_ready",
         background: true,
         script_provider: result.script?.script_provider || null,
+        script_provider_model: result.script?.script_provider_model || null,
+        script_provider_reason: result.script?.script_provider_reason || null,
         script_generation_ms: Date.now() - startedAt,
       },
     }).eq("id", jobId).eq("status", "script_generating").select("id").maybeSingle();

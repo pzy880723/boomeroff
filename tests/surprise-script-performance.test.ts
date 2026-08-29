@@ -23,18 +23,17 @@ test('快速兜底稿仍满足高密度五镜、字幕对齐和连续口播规�
   assert.equal(script.publish_copy?.title.includes('中信泰富'), true);
 });
 
-test('惊喜一下只允许一次 DeepSeek 请求并使用快速模型', () => {
+test('惊喜一下使用官方 DeepSeek 模型并允许一次定向修复', () => {
   const source = readFileSync(
     new URL('../supabase/functions/generate-marketing-video-script/index.ts', import.meta.url),
     'utf8',
   );
-  assert.equal((source.match(/await requestDeepSeekJson\(/g) || []).length, 1);
-  assert.doesNotMatch(source, /for \(let attempt = 0; attempt < 3/);
-  assert.match(source, /deepseek-v4-flash/);
+  assert.match(source, /deepseek-chat/);
+  assert.doesNotMatch(source, /deepseek-v4-flash/);
   assert.match(source, /buildFastSurpriseFallback/);
 });
 
-test('惊喜一下预览不再等待 AI 生成人设，并限制模型等待时间', () => {
+test('惊喜一下预览不等待 AI 生成人设，并给真实脚本生成合理时间', () => {
   const source = readFileSync(
     new URL('../supabase/functions/surprise-marketing-video/index.ts', import.meta.url),
     'utf8',
@@ -49,7 +48,7 @@ test('惊喜一下预览不再等待 AI 生成人设，并限制模型等待时�
 
   const timeout = performanceSource.match(/SURPRISE_MODEL_TIMEOUT_MS\s*=\s*([\d_]+)/);
   assert.ok(timeout, '应声明惊喜脚本模型超时');
-  assert.ok(Number(timeout[1].replaceAll('_', '')) <= 2_500, '模型等待不能超过 2.5 秒');
+  assert.ok(Number(timeout[1].replaceAll('_', '')) >= 10_000, '模型等待不能短到固定触发兜底');
 });
 
 test('惊喜一下不再通过第三层 Edge Function 生成脚本', () => {

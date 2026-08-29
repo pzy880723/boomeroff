@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { requestDeepSeekJson } from '../supabase/functions/_shared/deepseek-client.ts';
 
-test('DeepSeek 客户端使用 v4-pro 非思考 JSON 模式且不改写密钥', async () => {
+test('DeepSeek 客户端使用官方 chat JSON 模式且不改写密钥', async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: any = null;
   let authHeader = '';
@@ -23,9 +23,9 @@ test('DeepSeek 客户端使用 v4-pro 非思考 JSON 模式且不改写密钥', 
     });
     assert.equal(result.title, '测试脚本');
     assert.equal(authHeader, 'Bearer test-secret');
-    assert.equal(requestBody.model, 'deepseek-v4-pro');
+    assert.equal(requestBody.model, 'deepseek-chat');
     assert.deepEqual(requestBody.response_format, { type: 'json_object' });
-    assert.deepEqual(requestBody.thinking, { type: 'disabled' });
+    assert.equal(requestBody.thinking, undefined);
     assert.equal(requestBody.stream, false);
   } finally {
     globalThis.fetch = originalFetch;

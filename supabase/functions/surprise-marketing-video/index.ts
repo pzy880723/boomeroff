@@ -413,7 +413,7 @@ Deno.serve(async (req) => {
 
     const generatedScript = await generateFastSurpriseScript({
       apiKey: Deno.env.get('DEEPSEEK_API_KEY'),
-      model: Deno.env.get('DEEPSEEK_SCRIPT_MODEL') || 'deepseek-v4-flash',
+      model: Deno.env.get('DEEPSEEK_SCRIPT_MODEL') || 'deepseek-chat',
       shopName: shopCtx?.name || null,
       imageDescriptions,
       ageBucket: persona.age_bucket || null,
