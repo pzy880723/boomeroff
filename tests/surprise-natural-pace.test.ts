@@ -87,9 +87,11 @@ test('编译后的提示词使用高密度语速和极短节奏换气', () => {
   assert.match(prompt, /严格按最终口播全文只读一次/);
   assert.doesNotMatch(prompt, /270–320/);
   assert.doesNotMatch(prompt, /零停顿、零吸气/);
-  // 画面顺序与参考图绑定保持不变
+  // 保留门头、素材顺序与完整收尾，但不再堆叠逐秒分镜口令
   assert.match(prompt, /0-3 秒/);
-  assert.match(prompt, /12-15 秒/);
-  assert.match(prompt, /画面严格参考图片1/);
-  assert.match(prompt, /画面严格参考图片5/);
+  assert.match(prompt, /【画面素材概括】/);
+  assert.match(prompt, /参考图片1/);
+  assert.match(prompt, /参考图片5/);
+  assert.match(prompt, /最后约 2\.5–3 秒必须保留给行动号召/);
+  assert.doesNotMatch(prompt, /12-15 秒｜对白/);
 });

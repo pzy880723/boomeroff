@@ -177,7 +177,7 @@ test('无效图片索引会确定性回退到真实参考图', () => {
   assert.equal(referencePlan.urls.length, 2);
   assert.equal(bound.scenes[1].image_index, 1);
   assert.doesNotMatch(prompt, /图片100/);
-  assert.match(prompt, /画面严格参考图片2/);
+  assert.match(prompt, /参考图片2/);
 });
 
 test('有门头素材时首镜头和首个画面切点必须锁定真实门头', () => {
