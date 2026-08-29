@@ -25,6 +25,46 @@ interface FastGenerationOptions extends FastFallbackOptions {
   model?: string;
 }
 
+const SAFE_BEAT_EXTENSIONS = [
+  '现在就值得专程进来认真看看',
+  '每排货架都能慢慢发现不同惊喜',
+  '拿在手里越看细节越有意思',
+  '认真挑选总能找到合眼缘的好物',
+  '记得放进攻略到店完整逛上一圈',
+];
+
+function chineseLength(value: unknown): number {
+  return String(value || '').replace(/[^\u4e00-\u9fa5]/g, '').length;
+}
+
+function fillToChineseLength(value: unknown, suffix: string, target = 18): string {
+  let output = String(value || '').replace(/[。.!！?？…;；:：,，、\s]+$/g, '').trim();
+  let suffixCursor = 0;
+  while (chineseLength(output) < target && suffixCursor < suffix.length) {
+    output += suffix[suffixCursor];
+    suffixCursor += 1;
+  }
+  return output;
+}
+
+/**
+ * DeepSeek 偶尔会返回结构和内容都合格、但每段偏短的稿子。
+ * 保留模型生成的主题和画面，仅用不引入价格/活动/地址的安全短语补齐口播预算，
+ * 避免把整份个性化脚本丢掉并换成固定兜底稿。
+ */
+export function completeShortGeneratedScript(candidate: Record<string, unknown>): SurpriseScript {
+  const script = normalizeDeepSeekSurpriseScript(candidate as any);
+  const clips = [script.hook, ...script.scenes, script.outro];
+  if (clips.length !== 5 || clips.some((clip) => !String(clip?.dialogue || '').trim())) return script;
+  clips.forEach((clip, index) => {
+    const dialogue = fillToChineseLength(clip.dialogue, SAFE_BEAT_EXTENSIONS[index], 18);
+    clip.dialogue = dialogue;
+    clip.subtitle = dialogue;
+  });
+  script.continuous_dialogue = clips.map((clip) => clip.dialogue).join('，');
+  return normalizeSurpriseScript(script);
+}
+
 export async function generateFastSurpriseScript(options: FastGenerationOptions): Promise<SurpriseScript> {
   const startedAt = Date.now();
   let script: SurpriseScript | null = null;
@@ -71,6 +111,21 @@ export async function generateFastSurpriseScript(options: FastGenerationOptions)
           lastErrors = validation.errors;
           providerReason = `validation_failed:${validation.errors.join('|')}`;
           console.warn(`[surprise-fast] DeepSeek candidate rejected attempt=${attempt + 1} model=${model}`, validation.errors);
+        }
+      }
+      if (!script && lastCandidate) {
+        const completed = completeShortGeneratedScript(lastCandidate);
+        const completedValidation = validateSurpriseScript(completed, {
+          ageBucket: options.ageBucket || null,
+          factContext: options.factContext,
+        });
+        if (!completedValidation.errors.length) {
+          script = completed;
+          provider = 'deepseek';
+          providerReason = 'locally_completed_after_validation';
+        } else {
+          providerReason = `local_completion_failed:${completedValidation.errors.join('|')}`;
+          console.warn(`[surprise-fast] completed DeepSeek candidate rejected model=${model}`, completedValidation.errors);
         }
       }
     } catch (error) {

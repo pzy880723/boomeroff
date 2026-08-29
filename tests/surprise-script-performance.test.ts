@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { buildFastSurpriseFallback } from '../supabase/functions/_shared/surprise-script-performance.ts';
+import { buildFastSurpriseFallback, completeShortGeneratedScript } from '../supabase/functions/_shared/surprise-script-performance.ts';
 import { validateSurpriseScript } from '../supabase/functions/_shared/surprise-script-policy.ts';
 
 test('快速兜底稿仍满足高密度五镜、字幕对齐和连续口播规则', () => {
@@ -21,6 +21,27 @@ test('快速兜底稿仍满足高密度五镜、字幕对齐和连续口播规�
   assert.deepEqual(validation.errors, []);
   assert.ok(validation.dialogueLength >= 90 && validation.dialogueLength <= 100);
   assert.equal(script.publish_copy?.title.includes('中信泰富'), true);
+});
+
+test('保留 DeepSeek 短稿内容并确定性补齐，不直接替换为固定兜底稿', () => {
+  const dialogues = ['这家店值得来逛', '进门就有满架惊喜', '拿起小物细节丰富', '慢慢挑选很有意思', '现在就来店里看看'];
+  const script = completeShortGeneratedScript({
+    continuous_dialogue: dialogues.join('，'),
+    hook: { scene: '真实门头', action: '边走边对镜头说', dialogue: dialogues[0], subtitle: dialogues[0], image_index: 0 },
+    scenes: dialogues.slice(1, 4).map((dialogue, index) => ({
+      scene: `店内实景${index + 1}`,
+      action: '边拿起商品边对镜头继续说',
+      dialogue,
+      subtitle: dialogue,
+      image_index: index + 1,
+    })),
+    outro: { scene: '店内全景', action: '边招手边对镜头继续说', dialogue: dialogues[4], subtitle: dialogues[4], image_index: 4 },
+  });
+  const validation = validateSurpriseScript(script);
+  assert.deepEqual(validation.errors, []);
+  assert.match(String(script.hook.dialogue), /^这家店值得来逛/);
+  assert.match(String(script.outro.dialogue), /^现在就来店里看看/);
+  assert.equal(script.outro.subtitle, script.outro.dialogue);
 });
 
 test('惊喜一下使用官方 DeepSeek 模型并允许一次定向修复', () => {
