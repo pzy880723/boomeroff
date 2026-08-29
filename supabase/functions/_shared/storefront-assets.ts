@@ -1,5 +1,6 @@
 export interface StorefrontAssetLike {
   id?: string;
+  output_url?: unknown;
   category?: unknown;
   tags?: unknown;
   summary?: unknown;
@@ -70,4 +71,18 @@ export function pickStorefrontAsset<T extends StorefrontAssetLike>(assets: T[]):
     .map((asset) => ({ asset, score: scoreStorefrontAsset(asset) }))
     .sort((a, b) => b.score - a.score);
   return ranked[0] && ranked[0].score >= 60 ? ranked[0].asset : null;
+}
+
+export function resolveStorefrontAsset<T extends StorefrontAssetLike>(
+  assets: T[],
+  preferredUrl?: string | null,
+): T | null {
+  const normalizedPreferredUrl = String(preferredUrl || '').trim();
+  if (normalizedPreferredUrl) {
+    const preferred = assets.find((asset) =>
+      String(asset?.output_url || '').trim() === normalizedPreferredUrl
+    );
+    if (preferred) return preferred;
+  }
+  return pickStorefrontAsset(assets);
 }

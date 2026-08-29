@@ -79,13 +79,15 @@ export function UploadAssetDialog({
           }
         }
         toast.success(`已上传 ${uploaded.length} 张图片到素材库`);
-        // 后台静默打标:不 await,不阻塞;每批最多 12 张,大量上传分批触发
+        // 后台静默打标:缩小多模态批次,并检查 invokeFn 返回的业务错误。
         const ids = uploaded.map((r) => r.id).filter(Boolean);
-        for (let i = 0; i < ids.length; i += 12) {
-          const slice = ids.slice(i, i + 12);
-          invokeFn('auto-tag-marketing-asset', { body: { asset_ids: slice } })
-            .catch(() => { /* 静默失败,下次生成视频时会兜底 */ });
-        }
+        void (async () => {
+          for (let i = 0; i < ids.length; i += 4) {
+            const slice = ids.slice(i, i + 4);
+            const { error } = await invokeFn('auto-tag-marketing-asset', { body: { asset_ids: slice } });
+            if (error) console.warn('[asset-upload] auto-tag failed', error.message);
+          }
+        })();
 
       } else if (kind === 'copy') {
         const t = title.trim(); const b = bodyText.trim();

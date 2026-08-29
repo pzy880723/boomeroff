@@ -172,16 +172,18 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
     if (allNew.length) onChange([...urls, ...allNew]);
     setItems((prev) => prev.filter((it) => it.stage !== 'done'));
 
-    // 等 insert 的 select id 返回(insert 是 fire-and-forget,这里给 600ms 兜底),然后按 8 个一批 fire-and-forget 调 auto-tag
+    // 等 insert 的 select id 返回,再用小批次后台识图并检查业务错误。
     if (insertedIds.length || newItems.length) {
       setTimeout(() => {
         const ids = [...insertedIds];
         if (!ids.length) return;
-        for (let i = 0; i < ids.length; i += 8) {
-          const slice = ids.slice(i, i + 8);
-          void invokeFn('auto-tag-marketing-asset', { body: { asset_ids: slice } })
-            .catch((err) => console.warn('[upload-grid] auto-tag failed', err?.message));
-        }
+        void (async () => {
+          for (let i = 0; i < ids.length; i += 4) {
+            const slice = ids.slice(i, i + 4);
+            const { error } = await invokeFn('auto-tag-marketing-asset', { body: { asset_ids: slice } });
+            if (error) console.warn('[upload-grid] auto-tag failed', error.message);
+          }
+        })();
       }, 600);
     }
 

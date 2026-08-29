@@ -12,6 +12,7 @@ export interface ShopContext {
   target_audience?: string | null;
   brand_keywords?: string[] | null;
   default_hashtags?: string[] | null;
+  cover_image_url?: string | null;
 }
 
 export async function loadShopContext(shopId: string | null | undefined): Promise<ShopContext | null> {
@@ -37,6 +38,7 @@ export async function loadShopContext(shopId: string | null | undefined): Promis
       target_audience: (prof as any)?.target_audience,
       brand_keywords: (prof as any)?.brand_keywords,
       default_hashtags: (prof as any)?.default_hashtags,
+      cover_image_url: (prof as any)?.cover_image_url,
     };
   } catch (e) {
     console.error("[shop-context] load fail", e);

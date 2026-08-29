@@ -15,7 +15,7 @@ import { resolveStorefrontOpeningEn, resolveStorefrontOpeningZh } from "../_shar
 import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
 import { generateFastSurpriseScript } from "../_shared/surprise-script-performance.ts";
-import { pickStorefrontAsset } from "../_shared/storefront-assets.ts";
+import { pickStorefrontAsset, resolveStorefrontAsset } from "../_shared/storefront-assets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -264,7 +264,8 @@ Deno.serve(async (req) => {
 
 
     // 2) 找高置信真实门头。没有门头时直接停止，绝不让模型凭空设计 Logo 或入口。
-    const storefrontHit = pickStorefrontAsset(pool);
+    const shopCtx = await shopContextPromise;
+    const storefrontHit = resolveStorefrontAsset(pool, shopCtx?.cover_image_url);
     if (!storefrontHit) {
       return json({
         ok: false,
@@ -337,7 +338,6 @@ Deno.serve(async (req) => {
     const holidayBrief = formatHolidayBrief(holiday);
 
     // 7) 快捷流程的人设由本地规则随机生成，避免在脚本前再串行等待一次 AI。
-    const shopCtx = await shopContextPromise;
     const allTags = Array.from(new Set(pickedAssets.flatMap((a: any) =>
       Array.isArray(a.tags) ? a.tags.map((t: any) => String(t)) : []
     )));

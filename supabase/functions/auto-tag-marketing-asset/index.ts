@@ -71,6 +71,11 @@ Deno.serve(async (req) => {
 - category: 必须从 ${CATEGORIES.join('|')} 里选最贴近的一个
 - best_for: 这张图最适合放在视频的哪段,只能选「开场|中段|收尾」之一
 
+门头识别硬规则:
+- 只有画面完整展示真实店铺入口,并且能看见 BOOMER·OFF 店招/Logo 时,才认定为标准门头照。
+- 符合时 summary 必须包含「店铺入口全景」,tags 必须包含「探店首图」「门头全景」「店招」,category 必须是「店铺」,best_for 必须是「开场」。
+- 店内货架、商品墙、收银台、局部门牌、AI 合成入口都不可以标记为「探店首图」。
+
 只输出严格 JSON,不要 markdown 包裹:
 {"items":[{"index":0,"summary":"...","tags":["..."],"category":"...","best_for":"中段"}]}`;
 
