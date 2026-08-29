@@ -23,6 +23,32 @@ test('快速兜底稿仍满足高密度五镜、字幕对齐和连续口播规�
   assert.equal(script.publish_copy?.title.includes('中信泰富'), true);
 });
 
+test('兜底稿按 variationKey 随机换文案，且每份都通过校验', () => {
+  const imageDescriptions = [
+    { index: 0, summary: '真实门头与 BOOMER OFF 招牌' },
+    { index: 1, summary: '店内复古杂货货架' },
+  ];
+  const factContext = '上海中信泰富店 中古杂货';
+  const seen = new Set<string>();
+  for (const variationKey of ['a1', 'b2', 'c3', 'd4', 'e5', 'f6']) {
+    const script = buildFastSurpriseFallback({ shopName: '上海中信泰富店', imageDescriptions, variationKey });
+    const validation = validateSurpriseScript(script, { factContext });
+    assert.deepEqual(validation.errors, [], `variationKey=${variationKey} 校验失败`);
+    seen.add(String(script.continuous_dialogue));
+  }
+  assert.ok(seen.size >= 2, '不同 variationKey 必须产出不同口播');
+
+  const one = buildFastSurpriseFallback({ shopName: '上海中信泰富店', imageDescriptions, variationKey: 'seed-A' });
+  const two = buildFastSurpriseFallback({ shopName: '上海中信泰富店', imageDescriptions, variationKey: 'seed-B' });
+  assert.notEqual(one.continuous_dialogue, two.continuous_dialogue);
+  assert.deepEqual(validateSurpriseScript(one, { factContext }).errors, []);
+  assert.deepEqual(validateSurpriseScript(two, { factContext }).errors, []);
+  assert.equal(
+    buildFastSurpriseFallback({ shopName: '上海中信泰富店', imageDescriptions, variationKey: 'seed-A' }).continuous_dialogue,
+    one.continuous_dialogue,
+  );
+});
+
 test('保留 DeepSeek 短稿内容并确定性补齐，不直接替换为固定兜底稿', () => {
   const dialogues = ['这家店值得来逛', '进门就有满架惊喜', '拿起小物细节丰富', '慢慢挑选很有意思', '现在就来店里看看'];
   const script = completeShortGeneratedScript({
