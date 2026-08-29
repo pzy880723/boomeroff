@@ -13,6 +13,17 @@ const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const CATEGORIES = ['服饰', '包袋', '配饰', '杂货', '玩具', '家居', '书刊', '店铺', '其他'];
+// Only the SHA-256 digest is committed. The raw cron token lives in the database
+// scheduler command and can be rotated without exposing it to browsers.
+const AUTO_TAG_CRON_TOKEN_SHA256 = "61c9191d9ceb52896ae3d106890138f21bb869f48446212dc587dd177c83c178";
+
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 interface AssetRow {
   id: string;
@@ -41,9 +52,12 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
     const body = await req.json().catch(() => ({}));
-    const cronSecret = Deno.env.get("AUTO_TAG_CRON_TOKEN") || "";
     const cronHeader = req.headers.get("X-Auto-Tag-Cron") || "";
-    const isCron = !!cronSecret && cronHeader === cronSecret;
+    const configuredCronSecret = Deno.env.get("AUTO_TAG_CRON_TOKEN") || "";
+    const isCron = !!cronHeader && (
+      (configuredCronSecret && cronHeader === configuredCronSecret) ||
+      await sha256Hex(cronHeader) === AUTO_TAG_CRON_TOKEN_SHA256
+    );
     const auth = req.headers.get("Authorization");
     let userId: string | null = null;
     if (!isCron) {
