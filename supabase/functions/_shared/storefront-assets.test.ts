@@ -1,5 +1,9 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { pickStorefrontAsset, resolveStorefrontAsset } from "./storefront-assets.ts";
+import {
+  isCanonicalStorefrontAsset,
+  pickStorefrontAsset,
+  resolveStorefrontAsset,
+} from "./storefront-assets.ts";
 
 Deno.test("探店首图优先于普通门头近景", () => {
   const canonical = {
@@ -39,4 +43,15 @@ Deno.test("门店资料指定的真实门头在 AI 标签缺失时仍可用于�
     resolveStorefrontAsset([interior, uploadedStorefront], storefrontUrl)?.id,
     "uploaded-storefront",
   );
+});
+
+Deno.test("只有完整真实门头标签才自动晋升为门店标准封面", () => {
+  assertEquals(isCanonicalStorefrontAsset({
+    tags: ["探店首图", "门头全景", "店招"],
+    meta: { summary: "店铺入口全景，BOOMER·OFF 店招清晰可见。" },
+  }), true);
+  assertEquals(isCanonicalStorefrontAsset({
+    tags: ["店铺", "商品陈列"],
+    meta: { summary: "店内货架与收银台。" },
+  }), false);
 });

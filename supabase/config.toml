@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.generate-marketing-copy]
 verify_jwt = false
+
+[functions.auto-tag-marketing-asset]
+verify_jwt = false

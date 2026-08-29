@@ -90,7 +90,13 @@ export function UploadGrid({ urls, onChange, max = 10, preset = 'thumb', title =
         input_image_urls: [finalUrl],
         sha256: hash,
         tags: defaultTags,
-        meta: { source: 'reference_upload', sha256: hash, filename: file.name },
+        meta: {
+          source: 'reference_upload',
+          sha256: hash,
+          filename: file.name,
+          ai_tag_status: 'pending',
+          ai_tag_attempts: 0,
+        },
       })
       .select('id')
       .single()

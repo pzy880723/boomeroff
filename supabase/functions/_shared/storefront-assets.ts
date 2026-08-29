@@ -66,6 +66,24 @@ export function scoreStorefrontAsset(asset: StorefrontAssetLike): number {
   return score;
 }
 
+export function isCanonicalStorefrontAsset(asset: StorefrontAssetLike): boolean {
+  const meta = asset?.meta || {};
+  const aiCaption = meta.ai_caption || {};
+  const summaries = [asset?.summary, meta.summary, aiCaption.summary]
+    .map((value) => String(value || '').toLowerCase())
+    .filter(Boolean)
+    .join(' ');
+  const tags = [...strings(asset?.tags), ...strings(aiCaption.tags)].join(' ');
+
+  const isPrimary = tags.includes('探店首图');
+  const hasFullEntrance = tags.includes('门头全景') ||
+    includesAny(summaries, ['店铺入口全景', '门店入口全景', '门头全景']);
+  const hasSign = tags.includes('店招') ||
+    includesAny(summaries, ['店招', 'boomer·off', 'boomer off']);
+
+  return isPrimary && hasFullEntrance && hasSign;
+}
+
 export function pickStorefrontAsset<T extends StorefrontAssetLike>(assets: T[]): T | null {
   const ranked = assets
     .map((asset) => ({ asset, score: scoreStorefrontAsset(asset) }))

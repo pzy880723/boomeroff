@@ -71,6 +71,8 @@ export function UploadAssetDialog({
                 source: 'manual_upload',
                 asset_class: asBase ? 'base' : 'upload',
                 filename: batch[j]?.name,
+                ai_tag_status: 'pending',
+                ai_tag_attempts: 0,
               },
             });
             uploaded.push(row);

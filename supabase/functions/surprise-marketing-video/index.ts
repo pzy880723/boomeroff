@@ -16,6 +16,7 @@ import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surp
 import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
 import { generateFastSurpriseScript } from "../_shared/surprise-script-performance.ts";
 import { pickStorefrontAsset, resolveStorefrontAsset } from "../_shared/storefront-assets.ts";
+import { selectPendingAutoTagAssetIds } from "../_shared/auto-tag-assets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -265,7 +266,38 @@ Deno.serve(async (req) => {
 
     // 2) 找高置信真实门头。没有门头时直接停止，绝不让模型凭空设计 Logo 或入口。
     const shopCtx = await shopContextPromise;
-    const storefrontHit = resolveStorefrontAsset(pool, shopCtx?.cover_image_url);
+    let storefrontHit = resolveStorefrontAsset(pool, shopCtx?.cover_image_url);
+    if (!storefrontHit) {
+      // 上传页的静默识图可能因用户退出、弱网或限流而丢失。生成脚本前再补跑一次，
+      // 确保新门店不会因为图片尚未打标而永久卡在“没有门头照”。
+      const pendingIds = selectPendingAutoTagAssetIds(pool, 12);
+      for (let i = 0; i < pendingIds.length; i += 4) {
+        try {
+          const tagRes = await fetch(`${SUPABASE_URL}/functions/v1/auto-tag-marketing-asset`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: auth,
+              apikey: ANON,
+            },
+            body: JSON.stringify({ asset_ids: pendingIds.slice(i, i + 4) }),
+          });
+          if (!tagRes.ok) console.warn(`[surprise] last-mile auto-tag failed status=${tagRes.status}`);
+        } catch (error) {
+          console.warn("[surprise] last-mile auto-tag request failed", error);
+        }
+      }
+      if (pendingIds.length) {
+        const { data: refreshed } = await admin.from("marketing_assets")
+          .select("id, output_url, tags, category, meta, created_at")
+          .in("id", pool.map((asset: any) => asset.id));
+        if (refreshed?.length) {
+          const refreshedById = new Map(refreshed.map((asset: any) => [asset.id, asset]));
+          pool = pool.map((asset: any) => refreshedById.get(asset.id) || asset);
+          storefrontHit = resolveStorefrontAsset(pool, shopCtx?.cover_image_url);
+        }
+      }
+    }
     if (!storefrontHit) {
       return json({
         ok: false,
