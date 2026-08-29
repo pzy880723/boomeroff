@@ -80,7 +80,12 @@ Deno.serve(async (req) => {
       .eq("kind", "photo")
       .not("output_url", "is", null);
     if (ids.length) query = query.in("id", ids);
-    else query = query.order("created_at", { ascending: true }).limit(200);
+    else {
+      query = query
+        .in("meta->>ai_tag_status", ["pending", "failed", "processing"])
+        .order("created_at", { ascending: true })
+        .limit(40);
+    }
     if (userId) query = query.eq("user_id", userId);
     const { data: rowsRaw, error: rErr } = await query;
     if (rErr) return json({ ok: false, error: rErr.message });
