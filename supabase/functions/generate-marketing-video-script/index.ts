@@ -325,6 +325,7 @@ ${refList}
         script = buildFastSurpriseFallback({
           shopName: shopCtx?.name || null,
           imageDescriptions,
+          variationKey: crypto.randomUUID(),
         });
         scriptProvider = "fast_fallback";
       }
