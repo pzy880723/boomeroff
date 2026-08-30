@@ -3,7 +3,7 @@ import { VideoJobDetailPanel } from '@/components/marketing/VideoJobDetailPanel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Sparkles, RefreshCw, ArrowRight, Wand2, Camera, MessageSquare, DoorOpen, PartyPopper, Pencil, Check } from 'lucide-react';
+import { Loader2, Sparkles, RefreshCw, ArrowRight, Wand2, Camera, MessageSquare, DoorOpen, PartyPopper, Pencil, Check, Images } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffectiveShop } from '@/hooks/useShops';
 import { toast } from 'sonner';
@@ -18,10 +18,14 @@ import {
   startSurpriseScriptJob,
   pollSurpriseScriptJob,
   saveSurpriseScriptJob,
+  reviseSurpriseScriptJob,
+  updateSurpriseScriptAssets,
   discardSurpriseScriptJob,
   dismissSurpriseVideoJob,
   renderSurpriseVideo,
 } from '@/api/surpriseScriptJob';
+import { SurpriseScriptChat, type SurpriseScriptMessage } from '@/components/marketing/SurpriseScriptChat';
+import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePickerDialog';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
 import { toastVideoFailure } from '@/lib/toastVideoFailure';
@@ -154,6 +158,10 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [renderError, setRenderError] = useState<string | null>(null);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const [scriptJobId, setScriptJobId] = useState<string | null>(null);
+  const [conversation, setConversation] = useState<SurpriseScriptMessage[]>([]);
+  const [revising, setRevising] = useState(false);
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+  const [updatingAssets, setUpdatingAssets] = useState(false);
   const realism: Realism = SURPRISE_REALISM;
   const pollRef = useRef<number | null>(null);
   const scriptPollRef = useRef<number | null>(null);
@@ -203,7 +211,11 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     if (shopId) clearActiveRenderJob(shopId);
     setScriptJobId(state.job_id);
     if (state.result && state.script) {
-      setPick({ ...state.result, script: state.script });
+      const assets = Array.isArray(state.picked_assets) && state.picked_assets.length
+        ? state.picked_assets
+        : state.result.assets;
+      setPick({ ...state.result, assets, script: state.script });
+      setConversation(Array.isArray(state.conversation) ? state.conversation : []);
       setScriptError(null);
       setPicking(false);
     } else if (state.status === 'script_generating') {
@@ -311,14 +323,50 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       const next = { ...current, script };
       if (scriptJobId) {
         if (scriptSaveRef.current) window.clearTimeout(scriptSaveRef.current);
-        scriptSaveRef.current = window.setTimeout(() => {
-          void saveSurpriseScriptJob(scriptJobId, script).catch((error) => {
-            toast.error(error?.message || '脚本保存失败');
-          });
-        }, 450);
+        if (!validateSurpriseScript(script)) {
+          scriptSaveRef.current = window.setTimeout(() => {
+            void saveSurpriseScriptJob(scriptJobId, script).catch((error) => {
+              console.warn('[surprise] autosave skipped', error);
+            });
+          }, 600);
+        }
       }
       return next;
     });
+  };
+
+  const reviseScript = async (instruction: string) => {
+    if (!scriptJobId || !pick) return;
+    setRevising(true);
+    try {
+      if (scriptSaveRef.current) {
+        window.clearTimeout(scriptSaveRef.current);
+        scriptSaveRef.current = null;
+      }
+      await saveSurpriseScriptJob(scriptJobId, pick.script);
+      const state = await reviseSurpriseScriptJob(scriptJobId, instruction);
+      applyScriptState(state);
+      toast.success('脚本已按你的要求更新');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : '脚本修改失败');
+    } finally {
+      setRevising(false);
+    }
+  };
+
+  const updateReferences = async (urls: string[]) => {
+    if (!scriptJobId) return;
+    setUpdatingAssets(true);
+    try {
+      const state = await updateSurpriseScriptAssets(scriptJobId, urls);
+      applyScriptState(state);
+      setAssetPickerOpen(false);
+      toast.success('参考图已更新，真实门头仍固定为第一镜');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : '参考图更新失败');
+    } finally {
+      setUpdatingAssets(false);
+    }
   };
 
   const start = async (overrides?: { modelId?: string; resolution?: string; face_pipeline?: 'auto' | 'character_sheet' | 'illustration' | 'faceless' }) => {
@@ -339,10 +387,11 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         window.clearTimeout(scriptSaveRef.current);
         scriptSaveRef.current = null;
       }
-      if (scriptJobId) await saveSurpriseScriptJob(scriptJobId, pick.script);
+      const savedState = scriptJobId ? await saveSurpriseScriptJob(scriptJobId, pick.script) : null;
+      const finalScript = (savedState?.script || pick.script) as ScriptShape;
       const result = await renderSurpriseVideo({
         shop_id: shopId,
-        script: pick.script,
+        script: finalScript,
         picked_assets: pick.assets,
         style: pick.style,
         realism,
@@ -465,8 +514,9 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[88vh] overflow-hidden flex flex-col p-0 rounded-2xl gap-0">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md max-h-[88vh] overflow-hidden flex flex-col p-0 rounded-2xl gap-0">
         <DialogHeader className="px-4 pt-4 pb-2.5 border-b">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Wand2 className="w-4 h-4 text-accent shrink-0" />
@@ -518,7 +568,15 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
         ) : (
           <>
-            <ScriptBody pick={pick} onScriptChange={handleScriptChange} />
+            <ScriptBody
+              pick={pick}
+              onScriptChange={handleScriptChange}
+              onChooseReferences={() => setAssetPickerOpen(true)}
+              updatingAssets={updatingAssets}
+            />
+            <div className="px-4 pb-3">
+              <SurpriseScriptChat messages={conversation} busy={revising} onSubmit={reviseScript} />
+            </div>
             <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 shrink-0" />
@@ -544,8 +602,17 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             </div>
           </>
         )}
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      <LibraryImagePickerDialog
+        open={assetPickerOpen}
+        onOpenChange={setAssetPickerOpen}
+        shopId={shopId}
+        max={8}
+        initialUrls={(pick?.assets || []).filter((asset) => asset.role !== 'storefront').map((asset) => asset.url)}
+        onConfirm={(urls) => void updateReferences(urls)}
+      />
+    </>
   );
 }
 
@@ -731,7 +798,17 @@ function RenderingBody({
   );
 }
 
-function ScriptBody({ pick, onScriptChange }: { pick: SurpriseResult; onScriptChange: (script: ScriptShape) => void }) {
+function ScriptBody({
+  pick,
+  onScriptChange,
+  onChooseReferences,
+  updatingAssets,
+}: {
+  pick: SurpriseResult;
+  onScriptChange: (script: ScriptShape) => void;
+  onChooseReferences: () => void;
+  updatingAssets: boolean;
+}) {
   const clips: { label: string; clip: SceneClip }[] = [];
   if (pick.script.hook) clips.push({ label: '钩子', clip: pick.script.hook });
   (pick.script.scenes || []).forEach((s, i) => clips.push({ label: `镜头${i + 1}`, clip: s }));
@@ -859,8 +936,14 @@ function ScriptBody({ pick, onScriptChange }: { pick: SurpriseResult; onScriptCh
       )}
 
       <div>
-        <div className="text-[11px] text-muted-foreground mb-1.5">
-          参考图 · {refTiles.length} 张(门头 / 实景)· 门店结构以当前实景为准 · 主角由 AI 现场生成
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <div className="text-[11px] text-muted-foreground">
+            参考图 · {refTiles.length} 张 · 真实门头固定第一镜
+          </div>
+          <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={onChooseReferences} disabled={updatingAssets}>
+            {updatingAssets ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Images className="w-3 h-3 mr-1" />}
+            更换参考图
+          </Button>
         </div>
         <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2 pt-1 snap-x">
           {refTiles.map((t, i) => (

@@ -22,13 +22,14 @@ import { invokeFn } from '@/lib/invokeFn';
 type Pending = UploadTileItem & { file: File };
 
 export function LibraryImagePickerDialog({
-  open, onOpenChange, shopId, max = 20, onConfirm, defaultSource = 'upload',
+  open, onOpenChange, shopId, max = 20, onConfirm, defaultSource = 'upload', initialUrls = [],
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   shopId: string | null;
   max?: number;
   onConfirm: (urls: string[]) => void;
+  initialUrls?: string[];
   /** 默认只显示「我上传的」素材;选视频参考图时建议保留默认 */
   defaultSource?: AssetSource | 'all';
 }) {
@@ -66,7 +67,7 @@ export function LibraryImagePickerDialog({
 
   useEffect(() => {
     if (!open || !user) return;
-    setSel(new Set());
+    setSel(new Set(initialUrls.slice(0, max)));
     setActiveTag(null);
     setSource(defaultSource);
     load();

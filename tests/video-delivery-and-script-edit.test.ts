@@ -66,5 +66,6 @@ test('惊喜一下可修改五段脚本，并用修改后的唯一口播提交',
   assert.match(dialog, /编辑脚本/);
   assert.match(dialog, /onScriptChange/);
   assert.match(dialog, /continuous_dialogue/);
-  assert.match(dialog, /script:\s*pick\.script/);
+  assert.match(dialog, /const finalScript = \(savedState\?\.script \|\| pick\.script\)/);
+  assert.match(dialog, /script:\s*finalScript/);
 });
