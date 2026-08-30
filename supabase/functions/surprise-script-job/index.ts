@@ -1,8 +1,19 @@
-// 惊喜一下脚本草稿任务。
-// 只负责“抽素材 + 生成脚本 + 保存草稿”，不创建视频镜头；用户确认后由 director-create-job 消费。
+// “BOOMER 帮我拍”脚本草稿任务。
+// 只负责抽素材、生成/修改脚本和保存参考图；用户确认后提交同一份脚本给 15 秒 one-shot 渲染。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { assertStoreAccess, resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
+import {
+  bindSurpriseReferences,
+  normalizeSurpriseScript,
+  type SurpriseReferenceDescription,
+  type SurpriseScript,
+} from "../_shared/surprise-one-shot.ts";
+import {
+  appendSurpriseConversation,
+  appendSurpriseScriptVersion,
+  orderSurpriseReferenceAssets,
+} from "../_shared/surprise-script-revision.ts";
 import {
   isStaleSurpriseScriptTask,
   selectCurrentSurpriseTask,
@@ -30,9 +41,75 @@ function state(job: any) {
     stage: job.meta?.surprise_stage || job.status,
     script: job.script_json || null,
     result: source.surprise_result || null,
+    conversation: source.surprise_conversation || [],
+    picked_assets: source.picked_assets || source.surprise_result?.assets || [],
+    script_versions: job.meta?.script_versions || [],
     error: job.error_message || null,
     updated_at: job.updated_at,
   };
+}
+
+function referenceDescriptions(assets: any[]): SurpriseReferenceDescription[] {
+  return assets.map((asset, index) => ({
+    index,
+    summary: String(asset?.summary || asset?.category || (index === 0 ? "当前门店真实门头" : "当前门店真实实景")),
+    role: asset?.role === "storefront" ? "storefront" : "scene",
+  }));
+}
+
+function parseAiJson(raw: string): Record<string, unknown> {
+  const cleaned = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("AI 没有返回可用脚本");
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+async function reviseScriptWithAi(
+  apiKey: string,
+  instruction: string,
+  currentScript: SurpriseScript,
+  source: Record<string, any>,
+): Promise<{ script: SurpriseScript; summary: string }> {
+  const assets = Array.isArray(source.picked_assets) ? source.picked_assets : [];
+  const persona = source.persona || source.surprise_result?.persona || null;
+  const prompt = `你是 BOOMER·OFF 中古杂货店 15 秒探店视频脚本编辑器。\n\n` +
+    `店员修改要求：${instruction}\n\n` +
+    `当前人物：${JSON.stringify(persona)}\n` +
+    `当前真实参考图：${JSON.stringify(assets.map((asset: any, index: number) => ({ index, summary: asset.summary, role: asset.role })))}\n` +
+    `当前脚本：${JSON.stringify(currentScript)}\n\n` +
+    `只输出 JSON：{"script":完整脚本对象,"summary":"一句话说明改了什么"}。` +
+    `脚本必须恰好五段 hook + scenes三段 + outro，每段都有 scene/action/dialogue/subtitle/duration_s/image_index/motion；` +
+    `每段 dialogue 必须 18-21 个汉字，五段合计 90-100 个汉字，subtitle 必须逐字等于 dialogue，` +
+    `continuous_dialogue 必须是五段 dialogue 用中文逗号连接；动作必须明确人物边行动边连续说话，不能停顿；` +
+    `第一段必须严格使用 index=0 的真实门头参考图，不得重画或改造 Logo；其余画面只能使用上面的真实参考图；` +
+    `不得编造价格、活动、地址或门店事实，不得复用六个字以上的重复短语。`;
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      temperature: 0.55,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(response.status === 429 ? "AI 正忙，请稍后再改" : `AI 改稿失败(${response.status}): ${text.slice(0, 120)}`);
+  }
+  const data = await response.json();
+  const parsed = parseAiJson(String(data?.choices?.[0]?.message?.content || ""));
+  const descriptions = referenceDescriptions(assets);
+  const script = bindSurpriseReferences(
+    normalizeSurpriseScript((parsed.script || parsed) as SurpriseScript),
+    assets.length,
+    descriptions,
+  );
+  const validation = validateSurpriseScript(script, { factContext: JSON.stringify(source) });
+  if (validation.errors.length) throw new Error(`改稿后校验未通过：${validation.errors.join("；")}`);
+  return { script, summary: String(parsed.summary || "已经按你的要求更新脚本").slice(0, 200) };
 }
 
 function videoState(job: any) {
@@ -165,6 +242,7 @@ async function runScriptGeneration({
         script_provider_model: result.script?.script_provider_model || null,
         script_provider_reason: result.script?.script_provider_reason || null,
         script_generation_ms: Date.now() - startedAt,
+        script_versions: appendSurpriseScriptVersion([], result.script, "generated"),
       },
     }).eq("id", jobId).eq("status", "script_generating").select("id").maybeSingle();
     if (saveError) throw saveError;
@@ -192,6 +270,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY") || "";
     const auth = req.headers.get("Authorization");
     const user = await getUser(req, supabaseUrl, anonKey);
     if (!user || !auth) return json({ ok: false, error: "未授权" }, 401);
@@ -283,8 +362,15 @@ Deno.serve(async (req) => {
       if (!['script_generating', 'script_ready'].includes(String(job.status))) {
         return json({ ok: false, error: "脚本已经进入视频生成，不能再修改" }, 409);
       }
-      const script = body.script && typeof body.script === "object" ? body.script : null;
-      if (!script) return json({ ok: false, error: "缺少脚本" }, 400);
+      const submittedScript = body.script && typeof body.script === "object" ? body.script : null;
+      if (!submittedScript) return json({ ok: false, error: "缺少脚本" }, 400);
+      const source = (job.source_pick_json || {}) as Record<string, any>;
+      const assets = Array.isArray(source.picked_assets) ? source.picked_assets : [];
+      const script = bindSurpriseReferences(
+        normalizeSurpriseScript(submittedScript as SurpriseScript),
+        assets.length,
+        referenceDescriptions(assets),
+      );
       const validation = validateSurpriseScript(script, {
         factContext: JSON.stringify(job.source_pick_json || {}),
       });
@@ -299,9 +385,86 @@ Deno.serve(async (req) => {
           consumed: false,
           surprise_stage: "script_ready",
           manually_edited_at: new Date().toISOString(),
+          script_versions: appendSurpriseScriptVersion(job.meta?.script_versions, script, "manual"),
         },
       }).eq("id", jobId).select("*").single();
       if (error || !saved) return json({ ok: false, error: error?.message || "保存脚本失败" }, 500);
+      return json(state(saved));
+    }
+
+    if (action === "revise") {
+      if (String(job.status) !== "script_ready" || !job.script_json) {
+        return json({ ok: false, error: "脚本还没有准备好" }, 409);
+      }
+      const instruction = String(body.instruction || "").trim();
+      if (!instruction) return json({ ok: false, error: "请告诉 BOOMER 想怎么修改" }, 400);
+      if (!lovableApiKey) return json({ ok: false, error: "AI 改稿服务尚未配置" }, 503);
+      const source = (job.source_pick_json || {}) as Record<string, any>;
+      const revised = await reviseScriptWithAi(lovableApiKey, instruction.slice(0, 500), job.script_json, source);
+      const nextSource = {
+        ...source,
+        surprise_conversation: appendSurpriseConversation(
+          source.surprise_conversation,
+          instruction,
+          revised.summary,
+        ),
+      };
+      const { data: saved, error } = await admin.from("video_generation_jobs").update({
+        script_json: revised.script,
+        source_pick_json: nextSource,
+        error_message: null,
+        meta: {
+          ...(job.meta || {}),
+          flow: "surprise",
+          consumed: false,
+          surprise_stage: "script_ready",
+          revised_at: new Date().toISOString(),
+          script_versions: appendSurpriseScriptVersion(job.meta?.script_versions, revised.script, "conversation", instruction),
+        },
+      }).eq("id", jobId).eq("status", "script_ready").select("*").single();
+      if (error || !saved) return json({ ok: false, error: error?.message || "保存改稿失败" }, 500);
+      return json(state(saved));
+    }
+
+    if (action === "update_assets") {
+      if (String(job.status) !== "script_ready" || !job.script_json) {
+        return json({ ok: false, error: "脚本还没有准备好" }, 409);
+      }
+      const urls = Array.isArray(body.asset_urls)
+        ? body.asset_urls.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 8)
+        : [];
+      if (!urls.length) return json({ ok: false, error: "请至少选择一张店内实景图" }, 400);
+      const { data: selected, error: selectedError } = await admin
+        .from("marketing_assets")
+        .select("id, output_url, description, category, tags, meta")
+        .eq("shop_id", job.shop_id)
+        .eq("kind", "photo")
+        .in("output_url", urls);
+      if (selectedError) return json({ ok: false, error: selectedError.message || "读取参考图失败" }, 500);
+      const selectedByUrl = new Map((selected || []).map((row: any) => [row.output_url, row]));
+      const orderedRows = urls.map((url: string) => selectedByUrl.get(url)).filter(Boolean) as Record<string, unknown>[];
+      if (orderedRows.length !== urls.length) return json({ ok: false, error: "部分参考图不属于当前门店" }, 403);
+
+      const source = (job.source_pick_json || {}) as Record<string, any>;
+      const existingAssets = Array.isArray(source.picked_assets) ? source.picked_assets : [];
+      const storefront = existingAssets.find((asset: any) => asset?.role === "storefront") || null;
+      const assets = orderSurpriseReferenceAssets(storefront, orderedRows);
+      const descriptions = referenceDescriptions(assets);
+      const script = bindSurpriseReferences(normalizeSurpriseScript(job.script_json), assets.length, descriptions);
+      const result = source.surprise_result && typeof source.surprise_result === "object"
+        ? { ...source.surprise_result, assets, script }
+        : source.surprise_result;
+      const nextSource = { ...source, picked_assets: assets, surprise_result: result };
+      const { data: saved, error } = await admin.from("video_generation_jobs").update({
+        script_json: script,
+        source_pick_json: nextSource,
+        meta: {
+          ...(job.meta || {}),
+          reference_assets_updated_at: new Date().toISOString(),
+          script_versions: appendSurpriseScriptVersion(job.meta?.script_versions, script, "references"),
+        },
+      }).eq("id", jobId).eq("status", "script_ready").select("*").single();
+      if (error || !saved) return json({ ok: false, error: error?.message || "保存参考图失败" }, 500);
       return json(state(saved));
     }
 

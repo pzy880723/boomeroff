@@ -15,6 +15,9 @@ export interface SurpriseScriptJobState {
   cover_url?: string | null;
   created_at?: string;
   updated_at?: string;
+  conversation?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  script_versions?: Array<Record<string, unknown>>;
+  picked_assets?: unknown[];
 }
 
 // 「BOOMER 帮我拍」固定 15 秒一段直出,输出分辨率恒为 1080p。
@@ -57,6 +60,14 @@ export function pollSurpriseScriptJob(jobId: string) {
 
 export function saveSurpriseScriptJob(jobId: string, script: unknown) {
   return call({ action: 'save', job_id: jobId, script });
+}
+
+export function reviseSurpriseScriptJob(jobId: string, instruction: string) {
+  return call({ action: 'revise', job_id: jobId, instruction });
+}
+
+export function updateSurpriseScriptAssets(jobId: string, assetUrls: string[]) {
+  return call({ action: 'update_assets', job_id: jobId, asset_urls: assetUrls });
 }
 
 export function discardSurpriseScriptJob(jobId: string) {

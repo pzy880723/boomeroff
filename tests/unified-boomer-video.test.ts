@@ -30,6 +30,7 @@ test('统一弹窗同时支持自然语言改稿、直接编辑和更换参考�
 test('脚本任务服务持久化自然语言对话和参考图', () => {
   const api = read('../src/api/surpriseScriptJob.ts');
   const endpoint = read('../supabase/functions/surprise-script-job/index.ts');
+  const revision = read('../supabase/functions/_shared/surprise-script-revision.ts');
 
   assert.ok(api.includes('reviseSurpriseScriptJob'));
   assert.ok(api.includes('updateSurpriseScriptAssets'));
@@ -37,7 +38,7 @@ test('脚本任务服务持久化自然语言对话和参考图', () => {
   assert.ok(endpoint.includes('action === "update_assets"'));
   assert.ok(endpoint.includes('surprise_conversation'));
   assert.ok(endpoint.includes('script_versions'));
-  assert.match(endpoint, /role:\s*"storefront"/);
+  assert.match(revision, /role:\s*'storefront'/);
 });
 
 test('旧导演路由保留兼容但不再出现在营销首页', () => {
