@@ -5,7 +5,7 @@ import { AuthPage } from '@/components/auth/AuthPage';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Link } from 'react-router-dom';
 import {
-  Sparkles, FileText, Video, Library, ChevronRight, Loader2, Share2,
+  FileText, Video, Library, ChevronRight, Loader2, Share2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import boomerIdle from '@/assets/boomer/boomer-idle.png';
@@ -89,7 +89,7 @@ export default function MyMarketing() {
 
   return (
     <>
-      <PageHeader title="营销中心" back="/me" subtitle="一键出图 · 一键出文 · 一键出片" />
+      <PageHeader title="营销中心" back="/me" subtitle="一句话改脚本 · 一键生成视频" />
       <div className="container mx-auto max-w-screen-md px-4 py-4 pb-12 space-y-5">
 
         <MarketingShopSwitcher
@@ -125,7 +125,7 @@ export default function MyMarketing() {
           </div>
         </section>
 
-        {/* ===== 惊喜一下 · 一键随机视频 ===== */}
+        {/* ===== 唯一创作入口 · 智能视频 ===== */}
         <button
           type="button"
           onClick={() => setSurpriseOpen(true)}
@@ -138,12 +138,12 @@ export default function MyMarketing() {
             draggable={false}
           />
           <div className="flex-1 min-w-0">
-            <div className="font-display text-[10px] tracking-[0.18em] text-accent">惊喜 · SURPRISE</div>
+            <div className="font-display text-[10px] tracking-[0.18em] text-accent">智能视频 · BOOMER VIDEO</div>
             <h3 className="text-[15px] font-semibold leading-tight mt-0.5 truncate">
-              让 BOOMER 替你拍一条
+              BOOMER 帮你拍一条
             </h3>
             <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug truncate">
-              使用{currentShop?.name || '当前门店'}素材 · 完整脚本 · 15 秒快速成片
+              {currentShop?.name || '当前门店'} · 自动写脚本 · 可对话修改 · 15 秒成片
             </p>
           </div>
           {hasActiveJob ? (
@@ -159,45 +159,6 @@ export default function MyMarketing() {
           )}
         </button>
 
-
-        {/* ===== 创作工坊 ===== */}
-        <section className="space-y-3">
-          <SectionLabel className="px-1">创作工坊</SectionLabel>
-          <div className="grid grid-cols-2 gap-3">
-            <ToolTile
-              to="/me/marketing/photo"
-              num="01"
-              icon={Sparkles}
-              title="AI 图片"
-              desc="对话出图 · 改图 · 海报"
-            />
-            <ToolTile
-              to="/me/marketing/copy"
-              num="02"
-              icon={FileText}
-              title="AI 文案"
-              desc="看图写文 · 平台口吻"
-            />
-          </div>
-          <Link to="/me/marketing/video" className="block">
-            <div className="group bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex items-center gap-4 transition-all hover:border-accent/40 active:scale-[0.995]">
-              <div className="w-12 h-12 rounded-xl bg-primary/95 text-primary-foreground flex items-center justify-center shrink-0 shadow-sm">
-                <Video className="w-6 h-6" strokeWidth={1.5} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-display text-[10px] text-accent tracking-[0.18em]">03</span>
-                  <h3 className="text-[15px] font-semibold leading-none">AI 视频</h3>
-                  <span className="ml-auto text-[10px] tracking-[0.18em] text-accent font-semibold">15-30 秒</span>
-                </div>
-                <p className="text-[11px] leading-relaxed text-muted-foreground mt-1">
-                  自定义脚本 · 逐镜制作 · 专业合成
-                </p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-          </Link>
-        </section>
 
         {/* ===== 管理与分发 ===== */}
         <section className="space-y-3">
@@ -289,28 +250,5 @@ function Metric({ label, value }: { label: string; value: number }) {
       <span className="text-[10px] text-muted-foreground tracking-wide">{label}</span>
       <span className="font-display text-base text-foreground">{value}</span>
     </div>
-  );
-}
-
-function ToolTile({
-  to, num, icon: Icon, title, desc,
-}: { to: string; num: string; icon: any; title: string; desc: string }) {
-  return (
-    <Link to={to} className="block">
-      <div className="group h-full bg-card rounded-[0.875rem] border border-accent/15 shadow-sm p-4 flex flex-col justify-between min-h-[132px] transition-all hover:border-accent/40 active:scale-[0.985]">
-        <div className="flex items-start justify-between">
-          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
-            <Icon className="w-5 h-5" strokeWidth={1.5} />
-          </div>
-        </div>
-        <div className="mt-4">
-          <div className="flex items-baseline gap-1.5 mb-0.5">
-            <span className="font-display text-[10px] text-accent tracking-[0.18em]">{num}</span>
-          </div>
-          <h3 className="text-[15px] font-semibold leading-tight">{title}</h3>
-          <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{desc}</p>
-        </div>
-      </div>
-    </Link>
   );
 }
