@@ -1,6 +1,6 @@
 // “BOOMER 帮我拍”脚本草稿任务。
 // 只负责抽素材、生成/修改脚本和保存参考图；用户确认后提交同一份脚本给 15 秒 one-shot 渲染。
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { assertStoreAccess, resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 import { formatPersonaDirective, type InfluencerPersona } from "../_shared/persona-generator.ts";
@@ -31,7 +31,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   headers: { ...corsHeaders, "Content-Type": "application/json" },
 });
 
-type AdminClient = ReturnType<typeof createClient>;
+type AdminClient = SupabaseClient<any, "public", any>;
 
 function state(job: any) {
   const source = (job?.source_pick_json || {}) as any;
@@ -74,10 +74,10 @@ async function reviseScriptWithAi(
   source: Record<string, any>,
 ): Promise<{ script: SurpriseScript; summary: string; persona: InfluencerPersona }> {
   const assets = Array.isArray(source.picked_assets) ? source.picked_assets : [];
-  const persona = source.persona || source.surprise_result?.persona || null;
+  const currentPersona = source.persona || source.surprise_result?.persona || null;
   const prompt = `你是 BOOMER·OFF 中古杂货店 15 秒探店视频脚本编辑器。\n\n` +
     `店员修改要求：${instruction}\n\n` +
-    `当前人物：${JSON.stringify(persona)}\n` +
+    `当前人物：${JSON.stringify(currentPersona)}\n` +
     `当前真实参考图：${JSON.stringify(assets.map((asset: any, index: number) => ({ index, summary: asset.summary, role: asset.role })))}\n` +
     `当前脚本：${JSON.stringify(currentScript)}\n\n` +
     `只输出 JSON：{"script":完整脚本对象,"persona":完整人物对象,"summary":"一句话说明改了什么"}。` +
