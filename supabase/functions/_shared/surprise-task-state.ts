@@ -13,7 +13,8 @@ export type CurrentSurpriseTask =
   | { kind: 'script'; job: SurpriseTaskRow }
   | { kind: 'video'; job: SurpriseTaskRow };
 
-export const SURPRISE_SCRIPT_STALE_MS = 20_000;
+// 脚本模型请求最长允许 35 秒，再留出 Edge Runtime 回写数据库的余量。
+export const SURPRISE_SCRIPT_STALE_MS = 60_000;
 
 export function isStaleSurpriseScriptTask(
   job: SurpriseTaskRow,

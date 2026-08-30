@@ -16,8 +16,10 @@ import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surp
 import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
 import { generateFastSurpriseScript } from "../_shared/surprise-script-performance.ts";
 import { pickStorefrontAsset, resolveStorefrontAsset } from "../_shared/storefront-assets.ts";
+import { selectAuthorizedSurpriseReferences } from "../_shared/surprise-render-references.ts";
 import { selectPendingAutoTagAssetIds } from "../_shared/auto-tag-assets.ts";
 import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
+import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -121,103 +123,195 @@ Deno.serve(async (req) => {
     shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
     if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
 
-    // ====== 提交模式:前端回传 preview 时生成的 script,直接渲染 ======
-    // 只要 preview=false 且带了脚本,就必须走「快速提交」;
-    // 绝不能因为缺 style / picked_assets 字段名不同而回落到「重新跑全流程」——
-    // 那条路要 100s+,线上网关会先超时 5xx,用户看到「AI 服务暂时不可用」,job 也拿不回来。
-    const submittedScript = body.script && typeof body.script === 'object' ? body.script : null;
-    const hasScriptShape = !!submittedScript
-      && !!submittedScript.hook
-      && Array.isArray(submittedScript.scenes)
-      && !!submittedScript.outro;
-    if (!preview && hasScriptShape) {
-      const rawAssets = Array.isArray(body.picked_assets)
-        ? body.picked_assets
-        : (Array.isArray(body.assets) ? body.assets : []);
+    // ====== 提交模式:只接受服务端已保存的脚本任务 ======
+    // 前端不能直接传脚本或参考图绕过门店权限、90–100 字和真实门头校验。
+    const scriptJobId = String(body.script_job_id || '').trim();
+    if (!preview && (scriptJobId || body.script)) {
+      if (!scriptJobId) return json({ ok: false, error: '请先保存脚本后再生成视频' }, 400);
+      const { data: scriptJob, error: scriptJobError } = await admin.from('video_generation_jobs')
+        .select('*')
+        .eq('id', scriptJobId)
+        .eq('user_id', u.user.id)
+        .eq('shop_id', shopId)
+        .single();
+      const scriptMeta = (scriptJob?.meta || {}) as Record<string, any>;
+      if (scriptJobError || !scriptJob || scriptMeta.flow !== 'surprise') {
+        return json({ ok: false, error: '脚本任务不存在或不属于当前门店' }, 404);
+      }
+      if (scriptJob.status !== 'script_ready' || scriptMeta.consumed === true || !scriptJob.script_json) {
+        if (scriptMeta.render_job_id) {
+          return json({ ok: true, job_id: scriptMeta.render_job_id, segment_total: 1, restored: true });
+        }
+        return json({ ok: false, error: '当前脚本已在生成或尚未准备好' }, 409);
+      }
+
+      const source = (scriptJob.source_pick_json || {}) as Record<string, any>;
+      const submittedScript = scriptJob.script_json;
+      const rawAssets = Array.isArray(source.picked_assets)
+        ? source.picked_assets
+        : (Array.isArray(source.surprise_result?.assets) ? source.surprise_result.assets : []);
       const scriptImageUrls: string[] = Array.isArray(submittedScript.image_urls)
         ? submittedScript.image_urls.filter((u: any) => typeof u === 'string' && u.trim())
         : [];
-      const submittedReferences = (rawAssets.length
+      const requestedReferences = (rawAssets.length
         ? rawAssets.map((asset: any) => ({
             asset,
+            asset_id: String(typeof asset === 'string' ? '' : (asset?.asset_id || asset?.id || '')).trim(),
             url: String(
               (typeof asset === 'string' ? asset : (asset?.url || asset?.output_url || asset?.image_url || '')),
             ).trim(),
           }))
-        : scriptImageUrls.map((url: string) => ({ asset: {}, url: url.trim() }))
+        : scriptImageUrls.map((url: string) => ({ asset: {}, asset_id: '', url: url.trim() }))
       ).filter((entry: any) => Boolean(entry.url)).slice(0, 9);
-      const submittedImageUrls = submittedReferences.map((entry: any) => entry.url);
-      if (!submittedImageUrls.length) {
+      if (!requestedReferences.length) {
         return json({ ok: false, error: '惊喜一下必须选择至少一张店铺实景图' });
       }
-      const existingManifest = Array.isArray(submittedScript.reference_manifest)
-        ? submittedScript.reference_manifest
-        : [];
-      const submittedCandidates = submittedReferences.map(({ asset }: any, index: number) => {
-        const existing = existingManifest.find((item: any) => Number(item?.index) === index) || {};
-        return {
-          id: String(index),
-          index,
-          summary: String(asset?.summary || existing?.summary || '').slice(0, 160),
-          role: asset?.role || existing?.role || 'scene',
-          category: asset?.category || null,
-          tags: asset?.tags || [],
-          meta: { summary: asset?.summary || existing?.summary || '' },
-        };
-      });
-      const submittedStorefront = pickStorefrontAsset(submittedCandidates);
-      if (!submittedStorefront) {
+      const requestedIds = requestedReferences.map((item: any) => item.asset_id).filter(Boolean);
+      const requestedUrls = requestedReferences.map((item: any) => item.url).filter(Boolean);
+      const authorizedRows: any[] = [];
+      if (requestedIds.length) {
+        const { data, error } = await admin.from('marketing_assets')
+          .select('id, output_url, description, category, tags, meta')
+          .eq('shop_id', shopId).eq('kind', 'photo').in('id', requestedIds);
+        if (error) return json({ ok: false, error: error.message || '读取参考图失败' }, 500);
+        authorizedRows.push(...(data || []));
+      }
+      if (requestedUrls.length) {
+        const { data, error } = await admin.from('marketing_assets')
+          .select('id, output_url, description, category, tags, meta')
+          .eq('shop_id', shopId).eq('kind', 'photo').in('output_url', requestedUrls);
+        if (error) return json({ ok: false, error: error.message || '读取参考图失败' }, 500);
+        const known = new Set(authorizedRows.map((row) => row.id));
+        authorizedRows.push(...(data || []).filter((row: any) => !known.has(row.id)));
+      }
+      let submittedRows: any[];
+      try {
+        submittedRows = selectAuthorizedSurpriseReferences(requestedReferences, authorizedRows);
+      } catch (error) {
         return json({
           ok: false,
-          error: '当前脚本没有绑定可确认的真实门头照。请重新打开「BOOMER 帮我拍」，系统会从当前门店素材库重新选择真实门头。',
-        }, 409);
+          error: error instanceof Error ? error.message : '参考图校验失败',
+        }, error instanceof Error && error.message.includes('不属于当前门店') ? 403 : 409);
       }
+      const submittedReferences = submittedRows.map((asset: any) => ({ asset, url: String(asset.output_url || '').trim() }));
+      const submittedImageUrls = submittedReferences.map((entry: any) => entry.url);
       const submittedDescriptions = submittedReferences.map(({ asset }: any, index: number) => ({
         index,
-        summary: String(submittedCandidates[index]?.summary || asset?.summary || `店内实景${index + 1}`).slice(0, 160),
-        role: index === submittedStorefront.index ? 'storefront' : 'scene',
+        summary: String(summarizeAsset(asset) || `店内实景${index + 1}`).slice(0, 160),
+        role: index === 0 ? 'storefront' : 'scene',
       }));
-      const submittedStyle = (typeof body.style === 'string' && body.style)
+      const submittedStyle = (typeof source.style === 'string' && source.style)
+        || (typeof source.surprise_result?.style === 'string' && source.surprise_result.style)
         || (typeof submittedScript.style === 'string' && submittedScript.style)
         || 'energetic';
-      console.log(`[surprise submit] refs=${submittedImageUrls.length} style=${submittedStyle} assets_field=${Array.isArray(body.picked_assets) ? 'picked_assets' : (Array.isArray(body.assets) ? 'assets' : 'script.image_urls')}`);
+      const normalizedSubmittedScript = bindSurpriseReferences(normalizeSurpriseScript({
+        ...submittedScript,
+        video_type: 'store_tour',
+        surprise_mode: true,
+        intent: 'viral_store_tour',
+        image_urls: submittedImageUrls,
+        image_descriptions: submittedDescriptions,
+        reference_manifest: submittedDescriptions,
+      }), submittedImageUrls.length, submittedDescriptions);
+      const validation = validateSurpriseScript(normalizedSubmittedScript, {
+        ageBucket: source.persona?.age_bucket || source.surprise_result?.persona?.age_bucket || null,
+        factContext: JSON.stringify({ assets: submittedRows, persona: source.persona || null }),
+      });
+      if (validation.errors.length) {
+        return json({ ok: false, error: validation.errors.join('；'), errors: validation.errors }, 422);
+      }
+
       const quality = resolveSeedanceQuality(body.model, body.resolution);
-      const renderBody: any = {
-        script: bindSurpriseReferences(normalizeSurpriseScript({
-          ...submittedScript,
-          video_type: 'store_tour',
-          surprise_mode: true,
-          intent: 'viral_store_tour',
-          image_urls: submittedImageUrls,
-          image_descriptions: submittedDescriptions,
-          reference_manifest: submittedDescriptions,
-        }), submittedImageUrls.length, submittedDescriptions),
+      const serverPromptOverrides = source.surprise_result?.prompt_overrides;
+      const renderPayload: Record<string, unknown> = {
+        script: normalizedSubmittedScript,
         style: submittedStyle,
-        shop_id: shopId,
         render_strategy: 'one_shot',
         model: quality.model.id,
         resolution: quality.resolution,
+        disable_references: false,
       };
-      if (body.realism === 'photoreal' || body.realism === 'stylized') renderBody.realism = body.realism;
-      // 员工极速成片必须以店铺实景图为事实锚点，禁止退化成无参考图生成。
-      renderBody.disable_references = false;
+      if (body.realism === 'photoreal' || body.realism === 'stylized') renderPayload.realism = body.realism;
       if (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless') {
-        renderBody.face_pipeline = body.face_pipeline;
+        renderPayload.face_pipeline = body.face_pipeline;
       }
-      if (body.prompt_overrides && typeof body.prompt_overrides === 'object') {
-        renderBody.prompt_overrides = body.prompt_overrides;
+      if (serverPromptOverrides && typeof serverPromptOverrides === 'object') {
+        renderPayload.prompt_overrides = serverPromptOverrides;
       }
-      const renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify(renderBody),
-      });
+
+      const renderJobId = crypto.randomUUID();
+      const submissionToken = crypto.randomUUID();
+      const claimedMeta = {
+        ...scriptMeta,
+        flow: 'surprise',
+        consumed: true,
+        surprise_stage: 'video_submitting',
+        render_job_id: renderJobId,
+        submission_token: submissionToken,
+        submitted_at: new Date().toISOString(),
+        render_payload: renderPayload,
+      };
+      const { data: claimed, error: claimError } = await admin.from('video_generation_jobs').update({
+        status: 'submitting',
+        meta: claimedMeta,
+      })
+        .eq('id', scriptJobId)
+        .eq('status', 'script_ready')
+        .contains('meta', { flow: 'surprise', consumed: false })
+        .select('id')
+        .maybeSingle();
+      if (claimError) return json({ ok: false, error: `锁定脚本任务失败: ${claimError.message}` }, 500);
+      if (!claimed) {
+        const { data: current } = await admin.from('video_generation_jobs').select('meta').eq('id', scriptJobId).single();
+        const existingRenderJobId = current?.meta?.render_job_id;
+        if (existingRenderJobId) return json({ ok: true, job_id: existingRenderJobId, segment_total: 1, restored: true });
+        return json({ ok: false, error: '脚本已被其他生成任务占用' }, 409);
+      }
+
+      console.log(`[surprise submit] script_job=${scriptJobId} render_job=${renderJobId} refs=${submittedImageUrls.length} style=${submittedStyle}`);
+      const renderBody: any = {
+        ...renderPayload,
+        shop_id: shopId,
+        requested_job_id: renderJobId,
+        source_script_job_id: scriptJobId,
+      };
+      const rollbackSubmission = async () => {
+        const rollbackMeta = { ...scriptMeta, flow: 'surprise', consumed: false, surprise_stage: 'script_ready' };
+        await admin.from('video_generation_jobs').update({ status: 'script_ready', meta: rollbackMeta })
+          .eq('id', scriptJobId).eq('status', 'submitting').contains('meta', { submission_token: submissionToken });
+      };
+      let renderRes: Response;
+      try {
+        renderRes = await fetch(`${SUPABASE_URL}/functions/v1/render-marketing-video`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: auth },
+          body: JSON.stringify(renderBody),
+        });
+      } catch (error) {
+        console.error('[surprise submit] render request failed', error);
+        await rollbackSubmission();
+        return json({ ok: false, error: '视频服务连接失败，请重试' }, 502);
+      }
       const renderText = await renderRes.text();
       let renderData: any = {};
       try { renderData = JSON.parse(renderText); } catch { renderData = {}; }
       if (!renderRes.ok || renderData?.ok === false || !renderData?.job_id) {
         console.error(`[surprise submit] render failed status=${renderRes.status} body=${renderText.slice(0, 400)}`);
+        await rollbackSubmission();
         return json({ ok: false, error: renderData?.error || `渲染提交失败(${renderRes.status})` });
+      }
+      const { data: bound, error: bindError } = await admin.from('video_generation_jobs').update({
+        status: 'rendering',
+        meta: {
+          ...claimedMeta,
+          surprise_stage: 'video_queued',
+          render_job_id: renderData.job_id,
+          bound_at: new Date().toISOString(),
+        },
+      }).eq('id', scriptJobId).eq('status', 'submitting').contains('meta', { submission_token: submissionToken }).select('id').maybeSingle();
+      if (bindError || !bound) {
+        await admin.from('marketing_video_jobs').update({ status: 'failed', error: '脚本任务绑定失败，已停止重复生成' }).eq('id', renderData.job_id);
+        return json({ ok: false, error: '视频任务绑定失败，请重新进入后重试' }, 500);
       }
       console.log(`[surprise submit] job=${renderData.job_id}`);
       return json({ ok: true, job_id: renderData.job_id, segment_total: renderData.segment_total || 1 });

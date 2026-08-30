@@ -370,15 +370,20 @@ Deno.serve(async (req) => {
     if (!u.user) return json({ ok: false, error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
+    const requestedJobId = typeof body.requested_job_id === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.requested_job_id)
+      ? body.requested_job_id
+      : null;
+    const sourceScriptJobId = typeof body.source_script_job_id === 'string' ? body.source_script_job_id : null;
     let script = body.script;
     if (!script || !script.hook || !Array.isArray(script.scenes) || !script.outro) {
       return json({ ok: false, error: "脚本格式不完整" });
     }
     // 一键修复开关:disable_storyboard = 扔掉分镜静帧首尾帧,disable_references = 连参考图也不要
     // face_pipeline:character_sheet = 提交前就给参考图打 Character Sheet 软通过水印
-    const disableStoryboard = !!body.disable_storyboard;
-    const disableReferences = !!body.disable_references;
-    const requireStoryboard = !!body.require_storyboard && !disableStoryboard && !disableReferences;
+    let disableStoryboard = !!body.disable_storyboard;
+    let disableReferences = !!body.disable_references;
+    let requireStoryboard = !!body.require_storyboard && !disableStoryboard && !disableReferences;
     let facePipeline: 'auto' | 'character_sheet' | 'illustration' | 'faceless' =
       (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless')
         ? body.face_pipeline : 'auto';
@@ -402,12 +407,46 @@ Deno.serve(async (req) => {
       }
     }
 
-
-    const styleKey = normalizeStyle(body.style || script.style);
-    const realism = normalizeRealism(body.realism ?? script.realism);
     let shopId: string | null = typeof body.shop_id === "string" && body.shop_id ? body.shop_id : null;
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
+    const isSurpriseSubmission = script.surprise_mode === true || script.intent === 'viral_store_tour';
+    if (isSurpriseSubmission) {
+      if (!sourceScriptJobId || !requestedJobId) {
+        return json({ ok: false, error: '惊喜一下必须通过已保存的脚本任务提交' }, 403);
+      }
+      const { data: sourceJob, error: sourceJobError } = await admin.from('video_generation_jobs')
+        .select('id, meta')
+        .eq('id', sourceScriptJobId)
+        .eq('user_id', u.user.id)
+        .eq('shop_id', shopId)
+        .eq('status', 'submitting')
+        .contains('meta', { flow: 'surprise', consumed: true, render_job_id: requestedJobId })
+        .single();
+      if (sourceJobError || !sourceJob) {
+        return json({ ok: false, error: '脚本任务未通过服务端提交校验' }, 403);
+      }
+      const trustedPayload = sourceJob.meta?.render_payload;
+      if (!trustedPayload?.script) {
+        return json({ ok: false, error: '脚本任务缺少已锁定的渲染内容' }, 409);
+      }
+      script = trustedPayload.script;
+      body.style = trustedPayload.style;
+      body.model = trustedPayload.model;
+      body.resolution = trustedPayload.resolution;
+      body.realism = trustedPayload.realism;
+      body.prompt_overrides = trustedPayload.prompt_overrides;
+      disableStoryboard = false;
+      disableReferences = false;
+      requireStoryboard = false;
+      facePipeline = (trustedPayload.face_pipeline === 'character_sheet'
+        || trustedPayload.face_pipeline === 'illustration'
+        || trustedPayload.face_pipeline === 'faceless')
+        ? trustedPayload.face_pipeline
+        : 'auto';
+    }
+    const styleKey = normalizeStyle(body.style || script.style);
+    const realism = normalizeRealism(body.realism ?? script.realism);
     const shopCtx = await loadShopContext(shopId);
     const shopBlock = formatShopContext(shopCtx);
 
@@ -501,11 +540,13 @@ Deno.serve(async (req) => {
       console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur} face_pipeline=${facePipeline}`);
 
       const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
+        ...(isSurpriseSubmission && requestedJobId ? { id: requestedJobId } : {}),
         user_id: u.user.id,
         script: {
           ...script,
           __render_payload: {
             prompt, duration: oneShotDur, ratio, model, resolution,
+            source_script_job_id: sourceScriptJobId,
             reference_images: refImages,
             reference_manifest: referencePlan?.items || [],
             storyboard_refs: storyboardRefs,
@@ -531,6 +572,7 @@ Deno.serve(async (req) => {
         input_image_urls: imageUrls, output_url: null,
         meta: {
           job_id: parent.id, video_type: script.video_type,
+          source_script_job_id: sourceScriptJobId,
           duration: oneShotDur, target_duration_s: totalDur, actual_duration_s: oneShotDur, aspect: ratio,
           mode: refImages.length ? "reference2video" : "text2video",
           render_mode: isSurpriseMode ? "surprise_one_shot" : "one_shot_reference",

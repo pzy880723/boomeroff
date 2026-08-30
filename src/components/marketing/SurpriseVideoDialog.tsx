@@ -18,6 +18,7 @@ import {
   startSurpriseScriptJob,
   pollSurpriseScriptJob,
   saveSurpriseScriptJob,
+  saveSurpriseScriptDraft,
   reviseSurpriseScriptJob,
   updateSurpriseScriptAssets,
   discardSurpriseScriptJob,
@@ -166,6 +167,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const pollRef = useRef<number | null>(null);
   const scriptPollRef = useRef<number | null>(null);
   const scriptSaveRef = useRef<number | null>(null);
+  const scriptSaveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const stopPolling = () => {
     if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
@@ -230,6 +232,23 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     }
   };
 
+  const restoreVideoState = (state: any) => {
+    if (!shopId || !state?.job_id) return;
+    const job: ActiveRenderJob = {
+      jobId: state.job_id,
+      coverUrl: state.cover_url || null,
+      createdAt: state.created_at ? Date.parse(state.created_at) : Date.now(),
+      kind: 'legacy',
+      segmentTotal: 1,
+    };
+    setPicking(false);
+    setPick(null);
+    setScriptJobId(null);
+    setActiveJob(job);
+    setActiveRenderJob(shopId, job);
+    startPolling(job.jobId, shopId);
+  };
+
   const pollScriptDraft = (jobId: string) => {
     stopScriptPolling();
     const startedAt = Date.now();
@@ -260,8 +279,12 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     setPicking(true); setPick(null);
     try {
       let state = await startSurpriseScriptJob(shopId, exclude, realism);
-      // 旧版本可能留下 Director 任务。它不再属于“BOOMER 帮我拍”，隐藏后创建一次成片脚本。
+      // 新版 one-shot 任务可跨设备恢复；没有 render_job_id 的才是旧 Director 遗留任务。
       if (state.task_kind === 'video') {
+        if (state.render_job_id) {
+          restoreVideoState(state);
+          return;
+        }
         await dismissSurpriseVideoJob(state.job_id);
         state = await startSurpriseScriptJob(shopId, exclude, realism);
       }
@@ -323,13 +346,14 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       const next = { ...current, script };
       if (scriptJobId) {
         if (scriptSaveRef.current) window.clearTimeout(scriptSaveRef.current);
-        if (!validateSurpriseScript(script)) {
-          scriptSaveRef.current = window.setTimeout(() => {
-            void saveSurpriseScriptJob(scriptJobId, script).catch((error) => {
-              console.warn('[surprise] autosave skipped', error);
+        scriptSaveRef.current = window.setTimeout(() => {
+          scriptSaveQueueRef.current = scriptSaveQueueRef.current
+            .catch(() => undefined)
+            .then(() => saveSurpriseScriptDraft(scriptJobId, script))
+            .catch((error) => {
+              console.warn('[surprise] draft autosave failed', error);
             });
-          }, 600);
-        }
+        }, 600);
       }
       return next;
     });
@@ -343,6 +367,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         window.clearTimeout(scriptSaveRef.current);
         scriptSaveRef.current = null;
       }
+      await scriptSaveQueueRef.current;
       await saveSurpriseScriptJob(scriptJobId, pick.script);
       const state = await reviseSurpriseScriptJob(scriptJobId, instruction);
       applyScriptState(state);
@@ -358,6 +383,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     if (!scriptJobId) return;
     setUpdatingAssets(true);
     try {
+      await scriptSaveQueueRef.current;
       const state = await updateSurpriseScriptAssets(scriptJobId, urls);
       applyScriptState(state);
       setAssetPickerOpen(false);
@@ -370,7 +396,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   };
 
   const start = async (overrides?: { modelId?: string; resolution?: string; face_pipeline?: 'auto' | 'character_sheet' | 'illustration' | 'faceless' }) => {
-    if (!shopId || !pick) return;
+    if (!shopId || !pick || !scriptJobId) return;
     const scriptIssue = validateSurpriseScript(pick.script);
     if (scriptIssue) {
       toast.error(scriptIssue);
@@ -387,26 +413,17 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
         window.clearTimeout(scriptSaveRef.current);
         scriptSaveRef.current = null;
       }
-      const savedState = scriptJobId ? await saveSurpriseScriptJob(scriptJobId, pick.script) : null;
-      const finalScript = (savedState?.script || pick.script) as ScriptShape;
+      await scriptSaveQueueRef.current;
+      await saveSurpriseScriptJob(scriptJobId, pick.script);
       const result = await renderSurpriseVideo({
+        script_job_id: scriptJobId,
         shop_id: shopId,
-        script: finalScript,
-        picked_assets: pick.assets,
         style: pick.style,
         realism,
         model: useModel,
         resolution: useRes,
-        prompt_overrides: pick.prompt_overrides,
         face_pipeline: overrides?.face_pipeline,
       });
-      if (scriptJobId) {
-        try {
-          await discardSurpriseScriptJob(scriptJobId);
-        } catch (error) {
-          console.warn('[surprise] render started but draft cleanup failed', error);
-        }
-      }
       const job: ActiveRenderJob = {
         jobId: result.job_id,
         coverUrl: null,
@@ -484,7 +501,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       clearActiveRenderJob(shopId);
       clearSavedPick(shopId);
     }
-    if (previousJobId && activeJob?.kind === 'director') {
+    if (previousJobId) {
       try {
         await dismissSurpriseVideoJob(previousJobId);
       } catch (error) {
@@ -586,7 +603,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
                   <RefreshCw className="w-4 h-4 mr-1" /> 换个创意
                 </Button>
-                <Button className="flex-1" onClick={() => start()} disabled={submitting}>
+                <Button className="flex-1" onClick={() => start()} disabled={submitting || revising || updatingAssets}>
                   {submitting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
                   马上生成 15 秒
                 </Button>
@@ -991,8 +1008,7 @@ function ScriptBody({
                   {([
                     ['scene', '画面'],
                     ['action', '动作与运镜'],
-                    ['dialogue', '对白'],
-                    ['subtitle', '字幕'],
+                    ['dialogue', '对白（字幕自动同步）'],
                   ] as const).map(([field, fieldLabel]) => (
                     <label key={field} className="block space-y-1">
                       <span className="text-[10px] text-muted-foreground">{fieldLabel}</span>

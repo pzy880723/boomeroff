@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   appendSurpriseConversation,
   appendSurpriseScriptVersion,
+  normalizeSurprisePersonaRevision,
   orderSurpriseReferenceAssets,
 } from '../supabase/functions/_shared/surprise-script-revision.ts';
 
@@ -43,4 +44,21 @@ test('更换参考图始终把原来的真实门头放在第一张并按用户�
   assert.equal(result[0].role, 'storefront');
   assert.equal(result[1].role, 'scene');
   assert.deepEqual(result.map((item) => item.index), [0, 1, 2]);
+});
+
+test('人物修改会生成完整且年龄段一致的新人物设定', () => {
+  const current = {
+    label: '中年探店博主', gender: 'male', age: 42, visual: '短发夹克', vibe: '稳重',
+    pace: 'medium', tone_label: '真诚', opener: '你看', catchphrase: ['真不错'], cta: '来逛逛',
+    group_type: 'solo', age_bucket: 'middle', companions: [],
+  };
+  const revised = normalizeSurprisePersonaRevision(current, {
+    label: '年轻女生探店博主', gender: 'female', age: 25, visual: '黑色长发与复古夹克', vibe: '活泼',
+    pace: 'fast', tone_label: '兴奋', opener: '快看', catchphrase: ['太会淘了'], cta: '马上来',
+  });
+
+  assert.equal(revised.gender, 'female');
+  assert.equal(revised.age, 25);
+  assert.equal(revised.age_bucket, 'young');
+  assert.equal(revised.pace, 'fast');
 });

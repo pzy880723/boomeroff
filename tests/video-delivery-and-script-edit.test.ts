@@ -61,11 +61,13 @@ test('新生成的视频素材直接带入脚本的 publish_copy', () => {
   assert.equal((render.match(/publish_copy:\s*script\.publish_copy\s*\|\|\s*null/g) || []).length, 2);
 });
 
-test('惊喜一下可修改五段脚本，并用修改后的唯一口播提交', () => {
+test('惊喜一下可修改五段脚本，并只提交服务端脚本任务 ID', () => {
   const dialog = read('../src/components/marketing/SurpriseVideoDialog.tsx');
   assert.match(dialog, /编辑脚本/);
   assert.match(dialog, /onScriptChange/);
   assert.match(dialog, /continuous_dialogue/);
-  assert.match(dialog, /const finalScript = \(savedState\?\.script \|\| pick\.script\)/);
-  assert.match(dialog, /script:\s*finalScript/);
+  assert.match(dialog, /await saveSurpriseScriptJob\(scriptJobId, pick\.script\)/);
+  assert.match(dialog, /script_job_id:\s*scriptJobId/);
+  assert.doesNotMatch(dialog, /script:\s*finalScript/);
+  assert.ok(!dialog.includes("['subtitle', '字幕']"));
 });

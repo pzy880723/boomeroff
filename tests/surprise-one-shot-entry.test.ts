@@ -13,12 +13,12 @@ test('BOOMER 帮我拍确认脚本后走 15 秒一次成片，不进入导演台
   assert.match(dialog, /kind:\s*['"]legacy['"]/);
 });
 
-test('一次成片提交前保存最终脚本，成功后清除草稿', () => {
+test('一次成片提交前保存最终脚本，成功后绑定可恢复的视频任务', () => {
   const dialog = read('../src/components/marketing/SurpriseVideoDialog.tsx');
 
   assert.match(
     dialog,
-    /saveSurpriseScriptJob\(scriptJobId,\s*pick\.script\)[\s\S]*renderSurpriseVideo[\s\S]*discardSurpriseScriptJob/,
+    /saveSurpriseScriptJob\(scriptJobId,\s*pick\.script\)[\s\S]*renderSurpriseVideo\([\s\S]*script_job_id:\s*scriptJobId/,
   );
 });
 
@@ -34,5 +34,5 @@ test('惊喜一下后端固定把确认脚本提交为 one_shot', () => {
   const endpoint = read('../supabase/functions/surprise-marketing-video/index.ts');
 
   assert.match(endpoint, /render_strategy:\s*['"]one_shot['"]/);
-  assert.match(endpoint, /if \(!preview && hasScriptShape\)/);
+  assert.match(endpoint, /if \(!preview && \(scriptJobId \|\| body\.script\)\)/);
 });

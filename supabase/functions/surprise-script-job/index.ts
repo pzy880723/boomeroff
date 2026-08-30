@@ -3,6 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { assertStoreAccess, resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
+import { formatPersonaDirective, type InfluencerPersona } from "../_shared/persona-generator.ts";
 import {
   bindSurpriseReferences,
   normalizeSurpriseScript,
@@ -12,6 +13,7 @@ import {
 import {
   appendSurpriseConversation,
   appendSurpriseScriptVersion,
+  normalizeSurprisePersonaRevision,
   orderSurpriseReferenceAssets,
 } from "../_shared/surprise-script-revision.ts";
 import {
@@ -39,7 +41,7 @@ function state(job: any) {
     job_id: job.id,
     status: job.status,
     stage: job.meta?.surprise_stage || job.status,
-    script: job.script_json || null,
+    script: source.manual_script_draft || job.script_json || null,
     result: source.surprise_result || null,
     conversation: source.surprise_conversation || [],
     picked_assets: source.picked_assets || source.surprise_result?.assets || [],
@@ -70,7 +72,7 @@ async function reviseScriptWithAi(
   instruction: string,
   currentScript: SurpriseScript,
   source: Record<string, any>,
-): Promise<{ script: SurpriseScript; summary: string }> {
+): Promise<{ script: SurpriseScript; summary: string; persona: InfluencerPersona }> {
   const assets = Array.isArray(source.picked_assets) ? source.picked_assets : [];
   const persona = source.persona || source.surprise_result?.persona || null;
   const prompt = `你是 BOOMER·OFF 中古杂货店 15 秒探店视频脚本编辑器。\n\n` +
@@ -78,7 +80,8 @@ async function reviseScriptWithAi(
     `当前人物：${JSON.stringify(persona)}\n` +
     `当前真实参考图：${JSON.stringify(assets.map((asset: any, index: number) => ({ index, summary: asset.summary, role: asset.role })))}\n` +
     `当前脚本：${JSON.stringify(currentScript)}\n\n` +
-    `只输出 JSON：{"script":完整脚本对象,"summary":"一句话说明改了什么"}。` +
+    `只输出 JSON：{"script":完整脚本对象,"persona":完整人物对象,"summary":"一句话说明改了什么"}。` +
+    `如果修改要求没有涉及人物，persona 必须逐项保持当前人物；如果涉及人物，则同步修改年龄、性别、外观、气质和语速。` +
     `脚本必须恰好五段 hook + scenes三段 + outro，每段都有 scene/action/dialogue/subtitle/duration_s/image_index/motion；` +
     `每段 dialogue 必须 18-21 个汉字，五段合计 90-100 个汉字，subtitle 必须逐字等于 dialogue，` +
     `continuous_dialogue 必须是五段 dialogue 用中文逗号连接；动作必须明确人物边行动边连续说话，不能停顿；` +
@@ -101,23 +104,30 @@ async function reviseScriptWithAi(
   }
   const data = await response.json();
   const parsed = parseAiJson(String(data?.choices?.[0]?.message?.content || ""));
+  const personaChangeRequested = /(人物|角色|主角|博主|女生|男生|男性|女性|老人|年轻|中年|年龄|情侣|一家三口)/.test(instruction);
+  const persona = normalizeSurprisePersonaRevision(
+    source.persona || source.surprise_result?.persona,
+    personaChangeRequested ? parsed.persona : (source.persona || source.surprise_result?.persona),
+  ) as InfluencerPersona;
   const descriptions = referenceDescriptions(assets);
   const script = bindSurpriseReferences(
     normalizeSurpriseScript((parsed.script || parsed) as SurpriseScript),
     assets.length,
     descriptions,
   );
-  const validation = validateSurpriseScript(script, { factContext: JSON.stringify(source) });
+  const validation = validateSurpriseScript(script, { ageBucket: persona.age_bucket || null, factContext: JSON.stringify(source) });
   if (validation.errors.length) throw new Error(`改稿后校验未通过：${validation.errors.join("；")}`);
-  return { script, summary: String(parsed.summary || "已经按你的要求更新脚本").slice(0, 200) };
+  return { script, persona, summary: String(parsed.summary || "已经按你的要求更新脚本").slice(0, 200) };
 }
 
 function videoState(job: any) {
+  const renderJobId = job.meta?.render_job_id || null;
   return {
     ok: true,
     task_kind: "video",
-    job_id: job.id,
-    status: job.status,
+    job_id: renderJobId || job.id,
+    render_job_id: renderJobId,
+    status: renderJobId ? "queued" : job.status,
     stage: job.meta?.surprise_stage || job.status,
     final_video_url: job.final_video_url || null,
     cover_url: job.cover_url || null,
@@ -158,7 +168,7 @@ async function clearFailedDrafts(admin: AdminClient, userId: string, shopId: str
 }
 
 async function expireStaleGeneratingDrafts(admin: AdminClient, userId: string, shopId: string) {
-  const cutoff = new Date(Date.now() - 40_000).toISOString();
+  const cutoff = new Date(Date.now() - 70_000).toISOString();
   const { error } = await admin
     .from("video_generation_jobs")
     .update({
@@ -305,6 +315,11 @@ Deno.serve(async (req) => {
         aspect_ratio: "9:16",
         meta: { flow: "surprise", consumed: false, surprise_stage: "script_generating", background: true },
       }).select("*").single();
+      if (error?.code === '23505') {
+        const concurrent = await findCurrentTask(admin, user.id, shopId);
+        if (concurrent?.kind === 'script') return json(state(concurrent.job));
+        if (concurrent?.kind === 'video') return json(videoState(concurrent.job));
+      }
       if (error || !job) return json({ ok: false, error: `创建脚本任务失败: ${error?.message || "unknown"}` }, 500);
 
       const task = runScriptGeneration({ admin, supabaseUrl, auth, jobId: job.id, shopId, exclude, realism });
@@ -319,8 +334,17 @@ Deno.serve(async (req) => {
 
     const jobId = String(body.job_id || "").trim();
     if (!jobId) return json({ ok: false, error: "缺少 job_id" }, 400);
-    const { data: job, error: jobError } = await admin
+    let { data: job, error: jobError } = await admin
       .from("video_generation_jobs").select("*").eq("id", jobId).eq("user_id", user.id).single();
+    if ((!job || jobError) && action === "dismiss") {
+      const fallback = await admin.from("video_generation_jobs")
+        .select("*")
+        .eq("user_id", user.id)
+        .contains("meta", { render_job_id: jobId })
+        .maybeSingle();
+      job = fallback.data;
+      jobError = fallback.error;
+    }
     if (jobError || !job) return json({ ok: false, error: "脚本任务不存在" }, 404);
     await assertStoreAccess(admin, user.id, job.shop_id);
 
@@ -353,9 +377,23 @@ Deno.serve(async (req) => {
           ...meta,
           surprise_dismissed_at: new Date().toISOString(),
         },
-      }).eq("id", jobId);
+      }).eq("id", job.id);
       if (error) return json({ ok: false, error: error.message || "结束任务失败" }, 500);
       return json({ ok: true, dismissed: true, job_id: jobId });
+    }
+
+    if (action === "save_draft") {
+      if (String(job.status) !== "script_ready") {
+        return json({ ok: false, error: "脚本还没有准备好" }, 409);
+      }
+      const script = body.script && typeof body.script === "object" ? body.script : null;
+      if (!script) return json({ ok: false, error: "缺少脚本" }, 400);
+      const source = (job.source_pick_json || {}) as Record<string, unknown>;
+      const { data: saved, error } = await admin.from("video_generation_jobs").update({
+        source_pick_json: { ...source, manual_script_draft: script },
+      }).eq("id", job.id).eq("status", "script_ready").contains("meta", { flow: "surprise", consumed: false }).select("*").single();
+      if (error || !saved) return json({ ok: false, error: error?.message || "保存脚本草稿失败" }, 500);
+      return json(state(saved));
     }
 
     if (action === "save") {
@@ -375,8 +413,11 @@ Deno.serve(async (req) => {
         factContext: JSON.stringify(job.source_pick_json || {}),
       });
       if (validation.errors.length) return json({ ok: false, error: validation.errors.join("；"), errors: validation.errors }, 422);
+      const nextSource = { ...source };
+      delete nextSource.manual_script_draft;
       const { data: saved, error } = await admin.from("video_generation_jobs").update({
         script_json: script,
+        source_pick_json: nextSource,
         status: "script_ready",
         error_message: null,
         meta: {
@@ -387,7 +428,7 @@ Deno.serve(async (req) => {
           manually_edited_at: new Date().toISOString(),
           script_versions: appendSurpriseScriptVersion(job.meta?.script_versions, script, "manual"),
         },
-      }).eq("id", jobId).select("*").single();
+      }).eq("id", jobId).eq("status", "script_ready").contains("meta", { flow: "surprise", consumed: false }).select("*").single();
       if (error || !saved) return json({ ok: false, error: error?.message || "保存脚本失败" }, 500);
       return json(state(saved));
     }
@@ -401,8 +442,25 @@ Deno.serve(async (req) => {
       if (!lovableApiKey) return json({ ok: false, error: "AI 改稿服务尚未配置" }, 503);
       const source = (job.source_pick_json || {}) as Record<string, any>;
       const revised = await reviseScriptWithAi(lovableApiKey, instruction.slice(0, 500), job.script_json, source);
+      const previousResult = source.surprise_result && typeof source.surprise_result === "object"
+        ? source.surprise_result
+        : {};
+      const previousOverrides = previousResult.prompt_overrides && typeof previousResult.prompt_overrides === "object"
+        ? previousResult.prompt_overrides
+        : {};
       const nextSource = {
         ...source,
+        manual_script_draft: null,
+        persona: revised.persona,
+        surprise_result: {
+          ...previousResult,
+          script: revised.script,
+          persona: revised.persona,
+          prompt_overrides: {
+            ...previousOverrides,
+            persona_directive: formatPersonaDirective(revised.persona),
+          },
+        },
         surprise_conversation: appendSurpriseConversation(
           source.surprise_conversation,
           instruction,
@@ -421,7 +479,7 @@ Deno.serve(async (req) => {
           revised_at: new Date().toISOString(),
           script_versions: appendSurpriseScriptVersion(job.meta?.script_versions, revised.script, "conversation", instruction),
         },
-      }).eq("id", jobId).eq("status", "script_ready").select("*").single();
+      }).eq("id", jobId).eq("status", "script_ready").contains("meta", { flow: "surprise", consumed: false }).select("*").single();
       if (error || !saved) return json({ ok: false, error: error?.message || "保存改稿失败" }, 500);
       return json(state(saved));
     }
@@ -463,7 +521,7 @@ Deno.serve(async (req) => {
           reference_assets_updated_at: new Date().toISOString(),
           script_versions: appendSurpriseScriptVersion(job.meta?.script_versions, script, "references"),
         },
-      }).eq("id", jobId).eq("status", "script_ready").select("*").single();
+      }).eq("id", jobId).eq("status", "script_ready").contains("meta", { flow: "surprise", consumed: false }).select("*").single();
       if (error || !saved) return json({ ok: false, error: error?.message || "保存参考图失败" }, 500);
       return json(state(saved));
     }

@@ -86,7 +86,7 @@ test('脚本生成失败后重新进入不恢复旧失败任务，应允许后�
   assert.equal(current, null);
 });
 
-test('生成中脚本超过 20 秒视为僵死，不能让页面永久转圈', () => {
+test('脚本超时阈值高于 35 秒模型请求预算，不会误杀正常后台任务', () => {
   const generating = row({
     status: 'script_generating',
     updated_at: '2026-08-16T10:00:00.000Z',
@@ -95,10 +95,10 @@ test('生成中脚本超过 20 秒视为僵死，不能让页面永久转圈', (
 
   assert.equal(
     isStaleSurpriseScriptTask(generating, Date.parse('2026-08-16T10:00:21.000Z')),
-    true,
+    false,
   );
   assert.equal(
-    isStaleSurpriseScriptTask(generating, Date.parse('2026-08-16T10:00:10.000Z')),
-    false,
+    isStaleSurpriseScriptTask(generating, Date.parse('2026-08-16T10:01:01.000Z')),
+    true,
   );
 });

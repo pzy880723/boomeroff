@@ -18,6 +18,7 @@ export interface SurpriseScriptJobState {
   conversation?: Array<{ role: 'user' | 'assistant'; content: string }>;
   script_versions?: Array<Record<string, unknown>>;
   picked_assets?: unknown[];
+  render_job_id?: string | null;
 }
 
 // 「BOOMER 帮我拍」固定 15 秒一段直出,输出分辨率恒为 1080p。
@@ -25,9 +26,8 @@ export interface SurpriseScriptJobState {
 export const SURPRISE_OUTPUT_RESOLUTION = '1080p';
 
 export interface SurpriseRenderPayload {
+  script_job_id: string;
   shop_id: string;
-  script: unknown;
-  picked_assets: unknown[];
   style: string;
   realism: string;
   model: string;
@@ -60,6 +60,10 @@ export function pollSurpriseScriptJob(jobId: string) {
 
 export function saveSurpriseScriptJob(jobId: string, script: unknown) {
   return call({ action: 'save', job_id: jobId, script });
+}
+
+export function saveSurpriseScriptDraft(jobId: string, script: unknown) {
+  return call({ action: 'save_draft', job_id: jobId, script });
 }
 
 export function reviseSurpriseScriptJob(jobId: string, instruction: string) {
