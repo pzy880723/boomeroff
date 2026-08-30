@@ -1,6 +1,6 @@
 // “BOOMER 帮我拍”脚本草稿任务。
 // 只负责抽素材、生成/修改脚本和保存参考图；用户确认后提交同一份脚本给 15 秒 one-shot 渲染。
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { assertStoreAccess, resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 import { formatPersonaDirective, type InfluencerPersona } from "../_shared/persona-generator.ts";
@@ -31,7 +31,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   headers: { ...corsHeaders, "Content-Type": "application/json" },
 });
 
-type AdminClient = ReturnType<typeof createClient>;
+type AdminClient = SupabaseClient<any, "public", any>;
 
 function state(job: any) {
   const source = (job?.source_pick_json || {}) as any;
