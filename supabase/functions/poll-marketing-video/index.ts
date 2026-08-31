@@ -7,6 +7,10 @@ import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
 import { isVolcesTosUrl, mirrorTosVideoToStorage } from "../_shared/mirror-tos-video.ts";
 import { coverPollFields, ensureCoverQueued } from "../_shared/cover-generation.ts";
 import { assertStoreAccess, StoreAccessError } from "../_shared/store-access.ts";
+import {
+  buildSurpriseVideoReadyUpdate,
+  readSourceScriptJobId,
+} from "../_shared/surprise-render-completion.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -199,33 +203,46 @@ async function updateAssetMeta(
   if (storedPath && typeof asset.output_url === "string" && !isVolcesTosUrl(asset.output_url)) {
     finalUrl = asset.output_url;
   }
-  // 火山 TOS 签名 URL 只有 24h 有效,成功时立刻转存到 Storage 拿长期链接
+  // 1080p 成片可能很大，不能在 Edge 轮询请求里同步下载转存，否则请求会超时，
+  // 前端会一直停在“排队中”。先保存火山地址并立即返回；腾讯云封面 Worker
+  // 会异步生成 Fast Start 成片并在 cover-callback 中换成长期地址。
   if (!storedPath && typeof outputUrl === "string" && isVolcesTosUrl(outputUrl)) {
-    try {
-      const r = await mirrorTosVideoToStorage(admin, userId, asset.id as string, outputUrl);
-      if (r.ok) {
-        finalUrl = r.url;
-        extraMeta.tos_url_original = outputUrl;
-        extraMeta.storage_path = r.path;
-        extraMeta.mirrored_at = new Date().toISOString();
-      } else {
-        console.warn("[poll] mirror failed", asset.id, r.error);
-        extraMeta.mirror_error = r.error;
-        extraMeta.mirror_retry_at = new Date().toISOString();
-      }
-    } catch (e) {
-      console.warn("[poll] mirror exception", asset.id, e);
-    }
+    extraMeta.tos_url_original = outputUrl;
+    extraMeta.stream_delivery_status = "queued";
   }
   const newMeta = { ...(asset.meta || {}), ...patch, ...extraMeta };
   const update: Record<string, unknown> = { meta: newMeta };
   if (finalUrl !== undefined) update.output_url = finalUrl;
   await admin.from("marketing_assets").update(update).eq("id", asset.id);
   return {
+    asset_id: asset.id as string,
     url: finalUrl || asset.output_url || null,
     mirrored: Boolean(extraMeta.storage_path || storedPath),
     error: typeof extraMeta.mirror_error === "string" ? extraMeta.mirror_error : null,
   };
+}
+
+async function syncSurpriseSourceVideoReady(
+  admin: any,
+  renderJob: any,
+  finalVideoUrl: string | null,
+  assetId?: string | null,
+) {
+  if (!finalVideoUrl) return;
+  const sourceJobId = readSourceScriptJobId(renderJob?.script);
+  if (!sourceJobId) return;
+  const { data: sourceJob } = await admin
+    .from("video_generation_jobs")
+    .select("id, status, meta")
+    .eq("id", sourceJobId)
+    .maybeSingle();
+  if (!sourceJob || sourceJob.status === "done") return;
+  await admin.from("video_generation_jobs").update(buildSurpriseVideoReadyUpdate({
+    sourceMeta: sourceJob.meta,
+    renderJobId: renderJob.id,
+    finalVideoUrl,
+    assetId,
+  })).eq("id", sourceJob.id);
 }
 
 async function submitQueuedChild(admin: any, arkKey: string, child: any, userId: string) {
@@ -788,6 +805,7 @@ Deno.serve(async (req) => {
         if (stableUrl && stableUrl !== job.video_url) {
           await admin.from("marketing_video_jobs").update({ video_url: stableUrl }).eq("id", jobId);
         }
+        await syncSurpriseSourceVideoReady(admin, job, stableUrl, mirrored?.asset_id);
       }
       let coverFields = coverPollFields(job.fallback_notes, job.script);
       if (job.status === "succeeded" && !job.parent_job_id && stableUrl && !coverFields.cover_status) {
@@ -849,6 +867,9 @@ Deno.serve(async (req) => {
       responseVideoUrl = mirrored?.url || responseVideoUrl;
       if (r.mapped === "succeeded" && responseVideoUrl && responseVideoUrl !== r.video_url) {
         await admin.from("marketing_video_jobs").update({ video_url: responseVideoUrl }).eq("id", jobId);
+      }
+      if (r.mapped === "succeeded") {
+        await syncSurpriseSourceVideoReady(admin, job, responseVideoUrl, mirrored?.asset_id);
       }
     }
 

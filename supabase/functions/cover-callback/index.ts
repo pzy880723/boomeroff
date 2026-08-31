@@ -4,6 +4,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { mergeCoverGeneration, readCoverGeneration, resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
 import { mirrorTosVideoToStorage } from "../_shared/mirror-tos-video.ts";
+import {
+  buildSurpriseCoverCompletion,
+  readSourceScriptJobId,
+} from "../_shared/surprise-render-completion.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,7 +40,7 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     const { data: job } = await admin
       .from("marketing_video_jobs")
-      .select("id, user_id, shop_id, fallback_notes, video_url, segment_url")
+      .select("id, user_id, shop_id, fallback_notes, video_url, segment_url, script")
       .eq("id", jobId)
       .maybeSingle();
     if (!job) return json({ ok: false, error: "任务不存在" }, 404);
@@ -162,6 +166,25 @@ Deno.serve(async (req) => {
     } catch (e) {
       assetError = (e as Error).message || String(e);
       console.error("[cover-callback] asset update failed", assetError);
+    }
+
+    const sourceScriptJobId = readSourceScriptJobId(job.script);
+    const completedVideoUrl = stableVideoUrl || deliveryVideoUrl || job.video_url || job.segment_url;
+    if (sourceScriptJobId && completedVideoUrl) {
+      const { data: sourceJob } = await admin
+        .from("video_generation_jobs")
+        .select("id, meta")
+        .eq("id", sourceScriptJobId)
+        .maybeSingle();
+      if (sourceJob) {
+        await admin.from("video_generation_jobs").update(buildSurpriseCoverCompletion({
+          sourceMeta: sourceJob.meta,
+          renderJobId: job.id,
+          finalVideoUrl: completedVideoUrl,
+          coverUrl,
+          assetId,
+        })).eq("id", sourceJob.id);
+      }
     }
 
     return json({
