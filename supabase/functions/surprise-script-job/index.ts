@@ -494,7 +494,7 @@ Deno.serve(async (req) => {
       if (!urls.length) return json({ ok: false, error: "请至少选择一张店内实景图" }, 400);
       const { data: selected, error: selectedError } = await admin
         .from("marketing_assets")
-        .select("id, output_url, description, category, tags, meta")
+        .select("id, output_url, output_text, category, tags, meta")
         .eq("shop_id", job.shop_id)
         .eq("kind", "photo")
         .in("output_url", urls);

@@ -6,7 +6,7 @@ import { selectAuthorizedSurpriseReferences } from '../supabase/functions/_share
 const storefront = {
   id: 'front',
   output_url: 'front.jpg',
-  description: 'BOOMER·OFF 门店入口全景与店招',
+  output_text: 'BOOMER·OFF 门店入口全景与店招',
   tags: ['探店首图', '门头全景', '店招'],
   category: '门店',
 };
@@ -25,7 +25,7 @@ test('最终渲染忽略客户端伪造的 storefront 角色并把数据库真�
   const interior = {
     id: 'inside',
     output_url: 'inside.jpg',
-    description: '店内唱片与玩具货架',
+    output_text: '店内唱片与玩具货架',
     tags: ['店内陈列'],
     category: '店铺',
   };

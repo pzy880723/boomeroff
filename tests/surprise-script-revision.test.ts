@@ -33,9 +33,9 @@ test('脚本版本限制为最近八版并记录来源', () => {
 test('更换参考图始终把原来的真实门头放在第一张并按用户顺序去重', () => {
   const storefront = { asset_id: 'front', url: 'front.jpg', summary: '真实门头', role: 'storefront' };
   const selected = [
-    { id: 'b', output_url: 'b.jpg', description: '唱片区' },
-    { id: 'a', output_url: 'a.jpg', description: '玩具区' },
-    { id: 'b', output_url: 'b.jpg', description: '重复唱片区' },
+    { id: 'b', output_url: 'b.jpg', output_text: '唱片区' },
+    { id: 'a', output_url: 'a.jpg', output_text: '玩具区' },
+    { id: 'b', output_url: 'b.jpg', output_text: '重复唱片区' },
   ];
 
   const result = orderSurpriseReferenceAssets(storefront, selected);

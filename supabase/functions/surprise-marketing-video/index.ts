@@ -20,6 +20,10 @@ import { selectAuthorizedSurpriseReferences } from "../_shared/surprise-render-r
 import { selectPendingAutoTagAssetIds } from "../_shared/auto-tag-assets.ts";
 import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
+import {
+  buildSurpriseContentScopePrompt,
+  resolveSurpriseContentScope,
+} from "../_shared/surprise-content-scope.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -94,6 +98,7 @@ function sampleWeighted<T>(items: { item: T; w: number }[], n: number): T[] {
 function summarizeAsset(a: any): string {
   const meta = (a.meta || {}) as any;
   if (meta.summary) return String(meta.summary).slice(0, 120);
+  if (a.output_text) return String(a.output_text).slice(0, 120);
   const parts: string[] = [];
   if (a.category) parts.push(a.category);
   if (Array.isArray(a.tags) && a.tags.length) parts.push(a.tags.slice(0, 3).join('/'));
@@ -114,6 +119,8 @@ Deno.serve(async (req) => {
     if (!u.user) return json({ ok: false, error: "未授权" }, 401);
 
     const body = await req.json().catch(() => ({}));
+    const contentScope = resolveSurpriseContentScope(body.content_scope);
+    const contentScopePrompt = buildSurpriseContentScopePrompt(contentScope);
     let shopId: string | null = typeof body.shop_id === 'string' && body.shop_id ? body.shop_id : null;
     const preview: boolean = !!body.preview;
     const exclude: string[] = Array.isArray(body.exclude_asset_ids) ? body.exclude_asset_ids.slice(0, 50) : [];
@@ -171,14 +178,14 @@ Deno.serve(async (req) => {
       const authorizedRows: any[] = [];
       if (requestedIds.length) {
         const { data, error } = await admin.from('marketing_assets')
-          .select('id, output_url, description, category, tags, meta')
+          .select('id, output_url, output_text, category, tags, meta')
           .eq('shop_id', shopId).eq('kind', 'photo').in('id', requestedIds);
         if (error) return json({ ok: false, error: error.message || '读取参考图失败' }, 500);
         authorizedRows.push(...(data || []));
       }
       if (requestedUrls.length) {
         const { data, error } = await admin.from('marketing_assets')
-          .select('id, output_url, description, category, tags, meta')
+          .select('id, output_url, output_text, category, tags, meta')
           .eq('shop_id', shopId).eq('kind', 'photo').in('output_url', requestedUrls);
         if (error) return json({ ok: false, error: error.message || '读取参考图失败' }, 500);
         const known = new Set(authorizedRows.map((row) => row.id));
@@ -493,6 +500,7 @@ Deno.serve(async (req) => {
       `店员:来一条 15 秒竖版探店口播,节奏严格按下面博主人设走(慢就慢、快就快,不要前后割裂)。\n` +
       `${formatPersonaBriefZh(persona)}\n` +
       `${openingDirective}\n` +
+      `${contentScopePrompt}\n` +
       `${holidayBrief ? holidayBrief + '\n' : ''}` +
       `【钩子句池】这次开场的钩子可参考(可改写,不要照抄,必须贴合博主语气与节奏):${randomHooks}。每次拍都要不一样,不要复用上次开头。\n` +
       `【全片要求】严格 5 个 3 秒镜头:钩子 1 镜 + 递进种草 3 镜 + CTA 1 镜。主角始终是上面那位虚构博主(同人同发型同服装),每镜都有动作(指/拿/试/转身/对镜头说话);**每一镜都必须有 dialogue 和 subtitle,严禁空台词**,每段严格 18–21 个汉字,五句合计 90–100 个汉字(硬上限 100,严禁重复内容、重复短语或回读),用中文逗号连接后就是一条从约 0.2 秒持续到约 14.5 秒的完整口播。五段分别讲钩子 → 进店发现 → 商品细节 → 价值体验 → 行动召唤,画面、对白、字幕必须逐段对应。语速高密度且清晰(约每分钟 390–430 汉字),逗号处只允许 0.05–0.12 秒节奏换气,切镜时人声延续不重开。随机变化钩子、人设和表达,但主旨永远是强力种草当前门店;门店事实和卖点只能来自店铺画像、品牌知识库与已选实景素材,严禁编造价格或活动。博主每一镜都要有情绪推进,全部用上传的店内实景;结尾必须带 CTA(参考博主 CTA「${persona.cta}」)。`;

@@ -147,7 +147,7 @@ export function orderSurpriseReferenceAssets(
       asset_id: String(row.id || row.asset_id || ''),
       index: ordered.length,
       url,
-      summary: String(row.description || row.summary || row.category || '当前门店真实实景'),
+      summary: String(row.output_text || row.summary || row.category || '当前门店真实实景'),
       category: row.category ? String(row.category) : null,
       role: 'scene',
     });
