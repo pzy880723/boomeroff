@@ -111,7 +111,7 @@ export async function sauListAccounts(): Promise<SauAccount[]> {
       avatar: String(row[3] || ""),
       status: Number(row[4] ?? 1),
     }))
-    .filter((account) => account.status === 1);
+    .filter((account: { status: number }) => account.status === 1);
 }
 
 export async function sauDeleteAccount(workerId: number): Promise<void> {

@@ -144,8 +144,8 @@ Deno.serve(async (req) => {
     async function worker() {
       while (true) {
         const idx = cursor++;
-        if (idx >= shots.length) break;
-        const shot = shots[idx];
+        if (idx >= shotList.length) break;
+        const shot = shotList[idx];
         try {
           await updateShot(admin, jobId, shot.shot_index, { status: 'submitting', error_message: null });
           const refs: string[] = [characterRefUrl!];
