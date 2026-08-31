@@ -131,6 +131,9 @@ Deno.serve(async (req) => {
       await updateJob(admin, jobId, { status: 'failed', error_message: '没有可拍的镜头' });
       return json({ ok: false, error: '无镜头' });
     }
+    const shotList = shots;
+
+
 
     // 用户上传的门头/实景素材(fallback 参考图)
     const pickedAssets: any[] = Array.isArray(src.picked_assets) ? src.picked_assets : [];
@@ -144,8 +147,8 @@ Deno.serve(async (req) => {
     async function worker() {
       while (true) {
         const idx = cursor++;
-        if (idx >= shots.length) break;
-        const shot = shots[idx];
+        if (idx >= shotList.length) break;
+        const shot = shotList[idx];
         try {
           await updateShot(admin, jobId, shot.shot_index, { status: 'submitting', error_message: null });
           const refs: string[] = [characterRefUrl!];

@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
             } else if (status === "success" || status === "succeeded" || status === "done") {
               send({ step: "syncing", msg: "手机端已确认，正在读取主页资料并保存账号关联" });
               let acct = normalizeWorkerAccount(j, code);
-              if (!acct) acct = await findAccountAfterLogin(code, beforeIds);
+              if (!acct) acct = (await findAccountAfterLogin(code, beforeIds)) as any;
               if (acct) {
                 const { error } = await supa.from("social_accounts").upsert({
                   shop_id: shopId,

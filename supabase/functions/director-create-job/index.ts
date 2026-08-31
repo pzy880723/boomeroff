@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     if (!shopId) return json({ ok: false, error: "缺少 shop_id" });
 
     if (draftJobId) {
-      const scriptValidation = validateSurpriseScript(script, { factContext: JSON.stringify(pickedAssets) });
+      const scriptValidation = validateSurpriseScript(script as any, { factContext: JSON.stringify(pickedAssets) });
       if (scriptValidation.errors.length) {
         return json({ ok: false, error: `脚本未通过校验: ${scriptValidation.errors.join("；")}`, errors: scriptValidation.errors }, 422);
       }
