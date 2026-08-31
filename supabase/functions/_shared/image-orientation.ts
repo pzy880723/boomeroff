@@ -8,7 +8,6 @@ export interface ImageDimensions {
 export interface ImageAssetLike {
   output_url?: unknown;
   meta?: Record<string, unknown> | null;
-  [key: string]: unknown;
 }
 
 function positiveInt(value: unknown): number | null {
