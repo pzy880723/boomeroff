@@ -4,6 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { selectPendingAutoTagAssetIds } from "../_shared/auto-tag-assets.ts";
 import { isCanonicalStorefrontAsset } from "../_shared/storefront-assets.ts";
+import { imageDimensionsFromMeta, probeImageDimensions, withImageDimensions } from "../_shared/image-orientation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -111,8 +112,17 @@ Deno.serve(async (req) => {
 
     const startedAt = new Date().toISOString();
     for (const row of todo) {
+      let rowWithDimensions = row;
+      if (!imageDimensionsFromMeta(row.meta) && row.output_url) {
+        try {
+          const dimensions = await probeImageDimensions(row.output_url);
+          if (dimensions) rowWithDimensions = withImageDimensions(row, dimensions);
+        } catch (error) {
+          console.warn(`[auto-tag] image dimension probe failed asset=${row.id}`, error);
+        }
+      }
       const nextMeta = {
-        ...(row.meta || {}),
+        ...(rowWithDimensions.meta || {}),
         ai_tag_status: "processing",
         ai_tag_started_at: startedAt,
         ai_tag_attempts: Number(row.meta?.ai_tag_attempts || 0) + 1,

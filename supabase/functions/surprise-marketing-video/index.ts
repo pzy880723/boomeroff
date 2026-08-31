@@ -15,9 +15,15 @@ import { resolveStorefrontOpeningEn, resolveStorefrontOpeningZh } from "../_shar
 import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
 import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
 import { generateFastSurpriseScript } from "../_shared/surprise-script-performance.ts";
-import { pickStorefrontAsset, resolveStorefrontAsset } from "../_shared/storefront-assets.ts";
+import { pickStorefrontAsset, resolveStorefrontAsset, scoreStorefrontAsset } from "../_shared/storefront-assets.ts";
 import { selectAuthorizedSurpriseReferences } from "../_shared/surprise-render-references.ts";
 import { selectPendingAutoTagAssetIds } from "../_shared/auto-tag-assets.ts";
+import {
+  imageDimensionsFromMeta,
+  probeImageDimensions,
+  selectAssetsForVideoAspect,
+  withImageDimensions,
+} from "../_shared/image-orientation.ts";
 import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 import {
@@ -103,6 +109,36 @@ function summarizeAsset(a: any): string {
   if (a.category) parts.push(a.category);
   if (Array.isArray(a.tags) && a.tags.length) parts.push(a.tags.slice(0, 3).join('/'));
   return parts.join(' · ') || '店内实景';
+}
+
+async function prepareAssetsForVideoAspect(admin: any, assets: any[], aspect: string): Promise<any[]> {
+  const resolved = assets.map((asset) => ({ ...asset, meta: { ...(asset.meta || {}) } }));
+  const unknown = resolved
+    .filter((asset) => !imageDimensionsFromMeta(asset.meta))
+    .sort((a, b) => scoreStorefrontAsset(b) - scoreStorefrontAsset(a));
+
+  for (let offset = 0; offset < unknown.length; offset += 12) {
+    const portraitReady = selectAssetsForVideoAspect(resolved, aspect);
+    if (portraitReady.length >= 9 && pickStorefrontAsset(portraitReady)) break;
+
+    const batch = unknown.slice(offset, offset + 12);
+    await Promise.all(batch.map(async (asset) => {
+      const url = String(asset.output_url || '').trim();
+      if (!url) return;
+      try {
+        const dimensions = await probeImageDimensions(url);
+        if (!dimensions) return;
+        const enriched = withImageDimensions(asset, dimensions);
+        asset.meta = enriched.meta;
+        const { error } = await admin.from('marketing_assets').update({ meta: enriched.meta }).eq('id', asset.id);
+        if (error) console.warn(`[surprise] image dimension cache failed asset=${asset.id}`, error.message);
+      } catch (error) {
+        console.warn(`[surprise] image dimension probe failed asset=${asset.id}`, error);
+      }
+    }));
+  }
+
+  return selectAssetsForVideoAspect(resolved, aspect);
 }
 
 Deno.serve(async (req) => {
@@ -200,6 +236,14 @@ Deno.serve(async (req) => {
           error: error instanceof Error ? error.message : '参考图校验失败',
         }, error instanceof Error && error.message.includes('不属于当前门店') ? 403 : 409);
       }
+      const portraitSubmittedRows = await prepareAssetsForVideoAspect(admin, submittedRows, '9:16');
+      if (portraitSubmittedRows.length !== submittedRows.length) {
+        return json({
+          ok: false,
+          error: '当前脚本包含横版、方形或无法确认尺寸的参考图。请点“换个创意”重新生成，竖版视频只会选择竖版照片。',
+        }, 409);
+      }
+      submittedRows = portraitSubmittedRows;
       const submittedReferences = submittedRows.map((asset: any) => ({ asset, url: String(asset.output_url || '').trim() }));
       const submittedImageUrls = submittedReferences.map((entry: any) => entry.url);
       const submittedDescriptions = submittedReferences.map(({ asset }: any, index: number) => ({
@@ -366,6 +410,11 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "素材库还没有你上传的实景图,先去『素材库 › 图片』上传几张(AI 生成图不参与)" });
     }
 
+    pool = await prepareAssetsForVideoAspect(admin, pool, '9:16');
+    if (pool.length === 0) {
+      return json({ ok: false, error: '当前门店没有可用于 9:16 视频的竖版实景图。请先上传竖拍照片，横图和方图不会再参与竖版视频。' }, 409);
+    }
+
 
     // 2) 找高置信真实门头。没有门头时直接停止，绝不让模型凭空设计 Logo 或入口。
     const shopCtx = await shopContextPromise;
@@ -404,7 +453,7 @@ Deno.serve(async (req) => {
     if (!storefrontHit) {
       return json({
         ok: false,
-        error: '当前门店素材库没有可确认的真实门头照。请先上传包含真实店铺入口与 BOOMER·OFF 店招的照片，再生成视频。',
+        error: '当前门店没有可确认的竖版真实门头照。请上传一张竖拍、完整包含店铺入口与 BOOMER·OFF 店招的照片，再生成 9:16 视频。',
       }, 409);
     }
     const needsStorefront = false;
@@ -493,7 +542,7 @@ Deno.serve(async (req) => {
     const storefrontEvidence = `${JSON.stringify(shopCtx || {})}\n${pickedAssets.map((asset: any) => summarizeAsset(asset)).join('\n')}`;
     const storefrontOpeningZh = resolveStorefrontOpeningZh(storefrontEvidence);
     const openingDirective = storefrontHit
-      ? `${storefrontOpeningZh} 参考图 1 是门头/店招/logo,务必在 0-3s 内露出;subtitle 像「${shopCtx?.name || '这家店'},冲!」之类。从第 2 镜起镜头已在店内货架间。`
+      ? `${storefrontOpeningZh} 参考图 1 是门头/店招/logo,只用于锁定真实入口与店招,不得静止播放;subtitle 像「${shopCtx?.name || '这家店'},冲!」之类。从第 2 镜起镜头已在店内货架间。`
       : `${storefrontOpeningZh} subtitle 像「${shopCtx?.name || '这家店'},冲!」。`;
 
     const briefTranscript =
@@ -511,6 +560,9 @@ Deno.serve(async (req) => {
       index: i,
       summary: i === 0 && storefrontHit ? `门头/店招 · ${summarizeAsset(a)}` : summarizeAsset(a),
       role: i === 0 && storefrontHit ? 'storefront' : 'scene',
+      width: imageDimensionsFromMeta(a.meta)?.width || null,
+      height: imageDimensionsFromMeta(a.meta)?.height || null,
+      orientation: a.meta?.image_orientation || null,
     }));
 
     const generatedScript = await generateFastSurpriseScript({

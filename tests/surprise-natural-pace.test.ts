@@ -87,8 +87,9 @@ test('编译后的提示词使用高密度语速和极短节奏换气', () => {
   assert.match(prompt, /严格按最终口播全文只读一次/);
   assert.doesNotMatch(prompt, /270–320/);
   assert.doesNotMatch(prompt, /零停顿、零吸气/);
-  // 保留门头、素材顺序与完整收尾，但不再堆叠逐秒分镜口令
-  assert.match(prompt, /0-3 秒/);
+  // 保留动态门头、素材顺序与完整收尾，但不再堆叠逐秒分镜口令
+  assert.match(prompt, /第 0 秒同一位博主已在真实门头前出现并开口/);
+  assert.match(prompt, /禁止定格、照片平移、两秒空镜或无人开场/);
   assert.match(prompt, /【画面素材概括】/);
   assert.match(prompt, /参考图片1/);
   assert.match(prompt, /参考图片5/);

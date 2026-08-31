@@ -120,7 +120,11 @@ test('一次成片提示词只包含一条连续口播、概括导演稿和完�
   assert.match(prompt, /图片1.*门头和开放式店面/);
   assert.match(prompt, /真实门头原件/);
   assert.match(prompt, /不得重绘、改字、替换、修复或生成任何 Logo、门头或招牌/);
-  assert.match(prompt, /无法准确复现时.*直接保持真实门头照片/);
+  assert.match(prompt, /第一帧就必须出现同一位探店博主/);
+  assert.match(prompt, /边说边快步入画、回头招手/);
+  assert.match(prompt, /带着顾客走进店内/);
+  assert.match(prompt, /禁止把门头参考图直接静止展示/);
+  assert.doesNotMatch(prompt, /直接保持真实门头照片/);
   assert.match(prompt, /图片2.*整面密集货架/);
   assert.ok(prompt.includes(`"${script.continuous_dialogue}"`), '提示词必须逐字包含连续口播');
   // 严禁再出现按镜逐字朗读的老式指令
@@ -193,6 +197,11 @@ test('有门头素材时首镜头和首个画面切点必须锁定真实门头',
   assert.equal(bound.hook.image_index, 0);
   assert.equal(bound.visual_beats?.[0].image_index, 0);
   assert.match(String(bound.hook.scene), /门头|店招|入口|Logo/i);
+  assert.match(String(bound.hook.action), /第一帧/);
+  assert.match(String(bound.hook.action), /带顾客走进店内/);
+  assert.match(String(bound.hook.motion), /不停顿不定格/);
+  assert.equal(bound.visual_beats?.[0].action, bound.hook.action);
+  assert.equal(bound.visual_beats?.[0].motion, bound.hook.motion);
 });
 
 test('对白不足时不注入无关固定台词，而是保留原稿交给校验触发整条重写', () => {

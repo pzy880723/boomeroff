@@ -11,15 +11,15 @@ export const STOREFRONT_CONSTRAINT_ZH = `【门店物理形态(硬约束 · 不�
 
 export const STOREFRONT_CONSTRAINT_EN = `STORE PHYSICAL CONSTRAINT (HARD RULE, must obey): The shop is located INSIDE a shopping mall on B1 underground floor. It is an open-front 8-meter-wide storefront with NO door, NO doorway frame, NO glass door, NO door handle, NO door curtain, NO roll-up shutter. The talent enters by walking directly from the mall corridor into the open shopfront — no pushing, no pulling, no opening any door. Background must show mall corridor / mall atrium / opposite mall shops / mall ceiling lighting. NEGATIVE — strictly forbid: street, sidewalk, road, traffic, car, outdoor sky, night street, push door, pull door, open door, door handle, door curtain, glass door, shutter, store entrance with door.`;
 
-export const STOREFRONT_OPENING_EN = `Opening shot (0-3s): camera POV from inside the mall corridor looking toward the open-front shop, the brand logo / signage on the lintel above the open frontage is visible, the visiting influencer walks straight in from the corridor side into the open shopfront (NO door, NO pushing). From shot #2 the camera is already inside the shop interior with retail shelves around.`;
+export const STOREFRONT_OPENING_EN = `Opening shot (0-3s): from the very first frame, the same visiting influencer is already visible in front of the real open-front shop, speaking while moving quickly, turning back to beckon the viewer, then leading the viewer directly from the mall corridor into the shop (NO door, NO pushing). The handheld camera follows forward immediately; the real brand logo / signage on the lintel remains visible while entering. Never show the storefront reference as a still photo, frozen frame, photo pan, empty establishing shot, or two-second unmanned opening. From shot #2 the camera is already inside the shop interior with retail shelves around.`;
 
-export const STOREFRONT_OPENING_ZH = `【强制开场(第 1 镜 / 0–3s · 不可改)】镜头从商场走廊视角看向开放式店面,顶部门楣上的 logo/店招清晰可见,探店博主从走廊侧自然走入开放式店面(无门、不要推门、不要拉门);从第 2 镜起镜头已在店内货架间。`;
+export const STOREFRONT_OPENING_ZH = `【强制开场(第 1 镜 / 0–3s · 不可改)】第一帧同一位探店博主就已出现在真实开放式门头前,立即边说边快步入画、回头招手带观众从商场走廊直接走进店内(无门、不要推门、不要拉门);手持镜头从第一帧立即跟随推进,进店过程中真实 logo/店招保持清晰可见。禁止静止展示门头参考图、定格、照片平移、两秒空镜或无人开场;从第 2 镜起镜头已在店内货架间。`;
 
 export const GENERIC_STOREFRONT_CONSTRAINT_ZH = `【门店实景约束】门店的楼层、入口、门头、空间结构和周边环境必须严格服从当前门店画像与参考图。没有明确依据时不要虚构街边店、商场楼层、玻璃门、开放式店面或具体尺寸;无法确认入口结构时直接从店内实景开始。`;
 
-export const GENERIC_STOREFRONT_OPENING_ZH = `【强制开场(第 1 镜 / 0–3s · 不可改)】严格照参考图中的真实门头、入口和周边环境拍摄,店招清晰可见;探店博主按实景里合理的方式靠近或进入门店,禁止凭空改变楼层、入口、门体或街区结构。`;
+export const GENERIC_STOREFRONT_OPENING_ZH = `【强制开场(第 1 镜 / 0–3s · 不可改)】严格照参考图中的真实门头、入口和周边环境拍摄,店招清晰可见;第一帧同一位探店博主就已在真实门头前出现并立即开口,边快步入画边回头招手,按实景里合理的方式带观众走进门店,手持镜头从第一帧立即跟随推进。禁止静止展示门头参考图、定格、照片平移、两秒空镜或无人开场;禁止凭空改变楼层、入口、门体或街区结构。`;
 
-export const GENERIC_STOREFRONT_OPENING_EN = `Opening shot (0-3s): reproduce the real storefront, entrance, signage, and surroundings from the supplied reference image. The same influencer approaches or enters in a physically plausible way. Do not invent a different floor, doorway, mall, street, or facade.`;
+export const GENERIC_STOREFRONT_OPENING_EN = `Opening shot (0-3s): reproduce the real storefront, entrance, signage, and surroundings from the supplied reference image. From the very first frame, the same influencer is already visible at the real storefront, speaking while moving quickly, turning back to beckon the viewer, and leading the viewer inside in a physically plausible way. The handheld camera follows forward immediately. Never show the storefront reference as a still photo, frozen frame, photo pan, empty establishing shot, or two-second unmanned opening. Do not invent a different floor, doorway, mall, street, or facade.`;
 
 export function usesOpenFrontMallConstraint(context: unknown): boolean {
   const text = String(context || '');

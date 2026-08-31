@@ -447,9 +447,11 @@ export function bindSurpriseReferences(
   if (storefront) {
     script.hook.image_index = storefront.index;
     const currentScene = String(script.hook.scene || '').trim();
-    if (!/门头|店招|入口|logo/i.test(currentScene)) {
-      script.hook.scene = `严格复现门头参考图中的真实入口与 BOOMER·OFF Logo；${currentScene}`;
-    }
+    script.hook.scene = /门头|店招|入口|logo/i.test(currentScene)
+      ? currentScene
+      : `严格复现门头参考图中的真实入口与 BOOMER·OFF Logo；${currentScene}`;
+    script.hook.action = '同一位探店博主从第一帧就在真实门头前快步入画，边说边回头招手带顾客走进店内，镜头全程手持跟随推进';
+    script.hook.motion = '手持跟随推进，不停顿不定格';
   }
 
   // visual_beats 与 clips 保持一致
@@ -467,6 +469,8 @@ export function bindSurpriseReferences(
     if (!/门头|店招|入口|logo/i.test(currentVisual)) {
       script.visual_beats[0].visual = `严格复现门头参考图中的真实入口与 BOOMER·OFF Logo；${currentVisual}`;
     }
+    script.visual_beats[0].action = String(script.hook.action);
+    script.visual_beats[0].motion = String(script.hook.motion);
   }
   return script;
 }
@@ -548,7 +552,8 @@ export function compileSurpriseOneShotPrompt(options: {
       if (item.role === 'storefront') {
         lines.push(
           `图片${item.referenceNumber}：【真实门头原件】${item.summary}。` +
-          '首镜 0-3 秒必须直接使用这张真实照片作为画面基底，只允许整张照片轻微推近或平移；' +
+          '这张图只用于锁定真实建筑、入口、店招和 Logo，不得把整张照片当作静止画面播放。' +
+          '第一帧就必须出现同一位探店博主，人物已经在真实门头前边说边快步入画、回头招手，并带着顾客走进店内；镜头从第一帧开始手持跟随推进，全程持续有人物动作和真实景深变化。' +
           '不得重绘、改字、替换、修复或生成任何 Logo、门头或招牌，照片里的门店结构、店招文字、颜色和比例必须原样保留。',
         );
       } else {
@@ -577,7 +582,7 @@ export function compileSurpriseOneShotPrompt(options: {
 
   // 只给 Seedance 一段概括性导演稿，避免五套逐字对白与逐镜硬口令挤占理解预算。
   lines.push('');
-  lines.push('【导演内容】这是一段完整连续的探店经历，不是五条独立短片。请自然完成：真实门头快速开场，主角顺势走进店内发现丰富陈列，近距离拿起并体验有代表性的中古小物，再展示逛店和挑选的价值感，最后回到能看清门店环境的稳定画面给出完整行动号召。镜头可按口播语义自然硬切，人物、服装、声音和空间始终一致。');
+  lines.push('【导演内容】这是一段完整连续的探店经历，不是五条独立短片。请自然完成：第 0 秒同一位博主已在真实门头前出现并开口，边回头招手边快步把观众带进店内；随后发现丰富陈列，近距离拿起并体验有代表性的中古小物，再展示逛店和挑选的价值感，最后回到能看清门店环境的稳定画面给出完整行动号召。镜头可按口播语义自然硬切，人物、服装、声音和空间始终一致。');
   const visualSummary = beats.map((beat, i) => {
     const sourceIndex = beat.image_index;
     const referenceNumber = typeof sourceIndex === 'number'
@@ -593,8 +598,8 @@ export function compileSurpriseOneShotPrompt(options: {
 
   lines.push('');
   lines.push('【连续性】五段是同一次探店经历，人物身份、衣着、声音、门店空间、商品外观、光线和色调必须连续一致；转场使用自然硬切或动作匹配剪辑，不做黑场、不做慢淡。');
-  lines.push('【首镜门头硬规则】第一镜无法准确复现时，不得自行设计或重画门头，直接保持真实门头照片并做极轻微运镜；真实 Logo 的文字、形状、颜色和位置一律不得改变。');
-  lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现街道、马路、推门、拉门、第三方 Logo、无关人物、重复人物、乱码文字或长时间空镜；不得重复词、重复短语、回读、卡顿式重启或吞字。');
+  lines.push('【首镜门头硬规则】门头与 Logo 必须严格来自真实参考图，但人物和摄影机必须从第一帧开始运动：博主边说边带顾客走入店内。禁止把门头参考图直接静止展示，禁止定格、照片平移、两秒空镜或无人开场；真实 Logo 的文字、形状、颜色和位置一律不得改变。');
+  lines.push('【禁止】不得偏离上述口播，不得虚构价格、品牌、商场、商品或活动；不得出现无关街道、马路、第三方 Logo、无关人物、重复人物、乱码文字或长时间空镜；不得重复词、重复短语、回读、卡顿式重启或吞字。');
   for (const constraint of (options.globalConstraints || []).slice(0, 4)) {
     if (constraint?.trim()) lines.push(compactText(constraint, 240));
   }
