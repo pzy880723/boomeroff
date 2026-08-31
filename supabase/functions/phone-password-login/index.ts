@@ -1,5 +1,8 @@
 // 手机号 + 密码登录：手机号只用于服务端解析真实 Auth 账号，避免暴露邮箱映射。
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { findAuthUserByPhone, type AuthUserLike } from '../_shared/auth-user-phone.ts';
+
+const DATABASE_LOOKUP_TIMEOUT_MS = 2500;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,21 +22,65 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const admin = createClient(
       supabaseUrl,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      serviceRoleKey,
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
 
-    const { data: uid, error: uidError } = await admin.rpc('find_user_id_by_phone', {
-      _phone: String(phone),
-    });
-    if (uidError) return json({ error: '登录服务暂时不可用' }, 500);
-    if (!uid) return json({ error: '账号或密码错误' }, 401);
+    const databaseAdmin = createClient(
+      supabaseUrl,
+      serviceRoleKey,
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: {
+          fetch: (input, init) => fetch(input, {
+            ...init,
+            signal: AbortSignal.timeout(DATABASE_LOOKUP_TIMEOUT_MS),
+          }),
+        },
+      },
+    );
 
-    const { data: userInfo, error: userError } = await admin.auth.admin.getUserById(String(uid));
-    const email = userInfo?.user?.email;
-    if (userError || !email) return json({ error: '账号或密码错误' }, 401);
+    let uid: string | null = null;
+    let databaseLookupFailed = false;
+    try {
+      const result = await databaseAdmin.rpc('find_user_id_by_phone', {
+        _phone: String(phone),
+      });
+      uid = result.data ? String(result.data) : null;
+      databaseLookupFailed = Boolean(result.error);
+    } catch {
+      databaseLookupFailed = true;
+    }
+
+    let authUser: AuthUserLike | null = null;
+    if (uid) {
+      const { data: userInfo, error: userError } = await admin.auth.admin.getUserById(uid);
+      if (!userError && userInfo?.user) authUser = userInfo.user;
+    } else if (!databaseLookupFailed) {
+      return json({ error: '账号或密码错误' }, 401);
+    }
+
+    if (!authUser && databaseLookupFailed) {
+      try {
+        authUser = await findAuthUserByPhone(async (page, perPage) => {
+          const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+          if (error) throw error;
+          return data?.users ?? [];
+        }, String(phone));
+      } catch (error) {
+        console.error(
+          '[phone-password-login] auth directory lookup failed',
+          error instanceof Error ? error.message : String(error),
+        );
+        return json({ error: '登录服务暂时不可用' }, 500);
+      }
+    }
+
+    const email = authUser?.email;
+    if (!email) return json({ error: '账号或密码错误' }, 401);
 
     const authClient = createClient(
       supabaseUrl,
