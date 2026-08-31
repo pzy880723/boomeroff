@@ -11,11 +11,15 @@ import {
   type SurpriseScript,
 } from "../_shared/surprise-one-shot.ts";
 import {
+  appendPendingSurpriseChange,
   appendSurpriseConversation,
   appendSurpriseScriptVersion,
+  clearPendingSurpriseChanges,
+  combinePendingSurpriseChanges,
   normalizeSurprisePersonaRevision,
   orderSurpriseReferenceAssets,
 } from "../_shared/surprise-script-revision.ts";
+import { resolveSurpriseContentScope } from "../_shared/surprise-content-scope.ts";
 import {
   isStaleSurpriseScriptTask,
   selectCurrentSurpriseTask,
@@ -44,10 +48,27 @@ function state(job: any) {
     script: source.manual_script_draft || job.script_json || null,
     result: source.surprise_result || null,
     conversation: source.surprise_conversation || [],
+    pending_changes: source.surprise_pending_changes || [],
+    content_scope: source.content_scope || source.surprise_result?.content_scope || "all",
     picked_assets: source.picked_assets || source.surprise_result?.assets || [],
     script_versions: job.meta?.script_versions || [],
     error: job.error_message || null,
     updated_at: job.updated_at,
+  };
+}
+
+function emptyState() {
+  return {
+    ok: true,
+    task_kind: "none",
+    job_id: "",
+    status: "empty",
+    stage: "empty",
+    script: null,
+    result: null,
+    conversation: [],
+    pending_changes: [],
+    content_scope: "all",
   };
 }
 
@@ -118,6 +139,46 @@ async function reviseScriptWithAi(
   const validation = validateSurpriseScript(script, { ageBucket: persona.age_bucket || null, factContext: JSON.stringify(source) });
   if (validation.errors.length) throw new Error(`改稿后校验未通过：${validation.errors.join("；")}`);
   return { script, persona, summary: String(parsed.summary || "已经按你的要求更新脚本").slice(0, 200) };
+}
+
+async function chatAboutScriptWithAi(
+  apiKey: string,
+  message: string,
+  currentScript: SurpriseScript,
+  source: Record<string, any>,
+): Promise<string> {
+  const history = Array.isArray(source.surprise_conversation)
+    ? source.surprise_conversation.slice(-8)
+    : [];
+  const pending = Array.isArray(source.surprise_pending_changes)
+    ? source.surprise_pending_changes.slice(-8)
+    : [];
+  const prompt = `你是 BOOMER·OFF 店员的短视频脚本沟通助手。\n` +
+    `店员正在讨论如何修改一份 15 秒五镜脚本。你现在只能沟通和确认要求，绝对不能输出或重写脚本。\n` +
+    `当前脚本：${JSON.stringify(currentScript)}\n` +
+    `已经记录但尚未应用的要求：${JSON.stringify(pending)}\n` +
+    `最近对话：${JSON.stringify(history)}\n` +
+    `店员刚说：${message}\n\n` +
+    `请用 1-2 句中文回复：先准确复述你记住的修改重点；确有歧义时只追问一个关键问题。` +
+    `不要说已经修改、已经重写或已经保存脚本，因为此时脚本尚未改变。只输出 JSON：{"reply":"回复"}。`;
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      temperature: 0.35,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(response.status === 429 ? "BOOMER 正忙，请稍后再聊" : `脚本沟通失败(${response.status}): ${text.slice(0, 120)}`);
+  }
+  const data = await response.json();
+  const parsed = parseAiJson(String(data?.choices?.[0]?.message?.content || ""));
+  return String(parsed.reply || "记下了。你可以继续补充，聊完后再一次性修改脚本。").trim().slice(0, 300);
 }
 
 function videoState(job: any) {
@@ -192,6 +253,7 @@ async function runScriptGeneration({
   shopId,
   exclude,
   realism,
+  contentScope,
 }: {
   admin: AdminClient;
   supabaseUrl: string;
@@ -200,6 +262,7 @@ async function runScriptGeneration({
   shopId: string;
   exclude: string[];
   realism: string;
+  contentScope: string;
 }) {
   const startedAt = Date.now();
   try {
@@ -211,7 +274,7 @@ async function runScriptGeneration({
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: auth },
         signal: controller.signal,
-        body: JSON.stringify({ shop_id: shopId, preview: true, exclude_asset_ids: exclude, realism }),
+        body: JSON.stringify({ shop_id: shopId, preview: true, exclude_asset_ids: exclude, realism, content_scope: contentScope }),
       });
     } finally {
       clearTimeout(timer);
@@ -239,6 +302,8 @@ async function runScriptGeneration({
         persona: result.persona || null,
         style: result.style || "energetic",
         excluded_asset_ids: exclude,
+        content_scope: contentScope,
+        surprise_pending_changes: [],
       },
       user_prompt: result.picked?.summary || result.script?.title || "BOOMER 探店短片",
       status: "script_ready",
@@ -290,6 +355,16 @@ Deno.serve(async (req) => {
     let shopId = String(body.shop_id || "").trim();
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
+    if (action === "current") {
+      shopId = (await resolveAuthorizedShop(admin, user.id, shopId || null)) || "";
+      if (!shopId) return json({ ok: false, error: "缺少 shop_id" }, 400);
+      await expireStaleGeneratingDrafts(admin, user.id, shopId);
+      const current = await findCurrentTask(admin, user.id, shopId);
+      if (current?.kind === "script") return json(state(current.job));
+      if (current?.kind === "video") return json(videoState(current.job));
+      return json(emptyState());
+    }
+
     if (action === "start") {
       shopId = (await resolveAuthorizedShop(admin, user.id, shopId || null)) || "";
       if (!shopId) return json({ ok: false, error: "缺少 shop_id" }, 400);
@@ -304,16 +379,17 @@ Deno.serve(async (req) => {
         ? body.exclude_asset_ids.map((x: unknown) => String(x)).slice(0, 50)
         : [];
       const realism = body.realism === "photoreal" ? "photoreal" : "stylized";
+      const contentScope = resolveSurpriseContentScope(body.content_scope);
       const { data: job, error } = await admin.from("video_generation_jobs").insert({
         user_id: user.id,
         shop_id: shopId,
         user_prompt: "BOOMER 惊喜一下脚本草稿",
-        source_pick_json: { excluded_asset_ids: exclude },
+        source_pick_json: { excluded_asset_ids: exclude, content_scope: contentScope.key, surprise_pending_changes: [] },
         script_json: null,
         status: "script_generating",
         duration: 15,
         aspect_ratio: "9:16",
-        meta: { flow: "surprise", consumed: false, surprise_stage: "script_generating", background: true },
+        meta: { flow: "surprise", consumed: false, surprise_stage: "script_generating", background: true, content_scope: contentScope.key },
       }).select("*").single();
       if (error?.code === '23505') {
         const concurrent = await findCurrentTask(admin, user.id, shopId);
@@ -322,7 +398,7 @@ Deno.serve(async (req) => {
       }
       if (error || !job) return json({ ok: false, error: `创建脚本任务失败: ${error?.message || "unknown"}` }, 500);
 
-      const task = runScriptGeneration({ admin, supabaseUrl, auth, jobId: job.id, shopId, exclude, realism });
+      const task = runScriptGeneration({ admin, supabaseUrl, auth, jobId: job.id, shopId, exclude, realism, contentScope: contentScope.key });
       // @ts-ignore Supabase Edge Runtime extension
       if (typeof (globalThis as any).EdgeRuntime?.waitUntil === "function") {
         (globalThis as any).EdgeRuntime.waitUntil(task);
@@ -433,15 +509,65 @@ Deno.serve(async (req) => {
       return json(state(saved));
     }
 
-    if (action === "revise") {
+    if (action === "chat") {
       if (String(job.status) !== "script_ready" || !job.script_json) {
         return json({ ok: false, error: "脚本还没有准备好" }, 409);
       }
-      const instruction = String(body.instruction || "").trim();
+      const message = String(body.message || "").trim();
+      if (!message) return json({ ok: false, error: "请先告诉 BOOMER 你的想法" }, 400);
+      if (!lovableApiKey) return json({ ok: false, error: "AI 沟通服务尚未配置" }, 503);
+      const source = (job.source_pick_json || {}) as Record<string, any>;
+      const visibleScript = source.manual_script_draft && typeof source.manual_script_draft === "object"
+        ? source.manual_script_draft
+        : job.script_json;
+      const pendingChanges = appendPendingSurpriseChange(source.surprise_pending_changes, message);
+      const reply = await chatAboutScriptWithAi(lovableApiKey, message.slice(0, 500), visibleScript, {
+        ...source,
+        surprise_pending_changes: pendingChanges,
+      });
+      const { data: saved, error } = await admin.from("video_generation_jobs").update({
+        source_pick_json: {
+          ...source,
+          surprise_pending_changes: pendingChanges,
+          surprise_conversation: appendSurpriseConversation(source.surprise_conversation, message, reply),
+        },
+      }).eq("id", jobId).eq("status", "script_ready").contains("meta", { flow: "surprise", consumed: false }).select("*").single();
+      if (error || !saved) return json({ ok: false, error: error?.message || "保存沟通内容失败" }, 500);
+      return json(state(saved));
+    }
+
+    if (action === "clear_conversation") {
+      if (String(job.status) !== "script_ready") {
+        return json({ ok: false, error: "脚本还没有准备好" }, 409);
+      }
+      const source = (job.source_pick_json || {}) as Record<string, any>;
+      const { data: saved, error } = await admin.from("video_generation_jobs").update({
+        source_pick_json: {
+          ...source,
+          surprise_pending_changes: clearPendingSurpriseChanges(source.surprise_pending_changes),
+          surprise_conversation: [],
+        },
+      }).eq("id", jobId).eq("status", "script_ready").contains("meta", { flow: "surprise", consumed: false }).select("*").single();
+      if (error || !saved) return json({ ok: false, error: error?.message || "取消沟通失败" }, 500);
+      return json(state(saved));
+    }
+
+    if (action === "revise" || action === "apply_conversation") {
+      if (String(job.status) !== "script_ready" || !job.script_json) {
+        return json({ ok: false, error: "脚本还没有准备好" }, 409);
+      }
+      const source = (job.source_pick_json || {}) as Record<string, any>;
+      const instruction = action === "apply_conversation"
+        ? combinePendingSurpriseChanges(source.surprise_pending_changes)
+        : String(body.instruction || "").trim();
       if (!instruction) return json({ ok: false, error: "请告诉 BOOMER 想怎么修改" }, 400);
       if (!lovableApiKey) return json({ ok: false, error: "AI 改稿服务尚未配置" }, 503);
-      const source = (job.source_pick_json || {}) as Record<string, any>;
-      const revised = await reviseScriptWithAi(lovableApiKey, instruction.slice(0, 500), job.script_json, source);
+      const revised = await reviseScriptWithAi(
+        lovableApiKey,
+        instruction.slice(0, action === "apply_conversation" ? 2000 : 500),
+        job.script_json,
+        source,
+      );
       const previousResult = source.surprise_result && typeof source.surprise_result === "object"
         ? source.surprise_result
         : {};
@@ -451,6 +577,9 @@ Deno.serve(async (req) => {
       const nextSource = {
         ...source,
         manual_script_draft: null,
+        surprise_pending_changes: action === "apply_conversation"
+          ? clearPendingSurpriseChanges(source.surprise_pending_changes)
+          : source.surprise_pending_changes || [],
         persona: revised.persona,
         surprise_result: {
           ...previousResult,
@@ -461,11 +590,9 @@ Deno.serve(async (req) => {
             persona_directive: formatPersonaDirective(revised.persona),
           },
         },
-        surprise_conversation: appendSurpriseConversation(
-          source.surprise_conversation,
-          instruction,
-          revised.summary,
-        ),
+        surprise_conversation: action === "apply_conversation"
+          ? appendSurpriseConversation(source.surprise_conversation, "应用以上沟通", revised.summary)
+          : appendSurpriseConversation(source.surprise_conversation, instruction, revised.summary),
       };
       const { data: saved, error } = await admin.from("video_generation_jobs").update({
         script_json: revised.script,

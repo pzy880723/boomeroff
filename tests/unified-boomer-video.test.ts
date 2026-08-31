@@ -20,7 +20,8 @@ test('统一弹窗同时支持自然语言改稿、直接编辑和更换参考�
 
   assert.ok(dialog.includes('SurpriseScriptChat'), '缺少自然语言改稿组件');
   assert.ok(dialog.includes('LibraryImagePickerDialog'), '缺少参考图选择器');
-  assert.ok(dialog.includes('reviseSurpriseScriptJob'), '缺少持久改稿调用');
+  assert.ok(dialog.includes('chatSurpriseScriptJob'), '缺少对话需求记录调用');
+  assert.ok(dialog.includes('applySurpriseScriptConversation'), '缺少一次性应用改稿调用');
   assert.ok(dialog.includes('updateSurpriseScriptAssets'), '缺少参考图更新调用');
   assert.ok(dialog.includes('编辑脚本'));
   assert.ok(dialog.includes('renderSurpriseVideo'));
@@ -48,7 +49,7 @@ test('脚本任务服务持久化自然语言对话和参考图', () => {
 test('生成按钮等待改稿和换图结束，提交使用服务端最终参考图', () => {
   const dialog = read('../src/components/marketing/SurpriseVideoDialog.tsx');
   const picker = read('../src/components/marketing/LibraryImagePickerDialog.tsx');
-  assert.match(dialog, /disabled=\{submitting \|\| revising \|\| updatingAssets\}/);
+  assert.match(dialog, /disabled=\{submitting \|\| revising \|\| chatting \|\| updatingAssets \|\| pendingChanges\.length > 0\}/);
   assert.match(dialog, /script_job_id:\s*scriptJobId/);
   assert.doesNotMatch(dialog, /markSurpriseScriptRendered/);
   assert.match(picker, /await supabase\.from\('marketing_assets'[\s\S]*?\.insert\([\s\S]*?\)\.select\('id'\)\.single\(\)/);

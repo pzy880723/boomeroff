@@ -2,11 +2,30 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  appendPendingSurpriseChange,
   appendSurpriseConversation,
   appendSurpriseScriptVersion,
+  combinePendingSurpriseChanges,
+  clearPendingSurpriseChanges,
   normalizeSurprisePersonaRevision,
   orderSurpriseReferenceAssets,
 } from '../supabase/functions/_shared/surprise-script-revision.ts';
+
+test('连续沟通只积累待应用要求，合并时保持原顺序', () => {
+  const first = appendPendingSurpriseChange([], '突出瓷器价格和款式');
+  const second = appendPendingSurpriseChange(first, '人物更热情，但不要修改门店事实');
+
+  assert.deepEqual(second, ['突出瓷器价格和款式', '人物更热情，但不要修改门店事实']);
+  assert.equal(
+    combinePendingSurpriseChanges(second),
+    '1. 突出瓷器价格和款式\n2. 人物更热情，但不要修改门店事实',
+  );
+  assert.deepEqual(clearPendingSurpriseChanges(second), []);
+});
+
+test('空白要求不会进入待应用列表', () => {
+  assert.deepEqual(appendPendingSurpriseChange(['保留原对白'], '   '), ['保留原对白']);
+});
 
 test('自然语言改稿对话只保留最近十二轮消息', () => {
   const existing = Array.from({ length: 12 }, (_, index) => ({

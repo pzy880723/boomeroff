@@ -15,17 +15,21 @@ import {
   type ActiveRenderJob, type CoverProgress, type RenderPhase,
 } from '@/lib/surpriseJob';
 import {
+  applySurpriseScriptConversation,
+  chatSurpriseScriptJob,
+  clearSurpriseScriptConversation,
+  getCurrentSurpriseScriptJob,
   startSurpriseScriptJob,
   pollSurpriseScriptJob,
   saveSurpriseScriptJob,
   saveSurpriseScriptDraft,
-  reviseSurpriseScriptJob,
   updateSurpriseScriptAssets,
   discardSurpriseScriptJob,
   dismissSurpriseVideoJob,
   renderSurpriseVideo,
 } from '@/api/surpriseScriptJob';
 import { SurpriseScriptChat, type SurpriseScriptMessage } from '@/components/marketing/SurpriseScriptChat';
+import { SurpriseCategoryPicker } from '@/components/marketing/SurpriseCategoryPicker';
 import { LibraryImagePickerDialog } from '@/components/marketing/LibraryImagePickerDialog';
 import { ImageLightbox } from '@/components/voucher/ImageLightbox';
 import { VideoFailureCard } from '@/components/marketing/VideoFailureCard';
@@ -34,6 +38,11 @@ import type { VideoFix } from '@/lib/videoFailure';
 import type { Realism } from '@/lib/realism';
 import { SURPRISE_DEFAULT_VIDEO_PREFS } from '@/lib/videoModelPrefs';
 import { resolveSurpriseScriptView } from '@/lib/surpriseScriptView';
+import {
+  isSurpriseContentScopeKey,
+  surpriseContentScopeLabel,
+  type SurpriseContentScopeKey,
+} from '@/lib/surpriseContentScope';
 
 // 惊喜一下固定真人写实,不暴露切换开关
 const SURPRISE_REALISM: Realism = 'photoreal';
@@ -148,6 +157,7 @@ function validateSurpriseScript(script: ScriptShape): string | null {
 
 export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { shopId } = useEffectiveShop();
+  const [restoring, setRestoring] = useState(false);
   const [picking, setPicking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [pick, setPick] = useState<SurpriseResult | null>(null);
@@ -160,6 +170,10 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   const [scriptError, setScriptError] = useState<string | null>(null);
   const [scriptJobId, setScriptJobId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<SurpriseScriptMessage[]>([]);
+  const [pendingChanges, setPendingChanges] = useState<string[]>([]);
+  const [selectedScope, setSelectedScope] = useState<SurpriseContentScopeKey>('all');
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatting, setChatting] = useState(false);
   const [revising, setRevising] = useState(false);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const [updatingAssets, setUpdatingAssets] = useState(false);
@@ -212,12 +226,14 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     setActiveJob(null);
     if (shopId) clearActiveRenderJob(shopId);
     setScriptJobId(state.job_id);
+    if (isSurpriseContentScopeKey(state.content_scope)) setSelectedScope(state.content_scope);
+    setPendingChanges(Array.isArray(state.pending_changes) ? state.pending_changes : []);
+    setConversation(Array.isArray(state.conversation) ? state.conversation : []);
     if (state.result && state.script) {
       const assets = Array.isArray(state.picked_assets) && state.picked_assets.length
         ? state.picked_assets
         : state.result.assets;
       setPick({ ...state.result, assets, script: state.script });
-      setConversation(Array.isArray(state.conversation) ? state.conversation : []);
       setScriptError(null);
       setPicking(false);
     } else if (state.status === 'script_generating') {
@@ -273,12 +289,12 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     scriptPollRef.current = window.setInterval(tick, 1000);
   };
 
-  const doPick = async (exclude: string[] = []) => {
+  const doPick = async (exclude: string[] = [], contentScope: SurpriseContentScopeKey = selectedScope) => {
     if (!shopId) return;
     setScriptError(null);
     setPicking(true); setPick(null);
     try {
-      let state = await startSurpriseScriptJob(shopId, exclude, realism);
+      let state = await startSurpriseScriptJob(shopId, exclude, realism, contentScope);
       // 新版 one-shot 任务可跨设备恢复；没有 render_job_id 的才是旧 Director 遗留任务。
       if (state.task_kind === 'video') {
         if (state.render_job_id) {
@@ -286,7 +302,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           return;
         }
         await dismissSurpriseVideoJob(state.job_id);
-        state = await startSurpriseScriptJob(shopId, exclude, realism);
+        state = await startSurpriseScriptJob(shopId, exclude, realism, contentScope);
       }
       if (state.task_kind === 'video') throw new Error('旧视频任务清理失败，请稍后重试');
       applyScriptState(state);
@@ -298,8 +314,34 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     }
   };
 
+  const restoreCurrentTask = async () => {
+    if (!shopId) return;
+    setRestoring(true);
+    setScriptError(null);
+    try {
+      const state = await getCurrentSurpriseScriptJob(shopId);
+      if (state.task_kind === 'video') {
+        restoreVideoState(state);
+      } else if (state.task_kind === 'script') {
+        applyScriptState(state);
+        if (state.status === 'script_generating') pollScriptDraft(state.job_id);
+      } else {
+        setPicking(false);
+        setPick(null);
+        setScriptJobId(null);
+        setConversation([]);
+        setPendingChanges([]);
+      }
+    } catch (error: unknown) {
+      setScriptError(error instanceof Error ? error.message : '读取当前任务失败');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   useEffect(() => {
     if (!open || !shopId) return;
+    setChatOpen(false);
     const cachedJob = getActiveRenderJob(shopId);
     if (cachedJob && cachedJob.kind !== 'director') {
       setActiveJob(cachedJob);
@@ -312,11 +354,11 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
       clearActiveRenderJob(shopId);
       void dismissSurpriseVideoJob(cachedJob.jobId)
         .catch((error) => console.warn('[surprise] dismiss old director task failed', error))
-        .finally(() => { void doPick(excluded); });
+        .finally(() => { void restoreCurrentTask(); });
       return () => { stopPolling(); stopScriptPolling(); };
     }
     // 数据库是当前任务的唯一真相。本地缓存只负责让弹窗先显示，随后必须和服务端对齐。
-    void doPick(excluded);
+    void restoreCurrentTask();
     return () => { stopPolling(); stopScriptPolling(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, shopId]);
@@ -359,23 +401,68 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     });
   };
 
-  const reviseScript = async (instruction: string) => {
+  const persistVisibleScript = async () => {
     if (!scriptJobId || !pick) return;
+    if (scriptSaveRef.current) {
+      window.clearTimeout(scriptSaveRef.current);
+      scriptSaveRef.current = null;
+    }
+    await scriptSaveQueueRef.current;
+    await saveSurpriseScriptJob(scriptJobId, pick.script);
+  };
+
+  const persistVisibleDraft = async () => {
+    if (!scriptJobId || !pick) return;
+    if (scriptSaveRef.current) {
+      window.clearTimeout(scriptSaveRef.current);
+      scriptSaveRef.current = null;
+    }
+    await scriptSaveQueueRef.current;
+    await saveSurpriseScriptDraft(scriptJobId, pick.script);
+  };
+
+  const chatAboutScript = async (message: string) => {
+    if (!scriptJobId || !pick) return;
+    setChatting(true);
+    try {
+      await persistVisibleDraft();
+      const state = await chatSurpriseScriptJob(scriptJobId, message);
+      applyScriptState(state);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'BOOMER 没有听清，请再说一次');
+    } finally {
+      setChatting(false);
+    }
+  };
+
+  const applyConversation = async () => {
+    if (!scriptJobId || !pick || pendingChanges.length === 0) return;
     setRevising(true);
     try {
-      if (scriptSaveRef.current) {
-        window.clearTimeout(scriptSaveRef.current);
-        scriptSaveRef.current = null;
-      }
-      await scriptSaveQueueRef.current;
-      await saveSurpriseScriptJob(scriptJobId, pick.script);
-      const state = await reviseSurpriseScriptJob(scriptJobId, instruction);
+      await persistVisibleScript();
+      const state = await applySurpriseScriptConversation(scriptJobId);
       applyScriptState(state);
-      toast.success('脚本已按你的要求更新');
+      setChatOpen(false);
+      toast.success('已按刚才聊好的要求一次性更新脚本');
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : '脚本修改失败');
+      toast.error(error instanceof Error ? error.message : '脚本修改失败，刚才的要求仍然保留');
     } finally {
       setRevising(false);
+    }
+  };
+
+  const clearConversation = async () => {
+    if (!scriptJobId || pendingChanges.length === 0) return;
+    setChatting(true);
+    try {
+      const state = await clearSurpriseScriptConversation(scriptJobId);
+      applyScriptState(state);
+      setChatOpen(false);
+      toast.message('本次沟通已取消，原脚本没有改变');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : '取消沟通失败');
+    } finally {
+      setChatting(false);
     }
   };
 
@@ -517,7 +604,26 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     setCoverProgress(null);
     setRenderError(null);
     setPick(null);
-    doPick(excluded);
+    setConversation([]);
+    setPendingChanges([]);
+    setChatOpen(false);
+  };
+
+  const changeCategory = async () => {
+    if (!scriptJobId) return;
+    if (!window.confirm('更换商品类别会放弃当前脚本，确认重新选择吗？')) return;
+    try {
+      await discardSurpriseScriptJob(scriptJobId);
+      stopScriptPolling();
+      setScriptJobId(null);
+      setPick(null);
+      setConversation([]);
+      setPendingChanges([]);
+      setChatOpen(false);
+      setScriptError(null);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : '更换品类失败');
+    }
   };
 
   // 完成/失败时,自动让用户回到"再拍一条"入口(不强制,但把弹窗底部的按钮变成"再拍一条")
@@ -525,6 +631,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
 
   const scriptView = resolveSurpriseScriptView({
     hasActiveJob: Boolean(activeJob),
+    restoring,
     picking,
     hasPick: Boolean(pick),
     scriptError,
@@ -550,6 +657,13 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             busy={submitting}
             onClose={() => onOpenChange(false)}
             onReset={resetToPicker}
+          />
+        ) : scriptView === 'category' ? (
+          <SurpriseCategoryPicker
+            value={selectedScope}
+            onChange={setSelectedScope}
+            onStart={() => void doPick(excluded, selectedScope)}
+            busy={picking}
           />
         ) : scriptView === 'error' ? (
           <div className="py-10 px-5 flex flex-col items-center gap-4 text-center">
@@ -579,12 +693,21 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
             <img src={boomerIdle} alt="" className="w-14 h-14 object-contain animate-pulse" />
             <Loader2 className="w-5 h-5 animate-spin text-accent" />
             <div className="text-center">
-              BOOMER 正在挑素材、蹭最近节日、想博主人设…
+              BOOMER 正在按所选品类挑素材、想角度、写脚本…
               <div className="text-[10px] mt-1 opacity-70">15s 竖版 · 真人出镜 · 风格随博主走</div>
             </div>
           </div>
         ) : (
           <>
+            <div className="flex items-center gap-2 border-b bg-muted/30 px-4 py-2 text-[11px]">
+              <span className="text-muted-foreground">本次品类</span>
+              <span className="rounded-full bg-accent/10 px-2 py-0.5 font-semibold text-accent">
+                {surpriseContentScopeLabel(selectedScope)}
+              </span>
+              <button type="button" onClick={() => void changeCategory()} className="ml-auto text-accent hover:underline">
+                更换
+              </button>
+            </div>
             <ScriptBody
               pick={pick}
               onScriptChange={handleScriptChange}
@@ -592,7 +715,17 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
               updatingAssets={updatingAssets}
             />
             <div className="px-4 pb-3">
-              <SurpriseScriptChat messages={conversation} busy={revising} onSubmit={reviseScript} />
+              <SurpriseScriptChat
+                messages={conversation}
+                pendingCount={pendingChanges.length}
+                open={chatOpen}
+                chatting={chatting}
+                applying={revising}
+                onOpenChange={setChatOpen}
+                onSend={chatAboutScript}
+                onApply={applyConversation}
+                onClear={clearConversation}
+              />
             </div>
             <div className="border-t px-4 pt-3 pb-4 space-y-3 bg-background">
               <div className="rounded-md border border-success/40 bg-success/5 text-success px-2.5 py-1.5 text-[11px] flex items-center gap-1.5">
@@ -600,14 +733,21 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
                 <span>固定 9:16 · 时长 15s · 一段直出 · 1080p · Seedance 原生中文对白</span>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting}>
+                <Button variant="outline" className="flex-1" onClick={reroll} disabled={submitting || revising || chatting}>
                   <RefreshCw className="w-4 h-4 mr-1" /> 换个创意
                 </Button>
-                <Button className="flex-1" onClick={() => start()} disabled={submitting || revising || updatingAssets}>
+                <Button
+                  className="flex-1"
+                  onClick={() => start()}
+                  disabled={submitting || revising || chatting || updatingAssets || pendingChanges.length > 0}
+                >
                   {submitting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
                   马上生成 15 秒
                 </Button>
               </div>
+              {pendingChanges.length > 0 && (
+                <p className="text-center text-[10px] text-accent">先应用或取消上面的修改要求，再生成视频</p>
+              )}
               {renderError && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-[11px] text-destructive">
                   {renderError}

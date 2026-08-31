@@ -3,6 +3,28 @@ export interface SurpriseConversationMessage {
   content: string;
 }
 
+function pendingChangeList(value: unknown): string[] {
+  return (Array.isArray(value) ? value : [])
+    .map((item) => String(item || '').trim().slice(0, 500))
+    .filter(Boolean)
+    .slice(-8);
+}
+
+export function appendPendingSurpriseChange(current: unknown, content: string): string[] {
+  const next = String(content || '').trim().slice(0, 500);
+  return next ? [...pendingChangeList(current), next].slice(-8) : pendingChangeList(current);
+}
+
+export function combinePendingSurpriseChanges(current: unknown): string {
+  return pendingChangeList(current)
+    .map((content, index) => `${index + 1}. ${content}`)
+    .join('\n');
+}
+
+export function clearPendingSurpriseChanges(_current: unknown): string[] {
+  return [];
+}
+
 export interface SurpriseScriptVersion {
   at: string;
   source: 'generated' | 'manual' | 'conversation' | 'references';

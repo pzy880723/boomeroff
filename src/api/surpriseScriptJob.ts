@@ -4,7 +4,7 @@ export type SurpriseScriptJobStatus = 'script_generating' | 'script_ready' | 'fa
 
 export interface SurpriseScriptJobState {
   ok: boolean;
-  task_kind?: 'script' | 'video';
+  task_kind?: 'none' | 'script' | 'video';
   job_id: string;
   status: SurpriseScriptJobStatus;
   stage?: string;
@@ -16,6 +16,8 @@ export interface SurpriseScriptJobState {
   created_at?: string;
   updated_at?: string;
   conversation?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  pending_changes?: string[];
+  content_scope?: string;
   script_versions?: Array<Record<string, unknown>>;
   picked_assets?: unknown[];
   render_job_id?: string | null;
@@ -50,8 +52,23 @@ async function call(body: Record<string, unknown>): Promise<SurpriseScriptJobSta
   return data;
 }
 
-export function startSurpriseScriptJob(shopId: string, excludeAssetIds: string[] = [], realism = 'photoreal') {
-  return call({ action: 'start', shop_id: shopId, exclude_asset_ids: excludeAssetIds, realism });
+export function getCurrentSurpriseScriptJob(shopId: string) {
+  return call({ action: 'current', shop_id: shopId });
+}
+
+export function startSurpriseScriptJob(
+  shopId: string,
+  excludeAssetIds: string[] = [],
+  realism = 'photoreal',
+  contentScope = 'all',
+) {
+  return call({
+    action: 'start',
+    shop_id: shopId,
+    exclude_asset_ids: excludeAssetIds,
+    realism,
+    content_scope: contentScope,
+  });
 }
 
 export function pollSurpriseScriptJob(jobId: string) {
@@ -68,6 +85,18 @@ export function saveSurpriseScriptDraft(jobId: string, script: unknown) {
 
 export function reviseSurpriseScriptJob(jobId: string, instruction: string) {
   return call({ action: 'revise', job_id: jobId, instruction });
+}
+
+export function chatSurpriseScriptJob(jobId: string, message: string) {
+  return call({ action: 'chat', job_id: jobId, message });
+}
+
+export function applySurpriseScriptConversation(jobId: string) {
+  return call({ action: 'apply_conversation', job_id: jobId });
+}
+
+export function clearSurpriseScriptConversation(jobId: string) {
+  return call({ action: 'clear_conversation', job_id: jobId });
 }
 
 export function updateSurpriseScriptAssets(jobId: string, assetUrls: string[]) {

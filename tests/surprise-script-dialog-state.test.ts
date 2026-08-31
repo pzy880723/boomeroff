@@ -16,7 +16,28 @@ test('脚本失败且没有结果时显示错误，不得继续显示加载动�
 test('后台仍在生成脚本时保持加载状态', () => {
   assert.equal(resolveSurpriseScriptView({
     hasActiveJob: false,
+    restoring: false,
     picking: true,
+    hasPick: false,
+    scriptError: null,
+  }), 'loading');
+});
+
+test('没有可恢复任务时先显示品类选择而不是自动加载', () => {
+  assert.equal(resolveSurpriseScriptView({
+    hasActiveJob: false,
+    restoring: false,
+    picking: false,
+    hasPick: false,
+    scriptError: null,
+  }), 'category');
+});
+
+test('查询可恢复任务期间仍显示加载状态', () => {
+  assert.equal(resolveSurpriseScriptView({
+    hasActiveJob: false,
+    restoring: true,
+    picking: false,
     hasPick: false,
     scriptError: null,
   }), 'loading');
