@@ -112,11 +112,11 @@ Deno.serve(async (req) => {
 
     const startedAt = new Date().toISOString();
     for (const row of todo) {
-      let rowWithDimensions = row;
+      let rowWithDimensions: AssetRow = row;
       if (!imageDimensionsFromMeta(row.meta) && row.output_url) {
         try {
           const dimensions = await probeImageDimensions(row.output_url);
-          if (dimensions) rowWithDimensions = withImageDimensions(row, dimensions);
+          if (dimensions) rowWithDimensions = withImageDimensions(row as any, dimensions) as AssetRow;
         } catch (error) {
           console.warn(`[auto-tag] image dimension probe failed asset=${row.id}`, error);
         }
