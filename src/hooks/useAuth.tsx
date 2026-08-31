@@ -7,6 +7,7 @@ import type { AppRole } from '@/types';
 import { clearUserCache, readUserCache, writeUserCache } from '@/lib/appCache';
 import { normalizeLoginIdentity } from '@/lib/loginIdentity';
 import { invokeFn } from '@/lib/invokeFn';
+import { withAuthTimeout } from '@/lib/authTimeout';
 import { toast } from 'sonner';
 
 export interface AppBootstrap {
@@ -70,6 +71,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const BOOTSTRAP_CACHE = 'app-bootstrap';
 const USER_CACHE_SCOPES = [BOOTSTRAP_CACHE, 'permissions', 'notifications', 'tasks'];
+const AUTH_STARTUP_TIMEOUT_MS = 5_000;
+const AUTH_LOGIN_TIMEOUT_MS = 12_000;
 
 function clearCachedUserData(userId: string): void {
   USER_CACHE_SCOPES.forEach((scope) => clearUserCache(scope, userId));
@@ -230,7 +233,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadBootstrap]);
 
   useEffect(() => {
-    supabase.auth.getSession()
+    withAuthTimeout(
+      supabase.auth.getSession(),
+      AUTH_STARTUP_TIMEOUT_MS,
+      '登录状态恢复超时',
+    )
       .then(({ data: { session: initialSession } }) => {
         if (initialSession) beginUserSession(initialSession);
         else clearSession();
@@ -258,38 +265,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (account: string, password: string) => {
     setLoading(true);
-    const identity = normalizeLoginIdentity(account);
-    let data;
-    let error;
-    if ('phone' in identity) {
-      const result = await invokeFn<{ access_token: string; refresh_token: string }>(
-        'phone-password-login',
-        { body: { phone: identity.phone, password } },
-      );
-      if (result.error || !result.data?.access_token || !result.data?.refresh_token) {
-        setLoading(false);
-        throw new Error(result.error?.message || '账号或密码错误');
+    try {
+      const identity = normalizeLoginIdentity(account);
+      let data;
+      let error;
+      if ('phone' in identity) {
+        const result = await withAuthTimeout(
+          invokeFn<{ access_token: string; refresh_token: string }>(
+            'phone-password-login',
+            { body: { phone: identity.phone, password } },
+          ),
+          AUTH_LOGIN_TIMEOUT_MS,
+          '登录服务响应超时，请重试',
+        );
+        if (result.error || !result.data?.access_token || !result.data?.refresh_token) {
+          throw new Error(result.error?.message || '账号或密码错误');
+        }
+        ({ data, error } = await withAuthTimeout(
+          supabase.auth.setSession({
+            access_token: result.data.access_token,
+            refresh_token: result.data.refresh_token,
+          }),
+          AUTH_LOGIN_TIMEOUT_MS,
+          '登录状态保存超时，请重试',
+        ));
+      } else {
+        ({ data, error } = await withAuthTimeout(
+          supabase.auth.signInWithPassword({
+            email: identity.email,
+            password,
+          }),
+          AUTH_LOGIN_TIMEOUT_MS,
+          '登录服务响应超时，请重试',
+        ));
       }
-      ({ data, error } = await supabase.auth.setSession({
-        access_token: result.data.access_token,
-        refresh_token: result.data.refresh_token,
-      }));
-    } else {
-      ({ data, error } = await supabase.auth.signInWithPassword({
-        email: identity.email,
-        password,
-      }));
-    }
-    if (error) {
-      setLoading(false);
-      throw error;
-    }
-    if (data.session) beginUserSession(data.session, true);
-    else setLoading(false);
+      if (error) throw error;
+      if (data.session) beginUserSession(data.session, true);
 
-    import('@/lib/audit').then(({ logAudit }) => {
-      logAudit({ action: 'login.password', detail: { account_type: 'phone' in identity ? 'phone' : 'email' } });
-    }).catch(() => {});
+      import('@/lib/audit').then(({ logAudit }) => {
+        logAudit({ action: 'login.password', detail: { account_type: 'phone' in identity ? 'phone' : 'email' } });
+      }).catch(() => {});
+    } finally {
+      setLoading(false);
+    }
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {

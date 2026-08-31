@@ -7,6 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { invokeFn } from '@/lib/invokeFn';
+import { withAuthTimeout } from '@/lib/authTimeout';
+
+const PHONE_AUTH_TIMEOUT_MS = 12_000;
 
 export function PhoneLoginForm({ onSuccess }: { onSuccess?: () => void }) {
   const [phone, setPhone] = useState('');
@@ -36,7 +39,11 @@ export function PhoneLoginForm({ onSuccess }: { onSuccess?: () => void }) {
     }
     setSending(true);
     try {
-      const { data, error } = await invokeFn('phone-login-send-otp', { body: { phone } });
+      const { data, error } = await withAuthTimeout(
+        invokeFn('phone-login-send-otp', { body: { phone } }),
+        PHONE_AUTH_TIMEOUT_MS,
+        '验证码服务响应超时，请重试',
+      );
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success('验证码已发送');
@@ -53,16 +60,24 @@ export function PhoneLoginForm({ onSuccess }: { onSuccess?: () => void }) {
     if (!/^\d{6}$/.test(code)) { toast.error('请输入 6 位验证码'); return; }
     setVerifying(true);
     try {
-      const { data, error } = await invokeFn<{ access_token: string; refresh_token: string }>(
-        'phone-login-verify-otp',
-        { body: { phone, code } },
+      const { data, error } = await withAuthTimeout(
+        invokeFn<{ access_token: string; refresh_token: string }>(
+          'phone-login-verify-otp',
+          { body: { phone, code } },
+        ),
+        PHONE_AUTH_TIMEOUT_MS,
+        '登录服务响应超时，请重试',
       );
       if (error) throw error;
       if (!data?.access_token || !data.refresh_token) throw new Error('登录会话创建失败');
-      const { error: eV } = await supabase.auth.setSession({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-      });
+      const { error: eV } = await withAuthTimeout(
+        supabase.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+        }),
+        PHONE_AUTH_TIMEOUT_MS,
+        '登录状态保存超时，请重试',
+      );
       if (eV) throw eV;
       import('@/lib/audit').then(({ logAudit }) => {
         logAudit({ action: 'login.phone', detail: { phone: String(phone).replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') } });
