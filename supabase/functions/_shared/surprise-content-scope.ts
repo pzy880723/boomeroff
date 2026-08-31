@@ -1,6 +1,7 @@
 export type SurpriseContentScopeKey = 'all' | 'ceramics' | 'toys' | 'music' | 'accessories';
 
 export interface SurpriseContentAsset {
+  id?: unknown;
   category?: unknown;
   tags?: unknown;
 }
@@ -49,29 +50,39 @@ const CONTENT_SCOPES: SurpriseContentScope[] = [
   {
     key: 'toys',
     label: '玩具公仔',
-    matches: keywordMatcher(/玩具|公仔|手办|玩偶|软胶|毛绒|动漫|卡通|奥特曼|骑士|三丽鸥|不二家|怪兽/),
+    matches: keywordMatcher(/玩具|公仔|手办|玩偶|软胶|毛绒|动漫|卡通|奥特曼|骑士|三丽鸥|不二家|怪兽|hello\s*kitty|凯蒂猫|迪士尼|佐藤象|谷子/),
     prompt: `【内容范围：玩具公仔】
-除第1镜真实门头外，其他镜头只能围绕中古玩具、公仔、手办、软胶玩偶、毛绒玩具和动漫周边展开。
-优先展示玩具墙、成排公仔、单件拿取、造型与包装细节；对白突出童年记忆、丰富陈列和淘到喜欢角色的兴奋感。
-只有素材标签明确识别出角色名称时才能说出IP名称，禁止编造限量、绝版、正版授权、年份或价格。`,
+第1镜必须使用当前门店真实门头，人物兴奋地带观众进店。
+第2镜优先展示 Hello Kitty、迪士尼、佐藤象等有真实参考图的代表玩具。
+第3镜展示成排公仔、玩偶和翻不完的中古谷子，突出数量多、选择多。
+第4镜表现人物翻找、拿起并发现喜欢的角色，突出童年回忆和淘到本命的兴奋。
+第5镜邀请观众带朋友到店认真翻一圈。
+对白像真实潮玩爱好者安利，活泼但不堆网络烂梗。只有参考图片和标签确认的角色才能点名；缺少对应图片时不得编造。
+禁止编造正版、绝版、限量、年份、价格和收藏价值。`,
   },
   {
     key: 'music',
     label: '唱片音响',
     matches: keywordMatcher(/唱片|黑胶|音响|音乐|磁带|随身听|收音机/),
     prompt: `【内容范围：唱片音响】
-除第1镜真实门头外，其他镜头只能围绕黑胶唱片、唱片封面、复古音响、收音机、磁带和音乐设备展开。
-优先展示翻找唱片、封面设计、唱片纹理、音响旋钮和整排陈列；对白突出探索感、设计感和复古音乐氛围。
-资料未明确时不得说出歌手、专辑、设备型号或发行年份，未经检测不得声称设备能够正常播放或音质优秀。`,
+第1镜必须使用当前门店真实门头，人物带观众快速进店。
+第2镜展示整排黑胶唱片和连续翻找动作，建立“唱片很多、值得慢慢淘”的认知。
+第3镜展示真实唱片封面、黑胶纹路和陈列细节。
+第4镜表现人物继续翻找并发现合眼缘唱片，突出封面设计、年代氛围和寻宝体验。
+第5镜邀请喜欢音乐与复古设计的人到店翻唱片。
+对白要有音乐爱好者的兴奋和审美，但不得声称未测试的音质。资料未明确时不得编造歌手、专辑、设备型号、发行年份和价格。`,
   },
   {
     key: 'accessories',
     label: '首饰配饰',
     matches: keywordMatcher(/首饰|配饰|戒指|胸针|项链|耳饰|耳环|领带|服饰|包/),
     prompt: `【内容范围：首饰配饰】
-除第1镜真实门头外，其他镜头只能围绕戒指、胸针、项链、耳饰、领带和复古配饰展开。
-优先展示饰品陈列、手部拿取、佩戴效果、纹样细节和不同造型之间的搭配；对白突出日常穿搭点睛和找到独特款式的惊喜感。
-没有明确资料时不得声称贵金属、天然宝石、具体品牌、年代或真伪。`,
+第1镜必须使用当前门店真实门头，人物带观众进店寻宝。
+第2镜展示首饰柜台和丰富陈列，只讲参考图中真实存在的耳饰、项链、胸针等。
+第3镜展示手部拿取、纹样、金属光泽和造型细节。
+第4镜表现人物试戴或贴近衣服比较，突出穿搭点睛、不易撞款和慢慢挑选的乐趣。
+第5镜邀请观众到店亲手试戴，找到最适合自己的一件。
+人物应是有穿搭兴趣的年轻或中年顾客，表达精致、热情、有审美。不得编造贵金属、天然宝石、品牌、年代、真伪、收藏价值和材质。`,
   },
 ];
 
@@ -90,4 +101,12 @@ export function resolveSurpriseContentScope(value: unknown): SurpriseContentScop
 
 export function buildSurpriseContentScopePrompt(scope: SurpriseContentScope): string {
   return scope.prompt;
+}
+
+export function filterAssetsForSurpriseContentScope<T extends SurpriseContentAsset>(
+  scope: SurpriseContentScope,
+  assets: T[],
+): T[] {
+  if (scope.key === 'all') return assets.slice();
+  return assets.filter((asset) => scope.matches(asset));
 }

@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
 import { isVolcesTosUrl, mirrorTosVideoToStorage } from "../_shared/mirror-tos-video.ts";
 import { coverPollFields, ensureCoverQueued } from "../_shared/cover-generation.ts";
+import { pickCanonicalVideoAsset, resolveVideoAssetOwner } from "../_shared/marketing-video-assets.ts";
 import { assertStoreAccess, StoreAccessError } from "../_shared/store-access.ts";
 import {
   buildSurpriseVideoReadyUpdate,
@@ -161,12 +162,11 @@ async function updateAssetMeta(
 ) {
   const { data: found } = await admin
     .from("marketing_assets")
-    .select("id, meta, output_url")
-    .eq("user_id", userId)
+    .select("id, user_id, created_at, meta, output_url")
     .eq("kind", "video")
     .filter("meta->>job_id", "eq", jobId)
-    .maybeSingle();
-  let asset = found;
+    .order("created_at", { ascending: true });
+  let asset = pickCanonicalVideoAsset(found || [], userId);
   // 素材行缺失(被删/从未创建)时按 job_id 补建，避免成片 URL 丢失
   if (!asset) {
     const { data: job } = await admin
@@ -196,6 +196,7 @@ async function updateAssetMeta(
     if (!created) return { url: outputUrl || null, mirrored: false };
     asset = created;
   }
+  if (!asset) return { url: outputUrl || null, mirrored: false };
 
   let finalUrl: string | null | undefined = outputUrl;
   const extraMeta: Record<string, unknown> = {};
@@ -666,6 +667,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (jErr || !job) return json({ error: "任务不存在" }, 404);
     await assertStoreAccess(admin, u.user.id, job.shop_id);
+    const jobOwnerId = resolveVideoAssetOwner(job.user_id, u.user.id);
 
     const isParent = (job.segment_total ?? 0) > 1 && !job.provider_task_id;
 
@@ -712,14 +714,14 @@ Deno.serve(async (req) => {
         ch.status = recovered.failed ? "failed" : "queued";
         ch.error = recovered.error || null;
         ch.fallback_notes = recovered.fallback_notes;
-        if (recovered.failed) anyFailed = recovered.error;
+        if (recovered.failed) anyFailed = recovered.error || "Seedance 分镜提交失败";
       }
 
       // 推进器:每次轮询最多提交 1 个未提交的分段。
       // 这样 render-marketing-video 只负责入队,不会再因为连续图片处理/多段请求被 CPU 杀掉。
       const nextQueued = segs.find((ch: any) => ch.status === "queued" && !ch.provider_task_id);
       if (nextQueued) {
-        submittedThisPoll = await submitQueuedChild(admin, ARK_KEY, nextQueued, u.user.id);
+        submittedThisPoll = await submitQueuedChild(admin, ARK_KEY, nextQueued, nextQueued.user_id || jobOwnerId);
         if (submittedThisPoll?.failed) anyFailed = submittedThisPoll.error;
         if (submittedThisPoll?.submitted) {
           nextQueued.status = "running";
@@ -762,14 +764,14 @@ Deno.serve(async (req) => {
         await admin.from("marketing_video_jobs").update({
           status: "failed", error: anyFailed, last_polled_at: new Date().toISOString(),
         }).eq("id", jobId);
-        await updateAssetMeta(admin, u.user.id, jobId, { status: "failed", error: anyFailed, segment_done: done });
+        await updateAssetMeta(admin, jobOwnerId, jobId, { status: "failed", error: anyFailed, segment_done: done });
       } else if (done === job.segment_total) {
         // 所有段就绪,等客户端拼接
         parentStatus = "ready_to_stitch";
         await admin.from("marketing_video_jobs").update({
           status: "ready_to_stitch", last_polled_at: new Date().toISOString(),
         }).eq("id", jobId);
-        await updateAssetMeta(admin, u.user.id, jobId, {
+        await updateAssetMeta(admin, jobOwnerId, jobId, {
           status: "stitching", stage: "stitching", segment_done: done, segment_urls: segUrls,
         });
       } else {
@@ -777,7 +779,7 @@ Deno.serve(async (req) => {
         await admin.from("marketing_video_jobs").update({
           status: "running", last_polled_at: new Date().toISOString(),
         }).eq("id", jobId);
-        await updateAssetMeta(admin, u.user.id, jobId, {
+        await updateAssetMeta(admin, jobOwnerId, jobId, {
           status: "running", stage: "generating", segment_done: done,
         });
       }
@@ -796,7 +798,7 @@ Deno.serve(async (req) => {
       if (job.status === "succeeded" && !job.parent_job_id && job.video_url) {
         const mirrored = await updateAssetMeta(
           admin,
-          u.user.id,
+          jobOwnerId,
           jobId,
           { status: "succeeded", error: null },
           job.video_url,
@@ -819,7 +821,7 @@ Deno.serve(async (req) => {
     if (!job.provider_task_id) {
       if (isStaleSeedanceSubmission(job)) {
         const recovered = await recoverSeedanceSubmission(admin, job, "Seedance 提交中断，未取得任务编号");
-        await updateAssetMeta(admin, u.user.id, jobId, recovered.failed
+        await updateAssetMeta(admin, jobOwnerId, jobId, recovered.failed
           ? { status: "failed", error: recovered.error, segment_done: 0 }
           : { status: "queued", stage: "retrying_submit", error: null, segment_done: 0 });
         return json({
@@ -831,17 +833,17 @@ Deno.serve(async (req) => {
         });
       }
       if (job.status === "queued" && (job.script || {}).__render_payload) {
-        const sub = await submitQueuedChild(admin, ARK_KEY, job, u.user.id);
+        const sub = await submitQueuedChild(admin, ARK_KEY, job, jobOwnerId);
         if (sub.failed) {
-          await updateAssetMeta(admin, u.user.id, jobId, { status: "failed", error: sub.error, segment_done: 0 });
+          await updateAssetMeta(admin, jobOwnerId, jobId, { status: "failed", error: sub.error, segment_done: 0 });
           return json({ status: "failed", error: sub.error, segment_total: job.segment_total || 1, segment_done: 0 });
         }
         if (sub.submitted) {
-          await updateAssetMeta(admin, u.user.id, jobId, { status: "running", segment_done: 0, segment_total: job.segment_total || 1 });
+          await updateAssetMeta(admin, jobOwnerId, jobId, { status: "running", segment_done: 0, segment_total: job.segment_total || 1 });
           return json({ status: "running", segment_total: job.segment_total || 1, segment_done: 0, submitted_segment: true });
         }
         if (sub.retrying) {
-          await updateAssetMeta(admin, u.user.id, jobId, { status: "queued", stage: "retrying_submit", error: null, segment_done: 0 });
+          await updateAssetMeta(admin, jobOwnerId, jobId, { status: "queued", stage: "retrying_submit", error: null, segment_done: 0 });
           return json({ status: "queued", retry_at: sub.retry_at || null, segment_total: job.segment_total || 1, segment_done: 0 });
         }
       }
@@ -860,7 +862,7 @@ Deno.serve(async (req) => {
     // 只有单段任务才同步素材库(子段不应在素材库出现)
     let responseVideoUrl = r.video_url || null;
     if (!job.parent_job_id) {
-      const mirrored = await updateAssetMeta(admin, u.user.id, jobId,
+      const mirrored = await updateAssetMeta(admin, jobOwnerId, jobId,
         { status: r.mapped, ...(r.error ? { error: r.error } : {}) },
         r.video_url || null,
       );

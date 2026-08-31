@@ -17,6 +17,7 @@ interface FastFallbackOptions {
   imageDescriptions?: Array<{ index: number; summary?: string | null }>;
   /** 每次生成传入的随机 nonce，用于让兜底稿在同一主旨下确定性地换一套文案。 */
   variationKey?: string | null;
+  contentScopeKey?: 'all' | 'ceramics' | 'toys' | 'music' | 'accessories' | null;
 }
 
 interface FastGenerationOptions extends FastFallbackOptions {
@@ -27,44 +28,16 @@ interface FastGenerationOptions extends FastFallbackOptions {
   model?: string;
 }
 
-const SAFE_BEAT_EXTENSIONS = [
-  '现在就值得专程进来认真看看',
-  '每排货架都能慢慢发现不同惊喜',
-  '拿在手里越看细节越有意思',
-  '认真挑选总能找到合眼缘的好物',
-  '记得放进攻略到店完整逛上一圈',
-];
-
 function chineseLength(value: unknown): number {
   return String(value || '').replace(/[^\u4e00-\u9fa5]/g, '').length;
 }
 
-function fillToChineseLength(value: unknown, suffix: string, target = 18): string {
-  let output = String(value || '').replace(/[。.!！?？…;；:：,，、\s]+$/g, '').trim();
-  let suffixCursor = 0;
-  while (chineseLength(output) < target && suffixCursor < suffix.length) {
-    output += suffix[suffixCursor];
-    suffixCursor += 1;
-  }
-  return output;
-}
-
 /**
  * DeepSeek 偶尔会返回结构和内容都合格、但每段偏短的稿子。
- * 保留模型生成的主题和画面，仅用不引入价格/活动/地址的安全短语补齐口播预算，
- * 避免把整份个性化脚本丢掉并换成固定兜底稿。
+ * 不再用固定尾句逐字补齐。短句必须由模型整句重写；两次仍不合格就使用完整兜底稿。
  */
 export function completeShortGeneratedScript(candidate: Record<string, unknown>): SurpriseScript {
-  const script = normalizeDeepSeekSurpriseScript(candidate as any);
-  const clips = [script.hook, ...script.scenes, script.outro];
-  if (clips.length !== 5 || clips.some((clip) => !String(clip?.dialogue || '').trim())) return script;
-  clips.forEach((clip, index) => {
-    const dialogue = fillToChineseLength(clip.dialogue, SAFE_BEAT_EXTENSIONS[index], 18);
-    clip.dialogue = dialogue;
-    clip.subtitle = dialogue;
-  });
-  script.continuous_dialogue = clips.map((clip) => clip.dialogue).join('，');
-  return normalizeSurpriseScript(script);
+  return normalizeDeepSeekSurpriseScript(candidate as any);
 }
 
 export async function generateFastSurpriseScript(options: FastGenerationOptions): Promise<SurpriseScript> {
@@ -79,7 +52,7 @@ export async function generateFastSurpriseScript(options: FastGenerationOptions)
 
   if (options.apiKey) {
     try {
-      const systemPrompt = '你是 BOOMER OFF 门店短视频编剧。只输出 JSON。写一条15秒高密度探店口播：严格5个连续镜头，每镜对白18-21个汉字，合计90-100字；字幕逐字等于对白；首镜必须使用真实门店入口和BOOMER OFF门头；最后一镜必须给出完整明确的到店行动号召；不得重复短语或编造价格活动。';
+      const systemPrompt = '你是 BOOMER OFF 门店短视频编剧。只输出 JSON。写一条15秒高密度探店口播：严格5个连续镜头，每镜对白18-21个汉字，合计90-100字；每镜是一句语义完整的对白，句内用一个逗号分成两个短分句，字幕逐字等于对白；五镜按钩子、进店发现、具体商品、体验价值、到店召唤形成连贯种草逻辑；首镜必须使用真实门店入口和BOOMER OFF门头；不得跨镜截断词语、拼接残字、重复短语或编造价格活动。';
       const baseUserPrompt = `真实门店、素材与脚本规则：\n${options.factContext.slice(0, 7000)}\n\n` +
         `主角：${JSON.stringify(options.character || {})}\n参考图：${JSON.stringify((options.imageDescriptions || []).slice(0, 8))}\n` +
         '输出字段：title,continuous_dialogue,hook,scenes,outro,publish_copy,bgm,total_duration_s,aspect,mode。hook/scenes/outro每段包含scene,action,dialogue,subtitle,image_index,duration_s=3,motion；scenes正好3段。只输出JSON。';
@@ -191,6 +164,30 @@ const FALLBACK_BEAT_POOLS: string[][] = [
   ],
 ];
 
+const CATEGORY_FALLBACK_DIALOGUES: Partial<Record<NonNullable<FastFallbackOptions['contentScopeKey']>, string[]>> = {
+  toys: [
+    '一进门先看玩具墙，童年快乐一下全回来了',
+    '凯蒂猫迪士尼佐藤象，一排排根本看不过来',
+    '还有翻不完的中古谷子，每个格子都可能藏惊喜',
+    '公仔玩偶周边慢慢翻，找到本命那刻真的上头',
+    '带上朋友来认真淘一圈，把喜欢的角色带回家',
+  ],
+  music: [
+    '别急着路过这家店，黑胶唱片真的让人失控',
+    '一排排唱片慢慢翻，每张封面都像一幅海报',
+    '指尖碰到黑胶纹路，复古年代感一下就出来了',
+    '找到合眼缘那一张，淘唱片的快乐真的会上头',
+    '喜欢音乐就来慢慢翻，下一张心头好就在这里',
+  ],
+  accessories: [
+    '一进门先看这柜首饰，每一件都在悄悄发光',
+    '耳夹胸针项链铺开，不同造型都有自己的气质',
+    '拿起来往衣服上一比，普通穿搭立刻有了重点',
+    '不追同款也不怕撞款，慢慢挑才有淘货快乐',
+    '来店里亲手试一圈，把最衬你的那件带回家',
+  ],
+};
+
 const FALLBACK_ACTIONS: string[][] = [
   [
     '博主快步走近门头，边指向招牌边对镜头连续说话',
@@ -244,7 +241,7 @@ export function buildFastSurpriseFallback(options: FastFallbackOptions = {}): Su
   const shopLabel = cleanShopName(options.shopName);
   const variationKey = String(options.variationKey || 'default');
   const variationHash = hashVariationKey(variationKey);
-  const dialogues = pickFallbackDialogues(variationKey);
+  const dialogues = CATEGORY_FALLBACK_DIALOGUES[options.contentScopeKey || 'all'] || pickFallbackDialogues(variationKey);
   const action = (beat: number) => FALLBACK_ACTIONS[beat][(variationHash >>> beat) % FALLBACK_ACTIONS[beat].length];
   const scenes = [
     '当前门店真实入口与 BOOMER OFF 门头招牌',

@@ -28,6 +28,7 @@ import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 import {
   buildSurpriseContentScopePrompt,
+  filterAssetsForSurpriseContentScope,
   resolveSurpriseContentScope,
 } from "../_shared/surprise-content-scope.ts";
 
@@ -458,10 +459,18 @@ Deno.serve(async (req) => {
     }
     const needsStorefront = false;
     const remainPool = pool.filter((a: any) => a.id !== storefrontHit.id);
+    const scopedPool = filterAssetsForSurpriseContentScope(contentScope, remainPool);
+    if (contentScope.key !== 'all' && scopedPool.length === 0) {
+      return json({
+        ok: false,
+        error: `当前门店没有识别到“${contentScope.label}”竖版实景素材。请先上传或重新标注对应商品图片，系统不会再用其他品类图片冒充。`,
+      }, 409);
+    }
+    const contentPool = contentScope.key === 'all' ? remainPool : scopedPool;
 
     // 3) 主题聚拢:按 tag/category 频次抽一个主题词,围绕它从剩余 pool 挑实景
     const themeCounter = new Map<string, number>();
-    remainPool.forEach((a: any) => {
+    contentPool.forEach((a: any) => {
       const cat = (a.category || '').toString().trim();
       if (cat) themeCounter.set(cat, (themeCounter.get(cat) || 0) + 1);
       (Array.isArray(a.tags) ? a.tags : []).forEach((t: any) => {
@@ -480,15 +489,15 @@ Deno.serve(async (req) => {
       if ((a.category || '') === themeTag) return true;
       return (Array.isArray(a.tags) ? a.tags : []).some((t: any) => String(t) === themeTag);
     };
-    const hits = themeTag ? remainPool.filter(matchTheme) : [];
-    const misses = themeTag ? remainPool.filter((a: any) => !matchTheme(a)) : remainPool;
+    const hits = themeTag ? contentPool.filter(matchTheme) : [];
+    const misses = themeTag ? contentPool.filter((a: any) => !matchTheme(a)) : contentPool;
 
     // 参考图槽位封顶 9(对齐 Seedance 2.0 reference_image 上限)
     // 惊喜流程不使用角色板,主角是 AI 现场生成的虚构「探店博主」,不绑参考图。
     // 已用槽:门头 1 张;剩下全部给实景。
     const storefrontSlot = storefrontHit ? 1 : 0;
     const ASSET_SLOT_FOR_SCENES = Math.max(3, 9 - storefrontSlot);
-    const targetCount = Math.min(remainPool.length, ASSET_SLOT_FOR_SCENES);
+    const targetCount = Math.min(contentPool.length, ASSET_SLOT_FOR_SCENES);
     let scenicAssets: any[];
     if (themeTag && hits.length >= 3) {
       const hitsW = hits.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
@@ -499,7 +508,7 @@ Deno.serve(async (req) => {
       const extras = sampleWeighted(extraW, Math.min(extraN, misses.length));
       scenicAssets = [...hits.slice(0, targetCount), ...extras];
     } else {
-      const weighted = remainPool.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
+      const weighted = contentPool.map((a: any, idx: number) => ({ item: a, w: 1 + Math.max(0, 20 - idx) * 0.1 }));
       scenicAssets = sampleWeighted(weighted, targetCount);
     }
 
@@ -511,7 +520,7 @@ Deno.serve(async (req) => {
     // 若实景不够,继续从剩余池补满 9 张
     if (pickedAssets.length < 9) {
       const used = new Set(pickedAssets.map((a: any) => a.id));
-      const extras = remainPool.filter((a: any) => !used.has(a.id)).slice(0, 9 - pickedAssets.length);
+      const extras = contentPool.filter((a: any) => !used.has(a.id)).slice(0, 9 - pickedAssets.length);
       pickedAssets.push(...extras);
     }
 
@@ -552,7 +561,7 @@ Deno.serve(async (req) => {
       `${contentScopePrompt}\n` +
       `${holidayBrief ? holidayBrief + '\n' : ''}` +
       `【钩子句池】这次开场的钩子可参考(可改写,不要照抄,必须贴合博主语气与节奏):${randomHooks}。每次拍都要不一样,不要复用上次开头。\n` +
-      `【全片要求】严格 5 个 3 秒镜头:钩子 1 镜 + 递进种草 3 镜 + CTA 1 镜。主角始终是上面那位虚构博主(同人同发型同服装),每镜都有动作(指/拿/试/转身/对镜头说话);**每一镜都必须有 dialogue 和 subtitle,严禁空台词**,每段严格 18–21 个汉字,五句合计 90–100 个汉字(硬上限 100,严禁重复内容、重复短语或回读),用中文逗号连接后就是一条从约 0.2 秒持续到约 14.5 秒的完整口播。五段分别讲钩子 → 进店发现 → 商品细节 → 价值体验 → 行动召唤,画面、对白、字幕必须逐段对应。语速高密度且清晰(约每分钟 390–430 汉字),逗号处只允许 0.05–0.12 秒节奏换气,切镜时人声延续不重开。随机变化钩子、人设和表达,但主旨永远是强力种草当前门店;门店事实和卖点只能来自店铺画像、品牌知识库与已选实景素材,严禁编造价格或活动。博主每一镜都要有情绪推进,全部用上传的店内实景;结尾必须带 CTA(参考博主 CTA「${persona.cta}」)。`;
+      `【全片要求】严格 5 个 3 秒镜头:钩子 1 镜 + 递进种草 3 镜 + CTA 1 镜。主角始终是上面那位虚构博主(同人同发型同服装),每镜都有动作(指/拿/试/转身/对镜头说话);**每一镜都必须有 dialogue 和 subtitle,严禁空台词**,每段严格 18–21 个汉字,五句合计 90–100 个汉字(硬上限 100,严禁重复内容、重复短语或回读)。每镜必须是一句语义完整的对白,句内只用一个中文逗号分成前后两个短分句;不得跨镜截断词语,不得为了凑字数拼接残字、固定尾句或重复内容,字数不合格必须整句重写。五段分别讲钩子 → 进店发现 → 具体商品 → 体验价值 → 行动召唤,画面、对白、字幕必须逐段对应。语速高密度且清晰(约每分钟 390–430 汉字),逗号自然换气 0.12–0.18 秒,切镜换气 0.08–0.12 秒,任何静音不得超过 0.25 秒,切镜时人声延续不重新起范。随机变化钩子、人设和表达,但主旨永远是强力种草当前门店;门店事实和卖点只能来自店铺画像、品牌知识库与已选实景素材,严禁编造价格或活动。博主每一镜都要有情绪推进,全部用上传的店内实景;结尾必须带 CTA(参考博主 CTA「${persona.cta}」)。`;
 
     // 9) 直接生成脚本，不再通过 HTTP 唤醒第三个 Edge Function。
     const imageUrls = pickedAssets.map((a: any) => a.output_url);
@@ -571,6 +580,7 @@ Deno.serve(async (req) => {
       shopName: shopCtx?.name || null,
       imageDescriptions,
       variationKey: crypto.randomUUID(),
+      contentScopeKey: contentScope.key,
       ageBucket: persona.age_bucket || null,
       character: {
         name: persona.label,

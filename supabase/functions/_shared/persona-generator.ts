@@ -30,6 +30,16 @@ export interface InfluencerPersona {
   companions?: PersonaCompanion[];
 }
 
+interface CategoryPersonaVariant {
+  keywords: string[];
+  ageBucket: AgeBucket;
+  label: string;
+  gender: InfluencerPersona['gender'];
+  visual: string;
+  vibe: string;
+  tone_label: string;
+}
+
 // ---------- 随机抽样 ----------
 
 interface CategoryWeights {
@@ -167,6 +177,83 @@ const FALLBACK_POOL: InfluencerPersona[] = [
   },
 ];
 
+const CATEGORY_PERSONA_VARIANTS: CategoryPersonaVariant[] = [
+  {
+    keywords: ['唱片', '黑胶', '音响', '音乐'], ageBucket: 'young', gender: 'female',
+    label: '27 岁黑胶唱片探店女生', tone_label: '唱片寻宝',
+    visual: '自然黑色锁骨发，偏圆脸，鼻梁有淡雀斑，酒红针织衫搭配深色牛仔裤，背帆布袋，像周末来翻唱片的真实音乐爱好者',
+    vibe: '语速快但有自然换气，看到喜欢的唱片封面会明显提高语调',
+  },
+  {
+    keywords: ['唱片', '黑胶', '音响', '音乐'], ageBucket: 'young', gender: 'male',
+    label: '30 岁黑胶唱片爱好者', tone_label: '音乐挖宝',
+    visual: '自然微卷短发，窄长脸，戴细框眼镜，墨绿色工装衬衫搭配白色内搭，手拎唱片袋，气质松弛但看到黑胶会兴奋',
+    vibe: '像给朋友安利刚翻到的唱片，表达清楚、有审美、情绪逐步升高',
+  },
+  {
+    keywords: ['唱片', '黑胶', '音响', '音乐'], ageBucket: 'young', gender: 'female',
+    label: '24 岁复古音乐博主', tone_label: '封面收藏',
+    visual: '利落耳下短发，鹅蛋脸，眉尾有一颗小痣，米白短夹克搭配蓝色直筒裤，手戴银色细表，像真实年轻唱片收藏者',
+    vibe: '口播紧凑而不乱，重点讲封面设计、翻找过程和发现心头好的惊喜',
+  },
+  {
+    keywords: ['唱片', '黑胶', '音响', '音乐'], ageBucket: 'middle', gender: 'male',
+    label: '45 岁唱片玩家', tone_label: '老歌寻宝',
+    visual: '鬓角略白的短发，方脸有浅法令纹，深蓝棉质衬衫搭配卡其裤，戴复古腕表，像下班后来认真翻唱片的普通顾客',
+    vibe: '语气稳中带兴奋，讲唱片时有真实经验感，但不编造音质和年份',
+  },
+  {
+    keywords: ['唱片', '黑胶', '音响', '音乐'], ageBucket: 'senior', gender: 'male',
+    label: '64 岁怀旧唱片爱好者', tone_label: '唱片怀旧',
+    visual: '自然花白短发，戴旧式细框眼镜，藏青针织开衫搭配灰色长裤，手里认真翻看唱片封面，像退休后常来淘唱片的普通顾客',
+    vibe: '说话有精神、有回忆感，重点讲翻唱片和遇见熟悉封面的快乐，不编造音质和年代',
+  },
+  {
+    keywords: ['玩具', '公仔', '谷子', '动漫', '三丽鸥', '迪士尼', '佐藤象'], ageBucket: 'young', gender: 'female',
+    label: '23 岁中古玩具爱好者', tone_label: '本命挖宝',
+    visual: '高马尾配自然碎发，圆脸有淡淡痘印，浅蓝卫衣搭配灰色百褶长裙，背满徽章的帆布包，像真实来翻中古谷子的年轻顾客',
+    vibe: '语速明快、有童年回忆感，发现喜欢角色时自然惊呼但不堆烂梗',
+  },
+  {
+    keywords: ['玩具', '公仔', '谷子', '动漫', '三丽鸥', '迪士尼', '佐藤象'], ageBucket: 'middle', gender: 'male',
+    label: '40 岁中古玩具收藏玩家', tone_label: '童年收藏',
+    visual: '短寸黑发夹少量白发，脸上有浅胡茬，棕色工装外套搭配深色牛仔裤，手拿一个公仔认真端详，像真实收藏爱好者',
+    vibe: '讲童年角色和翻找乐趣，稳中带劲，看到喜欢的玩具会突然兴奋',
+  },
+  {
+    keywords: ['玩具', '公仔', '谷子', '动漫', '三丽鸥', '迪士尼', '佐藤象'], ageBucket: 'senior', gender: 'female',
+    label: '63 岁童年玩具爱好者', tone_label: '童心寻宝',
+    visual: '自然银灰短卷发，眼角有真实细纹，酒红针织外套搭配深色长裤，手里拿着一只旧公仔认真看细节，像退休后来寻找童年记忆的普通顾客',
+    vibe: '语气热情又真诚，讲退休后出来逛逛和看到熟悉玩具的惊喜，不说追星入坑或暑假话题',
+  },
+  {
+    keywords: ['首饰', '配饰', '项链', '耳饰', '耳夹', '胸针'], ageBucket: 'young', gender: 'female',
+    label: '29 岁复古穿搭博主', tone_label: '首饰试戴',
+    visual: '自然棕色低马尾，长圆脸，下巴有一颗淡痣，奶油白衬衫搭配深咖半裙，妆感轻薄，像来挑日常首饰的真实顾客',
+    vibe: '表达精致热情，重点讲试戴、搭配和不容易撞款的惊喜',
+  },
+  {
+    keywords: ['首饰', '配饰', '项链', '耳饰', '耳夹', '胸针'], ageBucket: 'middle', gender: 'female',
+    label: '43 岁精致穿搭顾客', tone_label: '配饰点睛',
+    visual: '齐耳自然卷短发，鹅蛋脸有真实眼周细纹，黑色针织上衣搭配米色阔腿裤，戴简洁腕表，气质利落亲切',
+    vibe: '语速清楚有层次，像给朋友分享如何用一件首饰让普通穿搭更有重点',
+  },
+  {
+    keywords: ['首饰', '配饰', '项链', '耳饰', '耳夹', '胸针'], ageBucket: 'senior', gender: 'female',
+    label: '62 岁复古首饰顾客', tone_label: '首饰点睛',
+    visual: '自然银灰齐耳短发，眼角和手部有真实年龄纹理，墨绿色针织上衣搭配米色长裤，正在镜前试一枚胸针，气质亲切利落',
+    vibe: '表达热情而清楚，重点讲退休后也要认真打扮、亲手试戴和找到适合自己的惊喜',
+  },
+];
+
+const FACE_DETAIL_VARIANTS = [
+  '面部特征锁：偏圆脸，左脸颊有一颗淡痣，眉眼轻微不对称',
+  '面部特征锁：窄长脸，鼻梁有浅雀斑，右侧眉尾略高',
+  '面部特征锁：方圆脸，下巴有一颗小痣，笑起来左侧酒窝更明显',
+  '面部特征锁：鹅蛋脸，眼下有自然小细纹，唇峰轻微不对称',
+  '面部特征锁：短圆脸，颧骨有淡晒斑，右眼高光略小',
+];
+
 function fallbackPersona(slot?: { ageBucket: AgeBucket; groupType: GroupType }): InfluencerPersona {
   if (!slot) {
     const pick = FALLBACK_POOL[Math.floor(Math.random() * FALLBACK_POOL.length)];
@@ -181,9 +268,28 @@ function fallbackPersona(slot?: { ageBucket: AgeBucket; groupType: GroupType }):
 export function generateFastPersona(opts: {
   assetTags: string[];
   assetCategories: string[];
+  random?: () => number;
 }): InfluencerPersona {
-  const slot = pickPersonaSlot(opts.assetTags || [], opts.assetCategories || []);
-  return fallbackPersona(slot);
+  const random = opts.random || Math.random;
+  const slot = pickPersonaSlot(opts.assetTags || [], opts.assetCategories || [], random);
+  const context = [...(opts.assetCategories || []), ...(opts.assetTags || [])].join(' ').toLowerCase();
+  const variants = CATEGORY_PERSONA_VARIANTS.filter((variant) =>
+    variant.ageBucket === slot.ageBucket && variant.keywords.some((keyword) => context.includes(keyword.toLowerCase()))
+  );
+  if (!variants.length) return fallbackPersona(slot);
+  const variant = variants[Math.floor(random() * variants.length) % variants.length];
+  const faceDetail = FACE_DETAIL_VARIANTS[Math.floor(random() * FACE_DETAIL_VARIANTS.length) % FACE_DETAIL_VARIANTS.length];
+  const base = fallbackPersona(slot);
+  return {
+    ...base,
+    label: variant.label,
+    gender: variant.gender,
+    visual: `${variant.visual}。${faceDetail}`,
+    vibe: variant.vibe,
+    tone_label: variant.tone_label,
+    age_bucket: slot.ageBucket,
+    age: slot.age,
+  };
 }
 
 // ---------- 主流程 ----------

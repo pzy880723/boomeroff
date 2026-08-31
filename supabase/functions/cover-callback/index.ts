@@ -4,6 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { mergeCoverGeneration, readCoverGeneration, resolveCoverWorkerToken } from "../_shared/cover-generation.ts";
 import { mirrorTosVideoToStorage } from "../_shared/mirror-tos-video.ts";
+import { pickCanonicalVideoAsset } from "../_shared/marketing-video-assets.ts";
 import {
   buildSurpriseCoverCompletion,
   readSourceScriptJobId,
@@ -96,12 +97,13 @@ Deno.serve(async (req) => {
     let stableVideoUrl: string | null = null;
     let streamOptimized = false;
     try {
-      const { data: asset } = await admin
+      const { data: assets } = await admin
         .from("marketing_assets")
-        .select("id, meta, output_url")
+        .select("id, user_id, created_at, meta, output_url")
         .eq("kind", "video")
         .filter("meta->>job_id", "eq", jobId)
-        .maybeSingle();
+        .order("created_at", { ascending: true });
+      const asset = pickCanonicalVideoAsset(assets || [], job.user_id);
       if (asset) {
         let meta = {
           ...((asset.meta as any) || {}),

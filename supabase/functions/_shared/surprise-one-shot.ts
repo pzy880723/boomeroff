@@ -378,8 +378,8 @@ export function normalizeSurpriseScript(input: SurpriseScript): SurpriseScript {
     speech_rate: 'very_fast_clear',
     speech_cpm_min: 390,
     speech_cpm_max: 430,
-    min_pause_s: 0.05,
-    max_silence_s: 0.12,
+    min_pause_s: 0.12,
+    max_silence_s: 0.25,
   };
 
   const clips = [nextScript.hook, ...nextScript.scenes, nextScript.outro];
@@ -574,7 +574,8 @@ export function compileSurpriseOneShotPrompt(options: {
   lines.push('1. 这是全片唯一的一条连续中文口播音轨，由 Seedance 直接生成同步人声，不使用后配 TTS。');
   lines.push('2. 画面出现后 0.1 秒内立即开口，最迟在 12 秒进入收尾，14.9 秒前完整说完最后一句并完成最后画面。');
   lines.push('3. 使用高密度、清晰、激动的探店口播，约每分钟 390–430 汉字；每个字都要咬清楚，不得吞字或含糊。');
-  lines.push('4. 只允许在逗号处有 0.05–0.12 秒的节奏换气，其余位置持续发声，不得出现静默。');
+  lines.push('4. 每镜是一句语义完整的对白，句内用一个逗号分成前后两个短分句；逗号自然换气 0.12–0.18 秒，切镜换气 0.08–0.12 秒，任何静音不得超过 0.25 秒。');
+  lines.push('5. 不得跨镜截断词语，不得为了凑字数拼接残字、固定尾句或重复内容；字数不合格必须整句重写。');
   lines.push('5. 切换镜头时人声继续，不得在切镜处重新起句、重开这段话或重新自我介绍。');
   lines.push('6. 严格按最终口播全文只读一次，不得改写、遗漏、合并或增加对白。');
   lines.push('7. 严禁重复词、重复短语、回读同一句、卡顿式重启、结巴或结尾拖音。');
