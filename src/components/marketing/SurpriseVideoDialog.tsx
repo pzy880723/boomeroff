@@ -289,12 +289,17 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     scriptPollRef.current = window.setInterval(tick, 1000);
   };
 
-  const doPick = async (exclude: string[] = [], contentScope: SurpriseContentScopeKey = selectedScope) => {
+  const doPick = async (
+    exclude: string[] = [],
+    contentScope: SurpriseContentScopeKey = selectedScope,
+    replaceCurrent = false,
+  ) => {
     if (!shopId) return;
     setScriptError(null);
     setPicking(true); setPick(null);
     try {
-      let state = await startSurpriseScriptJob(shopId, exclude, realism, contentScope);
+      setSelectedScope(contentScope);
+      let state = await startSurpriseScriptJob(shopId, exclude, realism, contentScope, replaceCurrent);
       // 新版 one-shot 任务可跨设备恢复；没有 render_job_id 的才是旧 Director 遗留任务。
       if (state.task_kind === 'video') {
         if (state.render_job_id) {
@@ -302,7 +307,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           return;
         }
         await dismissSurpriseVideoJob(state.job_id);
-        state = await startSurpriseScriptJob(shopId, exclude, realism, contentScope);
+        state = await startSurpriseScriptJob(shopId, exclude, realism, contentScope, true);
       }
       if (state.task_kind === 'video') throw new Error('旧视频任务清理失败，请稍后重试');
       applyScriptState(state);
@@ -379,7 +384,7 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
     setScriptJobId(null);
     setScriptError(null);
     setPick(null);
-    void doPick(newEx);
+    void doPick(newEx, selectedScope, true);
   };
 
   const handleScriptChange = (script: ScriptShape) => {
@@ -610,8 +615,10 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
   };
 
   const changeCategory = async () => {
-    if (!scriptJobId) return;
-    if (!window.confirm('更换商品类别会放弃当前脚本，确认重新选择吗？')) return;
+    if (!scriptJobId) {
+      setPick(null);
+      return;
+    }
     try {
       await discardSurpriseScriptJob(scriptJobId);
       stopScriptPolling();
@@ -662,7 +669,8 @@ export function SurpriseVideoDialog({ open, onOpenChange }: { open: boolean; onO
           <SurpriseCategoryPicker
             value={selectedScope}
             onChange={setSelectedScope}
-            onStart={() => void doPick(excluded, selectedScope)}
+            onStart={(contentScope) => void doPick(excluded, contentScope, true)}
+            onClose={() => onOpenChange(false)}
             busy={picking}
           />
         ) : scriptView === 'error' ? (

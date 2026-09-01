@@ -61,6 +61,7 @@ export function startSurpriseScriptJob(
   excludeAssetIds: string[] = [],
   realism = 'photoreal',
   contentScope = 'all',
+  replaceCurrent = false,
 ) {
   return call({
     action: 'start',
@@ -68,6 +69,7 @@ export function startSurpriseScriptJob(
     exclude_asset_ids: excludeAssetIds,
     realism,
     content_scope: contentScope,
+    replace_current: replaceCurrent,
   });
 }
 

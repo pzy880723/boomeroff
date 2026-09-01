@@ -49,7 +49,26 @@ test('兜底稿按 variationKey 随机换文案，且每份都通过校验', () 
   );
 });
 
-test('保留 DeepSeek 短稿内容并确定性补齐，不直接替换为固定兜底稿', () => {
+test('每个商品品类的兜底稿都满足统一高密度脚本规则', () => {
+  for (const contentScopeKey of ['all', 'ceramics', 'toys', 'music', 'accessories'] as const) {
+    const script = buildFastSurpriseFallback({
+      shopName: '温州朔门古港店',
+      contentScopeKey,
+      variationKey: `category-${contentScopeKey}`,
+      imageDescriptions: [
+        { index: 0, summary: '真实门头与 BOOMER OFF 招牌' },
+        { index: 1, summary: `${contentScopeKey} 店内实景` },
+      ],
+    });
+    assert.deepEqual(
+      validateSurpriseScript(script, { factContext: `温州鹿城区 ${contentScopeKey}` }).errors,
+      [],
+      `${contentScopeKey} 兜底稿不合格`,
+    );
+  }
+});
+
+test('DeepSeek 短稿不得机械补字，必须交给模型整句重写或完整兜底', () => {
   const dialogues = ['这家店值得来逛', '进门就有满架惊喜', '拿起小物细节丰富', '慢慢挑选很有意思', '现在就来店里看看'];
   const script = completeShortGeneratedScript({
     continuous_dialogue: dialogues.join('，'),
@@ -64,9 +83,9 @@ test('保留 DeepSeek 短稿内容并确定性补齐，不直接替换为固定�
     outro: { scene: '店内全景', action: '边招手边对镜头继续说', dialogue: dialogues[4], subtitle: dialogues[4], image_index: 4 },
   });
   const validation = validateSurpriseScript(script);
-  assert.deepEqual(validation.errors, []);
-  assert.match(String(script.hook.dialogue), /^这家店值得来逛/);
-  assert.match(String(script.outro.dialogue), /^现在就来店里看看/);
+  assert.ok(validation.errors.length > 0);
+  assert.equal(script.hook.dialogue, dialogues[0]);
+  assert.equal(script.outro.dialogue, dialogues[4]);
   assert.equal(script.outro.subtitle, script.outro.dialogue);
 });
 

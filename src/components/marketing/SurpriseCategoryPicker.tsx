@@ -1,4 +1,4 @@
-import { PackageSearch, Sparkles } from 'lucide-react';
+import { PackageSearch, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   SURPRISE_CONTENT_SCOPES,
@@ -9,11 +9,13 @@ export function SurpriseCategoryPicker({
   value,
   onChange,
   onStart,
+  onClose,
   busy,
 }: {
   value: SurpriseContentScopeKey;
   onChange: (value: SurpriseContentScopeKey) => void;
-  onStart: () => void;
+  onStart: (value: SurpriseContentScopeKey) => void;
+  onClose: () => void;
   busy: boolean;
 }) {
   const selected = SURPRISE_CONTENT_SCOPES.find((scope) => scope.key === value) || SURPRISE_CONTENT_SCOPES[0];
@@ -58,10 +60,15 @@ export function SurpriseCategoryPicker({
         已选择「{selected.label}」。第一镜仍固定使用当前门店的真实门头，其他镜头只从本店真实素材中挑选。
       </div>
 
-      <Button className="w-full h-11" onClick={onStart} disabled={busy}>
-        <Sparkles className="mr-1.5 h-4 w-4" />
-        按「{selected.label}」开始写脚本
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="outline" className="h-11 px-4" onClick={onClose} disabled={busy}>
+          <X className="mr-1 h-4 w-4" />关闭
+        </Button>
+        <Button className="h-11 flex-1" onClick={() => onStart(selected.key)} disabled={busy}>
+          <Sparkles className="mr-1.5 h-4 w-4" />
+          按「{selected.label}」开始写脚本
+        </Button>
+      </div>
     </div>
   );
 }

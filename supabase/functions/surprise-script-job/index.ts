@@ -20,6 +20,7 @@ import {
   orderSurpriseReferenceAssets,
 } from "../_shared/surprise-script-revision.ts";
 import { resolveSurpriseContentScope } from "../_shared/surprise-content-scope.ts";
+import { buildShopSpeechInstruction } from "../_shared/shop-speech-locale.ts";
 import {
   isStaleSurpriseScriptTask,
   selectCurrentSurpriseTask,
@@ -96,8 +97,11 @@ async function reviseScriptWithAi(
 ): Promise<{ script: SurpriseScript; summary: string; persona: InfluencerPersona }> {
   const assets = Array.isArray(source.picked_assets) ? source.picked_assets : [];
   const currentPersona = source.persona || source.surprise_result?.persona || null;
+  const shopContext = source.surprise_result?.shop_context || source.shop_context || null;
+  const speechInstruction = buildShopSpeechInstruction(shopContext, instruction);
   const prompt = `你是 BOOMER·OFF 中古杂货店 15 秒探店视频脚本编辑器。\n\n` +
     `店员修改要求：${instruction}\n\n` +
+    `${speechInstruction}\n` +
     `当前人物：${JSON.stringify(currentPersona)}\n` +
     `当前真实参考图：${JSON.stringify(assets.map((asset: any, index: number) => ({ index, summary: asset.summary, role: asset.role })))}\n` +
     `当前脚本：${JSON.stringify(currentScript)}\n\n` +
@@ -153,12 +157,15 @@ async function chatAboutScriptWithAi(
   const pending = Array.isArray(source.surprise_pending_changes)
     ? source.surprise_pending_changes.slice(-8)
     : [];
+  const shopContext = source.surprise_result?.shop_context || source.shop_context || null;
+  const speechInstruction = buildShopSpeechInstruction(shopContext, message);
   const prompt = `你是 BOOMER·OFF 店员的短视频脚本沟通助手。\n` +
     `店员正在讨论如何修改一份 15 秒五镜脚本。你现在只能沟通和确认要求，绝对不能输出或重写脚本。\n` +
     `当前脚本：${JSON.stringify(currentScript)}\n` +
     `已经记录但尚未应用的要求：${JSON.stringify(pending)}\n` +
     `最近对话：${JSON.stringify(history)}\n` +
     `店员刚说：${message}\n\n` +
+    `${speechInstruction}\n` +
     `请用 1-2 句中文回复：先准确复述你记住的修改重点；确有歧义时只追问一个关键问题。` +
     `不要说已经修改、已经重写或已经保存脚本，因为此时脚本尚未改变。只输出 JSON：{"reply":"回复"}。`;
 
@@ -369,9 +376,24 @@ Deno.serve(async (req) => {
       shopId = (await resolveAuthorizedShop(admin, user.id, shopId || null)) || "";
       if (!shopId) return json({ ok: false, error: "缺少 shop_id" }, 400);
       await expireStaleGeneratingDrafts(admin, user.id, shopId);
+      const replaceCurrent = body.replace_current === true;
       const current = await findCurrentTask(admin, user.id, shopId);
-      if (current?.kind === "script") return json(state(current.job));
       if (current?.kind === "video") return json(videoState(current.job));
+      if (current?.kind === "script" && !replaceCurrent) return json(state(current.job));
+      if (current?.kind === "script" && replaceCurrent) {
+        const { count, error: shotsError } = await admin.from("video_generation_shots")
+          .select("id", { count: "exact", head: true })
+          .eq("job_id", current.job.id);
+        if (shotsError) {
+          return json({ ok: false, error: `检查当前视频任务失败: ${shotsError.message}` }, 500);
+        }
+        if (count) return json({ ok: false, error: "当前任务已经开始生成视频，不能更换品类" }, 409);
+        const { error: replaceError } = await admin.from("video_generation_jobs")
+          .delete()
+          .eq("id", current.job.id)
+          .eq("user_id", user.id);
+        if (replaceError) return json({ ok: false, error: `更换品类失败: ${replaceError.message}` }, 500);
+      }
       // 失败记录没有可恢复的脚本，不能在用户下次进入时永久占住当前任务。
       await clearFailedDrafts(admin, user.id, shopId);
 

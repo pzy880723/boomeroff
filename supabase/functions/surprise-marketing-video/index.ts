@@ -31,6 +31,11 @@ import {
   filterAssetsForSurpriseContentScope,
   resolveSurpriseContentScope,
 } from "../_shared/surprise-content-scope.ts";
+import {
+  buildShopSpeechInstruction,
+  resolveShopSpeechLocale,
+} from "../_shared/shop-speech-locale.ts";
+import { shouldStopSurpriseImageProbing } from "../_shared/surprise-image-probe.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -112,15 +117,19 @@ function summarizeAsset(a: any): string {
   return parts.join(' · ') || '店内实景';
 }
 
-async function prepareAssetsForVideoAspect(admin: any, assets: any[], aspect: string): Promise<any[]> {
+async function prepareAssetsForVideoAspect(
+  admin: any,
+  assets: any[],
+  aspect: string,
+  contentScope = resolveSurpriseContentScope('all'),
+): Promise<any[]> {
   const resolved = assets.map((asset) => ({ ...asset, meta: { ...(asset.meta || {}) } }));
   const unknown = resolved
     .filter((asset) => !imageDimensionsFromMeta(asset.meta))
     .sort((a, b) => scoreStorefrontAsset(b) - scoreStorefrontAsset(a));
 
   for (let offset = 0; offset < unknown.length; offset += 12) {
-    const portraitReady = selectAssetsForVideoAspect(resolved, aspect);
-    if (portraitReady.length >= 9 && pickStorefrontAsset(portraitReady)) break;
+    if (shouldStopSurpriseImageProbing(resolved, aspect, contentScope)) break;
 
     const batch = unknown.slice(offset, offset + 12);
     await Promise.all(batch.map(async (asset) => {
@@ -237,7 +246,7 @@ Deno.serve(async (req) => {
           error: error instanceof Error ? error.message : '参考图校验失败',
         }, error instanceof Error && error.message.includes('不属于当前门店') ? 403 : 409);
       }
-      const portraitSubmittedRows = await prepareAssetsForVideoAspect(admin, submittedRows, '9:16');
+      const portraitSubmittedRows = await prepareAssetsForVideoAspect(admin, submittedRows, '9:16', contentScope);
       if (portraitSubmittedRows.length !== submittedRows.length) {
         return json({
           ok: false,
@@ -411,7 +420,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "素材库还没有你上传的实景图,先去『素材库 › 图片』上传几张(AI 生成图不参与)" });
     }
 
-    pool = await prepareAssetsForVideoAspect(admin, pool, '9:16');
+    pool = await prepareAssetsForVideoAspect(admin, pool, '9:16', contentScope);
     if (pool.length === 0) {
       return json({ ok: false, error: '当前门店没有可用于 9:16 视频的竖版实景图。请先上传竖拍照片，横图和方图不会再参与竖版视频。' }, 409);
     }
@@ -419,6 +428,8 @@ Deno.serve(async (req) => {
 
     // 2) 找高置信真实门头。没有门头时直接停止，绝不让模型凭空设计 Logo 或入口。
     const shopCtx = await shopContextPromise;
+    const shopLocale = resolveShopSpeechLocale(shopCtx);
+    const speechInstruction = buildShopSpeechInstruction(shopCtx);
     let storefrontHit = resolveStorefrontAsset(pool, shopCtx?.cover_image_url);
     if (!storefrontHit) {
       // 上传页的静默识图可能因用户退出、弱网或限流而丢失。生成脚本前再补跑一次，
@@ -461,6 +472,10 @@ Deno.serve(async (req) => {
     const remainPool = pool.filter((a: any) => a.id !== storefrontHit.id);
     const scopedPool = filterAssetsForSurpriseContentScope(contentScope, remainPool);
     if (contentScope.key !== 'all' && scopedPool.length === 0) {
+      console.warn(
+        `[surprise] scoped portrait assets empty shop=${shopId} scope=${contentScope.key} ` +
+        `portrait=${pool.length} remain=${remainPool.length} scoped=0`,
+      );
       return json({
         ok: false,
         error: `当前门店没有识别到“${contentScope.label}”竖版实景素材。请先上传或重新标注对应商品图片，系统不会再用其他品类图片冒充。`,
@@ -558,6 +573,7 @@ Deno.serve(async (req) => {
       `店员:来一条 15 秒竖版探店口播,节奏严格按下面博主人设走(慢就慢、快就快,不要前后割裂)。\n` +
       `${formatPersonaBriefZh(persona)}\n` +
       `${openingDirective}\n` +
+      `${speechInstruction}\n` +
       `${contentScopePrompt}\n` +
       `${holidayBrief ? holidayBrief + '\n' : ''}` +
       `【钩子句池】这次开场的钩子可参考(可改写,不要照抄,必须贴合博主语气与节奏):${randomHooks}。每次拍都要不一样,不要复用上次开头。\n` +
@@ -638,6 +654,7 @@ Deno.serve(async (req) => {
       vtype: 'store_tour', vtype_label: '洗脑探店', style,
       character: null,
       persona,
+      shop_context: shopCtx ? { ...shopCtx, locality: shopLocale } : { locality: shopLocale },
       holiday: holiday ? { name: holiday.name, days_away: holiday.daysAway } : null,
       duration: 15, aspect: '9:16',
       prompt_overrides: promptOverrides,
