@@ -1,30 +1,62 @@
-# 诊断结论：点击「生成视频」后卡住的真实根因
+# 品类生成失败：生产诊断报告（只诊断，不修改）
 
-## 结论（可验证）
+## 1. 最近失败的直接证据
 
-`surprise-marketing-video` 在提交分支里查询参考图时 SELECT 了一个**数据库中不存在的字段 `description`**，PostgREST 直接返回 42703 错误，函数在任何数据库写入之前就 `return 500 读取参考图失败`。因此脚本任务永远停在 `script_ready`，`marketing_video_jobs` 也不会新增行。
+- 后端 Edge Function 日志：`surprise-script-job` 与 `surprise-marketing-video` 在保留窗口内 **查不到任何日志**（含 error/boot），说明近期这两支函数几乎没有被成功调用到，或日志已随昨天的数据库/网关故障丢失。函数本身在线：无 token POST 返回 `401 {"ok":false,"error":"未授权"}`（0.95s）。
+- 数据库中最近 10 天只有 4 条 `video_generation_jobs`，**没有任何一条 status=failed**：
 
-证据：
+| 创建时间(UTC) | scope | status | stage | error_message |
+|---|---|---|---|---|
+| 09-01 02:12 | all | done | completed | 无 |
+| 08-31 08:33 | music | done | completed | 无 |
+| 08-31 02:35 | (无) | done | completed | 无 |
+| 08-30 11:27 | (无) | script_ready | script_ready | 无 |
 
-- `supabase/functions/surprise-marketing-video/index.ts` 第 174、181 行：
-  `.select('id, output_url, description, category, tags, meta')`
-- `public.marketing_assets` 实际字段：`category, created_at, id, input_image_urls, kind, meta, output_text, output_url, published_at, published_platforms, sha256, shop_id, tags, user_id` —— **没有 `description`**。
-- 该 SELECT 位于 claim 之前（claim 在第 254 行才把 status 改成 `submitting`、写入 `submission_token`），所以失败时不留任何 DB 痕迹。
-- 任务 `55e1f864-5644-4dae-98b3-ceba78169644`：`updated_at = 2026-08-31 05:30:11.145Z`，与 `meta.manually_edited_at = 05:30:10.936Z` 仅差 200ms，即最后一次写库来自「手动改脚本保存」（surprise-script-job），此后没有任何写入；`meta` 里没有 `submission_token` / `render_job_id`，证明 claim 从未执行。
-- `marketing_video_jobs` 近 24 小时 0 行，最后一行 `2026-08-29 11:47:17Z`；最后一次 surprise 成片是 `2026-07-29`。
-- 已排除其他分支：本地用生产数据跑 `validateSurpriseScript`（脚本 5 段 19/19/19/19/18 汉字，合计 94）→ `errors = []`；`picked_assets` 9 张均属该门店（shop `0d2fdb41…`，kind=photo），归属校验不会抛错。
-- 引入时间：commit `b2083628`（2026-08-30 23:20 +0800）修改了该文件并带入这一 SELECT；这也解释了 08-30 起 3 条草稿（06:58、11:27、以及本次）全部停在 `script_ready`。
+- 失败记录查不到不代表没失败：`surprise-script-job` 的 `clearFailedDrafts()` 会在**下一次点击“开始写脚本”时物理删除**该用户该门店所有 `status=failed` 的 surprise 草稿。用户点第二次生成时，第一次失败的 `error_message` 就永久消失了。这是当前无法给出“最近一次失败精确时间/HTTP 状态”的根本原因。
+- 因此：**shop_id 已确认为 `0d2fdb41-2c16-469e-aee7-c976dc2edec9`（唯一在用门店），但精确失败时间、content_scope、HTTP 状态与 error_message 已被系统自身清除，不可追溯。**
 
-## 关于部署版本
+## 2. 失败落在哪一步（已用数据复现判定）
 
-- 本地 HEAD = `4235dc2e9f8dc42e6b90abc31abceec0bfede519`（含上述有问题的 SELECT）。
-- 生产三支函数均能正常启动：无 token 请求 `surprise-script-job` / `surprise-marketing-video` / `render-marketing-video` 均返回 `401 {"ok":false,"error":"未授权"}`，无 BOOT_ERROR。
-- 无法用日志佐证 05:30 那次调用：本项目 Edge 日志查询窗口只回溯约 10 分钟（`function_edge_logs` 可见范围 05:56–06:06Z），05:30 的记录已不可查；日志中也没有任何 surprise 相关 URL 命中。因此“请求最后到达哪个函数”是由数据库写入痕迹推断的，不是由日志。
+失败不在建任务、不在门头识别、不在 DeepSeek、也不在 `validateSurpriseScript`，而在 **竖版素材筛选 + 品类筛选的交叉处**。
 
-## 修复方案（待批准后执行，仅一处改动）
+该门店 54 张真实上传照片的实测统计：
 
-1. 把 `supabase/functions/surprise-marketing-video/index.ts` 第 174、181 行的 SELECT 改为实际存在的字段：`'id, output_url, output_text, category, tags, meta'`（`summarizeAsset` 若引用 `description`，同步改读 `output_text`/`meta`）。
-2. 重新部署 `surprise-marketing-video`。
-3. 把 3 条卡住的 `script_ready` 草稿保持原样，由用户在 App 内重新点击「生成视频」验证；确认 `video_generation_jobs.status` 走到 `rendering` 且 `marketing_video_jobs` 新增一行。
+| 指标 | 数量 |
+|---|---|
+| photo 素材总数 | 54 |
+| 已缓存尺寸（meta.image_width） | **12** |
+| 判定为竖版 portrait | 12 |
+| 竖版且命中「瓷器餐具」关键词 | **0** |
+| 竖版且命中「唱片音响」关键词 | **0** |
+| 竖版且命中「首饰配饰」关键词 | **0** |
+| 竖版且命中「玩具公仔」关键词 | 4 |
 
-不改 UI、不改数据库结构、不改脚本生成逻辑。
+链路成因：
+
+```text
+surprise-marketing-video
+  pool(54) → prepareAssetsForVideoAspect(9:16)
+      循环里每探测一批 12 张就检查一次：
+      portraitReady >= 9 且已找到门头 → break
+      → 只探测了前 12 张，其余 42 张尺寸未知
+  selectAssetsForVideoAspect 丢弃尺寸未知的素材 → pool = 12
+  resolveStorefrontAsset 命中门头 → remainPool = 11
+  filterAssetsForSurpriseContentScope(ceramics/music/accessories) → 0
+  → HTTP 409 "当前门店没有识别到“瓷器餐具”竖版实景素材…"
+```
+
+`surprise-script-job` 收到 409 后在 `runScriptGeneration` 的 catch 中把任务写成 `failed`，前端显示失败；用户再点一次，`clearFailedDrafts` 把这条证据删掉。**这与用户“切品类后必失败、全品类/玩具能成功”的现象完全吻合**（09-01 的 `all` 与 08-31 的 `music` 成功，是当时缓存到的 12 张恰好覆盖到）。
+
+## 3. 生产部署是否包含 category-first 逻辑
+
+包含。本地 HEAD = `ce9bb273`，工作区干净；仓库中 `surprise-script-job/index.ts` 第 382–401 行确有 `resolveSurpriseContentScope(body.content_scope)`，并把 `content_scope` 写入 `source_pick_json.content_scope`、`meta.content_scope`，再透传给 `surprise-marketing-video`。数据库侧亦有实证：08-31 的任务 `source_pick_json->>'content_scope' = 'music'`，证明线上函数确实是含 category-first 逻辑的版本（早于 `ce9bb273` 的部署已包含该链路，`ce9bb273` 本身只改手机登录）。**问题不是版本没同步。**
+
+## 4. 建议的最小修复点（本轮不执行）
+
+1. `surprise-marketing-video` 的 `prepareAssetsForVideoAspect` 早停条件：当 `content_scope !== 'all'` 时，早停应改为「已找到门头 **且** 命中该品类的竖版素材 ≥ 3」，否则继续探测剩余批次。这是唯一必需的改动。
+2. 兜底：品类竖版为 0 时，先对**该品类关键词命中的全部素材**（不论是否已知尺寸）补探一次尺寸，再判 409；仍为 0 才返回提示。
+3. 可观测性：`clearFailedDrafts` 改为只清理 24 小时前的 failed 草稿，或删除前把 `error_message`/`content_scope` 落到一张审计表，否则失败永远无法复盘。
+4. 建议顺带补一次全量尺寸回填（54 张里 42 张无尺寸），可显著降低首次生成耗时与 409 概率。
+5. 关键日志缺失也应补：`surprise-marketing-video` 在返回 409 前打印 `shop_id / content_scope / pool / portrait / scoped` 计数。
+
+不涉及数据库结构、前端布局与 DeepSeek 提示词。
