@@ -110,3 +110,52 @@ export function filterAssetsForSurpriseContentScope<T extends SurpriseContentAss
   if (scope.key === 'all') return assets.slice();
   return assets.filter((asset) => scope.matches(asset));
 }
+
+const SCRIPT_SCOPE_RULES: Partial<Record<SurpriseContentScopeKey, {
+  required: Array<{ pattern: RegExp; message: string }>;
+  forbidden: RegExp;
+}>> = {
+  ceramics: {
+    required: [
+      { pattern: /瓷|杯|盘|碗|碟|餐具/, message: '必须明确讲瓷器餐具' },
+      { pattern: /(?:6|六)(?:[.]?9|块九)/, message: '必须讲全场 6.9 元起' },
+      { pattern: /日本|日瓷/, message: '必须讲日本瓷器' },
+      { pattern: /欧洲|欧瓷/, message: '必须讲欧洲瓷器' },
+      { pattern: /退休/, message: '必须自然邀请退休人群出来逛' },
+    ],
+    forbidden: /玩具|公仔|玩偶|铁皮小车|黑胶|唱片|首饰|项链|耳环/,
+  },
+  toys: {
+    required: [
+      { pattern: /玩具|公仔|玩偶|谷子|凯蒂猫|迪士尼|佐藤象/, message: '必须明确讲玩具公仔或中古谷子' },
+    ],
+    forbidden: /黑胶|唱片|音响|首饰|项链|耳环|退休/,
+  },
+  music: {
+    required: [
+      { pattern: /黑胶|唱片|磁带|音响|随身听|收音机/, message: '必须明确讲唱片或复古音响' },
+    ],
+    forbidden: /玩具|公仔|玩偶|谷子|首饰|项链|耳环|退休/,
+  },
+  accessories: {
+    required: [
+      { pattern: /首饰|配饰|耳饰|耳环|项链|胸针|戒指|试戴/, message: '必须明确讲首饰配饰与试戴挑选' },
+    ],
+    forbidden: /玩具|公仔|玩偶|谷子|黑胶|唱片|音响|退休/,
+  },
+};
+
+export function validateSurpriseContentScopeDialogue(
+  scopeKey: SurpriseContentScopeKey | null | undefined,
+  dialogue: unknown,
+): string[] {
+  const rules = scopeKey ? SCRIPT_SCOPE_RULES[scopeKey] : null;
+  if (!rules) return [];
+
+  const text = String(dialogue || '').replace(/\s+/g, '');
+  const errors = rules.required
+    .filter((rule) => !rule.pattern.test(text))
+    .map((rule) => rule.message);
+  if (rules.forbidden.test(text)) errors.push('脚本混入了其他商品品类，必须围绕所选品类完整重写');
+  return errors;
+}

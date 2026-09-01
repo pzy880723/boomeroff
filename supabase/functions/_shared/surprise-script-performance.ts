@@ -9,6 +9,7 @@ import {
   normalizeDeepSeekSurpriseScript,
   validateSurpriseScript,
 } from './surprise-script-policy.ts';
+import { validateSurpriseContentScopeDialogue } from './surprise-content-scope.ts';
 
 export const SURPRISE_MODEL_TIMEOUT_MS = 12_000;
 
@@ -78,14 +79,19 @@ export async function generateFastSurpriseScript(options: FastGenerationOptions)
           ageBucket: options.ageBucket || null,
           factContext: options.factContext,
         });
-        if (!validation.errors.length) {
+        const scopeErrors = validateSurpriseContentScopeDialogue(
+          options.contentScopeKey,
+          normalized.continuous_dialogue,
+        );
+        const validationErrors = [...validation.errors, ...scopeErrors];
+        if (!validationErrors.length) {
           script = normalized;
           provider = 'deepseek';
           providerReason = attempt === 0 ? 'generated' : 'repaired';
         } else {
-          lastErrors = validation.errors;
-          providerReason = `validation_failed:${validation.errors.join('|')}`;
-          console.warn(`[surprise-fast] DeepSeek candidate rejected attempt=${attempt + 1} model=${model}`, validation.errors);
+          lastErrors = validationErrors;
+          providerReason = `validation_failed:${validationErrors.join('|')}`;
+          console.warn(`[surprise-fast] DeepSeek candidate rejected attempt=${attempt + 1} model=${model}`, validationErrors);
         }
       }
       if (!script && lastCandidate) {
@@ -94,13 +100,18 @@ export async function generateFastSurpriseScript(options: FastGenerationOptions)
           ageBucket: options.ageBucket || null,
           factContext: options.factContext,
         });
-        if (!completedValidation.errors.length) {
+        const completedScopeErrors = validateSurpriseContentScopeDialogue(
+          options.contentScopeKey,
+          completed.continuous_dialogue,
+        );
+        const completedErrors = [...completedValidation.errors, ...completedScopeErrors];
+        if (!completedErrors.length) {
           script = completed;
           provider = 'deepseek';
           providerReason = 'locally_completed_after_validation';
         } else {
-          providerReason = `local_completion_failed:${completedValidation.errors.join('|')}`;
-          console.warn(`[surprise-fast] completed DeepSeek candidate rejected model=${model}`, completedValidation.errors);
+          providerReason = `local_completion_failed:${completedErrors.join('|')}`;
+          console.warn(`[surprise-fast] completed DeepSeek candidate rejected model=${model}`, completedErrors);
         }
       }
     } catch (error) {
@@ -165,6 +176,13 @@ const FALLBACK_BEAT_POOLS: string[][] = [
 ];
 
 const CATEGORY_FALLBACK_DIALOGUES: Partial<Record<NonNullable<FastFallbackOptions['contentScopeKey']>, string[]>> = {
+  ceramics: [
+    '退休以后别总闷在家里，这家瓷器店真值得逛',
+    '日本瓷器欧洲瓷器，一排排花色真的太漂亮了',
+    '杯盘碗碟款式多到真挑花眼，全场六块九起',
+    '慢慢拿起比较每一套都好看，价格还特别亲民',
+    '带上老朋友一起来店里慢慢逛，淘一套回家用',
+  ],
   toys: [
     '一进门先看玩具墙，童年快乐一下全回来了',
     '凯蒂猫迪士尼佐藤象，一排排根本看不过来',

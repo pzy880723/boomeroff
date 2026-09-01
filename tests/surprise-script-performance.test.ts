@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { buildFastSurpriseFallback, completeShortGeneratedScript } from '../supabase/functions/_shared/surprise-script-performance.ts';
 import { validateSurpriseScript } from '../supabase/functions/_shared/surprise-script-policy.ts';
+import { validateSurpriseContentScopeDialogue } from '../supabase/functions/_shared/surprise-content-scope.ts';
 
 test('快速兜底稿仍满足高密度五镜、字幕对齐和连续口播规则', () => {
   const script = buildFastSurpriseFallback({
@@ -65,7 +66,27 @@ test('每个商品品类的兜底稿都满足统一高密度脚本规则', () =>
       [],
       `${contentScopeKey} 兜底稿不合格`,
     );
+    assert.deepEqual(
+      validateSurpriseContentScopeDialogue(contentScopeKey, script.continuous_dialogue),
+      [],
+      `${contentScopeKey} 兜底稿发生品类跑题`,
+    );
   }
+});
+
+test('瓷器脚本缺少核心卖点或混入玩具时必须拒绝', () => {
+  assert.deepEqual(
+    validateSurpriseContentScopeDialogue(
+      'ceramics',
+      '退休以后出来逛逛，日本瓷器欧洲瓷器款式丰富，全场六块九起，杯盘碗碟慢慢挑选',
+    ),
+    [],
+  );
+  const errors = validateSurpriseContentScopeDialogue(
+    'ceramics',
+    '退休以后出来逛逛，日本瓷器欧洲瓷器很好看，全场六块九起，还有铁皮小车',
+  );
+  assert.match(errors.join('|'), /其他商品品类/);
 });
 
 test('DeepSeek 短稿不得机械补字，必须交给模型整句重写或完整兜底', () => {
