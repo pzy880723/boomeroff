@@ -1139,6 +1139,7 @@ def generate_cover(
             ),
         }
         selected_source: str
+        generated_candidate_count = 1
         if has_character_reference:
             _progress(progress_cb, 45, "lock_character", "正在锁定成片中的同一位主角")
             base = choose_cover_base_candidate(
@@ -1187,6 +1188,7 @@ def generate_cover(
                 )
             _progress(progress_cb, 68, "select_cover", "正在筛选最接近批准风格的封面")
             final_bytes = choose_cover_candidate(candidates)
+            generated_candidate_count = len(candidates)
         final_bytes = normalize_cover_png(final_bytes)
 
         cover_digest = hashlib.sha256(final_bytes).hexdigest()[:12]
@@ -1206,7 +1208,7 @@ def generate_cover(
             ),
             "delivery_video_url": f"{delivery_base_url}/{optimized_filename}",
             "reference_frame_count": len(references),
-            "candidate_count": len(candidates),
+            "candidate_count": generated_candidate_count,
             "cover_source": selected_source,
             "cover_style_key": style.key,
             "cover_style_label": style.label,

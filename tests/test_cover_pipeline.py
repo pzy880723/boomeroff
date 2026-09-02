@@ -614,6 +614,7 @@ class CoverPipelineTests(unittest.TestCase):
         source = inspect.getsource(generate_cover)
         self.assertNotIn("lock_storefront_opening(", source)
         self.assertIn("render_cover_text(", source)
+        self.assertIn('"candidate_count": generated_candidate_count', source)
         self.assertIn("build_cover_clients()", source)
         self.assertIn('"cover_source": selected_source', source)
 
