@@ -282,6 +282,29 @@ class CoverPipelineTests(unittest.TestCase):
         self.assertEqual(selected.index, 0)
         self.assertEqual(selected.timestamp_s, 0.4)
 
+    def test_expected_character_ignores_later_false_positive_face(self):
+        frames = [
+            FrameCandidate(
+                index=0,
+                timestamp_s=0.4,
+                image=np.full((120, 80, 3), 20, dtype=np.uint8),
+                face_boxes=[],
+                quality=0.5,
+            ),
+            FrameCandidate(
+                index=1,
+                timestamp_s=8.0,
+                image=np.full((120, 80, 3), 80, dtype=np.uint8),
+                face_boxes=[(20, 20, 30, 30)],
+                quality=0.95,
+            ),
+        ]
+
+        selected = choose_cover_base_candidate(frames, character_expected=True)
+
+        self.assertEqual(selected.index, 0)
+        self.assertEqual(selected.timestamp_s, 0.4)
+
     def test_character_expectation_comes_from_the_video_script(self):
         self.assertTrue(script_expects_character({"script": {"persona": {"gender": "male"}}}))
         self.assertTrue(

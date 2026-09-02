@@ -228,11 +228,13 @@ def choose_cover_base_candidate(
     frames = list(candidates)
     if not frames:
         raise CoverPipelineError("视频里没有可读取的画面，无法制作封面。")
+    if character_expected:
+        # 惊喜视频规定主角从第一帧入画。优先锁定开场主角，避免瓷器纹样等
+        # 被 Haar 误判成人脸后选到无人物商品帧。
+        return min(frames, key=lambda candidate: abs(candidate.timestamp_s - 0.6))
     people = [candidate for candidate in frames if candidate.face_boxes]
     if people:
         return max(people, key=lambda candidate: candidate.quality)
-    if character_expected:
-        return min(frames, key=lambda candidate: abs(candidate.timestamp_s - 0.6))
     return max(frames, key=lambda candidate: candidate.quality)
 
 
