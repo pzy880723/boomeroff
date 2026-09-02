@@ -64,6 +64,8 @@ class CoverWorkerContractTests(unittest.TestCase):
                 "variation_key": "variation-hash",
                 "cover_style_key": "warm_store_walk",
                 "cover_style_label": "暖色店内漫游",
+                "storefront_locked": False,
+                "storefront_reference_url": None,
             },
         )
 
@@ -79,6 +81,8 @@ class CoverWorkerContractTests(unittest.TestCase):
                 "variation_key": "variation-hash",
                 "cover_style_key": "warm_store_walk",
                 "cover_style_label": "暖色店内漫游",
+                "storefront_locked": False,
+                "storefront_reference_url": None,
             },
         )
 

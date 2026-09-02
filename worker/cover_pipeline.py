@@ -18,7 +18,7 @@ import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from worker.storefront_lock import lock_storefront_opening, resolve_storefront_reference
+from worker.storefront_lock import resolve_storefront_reference
 
 
 class CoverPipelineError(RuntimeError):
@@ -218,6 +218,34 @@ def choose_reference_candidates(
             if len(selected) == max_frames:
                 break
     return sorted(selected, key=lambda candidate: candidate.timestamp_s)
+
+
+def choose_cover_base_candidate(
+    candidates: Iterable[FrameCandidate],
+    *,
+    character_expected: bool = False,
+) -> FrameCandidate:
+    frames = list(candidates)
+    if not frames:
+        raise CoverPipelineError("视频里没有可读取的画面，无法制作封面。")
+    people = [candidate for candidate in frames if candidate.face_boxes]
+    if people:
+        return max(people, key=lambda candidate: candidate.quality)
+    if character_expected:
+        return min(frames, key=lambda candidate: abs(candidate.timestamp_s - 0.6))
+    return max(frames, key=lambda candidate: candidate.quality)
+
+
+def script_expects_character(job: dict[str, Any]) -> bool:
+    script = job.get("script") if isinstance(job.get("script"), dict) else {}
+    if isinstance(script.get("persona"), dict) or isinstance(script.get("character"), dict):
+        return True
+    payload = (
+        script.get("__render_payload")
+        if isinstance(script.get("__render_payload"), dict)
+        else {}
+    )
+    return "【唯一主角】" in str(payload.get("prompt") or "")
 
 
 def choose_scene_reference_candidates(
@@ -766,6 +794,19 @@ def render_cover_text(
         cursor_y = plate[3] + line_gap
 
     sticker_y = max(int(height * 0.67), cursor_y + line_gap * 2)
+    if badges:
+        plate_height = len(badges) * max(78, height // 13) + max(44, height // 28)
+        _draw_rough_plate(
+            draw,
+            (
+                margin_x // 2,
+                sticker_y - max(18, height // 90),
+                int(width * 0.82),
+                min(height - max(28, height // 50), sticker_y + plate_height),
+            ),
+            rng,
+            fill="#0A0807",
+        )
     for index, badge in enumerate(badges):
         _draw_fact_sticker(
             image,
@@ -781,6 +822,37 @@ def render_cover_text(
     output = io.BytesIO()
     image.save(output, format="PNG", optimize=True)
     return output.getvalue()
+
+
+def _frame_cover_bytes(candidate: FrameCandidate) -> bytes:
+    try:
+        rgb = cv2.cvtColor(candidate.image, cv2.COLOR_BGR2RGB)
+        frame = Image.fromarray(rgb)
+        cover = ImageOps.fit(
+            frame,
+            (1080, 1440),
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
+        output = io.BytesIO()
+        cover.save(output, format="PNG", optimize=True)
+        return output.getvalue()
+    except Exception as exc:
+        raise CoverPipelineError("视频主角帧无法转换为封面底图。") from exc
+
+
+def resolve_cover_font() -> Path:
+    candidates = [
+        Path(os.environ.get("COVER_HEADLINE_FONT_PATH", "")),
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"),
+        Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
+        Path("/System/Library/Fonts/STHeiti Medium.ttc"),
+        Path("/System/Library/Fonts/PingFang.ttc"),
+    ]
+    font = next((path for path in candidates if path.is_file()), None)
+    if font is None:
+        raise CoverPipelineError("服务器缺少可用的中文封面字体。")
+    return font
 
 
 def normalize_cover_png(image_bytes: bytes) -> bytes:
@@ -1022,15 +1094,10 @@ def generate_cover(
         delivery_source = video
         storefront_reference_url = resolve_storefront_reference(job)
         storefront_locked = False
+        storefront: Path | None = None
         if storefront_reference_url:
-            _progress(progress_cb, 11, "lock_storefront", "正在锁定真实门头首镜")
+            _progress(progress_cb, 11, "storefront_reference", "正在读取真实门头参考")
             storefront = _download(storefront_reference_url, temp_dir / "storefront-reference.jpg")
-            delivery_source = lock_storefront_opening(
-                video,
-                storefront,
-                temp_dir / "storefront-locked.mp4",
-            )
-            storefront_locked = True
         _progress(progress_cb, 15, "optimize_video", "正在优化手机端视频加载")
         optimized_filename = f"{_safe_name(job_id)}-faststart.mp4"
         optimized_video = optimize_video_for_streaming(
@@ -1042,53 +1109,27 @@ def generate_cover(
         optimized_public_path = optimized_dir / optimized_filename
         optimized_public_path.write_bytes(optimized_video.read_bytes())
         _progress(progress_cb, 20, "extract_character", "正在从视频提取主角参考帧")
-        references = select_reference_frames(delivery_source, temp_dir / "references")
-        has_character_reference = any(path.name.startswith("character-ref-") for path in references)
-        _progress(progress_cb, 45, "generate", "正在生成全新封面场景")
+        frame_candidates = _sample_video_frames(delivery_source)
+        references = select_reference_frames(
+            delivery_source,
+            temp_dir / "references",
+            sampler=lambda _video: frame_candidates,
+        )
+        character_expected = script_expects_character(job)
+        has_character_reference = (
+            any(path.name.startswith("character-ref-") for path in references)
+            or character_expected
+        )
         style = select_cover_style(payload, allow_people=has_character_reference)
-        style_reference = resolve_cover_style_reference()
-        candidate_count = max(
-            1,
-            min(4, int(os.environ.get("COVER_CANDIDATE_COUNT", "1"))),
-        )
-        prompt = build_cover_prompt(
-            payload,
-            style=style,
-            has_storefront_reference=storefront_locked,
-            has_character_reference=has_character_reference,
-        )
-        candidates: list[bytes] = []
-        selected_source = ""
-        provider_errors: list[str] = []
-        for source, client in build_cover_clients():
-            try:
-                candidates = generate_cover_candidates(
-                    client,
-                    prompt,
-                    references,
-                    style_reference,
-                    storefront_reference=(storefront if storefront_locked else None),
-                    count=candidate_count,
-                )
-                selected_source = source
-                break
-            except Exception as exc:
-                provider_errors.append(f"{source}: {exc}")
-        if not candidates:
-            raise CoverPipelineError(
-                "所有封面生成模型均失败：" + " | ".join(provider_errors)
-            )
-        _progress(progress_cb, 68, "select_cover", "正在筛选最接近批准风格的封面")
-        generated = choose_cover_candidate(candidates)
-
         generation = (
             job.get("cover_generation")
             if isinstance(job.get("cover_generation"), dict)
             else {}
         )
         copy = generation.get("copy") if isinstance(generation.get("copy"), dict) else {}
+        script = job.get("script") if isinstance(job.get("script"), dict) else {}
         normalized_copy = {
-            "headline": str(copy.get("headline") or "").strip(),
+            "headline": str(copy.get("headline") or script.get("title") or "中古好物太好逛").strip(),
             "subtitle": str(copy.get("subtitle") or "").strip(),
             "highlight_keyword": str(copy.get("highlight_keyword") or "").strip(),
             "badges": (
@@ -1097,9 +1138,56 @@ def generate_cover(
                 else []
             ),
         }
-        # GPT Image 2 直接生成包含准确标题、字幕和关键词的完整封面。
-        # 参考帧只用于人物身份，绝不把截图或程序排字当作最终封面。
-        final_bytes = normalize_cover_png(generated)
+        selected_source: str
+        if has_character_reference:
+            _progress(progress_cb, 45, "lock_character", "正在锁定成片中的同一位主角")
+            base = choose_cover_base_candidate(
+                frame_candidates,
+                character_expected=character_expected,
+            )
+            final_bytes = render_cover_text(
+                _frame_cover_bytes(base),
+                normalized_copy,
+                resolve_cover_font(),
+            )
+            selected_source = "video-frame-editorial"
+        else:
+            _progress(progress_cb, 45, "generate", "正在生成无人物商品封面")
+            style_reference = resolve_cover_style_reference()
+            candidate_count = max(
+                1,
+                min(4, int(os.environ.get("COVER_CANDIDATE_COUNT", "1"))),
+            )
+            prompt = build_cover_prompt(
+                payload,
+                style=style,
+                has_storefront_reference=storefront is not None,
+                has_character_reference=False,
+            )
+            candidates = []
+            selected_source = ""
+            provider_errors: list[str] = []
+            for source, client in build_cover_clients():
+                try:
+                    candidates = generate_cover_candidates(
+                        client,
+                        prompt,
+                        references,
+                        style_reference,
+                        storefront_reference=storefront,
+                        count=candidate_count,
+                    )
+                    selected_source = source
+                    break
+                except Exception as exc:
+                    provider_errors.append(f"{source}: {exc}")
+            if not candidates:
+                raise CoverPipelineError(
+                    "所有封面生成模型均失败：" + " | ".join(provider_errors)
+                )
+            _progress(progress_cb, 68, "select_cover", "正在筛选最接近批准风格的封面")
+            final_bytes = choose_cover_candidate(candidates)
+        final_bytes = normalize_cover_png(final_bytes)
 
         cover_digest = hashlib.sha256(final_bytes).hexdigest()[:12]
         filename = f"{_safe_name(job_id)}-cover-{cover_digest}.png"

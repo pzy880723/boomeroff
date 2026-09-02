@@ -22,11 +22,14 @@ from worker.cover_pipeline import (
     build_cover_prompt,
     build_faststart_command,
     build_cover_clients,
+    choose_cover_base_candidate,
     choose_cover_candidate,
     choose_reference_candidates,
     generate_cover_candidates,
     generate_cover,
     normalize_cover_png,
+    render_cover_text,
+    script_expects_character,
     select_reference_frames,
     select_cover_style,
 )
@@ -225,6 +228,68 @@ class CoverPipelineTests(unittest.TestCase):
         picked = choose_reference_candidates(frames, max_frames=3, min_gap_s=2.0)
 
         self.assertEqual([item.index for item in picked], [0, 2, 3])
+
+    def test_cover_base_uses_the_actual_video_character_frame(self):
+        frames = [
+            FrameCandidate(
+                index=0,
+                timestamp_s=0.5,
+                image=np.full((120, 80, 3), 20, dtype=np.uint8),
+                face_boxes=[],
+                quality=0.95,
+            ),
+            FrameCandidate(
+                index=1,
+                timestamp_s=4.0,
+                image=np.full((120, 80, 3), 80, dtype=np.uint8),
+                face_boxes=[(20, 20, 30, 30)],
+                quality=0.72,
+            ),
+            FrameCandidate(
+                index=2,
+                timestamp_s=8.0,
+                image=np.full((120, 80, 3), 120, dtype=np.uint8),
+                face_boxes=[(20, 20, 30, 30)],
+                quality=0.88,
+            ),
+        ]
+
+        selected = choose_cover_base_candidate(frames)
+
+        self.assertEqual(selected.index, 2)
+        self.assertEqual(selected.timestamp_s, 8.0)
+
+    def test_cover_base_uses_opening_character_frame_when_face_detector_misses(self):
+        frames = [
+            FrameCandidate(
+                index=0,
+                timestamp_s=0.4,
+                image=np.full((120, 80, 3), 20, dtype=np.uint8),
+                face_boxes=[],
+                quality=0.2,
+            ),
+            FrameCandidate(
+                index=1,
+                timestamp_s=5.0,
+                image=np.full((120, 80, 3), 80, dtype=np.uint8),
+                face_boxes=[],
+                quality=0.9,
+            ),
+        ]
+
+        selected = choose_cover_base_candidate(frames, character_expected=True)
+
+        self.assertEqual(selected.index, 0)
+        self.assertEqual(selected.timestamp_s, 0.4)
+
+    def test_character_expectation_comes_from_the_video_script(self):
+        self.assertTrue(script_expects_character({"script": {"persona": {"gender": "male"}}}))
+        self.assertTrue(
+            script_expects_character(
+                {"script": {"__render_payload": {"prompt": "【唯一主角】42岁家居主理人大叔"}}}
+            )
+        )
+        self.assertFalse(script_expects_character({"script": {"title": "纯商品展示"}}))
 
     def test_video_without_detectable_person_uses_spaced_scene_frames(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -545,12 +610,40 @@ class CoverPipelineTests(unittest.TestCase):
             self.assertEqual(image.format, "PNG")
             self.assertEqual(image.size, (16, 16))
 
-    def test_pipeline_uses_provider_fallback_without_pillow_overlay(self):
+    def test_pipeline_keeps_video_motion_and_locks_cover_to_actual_character(self):
         source = inspect.getsource(generate_cover)
-        self.assertNotIn("render_cover_text(", source)
-        self.assertNotIn('"overlay_copy"', source)
+        self.assertNotIn("lock_storefront_opening(", source)
+        self.assertIn("render_cover_text(", source)
         self.assertIn("build_cover_clients()", source)
         self.assertIn('"cover_source": selected_source', source)
+
+    def test_editorial_overlay_preserves_video_frame_as_cover_background(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            font_candidates = [
+                Path("/System/Library/Fonts/STHeiti Medium.ttc"),
+                Path("/System/Library/Fonts/PingFang.ttc"),
+            ]
+            font = next((path for path in font_candidates if path.is_file()), None)
+            if font is None:
+                self.skipTest("No CJK font available in this test environment")
+
+            source = io.BytesIO()
+            Image.new("RGB", (600, 800), (42, 84, 126)).save(source, format="PNG")
+            rendered = render_cover_text(
+                source.getvalue(),
+                {
+                    "headline": "进店就想翻",
+                    "subtitle": "中古好物太多了",
+                    "highlight_keyword": "中古好物",
+                    "badges": ["6.9元起"],
+                },
+                font,
+                font,
+            )
+
+            with Image.open(io.BytesIO(rendered)) as result:
+                self.assertEqual(result.size, (600, 800))
+                self.assertEqual(result.getpixel((590, 790)), (42, 84, 126))
 
 
 if __name__ == "__main__":
