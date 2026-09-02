@@ -25,10 +25,10 @@ from worker.cover_pipeline import (
     choose_cover_base_candidate,
     choose_cover_candidate,
     choose_reference_candidates,
+    ensure_opening_character_reference,
     generate_cover_candidates,
     generate_cover,
     normalize_cover_png,
-    render_cover_text,
     script_expects_character,
     select_reference_frames,
     select_cover_style,
@@ -313,6 +313,29 @@ class CoverPipelineTests(unittest.TestCase):
             )
         )
         self.assertFalse(script_expects_character({"script": {"title": "纯商品展示"}}))
+
+    def test_missing_face_detection_adds_opening_frame_as_character_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            scene = output_dir / "scene-ref-01.jpg"
+            Image.new("RGB", (12, 12), "navy").save(scene)
+            opening = FrameCandidate(
+                index=0,
+                timestamp_s=0.4,
+                image=np.full((40, 30, 3), 96, dtype=np.uint8),
+                face_boxes=[],
+                quality=0.2,
+            )
+
+            references = ensure_opening_character_reference(
+                [scene],
+                [opening],
+                output_dir,
+            )
+
+            self.assertEqual(references[0].name, "character-ref-opening.jpg")
+            self.assertTrue(references[0].is_file())
+            self.assertEqual(references[1], scene)
 
     def test_video_without_detectable_person_uses_spaced_scene_frames(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -636,38 +659,10 @@ class CoverPipelineTests(unittest.TestCase):
     def test_pipeline_keeps_video_motion_and_locks_cover_to_actual_character(self):
         source = inspect.getsource(generate_cover)
         self.assertNotIn("lock_storefront_opening(", source)
-        self.assertIn("render_cover_text(", source)
-        self.assertIn('"candidate_count": generated_candidate_count', source)
+        self.assertNotIn("render_cover_text(", source)
+        self.assertIn("ensure_opening_character_reference(", source)
         self.assertIn("build_cover_clients()", source)
         self.assertIn('"cover_source": selected_source', source)
-
-    def test_editorial_overlay_preserves_video_frame_as_cover_background(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            font_candidates = [
-                Path("/System/Library/Fonts/STHeiti Medium.ttc"),
-                Path("/System/Library/Fonts/PingFang.ttc"),
-            ]
-            font = next((path for path in font_candidates if path.is_file()), None)
-            if font is None:
-                self.skipTest("No CJK font available in this test environment")
-
-            source = io.BytesIO()
-            Image.new("RGB", (600, 800), (42, 84, 126)).save(source, format="PNG")
-            rendered = render_cover_text(
-                source.getvalue(),
-                {
-                    "headline": "进店就想翻",
-                    "subtitle": "中古好物太多了",
-                    "highlight_keyword": "中古好物",
-                    "badges": ["6.9元起"],
-                },
-                font,
-                font,
-            )
-
-            with Image.open(io.BytesIO(rendered)) as result:
-                self.assertEqual(result.size, (600, 800))
-                self.assertEqual(result.getpixel((590, 790)), (42, 84, 126))
 
 
 if __name__ == "__main__":

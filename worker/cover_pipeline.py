@@ -250,6 +250,23 @@ def script_expects_character(job: dict[str, Any]) -> bool:
     return "【唯一主角】" in str(payload.get("prompt") or "")
 
 
+def ensure_opening_character_reference(
+    references: list[Path],
+    candidates: Iterable[FrameCandidate],
+    output_dir: Path,
+    *,
+    max_frames: int = 4,
+) -> list[Path]:
+    if any(path.name.startswith("character-ref-") for path in references):
+        return references
+    opening = choose_cover_base_candidate(candidates, character_expected=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "character-ref-opening.jpg"
+    if not cv2.imwrite(str(path), opening.image, [cv2.IMWRITE_JPEG_QUALITY, 94]):
+        raise CoverPipelineError("成片开场主角参考帧写入失败。")
+    return [path, *references[: max(0, max_frames - 1)]]
+
+
 def choose_scene_reference_candidates(
     candidates: Iterable[FrameCandidate],
     *,
@@ -826,37 +843,6 @@ def render_cover_text(
     return output.getvalue()
 
 
-def _frame_cover_bytes(candidate: FrameCandidate) -> bytes:
-    try:
-        rgb = cv2.cvtColor(candidate.image, cv2.COLOR_BGR2RGB)
-        frame = Image.fromarray(rgb)
-        cover = ImageOps.fit(
-            frame,
-            (1080, 1440),
-            method=Image.Resampling.LANCZOS,
-            centering=(0.5, 0.5),
-        )
-        output = io.BytesIO()
-        cover.save(output, format="PNG", optimize=True)
-        return output.getvalue()
-    except Exception as exc:
-        raise CoverPipelineError("视频主角帧无法转换为封面底图。") from exc
-
-
-def resolve_cover_font() -> Path:
-    candidates = [
-        Path(os.environ.get("COVER_HEADLINE_FONT_PATH", "")),
-        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"),
-        Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
-        Path("/System/Library/Fonts/STHeiti Medium.ttc"),
-        Path("/System/Library/Fonts/PingFang.ttc"),
-    ]
-    font = next((path for path in candidates if path.is_file()), None)
-    if font is None:
-        raise CoverPipelineError("服务器缺少可用的中文封面字体。")
-    return font
-
-
 def normalize_cover_png(image_bytes: bytes) -> bytes:
     try:
         with Image.open(io.BytesIO(image_bytes)) as source:
@@ -1118,20 +1104,59 @@ def generate_cover(
             sampler=lambda _video: frame_candidates,
         )
         character_expected = script_expects_character(job)
-        has_character_reference = (
-            any(path.name.startswith("character-ref-") for path in references)
-            or character_expected
+        if character_expected:
+            references = ensure_opening_character_reference(
+                references,
+                frame_candidates,
+                temp_dir / "references",
+            )
+        has_character_reference = any(
+            path.name.startswith("character-ref-") for path in references
         )
+        _progress(progress_cb, 45, "generate", "正在按原有风格生成封面")
         style = select_cover_style(payload, allow_people=has_character_reference)
+        style_reference = resolve_cover_style_reference()
+        candidate_count = max(
+            1,
+            min(4, int(os.environ.get("COVER_CANDIDATE_COUNT", "1"))),
+        )
+        prompt = build_cover_prompt(
+            payload,
+            style=style,
+            has_storefront_reference=storefront is not None,
+            has_character_reference=has_character_reference,
+        )
+        candidates: list[bytes] = []
+        selected_source = ""
+        provider_errors: list[str] = []
+        for source, client in build_cover_clients():
+            try:
+                candidates = generate_cover_candidates(
+                    client,
+                    prompt,
+                    references,
+                    style_reference,
+                    storefront_reference=storefront,
+                    count=candidate_count,
+                )
+                selected_source = source
+                break
+            except Exception as exc:
+                provider_errors.append(f"{source}: {exc}")
+        if not candidates:
+            raise CoverPipelineError(
+                "所有封面生成模型均失败：" + " | ".join(provider_errors)
+            )
+        _progress(progress_cb, 68, "select_cover", "正在筛选最接近批准风格的封面")
+        generated = choose_cover_candidate(candidates)
         generation = (
             job.get("cover_generation")
             if isinstance(job.get("cover_generation"), dict)
             else {}
         )
         copy = generation.get("copy") if isinstance(generation.get("copy"), dict) else {}
-        script = job.get("script") if isinstance(job.get("script"), dict) else {}
         normalized_copy = {
-            "headline": str(copy.get("headline") or script.get("title") or "中古好物太好逛").strip(),
+            "headline": str(copy.get("headline") or "").strip(),
             "subtitle": str(copy.get("subtitle") or "").strip(),
             "highlight_keyword": str(copy.get("highlight_keyword") or "").strip(),
             "badges": (
@@ -1140,58 +1165,8 @@ def generate_cover(
                 else []
             ),
         }
-        selected_source: str
-        generated_candidate_count = 1
-        if has_character_reference:
-            _progress(progress_cb, 45, "lock_character", "正在锁定成片中的同一位主角")
-            base = choose_cover_base_candidate(
-                frame_candidates,
-                character_expected=character_expected,
-            )
-            final_bytes = render_cover_text(
-                _frame_cover_bytes(base),
-                normalized_copy,
-                resolve_cover_font(),
-            )
-            selected_source = "video-frame-editorial"
-        else:
-            _progress(progress_cb, 45, "generate", "正在生成无人物商品封面")
-            style_reference = resolve_cover_style_reference()
-            candidate_count = max(
-                1,
-                min(4, int(os.environ.get("COVER_CANDIDATE_COUNT", "1"))),
-            )
-            prompt = build_cover_prompt(
-                payload,
-                style=style,
-                has_storefront_reference=storefront is not None,
-                has_character_reference=False,
-            )
-            candidates = []
-            selected_source = ""
-            provider_errors: list[str] = []
-            for source, client in build_cover_clients():
-                try:
-                    candidates = generate_cover_candidates(
-                        client,
-                        prompt,
-                        references,
-                        style_reference,
-                        storefront_reference=storefront,
-                        count=candidate_count,
-                    )
-                    selected_source = source
-                    break
-                except Exception as exc:
-                    provider_errors.append(f"{source}: {exc}")
-            if not candidates:
-                raise CoverPipelineError(
-                    "所有封面生成模型均失败：" + " | ".join(provider_errors)
-                )
-            _progress(progress_cb, 68, "select_cover", "正在筛选最接近批准风格的封面")
-            final_bytes = choose_cover_candidate(candidates)
-            generated_candidate_count = len(candidates)
-        final_bytes = normalize_cover_png(final_bytes)
+        # 保留原有 AI 封面版式与提示词，只用开场成片帧锁定人物身份。
+        final_bytes = normalize_cover_png(generated)
 
         cover_digest = hashlib.sha256(final_bytes).hexdigest()[:12]
         filename = f"{_safe_name(job_id)}-cover-{cover_digest}.png"
@@ -1210,7 +1185,7 @@ def generate_cover(
             ),
             "delivery_video_url": f"{delivery_base_url}/{optimized_filename}",
             "reference_frame_count": len(references),
-            "candidate_count": generated_candidate_count,
+            "candidate_count": len(candidates),
             "cover_source": selected_source,
             "cover_style_key": style.key,
             "cover_style_label": style.label,
