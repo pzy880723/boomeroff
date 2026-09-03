@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BOOMER GO App Store Previews V2</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --paper: #f3efe7;
+      --paper-light: #fbf8f2;
+      --ink: #171716;
+      --muted: #706b64;
+      --red: #e30613;
+      --red-soft: #f7dfe0;
+      --line: rgba(23, 23, 22, .13);
+      --green: #188759;
+    }
+    html, body { margin: 0; background: #bdb9b2; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif; }
+    .board { display: flex; align-items: flex-start; gap: 48px; width: max-content; padding: 48px; }
+    .store-shot { position: relative; width: 1320px; height: 2868px; overflow: hidden; background: var(--paper); isolation: isolate; }
+    .store-shot::before { content: ""; position: absolute; inset: 0; z-index: -2; opacity: .22; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.12'/%3E%3C/svg%3E"); }
+    .store-shot::after { content: ""; position: absolute; top: 0; left: 0; width: 22px; height: 100%; background: var(--red); }
+    .top { position: relative; height: 750px; padding: 88px 88px 0 112px; }
+    .brand-row { display: flex; align-items: center; justify-content: space-between; }
+    .wordmark { width: 290px; height: auto; display: block; }
+    .index { font-family: Georgia, serif; font-size: 27px; letter-spacing: .12em; color: var(--muted); }
+    .rule { width: 104px; height: 8px; margin-top: 78px; background: var(--red); }
+    .kicker { margin-top: 27px; font-size: 24px; line-height: 1; letter-spacing: .28em; font-weight: 900; color: var(--red); }
+    h1 { max-width: 1060px; margin: 28px 0 0; font-size: 94px; line-height: 1.08; letter-spacing: -.058em; font-weight: 950; }
+    .subtitle { max-width: 1050px; margin: 28px 0 0; font-size: 34px; line-height: 1.5; color: var(--muted); font-weight: 650; }
+    .stage { position: absolute; left: 80px; right: 60px; top: 700px; bottom: -120px; }
+    .phone { position: relative; height: 100%; overflow: hidden; border: 7px solid var(--ink); border-radius: 100px 100px 0 0; background: #f5f3ef; box-shadow: 0 42px 90px rgba(24, 20, 16, .18); }
+    .phone::before { content: ""; position: absolute; z-index: 5; top: 21px; left: 50%; width: 250px; height: 61px; border-radius: 999px; background: #111; transform: translateX(-50%); }
+    .status { height: 106px; padding: 42px 64px 0; display: flex; align-items: center; justify-content: space-between; background: #fff; font-size: 24px; font-weight: 850; }
+    .appbar { height: 134px; padding: 0 46px; display: flex; align-items: center; gap: 22px; background: #fff; border-bottom: 1px solid var(--line); }
+    .back { font-size: 48px; line-height: 1; font-weight: 300; }
+    .app-title { font-size: 34px; font-weight: 930; letter-spacing: -.03em; }
+    .app-subtitle { display: block; margin-top: 5px; color: #999; font-size: 19px; font-weight: 600; }
+    .mini-mark { margin-left: auto; width: 188px; }
+    .screen { padding: 40px 42px 190px; }
+    .card { background: rgba(255,255,255,.92); border: 2px solid var(--line); border-radius: 34px; box-shadow: 0 9px 28px rgba(20,18,15,.055); }
+    .section-label { margin: 34px 6px 17px; font-size: 23px; font-weight: 900; letter-spacing: .12em; }
+    .muted { color: var(--muted); }
+    .store-picker { display: flex; align-items: center; padding: 25px 28px; }
+    .store-icon { width: 66px; height: 66px; display: grid; place-items: center; border-radius: 21px; background: var(--red); color: #fff; font-size: 25px; font-weight: 950; }
+    .store-copy { margin-left: 19px; }
+    .store-copy span { display: block; color: var(--muted); font-size: 19px; }
+    .store-copy b { display: block; margin-top: 4px; font-size: 27px; }
+    .chev { margin-left: auto; color: #999; font-size: 36px; }
+    .button { display: flex; align-items: center; justify-content: center; min-height: 82px; border-radius: 24px; background: var(--red); color: #fff; font-size: 26px; font-weight: 900; }
+    .button.secondary { background: #f2efea; color: var(--ink); }
+    .badge { display: inline-flex; align-items: center; padding: 10px 15px; border-radius: 999px; background: var(--red-soft); color: var(--red); font-size: 18px; font-weight: 900; }
+    .badge.green { background: #e5f3ec; color: var(--green); }
+    .nav { position: absolute; z-index: 4; left: 0; right: 0; bottom: 0; height: 155px; display: grid; grid-template-columns: repeat(4,1fr); align-items: center; background: rgba(255,255,255,.96); border-top: 1px solid var(--line); backdrop-filter: blur(20px); }
+    .nav-item { text-align: center; color: #888; font-size: 20px; font-weight: 750; }
+    .nav-icon { display: block; margin: 0 auto 8px; font-size: 27px; line-height: 1; }
+    .nav-item.active { color: var(--red); }
+
+    .hero-ops { padding: 38px; color: #fff; background: var(--ink); }
+    .hero-ops small { font-size: 19px; letter-spacing: .18em; color: rgba(255,255,255,.58); }
+    .hero-ops h2 { margin: 14px 0 0; font-size: 50px; line-height: 1.18; letter-spacing: -.04em; }
+    .hero-ops p { margin: 14px 0 0; color: rgba(255,255,255,.68); font-size: 23px; line-height: 1.5; }
+    .scope { display: flex; gap: 12px; margin-top: 29px; }
+    .scope span { padding: 12px 18px; border: 1px solid rgba(255,255,255,.17); border-radius: 999px; font-size: 18px; color: rgba(255,255,255,.72); }
+    .scope .selected { background: #fff; color: #111; }
+    .quick-strip { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-top: 20px; }
+    .quick-action { min-height: 178px; padding: 23px; }
+    .quick-action .qicon { width: 51px; height: 51px; display: grid; place-items: center; border-radius: 15px; background: var(--red-soft); color: var(--red); font-size: 21px; font-weight: 950; }
+    .quick-action b { display: block; margin-top: 24px; font-size: 22px; }
+    .quick-action span { display: block; margin-top: 7px; color: var(--muted); font-size: 17px; line-height: 1.35; }
+    .work-list { overflow: hidden; }
+    .work-row { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 18px; padding: 25px 27px; border-bottom: 1px solid var(--line); }
+    .work-row:last-child { border-bottom: 0; }
+    .work-avatar { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 19px; background: #f1eee8; font-size: 20px; font-weight: 900; }
+    .work-row b { display: block; font-size: 22px; }
+    .work-row span { display: block; margin-top: 6px; color: var(--muted); font-size: 17px; }
+
+    .director { overflow: hidden; }
+    .director-cover { height: 505px; position: relative; overflow: hidden; background: linear-gradient(180deg, rgba(0,0,0,.04), rgba(0,0,0,.77)), url('../../src/assets/banner-default.jpg') center/cover; }
+    .director-cover::after { content: "15 秒种草成片"; position: absolute; left: 31px; bottom: 34px; color: #fff; font-size: 42px; font-weight: 950; }
+    .video-pill { position: absolute; left: 28px; top: 28px; padding: 12px 17px; border-radius: 999px; color: #fff; background: var(--red); font-size: 18px; font-weight: 900; }
+    .play { position: absolute; inset: 0; display: grid; place-items: center; }
+    .play span { width: 104px; height: 104px; display: grid; place-items: center; padding-left: 7px; border-radius: 50%; background: rgba(255,255,255,.93); color: var(--red); font-size: 42px; }
+    .director-body { padding: 30px; }
+    .director-body h3 { margin: 0; font-size: 27px; }
+    .script-line { display: grid; grid-template-columns: 58px 1fr; gap: 13px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+    .script-line:last-child { border-bottom: 0; }
+    .script-index { color: var(--red); font-size: 20px; font-weight: 950; }
+    .script-line p { margin: 0; font-size: 20px; line-height: 1.5; }
+    .result-tools { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 13px; margin-top: 18px; }
+    .result-tool { padding: 20px 15px; text-align: center; background: #f5f2ed; border-radius: 20px; font-size: 19px; font-weight: 800; }
+    .process { display: flex; align-items: center; justify-content: space-between; padding: 22px 27px; margin-bottom: 20px; }
+    .process-steps { display: flex; gap: 7px; }
+    .process-steps i { width: 42px; height: 7px; border-radius: 99px; background: #ddd6cd; }
+    .process-steps i.on { background: var(--red); }
+
+    .capture { position: relative; height: 650px; overflow: hidden; border-radius: 40px; background: radial-gradient(ellipse at 47% 42%, #f1dbc0 0 10%, #ba7a47 11% 22%, #6d3f26 23% 39%, #211913 40% 100%); }
+    .capture::before { content: ""; position: absolute; inset: 70px; border: 3px solid rgba(255,255,255,.86); border-radius: 28px; }
+    .capture-label { position: absolute; left: 0; right: 0; bottom: 46px; color: white; text-align: center; font-size: 22px; font-weight: 850; }
+    .scan-line { position: absolute; left: 88px; right: 88px; top: 310px; height: 4px; background: var(--red); }
+    .story { margin-top: 20px; padding: 31px; }
+    .story h3 { margin: 13px 0 0; font-size: 37px; line-height: 1.2; }
+    .story p { margin: 17px 0 0; color: #58544f; font-size: 21px; line-height: 1.68; }
+    .story-tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+    .story-tags span { padding: 10px 14px; border-radius: 10px; background: #f2eee8; font-size: 17px; font-weight: 800; }
+    .recognition-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 14px; margin-top: 20px; }
+
+    .overview { padding: 32px; background: #fff; }
+    .overview-head { display: flex; align-items: flex-end; justify-content: space-between; }
+    .overview h2 { margin: 0; font-size: 40px; line-height: 1.2; }
+    .overview-meta { color: var(--muted); font-size: 19px; }
+    .overview-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 27px; }
+    .overview-metric { padding: 20px; border-radius: 21px; background: #f4f1ec; }
+    .overview-metric b { display: block; font-size: 34px; }
+    .overview-metric span { display: block; margin-top: 5px; color: var(--muted); font-size: 16px; }
+    .store-list { display: grid; gap: 15px; }
+    .store-row { padding: 25px; }
+    .store-row-top { display: flex; align-items: center; }
+    .store-rank { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: var(--ink); font-size: 18px; font-weight: 900; }
+    .store-row h3 { margin: 0 0 0 15px; font-size: 24px; }
+    .store-row .badge { margin-left: auto; }
+    .store-progress { height: 8px; margin-top: 21px; overflow: hidden; border-radius: 99px; background: #e7e1d8; }
+    .store-progress i { display: block; height: 100%; border-radius: inherit; background: var(--red); }
+    .store-foot { margin-top: 12px; display: flex; justify-content: space-between; color: var(--muted); font-size: 17px; }
+    .activity { overflow: hidden; }
+    .activity-row { display: flex; align-items: center; gap: 17px; padding: 23px 25px; border-bottom: 1px solid var(--line); }
+    .activity-row:last-child { border-bottom: 0; }
+    .activity-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--green); }
+    .activity-row b { display: block; font-size: 20px; }
+    .activity-row span { display: block; margin-top: 4px; color: var(--muted); font-size: 16px; }
+    .activity-time { margin-left: auto; color: #999; font-size: 16px; }
+
+    .publish-asset { display: flex; gap: 22px; padding: 25px; }
+    .publish-thumb { width: 182px; height: 240px; position: relative; overflow: hidden; flex: none; border-radius: 24px; background: linear-gradient(165deg, #ecb16e, #4d2d1d 60%, #14110f); }
+    .publish-thumb::after { content: "BOOMER\A 中古探店"; white-space: pre; position: absolute; left: 17px; bottom: 17px; color: #fff; font-size: 22px; line-height: 1.12; font-weight: 950; }
+    .publish-info { padding: 7px 0; }
+    .publish-info h3 { margin: 10px 0 0; font-size: 28px; line-height: 1.25; }
+    .publish-info p { margin: 12px 0 0; color: var(--muted); font-size: 18px; line-height: 1.5; }
+    .platform-list { overflow: hidden; }
+    .platform { display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 17px; padding: 24px 26px; border-bottom: 1px solid var(--line); }
+    .platform:last-child { border-bottom: 0; }
+    .platform-icon { width: 54px; height: 54px; display: grid; place-items: center; border-radius: 17px; color: white; background: #111; font-size: 19px; font-weight: 950; }
+    .platform-icon.red { background: var(--red); }
+    .platform-icon.green { background: #18a05e; }
+    .platform-icon.blue { background: #2876d8; }
+    .platform b { display: block; font-size: 21px; }
+    .platform span { display: block; margin-top: 5px; color: var(--muted); font-size: 16px; }
+    .publish-status { font-size: 18px; font-weight: 850; color: var(--green); }
+    .copy-block { padding: 27px; }
+    .copy-block h3 { margin: 0; font-size: 25px; }
+    .copy-block p { margin: 14px 0 0; color: #5f5a54; font-size: 19px; line-height: 1.65; }
+    .copy-tags { margin-top: 15px; color: var(--red); font-size: 18px; font-weight: 800; line-height: 1.55; }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <section class="store-shot" data-shot="01-unified-operations">
+      <header class="top"><div class="brand-row"><img class="wordmark" src="../../src/assets/boomer-go-wordmark.png" alt="BOOMER GO" /><span class="index">01 / 05</span></div><div class="rule"></div><div class="kicker">UNIFIED OPERATIONS</div><h1>一套系统，经营<br />每一家 BOOMER</h1><p class="subtitle">总部统筹 · 门店执行 · 加盟协作</p></header>
+      <div class="stage"><div class="phone">
+        <div class="status"><span>9:41</span><span>5G　100%</span></div><div class="appbar"><div><div class="app-title">营销中心</div><span class="app-subtitle">品牌 AI 营销工作台</span></div><img class="mini-mark" src="../../src/assets/boomer-go-wordmark.png" alt="" /></div>
+        <div class="screen"><div class="card store-picker"><div class="store-icon">店</div><div class="store-copy"><span>当前经营范围</span><b>全部门店与总部</b></div><span class="badge">可切换</span><div class="chev">›</div></div>
+          <div class="card hero-ops" style="margin-top:20px"><small>BOOMER · AI 营销助手</small><h2>今天的内容生产，<br />从这里开始</h2><p>统一查看总部与各门店的素材、视频和发布任务。</p><div class="scope"><span class="selected">全部范围</span><span>总部</span><span>直营门店</span><span>加盟门店</span></div></div>
+          <div class="section-label">快速开始</div><div class="quick-strip"><div class="card quick-action"><div class="qicon">拍</div><b>BOOMER 帮我拍</b><span>一句话生成种草视频</span></div><div class="card quick-action"><div class="qicon">识</div><b>拍照识物</b><span>沉淀商品故事</span></div><div class="card quick-action"><div class="qicon">发</div><b>内容分发</b><span>同步多个平台</span></div></div>
+          <div class="section-label">全局动态</div><div class="card work-list"><div class="work-row"><div class="work-avatar">总</div><div><b>总部品牌视频正在生成</b><span>脚本与封面已完成</span></div><span class="badge green">进行中</span></div><div class="work-row"><div class="work-avatar">沪</div><div><b>上海中信泰富店新增素材</b><span>门店实拍已同步到素材库</span></div><span class="chev">›</span></div><div class="work-row"><div class="work-avatar">温</div><div><b>温州朔门店发布任务完成</b><span>发布结果已回写</span></div><span class="chev">›</span></div></div>
+        </div><div class="nav"><div class="nav-item active"><span class="nav-icon">⌂</span>工作台</div><div class="nav-item"><span class="nav-icon">◉</span>识图</div><div class="nav-item"><span class="nav-icon">▣</span>素材</div><div class="nav-item"><span class="nav-icon">◎</span>我的</div></div>
+      </div></div>
+    </section>
+
+    <section class="store-shot" data-shot="02-ai-marketing">
+      <header class="top"><div class="brand-row"><img class="wordmark" src="../../src/assets/boomer-go-wordmark.png" alt="BOOMER GO" /><span class="index">02 / 05</span></div><div class="rule"></div><div class="kicker">AI MARKETING</div><h1>一句话，拍出<br />门店种草视频</h1><p class="subtitle">脚本、画面、封面与发布文案自动完成</p></header>
+      <div class="stage"><div class="phone">
+        <div class="status"><span>9:41</span><span>5G　100%</span></div><div class="appbar"><span class="back">‹</span><div><div class="app-title">BOOMER 帮我拍</div><span class="app-subtitle">上海中信泰富店 · 全品类</span></div><img class="mini-mark" src="../../src/assets/boomer-go-wordmark.png" alt="" /></div>
+        <div class="screen"><div class="card process"><div><b style="font-size:23px">成片已完成</b><div class="muted" style="font-size:17px;margin-top:6px">脚本、视频、封面与文案已准备</div></div><div class="process-steps"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+          <div class="card director"><div class="director-cover"><span class="video-pill">1080P · 9:16</span><div class="play"><span>▶</span></div></div><div class="director-body"><h3>上海旅行隐藏副本</h3><div class="script-line"><span class="script-index">01</span><p>真实门头第一秒出现，人物边走边说，直接带观众进店。</p></div><div class="script-line"><span class="script-index">02</span><p>快速扫过瓷器、玩具与黑胶，紧凑对白连续种草。</p></div><div class="script-line"><span class="script-index">03</span><p>价格、地址与营业信息清楚落版，完成到店号召。</p></div><div class="result-tools"><div class="result-tool">下载视频</div><div class="result-tool">保存封面</div><div class="result-tool">复制文案</div></div></div></div><div class="button" style="margin-top:20px">去内容分发中心</div>
+        </div><div class="nav"><div class="nav-item"><span class="nav-icon">⌂</span>工作台</div><div class="nav-item active"><span class="nav-icon">✦</span>AI 营销</div><div class="nav-item"><span class="nav-icon">▣</span>素材</div><div class="nav-item"><span class="nav-icon">◎</span>我的</div></div>
+      </div></div>
+    </section>
+
+    <section class="store-shot" data-shot="03-product-recognition">
+      <header class="top"><div class="brand-row"><img class="wordmark" src="../../src/assets/boomer-go-wordmark.png" alt="BOOMER GO" /><span class="index">03 / 05</span></div><div class="rule"></div><div class="kicker">PRODUCT INTELLIGENCE</div><h1>拍一下，沉淀<br />每件好物的故事</h1><p class="subtitle">识别商品 · 生成内容 · 归档素材</p></header>
+      <div class="stage"><div class="phone">
+        <div class="status"><span>9:41</span><span>5G　100%</span></div><div class="appbar"><span class="back">‹</span><div><div class="app-title">AI 拍照识物</div><span class="app-subtitle">连续拍摄，自动进入识别队列</span></div><span class="badge green" style="margin-left:auto">已识别</span></div>
+        <div class="screen"><div class="capture"><div class="scan-line"></div><div class="capture-label">正在识别中古陶瓷器物</div></div><div class="card story"><span class="badge">商品故事已生成</span><h3>昭和手绘花纹陶瓷杯</h3><p>温润釉色与细腻手绘保留了旧时代的生活气息。它不只是日常器物，更像一段从日本家庭餐桌流转而来的时间记忆，适合收藏，也适合继续使用。</p><div class="story-tags"><span>日本中古</span><span>昭和风格</span><span>手绘陶瓷</span><span>生活器物</span></div></div><div class="recognition-actions"><div class="button secondary">继续拍摄</div><div class="button">保存到素材库</div></div></div>
+        <div class="nav"><div class="nav-item"><span class="nav-icon">⌂</span>工作台</div><div class="nav-item active"><span class="nav-icon">◉</span>识图</div><div class="nav-item"><span class="nav-icon">▣</span>素材</div><div class="nav-item"><span class="nav-icon">◎</span>我的</div></div>
+      </div></div>
+    </section>
+
+    <section class="store-shot" data-shot="04-multi-store-collaboration">
+      <header class="top"><div class="brand-row"><img class="wordmark" src="../../src/assets/boomer-go-wordmark.png" alt="BOOMER GO" /><span class="index">04 / 05</span></div><div class="rule"></div><div class="kicker">MULTI-STORE COLLABORATION</div><h1>总部与门店，<br />实时协同</h1><p class="subtitle">任务、素材与经营进度清晰可见</p></header>
+      <div class="stage"><div class="phone">
+        <div class="status"><span>9:41</span><span>5G　100%</span></div><div class="appbar"><span class="back">‹</span><div><div class="app-title">多店协作</div><span class="app-subtitle">总部 · 直营 · 加盟统一视图</span></div><img class="mini-mark" src="../../src/assets/boomer-go-wordmark.png" alt="" /></div>
+        <div class="screen"><div class="card overview"><div class="overview-head"><h2>今日协作<br />一目了然</h2><span class="overview-meta">全部门店　⌄</span></div><div class="overview-grid"><div class="overview-metric"><b>总部</b><span>品牌内容</span></div><div class="overview-metric"><b>直营</b><span>门店执行</span></div><div class="overview-metric"><b>加盟</b><span>协同运营</span></div></div></div>
+          <div class="section-label">门店进度</div><div class="store-list"><div class="card store-row"><div class="store-row-top"><div class="store-rank">总</div><h3>BOOMER 总部</h3><span class="badge green">运行中</span></div><div class="store-progress"><i style="width:88%"></i></div><div class="store-foot"><span>品牌素材与自动化任务</span><span>查看详情 ›</span></div></div><div class="card store-row"><div class="store-row-top"><div class="store-rank">沪</div><h3>上海中信泰富店</h3><span class="badge">有新素材</span></div><div class="store-progress"><i style="width:72%"></i></div><div class="store-foot"><span>门店实拍与营销视频</span><span>查看详情 ›</span></div></div><div class="card store-row"><div class="store-row-top"><div class="store-rank">温</div><h3>温州朔门店</h3><span class="badge green">已同步</span></div><div class="store-progress"><i style="width:61%"></i></div><div class="store-foot"><span>本地素材与发布任务</span><span>查看详情 ›</span></div></div></div>
+          <div class="section-label">最新动态</div><div class="card activity"><div class="activity-row"><i class="activity-dot"></i><div><b>上海门店新增一组瓷器素材</b><span>已自动归入对应门店素材库</span></div><span class="activity-time">刚刚</span></div><div class="activity-row"><i class="activity-dot"></i><div><b>温州门店视频生成完成</b><span>封面与发布文案同步完成</span></div><span class="activity-time">8 分钟</span></div></div>
+        </div><div class="nav"><div class="nav-item active"><span class="nav-icon">⌂</span>工作台</div><div class="nav-item"><span class="nav-icon">◉</span>识图</div><div class="nav-item"><span class="nav-icon">▣</span>素材</div><div class="nav-item"><span class="nav-icon">◎</span>我的</div></div>
+      </div></div>
+    </section>
+
+    <section class="store-shot" data-shot="05-omnichannel-publishing">
+      <header class="top"><div class="brand-row"><img class="wordmark" src="../../src/assets/boomer-go-wordmark.png" alt="BOOMER GO" /><span class="index">05 / 05</span></div><div class="rule"></div><div class="kicker">OMNICHANNEL PUBLISHING</div><h1>好内容，一键发到<br />所有平台</h1><p class="subtitle">账号统一管理 · 发布状态实时追踪</p></header>
+      <div class="stage"><div class="phone">
+        <div class="status"><span>9:41</span><span>5G　100%</span></div><div class="appbar"><span class="back">‹</span><div><div class="app-title">内容分发中心</div><span class="app-subtitle">新建发布 · 上海中信泰富店</span></div><span class="badge green" style="margin-left:auto">4 个账号在线</span></div>
+        <div class="screen"><div class="card publish-asset"><div class="publish-thumb"></div><div class="publish-info"><span class="badge">发布素材</span><h3>中信泰富店中古淘货攻略</h3><p>1080P · 15 秒 · 视频与封面已准备</p><div class="muted" style="font-size:17px;margin-top:18px">素材、文案和门店信息将一并发布</div></div></div>
+          <div class="section-label">选择发布平台</div><div class="card platform-list"><div class="platform"><div class="platform-icon red">小</div><div><b>小红书</b><span>上海中信泰富店 · 主账号</span></div><span class="publish-status">已选择</span></div><div class="platform"><div class="platform-icon">抖</div><div><b>抖音</b><span>上海中信泰富店 · 门店号</span></div><span class="publish-status">已选择</span></div><div class="platform"><div class="platform-icon green">视</div><div><b>视频号</b><span>BOOMER OFF 上海</span></div><span class="publish-status">已选择</span></div><div class="platform"><div class="platform-icon blue">快</div><div><b>快手</b><span>上海门店内容账号</span></div><span class="publish-status">已选择</span></div></div>
+          <div class="section-label">发布文案</div><div class="card copy-block"><h3>上海中古爱好者别错过</h3><p>走进 BOOMER OFF，像把东京与大阪的中古市集搬进了上海。瓷器、玩具、黑胶和首饰慢慢淘，每一次来都有新的发现。</p><div class="copy-tags">#上海探店　#中古杂货　#周末去哪儿</div></div><div class="button" style="margin-top:20px">立即发布到 4 个平台</div>
+        </div><div class="nav"><div class="nav-item"><span class="nav-icon">⌂</span>工作台</div><div class="nav-item"><span class="nav-icon">◉</span>识图</div><div class="nav-item"><span class="nav-icon">▣</span>素材</div><div class="nav-item active"><span class="nav-icon">↗</span>发布</div></div>
+      </div></div>
+    </section>
+  </main>
+</body>
+</html>
