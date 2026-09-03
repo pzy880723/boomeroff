@@ -55,6 +55,7 @@ import PublicAbout from "./pages/public/PublicAbout";
 import { PublicErrorBoundary } from "./components/system/PublicErrorBoundary";
 import { ScrollRestoration } from "./components/system/ScrollRestoration";
 import { RequirePhoneGate } from "./components/auth/RequirePhoneGate";
+import { PrivacyPolicy, Support } from "./pages/public/Legal";
 
 
 const ActivitiesMine = lazy(() => import("./pages/ActivitiesMine"));
@@ -164,6 +165,8 @@ const App = () => {
 
               {/* 火山真人认证 H5 回跳页(免登录) */}
               <Route path="/verify-callback" element={<VerifyCallback />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/support" element={<Support />} />
 
               {/* 游客版（免登录）—— 用静默 ErrorBoundary,顾客永远不会看到错误卡片 */}
               <Route

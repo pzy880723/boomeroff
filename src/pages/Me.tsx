@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Loader2, Camera, Star, Image, History as HistoryIcon, Lock, LogOut,
-  ChevronRight, Edit2, CalendarCheck, BookOpen, MessagesSquare, MapPin, Briefcase, Ticket, Megaphone, Clapperboard,
+  ChevronRight, Edit2, CalendarCheck, BookOpen, MessagesSquare, MapPin, Briefcase, Ticket, Megaphone, Clapperboard, ShieldCheck,
 } from 'lucide-react';
 import { APP_BRAND_LOGO, APP_BRAND_NAME, APP_BRAND_TAGLINE, APP_VERSION } from '@/assets/brand';
 import { Link } from 'react-router-dom';
@@ -271,6 +271,11 @@ export default function Me() {
             <span className="flex-1 text-sm text-left">修改密码</span>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </button>
+          <Link to="/support" className="flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
+            <ShieldCheck className="w-5 h-5 text-muted-foreground" />
+            <span className="flex-1 text-sm">隐私、帮助与账号注销</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </Link>
           <button onClick={signOut} className="w-full flex items-center gap-3 p-4 hover:bg-accent/10 transition-colors border-t border-border/60">
             <LogOut className="w-5 h-5 text-destructive" />
             <span className="flex-1 text-sm text-left text-destructive">退出登录</span>
