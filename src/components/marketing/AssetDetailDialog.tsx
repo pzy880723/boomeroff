@@ -697,7 +697,11 @@ export function AssetDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-md max-h-[85vh] overflow-y-auto"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <span className="font-display text-[11px] text-accent tracking-[0.18em]">

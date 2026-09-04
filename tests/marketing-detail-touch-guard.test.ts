@@ -6,6 +6,10 @@ const source = readFileSync(
   new URL('../src/pages/marketing/MarketingLibrary.tsx', import.meta.url),
   'utf8',
 );
+const detailSource = readFileSync(
+  new URL('../src/components/marketing/AssetDetailDialog.tsx', import.meta.url),
+  'utf8',
+);
 
 test('素材详情打开期间忽略 iOS 延迟触摸，避免切换到背后的卡片', () => {
   assert.match(source, /const detailTouchGuardRef = useRef<string \| null>\(null\)/);
@@ -19,4 +23,9 @@ test('关闭详情后延迟释放触摸锁，避免关闭按钮穿透并重新�
   assert.match(source, /detailTouchGuardRef\.current = null/);
   assert.match(source, /}, 650\)/);
   assert.match(source, /onOpenChange=\{\(nextOpen\) => !nextOpen && closeAssetDetail\(\)\}/);
+});
+
+test('iOS 原生视频控件不会被误判为点击弹窗外部', () => {
+  assert.match(detailSource, /onPointerDownOutside=\{\(event\) => event\.preventDefault\(\)\}/);
+  assert.match(detailSource, /onInteractOutside=\{\(event\) => event\.preventDefault\(\)\}/);
 });
