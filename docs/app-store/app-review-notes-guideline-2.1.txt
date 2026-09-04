@@ -1,4 +1,4 @@
-BOOMER GO 1.0.3 (build 5) has been tested on a physical iPhone 16 Pro Max running iOS 26.6.1. The attached recording starts from a cold launch and shows the normal review flow.
+BOOMER GO 1.0.3 (build 5) has been tested on a physical iPhone 16 Pro Max running iOS 26.6.1. Two physical-device recordings are attached: the overview starts from a cold launch, and the second recording demonstrates playback of a prepared completed marketing video.
 
 PURPOSE AND AUDIENCE
 BOOMER GO is a permission-controlled store operations and AI marketing workspace for authorized BOOMER OFF headquarters staff, employees, independently operated franchise stores, and other approved store members. It combines product recognition, training knowledge, store tasks, marketing production, asset management, and content publishing. Public App Store distribution is needed because authorized users belong to multiple independently operated franchise entities and install/update the app on their own iPhones. Business data still requires an approved account and store assignment.
@@ -29,4 +29,4 @@ Core authenticated features are consistent in every available region. The interf
 REGULATED CONTENT AND RIGHTS
 The app does not provide medical, financial, gambling, news, religious, or other regulated services. Baomu (Shanghai) Brand Management Co., Ltd. owns or is authorized to use the BOOMER OFF and BOOMER GO brand assets. Authorized store users provide their own product/store media for internal operations and authorized marketing.
 
-The attached physical-device recording shows cold launch, sign-in, assigned store, recognition, marketing/video assets, publishing, knowledge base, internal community, privacy/support, and account-deletion access.
+The overview recording shows cold launch with the review account already authenticated, the assigned store, AI recognition entry points, the knowledge base, Marketing Center, and content publishing. The second recording shows a prepared 15-second marketing video playing successfully in the asset library. Active username/password credentials are provided separately in the Sign-in Information fields; no SMS code is required.

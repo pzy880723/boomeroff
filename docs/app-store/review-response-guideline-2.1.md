@@ -4,20 +4,20 @@
 
 Hello App Review Team,
 
-Thank you for your message. We have tested BOOMER GO 1.0.3 (build 5) on a physical iPhone running the latest available iOS release and have attached a screen recording that begins with a cold launch and demonstrates the typical user flow.
+Thank you for your message. We have tested BOOMER GO 1.0.3 (build 5) on a physical iPhone 16 Pro Max running iOS 26.6.1. We have attached two physical-device recordings: the overview begins with a cold launch, and the second recording demonstrates playback of a prepared completed marketing video.
 
 ### 1. Physical-device screen recording
 
-The attached recording demonstrates:
+The attached recordings demonstrate:
 
 1. Cold launch of BOOMER GO.
-2. Sign-in with the review account supplied in App Review Information.
-3. The store dashboard and the current-store context.
-4. AI product recognition, including the camera/photo-library entry points and a completed recognition result.
-5. The Marketing Center, BOOMER video workflow, generated asset library, and content-publishing workflow.
-6. The knowledge base and store operations features.
-7. The authenticated internal community feed. Community content is restricted to authorized BOOMER OFF members and is moderated by users with the appropriate administrative permission.
-8. Privacy, support, and the in-app account-deletion request entry point under Me > Privacy, Help & Account Deletion.
+2. The authenticated store dashboard and current-store context.
+3. AI product recognition, including its camera and photo-library entry points.
+4. The product and training knowledge base.
+5. The Marketing Center, generated asset library, and content-publishing workflow.
+6. Playback of a prepared completed 15-second marketing video on the physical iPhone.
+
+The review account remains signed in during the cold-launch recording. The active username/password credentials are supplied separately in the Sign-in Information fields in App Store Connect, and no SMS code is required.
 
 The app has no paid content, subscriptions, or in-app purchases.
 
