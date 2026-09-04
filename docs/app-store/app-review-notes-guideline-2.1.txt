@@ -1,0 +1,32 @@
+BOOMER GO 1.0.3 (build 5) has been tested on a physical iPhone 16 Pro Max running iOS 26.6.1. The attached recording starts from a cold launch and shows the normal review flow.
+
+PURPOSE AND AUDIENCE
+BOOMER GO is a permission-controlled store operations and AI marketing workspace for authorized BOOMER OFF headquarters staff, employees, independently operated franchise stores, and other approved store members. It combines product recognition, training knowledge, store tasks, marketing production, asset management, and content publishing. Public App Store distribution is needed because authorized users belong to multiple independently operated franchise entities and install/update the app on their own iPhones. Business data still requires an approved account and store assignment.
+
+REVIEW ACCESS
+1. Launch the app and select username/password sign-in.
+2. Use the active credentials in the Sign-in Information fields. No SMS code is required.
+3. Home shows the assigned store and operational modules.
+4. AI Product Recognition: take a photo or choose one from Photos. Permissions are requested only after selecting those actions.
+5. Marketing Center: open BOOMER Video, Asset Library, and Content Publishing. Prepared completed assets are available, so review does not require waiting for an AI render.
+6. Open Knowledge Base for training/product knowledge.
+7. Open the authenticated internal community feed. It is limited to approved BOOMER OFF users; users with administrative moderation permission can remove inappropriate posts. It is not a public social network and does not currently provide user-to-user blocking.
+8. Open Me > Privacy, Help & Account Deletion for the privacy policy, support channel, and in-app account-deletion request entry point.
+
+No external hardware or sample files are required. The app has no paid content, subscriptions, in-app purchases, or external payment processor.
+
+EXTERNAL SERVICES
+- Lovable Cloud Supabase-compatible authentication, database, storage, realtime, and serverless functions.
+- Tencent Cloud web delivery, background workers, media processing/storage, and mainland-China SMS.
+- Volcengine Ark / Seedance for AI video generation.
+- DeepSeek for AI-assisted marketing scripts.
+- Apple Push Notification service for optional notifications.
+- User-selected social platforms for optional account connection/content publishing. These are not required to review the other features.
+
+REGIONAL BEHAVIOR
+Core authenticated features are consistent in every available region. The interface is currently Simplified Chinese and is designed for BOOMER OFF stores in mainland China. SMS login supports +86 numbers, but the supplied password login works from any region. Store addresses and content vary only with the account's assigned store.
+
+REGULATED CONTENT AND RIGHTS
+The app does not provide medical, financial, gambling, news, religious, or other regulated services. Baomu (Shanghai) Brand Management Co., Ltd. owns or is authorized to use the BOOMER OFF and BOOMER GO brand assets. Authorized store users provide their own product/store media for internal operations and authorized marketing.
+
+The attached physical-device recording shows cold launch, sign-in, assigned store, recognition, marketing/video assets, publishing, knowledge base, internal community, privacy/support, and account-deletion access.
