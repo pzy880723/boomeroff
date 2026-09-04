@@ -16,6 +16,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { Capacitor } from '@capacitor/core';
 
 
 /** 活泼版 tile —— 淡红圆底 + 品牌红粗线图标 + 一抹柠檬黄小重点。 */
@@ -101,6 +102,7 @@ function SortableTile({ id, editing, onHide }: TileProps) {
 }
 
 export function AppGrid() {
+  const isNativeApp = Capacitor.isNativePlatform();
   const [pref, setPref] = useState(() => readAppPref());
   const [editing, setEditing] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -113,10 +115,10 @@ export function AppGrid() {
   useEffect(() => { writeAppPref(pref); }, [pref]);
 
   const visible = useMemo(
-    () => pref.order.filter((id) => !pref.hidden.includes(id) && APP_ICON_REGISTRY[id]),
-    [pref],
+    () => pref.order.filter((id) => !pref.hidden.includes(id) && APP_ICON_REGISTRY[id] && (!isNativeApp || id !== 'community')),
+    [isNativeApp, pref],
   );
-  const hiddenIds = ALL_APP_IDS.filter((id) => !pref.order.includes(id) || pref.hidden.includes(id));
+  const hiddenIds = ALL_APP_IDS.filter((id) => (!isNativeApp || id !== 'community') && (!pref.order.includes(id) || pref.hidden.includes(id)));
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
   const onDragEnd = (e: DragEndEvent) => {

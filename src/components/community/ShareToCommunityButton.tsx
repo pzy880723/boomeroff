@@ -7,6 +7,7 @@ import { Share2, Check, Loader2 } from 'lucide-react';
 import type { ProductCategory } from '@/types';
 import { serializeTips, type SellingPoint, type TipsObj } from '@/lib/script';
 import { makeThumbnail } from '@/lib/imageThumb';
+import { Capacitor } from '@capacitor/core';
 
 interface ShareToCommunityButtonProps {
   productId: string;
@@ -40,6 +41,8 @@ export function ShareToCommunityButton({
   const { toast } = useToast();
   const [shared, setShared] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+
+  if (Capacitor.isNativePlatform()) return null;
 
   // 懒检查
   const ensureChecked = async () => {

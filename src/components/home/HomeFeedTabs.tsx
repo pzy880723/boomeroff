@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 import { thumbUrl } from '@/lib/imageUrl';
 import { CATEGORY_LABELS, type ProductCategory } from '@/types';
+import { Capacitor } from '@capacitor/core';
 
 type TabKey = 'my-kb' | 'community';
 
@@ -35,12 +36,13 @@ const PREF_KEY = 'home-feed-tab';
 const PAGE = 30;
 
 export function HomeFeedTabs() {
+  const isNativeApp = Capacitor.isNativePlatform();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>(() => {
     try {
       const v = localStorage.getItem(PREF_KEY);
-      return v === 'community' ? 'community' : 'my-kb';
+      return !Capacitor.isNativePlatform() && v === 'community' ? 'community' : 'my-kb';
     } catch { return 'my-kb'; }
   });
   const [loading, setLoading] = useState(false);
@@ -51,8 +53,12 @@ export function HomeFeedTabs() {
   const [postsDone, setPostsDone] = useState(false);
 
   useEffect(() => {
+    if (isNativeApp && tab !== 'my-kb') {
+      setTab('my-kb');
+      return;
+    }
     try { localStorage.setItem(PREF_KEY, tab); } catch { /* ignore */ }
-  }, [tab]);
+  }, [isNativeApp, tab]);
 
   // 首屏加载 — 优先用 snapshot 快出图, 再异步补最新数据
   useEffect(() => {
@@ -225,13 +231,15 @@ export function HomeFeedTabs() {
               tab === 'my-kb' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground',
             )}
           >我的知识</button>
-          <button
-            onClick={() => setTab('community')}
-            className={cn(
-              'px-3 h-7 rounded-full font-medium transition-colors',
-              tab === 'community' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground',
-            )}
-          >BOOMER 圈</button>
+          {!isNativeApp && (
+            <button
+              onClick={() => setTab('community')}
+              className={cn(
+                'px-3 h-7 rounded-full font-medium transition-colors',
+                tab === 'community' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground',
+              )}
+            >BOOMER 圈</button>
+          )}
         </div>
         {rightAction}
       </div>

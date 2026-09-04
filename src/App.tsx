@@ -12,6 +12,7 @@ import { lazyWithRetry as lazy } from "@/lib/lazyWithRetry";
 import Scan from "./pages/Scan";
 import { useEffect } from "react";
 import { loadPublicBaseUrl } from "@/lib/publicBaseUrl";
+import { Capacitor } from "@capacitor/core";
 
 // 非首屏路由全部懒加载，减小首包体积
 const OfficialLibrary = lazy(() => import("./pages/OfficialLibrary"));
@@ -96,6 +97,7 @@ function LegacyPublishRedirect() {
 }
 
 const App = () => {
+  const isNativeApp = Capacitor.isNativePlatform();
   useEffect(() => { void loadPublicBaseUrl(); }, []);
   return (
   <QueryClientProvider client={queryClient}>
@@ -117,7 +119,7 @@ const App = () => {
                 <Route path="/library" element={<OfficialLibrary />} />
                 <Route path="/my-library" element={<MyLibrary />} />
                 <Route path="/notifications" element={<Notifications />} />
-                <Route path="/community" element={<Community />} />
+                <Route path="/community" element={isNativeApp ? <Navigate to="/" replace /> : <Community />} />
                 <Route path="/me" element={<Me />} />
               </Route>
 
