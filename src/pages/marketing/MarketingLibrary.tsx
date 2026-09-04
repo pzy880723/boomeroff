@@ -43,6 +43,8 @@ export default function MarketingLibrary() {
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [detail, setDetail] = useState<any | null>(null);
+  const detailTouchGuardRef = useRef<string | null>(null);
+  const detailTouchReleaseTimerRef = useRef<number | null>(null);
   const [tab, setTab] = useState<KindTab>('all');
   const [uploadKind, setUploadKind] = useState<'photo' | 'copy' | 'video' | null>(null);
   const [characters, setCharacters] = useState<any[]>([]);
@@ -63,6 +65,33 @@ export default function MarketingLibrary() {
     } catch { return 'base'; }
   });
   useEffect(() => { try { localStorage.setItem('lib.imgSource', imgSource); } catch {} }, [imgSource]);
+
+  const openAssetDetail = (asset: any) => {
+    if (detailTouchGuardRef.current) return;
+    if (detailTouchReleaseTimerRef.current !== null) {
+      window.clearTimeout(detailTouchReleaseTimerRef.current);
+      detailTouchReleaseTimerRef.current = null;
+    }
+    detailTouchGuardRef.current = asset.id;
+    setDetail(asset);
+  };
+
+  const closeAssetDetail = () => {
+    setDetail(null);
+    if (detailTouchReleaseTimerRef.current !== null) {
+      window.clearTimeout(detailTouchReleaseTimerRef.current);
+    }
+    detailTouchReleaseTimerRef.current = window.setTimeout(() => {
+      detailTouchGuardRef.current = null;
+      detailTouchReleaseTimerRef.current = null;
+    }, 650);
+  };
+
+  useEffect(() => () => {
+    if (detailTouchReleaseTimerRef.current !== null) {
+      window.clearTimeout(detailTouchReleaseTimerRef.current);
+    }
+  }, []);
 
   const shopName = (id?: string | null) => shops.find((s) => s.id === id)?.name || '未分类';
 
@@ -687,7 +716,7 @@ export default function MarketingLibrary() {
                         <button
                           type="button"
                           key={it.id}
-                          onClick={() => { if (manageMode) toggleSel(it.id); else setDetail(it); }}
+                          onClick={() => { if (manageMode) toggleSel(it.id); else openAssetDetail(it); }}
                           className={[
                             'relative aspect-square rounded-md overflow-hidden bg-muted border transition-all',
                             manageMode && checked ? 'ring-2 ring-primary border-primary' : 'border-border hover:border-accent/50',
@@ -826,7 +855,7 @@ export default function MarketingLibrary() {
                   return (
                     <div
                       key={it.id}
-                      onClick={() => { if (manageMode) toggleSel(it.id); else setDetail(it); }}
+                      onClick={() => { if (manageMode) toggleSel(it.id); else openAssetDetail(it); }}
                       className={[
                         'bg-card rounded-[0.875rem] border shadow-sm p-3 flex gap-3 transition-colors cursor-pointer',
                         manageMode && checked ? 'border-accent/60 bg-accent/5' : 'border-accent/15 hover:border-accent/40',
@@ -880,7 +909,7 @@ export default function MarketingLibrary() {
       <AssetDetailDialog
         asset={detail}
         open={!!detail}
-        onOpenChange={(o) => !o && setDetail(null)}
+        onOpenChange={(nextOpen) => !nextOpen && closeAssetDetail()}
         onUpdated={(next) => {
           setItems((prev) => prev.map((it) => (it.id === next.id ? { ...it, ...next } : it)));
           setDetail(next);
