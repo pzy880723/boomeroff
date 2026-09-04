@@ -23,3 +23,11 @@ test('原生缓存下载期间忽略重复的 media error', () => {
   assert.match(source, /if \(nativePreparingRef\.current\) return;/);
   assert.match(source, /nativePreparingRef\.current = true/);
 });
+
+test('iOS 点击播放时保留封面按钮节点，避免触摸穿透到弹窗后的素材卡片', () => {
+  assert.doesNotMatch(source, /if \(!active\) \{[\s\S]*?return \(\s*<button/);
+  assert.match(source, /const handleActivate = \(event: React\.MouseEvent<HTMLButtonElement>\)/);
+  assert.match(source, /disabled=\{active && !guardingActivation\}/);
+  assert.match(source, /guardingActivation \? 'opacity-0 pointer-events-auto'/);
+  assert.match(source, /window\.setTimeout\(\(\) => setGuardingActivation\(false\), 450\)/);
+});

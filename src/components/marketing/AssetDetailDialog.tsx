@@ -25,10 +25,12 @@ function LazyVideoPlayer({
   const [autoPosterDone, setAutoPosterDone] = useState<boolean>(!!poster);
   const [nativePlaybackUrl, setNativePlaybackUrl] = useState<string | null>(null);
   const [preparingNativePlayback, setPreparingNativePlayback] = useState(false);
+  const [guardingActivation, setGuardingActivation] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const nativeCachePathRef = useRef<string | null>(null);
   const nativeAttemptRef = useRef(0);
   const nativePreparingRef = useRef(false);
+  const activationTimerRef = useRef<number | null>(null);
 
   useEffect(() => { setPosterUrl(poster); setAutoPosterDone(!!poster); }, [poster]);
   useEffect(() => {
@@ -36,6 +38,9 @@ function LazyVideoPlayer({
     const oldCachePath = nativeCachePathRef.current;
     nativeCachePathRef.current = null;
     nativePreparingRef.current = false;
+    if (activationTimerRef.current !== null) window.clearTimeout(activationTimerRef.current);
+    activationTimerRef.current = null;
+    setGuardingActivation(false);
     setNativePlaybackUrl(null);
     setPreparingNativePlayback(false);
     setVideoError(false);
@@ -46,6 +51,7 @@ function LazyVideoPlayer({
   }, [src]);
 
   useEffect(() => () => {
+    if (activationTimerRef.current !== null) window.clearTimeout(activationTimerRef.current);
     const cachePath = nativeCachePathRef.current;
     if (cachePath) {
       Filesystem.deleteFile({ path: cachePath, directory: Directory.Cache }).catch(() => {});
@@ -181,6 +187,17 @@ function LazyVideoPlayer({
     setVideoError(true);
   };
 
+  const handleActivate = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (active) return;
+    setGuardingActivation(true);
+    setActive(true);
+    void videoRef.current?.play().catch(() => {});
+    if (activationTimerRef.current !== null) window.clearTimeout(activationTimerRef.current);
+    activationTimerRef.current = window.setTimeout(() => setGuardingActivation(false), 450);
+  };
+
   if (!src) {
     return (
       <div className="w-full rounded-lg bg-muted aspect-[9/16] max-h-[70vh] flex items-center justify-center text-xs text-muted-foreground">
@@ -195,33 +212,6 @@ function LazyVideoPlayer({
         <span className="text-sm">视频源已过期</span>
         <span>请点右下方「重新生成」再来一版</span>
       </div>
-    );
-  }
-
-  if (!active) {
-    return (
-      <button
-        type="button"
-        onClick={() => setActive(true)}
-        className="relative w-full rounded-lg bg-black overflow-hidden aspect-[9/16] max-h-[70vh] flex items-center justify-center"
-      >
-        {posterUrl ? (
-          <img
-            src={posterUrl}
-            alt=""
-            className="absolute inset-0 w-full h-full object-contain transition-opacity duration-200"
-            loading="eager"
-            decoding="async"
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore — 小写属性对所有 React 版本都安全
-            fetchpriority="high"
-            onError={() => setPosterUrl(undefined)}
-          />
-        ) : null}
-        <span className="relative w-14 h-14 rounded-full bg-black/55 backdrop-blur flex items-center justify-center">
-          <Play className="w-7 h-7 text-white fill-white" />
-        </span>
-      </button>
     );
   }
 
@@ -254,32 +244,62 @@ function LazyVideoPlayer({
   }
 
   return (
-    <div className="relative">
+    <div className="relative w-full rounded-lg bg-black overflow-hidden aspect-[9/16] max-h-[70vh]">
       <video
         key={`${nativePlaybackUrl || src}#${srcNonce}`}
         ref={videoRef}
         src={nativePlaybackUrl || src}
-        controls
+        controls={active}
         playsInline
-        preload="metadata"
+        preload="none"
         poster={posterUrl}
         onError={handleVideoError}
         onTimeUpdate={handleTimeUpdate}
-        className="w-full rounded-lg bg-black"
+        className="absolute inset-0 w-full h-full object-contain rounded-lg bg-black"
         crossOrigin={nativePlaybackUrl ? undefined : 'anonymous'}
       />
+      <button
+        type="button"
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+        onClick={handleActivate}
+        disabled={active && !guardingActivation}
+        aria-hidden={active && !guardingActivation}
+        className={`absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-200 ${
+          active
+            ? guardingActivation ? 'opacity-0 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            : 'opacity-100 pointer-events-auto'
+        }`}
+      >
+        {posterUrl ? (
+          <img
+            src={posterUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-contain"
+            loading="eager"
+            decoding="async"
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore — 小写属性对所有 React 版本都安全
+            fetchpriority="high"
+            onError={() => setPosterUrl(undefined)}
+          />
+        ) : null}
+        <span className="relative w-14 h-14 rounded-full bg-black/55 backdrop-blur flex items-center justify-center">
+          <Play className="w-7 h-7 text-white fill-white" />
+        </span>
+      </button>
       {preparingNativePlayback && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-white text-xs">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 text-white text-xs">
           <SpinTop className="w-4 h-4 mr-2 animate-spin" />
           正在准备手机播放
         </div>
       )}
-      {assetId && (
+      {assetId && active && (
         <button
           type="button"
           onClick={() => captureAndUpload()}
           disabled={savingPoster}
-          className="absolute top-2 right-2 inline-flex items-center gap-1 px-2.5 h-7 rounded-full bg-black/55 backdrop-blur text-white text-[11px] hover:bg-black/70 disabled:opacity-60"
+          className="absolute z-20 top-2 right-2 inline-flex items-center gap-1 px-2.5 h-7 rounded-full bg-black/55 backdrop-blur text-white text-[11px] hover:bg-black/70 disabled:opacity-60"
           title="用当前画面作为视频封面"
         >
           {savingPoster ? <SpinTop className="w-3 h-3 animate-spin" /> : <ImageDown className="w-3 h-3" />}
