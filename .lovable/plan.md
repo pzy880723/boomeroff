@@ -51,22 +51,39 @@
 
 原则：门店范围由 **ERP 作为唯一权威**下发，GO 侧不新建后台管理界面，只消费。
 
-**A. 身份桥接（读）**
-- 扩展 `erp_user_links` 的语义即可，不新增身份表：`roles[]` 承载 ERP 角色（含 HQ 角色码），`shops` jsonb 承载可见门店列表，并新增一个显式的全域标记（如 `scope: 'hq' | 'shops'`），避免用"空数组"歧义表达总部。
-- 增加一个 SECURITY DEFINER 只读函数 `current_user_shop_scope()`，返回 `{is_hq boolean, shop_ids uuid[]}`：HQ → is_hq=true；店长/店员 → ERP 下发门店 ∪ `staff_profiles.shop_id` ∪ `allowed_shop_ids`。所有 RLS 与 bootstrap 统一改用它，`current_user_shop_id()` 保留为兼容包装。
+**A. 身份桥接（读）— ERP 是唯一权限权威**
+- 权限范围只认 ERP 下发：`erp_user_links.roles[]` 承载 ERP 角色码，`shops` jsonb 承载已授权门店，并新增显式范围标记（如 `scope: 'hq' | 'shops'`），不用"空数组"歧义表达总部。
+- 明确否决"并集扩权"：**不采用** ERP 门店 ∪ `staff_profiles.shop_id` ∪ `allowed_shop_ids` 的自动合并。GO 本地的 `staff_profiles.shop_id` / `allowed_shop_ids` 仅作为**待迁移证据**保留（可在管理视图中列为"待 ERP 确认"），绝不隐式授予销售或排班的读取权限。
+- 新增 SECURITY DEFINER 只读函数 `current_user_shop_scope()`，返回 `{ scope: 'hq'|'shops', shop_ids uuid[] }`，**数据来源仅为 ERP 授权映射**。ERP 未下发映射时返回空范围（fail-closed），由前端提示"权限未同步，请在 ERP 配置"，而不是回退到旧资料。
+- 不为读取身份而开放 `erp_user_links` 整表：保持零策略 + service_role，仅通过上述 SECURITY DEFINER 函数暴露**最小非敏感字段**（scope、shop_ids、角色码）。`phone`、`display_name`、`permissions[]` 原文等个人/敏感字段不进入客户端。
 
-**B. 当天有效门店上下文（读）**
+**B. 当天有效门店上下文（读）— 不做归属回退**
 - `app_bootstrap_v1` 的 `shifts` 增加 `shop_id`、`shop_name`、`start_time`、`end_time`。
-- 新增返回块 `shop_context`：`{ is_hq, home_shop_id, today_shop_ids[], effective_shop_id }`，其中 `effective_shop_id` = 当天排班门店优先，无排班时回退 `staff_profiles.shop_id`，HQ 则为 null 且 `is_hq=true`（前端据此渲染"总部/全部门店"而非"未分配门店"）。
-- 班次定义、活动、OKR 的过滤条件从 `= current_shop_id` 改为 `is_hq OR shop_id = ANY(scope)`。
+- 新增返回块 `shop_context`：`{ scope, authorized_shop_ids[], today_shop_ids[], today_state, effective_shop_id }`。
+- `today_state` 必须是显式枚举，**无排班时绝不把 `staff_profiles.shop_id` 当作今日工作门店**：
+  - `scheduled` — 当天有排班，`effective_shop_id` = 排班门店（多店时 `today_shop_ids` 给全量，`effective_shop_id` 为 null，由 UI 让本人选择）。
+  - `unscheduled` — 当天无排班（含休息日），`effective_shop_id` = null。
+  - `rest` — 当天命中 `staff_day_offs` 或节假日全员休。
+  - `hq` — 总部范围，无固定门店，看全部授权门店。
+  - `unmapped` — ERP 未下发授权映射，属错误态，前端明示而非静默降级。
+- `staff_profiles.shop_id` 在返回体中仅作为 `home_shop_hint`（历史资料）出现，标注为非授权、非今日上下文，供迁移核对；任何过滤逻辑不得使用它。
+- 班次定义、活动、OKR 的过滤条件从 `= current_shop_id` 改为按 `scope`：HQ → 全部授权门店；其余 → `shop_id = ANY(authorized_shop_ids)`；`unmapped` → 不返回门店数据。
+- 排班上下文与动作权限分离：`shop_context` 只回答"今天在哪家店/能看哪些店"，能否写排班、能否看销售仍由 ERP 权限位单独判定。
 
-**C. 跨店排班可行性前提（需 ERP 侧确认后才谈改造）**
-- 必须先决定是否允许同一人同日跨店/多班。若允许，`UNIQUE (work_date, user_id)` 必须让位给 `(work_date, user_id, shop_id, shift_code)`，并补"同日时间区间不重叠"的校验。
-- 跨午夜班次需要显式语义：建议增加 `crosses_midnight boolean`（或以 `end_time <= start_time` 约定并在所有下游统一解释），当前 0 行跨午夜，是最低成本的定义时机。
+**C. HQ 范围与动作权限分离**
+- 总部**不等于**超级管理员。需要两个正交维度：范围（HQ 全域 / 指定门店集合）与动作权限（读销售、读排班、写排班、写门店……）。
+- 现状是靠 legacy `has_role(auth.uid(),'admin')` 绕过门店条件，等于把范围和最高动作权限绑死，必须拆开：RLS 条件形如 `范围命中 AND 动作权限命中`，HQ 只放宽范围，不放宽动作。
+- `area_manager` 同理：辖区门店集合由 ERP 下发，动作权限单独判定。
 
-**D. 归属 ERP 而非 GO 的事项**
-- 角色与 HQ 范围的授予、门店归属、区域经理的辖区定义，全部在 ERP 维护并通过 SSO/JWT 与 `erp_user_links` 同步；GO 不新建角色后台，`/portal` 只做只读展示。
-- GO 侧仅需消费三个只读原语：`is_erp_user()`、`current_user_shop_scope()`、`app_bootstrap_v1.shop_context`。
+**D. 跨店排班改造边界（本轮必做 / 待答）**
+- **必做（无损）**：现有 395 条排班一行不改、不删；仅让"按日期读取跨店排班"成为可能——即 bootstrap 与查询按 `work_date` + 授权门店集合取数，而不是按 `staff_profiles.shop_id` 过滤。这不需要改任何约束。
+- **待你回答**：是否允许同一人同日多店/多班。当前 `UNIQUE (work_date, user_id)` 结构性禁止；若要允许，需改为 `(work_date, user_id, shop_id, shift_code)` 并补同日时间区间不重叠校验。**在你答复前不改约束。**
+- 跨午夜语义仍未定义（当前 0 行 `end_time <= start_time`），建议在改动前显式定义（新增 `crosses_midnight` 或统一约定），否则一旦录入将被下游误判。
+
+**E. 归属 ERP 而非 GO 的事项**
+- 角色授予、HQ 范围、门店归属、区域辖区，全部在 ERP 维护，经 SSO/JWT 与 `erp_user_links` 同步；GO 不新建角色后台，`/portal` 只读展示。
+- GO 侧仅消费三个只读原语：`is_erp_user()`、`current_user_shop_scope()`、`app_bootstrap_v1.shop_context`。
+
 
 ## 4. 本条未做
 
