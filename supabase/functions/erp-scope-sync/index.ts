@@ -97,59 +97,26 @@ Deno.serve(async (req) => {
   // 1) 拉取（ERP 用调用者的 GO token 自行核验本人身份）
   let scopeJson: unknown = null;
   let failCode = "";
-  try {
-    const controller = new AbortController();
-    // 超时必须覆盖「握手 + 完整 body 读取」，慢 body 同样要中断
-    const timer = setTimeout(() => controller.abort(), ERP_TIMEOUT_MS);
-    try {
-      const resp = await fetch(ERP_SCOPE_URL, {
-        method: "GET",
-        redirect: "error", // 固定 origin，禁止任何跳转（避免 token 外泄）
-        headers: {
-          Authorization: authHeader,
-          Accept: "application/json",
+  {
+    const pull = decidePullOutcome(
+      await erpFetchJson({
+        url: ERP_SCOPE_URL,
+        timeoutMs: ERP_TIMEOUT_MS,
+        expectedOrigin: ERP_ORIGIN,
+        init: {
+          method: "GET",
+          redirect: "error", // 固定 origin，禁止任何跳转（避免 token 外泄）
+          headers: {
+            Authorization: authHeader,
+            Accept: "application/json",
+          },
         },
-        signal: controller.signal,
-      });
-
-      if (new URL(resp.url || ERP_SCOPE_URL).origin !== ERP_ORIGIN) {
-        await resp.body?.cancel().catch(() => {});
-        failCode = "erp_origin_mismatch";
-      } else {
-        // 在同一个 timer 覆盖下读完整 body（慢 body 会抛 AbortError）
-        const raw = await resp.text();
-        let body: unknown = null;
-        let parseFailed = false;
-        if (raw.trim() === "") {
-          parseFailed = true;
-        } else {
-          try {
-            body = JSON.parse(raw);
-          } catch {
-            parseFailed = true;
-          }
-        }
-        const obj = body && typeof body === "object" && !Array.isArray(body)
-          ? (body as Record<string, unknown>)
-          : null;
-
-        if (!resp.ok) {
-          failCode = `erp_http_${resp.status}`;
-        } else if (parseFailed || !obj) {
-          failCode = "erp_bad_response";
-        } else if (obj.ok !== true) {
-          const c = obj.code;
-          failCode = typeof c === "string" ? c : "erp_bad_response";
-        } else {
-          scopeJson = obj.data;
-        }
-      }
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch (e) {
-    failCode = (e as Error)?.name === "AbortError" ? "erp_timeout" : "erp_unreachable";
+      }),
+    );
+    if (pull.ok) scopeJson = pull.data;
+    else failCode = pull.code;
   }
+
 
 
   if (!scopeJson) {
