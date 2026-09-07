@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.app.json",
+  "include": [
+    "../src/vite-env.d.ts",
+    "../src/hooks/useAuth.tsx",
+    "../src/hooks/usePermissions.tsx",
+    "../src/lib/erpScopeSync.ts",
+    "../src/lib/erpScopeThrottle.ts",
+    "./erp-scope-auth.test.tsx",
+    "./erp-scope-sync.test.ts",
+    "./erp-bootstrap-guard.test.ts"
+  ]
+}

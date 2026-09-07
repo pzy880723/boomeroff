@@ -13,7 +13,7 @@ import {
   ERP_SCOPE_RENEW_INTERVAL_MS,
   refreshErpScope,
   resetErpScopeSyncThrottle,
-  shouldTrustCachedRole,
+  readErpGovernance,
   startErpScopeRenewTimer,
 } from '@/lib/erpScopeSync';
 import { toast } from 'sonner';
@@ -24,7 +24,10 @@ export interface AppBootstrap {
     role: AppRole;
     role_code: string | null;
     suspended: boolean;
+    source?: 'erp' | 'legacy';
+    role_codes?: string[];
   } | null;
+  shop_context?: { scope: string; date?: string | null };
   permissions: string[];
   profile: {
     display_name: string | null;
@@ -78,6 +81,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const BOOTSTRAP_CACHE = 'app-bootstrap';
+// This is a sticky deny-only hint, not authority; clearing business caches must
+// not let a previously governed account regain legacy fallback after a restart.
+const ERP_GOVERNANCE_CACHE = 'erp-governance';
 const USER_CACHE_SCOPES = [BOOTSTRAP_CACHE, 'permissions', 'notifications', 'tasks'];
 const AUTH_STARTUP_TIMEOUT_MS = 5_000;
 const AUTH_LOGIN_TIMEOUT_MS = 12_000;
@@ -95,6 +101,16 @@ function isBootstrap(value: unknown): value is AppBootstrap {
   return !!value && typeof value === 'object' && Array.isArray((value as AppBootstrap).permissions);
 }
 
+function deniedBootstrap(previous: AppBootstrap | null): AppBootstrap {
+  return {
+    date: previous?.date ?? '', user_role: null, permissions: [],
+    profile: previous?.profile ?? null, staff_profile: null,
+    shop_context: { scope: 'unconfigured', date: null },
+    shifts: [], shift_definitions: [], checked_today: false,
+    activity: null, okrs: [], encouragement: null,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -110,9 +126,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const bootstrapRequestRef = useRef<{ userId: string; promise: Promise<void> } | null>(null);
   // 受 ERP 治理的账号：失效/撤销/同步失败时不得回退到缓存里的旧角色
   const erpGovernedRef = useRef(false);
-  const erpScopeActiveRef = useRef(true);
+  const erpScopeActiveRef = useRef(false);
+  const legacyVerifiedRef = useRef(false);
+  const sessionGenerationRef = useRef(0);
+  const syncRequestRef = useRef<{ userId: string; promise: Promise<void> } | null>(null);
+
+  const clearErpAuthorization = useCallback((userId: string) => {
+    roleRequestIdRef.current += 1;
+    bootstrapRequestRef.current = null;
+    erpScopeActiveRef.current = false;
+    clearCachedUserData(userId);
+    // Keep an explicit denied bootstrap: null would make PermissionsProvider
+    // fall back to app_role_permissions and revive local operation permissions.
+    const denied = deniedBootstrap(bootstrapRef.current);
+    bootstrapRef.current = denied;
+    setBootstrap(denied);
+    setRole(null);
+    setRoleCode(null);
+    setSuspended(false);
+    setBootstrapLoading(false);
+  }, []);
 
   const applyBootstrap = useCallback((userId: string, value: AppBootstrap, cache: boolean) => {
+    const governance = readErpGovernance(value);
+    erpGovernedRef.current ||= governance.governed;
+    if (erpGovernedRef.current) writeUserCache(ERP_GOVERNANCE_CACHE, userId, true);
+    legacyVerifiedRef.current ||= !erpGovernedRef.current && value.user_role?.source === 'legacy';
+    if (!erpGovernedRef.current && !legacyVerifiedRef.current) {
+      clearErpAuthorization(userId);
+      return;
+    }
+    if (erpGovernedRef.current && (!cache || !erpScopeActiveRef.current ||
+        !governance.governed || !governance.scopeActive)) {
+      clearErpAuthorization(userId);
+      return;
+    }
     bootstrapRef.current = value;
     setBootstrap(value);
     const nextRole = value.user_role?.role ?? 'anchor';
@@ -122,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (cache && !value.user_role?.suspended) {
       writeUserCache(BOOTSTRAP_CACHE, userId, value);
     }
-  }, []);
+  }, [clearErpAuthorization]);
 
   const fetchBootstrap = useCallback(async (userId: string) => {
     const requestId = ++roleRequestIdRef.current;
@@ -149,17 +197,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // 受 ERP 治理且当前范围失效/撤销：绝不回退到 user_roles 或缓存里的旧角色
-      if (!shouldTrustCachedRole(erpGovernedRef.current, erpScopeActiveRef.current)) {
-        clearCachedUserData(userId);
-        bootstrapRef.current = null;
-        setBootstrap(null);
-        setRole(null);
-        setRoleCode(null);
-        setSuspended(false);
+      if (erpGovernedRef.current || !legacyVerifiedRef.current) {
+        clearErpAuthorization(userId);
         return;
       }
 
       // Migration may not be deployed yet. Keep the app usable during staged rollout.
+      // Only a confirmed never-governed legacy account may leave the denied
+      // bootstrap and use PermissionsProvider's existing table fallback.
+      if (!bootstrapRef.current?.user_role) {
+        bootstrapRef.current = null;
+        setBootstrap(null);
+      }
       const { data: roleRow, error: roleError } = await supabase
         .from('user_roles')
         .select('role, suspended, role_code')
@@ -184,14 +233,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
       }
     } catch {
-      if (requestId !== roleRequestIdRef.current) return;
-      if (!shouldTrustCachedRole(erpGovernedRef.current, erpScopeActiveRef.current)) {
-        clearCachedUserData(userId);
-        bootstrapRef.current = null;
-        setBootstrap(null);
-        setRole(null);
-        setRoleCode(null);
-        setSuspended(false);
+      if (requestId !== roleRequestIdRef.current || activeUserIdRef.current !== userId) return;
+      if (erpGovernedRef.current || !legacyVerifiedRef.current) {
+        clearErpAuthorization(userId);
         return;
       }
       // Cached bootstrap remains visible; RLS remains the authorization boundary.
@@ -203,7 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       if (requestId === roleRequestIdRef.current) setBootstrapLoading(false);
     }
-  }, [applyBootstrap]);
+  }, [applyBootstrap, clearErpAuthorization]);
 
   const loadBootstrap = useCallback((userId: string): Promise<void> => {
     const current = bootstrapRequestRef.current;
@@ -220,25 +264,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ERP 授权镜像续租；可信同步后按新授权重新拉 bootstrap。
   // 迟到响应（账号已切换/已登出）一律丢弃，绝不套用到新账号。
-  const syncErpScope = useCallback(async (userId: string, force = false) => {
-    const result = await refreshErpScope(force);
-    const outcome = decideErpSyncOutcome(userId, activeUserIdRef.current, result);
-    if (outcome.discard) return;
+  const syncErpScope = useCallback((userId: string, force = false): Promise<void> => {
+    if (syncRequestRef.current?.userId === userId) return syncRequestRef.current.promise;
+    const generation = sessionGenerationRef.current;
+    const promise = (async () => {
+      const result = await refreshErpScope(force, userId);
+      if (generation !== sessionGenerationRef.current) return;
+      const outcome = decideErpSyncOutcome(userId, activeUserIdRef.current, result, erpGovernedRef.current);
+      if (outcome.discard) return;
 
-    erpGovernedRef.current = outcome.governed;
-    erpScopeActiveRef.current = outcome.scopeActive;
+      erpGovernedRef.current ||= outcome.governed;
+      if (erpGovernedRef.current) writeUserCache(ERP_GOVERNANCE_CACHE, userId, true);
+      const verifiedData = result?.data as { is_erp_user?: boolean } | undefined;
+      const legacyConfirmed = !outcome.governed && result?.sync?.status === 'unlinked' &&
+        verifiedData?.is_erp_user === false;
+      legacyVerifiedRef.current ||= legacyConfirmed;
+      erpScopeActiveRef.current = outcome.scopeActive;
+      if (outcome.clearCachedRole) clearErpAuthorization(userId);
 
-    if (outcome.clearCachedRole) {
-      // 撤销/失效：立刻清掉本地缓存的旧角色，再向服务端要真实 bootstrap
-      clearCachedUserData(userId);
-      bootstrapRef.current = null;
-    }
-
-    if (outcome.reloadBootstrap) {
-      bootstrapRequestRef.current = null;
-      await fetchBootstrap(userId);
-    }
-  }, [fetchBootstrap]);
+      if (outcome.reloadBootstrap || (legacyConfirmed && !bootstrapRef.current?.user_role)) {
+        bootstrapRequestRef.current = null;
+        await fetchBootstrap(userId);
+      }
+    })().finally(() => {
+      if (syncRequestRef.current?.promise === promise) syncRequestRef.current = null;
+    });
+    syncRequestRef.current = { userId, promise };
+    return promise;
+  }, [fetchBootstrap, clearErpAuthorization]);
 
   const beginUserSession = useCallback((nextSession: Session, forceRefresh = false) => {
     const nextUser = nextSession.user;
@@ -249,8 +302,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
 
     if (changedUser) {
-      erpGovernedRef.current = false;
-      erpScopeActiveRef.current = true;
+      sessionGenerationRef.current += 1;
+      roleRequestIdRef.current += 1;
+      bootstrapRequestRef.current = null;
+      syncRequestRef.current = null;
+      bootstrapRef.current = null;
+      erpGovernedRef.current = readUserCache<boolean>(ERP_GOVERNANCE_CACHE, nextUser.id) === true;
+      erpScopeActiveRef.current = false;
+      legacyVerifiedRef.current = false;
       const cached = readUserCache<AppBootstrap>(BOOTSTRAP_CACHE, nextUser.id);
       if (cached && isBootstrap(cached)) applyBootstrap(nextUser.id, cached, false);
       else {
@@ -265,17 +324,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (changedUser || forceRefresh || !bootstrapRef.current) {
       void loadBootstrap(nextUser.id);
     }
-    // 失败静默：授权边界仍在服务端。
+    // 续租失败不登出身份，但受 ERP 治理的账号立即清空操作权限。
     void syncErpScope(nextUser.id, changedUser);
   }, [applyBootstrap, loadBootstrap, syncErpScope]);
 
   const clearSession = useCallback(() => {
     activeUserIdRef.current = null;
+    sessionGenerationRef.current += 1;
     roleRequestIdRef.current += 1;
     bootstrapRequestRef.current = null;
+    syncRequestRef.current = null;
     bootstrapRef.current = null;
     erpGovernedRef.current = false;
-    erpScopeActiveRef.current = true;
+    erpScopeActiveRef.current = false;
+    legacyVerifiedRef.current = false;
     resetErpScopeSyncThrottle();
     setSession(null);
     setUser(null);

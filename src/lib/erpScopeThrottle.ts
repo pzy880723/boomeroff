@@ -69,13 +69,16 @@ export function startErpScopeRenewTimer(opts: ErpRenewTimerOptions): () => void 
   };
 }
 
-/** 从 verifier 数据里读出「是否受 ERP 治理」「当前范围是否有效」。 */
+/** Verifier 和 bootstrap 都能证明治理来源；未知来源不等于 legacy/unlinked。 */
 export function readErpGovernance(data: unknown): { governed: boolean; scopeActive: boolean } {
   const d = (data ?? {}) as Record<string, unknown>;
   const scopeCtx = (d.scope_context ?? {}) as Record<string, unknown>;
-  const governed = d.is_erp_user === true || d.erp_user_id != null;
-  const scope = typeof scopeCtx.scope === 'string' ? scopeCtx.scope : 'unconfigured';
-  return { governed, scopeActive: scope !== 'unconfigured' };
+  const role = (d.user_role ?? {}) as Record<string, unknown>;
+  const shopCtx = (d.shop_context ?? {}) as Record<string, unknown>;
+  const governed = d.is_erp_user === true || d.erp_user_id != null ||
+    scopeCtx.erp_governed === true || scopeCtx.erp_linked === true || role.source === 'erp';
+  const scope = scopeCtx.scope ?? shopCtx.scope;
+  return { governed, scopeActive: scope === 'hq' || scope === 'shop' || scope === 'store' };
 }
 
 export interface ErpSyncOutcome {
@@ -90,18 +93,31 @@ export interface ErpSyncOutcome {
 export function decideErpSyncOutcome(
   requestUserId: string | null,
   activeUserId: string | null,
-  result: { data?: unknown; sync?: { status?: string } } | null,
+  result: { ok?: boolean; data?: unknown; sync?: { status?: string; lease_renewed?: boolean; scope_version?: number | null } } | null | undefined,
+  knownGoverned = false,
 ): ErpSyncOutcome {
-  if (!result || isStaleSyncResponse(requestUserId, activeUserId)) {
+  if (result === undefined || isStaleSyncResponse(requestUserId, activeUserId)) {
     return { discard: true, governed: false, scopeActive: true, clearCachedRole: false, reloadBootstrap: false };
   }
-  const { governed, scopeActive } = readErpGovernance(result.data);
+  const data = result?.data as Record<string, unknown> | null;
+  const verified = result?.ok === true && data?.authenticated === true &&
+    data.user_id === activeUserId;
+  const governance = verified ? readErpGovernance(data) : { governed: false, scopeActive: false };
+  const governed = knownGoverned || governance.governed;
+  // A timeout or mismatched response cannot establish that an unknown user is legacy.
+  if (!verified && !governed) {
+    return { discard: true, governed: false, scopeActive: false, clearCachedRole: false, reloadBootstrap: false };
+  }
+  const applied = verified && shouldReloadBootstrapAfterSync(result?.sync?.status) &&
+    result?.sync?.lease_renewed === true && Number.isSafeInteger(result?.sync?.scope_version) &&
+    (result?.sync?.scope_version ?? -1) >= 0;
+  const scopeActive = applied && governance.scopeActive;
   const revoked = governed && !scopeActive;
   return {
     discard: false,
     governed,
     scopeActive,
     clearCachedRole: revoked,
-    reloadBootstrap: shouldReloadBootstrapAfterSync(result.sync?.status) || revoked,
+    reloadBootstrap: applied && scopeActive,
   };
 }

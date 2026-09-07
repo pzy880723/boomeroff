@@ -125,11 +125,15 @@ test('30 秒节流：定时器 + focus 同时触发只会跑一次网络请求',
 
 // ---- 同步 -> bootstrap 顺序 ----
 const activeScope = {
+  authenticated: true,
+  user_id: 'u1',
   is_erp_user: true,
   erp_user_id: 'e-1',
   scope_context: { scope: 'hq' },
 };
 const revokedScope = {
+  authenticated: true,
+  user_id: 'u1',
   is_erp_user: true,
   erp_user_id: null,
   scope_context: { scope: 'unconfigured', reason: 'mapping_revoked' },
@@ -147,7 +151,7 @@ test('可信同步后按新授权重拉 bootstrap（顺序：sync -> bootstrap�
   const order: string[] = [];
   const run = async (userId: string) => {
     order.push('sync:start');
-    const result = { data: activeScope, sync: { status: 'synced' } };
+    const result = { ok: true, data: activeScope, sync: { status: 'synced', lease_renewed: true, scope_version: 3 } };
     order.push('sync:done');
     const outcome = decideErpSyncOutcome(userId, userId, result);
     if (outcome.reloadBootstrap) order.push('bootstrap:reload');
@@ -162,15 +166,16 @@ test('可信同步后按新授权重拉 bootstrap（顺序：sync -> bootstrap�
 
 test('ack_pending：新权限已生效，仍要重拉 bootstrap', () => {
   const outcome = decideErpSyncOutcome('u1', 'u1', {
+    ok: true,
     data: activeScope,
-    sync: { status: 'ack_pending' },
+    sync: { status: 'ack_pending', lease_renewed: true, scope_version: 3 },
   });
   assert.equal(outcome.discard, false);
   assert.equal(outcome.reloadBootstrap, true);
 });
 
 test('迟到响应：账号已切换 / 已登出，绝不套用到新账号', () => {
-  const late = { data: activeScope, sync: { status: 'synced' } };
+  const late = { ok: true, data: activeScope, sync: { status: 'synced', lease_renewed: true, scope_version: 3 } };
   assert.equal(decideErpSyncOutcome('u1', 'u2', late).discard, true);
   assert.equal(decideErpSyncOutcome('u1', null, late).discard, true);
   assert.equal(decideErpSyncOutcome('u1', 'u1', late).discard, false);
@@ -180,30 +185,33 @@ test('迟到响应：账号已切换 / 已登出，绝不套用到新账号', ()
 test('网络失败（result 为空）：不改治理标记、不重拉、不续租', () => {
   const outcome = decideErpSyncOutcome('u1', 'u1', null);
   assert.deepEqual(outcome, {
-    discard: true, governed: false, scopeActive: true,
+    discard: true, governed: false, scopeActive: false,
     clearCachedRole: false, reloadBootstrap: false,
   });
 });
 
-test('受治理账号被撤销：清缓存旧角色并重拉，绝不沿用旧 admin', () => {
+test('受治理账号被撤销：清缓存旧角色且不重拉旧镜像，绝不沿用旧 admin', () => {
   const outcome = decideErpSyncOutcome('u1', 'u1', {
+    ok: true,
     data: revokedScope,
-    sync: { status: 'pending', code: 'erp_unreachable' },
+    sync: { status: 'pending' },
   });
   assert.equal(outcome.governed, true);
   assert.equal(outcome.scopeActive, false);
   assert.equal(outcome.clearCachedRole, true);
-  assert.equal(outcome.reloadBootstrap, true);
+  assert.equal(outcome.reloadBootstrap, false);
   assert.equal(shouldTrustCachedRole(outcome.governed, outcome.scopeActive), false);
 });
 
 test('未被 ERP 治理的旧账号（11 名未绑定）：不清角色、不扩权、维持原有过渡权限', () => {
   const legacy = {
+    authenticated: true,
+    user_id: 'u1',
     is_erp_user: false,
     erp_user_id: null,
     scope_context: { scope: 'unconfigured', reason: 'no_erp_mapping' },
   };
-  const outcome = decideErpSyncOutcome('u1', 'u1', { data: legacy, sync: { status: 'unlinked', code: 'no_erp_mapping' } });
+  const outcome = decideErpSyncOutcome('u1', 'u1', { ok: true, data: legacy, sync: { status: 'unlinked' } });
   assert.equal(outcome.governed, false);
   assert.equal(outcome.clearCachedRole, false);
   assert.equal(outcome.reloadBootstrap, false, 'unlinked 不重拉，也不改动旧账号权限');
@@ -211,7 +219,19 @@ test('未被 ERP 治理的旧账号（11 名未绑定）：不清角色、不扩
 });
 
 test('readErpGovernance 识别治理来源', () => {
+  assert.deepEqual(readErpGovernance({ user_role: { source: 'erp' }, shop_context: { scope: 'hq' } }), { governed: true, scopeActive: true });
   assert.deepEqual(readErpGovernance({ is_erp_user: false, erp_user_id: 'e-1', scope_context: { scope: 'shop' } }), { governed: true, scopeActive: true });
   assert.deepEqual(readErpGovernance({ is_erp_user: true, erp_user_id: null, scope_context: {} }), { governed: true, scopeActive: false });
   assert.deepEqual(readErpGovernance(null), { governed: false, scopeActive: false });
+});
+
+test('known ERP governance survives null response and pending old-scope payload', () => {
+  for (const result of [null, { ok: true, data: activeScope, sync: { status: 'pending' } }]) {
+    const outcome = decideErpSyncOutcome('u1', 'u1', result, true);
+    assert.equal(outcome.governed, true);
+    assert.equal(outcome.scopeActive, false);
+    assert.equal(outcome.clearCachedRole, true);
+    assert.equal(outcome.reloadBootstrap, false);
+  }
+  assert.equal(decideErpSyncOutcome('u1', 'u1', undefined, true).discard, true);
 });

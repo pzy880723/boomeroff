@@ -1,5 +1,5 @@
 // Web 侧 ERP 授权范围续租：登录、冷启、回前台、前台 30 秒定时器时调用。
-// 只做刷新，不做任何权限判断（授权边界仍在 RLS / RPC）。
+// 校验续租结果并驱动 UI fail-closed；真正授权边界仍在 RLS / RPC。
 import { invokeFn } from '@/lib/invokeFn';
 import {
   decideErpSyncOutcome,
@@ -41,27 +41,47 @@ export interface ErpScopeSyncResult {
 
 let lastRunAt = 0;
 let inFlight: Promise<ErpScopeSyncResult | null> | null = null;
+let activeUserId: string | null = null;
+let generation = 0;
 
 export function resetErpScopeSyncThrottle(): void {
   lastRunAt = 0;
   inFlight = null;
+  activeUserId = null;
+  generation += 1;
 }
 
-export async function refreshErpScope(force = false): Promise<ErpScopeSyncResult | null> {
+export function refreshErpScope(force = false, userId: string | null = null): Promise<ErpScopeSyncResult | null | undefined> {
+  if (activeUserId !== userId) {
+    resetErpScopeSyncThrottle();
+    activeUserId = userId;
+  }
   if (inFlight) return inFlight;
   const now = Date.now();
-  if (!force && !shouldRunErpScopeSync(now, lastRunAt)) return null;
+  // Skipped work must not look like a failed request and revoke a healthy lease.
+  if (!force && !shouldRunErpScopeSync(now, lastRunAt)) return Promise.resolve(undefined);
   lastRunAt = now;
+  const requestGeneration = generation;
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<null>((resolve) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      resolve(null);
+    }, 20_000);
+  });
 
-  inFlight = invokeFn<ErpScopeSyncResult>('erp-scope-sync', { body: {} })
+  const operation = invokeFn<ErpScopeSyncResult>('erp-scope-sync', { body: {}, signal: controller.signal })
     .then(({ data, error }) => {
-      if (error || !data) return null;
+      if (requestGeneration !== generation || error || !data) return null;
       return data;
-    })
+    });
+  const promise = Promise.race([operation, timeout])
     .catch(() => null)
     .finally(() => {
-      inFlight = null;
+      clearTimeout(timeoutId);
+      if (inFlight === promise) inFlight = null;
     });
-
-  return inFlight;
+  inFlight = promise;
+  return promise;
 }
