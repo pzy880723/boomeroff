@@ -1,0 +1,12 @@
+REVOKE ALL ON FUNCTION public.current_user_erp_scope() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.erp_authorized_shop_ids() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.is_hq_user() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.current_shop_context_v1() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.list_shift_schedules_v1(date, date, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.erp_verify_current_scope_v1() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.current_user_erp_scope() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.erp_authorized_shop_ids() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_hq_user() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.current_shop_context_v1() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.list_shift_schedules_v1(date, date, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.erp_verify_current_scope_v1() TO authenticated, service_role;
