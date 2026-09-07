@@ -25,7 +25,7 @@ export function assertNotSuspended(role: { suspended?: boolean | null } | null |
 /** 校验题源可读性。row 为用带 JWT 的客户端（受 RLS 约束）读取到的行。 */
 export function assertQuizSourceReadable(
   kind: QuizKind,
-  row: { user_id?: string | null } | null | undefined,
+  row: (Record<string, unknown> & { user_id?: string | null }) | null | undefined,
   userId: string,
 ): void {
   if (!row) {
