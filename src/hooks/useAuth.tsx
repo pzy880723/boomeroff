@@ -220,6 +220,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return promise;
   }, [fetchBootstrap]);
 
+  // ERP 授权镜像续租；可信同步后按新授权重新拉 bootstrap。
+  // 迟到响应（账号已切换/已登出）一律丢弃，绝不套用到新账号。
+  const syncErpScope = useCallback(async (userId: string, force = false) => {
+    const result = await refreshErpScope(force);
+    if (!result) return;
+    if (isStaleSyncResponse(userId, activeUserIdRef.current)) return;
+
+    const { governed, scopeActive } = readErpGovernance(result.data);
+    erpGovernedRef.current = governed;
+    erpScopeActiveRef.current = scopeActive;
+
+    if (governed && !scopeActive) {
+      // 撤销/失效：立刻清掉本地缓存的旧角色，再向服务端要真实 bootstrap
+      clearCachedUserData(userId);
+      bootstrapRef.current = null;
+    }
+
+    if (shouldReloadBootstrapAfterSync(result.sync?.status) || (governed && !scopeActive)) {
+      bootstrapRequestRef.current = null;
+      await fetchBootstrap(userId);
+    }
+  }, [fetchBootstrap]);
+
   const beginUserSession = useCallback((nextSession: Session, forceRefresh = false) => {
     const nextUser = nextSession.user;
     const changedUser = activeUserIdRef.current !== nextUser.id;
@@ -229,6 +252,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
 
     if (changedUser) {
+      erpGovernedRef.current = false;
+      erpScopeActiveRef.current = true;
       const cached = readUserCache<AppBootstrap>(BOOTSTRAP_CACHE, nextUser.id);
       if (cached && isBootstrap(cached)) applyBootstrap(nextUser.id, cached, false);
       else {
@@ -243,15 +268,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (changedUser || forceRefresh || !bootstrapRef.current) {
       void loadBootstrap(nextUser.id);
     }
-    // ERP 授权镜像续租（30 秒节流）。失败静默：授权边界仍在服务端。
-    void refreshErpScope(changedUser);
-  }, [applyBootstrap, loadBootstrap]);
+    // 失败静默：授权边界仍在服务端。
+    void syncErpScope(nextUser.id, changedUser);
+  }, [applyBootstrap, loadBootstrap, syncErpScope]);
 
   const clearSession = useCallback(() => {
     activeUserIdRef.current = null;
     roleRequestIdRef.current += 1;
     bootstrapRequestRef.current = null;
     bootstrapRef.current = null;
+    erpGovernedRef.current = false;
+    erpScopeActiveRef.current = true;
     resetErpScopeSyncThrottle();
     setSession(null);
     setUser(null);
