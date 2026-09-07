@@ -150,6 +150,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // 受 ERP 治理且当前范围失效/撤销：绝不回退到 user_roles 或缓存里的旧角色
+      if (!shouldTrustCachedRole(erpGovernedRef.current, erpScopeActiveRef.current)) {
+        clearCachedUserData(userId);
+        bootstrapRef.current = null;
+        setBootstrap(null);
+        setRole(null);
+        setRoleCode(null);
+        setSuspended(false);
+        return;
+      }
+
       // Migration may not be deployed yet. Keep the app usable during staged rollout.
       const { data: roleRow, error: roleError } = await supabase
         .from('user_roles')
@@ -176,6 +187,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       if (requestId !== roleRequestIdRef.current) return;
+      if (!shouldTrustCachedRole(erpGovernedRef.current, erpScopeActiveRef.current)) {
+        clearCachedUserData(userId);
+        bootstrapRef.current = null;
+        setBootstrap(null);
+        setRole(null);
+        setRoleCode(null);
+        setSuspended(false);
+        return;
+      }
       // Cached bootstrap remains visible; RLS remains the authorization boundary.
       if (!bootstrapRef.current) {
         setRole('anchor');
