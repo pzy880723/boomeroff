@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
         await adminClient.from("official_knowledge").update({ content: newContent }).eq("id", id);
       } else {
         await adminClient.from("app_settings").upsert(
-          { key: cacheKey, value: { pool, generated_at: new Date().toISOString() }, updated_by: userData.user.id },
+          { key: cacheKey, value: { pool, generated_at: new Date().toISOString() }, updated_by: user.id },
           { onConflict: "key" },
         );
       }
