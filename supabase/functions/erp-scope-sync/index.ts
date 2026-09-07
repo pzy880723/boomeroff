@@ -181,14 +181,13 @@ Deno.serve(async (req) => {
   }
 
   // 4) ACK（ERP 会用本人 token 反查 GO receipt 核验真实版本/新鲜度，不信客户端）
-  let ackOk = false;
-  let ackCode = "";
-  try {
-    const controller = new AbortController();
-    // 同一个 timer 覆盖握手 + 完整 body 读取
-    const timer = setTimeout(() => controller.abort(), ERP_ACK_TIMEOUT_MS);
-    try {
-      const ackResp = await fetch(ERP_ACK_URL, {
+  //    只有「对象 且 ok === true」才算 ACK 成功；200 空 body / HTML / 非法 JSON => ack_bad_response
+  const ackResult = decideAckOutcome(
+    await erpFetchJson({
+      url: ERP_ACK_URL,
+      timeoutMs: ERP_ACK_TIMEOUT_MS,
+      expectedOrigin: ERP_ORIGIN,
+      init: {
         method: "POST",
         redirect: "error",
         headers: {
@@ -197,49 +196,12 @@ Deno.serve(async (req) => {
           Accept: "application/json",
         },
         body: "{}",
-        signal: controller.signal,
-      });
+      },
+    }),
+  );
+  const ackOk = ackResult.ok;
+  const ackCode = ackResult.code;
 
-      if (new URL(ackResp.url || ERP_ACK_URL).origin !== ERP_ORIGIN) {
-        await ackResp.body?.cancel().catch(() => {});
-        ackCode = "ack_origin_mismatch";
-      } else if (ackResp.ok) {
-        const raw = await ackResp.text();
-        let ackBody: unknown = null;
-        let parseFailed = false;
-        if (raw.trim() === "") {
-          parseFailed = true;
-        } else {
-          try {
-            ackBody = JSON.parse(raw);
-          } catch {
-            parseFailed = true;
-          }
-        }
-        const obj = ackBody && typeof ackBody === "object" && !Array.isArray(ackBody)
-          ? (ackBody as Record<string, unknown>)
-          : null;
-
-        if (parseFailed || !obj) {
-          // 200 空 body / HTML / 非法 JSON / 非对象：一律不算 ACK 成功
-          ackCode = "ack_bad_response";
-        } else if (obj.ok === true) {
-          ackOk = true;
-        } else {
-          const c = obj.code;
-          ackCode = typeof c === "string" ? c : "ack_rejected";
-        }
-      } else {
-        await ackResp.body?.cancel().catch(() => {});
-        ackCode = `ack_http_${ackResp.status}`;
-      }
-    } finally {
-      clearTimeout(timer);
-    }
-
-  } catch (e) {
-    ackCode = (e as Error)?.name === "AbortError" ? "ack_timeout" : "ack_unreachable";
-  }
 
   console.log(
     JSON.stringify({ evt: "erp_scope_sync_done", code, scope_version: scopeVersion, ack: ackOk ? "ok" : ackCode }),
