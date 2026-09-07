@@ -211,6 +211,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (changedUser || forceRefresh || !bootstrapRef.current) {
       void loadBootstrap(nextUser.id);
     }
+    // ERP 授权镜像续租（30 秒节流）。失败静默：授权边界仍在服务端。
+    void refreshErpScope(changedUser);
   }, [applyBootstrap, loadBootstrap]);
 
   const clearSession = useCallback(() => {
@@ -218,6 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roleRequestIdRef.current += 1;
     bootstrapRequestRef.current = null;
     bootstrapRef.current = null;
+    resetErpScopeSyncThrottle();
     setSession(null);
     setUser(null);
     setRole(null);
