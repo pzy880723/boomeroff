@@ -44,3 +44,10 @@ verify_jwt = false
 
 [functions.auto-tag-marketing-asset]
 verify_jwt = false
+
+[functions.erp-scope-sync]
+verify_jwt = true
+
+[functions.erp-scope-push]
+verify_jwt = false
+
