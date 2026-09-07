@@ -3544,6 +3544,9 @@ export type Database = {
         Args: { _op?: string; _source_id: string; _source_type: string }
         Returns: undefined
       }
+      legacy_transition_active: { Args: never; Returns: boolean }
+      legacy_transition_admin: { Args: never; Returns: boolean }
+      legacy_transition_shop_id: { Args: never; Returns: string }
       list_activity_applications: {
         Args: { _activity_id: string }
         Returns: Json[]
