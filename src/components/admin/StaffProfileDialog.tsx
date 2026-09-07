@@ -276,14 +276,9 @@ export function StaffProfileDialog({ open, onOpenChange, userId, displayName, sh
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div>
               <div>
-                <Label className="text-xs">每周最多上班天数</Label>
-                <Input type="number" min={0} max={7} value={p.max_per_week}
-                  onChange={e => setP({ ...p, max_per_week: Math.max(0, Math.min(7, +e.target.value || 0)) })} />
-              </div>
-              <div>
-                <Label className="text-xs">期望上班天数</Label>
+                <Label className="text-xs">期望上班天数（AI 排班参考，不限制实际排班）</Label>
                 <Input type="number" min={0} max={7} value={p.weekly_workdays}
                   onChange={e => setP({ ...p, weekly_workdays: Math.max(0, Math.min(7, +e.target.value || 0)) })} />
               </div>

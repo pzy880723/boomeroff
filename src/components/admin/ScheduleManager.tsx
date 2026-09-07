@@ -27,7 +27,6 @@ interface User {
   available_weekdays?: number[];
   blocked_weekdays?: number[];
   blocked_shifts?: string[];
-  max_per_week?: number;
   day_offs?: string[];
 }
 interface Shop { id: string; name: string }
@@ -76,7 +75,7 @@ export function ScheduleManager() {
       supabase.from('shift_schedules' as any).select('*').eq('shop_id', shopId).gte('work_date', weekStart).lte('work_date', end),
       supabase.from('shift_schedules' as any).select('user_id, work_date, shop_id').gte('work_date', weekStart).lte('work_date', end),
       supabase.from('user_roles').select('user_id').eq('suspended', false),
-      supabase.from('staff_profiles' as any).select('user_id, allowed_shop_ids, shop_id, real_name, available_weekdays, blocked_weekdays, blocked_shifts, max_per_week'),
+      supabase.from('staff_profiles' as any).select('user_id, allowed_shop_ids, shop_id, real_name, available_weekdays, blocked_weekdays, blocked_shifts'),
     ]);
     const userIds = (roles || []).map((r: any) => r.user_id);
     const profMap = new Map<string, any>();
@@ -104,7 +103,6 @@ export function ScheduleManager() {
           available_weekdays: sp.available_weekdays || [0,1,2,3,4,5,6],
           blocked_weekdays: sp.blocked_weekdays || [],
           blocked_shifts: sp.blocked_shifts || [],
-          max_per_week: sp.max_per_week ?? 5,
           day_offs: dayOffMap.get(p.user_id) || [],
         };
       });
@@ -138,7 +136,7 @@ export function ScheduleManager() {
     return dates.size;
   };
 
-  const validateAssign = (date: string, code: string, user: User, opts: { ignoreMax?: boolean } = {}): { hard: string[]; soft: string[] } => {
+  const validateAssign = (date: string, code: string, user: User): { hard: string[]; soft: string[] } => {
     const hard: string[] = [];
     const soft: string[] = [];
     const wd = dowOf(date);
@@ -160,13 +158,6 @@ export function ScheduleManager() {
     );
     if (otherShopSameDay) {
       hard.push(`${user.display_name} 当天已在其他门店排班`);
-    }
-    if (!opts.ignoreMax) {
-      const cnt = weekCountOf(user.user_id, date);
-      const cap = typeof user.max_per_week === 'number' ? user.max_per_week : 5;
-      if (cnt + 1 > Math.min(cap, 5)) {
-        hard.push(`${user.display_name} 本周已排 ${cnt} 天，已达上限 ${Math.min(cap, 5)} 天（每周最多 5 天，跨门店合并统计）`);
-      }
     }
     return { hard, soft };
   };
@@ -247,11 +238,11 @@ export function ScheduleManager() {
     // 互换后：A 的位置变成 B 的人，反之亦然。校验时排除原日期防止重复计数。
     const issues: string[] = [];
     if (userB) {
-      const v = validateAssign(a.work_date, a.shift_code, userB, { ignoreMax: true });
+      const v = validateAssign(a.work_date, a.shift_code, userB);
       issues.push(...v.soft, ...v.hard);
     }
     if (userA) {
-      const v = validateAssign(b.work_date, b.shift_code, userA, { ignoreMax: true });
+      const v = validateAssign(b.work_date, b.shift_code, userA);
       issues.push(...v.soft, ...v.hard);
     }
     const confirmMsg = `换班：\n• ${userA?.display_name} 的「${a.work_date} ${a.shift_code}」\n  ↔\n• ${userB?.display_name} 的「${b.work_date} ${b.shift_code}」\n\n${issues.length ? '注意违规：\n• ' + issues.join('\n• ') + '\n\n' : ''}确认互换？`;
@@ -314,19 +305,16 @@ export function ScheduleManager() {
                 <p className="text-xs text-muted-foreground px-2 py-1.5">无可选员工</p>
               ) : candidates.map(u => {
                 const cnt = weekCountOf(u.user_id);
-                const cap = Math.min(typeof u.max_per_week === 'number' ? u.max_per_week : 5, 5);
-                const full = cnt >= cap;
                 const c = colorOf(u.user_id);
                 return (
                   <button
                     key={u.user_id}
-                    disabled={full}
                     onClick={() => addAssign(date, code, u.user_id)}
-                    className={cn('w-full text-left px-2 py-1.5 text-sm rounded flex items-center gap-2', full ? 'opacity-40 cursor-not-allowed' : 'hover:bg-muted')}
+                    className="w-full text-left px-2 py-1.5 text-sm rounded flex items-center gap-2 hover:bg-muted"
                   >
                     <span className="w-3 h-3 rounded-full border" style={{ background: c.bg, borderColor: c.border }} />
                     <span className="flex-1">{u.display_name}</span>
-                    <span className="text-[10px] tabular-nums text-muted-foreground">{Math.max(0, cap - cnt)}/{cap}</span>
+                    <span className="text-[10px] tabular-nums text-muted-foreground">已排 {cnt} 天</span>
                   </button>
                 );
               })}
@@ -417,12 +405,11 @@ export function ScheduleManager() {
           {users.map(u => {
             const c = colorOf(u.user_id);
             const cnt = weekCountOf(u.user_id);
-            const cap = Math.min(typeof u.max_per_week === 'number' ? u.max_per_week : 5, 5);
             return (
               <Button key={u.user_id} variant="outline" size="sm" onClick={() => setProfileFor(u)} className="gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full border" style={{ background: c.bg, borderColor: c.border }} />
                 {u.display_name}
-                <span className="text-[10px] tabular-nums text-muted-foreground">{Math.max(0, cap - cnt)}/{cap}</span>
+                <span className="text-[10px] tabular-nums text-muted-foreground">已排 {cnt} 天</span>
               </Button>
             );
           })}
