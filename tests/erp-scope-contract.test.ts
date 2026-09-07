@@ -7,7 +7,7 @@ import {
   timestampWithinWindow,
   timingSafeEqualStr,
 } from '../supabase/functions/_shared/erp-scope.ts';
-import { shouldRunErpScopeSync, ERP_SCOPE_THROTTLE_MS } from '../src/lib/erpScopeSync.ts';
+import { shouldRunErpScopeSync, ERP_SCOPE_THROTTLE_MS } from '../src/lib/erpScopeThrottle.ts';
 
 const GO_SHOP = '72c80d98-0000-4000-8000-000000000001';
 const ERP_LOC = '7111b585-7d7f-4777-b4ae-61ce2b868f78';
