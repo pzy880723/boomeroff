@@ -110,6 +110,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const activeUserIdRef = useRef<string | null>(null);
   const bootstrapRef = useRef<AppBootstrap | null>(null);
   const bootstrapRequestRef = useRef<{ userId: string; promise: Promise<void> } | null>(null);
+  // 受 ERP 治理的账号：失效/撤销/同步失败时不得回退到缓存里的旧角色
+  const erpGovernedRef = useRef(false);
+  const erpScopeActiveRef = useRef(true);
 
   const applyBootstrap = useCallback((userId: string, value: AppBootstrap, cache: boolean) => {
     bootstrapRef.current = value;
