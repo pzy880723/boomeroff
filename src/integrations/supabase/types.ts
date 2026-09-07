@@ -3505,7 +3505,9 @@ export type Database = {
       current_user_erp_scope: { Args: never; Returns: Json }
       current_user_shop_id: { Args: never; Returns: string }
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
+      erp_action_permissions: { Args: never; Returns: string[] }
       erp_authorized_shop_ids: { Args: never; Returns: string[] }
+      erp_has_action: { Args: { _perm: string }; Returns: boolean }
       erp_is_governed: { Args: never; Returns: boolean }
       erp_scope_active: { Args: never; Returns: boolean }
       erp_verify_current_scope_v1: { Args: never; Returns: Json }
