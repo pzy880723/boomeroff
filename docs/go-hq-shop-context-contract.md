@@ -104,3 +104,49 @@ rpc: list_shift_schedules_v1(_from date = 今天, _to date = _from, _shop_id uui
 2. 映射下发即写入 `erp_governed_users`，该账号自动退出过渡分支，改由 ERP 授权判定。
 3. 全员非 `unconfigured` 后，删除第 4.1 节的三个原语与相关策略分支，`staff_profiles.shop_id` 降级为纯资料。
 
+
+## 6. ERP 授权镜像刷新（GO 侧兼容准备，已上线；短租约默认关闭）
+
+### 6.1 冻结的两边契约
+
+ERP 端点（GO 主动拉）：`POST https://boomer-off-buddy.lovable.app/api/public/sso/aigc-scope`
+- 头：`x-erp-sso-secret`（复用现有 `ERP_AIGC_SSO_SECRET`，GO 不新增 service key）
+- 入参：`{ "erp_user_id": "<uuid>" }`
+- 返回：`{ ok: true, data: { erp_user_id, active, revoked, roles: string[], permissions: string[], scope_version: int, updated_at, shops: [{ go_shop_id, erp_location_id, name }] } }`
+- 门店只从 **active `go_shop_location_links`** 翻译；翻不出必须显式报错，禁止静默丢弃。ERP 身份链接被撤销必须 `revoked: true`。
+
+ERP 推送（保存/撤销后）：`POST <GO functions>/erp-scope-push`（`verify_jwt=false`）
+- 头：`x-erp-sso-secret`（恒定时间比较）、可选 `x-erp-timestamp`、`x-erp-nonce`
+- Body：`{ timestamp, nonce, data: <上面的 data 同构> }`（`timestamp`/`nonce` 也可放 header）
+- 校验：`timestamp` ±5 分钟窗；`nonce` 落 `erp_scope_push_nonces` 真实去重，重复 → `409 duplicate_nonce` 且**不续租、不改镜像**。
+
+GO 函数（供原生/Web 调用）：`POST <GO functions>/erp-scope-sync`（`verify_jwt=true`）
+- 先 `auth.getUser()`，再按 canonical `erp_user_links.aigc_user_id = auth.uid()` 取 `erp_user_id`；**不接受客户端传入 erp_user_id**。
+- 返回：`{ ok: true, data: <erp_verify_current_scope_v1() 原样 JSON>, sync: { status: "synced" | "pending" | "unlinked", code, scope_version?, lease_renewed? } }`
+  - `unlinked`：`no_erp_mapping` / `ambiguous_mapping`（未绑定账号，不报错、不新建绑定）
+  - `pending`：`erp_unreachable` / `erp_http_<code>` / `sso_secret_missing` / `invalid_shop_mapping` 等，UI 显示「待同步」，**不得宣称已生效**
+  - `synced`：`applied` 或 `lease_renewed`
+
+### 6.2 版本与事务规则（`erp_apply_scope_mirror_v1(_erp_user_id, _payload, _mode)`，仅 service_role）
+
+行级 `FOR UPDATE`，规则：
+- 映射不存在 → `no_mapping`，**永不 INSERT 新绑定**。
+- `in < cur` → `stale_version`（旧版本不覆盖）。
+- `in = cur` 且内容一致：`pull` → `lease_renewed`（可信主动核验可延长租约）；`push` → `noop_same_version`（不续租）。
+- `in = cur` 且内容不一致 → `version_conflict`。
+- `in > cur` → 写入；`revoked || !active` 写墓碑 `link_status='revoked'` + `revoked_at`，**保留 canonical `aigc_user_id`，不删行**；墓碑只能由严格更高版本且未撤销的可信 payload 恢复。
+- `scope_synced_at` 一律 `now()`（服务端时间），不接受任何传入时间。
+
+### 6.3 短租约（**当前关闭**）
+
+`app_settings.erp_scope_lease = {"enabled": false, "seconds": 60}`。开启后 `current_user_erp_scope()` 对已治理账号读写共用 60 秒租约，`scope_synced_at` 为空或过期 → `unconfigured / scope_stale`。`scope_synced_at IS NULL` 的豁免只是过渡态，不是最终态；等 ERP 端点 + 原生刷新真实验收后再置 `enabled: true`。
+
+### 6.4 客户端刷新
+
+Web：登录成功、冷启恢复会话、回前台/窗口聚焦时调用 `erp-scope-sync`，30 秒节流（`src/lib/erpScopeThrottle.ts`），失败静默。原生由 App 侧接线，同一节流约定。
+
+### 6.5 尚未启用 / 依赖项
+
+- `ERP_AIGC_SSO_SECRET` 在本项目 Edge Function 环境**尚未配置**：`erp-scope-push` 现返回 `500 server_misconfigured`（fail closed），`erp-scope-sync` 返回 `sync.status = "pending" / sso_secret_missing`，不影响现有权限。
+- ERP `/api/public/sso/aigc-scope` 尚未上线，暂不做任何真实拉取，现有 3 个总部账号的角色与绑定未被改动。
+- 短租约开关保持关闭；新 shops 结构解析已生效，但只在镜像里出现 `go_shop_id` 时启用，旧结构走原逻辑，总部账号不受影响。

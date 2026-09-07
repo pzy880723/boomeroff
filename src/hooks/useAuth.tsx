@@ -8,6 +8,7 @@ import { clearUserCache, readUserCache, writeUserCache } from '@/lib/appCache';
 import { normalizeLoginIdentity } from '@/lib/loginIdentity';
 import { invokeFn } from '@/lib/invokeFn';
 import { withAuthTimeout } from '@/lib/authTimeout';
+import { refreshErpScope, resetErpScopeSyncThrottle } from '@/lib/erpScopeSync';
 import { toast } from 'sonner';
 
 export interface AppBootstrap {
@@ -210,6 +211,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (changedUser || forceRefresh || !bootstrapRef.current) {
       void loadBootstrap(nextUser.id);
     }
+    // ERP 授权镜像续租（30 秒节流）。失败静默：授权边界仍在服务端。
+    void refreshErpScope(changedUser);
   }, [applyBootstrap, loadBootstrap]);
 
   const clearSession = useCallback(() => {
@@ -217,6 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roleRequestIdRef.current += 1;
     bootstrapRequestRef.current = null;
     bootstrapRef.current = null;
+    resetErpScopeSyncThrottle();
     setSession(null);
     setUser(null);
     setRole(null);
@@ -262,6 +266,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, [beginUserSession, clearSession]);
+
+  // 回到前台时续租（30 秒节流）
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && activeUserIdRef.current) {
+        void refreshErpScope();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, []);
+
 
   const signIn = async (account: string, password: string) => {
     setLoading(true);

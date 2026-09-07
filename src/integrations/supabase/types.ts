@@ -1001,6 +1001,24 @@ export type Database = {
         }
         Relationships: []
       }
+      erp_scope_push_nonces: {
+        Row: {
+          erp_user_id: string | null
+          nonce: string
+          seen_at: string
+        }
+        Insert: {
+          erp_user_id?: string | null
+          nonce: string
+          seen_at?: string
+        }
+        Update: {
+          erp_user_id?: string | null
+          nonce?: string
+          seen_at?: string
+        }
+        Relationships: []
+      }
       erp_user_links: {
         Row: {
           aigc_user_id: string
@@ -1008,10 +1026,15 @@ export type Database = {
           display_name: string | null
           erp_user_id: string
           last_login_at: string
+          link_status: string
           permissions: string[]
           phone: string | null
+          revoked_at: string | null
           roles: string[]
+          scope_synced_at: string | null
+          scope_version: number
           shops: Json
+          sync_error: string | null
           updated_at: string
         }
         Insert: {
@@ -1020,10 +1043,15 @@ export type Database = {
           display_name?: string | null
           erp_user_id: string
           last_login_at?: string
+          link_status?: string
           permissions?: string[]
           phone?: string | null
+          revoked_at?: string | null
           roles?: string[]
+          scope_synced_at?: string | null
+          scope_version?: number
           shops?: Json
+          sync_error?: string | null
           updated_at?: string
         }
         Update: {
@@ -1032,10 +1060,15 @@ export type Database = {
           display_name?: string | null
           erp_user_id?: string
           last_login_at?: string
+          link_status?: string
           permissions?: string[]
           phone?: string | null
+          revoked_at?: string | null
           roles?: string[]
+          scope_synced_at?: string | null
+          scope_version?: number
           shops?: Json
+          sync_error?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -3506,10 +3539,19 @@ export type Database = {
       current_user_shop_id: { Args: never; Returns: string }
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
       erp_action_permissions: { Args: never; Returns: string[] }
+      erp_apply_scope_mirror_v1: {
+        Args: { _erp_user_id: string; _mode?: string; _payload: Json }
+        Returns: Json
+      }
       erp_authorized_shop_ids: { Args: never; Returns: string[] }
       erp_has_action: { Args: { _perm: string }; Returns: boolean }
       erp_is_governed: { Args: never; Returns: boolean }
+      erp_mark_scope_sync_error_v1: {
+        Args: { _erp_user_id: string; _error: string }
+        Returns: undefined
+      }
       erp_scope_active: { Args: never; Returns: boolean }
+      erp_scope_lease_config: { Args: never; Returns: Json }
       erp_verify_current_scope_v1: { Args: never; Returns: Json }
       find_user_id_by_phone: { Args: { _phone: string }; Returns: string }
       gen_short_code: { Args: never; Returns: string }
