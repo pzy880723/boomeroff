@@ -15,11 +15,42 @@ describe('quiz source access', () => {
     expect(isValidKind('favorite')).toBe(true);
   });
 
-  it('rejects suspended account', () => {
-    expect(() => assertNotSuspended({ suspended: true })).toThrow(QuizAccessError);
-    expect(() => assertNotSuspended({ suspended: false })).not.toThrow();
-    expect(() => assertNotSuspended(null)).not.toThrow();
+  it('rejects suspended account (any row suspended)', () => {
+    expect(() => assertNotSuspended([{ suspended: true }])).toThrow(QuizAccessError);
+    expect(() => assertNotSuspended([{ suspended: false }, { suspended: true }])).toThrow(/停用/);
+    try {
+      assertNotSuspended([{ suspended: true }]);
+    } catch (e: any) {
+      expect(e.status).toBe(403);
+    }
   });
+
+  it('allows active account, including multiple non-suspended rows', () => {
+    expect(() => assertNotSuspended([{ suspended: false }])).not.toThrow();
+    expect(() => assertNotSuspended([{ suspended: false }, { suspended: null }])).not.toThrow();
+  });
+
+  it('allows account with no role row (existing account rule)', () => {
+    expect(() => assertNotSuspended([])).not.toThrow();
+  });
+
+  it('fails closed with 503 when the suspension lookup errors or returns null', () => {
+    for (const call of [
+      () => assertNotSuspended(null, { message: 'db down' }),
+      () => assertNotSuspended([{ suspended: false }], { message: 'db down' }),
+      () => assertNotSuspended(null),
+      () => assertNotSuspended(undefined),
+    ]) {
+      try {
+        call();
+        throw new Error('should have thrown');
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(QuizAccessError);
+        expect(e.status).toBe(503);
+      }
+    }
+  });
+
 
   it("rejects another user's favorite", () => {
     try {
