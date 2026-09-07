@@ -9,12 +9,10 @@ import { normalizeLoginIdentity } from '@/lib/loginIdentity';
 import { invokeFn } from '@/lib/invokeFn';
 import { withAuthTimeout } from '@/lib/authTimeout';
 import {
+  decideErpSyncOutcome,
   ERP_SCOPE_RENEW_INTERVAL_MS,
-  isStaleSyncResponse,
-  readErpGovernance,
   refreshErpScope,
   resetErpScopeSyncThrottle,
-  shouldReloadBootstrapAfterSync,
   shouldTrustCachedRole,
   startErpScopeRenewTimer,
 } from '@/lib/erpScopeSync';
@@ -224,20 +222,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 迟到响应（账号已切换/已登出）一律丢弃，绝不套用到新账号。
   const syncErpScope = useCallback(async (userId: string, force = false) => {
     const result = await refreshErpScope(force);
-    if (!result) return;
-    if (isStaleSyncResponse(userId, activeUserIdRef.current)) return;
+    const outcome = decideErpSyncOutcome(userId, activeUserIdRef.current, result);
+    if (outcome.discard) return;
 
-    const { governed, scopeActive } = readErpGovernance(result.data);
-    erpGovernedRef.current = governed;
-    erpScopeActiveRef.current = scopeActive;
+    erpGovernedRef.current = outcome.governed;
+    erpScopeActiveRef.current = outcome.scopeActive;
 
-    if (governed && !scopeActive) {
+    if (outcome.clearCachedRole) {
       // 撤销/失效：立刻清掉本地缓存的旧角色，再向服务端要真实 bootstrap
       clearCachedUserData(userId);
       bootstrapRef.current = null;
     }
 
-    if (shouldReloadBootstrapAfterSync(result.sync?.status) || (governed && !scopeActive)) {
+    if (outcome.reloadBootstrap) {
       bootstrapRequestRef.current = null;
       await fetchBootstrap(userId);
     }
