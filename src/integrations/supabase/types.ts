@@ -3612,6 +3612,7 @@ export type Database = {
         }[]
       }
       perform_check_in: { Args: never; Returns: Json }
+      scoped_has_action: { Args: { _perm: string }; Returns: boolean }
       update_my_phone_realname: {
         Args: { _phone: string; _real_name: string }
         Returns: undefined
