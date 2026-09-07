@@ -58,7 +58,8 @@ rpc: list_shift_schedules_v1(_from date = 今天, _to date = _from, _shop_id uui
 - `erp_authorized_shop_ids()` → `uuid[]`（RLS 使用）
 - `is_hq_user()` → boolean
 - `current_shop_context_v1()` → 同 `shop_context`
-- `erp_verify_current_scope_v1()` → ERP 侧用固定 issuer 的用户令牌调用，回 `{ authenticated, user_id, is_erp_user, scope_context, shop_context }`；客户端不放 service key。
+- `erp_verify_current_scope_v1()` → ERP 侧用固定 issuer 的用户令牌调用，回 `{ authenticated, user_id, erp_user_id, is_erp_user, scope_context, shop_context }`；客户端不放 service key。
+  - `erp_user_id`：仅当本人存在**唯一且有效**的 ERP 映射（`erp_user_links.aigc_user_id = auth.uid()`，未停用、无歧义）时返回该 ERP 用户 ID（uuid）；歧义、撤销、停用、未映射一律返回 `null`（视为未授权）。绝不从用户可改的 email / user_metadata 推断 ERP 身份，也不开放 `erp_user_links` 整表读取。
 
 全部函数已 `REVOKE ... FROM PUBLIC, anon`，仅 `authenticated` 可执行。
 
