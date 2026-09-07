@@ -12,15 +12,18 @@
 "shop_context": {
   "date": "2026-09-08",                 // 上海时区当天
   "scope": "hq" | "store" | "unconfigured",
-  "status": "scheduled" | "rest" | "unscheduled" | "unconfigured",
+  "status": "hq" | "scheduled" | "rest" | "unscheduled" | "unconfigured",
   "effective_shop": { "id": "uuid", "name": "上海中信泰富店" } | null,
   "authorized_shops": [ { "id": "uuid", "name": "上海中信泰富店" } ],
-  "reason": "no_erp_mapping" | "suspended" | "no_authorized_shop"   // 仅 unconfigured 时出现
+  "self_schedule": { "id": "uuid", "name": "上海中信泰富店" } | null,   // 仅参考，不代表身份
+  "reason": "no_erp_mapping" | "mapping_revoked" | "ambiguous_mapping" | "suspended" | "no_authorized_shop"   // 仅 unconfigured 时出现
 }
 ```
 
 - 有效门店只来自**当天排班**（且必须落在授权门店内），永不回退历史归属。
-- 总部无固定门店：`scope=hq`、`effective_shop=null`（除非总部本人当天也有排班）。
+- 总部**永远** `scope=hq`、`status=hq`、`effective_shop=null`；即使当天本人有排班也只出现在 `self_schedule`，不降级为门店身份。
+- ERP 身份只按 `aigc_user_id` 精确匹配，取消邮箱兜底；出现多条匹配返回 `ambiguous_mapping`。
+- 曾被 ERP 下发过映射的账号登记在 `erp_governed_users`；映射撤销/账号停用一律 `unconfigured`，**不回落** legacy 门店。
 
 ## 2. 排班只读接口
 
@@ -31,6 +34,8 @@ rpc: list_shift_schedules_v1(_from date = 今天, _to date = _from, _shop_id uui
 - 区间上限 31 天，超出报 `22023 range exceeds 31 days`；`_shop_id` 不在授权范围报 `42501 shop not authorized`。
 - 总部（或有 `schedule.view_shop` / `staff.read` 的门店范围账号）：授权门店内全部员工排班。
 - 其他账号：只返回本人排班（可跨门店、跨日期）。
+- 结果 UNION `staff_day_offs`：当天只有休息记录、没有班次时也返回一行 `is_rest=true`、`source=day_off`、`shift_code=null`；工作行优先，同一 `user_id + work_date` 绝不重复。
+- 排序稳定：`work_date, user_id, shop_name`；同人同日多条工作行会在 `conflicts` 中报告。
 
 ```jsonc
 {
@@ -42,7 +47,8 @@ rpc: list_shift_schedules_v1(_from date = 今天, _to date = _from, _shop_id uui
     "shift_code": "A", "shift_name": "A 班",
     "start_time": "10:00:00", "end_time": "19:00:00",
     "source": "manual", "is_self": false, "is_rest": false
-  }]
+  }],
+  "conflicts": [{ "work_date": "2026-09-08", "user_id": "uuid", "count": 2, "shop_ids": ["uuid","uuid"] }]
 }
 ```
 
@@ -58,7 +64,10 @@ rpc: list_shift_schedules_v1(_from date = 今天, _to date = _from, _shop_id uui
 
 ## 4. RLS 现状
 
-`shops` / `shop_shifts` / `shift_schedules` / `shop_kb_entries` / `shop_kb_categories` / `shop_holidays` / `staff_day_offs` / `staff_profiles` / `operation_okrs` 的读取条件新增 `shop_id = ANY(erp_authorized_shop_ids())`（总部或带对应权限时生效）。既有 legacy 条件保持不变以兼容尚未接入 ERP 的账号。
+`shops` / `shop_shifts` / `shift_schedules` / `shop_kb_entries` / `shop_kb_categories` / `shop_holidays` / `staff_day_offs` / `staff_profiles` / `operation_okrs`：
+- 读取条件**只认** `shop_id = ANY(erp_authorized_shop_ids())`（+ 本人行、+ `shop_id IS NULL` 的全员公共内容）。已删除 legacy 的 `has_role(admin)` / `current_user_shop_id()` 读取分支。
+- 原先的 `FOR ALL` 写策略会顺带放开读取，已拆分为 INSERT / UPDATE / DELETE 三条，且写入范围同样受 ERP 授权门店约束；总部范围与动作权限（`user_has_permission`）分离。
+- 无 ERP 映射的账号：只看得到本人数据与全员公共内容，门店运营数据一律 `unconfigured`；历史记录一条不删。
 
 ## 5. 待迁移（当前缺身份映射的安全方案）
 
