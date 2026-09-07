@@ -1,60 +1,82 @@
-# GO ↔ ERP 授权镜像收尾：最小落地契约（只读方案，不改生产数据）
+# GO ↔ ERP 授权镜像收尾：冻结契约与切换次序（只读方案，本轮不做任何迁移）
 
 ## 现状（已只读核对）
 
-- `erp_user_links` 只有 3 行，均为 HQ（roles `["super_admin"]`、permissions `["aigc_access"]`），canonical `aigc_user_id` 由 `erp-aigc-session` 严格保留（按 `erp_user_id` 唯一映射优先，冲突 409，绝不改写已存在的 canonical）。
-- 这 3 行的 `shops` 目前是 `[{id: 7111b585-…, name: 中信泰富店}]`，`id` 是 ERP inv_location 编号，与 GO `shops.id` 不同源。因为 3 人都是 HQ，走 `scope='hq'` 分支，不解析 shops，所以现在没暴露；一旦有门店员工绑定就会整份 `invalid_shop_mapping`。
-- `current_user_erp_scope()` 已经是严格 fail-closed（停用/歧义/撤销/非法或停用门店 → `unconfigured`）。缺的只有一件事：**镜像何时刷新**。原生登录只走 GO 手机号+密码，不重跑 SSO，所以 ERP 改角色后 GO 镜像可以无限期停留在旧值。
-- `erp_governed_users` 只增不减，撤销后表现为 `mapping_revoked`，never-linked 的 11 名员工不受任何影响（保持既有旧 Web 兼容分支）。
+- `erp_user_links` 只有 3 行，均为 HQ（roles `["super_admin"]`、permissions `["aigc_access"]`），canonical `aigc_user_id` 由 `erp-aigc-session` 严格保留（按 `erp_user_id` 唯一映射优先，冲突 409，绝不改写已存在 canonical）。
+- 这 3 行的 `shops` 是 `[{id: 7111b585-…, name: 中信泰富店}]`，`id` 为 ERP inv_location 编号，与 GO `shops.id` 不同源。3 人都走 `scope='hq'` 分支不解析 shops，所以现在没暴露；一旦有门店员工绑定会整份 `invalid_shop_mapping`。
+- `current_user_erp_scope()` 已严格 fail-closed（停用/歧义/撤销/非法或停用门店 → `unconfigured`）。唯一缺口是镜像刷新时机：原生只走 GO 手机号+密码，不重跑 SSO。
+- `erp_governed_users` 只增不减；never-linked 的 11 名员工保持既有旧 Web 兼容分支，本方案不触碰。
 
-## 方案要点（两边最小改动）
+## 冻结契约
 
-三条链路，共用一把已存在的 `ERP_AIGC_SSO_SECRET`，**不需要新增 GO service key、不需要改 verifier RPC 签名**。
+### A. ERP 侧端点（复用现有 `ERP_AIGC_SSO_SECRET`，GO 不新增 service key）
 
-### 1. 拉（GO 主动刷新，唯一必须项）
+`POST /api/public/sso/aigc-scope`，头 `x-erp-sso-secret`，入参 `{ erp_user_id }`，返回：
 
-新增 GO Edge Function `erp-scope-sync`（`verify_jwt = true`）：
+```json
+{ "ok": true, "data": {
+  "erp_user_id": "uuid",
+  "active": true,
+  "revoked": false,
+  "roles": ["..."],
+  "permissions": ["..."],
+  "scope_version": 12,
+  "updated_at": "2026-09-07T18:00:00Z",
+  "shops": [{ "go_shop_id": "uuid", "erp_location_id": "uuid", "name": "中信泰富店" }]
+}}
+```
 
-1. 用调用者 JWT `auth.getUser()` 确认身份；
-2. 只按 canonical `erp_user_links.aigc_user_id = user.id` 取 `erp_user_id`（歧义/无映射直接返回 `unauthorized`，绝不按手机号/姓名/邮箱猜）；
-3. 带 `x-erp-sso-secret` 调 ERP 新端点 `POST /api/public/sso/aigc-scope`，只传 `{ erp_user_id }`；
-4. ERP 返回的 roles / permissions / shops 用 service role 写回镜像行（只 UPDATE 已有行，永不 INSERT 新映射）；
-5. 返回 `erp_verify_current_scope_v1()` 的结果，原生可直接接线。
+- 门店只从 **active 的 `go_shop_location_links`** 翻译；任一 location 翻不出 `go_shop_id` 必须显式报错，禁止静默丢弃。
+- **ERP 侧身份链接被 revoke 也必须体现为 `revoked: true`**（不只是角色为空），GO 据此进入永久撤销状态。
+- `scope_version` 单调递增。
 
-原生调用时机：登录成功后、App 冷启/回前台、进入排班或门店写操作前（可节流，例如 60 秒内不重复拉）。
+### B. ERP 推送（保存/撤销后立即失效）
 
-### 2. 推（ERP 保存/撤销后即时失效，推荐但非阻断）
+`POST <GO functions>/erp-scope-push`，`verify_jwt = false`，同一把 secret 鉴权，body 为上面 `data` 的同构 payload 外加 `timestamp`、`nonce`。ERP 在角色/门店/启停/离职/链接撤销保存成功后调用一次。推送失败不阻断 ERP 保存。
 
-新增 GO Edge Function `erp-scope-push`（`verify_jwt = false`，用同一把 secret + `timestamp` + `nonce` 校验，5 分钟时间窗防重放）：ERP 在角色、门店、启停、离职保存成功后调用一次。GO 收到后只更新已存在的映射行；`revoked: true` 时删除 `erp_user_links` 行并保留 `erp_governed_users`，账号立即变 `mapping_revoked` 而不是回落旧 GO 权限。推送失败不阻断 ERP 保存——下一次拉取会补上。
+### C. GO 侧函数
 
-### 3. 过期即失效（保证"失败 ≠ 永久旧权限"）
+`erp-scope-sync`（`verify_jwt = true`）：
+1. `auth.getUser()` 确认调用者；
+2. **仅**按 canonical `erp_user_links.aigc_user_id = user.id` 取 `erp_user_id`，**不接受客户端传入 erp_user_id**，歧义/无墓碑记录直接 `unauthorized`；
+3. 带 secret 调 A 端点，service role 写回镜像；
+4. 返回 `erp_verify_current_scope_v1()` 结果，原生直接接线。
 
-`erp_user_links` 增加 `scope_synced_at`、`scope_version`、`sync_error`。`current_user_erp_scope()` 增加新鲜度判断：
+### D. 短租约（取代先前的读 12 小时/写 15 分钟宽限）
 
-- `scope_synced_at` 超过 **15 分钟** → 写动作一律拒绝（`reason = 'scope_stale'`）；
-- 超过 **12 小时** → 读也降为 `unconfigured`，即彻底 fail-closed。
+- 治理账号的读与写共用同一 **60 秒** 租约：`now() - scope_synced_at > 60s` → `reason='scope_stale'`，读写一律 fail closed。
+- ERP 推送成功 = **立即失效并即时替换**；推送失败/端点不可达 = 原生显示"待同步"，最多到租约到期即拒绝，**不得宣称立即生效**。
+- never-linked 过渡账号不受租约约束。
 
-ERP 不可达时是"降权"，不是"沿用旧权限"，也不会回落 legacy 分支。never-linked 账号不受新鲜度约束。
+### E. 撤销用墓碑，不删行
 
-### 4. shops 契约切换
+- `erp_user_links` 不再 DELETE。增加 `link_status`（`active` / `revoked`）、`revoked_at`、`scope_synced_at`、`scope_version`、`sync_error`。
+- 撤销 = `link_status='revoked'`，**保留 canonical `aigc_user_id`**，因此后续可信拉取仍能定位身份并恢复，无需用户输入 ERP ID。
+- 幂等：`scope_version` 小于或等于已存版本的推送直接丢弃（乱序/重复同版本无副作用）；**永久撤销（ERP `revoked:true`）不可被任何旧版本 push 复活**，只能由更高 `scope_version` 且 `revoked:false` 的可信拉取/推送恢复。
 
-按你已确认的新结构解析：`[{ go_shop_id, erp_location_id, name }]`，GO 只信 `go_shop_id`，任一元素缺字段/格式非法/未知/已停用 → 整份 `invalid_shop_mapping`。旧 `{id}` 结构不再接受（3 个 HQ 走 hq 分支，不受影响）。
+### F. 防重放与鉴权卫生
 
-## 需要 ERP 新增的东西（明确清单）
+- `timestamp` 在 ±5 分钟窗内，`nonce` 真实落库去重（唯一索引，保留 ≥ 24 小时后清理），重复 nonce 直接 409。
+- secret 用**恒定时间比较**（`crypto.timingSafeEqual` 等价实现），任何日志/错误响应都不得出现 secret、token 或其片段。
 
-1. `POST /api/public/sso/aigc-scope`，`x-erp-sso-secret` 鉴权，入参 `{ erp_user_id }`，返回：
-   `{ ok, data: { erp_user_id, active, revoked, roles[], permissions[], scope_version, updated_at, shops: [{ go_shop_id, erp_location_id, name }] } }`，
-   门店只从 **active 的 `go_shop_location_links`** 翻译；翻译不出来的 location 必须显式报错，不要静默丢弃。
-2. 上述 push 回调（角色/门店/启停/离职保存后触发，含同样 payload + `timestamp`/`nonce`）。
-3. `scope_version` 单调递增，GO 用它做幂等，乱序推送不覆盖新值。
-4. ERP 侧不得依据手机号/姓名新建映射；建立新绑定仍必须走 `erp-aigc-session` 的 SSO 票据链路（canonical `aigc_user_id` 由 GO 保留）。
-5. 11 名未绑定员工在 ERP 侧显式发绑定入口，GO 这边不自动关联、不改他们现有权限。
+### G. shops 解析
 
-## 交付顺序
+GO 只信新结构 `{ go_shop_id, erp_location_id, name }` 中的 `go_shop_id`；任一元素缺字段/格式非法/未知/已停用 → 整份 `invalid_shop_mapping` fail closed。员工缺映射 → 明确 `unconfigured`，不回落 legacy 门店。
 
-1. GO 侧先加字段与新鲜度判断（对 3 个 HQ 无影响，因为首次同步会即时写入）；
-2. ERP 上线 scope 端点后接 `erp-scope-sync`，做一次真实拉取回验；
-3. 最后接 push；
-4. 全流程用 ROLLBACK 事务测：HQ 正例、ERP 降 staff 后写/读均拒绝、撤销后 `mapping_revoked`、镜像过期后拒绝、never-linked 保持原状。
+## 切换次序（每步向后兼容，先加后切）
 
-本轮只提方案，不改生产角色、映射、历史数据，也不动原生 UI。
+1. **GO 加字段与 edge（不启用租约）**：加 E 的列 + nonce 表，部署 `erp-scope-sync`、`erp-scope-push`，`scope_synced_at` 允许为空视为"不校验"。现有 3 HQ 完全不受影响。
+2. **ERP 上线 A 端点**，GO 做一次真实拉取回验（HQ 正例 + 一个门店样例）。
+3. **原生接入刷新时机**：登录后、冷启/回前台、进入排班或门店写操作前调用 `erp-scope-sync`（可 30 秒节流）。
+4. **ERP 接 B 推送**，验证保存后即时失效。
+5. **最后启用 60 秒短租约**（含 G 的 strict shops 解析），此时首批 HQ 的镜像已由可信端点拉取过，不做任何手工赋权。
+6. 全流程用 ROLLBACK 事务测：HQ 正例、ERP 降 staff 后读写均拒、`revoked` 墓碑后 fail closed 且不可被旧版本复活、租约过期拒绝、重复 nonce 拒绝、never-linked 保持原状。
+
+## 需要 ERP 明确承诺
+
+- 端点 A + 推送 B（含 `scope_version`、`revoked`、`timestamp`、`nonce`）；
+- 门店只经 active `go_shop_location_links` 翻译，翻不出即报错；
+- 不按手机号/姓名建立映射；新绑定仍走 `erp-aigc-session` SSO 票据，canonical `aigc_user_id` 由 GO 保留；
+- 11 名未绑定员工在 ERP 侧发绑定入口，GO 不自动关联、不改其现有权限。
+
+本轮只冻结契约，不执行迁移、不改生产角色与映射、不动历史数据与原生 UI，也不恢复旧队列任务。
