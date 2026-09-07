@@ -8,6 +8,7 @@ import { clearUserCache, readUserCache, writeUserCache } from '@/lib/appCache';
 import { normalizeLoginIdentity } from '@/lib/loginIdentity';
 import { invokeFn } from '@/lib/invokeFn';
 import { withAuthTimeout } from '@/lib/authTimeout';
+import { refreshErpScope, resetErpScopeSyncThrottle } from '@/lib/erpScopeSync';
 import { toast } from 'sonner';
 
 export interface AppBootstrap {
