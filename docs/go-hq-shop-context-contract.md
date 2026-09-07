@@ -182,3 +182,12 @@ ACK 失败：本地新权限已生效，但 `sync.status = "ack_pending"`，后�
 ### 7.4 `erp-scope-push`
 
 保留、未配置 `ERP_AIGC_SSO_SECRET`、不启用（现返回 `500 server_misconfigured`，fail closed）。不新增任何密钥。
+
+### 7.5 Web 刷新与 bootstrap 顺序（本次修复）
+
+- 新增「仅前台 + 已登录」的 30 秒续租定时器（`startErpScopeRenewTimer`），登出 / 切后台 / 组件卸载即停；与 `focus`/`visibilitychange` 共用 30 秒节流 + in-flight 复用去重，不会重复打请求。
+- 可信同步（`synced` 或 `ack_pending`）完成后强制重拉 `app_bootstrap_v1`，ERP 改角色后 UI 不会继续用旧 bootstrap。
+- 迟到响应保护：发起时的 `userId` 与当前账号不一致（切号/登出）一律丢弃，绝不套用到新账号。
+- 受 ERP 治理的账号在撤销/失效时：清掉本地缓存角色后重拉；`app_bootstrap_v1` 失败时**不再回退** `user_roles` 或缓存旧 admin，角色置空（fail closed）。
+- 未被 ERP 治理的旧账号（11 名未绑定）：`unlinked` 不清角色、不重拉、不扩权，维持原有过渡权限。
+- 测试：`tests/erp-scope-refresh.test.ts`（12 项，含假定时器真实推进 30/90/120 秒、后台与登出停表、dispose 后不再触发、节流去重、sync→bootstrap 顺序、迟到响应、撤销 fail closed）+ `tests/erp-scope-contract.test.ts`（11 项 payload/nonce）。
