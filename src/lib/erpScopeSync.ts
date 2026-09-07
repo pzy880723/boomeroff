@@ -1,9 +1,29 @@
-// Web 侧 ERP 授权范围续租：登录、冷启、回前台时调用，30 秒节流。
+// Web 侧 ERP 授权范围续租：登录、冷启、回前台、前台 30 秒定时器时调用。
 // 只做刷新，不做任何权限判断（授权边界仍在 RLS / RPC）。
 import { invokeFn } from '@/lib/invokeFn';
-import { ERP_SCOPE_THROTTLE_MS, shouldRunErpScopeSync } from '@/lib/erpScopeThrottle';
+import {
+  decideErpSyncOutcome,
+  ERP_SCOPE_RENEW_INTERVAL_MS,
+  ERP_SCOPE_THROTTLE_MS,
+  isStaleSyncResponse,
+  readErpGovernance,
+  shouldReloadBootstrapAfterSync,
+  shouldRunErpScopeSync,
+  shouldTrustCachedRole,
+  startErpScopeRenewTimer,
+} from '@/lib/erpScopeThrottle';
 
-export { ERP_SCOPE_THROTTLE_MS, shouldRunErpScopeSync };
+export {
+  decideErpSyncOutcome,
+  ERP_SCOPE_RENEW_INTERVAL_MS,
+  ERP_SCOPE_THROTTLE_MS,
+  isStaleSyncResponse,
+  readErpGovernance,
+  shouldReloadBootstrapAfterSync,
+  shouldRunErpScopeSync,
+  shouldTrustCachedRole,
+  startErpScopeRenewTimer,
+};
 
 export type ErpSyncStatus = 'synced' | 'ack_pending' | 'pending' | 'unlinked';
 
@@ -21,7 +41,6 @@ export interface ErpScopeSyncResult {
 
 let lastRunAt = 0;
 let inFlight: Promise<ErpScopeSyncResult | null> | null = null;
-
 
 export function resetErpScopeSyncThrottle(): void {
   lastRunAt = 0;

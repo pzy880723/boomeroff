@@ -8,7 +8,14 @@ import { clearUserCache, readUserCache, writeUserCache } from '@/lib/appCache';
 import { normalizeLoginIdentity } from '@/lib/loginIdentity';
 import { invokeFn } from '@/lib/invokeFn';
 import { withAuthTimeout } from '@/lib/authTimeout';
-import { refreshErpScope, resetErpScopeSyncThrottle } from '@/lib/erpScopeSync';
+import {
+  decideErpSyncOutcome,
+  ERP_SCOPE_RENEW_INTERVAL_MS,
+  refreshErpScope,
+  resetErpScopeSyncThrottle,
+  shouldTrustCachedRole,
+  startErpScopeRenewTimer,
+} from '@/lib/erpScopeSync';
 import { toast } from 'sonner';
 
 export interface AppBootstrap {
@@ -101,6 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const activeUserIdRef = useRef<string | null>(null);
   const bootstrapRef = useRef<AppBootstrap | null>(null);
   const bootstrapRequestRef = useRef<{ userId: string; promise: Promise<void> } | null>(null);
+  // 受 ERP 治理的账号：失效/撤销/同步失败时不得回退到缓存里的旧角色
+  const erpGovernedRef = useRef(false);
+  const erpScopeActiveRef = useRef(true);
 
   const applyBootstrap = useCallback((userId: string, value: AppBootstrap, cache: boolean) => {
     bootstrapRef.current = value;
@@ -138,6 +148,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // 受 ERP 治理且当前范围失效/撤销：绝不回退到 user_roles 或缓存里的旧角色
+      if (!shouldTrustCachedRole(erpGovernedRef.current, erpScopeActiveRef.current)) {
+        clearCachedUserData(userId);
+        bootstrapRef.current = null;
+        setBootstrap(null);
+        setRole(null);
+        setRoleCode(null);
+        setSuspended(false);
+        return;
+      }
+
       // Migration may not be deployed yet. Keep the app usable during staged rollout.
       const { data: roleRow, error: roleError } = await supabase
         .from('user_roles')
@@ -164,6 +185,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       if (requestId !== roleRequestIdRef.current) return;
+      if (!shouldTrustCachedRole(erpGovernedRef.current, erpScopeActiveRef.current)) {
+        clearCachedUserData(userId);
+        bootstrapRef.current = null;
+        setBootstrap(null);
+        setRole(null);
+        setRoleCode(null);
+        setSuspended(false);
+        return;
+      }
       // Cached bootstrap remains visible; RLS remains the authorization boundary.
       if (!bootstrapRef.current) {
         setRole('anchor');
@@ -188,6 +218,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return promise;
   }, [fetchBootstrap]);
 
+  // ERP 授权镜像续租；可信同步后按新授权重新拉 bootstrap。
+  // 迟到响应（账号已切换/已登出）一律丢弃，绝不套用到新账号。
+  const syncErpScope = useCallback(async (userId: string, force = false) => {
+    const result = await refreshErpScope(force);
+    const outcome = decideErpSyncOutcome(userId, activeUserIdRef.current, result);
+    if (outcome.discard) return;
+
+    erpGovernedRef.current = outcome.governed;
+    erpScopeActiveRef.current = outcome.scopeActive;
+
+    if (outcome.clearCachedRole) {
+      // 撤销/失效：立刻清掉本地缓存的旧角色，再向服务端要真实 bootstrap
+      clearCachedUserData(userId);
+      bootstrapRef.current = null;
+    }
+
+    if (outcome.reloadBootstrap) {
+      bootstrapRequestRef.current = null;
+      await fetchBootstrap(userId);
+    }
+  }, [fetchBootstrap]);
+
   const beginUserSession = useCallback((nextSession: Session, forceRefresh = false) => {
     const nextUser = nextSession.user;
     const changedUser = activeUserIdRef.current !== nextUser.id;
@@ -197,6 +249,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
 
     if (changedUser) {
+      erpGovernedRef.current = false;
+      erpScopeActiveRef.current = true;
       const cached = readUserCache<AppBootstrap>(BOOTSTRAP_CACHE, nextUser.id);
       if (cached && isBootstrap(cached)) applyBootstrap(nextUser.id, cached, false);
       else {
@@ -211,15 +265,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (changedUser || forceRefresh || !bootstrapRef.current) {
       void loadBootstrap(nextUser.id);
     }
-    // ERP 授权镜像续租（30 秒节流）。失败静默：授权边界仍在服务端。
-    void refreshErpScope(changedUser);
-  }, [applyBootstrap, loadBootstrap]);
+    // 失败静默：授权边界仍在服务端。
+    void syncErpScope(nextUser.id, changedUser);
+  }, [applyBootstrap, loadBootstrap, syncErpScope]);
 
   const clearSession = useCallback(() => {
     activeUserIdRef.current = null;
     roleRequestIdRef.current += 1;
     bootstrapRequestRef.current = null;
     bootstrapRef.current = null;
+    erpGovernedRef.current = false;
+    erpScopeActiveRef.current = true;
     resetErpScopeSyncThrottle();
     setSession(null);
     setUser(null);
@@ -267,20 +323,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [beginUserSession, clearSession]);
 
-  // 回到前台时续租（30 秒节流）
+  // 回到前台续租 + 前台每 30 秒续租（登出/切后台/卸载即停；重复触发由节流去重）
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && activeUserIdRef.current) {
-        void refreshErpScope();
-      }
+    const tick = () => {
+      const uid = activeUserIdRef.current;
+      if (!uid) return;
+      if (document.visibilityState !== 'visible') return;
+      void syncErpScope(uid);
     };
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onVisible);
+
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', tick);
+    const disposeTimer = startErpScopeRenewTimer({
+      intervalMs: ERP_SCOPE_RENEW_INTERVAL_MS,
+      isVisible: () => document.visibilityState === 'visible',
+      isLoggedIn: () => !!activeUserIdRef.current,
+      run: tick,
+    });
+
     return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('focus', tick);
+      disposeTimer();
     };
-  }, []);
+  }, [syncErpScope]);
 
 
   const signIn = async (account: string, password: string) => {
