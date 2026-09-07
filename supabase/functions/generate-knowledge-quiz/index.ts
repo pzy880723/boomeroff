@@ -136,13 +136,14 @@ Deno.serve(async (req) => {
     const user = userData?.user;
     if (userErr || !user) return json({ error: "未登录或登录已过期" }, 401);
 
-    // 停用账号直接拒绝
-    const { data: roleRow } = await adminClient
-      .from("user_roles").select("suspended").eq("user_id", user.id).maybeSingle();
+    // 停用账号直接拒绝；读取失败 fail-closed（503），发生在读取题源与调用模型之前
+    const { data: roleRows, error: roleErr } = await adminClient
+      .from("user_roles").select("suspended").eq("user_id", user.id);
     try {
-      assertNotSuspended(roleRow);
+      assertNotSuspended(roleRows as Array<{ suspended?: boolean | null }> | null, roleErr);
     } catch (e: any) {
       return json({ error: e.message }, e.status ?? 403);
+
     }
 
     const body = await req.json().catch(() => ({}));
