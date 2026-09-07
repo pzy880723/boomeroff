@@ -9,6 +9,7 @@
 //   ack 失败时本地新权限已生效，但状态明确为 ack_pending，后续同版本 pull 可重试。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { parseScopePayload } from "../_shared/erp-scope.ts";
+import { decideAckOutcome, decidePullOutcome, erpFetchJson } from "../_shared/erp-http.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
