@@ -267,6 +267,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [beginUserSession, clearSession]);
 
+  // 回到前台时续租（30 秒节流）
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && activeUserIdRef.current) {
+        void refreshErpScope();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, []);
+
+
   const signIn = async (account: string, password: string) => {
     setLoading(true);
     try {
