@@ -18,9 +18,24 @@ export function isValidKind(kind: unknown): kind is QuizKind {
   return kind === "official" || kind === "favorite" || kind === "knowledge";
 }
 
-export function assertNotSuspended(role: { suspended?: boolean | null } | null | undefined): void {
-  if (role?.suspended) throw new QuizAccessError("账号已停用", 403);
+/**
+ * 停用状态判定（fail-closed）。
+ * user_roles 只有 (user_id, role) 唯一约束，同一用户可能有多行 → 任一行 suspended 即拒绝。
+ * 查询报错 → 503（可重试），不得默认放行。
+ * 无角色行 → 与 _shared/store-access.ts 相同的现有账号规则：视为未停用。
+ */
+export function assertNotSuspended(
+  rows: Array<{ suspended?: boolean | null }> | null | undefined,
+  error?: { message?: string } | null,
+): void {
+  if (error || rows == null) {
+    throw new QuizAccessError("账号状态校验暂时不可用，请稍后重试", 503);
+  }
+  if (rows.some((r) => r?.suspended === true)) {
+    throw new QuizAccessError("账号已停用", 403);
+  }
 }
+
 
 /** 校验题源可读性。row 为用带 JWT 的客户端（受 RLS 约束）读取到的行。 */
 export function assertQuizSourceReadable(
