@@ -9,6 +9,7 @@
 //   ack 失败时本地新权限已生效，但状态明确为 ack_pending，后续同版本 pull 可重试。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { parseScopePayload } from "../_shared/erp-scope.ts";
+import { decideAckOutcome, decidePullOutcome, erpFetchJson } from "../_shared/erp-http.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -97,40 +98,27 @@ Deno.serve(async (req) => {
   // 1) 拉取（ERP 用调用者的 GO token 自行核验本人身份）
   let scopeJson: unknown = null;
   let failCode = "";
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ERP_TIMEOUT_MS);
-    let resp: Response;
-    try {
-      resp = await fetch(ERP_SCOPE_URL, {
-        method: "GET",
-        redirect: "error", // 固定 origin，禁止任何跳转（避免 token 外泄）
-        headers: {
-          Authorization: authHeader,
-          Accept: "application/json",
+  {
+    const pull = decidePullOutcome(
+      await erpFetchJson({
+        url: ERP_SCOPE_URL,
+        timeoutMs: ERP_TIMEOUT_MS,
+        expectedOrigin: ERP_ORIGIN,
+        init: {
+          method: "GET",
+          redirect: "error", // 固定 origin，禁止任何跳转（避免 token 外泄）
+          headers: {
+            Authorization: authHeader,
+            Accept: "application/json",
+          },
         },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-
-    if (new URL(resp.url || ERP_SCOPE_URL).origin !== ERP_ORIGIN) {
-      failCode = "erp_origin_mismatch";
-    } else {
-      const body = await resp.json().catch(() => null);
-      if (!resp.ok) {
-        failCode = `erp_http_${resp.status}`;
-      } else if (!body || (body as Record<string, unknown>).ok !== true) {
-        const c = (body as Record<string, unknown> | null)?.code;
-        failCode = typeof c === "string" ? c : "erp_bad_response";
-      } else {
-        scopeJson = (body as Record<string, unknown>).data;
-      }
-    }
-  } catch (e) {
-    failCode = (e as Error)?.name === "AbortError" ? "erp_timeout" : "erp_unreachable";
+      }),
+    );
+    if (pull.ok) scopeJson = pull.data;
+    else failCode = pull.code;
   }
+
+
 
   if (!scopeJson) {
     const code = failCode || "erp_unreachable";
@@ -194,14 +182,13 @@ Deno.serve(async (req) => {
   }
 
   // 4) ACK（ERP 会用本人 token 反查 GO receipt 核验真实版本/新鲜度，不信客户端）
-  let ackOk = false;
-  let ackCode = "";
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ERP_ACK_TIMEOUT_MS);
-    let ackResp: Response;
-    try {
-      ackResp = await fetch(ERP_ACK_URL, {
+  //    只有「对象 且 ok === true」才算 ACK 成功；200 空 body / HTML / 非法 JSON => ack_bad_response
+  const ackResult = decideAckOutcome(
+    await erpFetchJson({
+      url: ERP_ACK_URL,
+      timeoutMs: ERP_ACK_TIMEOUT_MS,
+      expectedOrigin: ERP_ORIGIN,
+      init: {
         method: "POST",
         redirect: "error",
         headers: {
@@ -210,27 +197,12 @@ Deno.serve(async (req) => {
           Accept: "application/json",
         },
         body: "{}",
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (new URL(ackResp.url || ERP_ACK_URL).origin !== ERP_ORIGIN) {
-      ackCode = "ack_origin_mismatch";
-    } else if (ackResp.ok) {
-      const ackBody = await ackResp.json().catch(() => null);
-      if (!ackBody || (ackBody as Record<string, unknown>).ok === true) {
-        ackOk = true;
-      } else {
-        const c = (ackBody as Record<string, unknown>).code;
-        ackCode = typeof c === "string" ? c : "ack_rejected";
-      }
-    } else {
-      ackCode = `ack_http_${ackResp.status}`;
-    }
-  } catch (e) {
-    ackCode = (e as Error)?.name === "AbortError" ? "ack_timeout" : "ack_unreachable";
-  }
+      },
+    }),
+  );
+  const ackOk = ackResult.ok;
+  const ackCode = ackResult.code;
+
 
   console.log(
     JSON.stringify({ evt: "erp_scope_sync_done", code, scope_version: scopeVersion, ack: ackOk ? "ok" : ackCode }),
