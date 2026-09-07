@@ -3552,6 +3552,7 @@ export type Database = {
       }
       erp_scope_active: { Args: never; Returns: boolean }
       erp_scope_lease_config: { Args: never; Returns: Json }
+      erp_scope_sync_receipt_v1: { Args: never; Returns: Json }
       erp_verify_current_scope_v1: { Args: never; Returns: Json }
       find_user_id_by_phone: { Args: { _phone: string }; Returns: string }
       gen_short_code: { Args: never; Returns: string }
