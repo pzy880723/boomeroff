@@ -3478,8 +3478,12 @@ export type Database = {
       }
       claim_daily_task: { Args: { _task_key: string }; Returns: Json }
       claim_pending_exp: { Args: { _id: string }; Returns: Json }
+      current_shop_context_v1: { Args: never; Returns: Json }
+      current_user_erp_scope: { Args: never; Returns: Json }
       current_user_shop_id: { Args: never; Returns: string }
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
+      erp_authorized_shop_ids: { Args: never; Returns: string[] }
+      erp_verify_current_scope_v1: { Args: never; Returns: Json }
       find_user_id_by_phone: { Args: { _phone: string }; Returns: string }
       gen_short_code: { Args: never; Returns: string }
       gen_voucher_code: { Args: never; Returns: string }
@@ -3515,6 +3519,7 @@ export type Database = {
         Returns: boolean
       }
       is_erp_user: { Args: never; Returns: boolean }
+      is_hq_user: { Args: never; Returns: boolean }
       kb_enqueue: {
         Args: { _op?: string; _source_id: string; _source_type: string }
         Returns: undefined
@@ -3524,6 +3529,10 @@ export type Database = {
         Returns: Json[]
       }
       list_pending_activity_applications: { Args: never; Returns: Json[] }
+      list_shift_schedules_v1: {
+        Args: { _from?: string; _shop_id?: string; _to?: string }
+        Returns: Json
+      }
       list_voucher_claims_with_pii: {
         Args: { _limit?: number; _voucher_id: string }
         Returns: {
