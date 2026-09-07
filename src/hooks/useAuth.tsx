@@ -326,20 +326,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [beginUserSession, clearSession]);
 
-  // 回到前台时续租（30 秒节流）
+  // 回到前台续租 + 前台每 30 秒续租（登出/切后台/卸载即停；重复触发由节流去重）
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && activeUserIdRef.current) {
-        void refreshErpScope();
-      }
+    const tick = () => {
+      const uid = activeUserIdRef.current;
+      if (!uid) return;
+      if (document.visibilityState !== 'visible') return;
+      void syncErpScope(uid);
     };
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onVisible);
+
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', tick);
+    const disposeTimer = startErpScopeRenewTimer({
+      intervalMs: ERP_SCOPE_RENEW_INTERVAL_MS,
+      isVisible: () => document.visibilityState === 'visible',
+      isLoggedIn: () => !!activeUserIdRef.current,
+      run: tick,
+    });
+
     return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('focus', tick);
+      disposeTimer();
     };
-  }, []);
+  }, [syncErpScope]);
 
 
   const signIn = async (account: string, password: string) => {
