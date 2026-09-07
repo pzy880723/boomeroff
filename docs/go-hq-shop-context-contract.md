@@ -66,14 +66,41 @@ rpc: list_shift_schedules_v1(_from date = 今天, _to date = _from, _shop_id uui
 ## 4. RLS 现状
 
 `shops` / `shop_shifts` / `shift_schedules` / `shop_kb_entries` / `shop_kb_categories` / `shop_holidays` / `staff_day_offs` / `staff_profiles` / `operation_okrs`：
-- 读取条件**只认** `shop_id = ANY(erp_authorized_shop_ids())`（+ 本人行、+ `shop_id IS NULL` 的全员公共内容）。已删除 legacy 的 `has_role(admin)` / `current_user_shop_id()` 读取分支。
+- 读取条件**只认** `shop_id = ANY(erp_authorized_shop_ids())`（+ 本人行、+ `shop_id IS NULL` 的全员公共内容），另加下方第 4.1 节的过渡分支。
 - 原先的 `FOR ALL` 写策略会顺带放开读取，已拆分为 INSERT / UPDATE / DELETE 三条，且写入范围同样受 ERP 授权门店约束；总部范围与动作权限（`user_has_permission`）分离。
-- 无 ERP 映射的账号：只看得到本人数据与全员公共内容，门店运营数据一律 `unconfigured`；历史记录一条不删。
+- 历史记录一条不删。
+
+## 4.1 过渡兼容分支（仅限「从未被 ERP 治理」的旧账号）
+
+目的：在 ERP 绑定入口交付前，避免在岗老员工突然失去旧 Web 功能。**只恢复其本轮改动之前既有的权限，不新增、不扩大门店。**
+
+判定原语（均为 `SECURITY DEFINER`、`REVOKE FROM PUBLIC, anon`）：
+- `legacy_transition_active()` = 已登录 **AND** `erp_governed_users` 从未登记 **AND** 当前 `erp_user_links` 无本人映射 **AND** 任一角色均未停用。
+- `legacy_transition_shop_id()` = 上式成立时返回 `current_user_shop_id()`（旧 `staff_profiles.shop_id`），否则 `NULL`。
+- `legacy_transition_admin()` = 上式成立 **AND** 旧 `admin` 角色。
+
+边界（硬性）：
+- 已映射、曾映射后被撤销（`erp_governed_users` 有登记）、任一角色停用 → 一律 `false`/`NULL`，绝不走旧分支。
+- 旧分支与 ERP 授权互斥使用：ERP 已治理账号不会出现 legacy ∪ ERP 的并集扩权。
+- 不按手机号 / 姓名 / 邮箱自动关联 ERP 身份。
+- **新接口不受过渡影响，一律要求可信 ERP 映射**：`current_shop_context_v1()`（`scope=unconfigured`、`reason=no_erp_mapping`）、`erp_verify_current_scope_v1()`（`erp_user_id=null`）、`list_shift_schedules_v1()`（抛 `42501 erp mapping required: <reason>`，未映射账号连本人排班也不返回）。
+
+验证（事务内执行并回滚，未改动任何数据）：
+
+| 用例 | 结果 |
+| --- | --- |
+| never-linked 门店员工（旧属上海中信泰富店） | 旧表直接 SELECT 仅见本店：`shops`=1 行本店、`shop_shifts`=2、`shop_kb_entries`=26（含公共） |
+| 同一账号调用新 RPC | `42501 erp mapping required: no_erp_mapping`；`current_shop_context_v1` = `unconfigured/no_erp_mapping`；`erp_verify_current_scope_v1.erp_user_id = null` |
+| never-linked 且被停用 | `legacy_transition_active=false`，`shops` 可见 0 行 |
+| 已映射账号（含旧 admin 角色） | `legacy_transition_active=false`，仅见 ERP 授权门店 |
+| 映射被撤销（governed 仍在） | `legacy_transition_active=false`，`shops`=0，`reason=mapping_revoked` |
+| never-linked 旧 admin | 恢复到本轮之前的旧 admin 可见范围（与改动前一致），新接口仍 `unconfigured` |
 
 ## 5. 待迁移（当前缺身份映射的安全方案）
 
-现状：`erp_user_links` 仅 3 条且全部 `super_admin`，其余 11 名员工无 ERP 映射，`scope=unconfigured`。
+现状：`erp_user_links` 3 条且全部 `super_admin`；共 15 个从未 ERP 治理且未停用的账号（其中在岗门店员工 11 名）走第 4.1 节过渡分支。
 建议迁移顺序（不改历史数据）：
-1. ERP 侧为每名在岗员工下发映射（`aigc_user_id` 或 `erp+<uuid>@aigc.boomeroff.local` 邮箱确定性匹配），带 `roles[]` 与 `shops[{id,name}]`。
-2. 观察 `current_user_erp_scope()` 全员非 `unconfigured` 后，再逐表移除 legacy 条件（`current_user_shop_id()`），届时 `staff_profiles.shop_id` 降级为纯资料。
-3. 在此之前不要删除 legacy 条件，否则未映射账号会立刻失去门店数据。
+1. ERP 侧为每名在岗员工下发映射（只按可信 `aigc_user_id`），带 `roles[]` 与 `shops[{id,name}]`。
+2. 映射下发即写入 `erp_governed_users`，该账号自动退出过渡分支，改由 ERP 授权判定。
+3. 全员非 `unconfigured` 后，删除第 4.1 节的三个原语与相关策略分支，`staff_profiles.shop_id` 降级为纯资料。
+
