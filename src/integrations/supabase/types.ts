@@ -3495,6 +3495,10 @@ export type Database = {
         Args: { _actor: string; _target_role_code: string }
         Returns: boolean
       }
+      can_write_scoped: {
+        Args: { _perm: string; _shop: string }
+        Returns: boolean
+      }
       claim_daily_task: { Args: { _task_key: string }; Returns: Json }
       claim_pending_exp: { Args: { _id: string }; Returns: Json }
       current_shop_context_v1: { Args: never; Returns: Json }
@@ -3503,6 +3507,7 @@ export type Database = {
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
       erp_authorized_shop_ids: { Args: never; Returns: string[] }
       erp_is_governed: { Args: never; Returns: boolean }
+      erp_scope_active: { Args: never; Returns: boolean }
       erp_verify_current_scope_v1: { Args: never; Returns: Json }
       find_user_id_by_phone: { Args: { _phone: string }; Returns: string }
       gen_short_code: { Args: never; Returns: string }
