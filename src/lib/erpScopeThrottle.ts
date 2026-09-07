@@ -68,3 +68,40 @@ export function startErpScopeRenewTimer(opts: ErpRenewTimerOptions): () => void 
     clearIntervalFn(handle);
   };
 }
+
+/** 从 verifier 数据里读出「是否受 ERP 治理」「当前范围是否有效」。 */
+export function readErpGovernance(data: unknown): { governed: boolean; scopeActive: boolean } {
+  const d = (data ?? {}) as Record<string, unknown>;
+  const scopeCtx = (d.scope_context ?? {}) as Record<string, unknown>;
+  const governed = d.is_erp_user === true || d.erp_user_id != null;
+  const scope = typeof scopeCtx.scope === 'string' ? scopeCtx.scope : 'unconfigured';
+  return { governed, scopeActive: scope !== 'unconfigured' };
+}
+
+export interface ErpSyncOutcome {
+  discard: boolean;
+  governed: boolean;
+  scopeActive: boolean;
+  clearCachedRole: boolean;
+  reloadBootstrap: boolean;
+}
+
+/** 同步结果 -> 本地动作决策（纯函数，便于测试迟到响应 / 撤销 / ack_pending 顺序）。 */
+export function decideErpSyncOutcome(
+  requestUserId: string | null,
+  activeUserId: string | null,
+  result: { data?: unknown; sync?: { status?: string } } | null,
+): ErpSyncOutcome {
+  if (!result || isStaleSyncResponse(requestUserId, activeUserId)) {
+    return { discard: true, governed: false, scopeActive: true, clearCachedRole: false, reloadBootstrap: false };
+  }
+  const { governed, scopeActive } = readErpGovernance(result.data);
+  const revoked = governed && !scopeActive;
+  return {
+    discard: false,
+    governed,
+    scopeActive,
+    clearCachedRole: revoked,
+    reloadBootstrap: shouldReloadBootstrapAfterSync(result.sync?.status) || revoked,
+  };
+}
