@@ -1,82 +1,66 @@
-# GO ↔ ERP 授权镜像收尾：冻结契约与切换次序（只读方案，本轮不做任何迁移）
+# ERP 授权刷新间歇超时：只读诊断结论 + 最小修复建议
 
-## 现状（已只读核对）
+只读排查，未改任何代码、权限、租约开关，未触发任何模拟身份或旧任务。
 
-- `erp_user_links` 只有 3 行，均为 HQ（roles `["super_admin"]`、permissions `["aigc_access"]`），canonical `aigc_user_id` 由 `erp-aigc-session` 严格保留（按 `erp_user_id` 唯一映射优先，冲突 409，绝不改写已存在 canonical）。
-- 这 3 行的 `shops` 是 `[{id: 7111b585-…, name: 中信泰富店}]`，`id` 为 ERP inv_location 编号，与 GO `shops.id` 不同源。3 人都走 `scope='hq'` 分支不解析 shops，所以现在没暴露；一旦有门店员工绑定会整份 `invalid_shop_mapping`。
-- `current_user_erp_scope()` 已严格 fail-closed（停用/歧义/撤销/非法或停用门店 → `unconfigured`）。唯一缺口是镜像刷新时机：原生只走 GO 手机号+密码，不重跑 SSO。
-- `erp_governed_users` 只增不减；never-linked 的 11 名员工保持既有旧 Web 兼容分支，本方案不触碰。
+## 事实证据（时间为 UTC，括号内 CST = UTC+8）
 
-## 冻结契约
+erp-scope-sync 函数日志（同一总部账号）：
 
-### A. ERP 侧端点（复用现有 `ERP_AIGC_SSO_SECRET`，GO 不新增 service key）
-
-`POST /api/public/sso/aigc-scope`，头 `x-erp-sso-secret`，入参 `{ erp_user_id }`，返回：
-
-```json
-{ "ok": true, "data": {
-  "erp_user_id": "uuid",
-  "active": true,
-  "revoked": false,
-  "roles": ["..."],
-  "permissions": ["..."],
-  "scope_version": 12,
-  "updated_at": "2026-09-07T18:00:00Z",
-  "shops": [{ "go_shop_id": "uuid", "erp_location_id": "uuid", "name": "中信泰富店" }]
-}}
+```text
+23:07:21.103 (07:07)  done   applied        scope_version=1  ack=ok
+23:07:48.159 (07:07)  done   lease_renewed  scope_version=1  ack=ok
+23:11:33.208 (07:11)  done   lease_renewed  scope_version=1  ack=ok
+23:12:01.443 (07:12)  done   lease_renewed  scope_version=1  ack=ok
+23:12:36.071 (07:12)  pending  erp_timeout        <-- 你观察到的那次
+23:13:01.728 (07:13)  done   lease_renewed  scope_version=1  ack=ok
+23:13:36.829 (07:13)  pending  erp_timeout        <-- 第二次，同一模式
+23:14:02.037 (07:14)  done   lease_renewed  scope_version=1  ack=ok
 ```
 
-- 门店只从 **active 的 `go_shop_location_links`** 翻译；任一 location 翻不出 `go_shop_id` 必须显式报错，禁止静默丢弃。
-- **ERP 侧身份链接被 revoke 也必须体现为 `revoked: true`**（不只是角色为空），GO 据此进入永久撤销状态。
-- `scope_version` 单调递增。
+对应 edge 请求耗时（全部 HTTP 200，函数本身没有崩溃、没有平台级超时）：
 
-### B. ERP 推送（保存/撤销后立即失效）
+```text
+成功轮次：3986 / 4127 / 4840 / 4905 / 6008 / 6103 ms
+失败轮次：9009 ms、10206 ms
+```
 
-`POST <GO functions>/erp-scope-push`，`verify_jwt = false`，同一把 secret 鉴权，body 为上面 `data` 的同构 payload 外加 `timestamp`、`nonce`。ERP 在角色/门店/启停/离职/链接撤销保存成功后调用一次。推送失败不阻断 ERP 保存。
+数据库回读（未修改）：唯一被治理的映射当前 `link_status=active`、`scope_version=1`、
+`sync_error=NULL`、`scope_synced_at=23:14:29`；另两条为从未接入 ERP 的历史行，未被触碰。
+近 3 天该函数只有今天这 2 次 pending、6 次 done。
 
-### C. GO 侧函数
+## 分类结论
 
-`erp-scope-sync`（`verify_jwt = true`）：
-1. `auth.getUser()` 确认调用者；
-2. **仅**按 canonical `erp_user_links.aigc_user_id = user.id` 取 `erp_user_id`，**不接受客户端传入 erp_user_id**，歧义/无墓碑记录直接 `unauthorized`；
-3. 带 secret 调 A 端点，service role 写回镜像；
-4. 返回 `erp_verify_current_scope_v1()` 结果，原生直接接线。
+- 不是「整体函数超时」：edge 请求都以 200 结束，耗时 9.0s / 10.2s，远低于平台上限，
+  也没有 shutdown/BOOT_ERROR/CPU 超限日志。
+- 不是「响应体读取被漏掉」：现有 `erpFetchJson` 用同一个 AbortController 覆盖握手 +
+  `resp.text()` 完整读取，超时会统一归为 `timeout`。
+- 是「拉取阶段整体超过 8 秒预算被主动 abort」：`ERP_TIMEOUT_MS = 8000`
+  （`supabase/functions/_shared/erp-http.ts` + `erp-scope-sync/index.ts`），
+  abort 后 `decidePullOutcome` 返回 `erp_timeout`，函数按设计只写 `sync_error`、
+  不写镜像、不续租，随后仍要走 `verifier()`，所以函数总耗时 = 8s + 1~2s ≈ 9~10s，
+  与观测完全吻合。
+- 关键风险点：**成功轮次本身已经在 4~6 秒**。也就是说正常情况下就用掉了 8 秒预算的
+  50~75%，只要腾讯侧多花 2~4 秒（冷启动、连接池新建、TLS 握手、上游抖动）就会被 abort。
+  这是「边缘余量不足」，不是权限问题。
+- 腾讯 nginx 无 GET authorization 记录，与「请求已到达但被客户端提前 abort」并不矛盾：
+  被 abort 的连接通常记为 499 或按配置不落 access log；仅凭缺记录不能断定请求未到达。
+  这一条目前**未被证实**，需要两侧联合验证（见下）。
+- fail-closed 行为符合设计：单次 `erp_timeout` 即让 App 退回未同步页，下一轮 pull 成功
+  自动恢复 HQ，与你在真机看到的现象一致。
 
-### D. 短租约（取代先前的读 12 小时/写 15 分钟宽限）
+## 最小修复建议（本次不实施，等你确认）
 
-- 治理账号的读与写共用同一 **60 秒** 租约：`now() - scope_synced_at > 60s` → `reason='scope_stale'`，读写一律 fail closed。
-- ERP 推送成功 = **立即失效并即时替换**；推送失败/端点不可达 = 原生显示"待同步"，最多到租约到期即拒绝，**不得宣称立即生效**。
-- never-linked 过渡账号不受租约约束。
+1. 先联合定位「到没到腾讯」：让 ERP 侧临时打开 `log_format` 里的 `499` 记录与
+   `$request_time`/`$upstream_response_time`，并在 GO 侧对 pull 请求加一个随机
+   `X-Request-Id` 头，仅用于日志比对。这是唯一能把「未到达」和「上游慢」分开的证据。
+2. 分阶段计时日志（无敏感字段）：在 `erp_scope_sync_pending` 日志里补 `phase`
+   （pull/ack）与 `elapsed_ms`，让后续判断不再靠推断。
+3. 余量而非放宽：把 pull 超时从 8s 提到 12s，并对 `timeout`/`unreachable` 做
+   **一次**立即重试（ack 不变）。这不放宽任何权限判定 —— 失败仍然 pending、
+   仍然不写镜像、不续租。
+4. UI 抖动收敛：连续 2 次同类网络失败才切到未同步页（或直到租约到期），
+   单次抖动不弹排班。权限边界仍由 RLS/租约决定，不因此延长任何有效权限。
+5. 腾讯侧长期项：确认该接口是否存在冷启动/无连接复用；启用 keep-alive 后
+   4~6 秒基线应显著下降，才是根治点。
 
-### E. 撤销用墓碑，不删行
-
-- `erp_user_links` 不再 DELETE。增加 `link_status`（`active` / `revoked`）、`revoked_at`、`scope_synced_at`、`scope_version`、`sync_error`。
-- 撤销 = `link_status='revoked'`，**保留 canonical `aigc_user_id`**，因此后续可信拉取仍能定位身份并恢复，无需用户输入 ERP ID。
-- 幂等：`scope_version` 小于或等于已存版本的推送直接丢弃（乱序/重复同版本无副作用）；**永久撤销（ERP `revoked:true`）不可被任何旧版本 push 复活**，只能由更高 `scope_version` 且 `revoked:false` 的可信拉取/推送恢复。
-
-### F. 防重放与鉴权卫生
-
-- `timestamp` 在 ±5 分钟窗内，`nonce` 真实落库去重（唯一索引，保留 ≥ 24 小时后清理），重复 nonce 直接 409。
-- secret 用**恒定时间比较**（`crypto.timingSafeEqual` 等价实现），任何日志/错误响应都不得出现 secret、token 或其片段。
-
-### G. shops 解析
-
-GO 只信新结构 `{ go_shop_id, erp_location_id, name }` 中的 `go_shop_id`；任一元素缺字段/格式非法/未知/已停用 → 整份 `invalid_shop_mapping` fail closed。员工缺映射 → 明确 `unconfigured`，不回落 legacy 门店。
-
-## 切换次序（每步向后兼容，先加后切）
-
-1. **GO 加字段与 edge（不启用租约）**：加 E 的列 + nonce 表，部署 `erp-scope-sync`、`erp-scope-push`，`scope_synced_at` 允许为空视为"不校验"。现有 3 HQ 完全不受影响。
-2. **ERP 上线 A 端点**，GO 做一次真实拉取回验（HQ 正例 + 一个门店样例）。
-3. **原生接入刷新时机**：登录后、冷启/回前台、进入排班或门店写操作前调用 `erp-scope-sync`（可 30 秒节流）。
-4. **ERP 接 B 推送**，验证保存后即时失效。
-5. **最后启用 60 秒短租约**（含 G 的 strict shops 解析），此时首批 HQ 的镜像已由可信端点拉取过，不做任何手工赋权。
-6. 全流程用 ROLLBACK 事务测：HQ 正例、ERP 降 staff 后读写均拒、`revoked` 墓碑后 fail closed 且不可被旧版本复活、租约过期拒绝、重复 nonce 拒绝、never-linked 保持原状。
-
-## 需要 ERP 明确承诺
-
-- 端点 A + 推送 B（含 `scope_version`、`revoked`、`timestamp`、`nonce`）；
-- 门店只经 active `go_shop_location_links` 翻译，翻不出即报错；
-- 不按手机号/姓名建立映射；新绑定仍走 `erp-aigc-session` SSO 票据，canonical `aigc_user_id` 由 GO 保留；
-- 11 名未绑定员工在 ERP 侧发绑定入口，GO 不自动关联、不改其现有权限。
-
-本轮只冻结契约，不执行迁移、不改生产角色与映射、不动历史数据与原生 UI，也不恢复旧队列任务。
+租约保持 OFF，直到 1、2 拿到证据且 3 上线验收。
