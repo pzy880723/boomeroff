@@ -218,10 +218,10 @@ Deno.serve(async (req) => {
   let ackCode = "";
   try {
     const controller = new AbortController();
+    // 同一个 timer 覆盖握手 + 完整 body 读取
     const timer = setTimeout(() => controller.abort(), ERP_ACK_TIMEOUT_MS);
-    let ackResp: Response;
     try {
-      ackResp = await fetch(ERP_ACK_URL, {
+      const ackResp = await fetch(ERP_ACK_URL, {
         method: "POST",
         redirect: "error",
         headers: {
@@ -232,22 +232,44 @@ Deno.serve(async (req) => {
         body: "{}",
         signal: controller.signal,
       });
+
+      if (new URL(ackResp.url || ERP_ACK_URL).origin !== ERP_ORIGIN) {
+        await ackResp.body?.cancel().catch(() => {});
+        ackCode = "ack_origin_mismatch";
+      } else if (ackResp.ok) {
+        const raw = await ackResp.text();
+        let ackBody: unknown = null;
+        let parseFailed = false;
+        if (raw.trim() === "") {
+          parseFailed = true;
+        } else {
+          try {
+            ackBody = JSON.parse(raw);
+          } catch {
+            parseFailed = true;
+          }
+        }
+        const obj = ackBody && typeof ackBody === "object" && !Array.isArray(ackBody)
+          ? (ackBody as Record<string, unknown>)
+          : null;
+
+        if (parseFailed || !obj) {
+          // 200 空 body / HTML / 非法 JSON / 非对象：一律不算 ACK 成功
+          ackCode = "ack_bad_response";
+        } else if (obj.ok === true) {
+          ackOk = true;
+        } else {
+          const c = obj.code;
+          ackCode = typeof c === "string" ? c : "ack_rejected";
+        }
+      } else {
+        await ackResp.body?.cancel().catch(() => {});
+        ackCode = `ack_http_${ackResp.status}`;
+      }
     } finally {
       clearTimeout(timer);
     }
-    if (new URL(ackResp.url || ERP_ACK_URL).origin !== ERP_ORIGIN) {
-      ackCode = "ack_origin_mismatch";
-    } else if (ackResp.ok) {
-      const ackBody = await ackResp.json().catch(() => null);
-      if (!ackBody || (ackBody as Record<string, unknown>).ok === true) {
-        ackOk = true;
-      } else {
-        const c = (ackBody as Record<string, unknown>).code;
-        ackCode = typeof c === "string" ? c : "ack_rejected";
-      }
-    } else {
-      ackCode = `ack_http_${ackResp.status}`;
-    }
+
   } catch (e) {
     ackCode = (e as Error)?.name === "AbortError" ? "ack_timeout" : "ack_unreachable";
   }
