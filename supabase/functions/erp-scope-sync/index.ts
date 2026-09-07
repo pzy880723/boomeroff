@@ -1,8 +1,12 @@
-// GO 主动拉取 ERP 授权范围并写镜像。
-// - 只按 auth.getUser() -> canonical erp_user_links.aigc_user_id 取 erp_user_id，
-//   绝不接受客户端传入的 erp_user_id。
+// GO 主动拉取 ERP 授权范围并写镜像（最小接入版）。
+// - 通道：GET https://erp.boomeroff.com/api/public/go/authorization
+//   固定 origin、禁止 redirect、转发调用者本人的 GO JWT（不使用任何 SSO secret）。
+// - 身份：只按 auth.getUser() -> canonical erp_user_links.aigc_user_id 取 erp_user_id，
+//   绝不接受客户端传入的 erp_user_id；并核对 ERP 响应中的 erp_user_id 一致。
 // - 只 UPDATE 已存在的映射，永不创建新绑定。
-// - ERP 端点不可达 / 报错时返回 sync.status = "pending"，不破坏现有旧 Web 权限。
+// - 网络/解析失败一律 pending，且不写镜像、不续租。
+// - 写镜像成功（applied / lease_renewed）后，用同一本人 GO JWT 调用 ERP ack；
+//   ack 失败时本地新权限已生效，但状态明确为 ack_pending，后续同版本 pull 可重试。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { parseScopePayload } from "../_shared/erp-scope.ts";
 
@@ -12,8 +16,11 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const ERP_SCOPE_URL = "https://boomer-off-buddy.lovable.app/api/public/sso/aigc-scope";
+const ERP_ORIGIN = "https://erp.boomeroff.com";
+const ERP_SCOPE_URL = `${ERP_ORIGIN}/api/public/go/authorization`;
+const ERP_ACK_URL = `${ERP_ORIGIN}/api/public/go/authorization-ack`;
 const ERP_TIMEOUT_MS = 8_000;
+const ERP_ACK_TIMEOUT_MS = 5_000;
 
 function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
@@ -29,7 +36,6 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const ssoSecret = Deno.env.get("ERP_AIGC_SSO_SECRET");
   if (!supabaseUrl || !serviceRoleKey || !anonKey) {
     return json(500, { ok: false, code: "server_misconfigured" });
   }
@@ -51,19 +57,25 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  const verifier = async () => {
+    const { data, error } = await userClient.rpc("erp_verify_current_scope_v1");
+    if (error) return null;
+    return data;
+  };
+
   // canonical 身份：必须唯一
   const { data: links, error: linkErr } = await admin
     .from("erp_user_links")
     .select("erp_user_id, link_status")
     .eq("aigc_user_id", uid)
     .limit(2);
-  if (linkErr) return json(500, { ok: false, code: "mapping_lookup_failed" });
-
-  const verifier = async () => {
-    const { data, error } = await userClient.rpc("erp_verify_current_scope_v1");
-    if (error) return null;
-    return data;
-  };
+  if (linkErr) {
+    return json(200, {
+      ok: true,
+      data: await verifier(),
+      sync: { status: "pending", code: "mapping_lookup_failed" },
+    });
+  }
 
   if (!links || links.length === 0) {
     return json(200, {
@@ -82,67 +94,71 @@ Deno.serve(async (req) => {
 
   const erpUserId = links[0].erp_user_id as string;
 
-  if (!ssoSecret) {
-    await admin.rpc("erp_mark_scope_sync_error_v1", {
-      _erp_user_id: erpUserId,
-      _error: "sso_secret_missing",
-    });
-    return json(200, {
-      ok: true,
-      data: await verifier(),
-      sync: { status: "pending", code: "sso_secret_missing" },
-    });
-  }
-
+  // 1) 拉取（ERP 用调用者的 GO token 自行核验本人身份）
   let scopeJson: unknown = null;
   let failCode = "";
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ERP_TIMEOUT_MS);
-    const resp = await fetch(ERP_SCOPE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-erp-sso-secret": ssoSecret },
-      body: JSON.stringify({ erp_user_id: erpUserId }),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    const body = await resp.json().catch(() => null);
-    if (!resp.ok || !body || (body as any).ok !== true) {
-      failCode = typeof (body as any)?.code === "string" ? (body as any).code : `erp_http_${resp.status}`;
-    } else {
-      scopeJson = (body as any).data;
+    let resp: Response;
+    try {
+      resp = await fetch(ERP_SCOPE_URL, {
+        method: "GET",
+        redirect: "error", // 固定 origin，禁止任何跳转（避免 token 外泄）
+        headers: {
+          Authorization: authHeader,
+          Accept: "application/json",
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
     }
-  } catch (_e) {
-    failCode = "erp_unreachable";
+
+    if (new URL(resp.url || ERP_SCOPE_URL).origin !== ERP_ORIGIN) {
+      failCode = "erp_origin_mismatch";
+    } else {
+      const body = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        failCode = `erp_http_${resp.status}`;
+      } else if (!body || (body as Record<string, unknown>).ok !== true) {
+        const c = (body as Record<string, unknown> | null)?.code;
+        failCode = typeof c === "string" ? c : "erp_bad_response";
+      } else {
+        scopeJson = (body as Record<string, unknown>).data;
+      }
+    }
+  } catch (e) {
+    failCode = (e as Error)?.name === "AbortError" ? "erp_timeout" : "erp_unreachable";
   }
 
   if (!scopeJson) {
-    await admin.rpc("erp_mark_scope_sync_error_v1", {
-      _erp_user_id: erpUserId,
-      _error: failCode || "erp_unreachable",
-    });
-    console.log(JSON.stringify({ evt: "erp_scope_sync_pending", code: failCode }));
+    const code = failCode || "erp_unreachable";
+    // 仅记录错误，绝不写镜像、绝不续租
+    await admin.rpc("erp_mark_scope_sync_error_v1", { _erp_user_id: erpUserId, _error: code });
+    console.log(JSON.stringify({ evt: "erp_scope_sync_pending", code }));
     return json(200, {
       ok: true,
       data: await verifier(),
-      sync: { status: "pending", code: failCode || "erp_unreachable" },
+      sync: { status: "pending", code },
     });
   }
 
+  // 2) 严格解析 + 身份一致性
   const parsed = parseScopePayload(scopeJson);
   if (!parsed.ok) {
-    await admin.rpc("erp_mark_scope_sync_error_v1", {
-      _erp_user_id: erpUserId,
-      _error: parsed.code,
-    });
+    await admin.rpc("erp_mark_scope_sync_error_v1", { _erp_user_id: erpUserId, _error: parsed.code });
     return json(200, {
       ok: true,
       data: await verifier(),
       sync: { status: "pending", code: parsed.code },
     });
   }
-
   if (parsed.payload.erp_user_id !== erpUserId) {
+    await admin.rpc("erp_mark_scope_sync_error_v1", {
+      _erp_user_id: erpUserId,
+      _error: "erp_user_id_mismatch",
+    });
     return json(200, {
       ok: true,
       data: await verifier(),
@@ -150,6 +166,7 @@ Deno.serve(async (req) => {
     });
   }
 
+  // 3) 原子写镜像（版本规则在数据库里）
   const { data: applied, error: applyErr } = await admin.rpc("erp_apply_scope_mirror_v1", {
     _erp_user_id: erpUserId,
     _payload: parsed.payload,
@@ -163,16 +180,71 @@ Deno.serve(async (req) => {
     });
   }
 
-  const result = applied as Record<string, unknown> | null;
-  const okApplied = result?.ok === true;
+  const result = (applied ?? {}) as Record<string, unknown>;
+  const code = String(result.code ?? "unknown");
+  const scopeVersion = (result.scope_version ?? null) as number | null;
+  const leaseRenewed = result.lease_renewed === true;
+
+  if (result.ok !== true) {
+    return json(200, {
+      ok: true,
+      data: await verifier(),
+      sync: { status: "pending", code, scope_version: scopeVersion, lease_renewed: false },
+    });
+  }
+
+  // 4) ACK（ERP 会用本人 token 反查 GO receipt 核验真实版本/新鲜度，不信客户端）
+  let ackOk = false;
+  let ackCode = "";
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ERP_ACK_TIMEOUT_MS);
+    let ackResp: Response;
+    try {
+      ackResp = await fetch(ERP_ACK_URL, {
+        method: "POST",
+        redirect: "error",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: "{}",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (new URL(ackResp.url || ERP_ACK_URL).origin !== ERP_ORIGIN) {
+      ackCode = "ack_origin_mismatch";
+    } else if (ackResp.ok) {
+      const ackBody = await ackResp.json().catch(() => null);
+      if (!ackBody || (ackBody as Record<string, unknown>).ok === true) {
+        ackOk = true;
+      } else {
+        const c = (ackBody as Record<string, unknown>).code;
+        ackCode = typeof c === "string" ? c : "ack_rejected";
+      }
+    } else {
+      ackCode = `ack_http_${ackResp.status}`;
+    }
+  } catch (e) {
+    ackCode = (e as Error)?.name === "AbortError" ? "ack_timeout" : "ack_unreachable";
+  }
+
+  console.log(
+    JSON.stringify({ evt: "erp_scope_sync_done", code, scope_version: scopeVersion, ack: ackOk ? "ok" : ackCode }),
+  );
+
   return json(200, {
     ok: true,
     data: await verifier(),
     sync: {
-      status: okApplied ? "synced" : "pending",
-      code: String(result?.code ?? "unknown"),
-      scope_version: result?.scope_version ?? null,
-      lease_renewed: result?.lease_renewed ?? false,
+      status: ackOk ? "synced" : "ack_pending",
+      code,
+      scope_version: scopeVersion,
+      lease_renewed: leaseRenewed,
+      ack: ackOk ? { ok: true, code: "acked" } : { ok: false, code: ackCode || "ack_failed" },
     },
   });
 });

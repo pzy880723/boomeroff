@@ -150,3 +150,35 @@ Web：登录成功、冷启恢复会话、回前台/窗口聚焦时调用 `erp-s
 - `ERP_AIGC_SSO_SECRET` 在本项目 Edge Function 环境**尚未配置**：`erp-scope-push` 现返回 `500 server_misconfigured`（fail closed），`erp-scope-sync` 返回 `sync.status = "pending" / sso_secret_missing`，不影响现有权限。
 - ERP `/api/public/sso/aigc-scope` 尚未上线，暂不做任何真实拉取，现有 3 个总部账号的角色与绑定未被改动。
 - 短租约开关保持关闭；新 shops 结构解析已生效，但只在镜像里出现 `go_shop_id` 时启用，旧结构走原逻辑，总部账号不受影响。
+
+
+## 7. 最小接入（最终版，2026-09-07 收尾）
+
+不新增 ERP service-role，不复制 SSO 密钥。
+
+### 7.1 拉取通道（已切换）
+
+`GET https://erp.boomeroff.com/api/public/go/authorization`
+- 头：`Authorization: Bearer <调用者本人的 GO JWT>`（由 `erp-scope-sync` 原样转发），**不带任何 SSO secret**。
+- `redirect: "error"` + 响应 origin 复核（非 `https://erp.boomeroff.com` → `erp_origin_mismatch`），杜绝 token 随跳转外泄。
+- ERP 侧固定 GO issuer，用无参 verifier 核验本人可信 `erp_user_id`；GO 旧 scope / 租约过期 / 已撤销也必须能刷新。
+- 返回沿用既有 payload；GO 仍严格解析并核对 `data.erp_user_id` 与本地 canonical 一致（不一致 → `erp_user_id_mismatch`，不写镜像）。
+- 网络/超时/HTTP 错误：**只记录 `sync_error`，绝不写镜像、绝不续租**。
+
+### 7.2 回执 RPC（新增）
+
+`erp_scope_sync_receipt_v1()`：无参、只读、`SECURITY DEFINER`、仅 `authenticated`/`service_role` 可执行，只读本人行。
+返回 `{ authenticated, user_id, erp_user_id, scope_version, link_status, scope_synced_at, code }`，
+`code ∈ ok | no_erp_mapping | ambiguous_mapping | unauthenticated`。
+撤销墓碑仍可读回执（`link_status: "revoked"`），不要求 scope 活跃；不暴露他人数据、不含任何密钥；客户端无法写入这些字段。
+
+### 7.3 ACK
+
+镜像 `applied` 或同版本可信 pull `lease_renewed` 之后，`erp-scope-sync` 用同一本人 GO JWT 调用
+`POST https://erp.boomeroff.com/api/public/go/authorization-ack`，body `{}`。
+ERP 自行反查 GO receipt 核验版本/状态/60 秒新鲜度后才确认 outbox，不采信客户端的 ok。
+ACK 失败：本地新权限已生效，但 `sync.status = "ack_pending"`，后续同版本 pull 会再次尝试 ACK；缺 ACK 一律不当成功。
+
+### 7.4 `erp-scope-push`
+
+保留、未配置 `ERP_AIGC_SSO_SECRET`、不启用（现返回 `500 server_misconfigured`，fail closed）。不新增任何密钥。

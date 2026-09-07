@@ -5,12 +5,18 @@ import { ERP_SCOPE_THROTTLE_MS, shouldRunErpScopeSync } from '@/lib/erpScopeThro
 
 export { ERP_SCOPE_THROTTLE_MS, shouldRunErpScopeSync };
 
-export type ErpSyncStatus = 'synced' | 'pending' | 'unlinked';
+export type ErpSyncStatus = 'synced' | 'ack_pending' | 'pending' | 'unlinked';
 
 export interface ErpScopeSyncResult {
   ok: boolean;
   data: unknown;
-  sync: { status: ErpSyncStatus; code: string };
+  sync: {
+    status: ErpSyncStatus;
+    code: string;
+    scope_version?: number | null;
+    lease_renewed?: boolean;
+    ack?: { ok: boolean; code: string };
+  };
 }
 
 let lastRunAt = 0;
