@@ -983,6 +983,24 @@ export type Database = {
         }
         Relationships: []
       }
+      erp_governed_users: {
+        Row: {
+          first_linked_at: string
+          last_seen_at: string
+          user_id: string
+        }
+        Insert: {
+          first_linked_at?: string
+          last_seen_at?: string
+          user_id: string
+        }
+        Update: {
+          first_linked_at?: string
+          last_seen_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       erp_user_links: {
         Row: {
           aigc_user_id: string
@@ -3455,6 +3473,7 @@ export type Database = {
       }
     }
     Functions: {
+      account_suspended: { Args: never; Returns: boolean }
       add_experience: {
         Args: { _amount: number; _user_id: string }
         Returns: number
@@ -3483,6 +3502,7 @@ export type Database = {
       current_user_shop_id: { Args: never; Returns: string }
       delete_voucher_safe: { Args: { _id: string }; Returns: Json }
       erp_authorized_shop_ids: { Args: never; Returns: string[] }
+      erp_is_governed: { Args: never; Returns: boolean }
       erp_verify_current_scope_v1: { Args: never; Returns: Json }
       find_user_id_by_phone: { Args: { _phone: string }; Returns: string }
       gen_short_code: { Args: never; Returns: string }
