@@ -1,66 +1,64 @@
-# ERP 授权刷新间歇超时：只读诊断结论 + 最小修复建议
+# BOOMER GO 收尾：只读核查结论（超时预算 + 收藏/练习语义）
 
-只读排查，未改任何代码、权限、租约开关，未触发任何模拟身份或旧任务。
+全程只读。未改 schema、权限、租约开关，未部署，未恢复任何旧任务，未写入任何成绩。
 
-## 事实证据（时间为 UTC，括号内 CST = UTC+8）
+## A. 当前可用性（核查受限，如实说明）
 
-erp-scope-sync 函数日志（同一总部账号）：
+- 后端数据平面此刻不可达：数据库连接池返回 “pooler unavailable”，`cloud_status` 探测超时，
+  直连 psql 报 `authentication query failed: connection to database not available`。
+  Auth 健康端点连续 10 次返回 401（服务在，但库侧未就绪）。
+- 因此本轮**无法**取到最新失败聚合、阶段耗时，也无法做匿名统计查询。
+- 日志侧：`erp-scope-sync` 在当前可查询的保留窗口内**没有任何请求记录**（0 条 edge 日志、
+  0 条函数日志），与 9 月 8 日之后未再真机触发/日志已过保留期一致。
+  9 月 8 日那两次的既有证据仍成立：函数总耗时 9.0s / 10.2s，成功轮次 4~6s，
+  失败即 8s pull 预算被 abort。
 
-```text
-23:07:21.103 (07:07)  done   applied        scope_version=1  ack=ok
-23:07:48.159 (07:07)  done   lease_renewed  scope_version=1  ack=ok
-23:11:33.208 (07:11)  done   lease_renewed  scope_version=1  ack=ok
-23:12:01.443 (07:12)  done   lease_renewed  scope_version=1  ack=ok
-23:12:36.071 (07:12)  pending  erp_timeout        <-- 你观察到的那次
-23:13:01.728 (07:13)  done   lease_renewed  scope_version=1  ack=ok
-23:13:36.829 (07:13)  pending  erp_timeout        <-- 第二次，同一模式
-23:14:02.037 (07:14)  done   lease_renewed  scope_version=1  ack=ok
-```
+待库恢复后需补跑的只读项（本轮未做）：按小时聚合 `erp-scope-sync` 的
+`execution_time_ms` 分位数与 `>8000ms` 占比、`erp_user_links.sync_error` 的匿名计数。
 
-对应 edge 请求耗时（全部 HTTP 200，函数本身没有崩溃、没有平台级超时）：
+## B. 超时预算的结构性问题（代码可证）
 
-```text
-成功轮次：3986 / 4127 / 4840 / 4905 / 6008 / 6103 ms
-失败轮次：9009 ms、10206 ms
-```
+- GO 侧：`supabase/functions/_shared/erp-http.ts` + `erp-scope-sync/index.ts`，
+  `ERP_TIMEOUT_MS = 8000` 覆盖「握手 + 完整 body 读取」，超时归为 `erp_timeout`，
+  不写镜像、不续租（fail-closed 正确）。
+- ERP 侧按你的说明：在这一个请求内**串行**执行 GO `auth.getUser`（8s）
+  + `erp_verify_current_scope_v1`（8s），上游最坏 16s。
+- 结论：上游最坏预算（16s）> 下游总预算（8s），只要任一段变慢就必然被 GO abort。
+  这不是偶发抖动，是预算倒挂；30 秒轮询下会周期性复现。
 
-数据库回读（未修改）：唯一被治理的映射当前 `link_status=active`、`scope_version=1`、
-`sync_error=NULL`、`scope_synced_at=23:14:29`；另两条为从未接入 ERP 的历史行，未被触碰。
-近 3 天该函数只有今天这 2 次 pending、6 次 done。
+### 最小可验证修复建议（不实施，不放宽权限）
 
-## 分类结论
+1. **ERP 侧为主**：把两次校验并行化，或合并为一次，并给整个 authorization 处理
+   设一个**总预算 ≤ 5s**（单段 2~2.5s）。这是唯一能让预算不倒挂的根治点。
+2. **GO 侧为辅**：pull 超时 8s → 12s，并对 `timeout`/`unreachable` 做**一次**立即重试；
+   失败仍然 pending、不写镜像、不续租。
+3. **可验证性**：在 `erp_scope_sync_pending` 日志补 `phase`（pull/ack）与 `elapsed_ms`
+   （无 token、无个人数据）；ERP 侧记录 `$request_time`/`$upstream_response_time` 与 499。
+   验收标准：连续 60 轮 30 秒刷新中 `erp_timeout` = 0，p95 < 3s。
+4. 明确不做：不让客户端使用过期权限、不延长租约、不降低任何校验。租约保持 OFF。
 
-- 不是「整体函数超时」：edge 请求都以 200 结束，耗时 9.0s / 10.2s，远低于平台上限，
-  也没有 shutdown/BOOT_ERROR/CPU 超限日志。
-- 不是「响应体读取被漏掉」：现有 `erpFetchJson` 用同一个 AbortController 覆盖握手 +
-  `resp.text()` 完整读取，超时会统一归为 `timeout`。
-- 是「拉取阶段整体超过 8 秒预算被主动 abort」：`ERP_TIMEOUT_MS = 8000`
-  （`supabase/functions/_shared/erp-http.ts` + `erp-scope-sync/index.ts`），
-  abort 后 `decidePullOutcome` 返回 `erp_timeout`，函数按设计只写 `sync_error`、
-  不写镜像、不续租，随后仍要走 `verifier()`，所以函数总耗时 = 8s + 1~2s ≈ 9~10s，
-  与观测完全吻合。
-- 关键风险点：**成功轮次本身已经在 4~6 秒**。也就是说正常情况下就用掉了 8 秒预算的
-  50~75%，只要腾讯侧多花 2~4 秒（冷启动、连接池新建、TLS 握手、上游抖动）就会被 abort。
-  这是「边缘余量不足」，不是权限问题。
-- 腾讯 nginx 无 GET authorization 记录，与「请求已到达但被客户端提前 abort」并不矛盾：
-  被 abort 的连接通常记为 499 或按配置不落 access log；仅凭缺记录不能断定请求未到达。
-  这一条目前**未被证实**，需要两侧联合验证（见下）。
-- fail-closed 行为符合设计：单次 `erp_timeout` 即让 App 退回未同步页，下一轮 pull 成功
-  自动恢复 HQ，与你在真机看到的现象一致。
+## C. user_favorites 语义
 
-## 最小修复建议（本次不实施，等你确认）
+`user_favorites(user_id, source_type CHECK IN ('official','product','recognition'),
+source_id, snapshot, UNIQUE(user_id, source_type, source_id))`，仅本人 select/insert/delete 的 RLS。
+`source_id` 无外键约束，`product` 与 `recognition` 两种 source_type 的 `source_id`
+在应用层均指向 `products.id` —— 与你的理解一致，二者靠 `source_type` 区分用途，不靠不同表。
 
-1. 先联合定位「到没到腾讯」：让 ERP 侧临时打开 `log_format` 里的 `499` 记录与
-   `$request_time`/`$upstream_response_time`，并在 GO 侧对 pull 请求加一个随机
-   `X-Request-Id` 头，仅用于日志比对。这是唯一能把「未到达」和「上游慢」分开的证据。
-2. 分阶段计时日志（无敏感字段）：在 `erp_scope_sync_pending` 日志里补 `phase`
-   （pull/ack）与 `elapsed_ms`，让后续判断不再靠推断。
-3. 余量而非放宽：把 pull 超时从 8s 提到 12s，并对 `timeout`/`unreachable` 做
-   **一次**立即重试（ack 不变）。这不放宽任何权限判定 —— 失败仍然 pending、
-   仍然不写镜像、不续租。
-4. UI 抖动收敛：连续 2 次同类网络失败才切到未同步页（或直到租约到期），
-   单次抖动不弹排班。权限边界仍由 RLS/租约决定，不因此延长任何有效权限。
-5. 腾讯侧长期项：确认该接口是否存在冷启动/无连接复用；启用 keep-alive 后
-   4~6 秒基线应显著下降，才是根治点。
+## D. knowledge_test_results 与 passed_at
 
-租约保持 OFF，直到 1、2 拿到证据且 3 上线验收。
+- 表：`UNIQUE (user_id, item_kind, item_id)`，`passed_at timestamptz NULL`，
+  索引 `(user_id, passed_at)`。唯一键与原生 upsert 的 `onConflict:'user_id,item_kind,item_id'` 匹配，仍有效。
+- **PostgREST upsert 只更新请求体里出现的列**：它生成
+  `INSERT (仅提交的列) ... ON CONFLICT (...) DO UPDATE SET` 同样这批列。
+  省略 `passed_at` ⇒ 该列不出现在 SET 中 ⇒ **既有通过时间原样保留**，不会被清空。
+  新行插入时 `passed_at` 取默认 NULL，符合「失败练习不算通过」。
+- 触发器：`exp_on_test_pass` 要求 `NEW.passed_at IS NOT NULL` 且与 `OLD` 不同才发经验；
+  省略写法下 `NEW.passed_at = OLD.passed_at`，**不会重复发经验**，也不会撤销已发的。
+  `exp_on_test_insert` 只在插入且 passed_at 非空时触发，不受影响。
+- 当天完成：`useTasks.tsx` 按 `passed_at` 落在当天区间统计；保留原 `passed_at` ⇒
+  当天通过后再练错，仍算当天完成。符合预期。
+- **一处不一致（只读发现，未改）**：Web 端 `src/pages/MyLibrary.tsx` 的失败分支仍显式传
+  `passed_at: null`，会把同一条记录的既有通过时间清掉。原生已改为省略；
+  若要两端语义一致，最小改动是删掉 Web 那一行的 `passed_at: null`（本轮未动）。
+
+ERP 新补录合同按你的安排在 ERP 项目确认，这里不涉及。
