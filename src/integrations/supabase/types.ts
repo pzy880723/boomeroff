@@ -1815,7 +1815,9 @@ export type Database = {
           created_at: string
           expires_at: string
           id: string
+          ip_hash: string | null
           phone: string
+          purpose: string
           used_at: string | null
         }
         Insert: {
@@ -1824,7 +1826,9 @@ export type Database = {
           created_at?: string
           expires_at: string
           id?: string
+          ip_hash?: string | null
           phone: string
+          purpose?: string
           used_at?: string | null
         }
         Update: {
@@ -1833,7 +1837,9 @@ export type Database = {
           created_at?: string
           expires_at?: string
           id?: string
+          ip_hash?: string | null
           phone?: string
+          purpose?: string
           used_at?: string | null
         }
         Relationships: []
@@ -3535,6 +3541,15 @@ export type Database = {
       }
       claim_daily_task: { Args: { _task_key: string }; Returns: Json }
       claim_pending_exp: { Args: { _id: string }; Returns: Json }
+      consume_phone_otp_v1: {
+        Args: {
+          _code_hash: string
+          _max_attempts?: number
+          _phone: string
+          _purpose: string
+        }
+        Returns: Json
+      }
       current_shop_context_v1: { Args: never; Returns: Json }
       current_user_erp_scope: { Args: never; Returns: Json }
       current_user_shop_id: { Args: never; Returns: string }
@@ -3591,6 +3606,19 @@ export type Database = {
       }
       is_erp_user: { Args: never; Returns: boolean }
       is_hq_user: { Args: never; Returns: boolean }
+      issue_phone_otp_v1: {
+        Args: {
+          _code_hash: string
+          _cooldown_seconds?: number
+          _ip_hash?: string
+          _ip_hourly_cap?: number
+          _phone: string
+          _phone_hourly_cap?: number
+          _purpose: string
+          _ttl_seconds?: number
+        }
+        Returns: Json
+      }
       kb_enqueue: {
         Args: { _op?: string; _source_id: string; _source_type: string }
         Returns: undefined

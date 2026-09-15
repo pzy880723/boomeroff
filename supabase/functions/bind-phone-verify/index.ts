@@ -35,24 +35,23 @@ Deno.serve(async (req) => {
       return json({ error: '请输入 6 位验证码' }, 400);
     }
 
-    const { data: otps } = await admin.from('phone_login_otp')
-      .select('id, code_hash, expires_at, used_at, attempts')
-      .eq('phone', String(phone))
-      .is('used_at', null)
-      .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false })
-      .limit(1);
-    const otp = otps?.[0];
-    if (!otp) return json({ error: '验证码已过期，请重新获取' }, 400);
-    if (otp.attempts >= 5) return json({ error: '验证码错误次数过多，请重新获取' }, 400);
-
     const codeHash = await sha256Hex(String(code));
-    if (codeHash !== otp.code_hash) {
-      await admin.from('phone_login_otp').update({ attempts: (otp.attempts || 0) + 1 }).eq('id', otp.id);
-      return json({ error: '验证码不正确' }, 400);
+    const { data: consumed, error: eConsume } = await admin.rpc('consume_phone_otp_v1', {
+      _phone: String(phone),
+      _purpose: 'bind',
+      _code_hash: codeHash,
+      _max_attempts: 5,
+    });
+    if (eConsume) return json({ error: '服务异常，请稍后再试', code: 'server_error' }, 500);
+    const consumeResult = consumed as { ok?: boolean; code?: string } | null;
+    if (!consumeResult?.ok) {
+      const c = consumeResult?.code || 'otp_invalid';
+      const msg = c === 'otp_expired' ? '验证码已过期，请重新获取'
+        : c === 'otp_too_many_attempts' ? '验证码错误次数过多，请重新获取'
+        : c === 'otp_already_used' ? '验证码已被使用，请重新获取'
+        : '验证码不正确';
+      return json({ error: msg, code: c }, 400);
     }
-
-    await admin.from('phone_login_otp').update({ used_at: new Date().toISOString() }).eq('id', otp.id);
 
     // 唯一性再校验
     const { data: exists } = await admin.from('profiles')
