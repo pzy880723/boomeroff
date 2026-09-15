@@ -1,25 +1,25 @@
 // 手机验证码登录：发送 OTP（白名单制）
-// 仅当手机号已登记在 profiles.phone 时才发送验证码
+// 仅当手机号已登记在 profiles.phone 时才发送验证码；不注册新账号、不授予任何角色。
+// 冷却 / 每小时手机号与 IP 限流 / 并发原子性全部由 issue_phone_otp_v1 在数据库事务内完成。
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { sendTencentSms } from '../_shared/tencent-sms.ts';
+import { clientIpHash, generateOtpCode, otpErrorResponse, sha256Hex } from '../_shared/phone-otp.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function sha256Hex(s: string) {
-  const buf = new TextEncoder().encode(s);
-  const hash = await crypto.subtle.digest('SHA-256', buf);
-  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+const PURPOSE = 'login';
+const TTL_SECONDS = 300;
+const COOLDOWN_SECONDS = 60;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
     const { phone } = await req.json().catch(() => ({}));
     if (!phone || !/^1[3-9]\d{9}$/.test(String(phone))) {
-      return json({ error: '手机号格式不正确' }, 400);
+      return otpErrorResponse('invalid_phone', {}, corsHeaders);
     }
 
     const admin = createClient(
@@ -28,53 +28,53 @@ Deno.serve(async (req) => {
     );
 
     const startedAt = performance.now();
-    const since = new Date(Date.now() - 60_000).toISOString();
-    const [uidResult, recentResult] = await Promise.all([
-      admin.rpc('find_user_id_by_phone', { _phone: String(phone) }),
-      admin.from('phone_login_otp')
-        .select('id')
-        .eq('phone', String(phone))
-        .gt('created_at', since)
-        .limit(1),
-    ]);
 
-    // 白名单：手机号必须已登记
-    const { data: uid, error: eUid } = uidResult;
-    if (eUid) return json({ error: eUid.message }, 500);
-    if (!uid) return json({ error: '该手机号尚未在系统中登记，请联系管理员' }, 404);
+    // 白名单：手机号必须已登记（不创建账号）
+    const { data: uid, error: eUid } = await admin.rpc('find_user_id_by_phone', { _phone: String(phone) });
+    if (eUid) return otpErrorResponse('server_error', {}, corsHeaders);
+    if (!uid) return otpErrorResponse('phone_not_registered', {}, corsHeaders);
 
-    // 60s 限流
-    const { data: recent, error: recentError } = recentResult;
-    if (recentError) return json({ error: recentError.message }, 500);
-    if (recent && recent.length > 0) {
-      return json({ error: '验证码已发送，请 60 秒后再试' }, 429);
-    }
-
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = generateOtpCode();
     const code_hash = await sha256Hex(code);
-    const expires_at = new Date(Date.now() + 5 * 60_000).toISOString();
-    const { error: e2 } = await admin.from('phone_login_otp').insert({
-      phone: String(phone),
-      code_hash,
-      expires_at,
+    const ip_hash = await clientIpHash(req);
+
+    const { data: issued, error: eIssue } = await admin.rpc('issue_phone_otp_v1', {
+      _phone: String(phone),
+      _purpose: PURPOSE,
+      _code_hash: code_hash,
+      _ip_hash: ip_hash,
+      _ttl_seconds: TTL_SECONDS,
+      _cooldown_seconds: COOLDOWN_SECONDS,
     });
-    if (e2) return json({ error: e2.message }, 400);
+    if (eIssue) return otpErrorResponse('server_error', {}, corsHeaders);
+    const issuedResult = issued as { ok?: boolean; code?: string; retry_after_seconds?: number } | null;
+    if (!issuedResult?.ok) {
+      const c = issuedResult?.code || 'server_error';
+      return otpErrorResponse(
+        c,
+        issuedResult?.retry_after_seconds ? { retry_after_seconds: issuedResult.retry_after_seconds } : {},
+        corsHeaders,
+      );
+    }
 
     const smsResult = await sendTencentSms(String(phone), 'otp', [code]);
     if (!smsResult.ok) {
-      return json({ error: smsResult.message || '短信发送失败，请稍后再试' }, 400);
+      return otpErrorResponse('sms_send_failed', {}, corsHeaders);
     }
 
-    console.log(JSON.stringify({ event: 'phone_login_otp_sent', duration_ms: Math.round(performance.now() - startedAt) }));
-    return json({ ok: true });
-  } catch (e) {
-    return json({ error: String(e) }, 500);
+    console.log(JSON.stringify({
+      event: 'phone_login_otp_sent',
+      purpose: PURPOSE,
+      duration_ms: Math.round(performance.now() - startedAt),
+    }));
+    return new Response(JSON.stringify({
+      ok: true,
+      code: 'otp_issued',
+      cooldown_seconds: COOLDOWN_SECONDS,
+      expires_in_seconds: TTL_SECONDS,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (_e) {
+    console.error('[phone-login-send-otp] unexpected error');
+    return otpErrorResponse('server_error', {}, corsHeaders);
   }
 });
-
-function json(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
