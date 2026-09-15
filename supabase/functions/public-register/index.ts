@@ -188,12 +188,6 @@ Deno.serve(async (req) => {
       .eq("user_id", newUserId);
     if (profErr) console.error("Failed to update profile phone/real_name:", profErr);
 
-    // 标记验证码已用
-    await admin
-      .from("phone_login_otp")
-      .update({ used_at: new Date().toISOString() })
-      .eq("id", otpRow.id);
-
     return json({
       success: true,
       message: "注册成功，等待管理员审核",
