@@ -104,10 +104,30 @@ Deno.serve(async (req) => {
       );
     };
 
-    // Pre-check: detect existing user to give precise feedback
+    // Pre-check: detect existing user to give precise feedback（仍未消费验证码）
     const pre = await findExistingUser();
     if (pre) {
       return await respondExisting(pre.id);
+    }
+
+    // 2. 全部确定性校验通过后，才原子消费验证码；必须在 createUser 之前，
+    //    保证同一验证码不可被并发复用（不回退到「先查码、后标记」的不安全写法）。
+    const code_hash = await sha256Hex(code);
+    const { data: consumed, error: eConsume } = await admin.rpc("consume_phone_otp_v1", {
+      _phone: phone,
+      _purpose: "register",
+      _code_hash: code_hash,
+      _max_attempts: 5,
+    });
+    if (eConsume) return json({ error: "服务异常，请稍后再试", code: "server_error" }, 500);
+    const consumeResult = consumed as { ok?: boolean; code?: string } | null;
+    if (!consumeResult?.ok) {
+      const c = consumeResult?.code || "otp_invalid";
+      const msg = c === "otp_expired" ? "验证码已过期，请重新获取"
+        : c === "otp_too_many_attempts" ? "验证码错误次数过多，请重新获取"
+        : c === "otp_already_used" ? "该验证码已使用，请重新获取"
+        : "验证码错误，请检查后重试";
+      return json({ error: msg, code: c }, 400);
     }
 
     const { data: created, error: createErr } =
