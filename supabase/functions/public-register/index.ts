@@ -58,24 +58,23 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // 1. 验证手机验证码
+    // 1. 验证手机验证码（原子消费，用途隔离为 register）
     const code_hash = await sha256Hex(code);
-    const { data: otpRow } = await admin
-      .from("phone_login_otp")
-      .select("id, expires_at, used_at, attempts")
-      .eq("phone", phone)
-      .eq("code_hash", code_hash)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!otpRow) {
-      return json({ error: "验证码错误，请检查后重试" }, 400);
-    }
-    if (otpRow.used_at) {
-      return json({ error: "该验证码已使用，请重新获取" }, 400);
-    }
-    if (new Date(otpRow.expires_at).getTime() < Date.now()) {
-      return json({ error: "验证码已过期，请重新获取" }, 400);
+    const { data: consumed, error: eConsume } = await admin.rpc("consume_phone_otp_v1", {
+      _phone: phone,
+      _purpose: "register",
+      _code_hash: code_hash,
+      _max_attempts: 5,
+    });
+    if (eConsume) return json({ error: "服务异常，请稍后再试", code: "server_error" }, 500);
+    const consumeResult = consumed as { ok?: boolean; code?: string } | null;
+    if (!consumeResult?.ok) {
+      const c = consumeResult?.code || "otp_invalid";
+      const msg = c === "otp_expired" ? "验证码已过期，请重新获取"
+        : c === "otp_too_many_attempts" ? "验证码错误次数过多，请重新获取"
+        : c === "otp_already_used" ? "该验证码已使用，请重新获取"
+        : "验证码错误，请检查后重试";
+      return json({ error: msg, code: c }, 400);
     }
 
     // 2. 手机号必须未被占用
