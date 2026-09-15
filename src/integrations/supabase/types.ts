@@ -3528,6 +3528,7 @@ export type Database = {
         Args: { _actor: string; _target_role_code: string }
         Returns: boolean
       }
+      can_create_shop: { Args: never; Returns: boolean }
       can_write_scoped: {
         Args: { _perm: string; _shop: string }
         Returns: boolean
