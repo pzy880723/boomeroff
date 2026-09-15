@@ -3665,6 +3665,7 @@ export type Database = {
         Args: { _perm: string; _user_id: string }
         Returns: boolean
       }
+      write_authority_blocked: { Args: never; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "operator" | "assistant" | "anchor"
