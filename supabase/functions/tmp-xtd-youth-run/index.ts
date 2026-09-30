@@ -66,6 +66,18 @@ Deno.serve(async (req) => {
     return j(v);
   }
 
+  if (action === "list") {
+    const r = await fetch(`${ARK}?page_num=1&page_size=20&filter.model=doubao-seedance-2-5-260628`, { headers: { Authorization: `Bearer ${arkKey}` } });
+    const t: any = await r.json().catch(() => ({}));
+    const items = (t?.items || []).map((i: any) => ({ id: i.id, status: i.status, created_at: i.created_at, duration: i.duration, resolution: i.resolution, error: i.error }));
+    return j({ http: r.status, total: t?.total, items, err: t?.error || null });
+  }
+  if (action === "adopt") {
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id || rec?.task_id) return j({ error: "bad", record: rec });
+    await save({ ...rec, business_id: "national-day-20260930-xintiandi-youth-v2", shop: "上海新天地店", model: "doubao-seedance-2-5-260628", duration: 25, resolution: "1080p", ratio: "9:16", generate_audio: true, reference_count: 10, reference_urls: FILES.map((f) => BASE + f), task_id: id, status: "submitted", note: "submit response lost (function wall-clock); task recovered from Ark list" });
+    return j({ adopted: id });
+  }
   if (!rec) return j({ record: null });
   if (!rec.task_id) return j({ record: rec });
   const r = await fetch(`${ARK}/${rec.task_id}`, { headers: { Authorization: `Bearer ${arkKey}` } });
