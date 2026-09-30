@@ -51,6 +51,3 @@ verify_jwt = true
 [functions.erp-scope-push]
 verify_jwt = false
 
-
-[functions.seedance25-probe]
-verify_jwt = false
