@@ -5,6 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { buildDirectorShotPlan, type DirectorScript } from "../_shared/director-utils.ts";
 import { validateSurpriseScript } from "../_shared/surprise-script-policy.ts";
 import { resolveAuthorizedShop, StoreAccessError } from "../_shared/store-access.ts";
+import { resolveSeedanceModel, SeedanceModelError, type SeedanceModelInfo } from "../_shared/seedance-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +47,13 @@ Deno.serve(async (req) => {
       ? body.user_prompt.trim().slice(0, 500)
       : (typeof script?.title === 'string' ? String(script.title).slice(0, 500) : null);
     if (!script) return json({ ok: false, error: "缺少脚本" });
+    let seedanceModel: SeedanceModelInfo;
+    try {
+      seedanceModel = resolveSeedanceModel(modelId);
+    } catch (e) {
+      if (e instanceof SeedanceModelError) return json({ ok: false, code: e.code, error: e.message }, 400);
+      throw e;
+    }
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     shopId = await resolveAuthorizedShop(admin, u.user.id, shopId);
@@ -58,7 +66,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    const shotPlan = buildDirectorShotPlan(script);
+    const shotPlan = buildDirectorShotPlan(script, {
+      maxShotDuration: seedanceModel.max_duration,
+      minShotDuration: seedanceModel.family === '2.5' ? seedanceModel.min_duration : 1,
+    });
     const plannedDuration = shotPlan.reduce((sum, shot) => sum + shot.duration, 0);
     if (plannedDuration < 1 || plannedDuration > 60) {
       return json({ ok: false, error: `导演分镜总时长超出范围(1–60s):${plannedDuration}s` }, 422);
@@ -95,7 +106,7 @@ Deno.serve(async (req) => {
 
       const updated = await admin.from("video_generation_jobs").update({
         user_prompt: userPrompt,
-        source_pick_json: { picked_assets: pickedAssets, persona, selected_character: selectedCharacter, character_mode: characterMode, model: modelId, resolution, style, prompt_overrides: promptOverrides },
+        source_pick_json: { picked_assets: pickedAssets, persona, selected_character: selectedCharacter, character_mode: characterMode, model: seedanceModel.id, resolution, style, prompt_overrides: promptOverrides },
         brief_json: brief,
         script_json: script,
         status: 'queued',
@@ -123,7 +134,7 @@ Deno.serve(async (req) => {
           user_id: u.user.id,
           shop_id: shopId,
           user_prompt: userPrompt,
-          source_pick_json: { picked_assets: pickedAssets, persona, selected_character: selectedCharacter, character_mode: characterMode, model: modelId, resolution, style, prompt_overrides: promptOverrides },
+          source_pick_json: { picked_assets: pickedAssets, persona, selected_character: selectedCharacter, character_mode: characterMode, model: seedanceModel.id, resolution, style, prompt_overrides: promptOverrides },
           brief_json: brief,
           script_json: script,
           status: 'queued',

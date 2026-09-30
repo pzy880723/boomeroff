@@ -484,6 +484,7 @@ export function buildSurpriseReferencePlan(
   script: SurpriseScript,
   imageUrls: string[],
   descriptions: SurpriseReferenceDescription[] = [],
+  limit = 9,
 ): SurpriseReferencePlan {
   const descriptionByIndex = new Map(
     descriptions
@@ -502,7 +503,7 @@ export function buildSurpriseReferencePlan(
   );
   if (!boundIndexes.size && imageUrls.length) boundIndexes.add(0);
 
-  imageUrls.slice(0, 9).forEach((rawUrl, sourceIndex) => {
+  imageUrls.slice(0, Math.max(1, limit)).forEach((rawUrl, sourceIndex) => {
     if (!boundIndexes.has(sourceIndex)) return;
     const url = String(rawUrl || '').trim();
     if (!url) return;

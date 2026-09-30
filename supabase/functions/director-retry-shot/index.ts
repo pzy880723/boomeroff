@@ -1,7 +1,7 @@
 // director-retry-shot:重置一个失败的镜头,重新提交给 Seedance。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
-import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2 } from "../_shared/seedance-models.ts";
+import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SeedanceModelError } from "../_shared/seedance-models.ts";
 import { assertStoreAccess, StoreAccessError } from "../_shared/store-access.ts";
 
 const corsHeaders = {
@@ -40,7 +40,12 @@ Deno.serve(async (req) => {
     if (!shot) return json({ ok: false, error: "镜头不存在" }, 404);
 
     const src = (job.source_pick_json || {}) as any;
-    const modelInfo = resolveSeedanceModel(src.model || DEFAULT_SEEDANCE_2);
+    let modelInfo;
+    try { modelInfo = resolveSeedanceModel(src.model || DEFAULT_SEEDANCE_2); }
+    catch (e) {
+      if (e instanceof SeedanceModelError) return json({ ok: false, code: e.code, error: e.message }, 400);
+      throw e;
+    }
     const resolution = clampResolution(modelInfo, src.resolution || modelInfo.default_resolution);
     const characterRefUrl: string | null = (job.character_json as any)?.reference_image_url || null;
     const pickedAssets: any[] = Array.isArray(src.picked_assets) ? src.picked_assets : [];

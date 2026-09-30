@@ -8,7 +8,7 @@
 //   step6/7 由后台定时推进 + 合成 Worker 完成,不依赖前端保持打开。
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { submitSeedanceSegment } from "../_shared/seedance-submit.ts";
-import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2 } from "../_shared/seedance-models.ts";
+import { resolveSeedanceModel, clampResolution, DEFAULT_SEEDANCE_2, SeedanceModelError, type SeedanceModelInfo } from "../_shared/seedance-models.ts";
 import { generateCharacterReferenceImage, dataUrlToBytes } from "../_shared/director-utils.ts";
 
 const corsHeaders = {
@@ -66,7 +66,19 @@ Deno.serve(async (req) => {
     const shopId = job.shop_id;
     const src = (job.source_pick_json || {}) as any;
     const persona = src.persona || {};
-    const modelInfo = resolveSeedanceModel(src.model || DEFAULT_SEEDANCE_2);
+    // 明确选择的模型(含 2.5)必须原样使用;未知模型直接失败,不回落 2.0。
+    let modelInfo: SeedanceModelInfo;
+    try {
+      modelInfo = resolveSeedanceModel(src.model || DEFAULT_SEEDANCE_2);
+    } catch (e) {
+      if (e instanceof SeedanceModelError) {
+        await updateJob(admin, jobId, { status: 'failed', error_message: e.message });
+        return json({ ok: false, code: e.code, error: e.message }, 400);
+      }
+      throw e;
+    }
+    const sceneRefCap = Math.max(1, modelInfo.max_refs - 1); // 第 1 张固定角色图
+    const plannedIndexCap = modelInfo.family === '2.5' ? sceneRefCap : 2;
     const resolution = clampResolution(modelInfo, src.resolution || modelInfo.default_resolution);
     const aspectRatio = job.aspect_ratio || '9:16';
 
@@ -139,7 +151,7 @@ Deno.serve(async (req) => {
     const pickedAssets: any[] = Array.isArray(src.picked_assets) ? src.picked_assets : [];
     const sceneRefFallbacks: string[] = pickedAssets
       .map((a: any) => a?.url).filter((u: any) => typeof u === 'string' && /^https?:/.test(u))
-      .slice(0, 4);
+      .slice(0, modelInfo.family === '2.5' ? sceneRefCap : 4);
 
     // 并发上限 2,防止方舟被打爆
     const concurrency = 2;
@@ -154,7 +166,7 @@ Deno.serve(async (req) => {
           const refs: string[] = [characterRefUrl!];
           const meta = shot.meta && typeof shot.meta === 'object' ? shot.meta : {};
           const plannedIndices: number[] = Array.isArray(meta.image_indices)
-            ? meta.image_indices.filter((value: unknown) => Number.isInteger(value)).slice(0, 2)
+            ? meta.image_indices.filter((value: unknown) => Number.isInteger(value)).slice(0, plannedIndexCap)
             : [];
           const indexedAssets = new Map<number, string>();
           pickedAssets.forEach((asset: any, position: number) => {

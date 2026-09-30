@@ -1,7 +1,7 @@
 // 单段 Seedance 2.0 提交器:一次只提交 1 个视频分段,避免边缘函数 CPU 超限。
 // 只在服务端使用,输入来自已入库的 marketing_video_jobs 子任务。
 
-import { SEEDANCE_MAX_REFS } from "./seedance-models.ts";
+import { normalizeSeedanceDuration, resolveSeedanceModel, SeedanceModelError, type SeedanceModelInfo } from "./seedance-models.ts";
 
 const ARK_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
 const SEEDANCE_SUBMIT_TIMEOUT_MS = 25_000;
@@ -23,6 +23,7 @@ export interface SubmitSegmentOptions {
   requireReferences?: boolean;
   requiredReferenceCount?: number;
   facePipeline?: FacePipeline;
+  generateAudio?: boolean;
 }
 
 export interface SubmitSegmentResult {
@@ -37,11 +38,39 @@ export interface SubmitSegmentResult {
   referenceCount: number;
 }
 
-function snapR2vDuration(d: number): number {
-  const n = Math.round(Number(d) || 5);
-  if (n <= 7) return 5;
-  if (n <= 12) return 10;
-  return 15;
+/** 纯函数:按模型规则构造方舟请求体(2.0 吸附 5/10/15 且 ≤9 张;2.5 4–30 整数且 ≤50 个)。 */
+export function buildArkTaskBody(opts: {
+  model: SeedanceModelInfo;
+  prompt: string;
+  ratio: string;
+  duration: number;
+  resolution: string;
+  referenceImages?: string[];
+  generateAudio?: boolean;
+}): { body: Record<string, unknown>; mode: string; duration: number; referenceCount: number } {
+  const content: any[] = [{ type: "text", text: opts.prompt }];
+  const refs = (opts.referenceImages || []).filter(Boolean).slice(0, opts.model.max_refs);
+  for (const url of refs) {
+    content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
+  }
+  const mode = refs.length ? "reference2video" : "text2video";
+  const duration = opts.model.family === "2.0" && mode === "text2video"
+    ? Math.round(Number(opts.duration) || 5)
+    : normalizeSeedanceDuration(opts.model, opts.duration);
+  return {
+    body: {
+      model: opts.model.id,
+      content,
+      resolution: opts.resolution,
+      ratio: opts.ratio,
+      duration,
+      watermark: false,
+      generate_audio: opts.generateAudio !== false,
+    },
+    mode,
+    duration,
+    referenceCount: refs.length,
+  };
 }
 
 function isSensitive(err?: string, raw?: any) {
@@ -52,30 +81,18 @@ function isSensitive(err?: string, raw?: any) {
 
 async function submitArkTask(opts: {
   arkKey: string;
-  model: string;
+  modelInfo: SeedanceModelInfo;
   prompt: string;
   ratio: string;
   duration: number;
   resolution: string;
   referenceImages?: string[];
+  generateAudio?: boolean;
 }): Promise<{ ok: true; id: string; mode: string; duration: number } | { ok: false; error: string; raw?: unknown; retryable?: boolean }> {
-  const content: any[] = [{ type: "text", text: opts.prompt }];
-  const refs = (opts.referenceImages || []).filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
-  for (const url of refs) {
-    content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
-  }
-  const mode = refs.length ? "reference2video" : "text2video";
-  const effectiveDuration = mode === "reference2video" ? snapR2vDuration(opts.duration) : Math.round(Number(opts.duration) || 5);
-
-  const arkBody: Record<string, unknown> = {
-    model: opts.model,
-    content,
-    resolution: opts.resolution,
-    ratio: opts.ratio,
-    duration: effectiveDuration,
-    watermark: false,
-    generate_audio: true,
-  };
+  const built = buildArkTaskBody({ ...opts, model: opts.modelInfo });
+  const arkBody = built.body;
+  const mode = built.mode;
+  const effectiveDuration = built.duration;
 
   let arkRes: Response;
   try {
@@ -110,8 +127,9 @@ async function submitArkTask(opts: {
 
 async function softPassKeyReferences(
   urls: string[],
-  opts: { admin: any; userId: string; max?: number },
+  opts: { admin: any; userId: string; max?: number; limit: number },
 ): Promise<string[]> {
+  const SEEDANCE_MAX_REFS = opts.limit;
   const max = Math.max(1, Math.min(SEEDANCE_MAX_REFS, opts.max ?? 1));
   const verified = urls.filter((u) => typeof u === 'string' && u.startsWith('asset://')).slice(0, 1);
   // 已经有火山官方私域素材(asset://)时,不要再在 Edge Function 里处理真人照片。
@@ -134,6 +152,15 @@ async function softPassKeyReferences(
 
 export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise<SubmitSegmentResult> {
   const fallbackNotes: string[] = [];
+  let modelInfo: SeedanceModelInfo;
+  try {
+    modelInfo = resolveSeedanceModel(opts.model);
+  } catch (e) {
+    const err = e instanceof SeedanceModelError ? e.message : String(e);
+    return { ok: false, error: err, retryable: false, fallbackNotes: ['unknown_model'], referenceCount: 0 };
+  }
+  const SEEDANCE_MAX_REFS = modelInfo.max_refs;
+  const arkOpts = { ...opts, modelInfo };
   const facePipeline = opts.facePipeline || 'auto';
   let effectiveRefs = (opts.referenceImages || []).filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
   const requiredReferenceCount = opts.requireReferences
@@ -159,6 +186,7 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
       admin: opts.admin,
       userId: opts.userId,
       max: 1,
+      limit: SEEDANCE_MAX_REFS,
     });
     effectiveRefs = [...softenedCharacter, ...sceneRefs].filter(Boolean).slice(0, SEEDANCE_MAX_REFS);
     if (lostRequiredReferences(effectiveRefs)) {
@@ -179,10 +207,10 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
     fallbackNotes.push('references_trimmed_for_safety');
   }
 
-  let r = await submitArkTask({ ...opts, referenceImages: effectiveRefs });
+  let r = await submitArkTask({ ...arkOpts, referenceImages: effectiveRefs });
 
   if (!r.ok && isSensitive(r.error, (r as any).raw) && effectiveRefs.length && facePipeline !== 'character_sheet') {
-    const marked = await softPassKeyReferences(effectiveRefs, { admin: opts.admin, userId: opts.userId, max: 1 });
+    const marked = await softPassKeyReferences(effectiveRefs, { admin: opts.admin, userId: opts.userId, max: 1, limit: SEEDANCE_MAX_REFS });
     if (lostRequiredReferences(marked)) {
       return { ok: false, error: '真人审核重试会丢失部分店铺参考图，已停止生成，避免生成与脚本无关的视频。请换图后重试。', raw: (r as any).raw, fallbackNotes: [...fallbackNotes, 'required_references_locked_stop'], referenceCount: marked.length };
     }
@@ -190,7 +218,7 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
       return { ok: false, error: '真人审核触发后需要丢掉分镜静帧才可能继续,已停止渲染。请使用角色认证或软通过后重试。', raw: (r as any).raw, fallbackNotes: ['storyboard_locked_stop'], referenceCount: effectiveRefs.length };
     }
     fallbackNotes.push('face_soft_pass_auto');
-    r = await submitArkTask({ ...opts, referenceImages: marked });
+    r = await submitArkTask({ ...arkOpts, referenceImages: marked });
     if (r.ok) effectiveRefs = marked;
   }
 
@@ -203,7 +231,7 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
     if (!keepsStoryboard(trimmed)) {
       return { ok: false, error: '继续降级会丢掉分镜静帧,已停止渲染。请换一张分镜静帧或完成真人认证后重试。', raw: (r as any).raw, fallbackNotes, referenceCount: effectiveRefs.length };
     }
-    r = await submitArkTask({ ...opts, referenceImages: trimmed });
+    r = await submitArkTask({ ...arkOpts, referenceImages: trimmed });
   }
 
   if (!r.ok && isSensitive(r.error, (r as any).raw)) {
@@ -214,7 +242,7 @@ export async function submitSeedanceSegment(opts: SubmitSegmentOptions): Promise
       return { ok: false, error: '火山审核不接受当前店铺参考图，系统已停止纯文本兜底，避免生成和脚本无关的视频。请换一组店铺实景图后重试。', raw: (r as any).raw, fallbackNotes: [...fallbackNotes, 'required_references_locked_stop'], referenceCount: effectiveRefs.length };
     }
     fallbackNotes.push('references_dropped_for_safety');
-    r = await submitArkTask({ ...opts, referenceImages: [] });
+    r = await submitArkTask({ ...arkOpts, referenceImages: [] });
   }
 
   if (!r.ok) {

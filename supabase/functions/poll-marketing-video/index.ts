@@ -296,6 +296,7 @@ async function submitQueuedChild(admin: any, arkKey: string, child: any, userId:
       requireReferences: payload.require_references === true,
       requiredReferenceCount: Number(payload.required_reference_count || 0),
       facePipeline: payload.face_pipeline || 'auto',
+      generateAudio: payload.generate_audio !== false,
     });
   } catch (error) {
     const msg = `第 ${(locked.segment_index ?? 0) + 1} 段提交异常: ${error instanceof Error ? error.message : String(error)}`;
