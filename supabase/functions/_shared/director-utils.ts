@@ -38,14 +38,14 @@ export interface FlatShot {
 }
 
 /** 把 script(hook+scenes+outro)拍平成一串镜头，脚本给出的 duration_s 会原样保留，仅限制在 1–15 秒。 */
-export function flattenScriptToShots(script: DirectorScript): FlatShot[] {
+export function flattenScriptToShots(script: DirectorScript, maxShotDuration = 15, minShotDuration = 1): FlatShot[] {
   const raw: Array<{ label: string; scene: DirectorScriptScene }> = [];
   if (script.hook) raw.push({ label: '钩子', scene: script.hook });
   (script.scenes || []).forEach((s, i) => raw.push({ label: `镜头${i + 1}`, scene: s }));
   if (script.outro) raw.push({ label: '收尾', scene: script.outro });
 
   return raw.map(({ label, scene }) => {
-    const dur = Math.max(1, Math.min(15, Math.round(Number(scene.duration_s) || 3)));
+    const dur = Math.max(minShotDuration, Math.min(maxShotDuration, Math.round(Number(scene.duration_s) || 3)));
     const parts: string[] = [];
     if (scene.scene) parts.push(`场景:${scene.scene}`);
     if (scene.subject) parts.push(`主体:${scene.subject}`);
@@ -73,8 +73,12 @@ export function flattenScriptToShots(script: DirectorScript): FlatShot[] {
  * AI 脚本产出几镜就返回几镜，严格保留顺序、duration_s、scene、action、dialogue、subtitle、image_index。
  * 不再合并成固定 3 镜。至少 3 镜。
  */
-export function buildDirectorShotPlan(script: DirectorScript): FlatShot[] {
-  const beats = flattenScriptToShots(script);
+export function buildDirectorShotPlan(
+  script: DirectorScript,
+  limits: { maxShotDuration?: number; minShotDuration?: number } = {},
+): FlatShot[] {
+  // 默认 2.0 规则(1–15s);选择 Seedance 2.5 时由调用方传 { max: 30, min: 4 }。
+  const beats = flattenScriptToShots(script, limits.maxShotDuration ?? 15, limits.minShotDuration ?? 1);
   if (beats.length < 3) {
     throw new Error(`导演脚本至少需要 3 个有效分镜,当前只有 ${beats.length} 个`);
   }
