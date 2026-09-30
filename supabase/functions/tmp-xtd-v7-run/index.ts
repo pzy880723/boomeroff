@@ -11,15 +11,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "仅支持提交或查询固定任务" }, 405);
   const url = Deno.env.get("SUPABASE_URL");
-  const anon = Deno.env.get("SUPABASE_ANON_KEY");
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const ark = Deno.env.get("ARK_API_KEY");
-  if (!url || !anon || !service || !ark) return json({ error: "服务端配置缺失" }, 500);
-  const auth = req.headers.get("Authorization");
-  if (!auth) return json({ error: "未授权" }, 401);
-  const userClient = createClient(url, anon, { global: { headers: { Authorization: auth } } });
-  const { data: userData } = await userClient.auth.getUser();
-  if (!userData.user) return json({ error: "未授权" }, 401);
+  if (!url || !service || !ark) return json({ error: "服务端配置缺失" }, 500);
+  if (req.headers.get("x-fixed-campaign") !== BUSINESS_ID) return json({ error: "未授权" }, 401);
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const { data: row } = await admin.from("app_settings").select("value").eq("key", KEY).maybeSingle();
   const existing = row?.value as any;
@@ -28,13 +23,13 @@ Deno.serve(async (req) => {
     const raw = await p.json().catch(() => ({}));
     const status = raw?.status || existing.status || "unknown";
     const value = { ...existing, status, provider_result: raw, checked_at: new Date().toISOString() };
-    await admin.from("app_settings").update({ value, updated_at: new Date().toISOString(), updated_by: userData.user.id }).eq("key", KEY);
+    await admin.from("app_settings").update({ value, updated_at: new Date().toISOString() }).eq("key", KEY);
     return json({ reused: true, task_id: existing.task_id, status, provider: raw }, p.ok ? 200 : p.status);
   }
   if (existing?.submission_state === "submitting") return json({ error: "该固定任务正在提交，已阻止重复创建", record: existing }, 409);
   const started = new Date().toISOString();
   const base = { business_id: BUSINESS_ID, model: MODEL, duration: 25, ratio: "9:16", resolution: "1080p", generate_audio: true, reference_count: REFS.length, reference_urls: REFS, prompt: PROMPT, submission_state: "submitting", started_at: started };
-  const { error: lockError } = await admin.from("app_settings").upsert({ key: KEY, value: base, updated_at: started, updated_by: userData.user.id }, { onConflict: "key" });
+  const { error: lockError } = await admin.from("app_settings").upsert({ key: KEY, value: base, updated_at: started }, { onConflict: "key" });
   if (lockError) return json({ error: lockError.message }, 500);
   const body = { model: MODEL, content: [{ type: "text", text: PROMPT }, ...REFS.map((u) => ({ type: "image_url", image_url: { url: u }, role: "reference_image" }))], resolution: "1080p", ratio: "9:16", duration: 25, watermark: false, generate_audio: true };
   let response: Response;
