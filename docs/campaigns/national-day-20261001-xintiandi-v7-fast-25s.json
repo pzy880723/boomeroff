@@ -39,6 +39,15 @@
     "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20261001-xintiandi-v7-fast-25s%2F13_29_s.jpg"
   ],
   "prompt_sha256": "8858b973069a84faab45916167e2997bb7461d8e809fcc38a62895b5d6ae9d66",
-  "status": "ready_to_submit",
-  "attempts": []
+  "task_id": "cgt-20261001004721-y5vxn",
+  "status": "queued",
+  "attempts": [
+    {
+      "at": "2026-10-01T00:47:21Z",
+      "scheme": "text-generated-character",
+      "outcome": "task_created",
+      "task_id": "cgt-20261001004721-y5vxn",
+      "reference_count": 13
+    }
+  ]
 }
