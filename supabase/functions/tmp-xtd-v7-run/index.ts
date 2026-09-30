@@ -8,6 +8,11 @@ const PROMPT = "上海新天地东台里BOOMER·OFF Vintage国庆综合探店广
 const REFS = ["https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F01_33.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F02_35_s.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20261001-xintiandi-v7-fast-25s%2F03_hello-kitty-shelf-03.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20261001-xintiandi-v7-fast-25s%2F04_hello-kitty-detail-01.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20261001-xintiandi-v7-fast-25s%2F05_hello-kitty-detail-02.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20261001-xintiandi-v7-fast-25s%2F06_30_s.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20261001-xintiandi-v7-fast-25s%2F07_26.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F05_36_s.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F06_32.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F07_37_s.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F08_06.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F03_28_s.jpg", "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20261001-xintiandi-v7-fast-25s%2F13_29_s.jpg"];
 const RUNNER_VERSION = "v7-admin-fixed-20260930-1645";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Runner-Version": RUNNER_VERSION } });
+const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+async function expectedSignature(secret: string) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(BUSINESS_ID)));
+}
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "仅支持提交或查询固定任务" }, 405);
@@ -15,8 +20,8 @@ Deno.serve(async (req) => {
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const ark = Deno.env.get("ARK_API_KEY");
   if (!url || !service || !ark) return json({ error: "服务端配置缺失" }, 500);
-  const serviceAuthorization = req.headers.get("x-service-authorization");
-  if (serviceAuthorization !== service) return json({ error: "未授权" }, 401);
+  const runSignature = req.headers.get("x-run-signature");
+  if (!runSignature || runSignature !== await expectedSignature(ark)) return json({ error: "未授权" }, 401);
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const { data: row } = await admin.from("app_settings").select("value").eq("key", KEY).maybeSingle();
   const existing = row?.value as any;
