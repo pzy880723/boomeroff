@@ -13,7 +13,7 @@ import { pickUpcomingHoliday, formatHolidayBrief } from "../_shared/holiday-cont
 import { generateFastPersona, formatPersonaDirective, formatPersonaBriefZh, type InfluencerPersona } from "../_shared/persona-generator.ts";
 import { resolveStorefrontOpeningEn, resolveStorefrontOpeningZh } from "../_shared/storefront-constraints.ts";
 import { bindSurpriseReferences, normalizeSurpriseScript } from "../_shared/surprise-one-shot.ts";
-import { resolveSeedanceQuality } from "../_shared/seedance-models.ts";
+import { resolveSeedanceQuality, SeedanceModelError, validateSeedanceDuration } from "../_shared/seedance-models.ts";
 import { generateFastSurpriseScript } from "../_shared/surprise-script-performance.ts";
 import { pickStorefrontAsset, resolveStorefrontAsset, scoreStorefrontAsset } from "../_shared/storefront-assets.ts";
 import { selectAuthorizedSurpriseReferences } from "../_shared/surprise-render-references.ts";
@@ -180,6 +180,24 @@ Deno.serve(async (req) => {
     // 前端不能直接传脚本或参考图绕过门店权限、90–100 字和真实门头校验。
     const scriptJobId = String(body.script_job_id || '').trim();
     if (!preview && (scriptJobId || body.script)) {
+      // 模型/时长先校验:未知模型或非法时长直接 400,绝不静默回落到 2.0。
+      let quality: ReturnType<typeof resolveSeedanceQuality>;
+      let requestedDuration: number | null = null;
+      try {
+        quality = resolveSeedanceQuality(body.model, body.resolution);
+        if (body.duration !== undefined && body.duration !== null && body.duration !== '') {
+          requestedDuration = validateSeedanceDuration(quality.model, body.duration);
+        }
+      } catch (error) {
+        if (error instanceof SeedanceModelError) return json({ ok: false, code: error.code, error: error.message }, 400);
+        throw error;
+      }
+      const characterReferenceUrls: string[] = Array.isArray(body.character_reference_urls)
+        ? body.character_reference_urls
+            .filter((u: unknown) => typeof u === 'string' && /^(https:\/\/|asset:\/\/)/.test(u))
+            .slice(0, 4)
+        : (typeof body.character_reference_url === 'string' && /^(https:\/\/|asset:\/\/)/.test(body.character_reference_url)
+            ? [body.character_reference_url] : []);
       if (!scriptJobId) return json({ ok: false, error: '请先保存脚本后再生成视频' }, 400);
       const { data: scriptJob, error: scriptJobError } = await admin.from('video_generation_jobs')
         .select('*')
@@ -215,7 +233,7 @@ Deno.serve(async (req) => {
             ).trim(),
           }))
         : scriptImageUrls.map((url: string) => ({ asset: {}, asset_id: '', url: url.trim() }))
-      ).filter((entry: any) => Boolean(entry.url)).slice(0, 9);
+      ).filter((entry: any) => Boolean(entry.url)).slice(0, quality.model.max_refs);
       if (!requestedReferences.length) {
         return json({ ok: false, error: '惊喜一下必须选择至少一张店铺实景图' });
       }
@@ -282,7 +300,6 @@ Deno.serve(async (req) => {
         return json({ ok: false, error: validation.errors.join('；'), errors: validation.errors }, 422);
       }
 
-      const quality = resolveSeedanceQuality(body.model, body.resolution);
       const serverPromptOverrides = source.surprise_result?.prompt_overrides;
       const renderPayload: Record<string, unknown> = {
         script: normalizedSubmittedScript,
@@ -291,7 +308,10 @@ Deno.serve(async (req) => {
         model: quality.model.id,
         resolution: quality.resolution,
         disable_references: false,
+        generate_audio: body.generate_audio !== false,
       };
+      if (requestedDuration !== null) renderPayload.duration = requestedDuration;
+      if (characterReferenceUrls.length) renderPayload.character_reference_urls = characterReferenceUrls;
       if (body.realism === 'photoreal' || body.realism === 'stylized') renderPayload.realism = body.realism;
       if (body.face_pipeline === 'character_sheet' || body.face_pipeline === 'illustration' || body.face_pipeline === 'faceless') {
         renderPayload.face_pipeline = body.face_pipeline;
