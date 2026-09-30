@@ -40,7 +40,7 @@
   ],
   "prompt_sha256": "8858b973069a84faab45916167e2997bb7461d8e809fcc38a62895b5d6ae9d66",
   "task_id": "cgt-20261001004721-y5vxn",
-  "status": "queued",
+  "status": "failed",
   "attempts": [
     {
       "at": "2026-10-01T00:47:21Z",
@@ -48,6 +48,24 @@
       "outcome": "task_created",
       "task_id": "cgt-20261001004721-y5vxn",
       "reference_count": 13
+    },
+    {
+      "at": "2026-10-01T00:55:08Z",
+      "outcome": "failed",
+      "task_id": "cgt-20261001004721-y5vxn",
+      "code": "OutputVideoSensitiveContentDetected.PolicyViolation",
+      "message": "The request failed because the output video may be related to copyright restrictions. Request id: 02179078685138100000000000000000000ffffac181411df50d0",
+      "request_id": "02179078685138100000000000000000000ffffac181411df50d0"
     }
-  ]
+  ],
+  "result": {
+    "status": "failed",
+    "video_url": null,
+    "usage": null,
+    "error": {
+      "code": "OutputVideoSensitiveContentDetected.PolicyViolation",
+      "message": "The request failed because the output video may be related to copyright restrictions. Request id: 02179078685138100000000000000000000ffffac181411df50d0",
+      "request_id": "02179078685138100000000000000000000ffffac181411df50d0"
+    }
+  }
 }
