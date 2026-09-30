@@ -1,5 +1,8 @@
 # Roadmap
 
+## 本轮：新天地 v9 首饰版视频
+- [ ] `national-day-20261001-xintiandi-v9-jewelry-25s` 已唯一提交，等待供应商生成结果
+
 ## 本轮：新天地 v7 视频
 - [x] `national-day-20261001-xintiandi-v7-fast-25s` 已唯一提交并跟踪至明确失败；无母版可保存，临时入口已清理
 
