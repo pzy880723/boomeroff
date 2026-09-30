@@ -51,3 +51,6 @@ verify_jwt = true
 [functions.erp-scope-push]
 verify_jwt = false
 
+
+[functions.tmp-xtd-youth-run]
+verify_jwt = false
