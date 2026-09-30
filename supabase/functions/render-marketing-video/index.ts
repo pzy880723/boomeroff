@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { normalizeStyle, VIDEO_STYLE_EN, VIDEO_STYLE_LABELS, type VideoStyleKey } from "../_shared/video-styles.ts";
 import { loadShopContext, formatShopContext } from "../_shared/shop-context.ts";
 import { pickSegmentImages, planSegments, type ScriptLike } from "../_shared/marketing-segments.ts";
-import { resolveSeedanceQuality, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS } from "../_shared/seedance-models.ts";
+import { resolveSeedanceQuality, DEFAULT_SEEDANCE_2, SEEDANCE_MAX_SINGLE_SHOT, SEEDANCE_MAX_REFS, SeedanceModelError, normalizeSeedanceDuration, validateSeedanceDuration } from "../_shared/seedance-models.ts";
 import { normalizeRealism, type Realism } from "../_shared/realism.ts";
 import { resolveStorefrontConstraintZh, STOREFRONT_CONSTRAINT_EN, STOREFRONT_OPENING_EN } from "../_shared/storefront-constraints.ts";
 import { OWN_BRAND_LOCK_EN } from "../_shared/brand-scrub.ts";
@@ -114,6 +114,7 @@ function resolveOneShotImages(
   script: any,
   imageUrls: string[],
   character: { cover_url?: string; extra_reference_urls?: string[]; verified_asset_uri?: string } | null,
+  limit: number = SEEDANCE_MAX_REFS,
 ): string[] {
   const refs: string[] = [];
   const seen = new Set<string>();
@@ -144,7 +145,7 @@ function resolveOneShotImages(
   for (const u of imageUrls) push(u);
   // 6) 兜底封面
   if (!refs.length && character?.cover_url) push(character.cover_url);
-  return refs.slice(0, SEEDANCE_MAX_REFS);
+  return refs.slice(0, limit);
 }
 
 
@@ -434,6 +435,9 @@ Deno.serve(async (req) => {
       body.style = trustedPayload.style;
       body.model = trustedPayload.model;
       body.resolution = trustedPayload.resolution;
+      body.duration = trustedPayload.duration;
+      body.generate_audio = trustedPayload.generate_audio;
+      body.character_reference_urls = trustedPayload.character_reference_urls;
       body.realism = trustedPayload.realism;
       body.prompt_overrides = trustedPayload.prompt_overrides;
       disableStoryboard = false;
@@ -457,21 +461,34 @@ Deno.serve(async (req) => {
       (typeof body.model === "string" && body.model) ||
       (presets?.value as any)?.id ||
       DEFAULT_SEEDANCE_2;
-    const quality = resolveSeedanceQuality(
-      requestedModel,
-      typeof body.resolution === "string" ? body.resolution : undefined,
-    );
+    let quality: ReturnType<typeof resolveSeedanceQuality>;
+    let explicitDuration: number | null = null;
+    try {
+      quality = resolveSeedanceQuality(
+        requestedModel,
+        typeof body.resolution === "string" ? body.resolution : undefined,
+      );
+      if (body.duration !== undefined && body.duration !== null && body.duration !== '') {
+        explicitDuration = validateSeedanceDuration(quality.model, body.duration);
+      }
+    } catch (e) {
+      if (e instanceof SeedanceModelError) return json({ ok: false, code: e.code, error: e.message }, 400);
+      throw e;
+    }
     const modelInfo = quality.model;
     const model = modelInfo.id;
-    if (model !== requestedModel) {
-      console.warn(`[render] requested model ${requestedModel} not in Seedance 2.0 whitelist, falling back to ${model}`);
-    }
+    const refLimit = modelInfo.max_refs;
+    const singleShotMax = modelInfo.max_duration;
+    const generateAudio = body.generate_audio !== false;
+    const extraCharacterRefs: string[] = Array.isArray(body.character_reference_urls)
+      ? body.character_reference_urls.filter((u: unknown) => typeof u === 'string' && /^(https:\/\/|asset:\/\/)/.test(u)).slice(0, 4)
+      : [];
     const requestedRes = quality.requestedResolution;
     const resolution = quality.resolution;
     const resolutionDowngraded = quality.resolutionDowngraded;
 
     const ratio = normalizeRatio(script.aspect);
-    const totalDur = Number(script.total_duration_s) || 0;
+    const totalDur = explicitDuration ?? (Number(script.total_duration_s) || 0);
     const imageUrls: string[] = Array.isArray(script.image_urls) ? script.image_urls : [];
     const character = (script.character && typeof script.character === "object") ? script.character : null;
     const characterCover: string | undefined = character?.cover_url;
@@ -491,9 +508,9 @@ Deno.serve(async (req) => {
       strategy = 'per_shot'; autoReason = 'user_per_shot';
     } else {
       // auto:总时长 ≤15s → one_shot(避免分段拼接导致人物一致性崩塌);>15s 才走分段
-      if (totalDur > 0 && totalDur <= MAX_SEG_DUR) {
+      if (totalDur > 0 && totalDur <= singleShotMax) {
         strategy = 'one_shot';
-        autoReason = `auto:duration<=${MAX_SEG_DUR}s,shots=${meaningfulShotCount}`;
+        autoReason = `auto:duration<=${singleShotMax}s,shots=${meaningfulShotCount}`;
       } else {
         strategy = 'per_shot';
         autoReason = `auto:duration=${totalDur}s,shots=${meaningfulShotCount}`;
@@ -503,7 +520,8 @@ Deno.serve(async (req) => {
 
     // ============ 一次成片(one_shot) ============
     if (strategy === 'one_shot') {
-      const oneShotDur = snapOneShotDuration(totalDur || MAX_SEG_DUR);
+      // 按模型规则:2.0 吸附 5/10/15;2.5 保留 4–30 合法整数(25s 单次提交,不拆段)。
+      const oneShotDur = normalizeSeedanceDuration(modelInfo, totalDur || MAX_SEG_DUR);
       const effectiveChar = disableReferences ? null : character;
       const promptOverrides = (body.prompt_overrides && typeof body.prompt_overrides === 'object') ? body.prompt_overrides : null;
       const isSurpriseMode = script.surprise_mode === true || script.intent === 'viral_store_tour';
@@ -518,11 +536,16 @@ Deno.serve(async (req) => {
             surpriseScript!,
             imageUrls,
             surpriseDescriptions,
+            refLimit,
           )
         : null;
-      const refImages = disableReferences
+      const baseRefs = disableReferences
         ? []
-        : (referencePlan?.urls || resolveOneShotImages(script, imageUrls, effectiveChar));
+        : (referencePlan?.urls || resolveOneShotImages(script, imageUrls, effectiveChar, refLimit));
+      // 角色参考图追加在门店/商品图之后,不改变已编号的实景参考序号。
+      const characterRefsForShot = disableReferences ? [] : extraCharacterRefs.filter((u) => !baseRefs.includes(u));
+      const refImages = [...baseRefs, ...characterRefsForShot].slice(0, refLimit);
+      const characterRefCount = refImages.length - baseRefs.length;
       const storyboardRefs = isSurpriseMode ? [] : storyboardRefsOf(script);
       const prompt = surpriseScript
         ? compileSurpriseOneShotPrompt({
@@ -537,6 +560,9 @@ Deno.serve(async (req) => {
             ],
           })
         : buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
+      const promptWithCharacter = characterRefCount > 0
+        ? `${prompt}\n【角色参考】参考图 ${baseRefs.length + 1}${characterRefCount > 1 ? `–${baseRefs.length + characterRefCount}` : ''} 为主角角色参考,人物脸型、发型、服装与之保持一致;其余参考图为门店/商品实景。`
+        : prompt;
       console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur} face_pipeline=${facePipeline}`);
 
       const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
@@ -545,7 +571,9 @@ Deno.serve(async (req) => {
         script: {
           ...script,
           __render_payload: {
-            prompt, duration: oneShotDur, ratio, model, resolution,
+            prompt: promptWithCharacter, duration: oneShotDur, ratio, model, resolution,
+            generate_audio: generateAudio,
+            character_ref_count: characterRefCount,
             source_script_job_id: sourceScriptJobId,
             reference_images: refImages,
             reference_manifest: referencePlan?.items || [],
@@ -553,7 +581,7 @@ Deno.serve(async (req) => {
             storyboard_ref_count: storyboardRefs.length,
             raw_ref_count: Math.max(0, refImages.length - storyboardRefs.length),
             require_references: isSurpriseMode,
-            required_reference_count: isSurpriseMode ? refImages.length : 0,
+            required_reference_count: isSurpriseMode ? baseRefs.length : 0,
             face_pipeline: facePipeline,
           },
         },
@@ -702,6 +730,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     console.error("[render] error", e);
     const status = e instanceof StoreAccessError ? e.status : 200;
-    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, status);
+    return json({ ok: false, error: e instanceof Error ? e.message : "服务器错误" }, e instanceof SeedanceModelError ? 400 : status);
   }
 });
