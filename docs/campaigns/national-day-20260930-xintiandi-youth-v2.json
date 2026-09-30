@@ -3,17 +3,55 @@
   "shop": "上海新天地店",
   "db_record": "app_settings.key = campaign:national-day-20260930-xintiandi-youth-v2",
   "model": "doubao-seedance-2-5-260628",
-  "duration": 25, "ratio": "9:16", "resolution": "1080p", "generate_audio": true,
+  "duration": 25,
+  "ratio": "9:16",
+  "resolution": "1080p",
+  "generate_audio": true,
   "reference_count": 10,
-  "reference_order": ["01_33.jpg","02_35_s.jpg","03_28_s.jpg","04_17.jpg","05_36_s.jpg","06_32.jpg","07_37_s.jpg","08_06.jpg","09_20.jpg","10_character-blue_s.jpg"],
+  "reference_order": [
+    "01_33.jpg",
+    "02_35_s.jpg",
+    "03_28_s.jpg",
+    "04_17.jpg",
+    "05_36_s.jpg",
+    "06_32.jpg",
+    "07_37_s.jpg",
+    "08_06.jpg",
+    "09_20.jpg",
+    "10_character-blue_s.jpg"
+  ],
   "reference_base_url": "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F",
   "attempts": [
-    {"at": "2026-09-30T15:28:56Z", "outcome": "no_task_created", "detail": "runner killed by edge wall-clock before Ark replied; Ark task list for this model = 0"},
-    {"at": "2026-09-30T15:34:24Z", "outcome": "rejected_no_task_created", "http_status": 400,
-     "code": "InputImageSensitiveContentDetected.PrivacyInformation",
-     "message": "The request failed because the input image 'content[10]' may contain real person.",
-     "request_id": "021790782451573faae7fb2907d9df6cb16d7e62d67e7fd1d2a47"}
+    {
+      "at": "2026-09-30T15:28:56Z",
+      "outcome": "no_task_created",
+      "detail": "runner killed by edge wall-clock before Ark replied; Ark task list for this model = 0"
+    },
+    {
+      "at": "2026-09-30T15:34:24Z",
+      "outcome": "rejected_no_task_created",
+      "http_status": 400,
+      "code": "InputImageSensitiveContentDetected.PrivacyInformation",
+      "message": "The request failed because the input image 'content[10]' may contain real person.",
+      "request_id": "021790782451573faae7fb2907d9df6cb16d7e62d67e7fd1d2a47",
+      "note": "error points at content[10]; this does not prove the other 9 images passed review; billing not verified"
+    }
   ],
   "task_id": null,
-  "status": "blocked_portrait_review"
+  "status": "blocked_asset_subscription_required",
+  "portrait_asset": {
+    "channel": "Ark AIGC private virtual portrait library: CreateAssetGroup(GroupType=AIGC) -> CreateAsset -> GetAsset=Active -> asset://",
+    "declared": "AI-generated virtual adult woman, not a real person",
+    "attempt": {
+      "at": "2026-09-30T15:43:31Z",
+      "action": "CreateAssetGroup",
+      "http": 403,
+      "code": "SubscriptionRequired",
+      "message": "This API requires an active subscription. Please subscribe to an advanced or premium plan.",
+      "request_id": "20260930234331BF6177C1CD1BA1E7B8F7"
+    },
+    "group_id": null,
+    "asset_id": null
+  },
+  "pre_check_2026-09-30T15:43Z": "Ark task list for doubao-seedance-2-5-260628 = 0 tasks"
 }

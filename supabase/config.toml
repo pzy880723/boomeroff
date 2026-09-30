@@ -50,6 +50,3 @@ verify_jwt = true
 
 [functions.erp-scope-push]
 verify_jwt = false
-
-[functions.tmp-xtd-youth-asset]
-verify_jwt = false
