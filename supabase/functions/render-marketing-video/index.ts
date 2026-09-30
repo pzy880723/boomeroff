@@ -560,9 +560,12 @@ Deno.serve(async (req) => {
             ],
           })
         : buildOneShotPrompt(script, styleKey, shopBlock, effectiveChar, realism, promptOverrides);
+      const durationOverride = surpriseScript && oneShotDur !== 15
+        ? `\n【时长覆盖·最高优先级】本条视频总时长为 ${oneShotDur} 秒,单次连续生成;上文所有"15秒"及时间锚点按 ${oneShotDur}/15 等比例放大,口播在 ${Math.max(1, oneShotDur - 0.1).toFixed(1)} 秒前自然说完。`
+        : '';
       const promptWithCharacter = characterRefCount > 0
-        ? `${prompt}\n【角色参考】参考图 ${baseRefs.length + 1}${characterRefCount > 1 ? `–${baseRefs.length + characterRefCount}` : ''} 为主角角色参考,人物脸型、发型、服装与之保持一致;其余参考图为门店/商品实景。`
-        : prompt;
+        ? `${prompt}${durationOverride}\n【角色参考】参考图 ${baseRefs.length + 1}${characterRefCount > 1 ? `–${baseRefs.length + characterRefCount}` : ''} 为主角角色参考,人物脸型、发型、服装与之保持一致;其余参考图为门店/商品实景。`
+        : `${prompt}${durationOverride}`;
       console.log(`[render one_shot] refs=${refImages.length} dur=${oneShotDur} face_pipeline=${facePipeline}`);
 
       const { data: parent, error: pErr } = await admin.from("marketing_video_jobs").insert({
