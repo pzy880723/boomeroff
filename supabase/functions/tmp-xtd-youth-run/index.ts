@@ -7,7 +7,7 @@ const KEY = "campaign:national-day-20260930-xintiandi-youth-v2";
 const TOKEN_HASH = "9f7206fdae2420322567d0814072e1c484d554d078f76d6cb9af2ffebd70f7ec";
 const ARK = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
 const BASE = "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F";
-const FILES = ["01_33.jpg","02_35.jpg","03_28.jpg","04_17.jpg","05_36.jpg","06_32.jpg","07_37.jpg","08_06.jpg","09_20.jpg","10_character-blue.png"];
+const FILES = ["01_33.jpg","02_35_s.jpg","03_28_s.jpg","04_17.jpg","05_36_s.jpg","06_32.jpg","07_37_s.jpg","08_06.jpg","09_20.jpg","10_character-blue_s.jpg"];
 
 const PROMPT = `上海新天地东台里 BOOMER·OFF Vintage 国庆年轻游客探店广告。完整25秒，9:16竖屏，1080p，原生中文有声。一个连续音画成片，剪辑在这一次生成内完成。
 参考图片顺序必须严格绑定：
@@ -41,29 +41,33 @@ Deno.serve(async (req) => {
   const save = (v: any) => admin.from("app_settings").update({ value: v, updated_at: new Date().toISOString() }).eq("key", KEY);
 
   if (action === "submit") {
-    if (rec) return j({ reused: true, record: rec });
-    const lock = await admin.from("app_settings").insert({ key: KEY, value: { status: "submitting", locked_at: new Date().toISOString() } });
-    if (lock.error) return j({ reused: true, lock_error: lock.error.message });
+    // retry allowed ONLY if previous attempt created no provider task (verified via list)
+    if (rec && (rec.task_id || rec.status !== "submitting" || !new URL(req.url).searchParams.get("confirm_no_task"))) return j({ reused: true, record: rec });
+    if (!rec) {
+      const lock = await admin.from("app_settings").insert({ key: KEY, value: { status: "submitting", locked_at: new Date().toISOString() } });
+      if (lock.error) return j({ reused: true, lock_error: lock.error.message });
+    } else {
+      await save({ status: "submitting", locked_at: new Date().toISOString(), prior_attempt: { locked_at: rec.locked_at, outcome: "edge wall-clock killed before Ark responded; Ark task list showed 0 tasks" } });
+    }
     const model = resolveSeedanceModel("doubao-seedance-2-5-260628");
     const refs = FILES.map((f) => BASE + f);
     const built = buildArkTaskBody({ model, prompt: PROMPT, ratio: "9:16", duration: 25, resolution: "1080p", referenceImages: refs, generateAudio: true });
-    const res = await fetch(ARK, { method: "POST", headers: { Authorization: `Bearer ${arkKey}`, "Content-Type": "application/json" }, body: JSON.stringify(built.body) });
-    const txt = await res.text();
-    let body: any; try { body = JSON.parse(txt); } catch { body = { raw: txt.slice(0, 500) }; }
-    const v = {
-      business_id: "national-day-20260930-xintiandi-youth-v2",
-      shop: "上海新天地店",
-      model: model.id, duration: built.duration, resolution: "1080p", ratio: "9:16", generate_audio: true,
-      reference_count: built.referenceCount, reference_urls: refs, mode: built.mode,
-      http_status: res.status,
-      request_id: res.headers.get("x-request-id") || res.headers.get("x-tt-logid") || body?.error?.request_id || null,
-      task_id: body?.id || null,
-      status: body?.id ? "submitted" : "submit_failed",
-      error: body?.id ? null : (body?.error || body),
-      submitted_at: new Date().toISOString(),
-    };
-    await save(v);
-    return j(v);
+    const { data: cur } = await admin.from("app_settings").select("value").eq("key", KEY).maybeSingle();
+    const work = (async () => {
+      let v: any = { ...(cur?.value || {}), business_id: "national-day-20260930-xintiandi-youth-v2", shop: "上海新天地店", model: model.id, duration: built.duration, resolution: "1080p", ratio: "9:16", generate_audio: true, reference_count: built.referenceCount, reference_urls: refs, mode: built.mode };
+      try {
+        const res = await fetch(ARK, { method: "POST", headers: { Authorization: `Bearer ${arkKey}`, "Content-Type": "application/json" }, body: JSON.stringify(built.body), signal: AbortSignal.timeout(300_000) });
+        const txt = await res.text();
+        let body: any; try { body = JSON.parse(txt); } catch { body = { raw: txt.slice(0, 500) }; }
+        v = { ...v, http_status: res.status, request_id: res.headers.get("x-request-id") || res.headers.get("x-tt-logid") || null, task_id: body?.id || null, status: body?.id ? "submitted" : "submit_failed", error: body?.id ? null : (body?.error || body), submitted_at: new Date().toISOString() };
+      } catch (e) {
+        v = { ...v, status: "submit_unknown", error: String((e as Error)?.message || e), submitted_at: new Date().toISOString() };
+      }
+      await save(v);
+    })();
+    // @ts-ignore
+    if ((globalThis as any).EdgeRuntime?.waitUntil) (globalThis as any).EdgeRuntime.waitUntil(work); else await work;
+    return j({ accepted: true, poll: "action=status" }, 202);
   }
 
   if (action === "list") {
