@@ -14,7 +14,8 @@ Deno.serve(async (req) => {
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const ark = Deno.env.get("ARK_API_KEY");
   if (!url || !service || !ark) return json({ error: "服务端配置缺失" }, 500);
-  if (req.headers.get("x-fixed-campaign") !== BUSINESS_ID) return json({ error: "未授权" }, 401);
+  const authorization = req.headers.get("Authorization");
+  if (authorization !== `Bearer ${service}`) return json({ error: "未授权" }, 401);
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const { data: row } = await admin.from("app_settings").select("value").eq("key", KEY).maybeSingle();
   const existing = row?.value as any;
