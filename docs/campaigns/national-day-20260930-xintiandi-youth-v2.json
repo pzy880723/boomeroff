@@ -7,7 +7,7 @@
   "ratio": "9:16",
   "resolution": "1080p",
   "generate_audio": true,
-  "reference_count": 10,
+  "reference_count": 9,
   "reference_order": [
     "01_33.jpg",
     "02_35_s.jpg",
@@ -17,8 +17,7 @@
     "06_32.jpg",
     "07_37_s.jpg",
     "08_06.jpg",
-    "09_20.jpg",
-    "10_character-blue_s.jpg"
+    "09_20.jpg"
   ],
   "reference_base_url": "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F",
   "attempts": [
@@ -35,10 +34,18 @@
       "message": "The request failed because the input image 'content[10]' may contain real person.",
       "request_id": "021790782451573faae7fb2907d9df6cb16d7e62d67e7fd1d2a47",
       "note": "error points at content[10]; this does not prove the other 9 images passed review; billing not verified"
+    },
+    {
+      "at": "2026-09-30T15:49:58Z",
+      "scheme": "text-generated-character",
+      "outcome": "task_created",
+      "http_status": 200,
+      "task_id": "cgt-20260930234952-r4ado",
+      "reference_count": 9
     }
   ],
-  "task_id": null,
-  "status": "blocked_asset_subscription_required",
+  "task_id": "cgt-20260930234952-r4ado",
+  "status": "succeeded",
   "portrait_asset": {
     "channel": "Ark AIGC private virtual portrait library: CreateAssetGroup(GroupType=AIGC) -> CreateAsset -> GetAsset=Active -> asset://",
     "declared": "AI-generated virtual adult woman, not a real person",
@@ -53,5 +60,17 @@
     "group_id": null,
     "asset_id": null
   },
-  "pre_check_2026-09-30T15:43Z": "Ark task list for doubao-seedance-2-5-260628 = 0 tasks"
+  "pre_check_2026-09-30T15:43Z": "Ark task list for doubao-seedance-2-5-260628 = 0 tasks",
+  "scheme": "text-generated-character",
+  "usage": {
+    "completion_tokens": 1217025,
+    "total_tokens": 1217025
+  },
+  "result": {
+    "duration": 25,
+    "resolution": "1080p",
+    "ratio": "9:16",
+    "video_url_expires": "2026-10-01T15:53:09Z (24h signed URL)",
+    "local_copy": "xintiandi-youth-v2-25s.mp4"
+  }
 }
