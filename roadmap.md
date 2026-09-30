@@ -1,5 +1,8 @@
 # Roadmap
 
+## 本轮：新天地 v7 视频
+- [ ] 提交并跟踪 `national-day-20261001-xintiandi-v7-fast-25s`，成功后保存 25 秒母版并清理临时入口
+
 ## 进行中 / 待 ERP 配合
 - [ ] 启用 ERP 授权短租约（`app_settings.erp_scope_lease.enabled = true`）—— 等 ERP `/api/public/sso/aigc-scope` 上线 + 原生刷新真实验收
 - [ ] 配置 `ERP_AIGC_SSO_SECRET`（当前缺失，push/pull 均 fail closed）
