@@ -1,0 +1,46 @@
+{
+  "business_id": "national-day-20261001-xintiandi-v9-jewelry-25s",
+  "model": "doubao-seedance-2-5-260628",
+  "duration": 25,
+  "ratio": "9:16",
+  "resolution": "1080p",
+  "generate_audio": true,
+  "draft": false,
+  "reference_count": 7,
+  "reference_order": [
+    "01_33.jpg",
+    "02_28_s.jpg",
+    "03_36_s.jpg",
+    "04_xintiandi-11-vintage-jewelry.jpg",
+    "05_37_s.jpg",
+    "06_06.jpg",
+    "07_29_s.jpg"
+  ],
+  "reference_urls": [
+    "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F01_33.jpg",
+    "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F03_28_s.jpg",
+    "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F05_36_s.jpg",
+    "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20261001-xintiandi-v9-jewelry-25s%2F07_xintiandi-11-vintage-jewelry.jpg",
+    "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F07_37_s.jpg",
+    "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20260930-xintiandi-youth-v2%2F08_06.jpg",
+    "https://narqwgwpqglathwtyevz.supabase.co/storage/v1/object/public/product-images/campaigns%2Fnational-day-20261001-xintiandi-v7-fast-25s%2F13_29_s.jpg"
+  ],
+  "prompt_sha256": "bf90588f7255c6da801269e1fdef06868f1b689a9dc7fa898367d0d4b1a4e9a4",
+  "task_id": "cgt-20261001012812-l4qgf",
+  "status": "created",
+  "created_at": "2026-09-30T17:28:09.381506+00:00",
+  "submitted_at": "2026-09-30T17:28:18.099631+00:00",
+  "submission_state": "created",
+  "attempts": [
+    {
+      "at": "2026-09-30T17:28:18.099631+00:00",
+      "outcome": "task_created",
+      "task_id": "cgt-20261001012812-l4qgf",
+      "reference_count": 7
+    }
+  ],
+  "provider_create_result": {
+    "id": "cgt-20261001012812-l4qgf"
+  },
+  "prompt": "上海新天地东台里 BOOMER·OFF Vintage 国庆综合探店广告。25秒，9:16，1080p，原生中文有声，一次完整AI真人探店生成，不是照片幻灯或照片快剪，不拆分。\n\n7张本店实景参考图按顺序严格绑定：图片1=33正面门头；图片2=28店内空间与可爱商品区环境中景；图片3=36瓷器墙；图片4=xintiandi-11-vintage-jewelry.jpg真实本店首饰货架，包含项链、框内胸针/耳饰、下层首饰托盘；图片5=37仅使用黑胶收纳、唱机与音响部分；图片6=06藤筐通道；图片7=29真实木质收银台。不要使用独立动漫角色特写素材。空间图中的商品仅作为实际店内环境，不让第三方角色活化或成为独立主角，不重绘受保护角色、唱片封面或艺人肖像。不伪造商品，不改变商品造型，不生成仿冒替代形象。原店白色裸顶轨道灯、黑色洞洞板木层架、木岛台、藤筐和木收银台保持真实结构与密度。没有老电脑，绝不生成电脑商品或电脑镜头。\n\n人物完全原创：约25岁中国成年女性，黑色齐下巴短发、淡粉色开衫、白色内搭、米白色休闲裤、帆布鞋、小号斜挎包；可爱自然、真实肤质和发丝、自然淡妆，不模仿任何明星。全片保持同一张脸、同一声音、同一服装。发现喜欢商品时眼睛发亮、扬眉笑、自然前倾分享，像带朋友兴奋逛店，不平淡慢演。\n\n第一帧起到末句全文由同一女声连续口播，快而清楚，兴奋语气有高低重音，不机械倍速。允许自然极短换气，但禁止几秒无对白展示、等动作结束再说话。镜头变化时同一声音连续画外音，正脸口型一致。提前合理分配全文节奏，所有台词必须按顺序完整说一次，不删品类、不改词、不加词、不复读、不截尾。精确口播：\n“国庆到新天地，直接冲这家店！走，找回童年的快乐！啊，好可爱！小摆件、毛绒、挂件，一整排看得眼睛都忙不过来！还不止这些！中古瓷器也太好看了吧，真想挑一套带回家！还有中古首饰，项链、胸针、耳环，快帮我看看哪个好看！往里竟然还有黑胶唱片、复古音响！从可爱逛到复古，根本舍不得走！下面一筐筐小杂货也别漏了，全场六块九起！翻完这筐翻那筐，挑几件喜欢的带回家！国庆就来新天地东台里！结账别忘了，免费领冰箱贴！”\n\n画面动作与口播同步，以口播为剪辑轴：\n0–3秒：第一帧原创女生与图片1真实完整门头同框并立即开口，指真实招牌、招手入店；不造街面门框、不改Logo，不用无人空镜开场。\n3–7秒：用图片2店内空间与可爱商品区环境中景，女生边走边看满架小物、毛绒、挂件，强调丰富与可逛；不做受保护角色的独立重绘特写，不让商品活化或融合变形。\n7–9秒：用图片3瓷器墙，女生轻托真实杯碟做短动作；保持真实器形、花纹和釉面，不虚构产地、年份或品牌。\n9–12.5秒：用图片4真实首饰区，清楚呈现项链、框内胸针/耳饰、下层首饰托盘；女生指托盘与项链，兴奋看向镜头说“快帮我看看哪个好看”，不改变首饰款式。\n12.5–16.5秒：用图片5黑胶收纳、唱机和音响部分，女生快速浏览；不重绘可辨认专辑封面或艺人照片，不播放现成唱片，不声称音质或设备功能，不生成老电脑。\n16.5–21.5秒：直接切到已蹲在图片6藤筐边的女生，边翻边说，拿起照片支持的小物；“全场六块九起”是全场起价，不绑定某件特写，不展示完整慢蹲。\n21.5–25秒：动作接切到图片7真实木收银台，女生拿选中小物对镜头邀约并完整说完免费冰箱贴；不虚构支付金额、收银员或赠品图案。最后一个字说完即结束，不留静止片尾。\n\n镜头高密度、动作匹配快切但稳定可辨，不晃、不眩晕；禁止慢动作、缓慢环绕、长推镜、完整慢走、安静赏物、微笑不说话等拖时镜头。保留原始真实门头Logo的字体、颜色和字形关系，不凭空重画Logo。\n\n配乐必须是完全原创日系City Pop纯器乐，116–124 BPM，以轻快鼓点、律动贝斯、清亮电钢琴、干净节奏吉他与少量复古合成器构成；不使用、引用、模仿任何现成歌曲、具体艺人、既有旋律、歌词、录音或人声。音乐持续低于清晰主口播并随人声轻微闪避，无音乐前奏、纯音乐过门或音乐尾巴。\n\n生成干净音画母版，不让模型生成字幕、贴纸、乱码字或片尾文字。后期会按实际口播校对并叠加全程短句中文字幕，最后3秒边说边叠加“BOOMER·OFF Vintage / 新天地·东台里”，但本次模型不要生成这些字，不延长25秒。"
+}
