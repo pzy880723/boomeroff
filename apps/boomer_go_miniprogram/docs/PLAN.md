@@ -40,6 +40,17 @@
 - [ ] Finish the old Web bound-attachment compatibility review and establish an exact Tencent source baseline before promotion. Do not overwrite current production from the stale server source tree.
 - [ ] Run dedicated-AppID legal-domain/privacy and two-employee/device acceptance. Tourist preview is not this gate.
 
+## Follow-up: Voucher And Schedule
+
+- [x] Read legacy voucher authority and store derivation, create and inspect editable voucher/activity designs, then freeze narrow native contracts without broad table grants.
+- [x] Coordinate Round13 voucher transaction/receipts and exact-store list reads, inspect fixed source and SQL test report, and independently review the privileged boundary.
+- [x] Implement native voucher lookup/confirmation, account-store-isolated unresolved intent, safe reconciliation and first-abort recovery; close independent review findings without automatic mutating retries.
+- [x] Reuse the existing schedule RPC for explicit rest, real work stores and permission-gated coworker views; preserve the month calendar and refuse conflicting legacy identities.
+- [x] Run 414/414 native tests, 17-route static checks, and all 18 WXML/19 WXSS official compilers; inspect actual labeled voucher and calendar/rest/empty states.
+- [x] Push mini-only feature commit `102950af` to `codex/go-mini-workbench` and verify its remote SHA, preserving unrelated Flutter edits and the user's normal index.
+- [ ] Finish native activity applications/publication confirmation and remaining employee parity. Existing read-only activity detail is not a completed management workflow.
+- [ ] Complete dedicated-AppID, employee and hardware acceptance. Withdrawn deployment fingerprints are not evidence; fixed-source hashes and backend deployment reports remain distinct from online byte comparison.
+
 ## Shared Worker Contract
 
 Root: `/Users/boomer/Documents/BOOMER GO Native/apps/boomer_go_miniprogram`.
