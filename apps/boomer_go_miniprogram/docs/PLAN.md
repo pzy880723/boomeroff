@@ -58,7 +58,7 @@
 - [x] Implement native activity list/detail and application editor with focused red-green tests, original-path preservation, explicit intent and per-scope unresolved recovery.
 - [x] Integrate native routes/preview and independently run 502 tests, 19-route checks and all official WXML/WXSS compilers; inspect actual labeled GUI filters, masked answers, draft preservation and disabled writes.
 - [x] Verify backend 0015 fixes for activity-context binding and safe declared-field projection, then enable only six source-audited first-abort error pairs; historical unknown requests remain frozen.
-- [ ] Push the isolated mini-only checkpoint after final verification, preserving Flutter work and the normal Git index.
+- [x] Push mini-only activity checkpoint `38dd2c66` after final verification and confirm the same remote SHA; preserve Flutter work, current branch and the empty normal Git index.
 - [ ] Implement and verify Stage2 bound original evidence upload; Stage1 does not complete that target or real employee acceptance.
 
 ## Shared Worker Contract (Reference)
