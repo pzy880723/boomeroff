@@ -4,7 +4,7 @@
     "pages/messages/index", "pages/mine/index", "pages/login/index",
     "pages/schedule/index", "pages/list/index", "pages/detail/index",
     "pages/quiz/index", "pages/sales/index", "pages/assistant/index",
-    "pages/marketing/index", "pages/asset/index"
+    "pages/marketing/index", "pages/asset/index", "pages/chat/index", "pages/community/index"
   ],
   "window": {
     "navigationBarTitleText": "BOOMER GO",

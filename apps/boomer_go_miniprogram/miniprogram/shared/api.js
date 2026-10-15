@@ -185,6 +185,59 @@ function createApi({ wx, config, session, invoke: transport }) {
     }));
     return { saved: true };
   }
-  return { action, invoke, recognize, assistant, saveMedia, copy, sales, leaderboard };
+  async function uploadChatAttachment(file) {
+    const before = snapshot();
+    await ensureFresh(before);
+    if (!file || !['image', 'video', 'file'].includes(file.kind) || typeof file.path !== 'string' || !/^(?:wxfile:\/\/|file:\/\/|https?:\/\/tmp\/|\/)/.test(file.path)) throw new Error('请选择本地聊天附件');
+    const name = String(file.name || file.path.split('/').pop() || '附件').replace(/[\x00-\x1f]/g, '').slice(-200);
+    const suffix = /\.([a-z0-9]{1,10})$/i.exec(name);
+    const ext = suffix ? suffix[1].toLowerCase() : 'bin';
+    const types = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', avif: 'image/avif', mp4: 'video/mp4', mov: 'video/quicktime', pdf: 'application/pdf', txt: 'text/plain', zip: 'application/zip', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
+    const mime = types[ext] || 'application/octet-stream';
+    if ((file.kind === 'image' && !mime.startsWith('image/')) || (file.kind === 'video' && !mime.startsWith('video/'))) throw new Error('附件文件格式与类型不一致，请重新选择');
+    const stats = await settled(before, new Promise((resolve, reject) => wx.getFileSystemManager().stat({ path: file.path, success: r => resolve(r.stats), fail: () => reject(new Error('本地附件读取失败，请重新选择')) })));
+    if (!stats || !Number.isSafeInteger(stats.size) || stats.size < 1 || stats.size > 40 * 1024 * 1024) throw new Error('聊天附件大小需在 40MB 以内');
+    await ensureFresh(before);
+    const id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const n = Math.floor(Math.random() * 16); return (c === 'x' ? n : (n & 3) | 8).toString(16); });
+    const path = session.get().userId + '/' + id + '.' + ext;
+    const key = 'chat-attachments/' + path;
+    await settled(before, new Promise((resolve, reject) => wx.uploadFile({
+      url: config.supabaseUrl.replace(/\/$/, '') + '/storage/v1/object/' + key,
+      filePath: file.path, name: 'file', timeout: 120000,
+      header: { Authorization: 'Bearer ' + session.token(), apikey: config.publicKey, 'x-upsert': 'false' },
+      formData: { cacheControl: '3600' },
+      success(r) {
+        if (r.statusCode < 200 || r.statusCode >= 300) { const error = new Error('附件上传失败，请重新选择或重试'); error.status = r.statusCode; return reject(error); }
+        let data; try { data = typeof r.data === 'string' ? JSON.parse(r.data) : r.data; } catch (_) {}
+        if (!data || data.Key !== key) return reject(new Error('服务器未确认附件存储位置，未加入消息'));
+        resolve();
+      }, fail: () => reject(new Error('附件上传未确认，请检查网络后重试'))
+    })));
+    return { kind: file.kind, storage_path: path, size: stats.size, mime, name };
+  }
+  async function openChatAttachment(message) {
+    const before = snapshot();
+    await ensureFresh(before);
+    const me = session.get().userId, att = message && message.attachment;
+    if (!message || !message.id || (message.sender_id !== me && message.receiver_id !== me) || !att || att.error || !['image', 'video', 'file'].includes(att.kind)) throw new Error('聊天附件不可用，请重新加载会话');
+    const origin = config.supabaseUrl.replace(/\/$/, '');
+    const prefix = origin + '/storage/v1/object/sign/chat-attachments/' + encodeURIComponent(message.sender_id) + '/';
+    const url = att.url;
+    if (typeof url !== 'string' || !url.startsWith(prefix) || /[\s\\#]/.test(url)) throw new Error('聊天附件来源未通过检查');
+    let path;
+    try { path = decodeURIComponent(url.slice(prefix.length).split('?')[0]); } catch (_) { throw new Error('聊天附件路径无效'); }
+    if (!path || /[%\\]/.test(path) || path.split('/').some(part => !part || part === '.' || part === '..') || !/^\?token=[A-Za-z0-9_.~-]+$/.test(url.slice(url.indexOf('?')))) throw new Error('聊天附件路径或签名无效');
+    if (att.kind === 'image') return settled(before, new Promise((resolve, reject) => wx.previewImage({ urls: [url], current: url, success: resolve, fail: () => reject(new Error('图片附件打开失败')) })));
+    if (att.kind === 'video') {
+      if (!wx.previewMedia) throw new Error('当前微信版本暂不支持视频附件预览，请升级微信');
+      return settled(before, new Promise((resolve, reject) => wx.previewMedia({ sources: [{ url, type: 'video' }], current: 0, success: resolve, fail: () => reject(new Error('视频附件打开失败')) })));
+    }
+    const temp = await settled(before, new Promise((resolve, reject) => wx.downloadFile({ url, timeout: 120000, success: r => r.statusCode === 200 ? resolve(r.tempFilePath) : reject(new Error('文件附件下载失败，请刷新会话')), fail: () => reject(new Error('文件附件下载中断，请重试')) })));
+    const match = /\.(docx?|xlsx?|pptx?|pdf)$/i.exec(String(att.name || ''));
+    if (match) return settled(before, new Promise((resolve, reject) => wx.openDocument({ filePath: temp, fileType: match[1].toLowerCase(), showMenu: true, success: resolve, fail: () => reject(new Error('文件预览失败，请检查文件格式')) })));
+    if (!wx.shareFileMessage) throw new Error('此文件类型暂不能原生预览，当前微信也不支持文件分享');
+    return settled(before, new Promise((resolve, reject) => wx.shareFileMessage({ filePath: temp, fileName: String(att.name || '附件'), success: resolve, fail: () => reject(new Error('文件分享未完成，原文件未修改')) })));
+  }
+  return { action, invoke, recognize, assistant, saveMedia, copy, sales, leaderboard, uploadChatAttachment, openChatAttachment };
 }
 module.exports = { createApi };

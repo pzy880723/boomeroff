@@ -4,6 +4,7 @@
 .unread-count { color: #eb0029; font-size: 26rpx; }
 .intro { margin-top: 14rpx; margin-bottom: 32rpx; }
 .controls { margin-bottom: 28rpx; }
+.batch-note { margin: -12rpx 0 24rpx; }
 .filters { justify-content: flex-start; }
 .filter { min-height: 88rpx; line-height: 88rpx; padding: 0 28rpx; font-size: 28rpx; background: #fff; color: #737780; border-radius: 20rpx; }
 .filter.selected { color: #eb0029; background: #ffedf0; font-weight: 600; }
@@ -24,3 +25,17 @@
 .freshness { text-align: center; font-size: 22rpx; margin-top: 30rpx; }
 .pressed { opacity: .75; }
 .loading-state { padding: 48rpx; text-align: center; color: #737780; }
+.section-tabs { display: flex; padding: 8rpx; margin: 0 0 28rpx; border-radius: 22rpx; background: #eaecef; }
+.section-tab { flex: 1; min-height: 88rpx; line-height: 88rpx; font-size: 30rpx; color: #737780; background: transparent; }
+.section-tab.active { background: #fff; color: #eb0029; font-weight: 700; }
+.peer-row { display: flex; align-items: center; gap: 22rpx; padding: 26rpx; }
+.peer-avatar { width: 88rpx; height: 88rpx; border-radius: 26rpx; flex-shrink: 0; }
+.letter-avatar { display: flex; align-items: center; justify-content: center; background: #ffedf0; color: #eb0029; font-size: 34rpx; font-weight: 700; }
+.peer-main { min-width: 0; flex: 1; }
+.peer-name { font-size: 32rpx; font-weight: 600; }
+.peer-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-top: 8rpx; }
+.peer-unread { font-size: 23rpx; color: #fff; background: #eb0029; padding: 2rpx 12rpx; border-radius: 24rpx; }
+.peer-arrow { color: #737780; }
+.contact-search { margin-bottom: 26rpx; background: #fff; }
+.group-title { font-size: 26rpx; color: #737780; margin: 28rpx 0 16rpx; }
+.assistant-link { min-height: 88rpx; padding: 24rpx 0; margin-top: 28rpx; font-size: 25rpx; color: #315acb; background: transparent; }

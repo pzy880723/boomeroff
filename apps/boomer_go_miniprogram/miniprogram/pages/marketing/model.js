@@ -3,7 +3,7 @@ const { supabaseUrl } = require('../../config');
 function text(value) { return typeof value === 'string' ? value : ''; }
 function scopeKey(session) {
   const user = session.get();
-  return user ? JSON.stringify([user.userId, user.shop && user.shop.id, user.scopeVersion]) : '';
+  return user ? JSON.stringify([user.userId, user.shop && user.shop.id, user.scopeVersion, typeof session.revision === 'function' ? session.revision() : null]) : '';
 }
 function mediaSource(value) {
   const url = text(value);

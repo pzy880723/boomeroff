@@ -1,0 +1,41 @@
+<view class="page community-page" style="padding-bottom:calc({{sendError || (draftLocked && !writing) ? 560 : 340}}rpx + {{keyboardInset}}px + env(safe-area-inset-bottom))">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成帖子与评论，不代表真实点赞或发布</view>
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+  <view wx:if="{{detailError}}" class="error"><text>{{detailError}}</text><button class="button-secondary" bindtap="refresh" disabled="{{detailLoading}}">重新加载帖子</button></view>
+  <view wx:if="{{detailLoading}}" class="muted loading-state">正在核对帖子与访问权限…</view>
+  <view wx:if="{{unavailable}}" class="card empty">帖子不存在、已移除，或当前账号无权访问。</view>
+  <block wx:if="{{post}}">
+    <view class="card post-header">
+      <view class="row author-row"><image wx:if="{{post.author.avatar_url}}" src="{{post.author.avatar_url}}" class="avatar" mode="aspectFill" /><view class="author-copy"><view>{{post.author.name || '作者未提供'}}<text wx:if="{{post.mine}}" class="mine-label">我</text></view><view class="muted">{{post.time ? post.time + '（上海时间）' : '时间未提供'}}</view></view></view>
+      <view class="post-title"><text selectable>{{post.name}}</text></view><text wx:if="{{post.category}}" class="chip">{{post.category}}</text>
+      <image wx:if="{{post.imageUrl}}" src="{{post.imageUrl}}" class="post-image" mode="widthFix" />
+    </view>
+    <view wx:if="{{fields.length}}" class="card"><view class="section-title">商品信息</view><view wx:for="{{fields}}" wx:key="label" class="field-row"><view class="muted">{{item.label}}</view><text selectable>{{item.value}}</text></view></view>
+    <view wx:for="{{sections}}" wx:key="title" wx:for-item="section" class="card story-card"><view class="section-title">{{section.title}}</view><view wx:for="{{section.entries}}" wx:key="index" class="story-entry"><view wx:if="{{item.title}}" class="entry-title">{{item.title}}</view><text selectable class="prose">{{item.body}}</text></view></view>
+    <view wx:if="{{!sections.length}}" class="card muted">原帖尚未提供商品故事，不会自动补写。</view>
+    <view class="card interaction-card">
+      <view class="row"><button class="button-secondary like-button {{liked === true ? 'is-liked' : ''}}" bindtap="like" loading="{{writing === 'like'}}" disabled="{{!canInteract || writing}}">{{writing === 'like' ? '正在确认' : (likeError ? '重试点赞操作' : (liked === null ? '状态未确认' : (liked ? '已点赞' : '点赞')))}} · {{likesCount === null ? '--' : likesCount}}</button><text class="muted">评论 {{commentsCount === null ? '--' : commentsCount}}</text></view>
+      <view wx:if="{{likeError}}" class="error local-error">{{likeError}}</view>
+      <view wx:if="{{preview}}" class="muted action-hint">示例模式只读，不会提交点赞或评论。</view>
+      <view wx:if="{{!preview && !canInteract}}" class="muted action-hint">互动状态尚未确认，请重新加载帖子。</view>
+    </view>
+    <view class="card comments-card">
+      <view class="row"><view class="section-title">评论 {{commentsCount === null ? '--' : commentsCount}}</view><button class="button-secondary refresh-button" bindtap="refresh" disabled="{{detailLoading || writing}}">刷新</button></view>
+      <view wx:if="{{commentsError}}" class="error local-error"><text>{{commentsError}}</text><button wx:if="{{!commentsLoaded}}" class="button-secondary" bindtap="retryComments" disabled="{{commentsLoading}}">重试加载评论</button></view>
+      <view wx:if="{{commentsLoaded && !comments.length && !commentsLoading && !commentsError && !hasMore}}" class="empty">还没有评论</view>
+      <view wx:for="{{comments}}" wx:key="id" class="comment-row">
+        <view class="row comment-author"><image wx:if="{{item.author.avatar_url}}" src="{{item.author.avatar_url}}" class="avatar comment-avatar" mode="aspectFill" /><view class="author-copy"><view>{{item.author.name || '作者未提供'}}<text wx:if="{{item.mine}}" class="mine-label">我</text></view><view class="muted comment-time">{{item.time}}</view></view></view>
+        <text selectable class="prose comment-content">{{item.content}}</text>
+      </view>
+      <view wx:if="{{commentsLoading}}" class="muted loading-state">正在加载评论…</view>
+      <button wx:if="{{hasMore}}" class="button-secondary more-button" bindtap="loadMoreComments" disabled="{{commentsLoading}}">{{commentsError ? '重试加载更多评论' : '加载更多评论'}}</button>
+    </view>
+    <view wx:if="{{notice}}" class="notice">{{notice}}</view>
+    <view class="composer" style="bottom:{{keyboardInset}}px">
+      <view wx:if="{{sendError}}" class="error composer-error">{{sendError}}</view>
+      <view wx:if="{{draftLocked && !writing}}" class="muted draft-hint">原稿已保留；请重试同一请求，先确认是否已保存。</view>
+      <textarea class="field comment-input" value="{{draft}}" bindinput="onDraftInput" bindkeyboardheightchange="keyboardHeight" adjust-position="{{false}}" maxlength="1000" placeholder="写下真实观察，最多 1000 字符" disabled="{{writing || draftLocked || !canInteract}}" />
+      <view class="row composer-actions"><text class="muted">{{draft.length}} / 1000</text><button class="button send-button" bindtap="sendComment" loading="{{writing === 'comment'}}" disabled="{{writing || !canInteract || !draft}}">{{writing === 'comment' ? '正在确认保存' : (draftLocked ? '重试并核对评论' : '发送评论')}}</button></view>
+    </view>
+  </block>
+</view>

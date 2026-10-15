@@ -1,0 +1,27 @@
+<view class="chat-page" style="padding-bottom: {{keyboardHeight}}px;">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成同事与历史，不代表真实发送或已读</view>
+  <view class="chat-header"><view class="chat-name">{{peerName}}</view><view class="muted">{{peerInfo}}</view><view wx:if="{{peerError}}" class="muted">同事资料暂未同步，聊天对象仍由服务器验证。</view></view>
+  <view wx:if="{{loading}}" class="loading">正在读取会话…</view>
+  <view wx:if="{{error}}" class="error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重试会话</button></view>
+  <scroll-view class="chat-scroll" scroll-y="{{true}}" scroll-into-view="{{scrollTarget}}" bindscroll="onScroll" scroll-with-animation="{{false}}">
+    <view class="chat-history">
+    <button wx:if="{{hasOlder}}" class="older-button" bindtap="loadOlder" disabled="{{loadingOlder}}" loading="{{loadingOlder}}">更早消息</button>
+    <view wx:if="{{olderError}}" class="error"><text>{{olderError}}</text><button class="button-secondary" bindtap="loadOlder">重试历史</button></view>
+    <view wx:if="{{loaded && !messages.length}}" class="empty">还没有消息，向同事打个招呼吧。</view>
+    <view wx:for="{{messages}}" wx:key="id" id="msg-{{item.id}}" data-id="{{item.id}}" class="message-row {{item.mine ? 'mine' : 'theirs'}}">
+      <view class="bubble-wrap"><view class="message-time">{{item.time}}</view><view class="bubble"><text wx:if="{{item.body}}" selectable="{{true}}" class="message-body">{{item.body}}</text>
+        <view wx:if="{{item.attachment}}" class="attachment"><block wx:if="{{item.attachment.error}}"><text class="attachment-error">{{item.attachment.error}}</text><button class="attachment-button" data-id="{{item.id}}" bindtap="openAttachment" disabled="{{opening}}">刷新并打开附件</button></block><block wx:else><image wx:if="{{item.attachment.kind === 'image'}}" class="attachment-image" src="{{item.attachment.url}}" mode="widthFix" data-id="{{item.id}}" bindtap="openAttachment"/><button wx:else class="attachment-button" data-id="{{item.id}}" bindtap="openAttachment" disabled="{{opening}}">{{item.attachment.kind === 'video' ? '播放视频' : '打开文件'}} · {{item.attachment.name}}</button></block></view>
+      </view><view wx:if="{{item.mine}}" class="receipt">{{item.readAt ? '对方已读' : '已发送 · 对方未读'}}</view></view>
+    </view>
+    </view>
+  </scroll-view>
+  <button wx:if="{{newMessages}}" class="new-messages" bindtap="scrollBottom">有新消息，查看最新 ↓</button>
+  <view wx:if="{{syncError}}" class="inline-error"><text>{{syncError}}</text><button bindtap="syncMessages">重新同步</button></view>
+  <view wx:if="{{readError}}" class="inline-error"><text>{{readError}}</text><button bindtap="markVisible">重试已读</button></view>
+  <view wx:if="{{statusError}}" class="inline-error"><text>{{statusError}}</text><button bindtap="syncVisibleStatus">重试回执</button></view>
+  <view wx:if="{{sendError}}" class="send-error"><text>{{sendError}}</text><view class="muted">原稿已保留，点击发送使用同一请求重试；未确认前不表示发送成功。</view></view>
+  <view wx:if="{{attachmentDraft}}" class="draft-attachment"><view><text>{{attachmentDraft.name}}</text><view class="muted">{{uploading ? '正在上传原文件，尚未发送' : attachmentDraft.ready ? '原文件已上传，待发送确认' : '附件尚未上传确认'}}</view></view><button bindtap="removeAttachment" disabled="{{uploading || sending}}">移除</button></view>
+  <view wx:if="{{uploadError}}" class="inline-error"><text>{{uploadError}}</text><button bindtap="uploadSelected" disabled="{{uploading}}">重试上传</button></view>
+  <view class="attachment-tools"><button data-kind="image" bindtap="chooseMedia" disabled="{{sending || uploading || selecting || !loaded}}">图片</button><button data-kind="video" bindtap="chooseMedia" disabled="{{sending || uploading || selecting || !loaded}}">视频</button><button bindtap="chooseFile" disabled="{{sending || uploading || selecting || !loaded}}">文件</button><text class="muted">原文件 · ≤40MB</text></view>
+  <view class="composer"><textarea class="composer-input" value="{{draft}}" placeholder="给同事发消息…" maxlength="2000" auto-height="{{true}}" adjust-position="{{false}}" show-confirm-bar="{{false}}" disabled="{{sending}}" bindinput="onInput" bindkeyboardheightchange="onKeyboard"/><button class="button send-button" bindtap="send" loading="{{sending}}" disabled="{{sending || uploading || selecting || !loaded}}">发送</button></view>
+</view>

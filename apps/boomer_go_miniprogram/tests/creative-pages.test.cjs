@@ -55,6 +55,22 @@ test('recognition view uses a real continuous camera, never per-shot confirmatio
   assert.match(source, /createCameraContext/);
   assert.doesNotMatch(source, /showModal|sourceType:\s*\[\s*['"]camera/);
 });
+test('same-employee relogin invalidates local album callbacks and retained creative data', async () => {
+  let revision = 1, choose;
+  const p = page('recognize', {}, { chooseMedia(options) { choose = options; } });
+  p.session.revision = () => revision;
+  p.onLoad(); p.onShow();
+  p.setData({ photos: ['old-photo'], hint: '旧会话草稿', result: { name: '旧结果' } });
+  const pending = p.pickAlbum();
+  revision++;
+  choose.success({ tempFiles: [{ tempFilePath: 'late-photo' }] });
+  await pending;
+  assert.deepEqual(plain(p.data.photos), ['old-photo']);
+  p.onShow();
+  assert.deepEqual(plain(p.data.photos), []);
+  assert.equal(p.data.hint, '');
+  assert.equal(p.data.result, null);
+});
 test('shutter immediately appends thumbnails and stops at five', async () => {
   const wx = cameraWx(); const p = page('recognize', {}, wx);
   p.onLoad(); p.onShow(); p.cameraReady();

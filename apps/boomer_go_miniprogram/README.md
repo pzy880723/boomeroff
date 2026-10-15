@@ -27,7 +27,7 @@ npm run check
 
 `tools/configure.cjs` reads only the existing **public** Supabase URL and publishable key from the parent repository `.env`. It never copies service-role keys, mini-program AppSecret or server deployment credentials into the mini-program. `miniprogram/config.local.js` is ignored.
 
-Current API origins are the existing GO Lovable Cloud project and `https://erp.boomeroff.com`. Before real-device preview, configure the HTTPS request and download domains in the dedicated employee mini-program console. Keep URL/TLS checks enabled. Configure required media/privacy declarations in that console rather than inventing `app.json` permission fields.
+Current API origins are the existing GO Lovable Cloud project and `https://erp.boomeroff.com`. Before real-device preview, configure the HTTPS request and download domains in the dedicated employee mini-program console. Chat attachments also require the existing GO Supabase origin as an uploadFile legal domain. Keep URL/TLS checks enabled. Configure required media/privacy declarations in that console rather than inventing `app.json` permission fields.
 
 ## Authorization And Data
 

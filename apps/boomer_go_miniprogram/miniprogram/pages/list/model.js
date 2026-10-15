@@ -107,6 +107,7 @@ function categories(data) {
 }
 
 function detailUrl(kind, id) {
+  if (kind === 'community') return '/pages/community/index?id=' + encodeURIComponent(id);
   return '/pages/detail/index?kind=' + encodeURIComponent(kind) + '&id=' + encodeURIComponent(id);
 }
 

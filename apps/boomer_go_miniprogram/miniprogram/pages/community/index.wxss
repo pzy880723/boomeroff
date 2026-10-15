@@ -1,0 +1,34 @@
+.community-page { padding-top: 28rpx; }
+.community-page .section-title { margin: 0 0 20rpx; font-size: 34rpx; }
+.post-header { padding: 30rpx; }
+.author-row, .comment-author { justify-content: flex-start; }
+.avatar { width: 76rpx; height: 76rpx; border-radius: 50%; flex-shrink: 0; background: #f5f6f8; }
+.author-copy { min-width: 0; flex: 1; font-size: 28rpx; overflow-wrap: break-word; }
+.author-copy .muted { margin-top: 8rpx; font-size: 23rpx; }
+.mine-label { color: #eb0029; background: #fff0f3; border-radius: 8rpx; font-size: 22rpx; padding: 2rpx 10rpx; margin-left: 12rpx; }
+.post-title { font-size: 44rpx; font-weight: 700; line-height: 1.5; margin: 28rpx 0 20rpx; word-break: break-all; }
+.post-image { display: block; width: 100%; border-radius: 20rpx; margin-top: 26rpx; }
+.field-row { padding: 18rpx 0; border-bottom: 1rpx solid #eef0f3; line-height: 1.8; word-break: break-all; }
+.field-row:last-child { border: 0; }
+.story-entry + .story-entry { margin-top: 24rpx; }
+.entry-title { font-size: 29rpx; font-weight: 600; margin-bottom: 10rpx; }
+.prose { display: block; font-size: 30rpx; line-height: 1.9; white-space: pre-wrap; word-break: break-all; }
+.like-button { min-width: 260rpx; }
+.like-button.is-liked { background: #fff0f3; color: #eb0029; border-color: #f6cbd3; }
+.local-error { margin: 20rpx 0 0; }
+.action-hint { margin-top: 20rpx; }
+.refresh-button { min-width: 140rpx; }
+.comments-card > .row .section-title { margin: 0; }
+.comment-row { padding: 28rpx 0; border-bottom: 1rpx solid #eef0f3; }
+.comment-avatar { width: 60rpx; height: 60rpx; }
+.comment-content { margin-top: 18rpx; }
+.comment-time { font-size: 22rpx; }
+.more-button { width: 100%; margin-top: 26rpx; }
+.loading-state { padding: 28rpx 0; text-align: center; }
+.notice { padding: 24rpx; border-radius: 20rpx; background: #eef3ff; color: #315acb; margin-bottom: 24rpx; }
+.composer { position: fixed; left: 0; right: 0; z-index: 10; background: #fff; border-top: 1rpx solid #e8eaee; padding: 20rpx 36rpx calc(20rpx + env(safe-area-inset-bottom)); }
+.comment-input { height: 112rpx; min-height: 112rpx; max-height: 180rpx; line-height: 1.6; }
+.composer-actions { margin-top: 16rpx; }
+.send-button { min-width: 230rpx; }
+.composer-error { margin-bottom: 16rpx; max-height: 130rpx; overflow-y: auto; }
+.draft-hint { margin-bottom: 12rpx; font-size: 23rpx; }

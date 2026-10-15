@@ -15,3 +15,12 @@ test('native source never embeds or navigates to a web page',()=>{
   assert.ok(files.length>0,'native source must exist');
   for(const file of files){const text=fs.readFileSync(file,'utf8');assert.doesNotMatch(text,/<web-view\b|navigateToMiniProgram|https?:\/\/[^\s"']*\.html/,'no H5 replacement: '+file);}
 });
+test('staff chat has its own native route and does not replace a tab',()=>{
+  const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
+  assert.ok(app.pages.includes('pages/chat/index'));
+  assert.equal(app.tabBar.list.length,5);
+});
+test('community entries open the native interactive post detail',()=>{
+  const model=require('../miniprogram/pages/list/model');
+  assert.equal(model.detailUrl('community','post-123'),'/pages/community/index?id=post-123');
+});

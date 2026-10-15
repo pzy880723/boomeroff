@@ -20,7 +20,25 @@
 - [x] Open in WeChat DevTools using a separate tourist project, inspect five native tabs and critical flows, capture evidence and fix visual issues.
 - [x] Record migration coverage, limitations and config/publish prerequisites. A preview/build is not a published mini-program or real-user acceptance.
 - [ ] Complete genuine employee/device acceptance with a dedicated GO AppID, legal domains and privacy configuration; no credentials or approvals were invented.
-- [ ] Complete remaining functional parity identified in FEATURE_PARITY.md, notably employee direct messages and role-specific operational writes. Initial native routes do not constitute complete migration.
+- [ ] Complete remaining functional parity identified in FEATURE_PARITY.md, notably activity/voucher operations and role-specific operational writes. Initial native routes do not constitute complete migration.
+
+## Follow-up: Employee Direct Messages
+
+- [x] Read the existing web message/contact/attachment paths and RLS migration; distinguish staff DM from AI conversations.
+- [x] Add editable conversation/chat design frames in the existing Figma file (3:32, 3:75); inspect the chat render. Detailed lifecycle and test plan: DM_NATIVE_PLAN.md.
+- [x] Obtain the deployed, own-JWT DM contract from GO Lovable; verify pagination, read boundaries and send idempotency without expanding permissions. Round 12 replaces time-filter pagination with frozen snapshot IDs.
+- [x] Add failing native interaction tests, then implement messages filters and native chat. Preserve private drafts on failure, stop polling off-screen and discard old-identity responses.
+- [x] Integrate shared transport/preview and native route registration; verify backend DTOs, not guessed mock contracts.
+- [x] Compile and visually inspect the native flow; update the coverage matrix. Official compilers passed all WXML/WXSS; synthetic contact, chat failure and community states have real DevTools screenshots.
+- [ ] Push an isolated follow-up commit. Real two-employee acceptance remains a separate gate.
+
+## Follow-up: Community and Release Gates
+
+- [x] Add approved-style native community detail, complete business story, explicit likes and idempotent comments; verify 31 focused simulated tests and official WXML/WXSS compilation.
+- [x] Add original-file DM upload/open checks, including identity changes during stat/upload/download and unconfirmed receipts; verify nine focused tests.
+- [x] Reproduce same-user re-login retaining creative state; include session revision in creative scope and pass the regression.
+- [ ] Finish the old Web bound-attachment compatibility review and establish an exact Tencent source baseline before promotion. Do not overwrite current production from the stale server source tree.
+- [ ] Run dedicated-AppID legal-domain/privacy and two-employee/device acceptance. Tourist preview is not this gate.
 
 ## Shared Worker Contract
 

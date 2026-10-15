@@ -221,7 +221,7 @@ test('generic native list covers original employee entry routes and preserves en
     const page = nativePage('list', async () => ({ items: [{ id: 'a/b ?中', title: '条目' }] }));
     await page.onLoad({ kind });
     page.openItem(event({ id: 'a/b ?中' }));
-    assert.match(page.navigations[0], /\/pages\/detail\/index\?kind=/);
+    assert.match(page.navigations[0], kind === 'community' ? /\/pages\/community\/index\?id=/ : /\/pages\/detail\/index\?kind=/);
     assert.ok(page.navigations[0].includes(encodeURIComponent('a/b ?中')));
   }
 });

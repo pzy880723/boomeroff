@@ -1,15 +1,38 @@
 <view class="page messages-page">
-  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成通知，不会修改真实已读记录</view>
-  <view class="eyebrow">BOOMER / INBOX</view><view class="row heading"><view class="page-title">消息</view><text class="unread-count">{{unread}} 条未读</text></view>
-  <view class="muted intro">门店动态、工作提醒，在这里同步。</view>
-  <button class="button-secondary" data-url="/pages/list/index?kind=conversations" bindtap="go">BOOMER 助手会话 →</button>
-  <view class="row controls"><view class="row filters"><button class="filter {{filter === 'all' ? 'selected' : ''}}" data-kind="all" bindtap="onFilter">全部</button><button class="filter {{filter === 'unread' ? 'selected' : ''}}" data-kind="unread" bindtap="onFilter">未读</button></view><button class="mark-all" bindtap="markAll" disabled="{{!unread || marking}}" loading="{{marking}}">全部已读</button></view>
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成通知、同事与历史，不代表真实发送或已读</view>
+  <view class="eyebrow">BOOMER / INBOX</view><view class="row heading"><view class="page-title">消息</view><text wx:if="{{section === 'notifications'}}" class="unread-count">已加载 {{unread}} 条未读</text><text wx:elif="{{section === 'conversations' && dmUnreadTotal !== null}}" class="unread-count">当前列表 {{dmUnreadTotal}} 条私信未读</text></view>
+  <view class="muted intro">工作通知与同事交接，都在这里。</view>
+  <view class="section-tabs"><button class="section-tab {{section === 'notifications' ? 'active' : ''}}" data-section="notifications" bindtap="onSection">通知</button><button class="section-tab {{section === 'conversations' ? 'active' : ''}}" data-section="conversations" bindtap="onSection">会话</button><button class="section-tab {{section === 'contacts' ? 'active' : ''}}" data-section="contacts" bindtap="onSection">联系人</button></view>
+  <block wx:if="{{section === 'notifications'}}">
+  <view class="row controls"><view class="row filters"><button class="filter {{filter === 'all' ? 'selected' : ''}}" data-kind="all" bindtap="onFilter">全部</button><button class="filter {{filter === 'unread' ? 'selected' : ''}}" data-kind="unread" bindtap="onFilter">未读</button></view><button class="mark-all" bindtap="markAll" disabled="{{!unread || marking}}" loading="{{marking}}">标记已加载通知</button></view>
+  <view wx:if="{{readNotice}}" class="muted batch-note">{{readNotice}}</view>
   <view wx:if="{{loading}}" class="card loading-state">正在同步消息…</view>
   <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重新同步</button></view>
-  <view wx:if="{{!loading && !error && !visibleItems.length}}" class="card empty"><view class="empty-symbol">信</view><view>{{filter === 'unread' ? '没有未读消息' : '暂时没有消息'}}</view><view class="muted">有新通知时会显示在这里。</view></view>
+  <view wx:if="{{!loading && !error && !visibleItems.length}}" class="card empty"><view class="empty-symbol">信</view><view>{{filter === 'unread' ? '已加载通知中暂无未读' : '已加载范围暂无通知'}}</view><view class="muted">{{hasMore ? '后面还有通知，可继续加载。' : '有新通知时会显示在这里。'}}</view></view>
   <view wx:for="{{visibleItems}}" wx:key="id" class="card message-card {{!item.read ? 'unread-card' : ''}}">
     <view class="message-main" data-id="{{item.id}}" bindtap="openItem" hover-class="pressed"><view class="row message-meta"><text class="message-category">{{item.category || '门店通知'}}</text><text wx:if="{{!item.read}}" class="unread-dot"></text><text wx:else class="muted">已读</text></view><view class="section-title message-title">{{item.title}}</view><view class="muted message-body">{{item.body}}</view><view class="muted message-time">{{item.time}}</view></view>
     <view class="row message-actions"><button class="read-content" data-id="{{item.id}}" bindtap="openItem">查看详情 →</button><button wx:if="{{!item.read}}" class="read-button" data-id="{{item.id}}" bindtap="markRead" disabled="{{marking}}">标为已读</button></view>
   </view>
+  <view wx:if="{{moreError}}" class="card error"><text>{{moreError}}</text><button class="button-secondary" bindtap="loadMore" disabled="{{loadingMore}}">重试续页</button></view>
+  <button wx:elif="{{hasMore}}" class="button-secondary" bindtap="loadMore" disabled="{{loadingMore || loading}}" loading="{{loadingMore}}">{{loadingMore ? '正在同步通知…' : '加载更多通知'}}</button>
   <view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view>
+  </block>
+  <block wx:else>
+    <input wx:if="{{section === 'contacts'}}" class="field contact-search" value="{{contactQuery}}" placeholder="已加载联系人中搜索姓名 / 门店 / 岗位" bindinput="onContactSearch"/>
+    <view wx:if="{{loading}}" class="card loading-state">正在同步{{section === 'contacts' ? '可见联系人' : '同事会话'}}…</view>
+    <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重新同步</button></view>
+    <view wx:if="{{dmSyncError}}" class="card error"><text>{{dmSyncError}}</text><button class="button-secondary" bindtap="pollPeople">重试同步</button></view>
+    <button wx:if="{{section === 'conversations' && conversationUpdate}}" class="button-secondary" bindtap="load">有新消息或状态变化，刷新会话</button>
+    <view wx:if="{{!loading && !error && !peopleItems.length}}" class="card empty">{{section === 'contacts' ? '当前权限下暂无可见同事' : '还没有同事会话'}}<view class="muted">{{section === 'contacts' ? '联系人由现有员工权限决定，不代表组织内没有同事。' : '可在联系人中选择一位可见同事开始交接。'}}</view></view>
+    <block wx:if="{{section === 'conversations'}}">
+      <view wx:for="{{peopleItems}}" wx:key="id" class="card peer-row" data-id="{{item.id}}" bindtap="openPeer" hover-class="pressed"><image wx:if="{{item.avatar}}" class="peer-avatar" src="{{item.avatar}}" mode="aspectFill"/><view wx:else class="peer-avatar letter-avatar">{{item.initial}}</view><view class="peer-main"><view class="row"><text class="peer-name">{{item.name}}</text><text class="small muted">{{item.time}}</text></view><view class="row"><text class="muted peer-preview">{{item.preview}}</text><text wx:if="{{item.unread}}" class="peer-unread">{{item.unread > 99 ? '99+' : item.unread}}</text></view></view></view>
+    </block>
+    <block wx:else>
+      <view wx:if="{{peopleItems.length && !contactGroups.length}}" class="card empty">已加载联系人中没有匹配结果</view>
+      <view wx:for="{{contactGroups}}" wx:key="name" wx:for-item="group" class="contact-group"><view class="group-title">{{group.name}} · {{group.items.length}} 人（已加载）</view><view wx:for="{{group.items}}" wx:key="id" class="card peer-row" data-id="{{item.id}}" bindtap="openPeer" hover-class="pressed"><image wx:if="{{item.avatar}}" class="peer-avatar" src="{{item.avatar}}" mode="aspectFill"/><view wx:else class="peer-avatar letter-avatar">{{item.initial}}</view><view class="peer-main"><view class="peer-name">{{item.name}}</view><view class="muted">{{item.position || '岗位未提供'}}</view></view><text class="peer-arrow">→</text></view></view>
+    </block>
+    <view wx:if="{{moreError}}" class="card error"><text>{{moreError}}</text><button class="button-secondary" bindtap="retryMorePeople">{{conversationExpired ? '刷新会话' : '重试续页'}}</button></view>
+    <button wx:elif="{{dmHasMore}}" class="button-secondary" bindtap="loadMorePeople" disabled="{{loadingMore || loading}}" loading="{{loadingMore}}">加载更多{{section === 'contacts' ? '联系人' : '会话'}}</button>
+  </block>
+  <button class="assistant-link" data-url="/pages/list/index?kind=conversations" bindtap="go">BOOMER 助手会话（非同事私信） →</button>
 </view>

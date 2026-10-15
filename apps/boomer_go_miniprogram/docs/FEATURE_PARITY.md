@@ -4,24 +4,26 @@
 
 ## 最终集成检查点
 
-后端契约快照已更新至 GO Lovable `0fbc3474e059e1622fc26df7cbccea196c712309`，详见 GO_MINI_API_CONTRACT.md。下方原始矩阵保留排查证据，其中以下旧缺口已被修复，不能继续当作当前故障：
+后端契约已补至 GO Lovable Round 12（固定源码 `7a3081199b99cbee95c0ea72d2ca5ffa785ba9ea`，部署 fingerprint `654c25d0`），详见 GO_MINI_API_CONTRACT.md。下方原始矩阵保留排查证据，其中以下旧缺口已被修复，不能继续当作当前故障：
 
 - 每日任务使用服务端真实 `items/pending_items`，工作台独立加载班次、任务和业绩；不要求 bootstrap 提供任务数组。
 - 成长签到使用 `checkin-status/checkin-submit`，原生按钮、历史、连续天数及写后回读已接；明确不是考勤。
 - 个人资料支持昵称和相册头像保存回读；ERP 姓名、手机号、门店和权限不可编辑。
 - 知识搜索使用 `q`，SOP/QA 使用 `learning` 的 `type/category_id`；列表 snapshot、商品名称、时间和通过状态已归一化。
 - 官方收藏与个人收藏删除分开调用；个人收藏包装、根层识物故事/卖点、图库和视频已解析；无真实商品 ID 不展示商品分享/收藏操作。
-- 通知中文分类和时间、BOOMER 助手会话标识已接；不能当作同事私信已经迁移。
+- 消息原生分为通知／会话／联系人；通知续页与精确已加载 ID 已读、同事私信及原文件附件已接。BOOMER 助手会话保留独立标识，不与同事私信混淆。
+- 同事会话使用固定 snapshot_id 续页；过期保留列表、显式刷新，不拼接新旧集合。聊天支持前后游标、真实 read_at 回执、失败保稿及发送幂等；隐藏停轮询、旧身份回包丢弃。原文件上传/原生打开已接，40MB 为客户端及后端约束，不是已验证的真机上传能力。
+- BOOMER 圈新增原生完整商品故事／卖点、稳定评论续页、显式点赞目标与幂等评论；服务端确认前不清草稿，不乐观捏造计数。开发示例只读，不会发送真实互动。
 - 素材库和参考图片均支持续页、ID 去重与旧请求隔离；竖版参考图提交前逐张检查宽高。
 - 当前预览的未知知识 ID 会报错，不再回退成第一篇无关文章；预览测验显式标记未保存真实成绩。
 - ERP 只读龙虎榜接口已经部署腾讯云；真实订单缺员工销售归属，因此不伪造排名，也不关联考核。
 
-以上是源码、单测、后台部署及开发者工具证据，不是实际员工登录、真机相机/相册、真实考试或视频发布的端到端验收。其余尚缺的同事私信、活动/券深度操作、角色管理和排班管理写入等仍需后续原生迁移，不能宣称全功能平替已完成。最终验证见 VERIFICATION.md。
+以上是源码、单测、后台部署及开发者工具证据，不是实际员工登录、双员工私信、真机相机/相册、真实考试或视频发布的端到端验收。尚缺活动/券深度操作、角色管理和排班管理写入等，不能宣称全功能平替已完成。旧腾讯 Web 对新绑定路径附件的兼容适配仍未部署，因此新原生 DM 暂不可向员工正式开放；不能将后台迁移当作跨端发布已完成。最终验证见 VERIFICATION.md。
 
 ## 1. 结论与证据边界
 
 - 目标是员工工作台原生迁移，不是客户 BOOMER OFF 小程序，也不是把员工 Web 放进 web-view。
-- 当前小程序注册 14 个原生页面、5 个 Tab：工作台／学习／识物／消息／我的。二级模块大量复用 list/detail，菜单存在不等于对应操作完整。
+- 当前小程序注册 16 个原生页面、5 个 Tab：工作台／学习／识物／消息／我的。二级模块大量复用 list/detail，菜单存在不等于对应操作完整。
 - “我的”当前有 17 个二级菜单。个人资料、设置、签到、活动、券、社区深度交互、角色、营销管理仍有不同程度缺口，详见下表。
 - 本轮盘点不访问生产数据库、不提交业务请求、不生成付费视频、不发送短信、不核销券、不修改用户数据。盘点仅写本文档；另有用户明确追加授权的素材分页、参考图前置校验与 source/cover 错误页面修复，不属于数据库变更。
 - 所有模块均标记为**未真机验收**。真实员工登录 E2E 尚未运行，不能从静态源码、预览、单测、编译或部署推导出业务闭环已完成。
@@ -133,12 +135,12 @@
 
 | 功能与现有来源 | 小程序路径 | 当前 API / 数据来源 | 实际状态与已知缺口 |
 | --- | --- | --- | --- |
-| `/notifications` 通知/资讯/未读；Flutter Messages | `/pages/messages/index` → `D(notifications,id)` | `G(notifications,{})`、`G(notification-read,{id})` 或 `{all:true}` | 实际已接（客户端）。以 `marked` 回执更新已读；当前页面只有全部/未读，未完整还原 Web 资讯/通知/私信分类、搜索、推送与 realtime。 |
+| `/notifications` 通知/资讯/未读；Flutter Messages | `/pages/messages/index` → `D(notifications,id)` | `G(notifications,{page,page_size})`、`G(notification-read,{id})` 或精确 `{ids}` | 客户端已接通知续页和已加载范围的精确批量回执；不调用旧 all:true。中文分类与时间保留；未接系统推送和全部 Web 编辑管理。 |
 | 管理员 AI 编写通知、草稿、封面、发布 | 无原生编写页 | 旧 Web `compose-notification/generate-notification-banner`、notifications 插入 | 缺少操作。看通知和标已读不等于能够发布通知。 |
-| `/messages/:peerId` 员工私聊、联系人、图片、已读与 realtime | 未见 peerId 原生页 | Web `direct_messages/profiles/staff_profiles/user_roles` + 实时订阅 | 缺少操作。不要把下行的 AI 会话当作员工对员工私聊已经迁移。 |
+| `/messages/:peerId` 员工私聊、联系人、图片、已读与 realtime | 消息三筛选 → `/pages/chat/index?peer_id=...` | `dm-contacts/conversations/messages/send/read/status/attachment`，原文件 Storage 上传 | 客户端已接文字、图片/视频/文件、历史及已读；可见时轮询，不伪造在线状态。沿用原 RLS，普通员工无 staff.read 时联系人可为空，仅可回复已有入站会话。尚未真双员工／真机验收；腾讯旧 Web 附件适配尚未上线，不能宣称跨端完整可用。 |
 | 我的 AI 会话列表/历史与新建 | 消息页 → `L(conversations)` → `D(conversation,id)` | `G(conversation-list,...)`、`G(conversation-messages,{conversation_id})`；`G(conversation-send,{content,conversation_id?})` | 读取/文字发送处理器已写；主流程称 send 可返回 `{conversation_id,reply}`。当前未见图片上传/发送、会话重命名/删除、usage；真实历史与新建回读待验。 |
 | 随处 BOOMER 助手；Web SpiritDrawer/useSpiritChat，Flutter assistant | `/pages/assistant/index` | `api.assistant(messages,conversationId,onDelta)`，当前共享层仍调用 `spirit-chat` | 原生文字对话、重试、新对话、卸载/身份变化保护已写。当前网络层是接收完 SSE 后解析再回调，不是真网络逐字流；没有 Web 附图、历史入口、rename/delete/usage。 |
-| `/community` 社区浏览与筛选 | `L(community)` → `D(community,id)` | `G(community,...)` | 只读主体已接。未见点赞、评论、帖子收藏、举报/审核、官方收录的原生同等操作。 |
+| `/community` 社区浏览与筛选 | `L(community)` → `/pages/community/index?id=...` | `community/detail/comments/like/comment` | 已接完整商品内容、显式点赞及幂等评论，评论按稳定游标续页；原生截图与模拟测试通过。帖子收藏、举报/审核、官方收录未迁移；未执行真实互动写入。 |
 | 已保存商品分享社区 | 商品通用详情的分享按钮 | `G(community-post,{product_id})` | 后端已确认读可访问 products、按用户+product 查重、返回 post_id/created；客户端产品 ID 提取及真实回读仍待验。不是任意图文帖发布或评论能力。 |
 | 社区内容官方收录/纠错审核 | 无 | 旧 Web Community、Portal CommunityModeration/CorrectionReviewPanel | 管理权限功能未迁移；不能从社区阅读页推导审核功能存在。 |
 

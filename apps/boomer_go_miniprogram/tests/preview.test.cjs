@@ -1,3 +1,76 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const{createPreview}=require('../miniprogram/shared/preview');
 test('development samples load without false live-sales or persistence',async()=>{const p=createPreview({});const data=await p.api.sales();assert.equal(data.achieved_cents,null);assert.equal(data.complete,false);assert.ok(data.as_of);const dashboard=await p.api.action('dashboard');assert.equal(dashboard.shift.title,'早班');const result=await p.api.action('quiz-submit',{});assert.equal(result.persisted,false);await assert.rejects(p.api.invoke('surprise-marketing-video',{}));});
 test('preview never substitutes an unrelated article or claims a real check-in',async()=>{const p=createPreview({});await assert.rejects(p.api.action('knowledge-detail',{id:'missing'}),/不存在/);const data=await p.api.action('checkin-status');assert.equal(data.checked_today,false);assert.ok(Array.isArray(data.history.items));await assert.rejects(p.api.action('checkin-submit'));});
+test('staff DM preview has separate synthetic contacts and history but never sends real messages', async()=>{
+  const p=createPreview({});
+  const contacts=await p.api.action('dm-contacts');
+  assert.equal(contacts.items.length,1);
+  assert.match(contacts.items[0].name,/示例/);
+  const peer=contacts.items[0].user_id;
+  const list=await p.api.action('dm-conversations');
+  assert.equal(list.items[0].peer.user_id,peer);
+  const history=await p.api.action('dm-messages',{peer_id:peer});
+  assert.equal(history.order,'desc');
+  assert.ok(history.items.every(m=>m.sender_id===peer||m.sender_id===p.session.get().userId));
+  assert.ok(history.next_after);
+  await assert.rejects(p.api.action('dm-send',{peer_id:peer,body:'不可以真实发送'}));
+  await assert.rejects(p.api.uploadChatAttachment({path:'wxfile://a.png',kind:'image'}));
+  await assert.rejects(p.api.openChatAttachment({}));
+  await assert.rejects(p.api.action('dm-messages',{peer_id:'missing'}),/不存在/);
+});
+test('community preview reads an explicit sample without pretending to publish an interaction', async()=>{
+  const p=createPreview({});
+  const data=await p.api.action('community-detail',{id:'example-community'});
+  assert.match(data.post.story,/示例/);
+  assert.equal(typeof data.liked,'boolean');
+  const comments=await p.api.action('community-comments',{post_id:'example-community'});
+  assert.equal(comments.order,'asc');
+  assert.ok(comments.items.every(c=>c.post_id==='example-community'));
+  await assert.rejects(p.api.action('community-detail',{id:'missing'}),/不存在/);
+  await assert.rejects(p.api.action('community-comment',{post_id:'example-community',content:'不能真实发表'}));
+  await assert.rejects(p.api.action('community-like',{post_id:'example-community',liked:true}));
+});
+test('notification preview returns only explicitly confirmed loaded ids for the batch mode', async()=>{
+  const p=createPreview({});
+  const data=await p.api.action('notification-read',{ids:['example-shift','missing']});
+  assert.deepEqual(data.read_ids,['example-shift']);
+  assert.deepEqual(data.ignored_ids,['missing']);
+  assert.equal(data.persisted,false);
+  const list=await p.api.action('notifications');
+  assert.equal(list.items.find(n=>n.id==='example-shift').read,true);
+  assert.equal(list.items.find(n=>n.id==='example-training').read,false);
+});
+test('DM preview preserves opaque snapshots and only reports synthetic message receipt state', async()=>{
+  const p=createPreview({});
+  const list=await p.api.action('dm-conversations');
+  assert.ok(list.snapshot_at);
+  assert.equal((await p.api.action('dm-conversations',{snapshot_at:list.snapshot_at,page:1})).snapshot_at,list.snapshot_at);
+  const peer=list.items[0].peer.user_id;
+  const rows=await p.api.action('dm-messages',{peer_id:peer});
+  const first=rows.items[0];
+  const status=await p.api.action('dm-status',{peer_id:peer,message_ids:[first.id,'missing']});
+  assert.equal(status.peer_id,peer);
+  assert.deepEqual(status.statuses,[{id:first.id,read_at:null}]);
+  assert.deepEqual(status.ignored_ids,['missing']);
+  await assert.rejects(p.api.action('dm-status',{peer_id:'missing',message_ids:[first.id]}),/不存在/);
+});
+test('DM preview v3 snapshot ids stay fixed, expire, and never cross preview sessions', async()=>{
+  const p=createPreview({}), other=createPreview({});
+  const first=await p.api.action('dm-conversations');
+  assert.match(first.snapshot_id,/^[0-9a-f-]{36}$/);
+  assert.equal(first.total_at_snapshot,1);
+  assert.equal(first.skipped_slots,0);
+  const next=await p.api.action('dm-conversations',{page:1,snapshot_id:first.snapshot_id});
+  assert.equal(next.snapshot_id,first.snapshot_id);
+  assert.equal(next.snapshot_at,first.snapshot_at);
+  assert.deepEqual(next.items,[]);
+  assert.equal(next.has_more,false);
+  assert.notEqual((await p.api.action('dm-conversations')).snapshot_id,first.snapshot_id);
+  await assert.rejects(other.api.action('dm-conversations',{snapshot_id:first.snapshot_id}),e=>e.status===409&&e.code==='snapshot_expired');
+  await assert.rejects(p.api.action('dm-conversations',{snapshot_id:'missing'}),e=>e.status===409&&e.code==='snapshot_expired');
+  const now=Date.now;
+  try {
+    Date.now=()=>now()+301000;
+    await assert.rejects(p.api.action('dm-conversations',{snapshot_id:first.snapshot_id}),e=>e.status===409&&e.code==='snapshot_expired');
+  } finally { Date.now=now; }
+});
