@@ -4,6 +4,10 @@
 
 ## 当前集成检查点
 
+学习闭环检查点：本人收藏支持已加载范围的待掌握／已掌握筛选、阅读资格、单篇服务端测试、严格保存回执和提交后逐题回顾；历史按真实题源回看并可重新练习。主流程628/628、19路由及官方编译通过，实际合成GUI已走通并修掉重复时间。全量统计、服务端筛选、每日批量／断点任务及每次旧题恢复未完成。Round18持久化事实修复已固定源码读回、独立复核闭合，Lovable报已部署及合成SQL回滚通过；真实员工学习保存回读仍未验收。
+
+登录／上传对齐检查点：已新增原生账号密码登录，保留验证码默认；手机号、用户名、邮箱均走既有 Auth 再 ERP 同步，不增加权限。主流程全套 587/587、19 路由和官方 20 WXML／21 WXSS 编译通过，mini-only 提交 `93334663d24dcc9da2a616fb2badb1ee58d87b89` 已非强推并 ls-remote 核对。上传已对齐固定 Round16/17 嵌套回执及严格 object_current，Lovable 报迁移／Edge 部署。独立复核确认两条后台 P2 闭合、客户端52项通过；主流程未运行特权 SQL 或真实员工上传。旧 quiz 结果重放 persisted 缺失已另交 Lovable 修复，尚未验收。此段取代下方“后台尚未结束”的历史状态，不代表正式发布。
+
 Stage2 客户端检查点（约 05:18）：原生申请编辑器已新增原图选择、本地预览、固定意图上传／实际进度／只读核对及新证据关联参数，550/550 单测通过，仍为 19 路由、五 Tab。后台实现任务尚未结束，未完成固定源码／部署契约对齐；不能称此上传已可供员工使用。实际开发者工具只走查了明确标记的只读示例和禁用上传状态，没有上传生产对象。真实上传与其余角色管理仍未验收。
 
 活动补充检查点：已新增原生活动根详情／脱敏申请列表和申请编辑两个路由，目前 19 路由、五 Tab。新入口替代旧“查看操作支持情况”；支持三种发布筛选、原证据引用保留／移除、显式确认／撤销、CAS 保稿和操作回执核对，不是审核／发券／社交发布。主流程 502/502 测试、官方 20 WXML／21 WXSS 编译及实际示例 GUI 检查通过。后台 0014 独立审查的两项 P2 已在固定 ref 171330bf 的 0015 修正并通过源码复核，Lovable 报已部署；不替代真实员工验收。Stage2 新图上传、申请审核、活动创建和其余角色管理仍未实现。下方历史矩阵的旧活动通用详情描述不再是当前客户端状态，详见 VERIFICATION.md 最新检查点。
@@ -107,7 +111,7 @@ Stage2 客户端检查点（约 05:18）：原生申请编辑器已新增原图�
 | 功能与现有来源 | 小程序路径 | 当前 API / 数据来源 | 实际状态与已知缺口 |
 | --- | --- | --- | --- |
 | 手机验证码登录；Flutter auth/session | `/pages/login/index` | `phone-login-send-otp`、`phone-login-verify-otp`、`erp-scope-sync`、必要时 `rpc:app_bootstrap_v1` | 实际已接（客户端）；续租由共享层处理。真实短信、租约、跨日、休息/未排班/停用账号 E2E 未验。 |
-| Web 邮箱/密码、忘记密码与 `/reset-password` | 无原生密码重置页 | 旧 Web Supabase Auth；小程序当前仅 OTP/恢复会话 | 缺少操作。采用 OTP 不等于 Web 其他登录方式全部迁移。 |
+| Web 手机号/用户名/邮箱密码、忘记密码与 `/reset-password` | 原生登录页账号密码模式，默认仍为 OTP | 既有 phone-password-login／Auth password grant → GET user 精确验证 → 原 ERP 同步 | 密码登录客户端已接；原生忘记密码仅现有联系管理员说明，不虚构短信重置。注册／邀请／真实重置仍有缺口；未提交真实凭据验收。 |
 | 邀请入职 `/invite/:code`；Web Invite | 无 | 小程序无邀请接受调用 | 缺少操作。不能把 OTP 登录视作已接邀请注册/绑定员工。 |
 | 工作台 `/`；Home、Flutter HomeScreen | `/pages/workbench/index` | `G(dashboard,{})` + `api.sales({period:'today'})` | 实际已接（客户端）；姓名/门店/今日班次/任务学习入口。公告焦点、Web 完整首页 feed/活动联动不等价。DTO 必须实际返回 tasks/learning，缺字段不会证明待办已完成。 |
 | 本人排班；Web Me 内 SchedulePanel，Flutter MyScheduleScreen | `/pages/schedule/index` | `G(schedule,{month})`，联结 `schedules/shift_defs` | 实际已接（客户端）＋只读。整月日历、前后月、按天/全月列表已写；不等于排班写入。 |
@@ -127,12 +131,12 @@ Stage2 客户端检查点（约 05:18）：原生申请编辑器已新增原图�
 | `/library` 官方知识、类别、搜索 | `/pages/learn/index` 的知识筛选、产品/官方源切换 | `G(knowledge,{kind,source,query,category,page})` | 实际已接（客户端）＋只读，支持续页。Web 网格/列表、年代/产地/IP/排序等多维筛选没有全部迁移。 |
 | `/library/:id` 官方知识详情 | `D(official,id)` / `D(knowledge,id)` | `G(knowledge-detail,{kind,id,view:'detail'})` | 正文/封面/字段阅读与测验入口已写。原 Web 一句话话术、分层卡片、语音朗读、底款图库及管理员编辑并非全部等价。 |
 | 收藏/取消收藏 | 知识或官方详情；`D(favorites,id)` | `G(knowledge-favorite,{id,favorite})` | 后端已确认仅支持 official source_id；跨 product/recognition/favorite 包装来源仍有不匹配，不能把按钮当全来源收藏能力。 |
-| `/my-library` 我的知识、已掌握归档、每日批量测验 | `L(my-library)`、`L(favorites)`、学习 Tab 测验筛选 | `G(my-library,{kind,...})`、`G(quiz-history,...)` | 列表读取已接；两个菜单共用 action，是否按 kind 区分须回读。Web 待学习/已掌握分组、每日多条连续任务/断点进度、移除收藏、AI 补知识卡并未全部迁移。 |
+| `/my-library` 我的知识、已掌握归档、每日批量测验 | `L(my-library)`、`L(favorites)`、学习 Tab 测验筛选 | `G(my-library,{page,page_size})`、`G(quiz-history,...)` | 两个菜单为同一本人收藏源；已加载待掌握／已掌握筛选与返回云刷新已接。不是服务端全量筛选或统计。每日批量／断点任务和AI补知识卡仍缺；真实归档回读待验。 |
 | 已有商品加入个人知识库 | 有 `_productId` 的通用详情 | `G(knowledge-save,{product_id})` | 客户端按钮已接，主流程称后端已部署。只收藏既有商品，不创建产品/上传图片，不可冒充识物保存。 |
 | 培训、门店 SOP `/me/sop`；Flutter TrainingScreen | 学习 Tab 培训；`L(sop)` → `D(sop,id)` | `G(learning,{kind:'training',...})`；SOP 菜单当前错用 `knowledge`、详情 `knowledge-detail` | 已确认学习后端源为 shop_kb_entries 的 SOP/QA；菜单 action 与 type/category_id 参数待对齐。未见课程报名、课时/观看进度/证书 API，不能把 SOP 阅读称为 LMS 完整培训。 |
 | 顾客问答 `/me/qa` | `L(qa)` → `D(qa,id)` | `G(knowledge,{kind:'qa',...})`、`knowledge-detail` | 只读。Web `shop.kb.write` 用户可 AI 草拟、新增、编辑、删除 SOP/QA；小程序没有对应写入和分类管理。 |
 | 单条知识测验；Web QuizDialog、Flutter knowledge_test | `Q(official/knowledge/favorite,id)` | `G(quiz-start,{kind,id})`，`G(quiz-submit,{quiz_token,answers})` | 实际已接（客户端）。题干/四选项、翻题、交卷、结果与解析；正式模式要求服务端 `persisted:true`，失败重试保留原答卷。主流程称后端持久化已修复；真实账号回读尚未验。 |
-| 测验历史、通关归档、换题 | `L(quiz-history)`、学习 Tab 记录 | `G(quiz-history,...)`；详情复用按 id 匹配 | 历史读取已接；详情 DTO/批量日任务、管理员强制换题、完整归档联动需补。旧 Web 客户端拿 correctIndex 判分不是应原样复制的目标；小程序不预露答案。 |
+| 测验历史、通关归档、换题 | `L(quiz-history)`、学习 Tab 记录 | `G(quiz-history,{page,page_size})`；item_kind/item_id阅读真实题源 | 历史是每条内容的最新结果，不是每次答卷档案。通过／作答时间及重新阅读练习已接；提交后回顾仅当前答卷。每日批量、管理员强制换题、历史旧题恢复仍缺；不预露答案或客户端评分。 |
 | `/scan` 原生连续相机、多图/提示、识别结果 | `/pages/recognize/index` | `wx.createCameraContext().takePhoto`，相册 only 的 chooseMedia；`api.recognize(paths,hint)` → `recognize-product` | 实际已接（客户端）。快门立即加缩略图、最多 5 张、失败保留照片和提示、故事/材质/产地/工艺/卖点。微信权限、连续拍摄及真机性能未验。 |
 | 新识别产品云保存 | 识物页“保存到云端识物记录” | 页面 `G(recognition-save,{result,photos})`；共享层转 `{result,image_data_urls,request_id}` | 已接客户端；Round 4 有主流程保存 SQL 证据。只有有效 `item.id` 才显示保存成功；真实登录上传、幂等超时重试、回读 `scan-history` 尚未 E2E。 |
 | `/history` 商品历史与详情 | `L(history)` → `D(history,id)` | `G(scan-history,...)`；最新详情改读 `G(knowledge-detail,{kind:'history',id})` | 读取调用与根层 ai_analysis 业务卡解析已追加。旧 Web 字段编辑/删除、纠错、重新生成知识卡、精细筛选未迁移；真实保存结果/卡片需 E2E。 |

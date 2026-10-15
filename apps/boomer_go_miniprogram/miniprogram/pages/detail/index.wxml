@@ -15,7 +15,8 @@
     <view wx:if="{{backstampUrl}}" class="card"><view class="section-title">底款细节</view><image class="business-image" src="{{backstampUrl}}" mode="widthFix" /></view>
     <view wx:if="{{videoUrl}}" class="card"><view class="section-title">商品视频</view><video class="business-video" src="{{videoUrl}}" controls /></view>
     <view wx:if="{{results.length}}" class="card"><view class="section-title">关键结果</view><view wx:for="{{results}}" wx:key="index" class="result-row row"><text class="result-marker {{item.completed ? 'done' : ''}}">{{item.completed ? '✓' : '·'}}</text><text class="result-text">{{item.title}}</text></view></view>
-    <button wx:if="{{quizUrl}}" class="button" data-url="{{quizUrl}}" bindtap="go">练习这条知识</button>
+    <button wx:if="{{quizUrl}}" class="button" data-url="{{quizUrl}}" bindtap="openQuiz">练习这条知识</button>
+    <view wx:if="{{learningNotice}}" class="notice">{{learningNotice}}</view>
     <view wx:if="{{canFavorite}}" class="cloud-actions"><button class="button-secondary" bindtap="toggleFavorite" disabled="{{busy}}" loading="{{busy}}">{{favorite ? '取消收藏' : '收藏知识'}}</button></view>
     <view wx:if="{{canRemoveFavorite}}" class="cloud-actions"><button class="button-secondary" bindtap="confirmFavoriteRemoval" disabled="{{busy}}" loading="{{busy}}">移除这条收藏</button></view>
     <view wx:if="{{canSave}}" class="cloud-actions"><button class="button-secondary" bindtap="saveKnowledge" disabled="{{busy}}">保存已有商品到我的知识库</button></view>

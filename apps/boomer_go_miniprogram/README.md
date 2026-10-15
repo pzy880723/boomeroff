@@ -35,6 +35,7 @@ Current API origins are the existing GO Lovable Cloud project and `https://erp.b
 - Store employees see only the backend-authorized working store; only verified headquarters scope permits authorized store selection.
 - GO shop IDs are mapped through ERP `/session` to ERP location IDs. They are never guessed from names or passed as ERP IDs.
 - Knowledge, schedules, notifications and user records come from their existing tables. The additive `go-mini-api` is coordinated directly with Lovable.
+- Personal learning has loaded-only pending/mastered filters, exact content-source history routing and a read/single-quiz/refresh loop. Server pagination remains visible even when a local filter is empty. Historical results are latest-per-content, not a recovered archive of every old question.
 - Correct quiz answers remain on the server. Grading and the first submitted result are frozen by an atomic server operation. The client never claims persistence when the server did not confirm it.
 - Recognition uses native `<camera>` and `takePhoto`; each successful photo goes straight into the tray, up to five photos. Album selection is a separate action.
 - Image/video album saving reports success only after WeChat confirms it. OS/WeChat privacy or album permission cannot be silently bypassed.

@@ -1,6 +1,7 @@
 const { definePage } = require('../../shared/page');
 const model = require('../list/model');
 const { businessContent } = require('./content');
+const learningKinds = ['knowledge', 'official', 'sop', 'qa', 'training', 'favorite', 'favorites', 'my-library', 'history', 'recognition'];
 
 function contentNodes(item) {
   if (Array.isArray(item.nodes)) return item.nodes;
@@ -12,12 +13,15 @@ function contentNodes(item) {
 
 Page(definePage({
   data: { kind: '', id: '', item: null, nodes: '', fields: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], freshness: '', quizUrl: '', unavailable: '', favorite: null, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, canSave: false, canShare: false, busy: false, actionNotice: '', resolvedMessage: '', resolvedUrl: '', keyActionsDraft: '', draftResults: [], messages: [], messageDraft: '', profileNameDraft: '', avatarPreview: '' },
-  onLoad(options) { this.setData({ kind: options.kind || 'knowledge', id: options.id || '' }); return this.load(); },
-  onShow() { if (this._request && this._identity !== model.scope(this)) return this.load(); },
+  onLoad(options) { this._hidden = false; this.setData({ kind: options.kind || 'knowledge', id: options.id || '' }); return this.load(); },
+  onShow() { const hidden = this._hidden; this._hidden = false; if (this._request && (this._identity !== model.scope(this) || (hidden && learningKinds.indexOf(this.data.kind) >= 0))) return this.load(); },
+  onHide() { if (learningKinds.indexOf(this.data.kind) >= 0) { model.hideLearning(this); this.setData({ quizUrl: '' }); } },
+  onUnload() { this.onHide(); this._gone = true; },
   onPullDownRefresh() { return this.load().finally(() => wx.stopPullDownRefresh()); },
   load() {
     const kind = this.data.kind;
     const section = model.sections[kind];
+    if (learningKinds.indexOf(kind) >= 0) this.setData({ learningNotice: '' });
     this._identity = model.scope(this);
     this._productId = '';
     this._favoriteTargetId = '';
@@ -31,7 +35,7 @@ Page(definePage({
     return model.remote(this, () => {
       if (!section) throw new Error('该原生详情类型未开放');
       if (!this.data.id && kind !== 'profile' && kind !== 'settings') throw new Error('缺少内容 ID，请从列表重新打开');
-      const knowledge = ['knowledge', 'official', 'sop', 'qa', 'training', 'favorite', 'favorites', 'my-library', 'history', 'recognition'].indexOf(kind) >= 0;
+      const knowledge = learningKinds.indexOf(kind) >= 0;
       const detailKind = ['favorite', 'favorites', 'my-library'].indexOf(kind) >= 0 ? 'favorite' : kind;
       if (kind === 'conversation') return this.api.action('conversation-messages', { conversation_id: this.data.id });
       if (kind === 'profile') return this.api.action('profile', {});
@@ -71,7 +75,18 @@ Page(definePage({
       const favorite = raw.favorite && typeof raw.favorite === 'object' ? raw.favorite : {};
       const source = raw.source && typeof raw.source === 'object' ? raw.source : {};
       const isFavorite = ['favorite', 'favorites', 'my-library'].indexOf(kind) >= 0 || item.kind === 'favorite';
+      const favoriteSourceValid = !isFavorite || favorite.source_type == null || ['official', 'recognition', 'product'].indexOf(favorite.source_type) >= 0;
+      const quizAllowed = item.quiz_available === true && ['official', 'knowledge', 'favorite'].indexOf(item.quiz_kind) >= 0 && item.quiz_kind === (isFavorite ? 'favorite' : kind) && raw.source_available !== false && raw.source_missing !== true && favoriteSourceValid;
+      if (learningKinds.indexOf(kind) >= 0) {
+        const expectedKind = ['favorite', 'favorites', 'my-library'].indexOf(kind) >= 0 ? 'favorite' : kind;
+        const matchingKind = !item.kind || item.kind === expectedKind || (expectedKind === 'favorite' && ['favorites', 'my-library'].indexOf(item.kind) >= 0) || (kind === 'history' && item.kind === 'recognition') || (kind === 'training' && ['sop', 'qa'].indexOf(item.kind) >= 0);
+        const userId = this.session.get().userId;
+        if ((item.id != null && String(item.id) !== this.data.id) || !matchingKind || (item.user_id != null && item.user_id !== userId)
+          || (isFavorite && favorite.user_id != null && favorite.user_id !== userId)
+          || (['history', 'recognition'].indexOf(kind) >= 0 && raw.created_by != null && raw.created_by !== userId)) throw new Error('学习详情来源或身份不一致，请返回列表刷新');
+      }
       const business = businessContent(isFavorite && raw.source ? source : raw);
+      if (learningKinds.indexOf(kind) >= 0) this.setData({ learningNotice: raw.source_available === false || raw.source_missing === true ? '收藏源内容不存在或当前不可读取，保留快照供查看；无法开始测验。' : (!favoriteSourceValid || (item.quiz_available === true && !quizAllowed) ? '测验来源信息不一致，当前无法开始测验。' : '') });
       const fields = (Array.isArray(item.fields) ? item.fields : []).map((field) => ({ label: field.label, value: field.value == null ? '未提供' : String(field.value) }));
       fields.push(...business.fields);
       const add = (label, value) => { if (value != null && value !== '') fields.push({ label, value: String(value) }); };
@@ -99,13 +114,17 @@ Page(definePage({
       this.setData({
         item: { id: item.id || this.data.id, title: item.title || section.title, category: kind === 'notifications' ? model.notificationCategory(item.category) : item.category || raw.category || section.title, author: item.author_name || '', cover_url: item.cover_url || '' },
         nodes: contentNodes(Object.assign({}, item, { body: item.body || business.body })), fields, businessSections: business.sections, gallery: business.gallery, backstampUrl: business.backstampUrl, videoUrl: business.videoUrl,
-        results, freshness: model.freshness(Object.assign({}, raw, item)), quizUrl: item.quiz_available === true && typeof item.quiz_kind === 'string' && item.quiz_kind ? model.quizUrl(item.quiz_kind, item.id || this.data.id) : '',
+        results, freshness: model.freshness(Object.assign({}, raw, item)), quizUrl: quizAllowed ? model.quizUrl(item.quiz_kind, item.id || this.data.id) : '',
         favorite: typeof raw.is_favorite === 'boolean' ? raw.is_favorite : (typeof item.is_favorite === 'boolean' ? item.is_favorite : (typeof item.favorite === 'boolean' ? item.favorite : (['favorite', 'favorites', 'my-library'].indexOf(kind) >= 0 ? true : null))),
         claimed: item.claimed === true, canSave: !!this._productId, canShare: !!this._productId, canFavorite, canRemoveFavorite: !!this._favoriteRowId,
         keyActionsDraft: item.key_actions || '', draftResults: results.map((result) => ({ title: result.title, completed: result.completed }))
       });
       wx.setNavigationBarTitle({ title: item.title || section.title });
     }, { item: null, nodes: '', fields: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], quizUrl: '', canSave: false, canShare: false, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, freshness: '', unavailable: '', actionNotice: '', resolvedMessage: '', resolvedUrl: '', messages: [] });
+  },
+  openQuiz(event) {
+    if (this._hidden || this._gone || model.scope(this) !== this._loadedIdentity || !this.data.quizUrl || event.currentTarget.dataset.url !== this.data.quizUrl) return;
+    return this.navigate(this.data.quizUrl);
   },
   showTask(row, freshness) {
     this._taskKey = row.task_key || '';

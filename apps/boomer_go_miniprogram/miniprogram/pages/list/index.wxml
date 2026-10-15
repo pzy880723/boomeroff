@@ -8,21 +8,30 @@
   <view wx:if="{{kind === 'check-ins'}}" class="notice">每日成长签到不是考勤，不用于出勤判断。日期以服务器的中国时区为准。</view>
   <view wx:if="{{checkin}}" class="card checkin-card"><view class="row"><view class="section-title">{{checkin.date}}</view><text class="chip">{{checkin.checkedToday ? '今日已成长签到' : '今日未成长签到'}}</text></view><view class="row checkin-stats"><view><view class="muted">连续天数</view><view class="checkin-number">{{checkin.currentStreak}}</view></view><view><view class="muted">最长连续</view><view class="checkin-number">{{checkin.longestStreak}}</view></view><view><view class="muted">累计天数</view><view class="checkin-number">{{checkin.total}}</view></view></view><button class="button" bindtap="submitCheckin" disabled="{{checkingIn || loading || checkin.checkedToday}}" loading="{{checkingIn}}">{{checkin.checkedToday ? '云端已确认今日成长签到' : '每日成长签到'}}</button><view wx:if="{{checkinNotice}}" class="notice">{{checkinNotice}}</view></view>
   <view wx:if="{{kind === 'tasks'}}" class="notice">每日任务与待领经验均以云端状态为准。完成条件、奖励资格和领取结果由服务器核验。</view>
-  <view wx:if="{{kind !== 'check-ins' && kind !== 'tasks'}}" class="search-box row"><input placeholder="搜索当前内容" value="{{query}}" bindinput="onSearchInput" bindconfirm="onSearch" confirm-type="search" /><button bindtap="onSearch">搜索</button></view>
+  <view wx:if="{{kind !== 'check-ins' && kind !== 'tasks'}}" class="search-box row"><input placeholder="{{isLearningCollection ? '搜索已加载内容' : '搜索当前内容'}}" value="{{query}}" bindinput="onSearchInput" bindconfirm="onSearch" confirm-type="search" /><button bindtap="onSearch">搜索</button></view>
+  <view wx:if="{{isLearningCollection && kind !== 'quiz-history'}}" class="row mastery-tabs">
+    <button class="mastery-tab {{mastery === 'all' ? 'selected' : ''}}" data-mastery="all" bindtap="onMastery">全部已加载</button>
+    <button class="mastery-tab {{mastery === 'pending' ? 'selected' : ''}}" data-mastery="pending" bindtap="onMastery">待掌握</button>
+    <button class="mastery-tab {{mastery === 'mastered' ? 'selected' : ''}}" data-mastery="mastered" bindtap="onMastery">已掌握</button>
+  </view>
+  <view wx:if="{{loadedSummary}}" class="learning-summary"><view>{{loadedSummary}}</view><view class="muted">{{pagingNote}}</view></view>
   <scroll-view wx:if="{{categories.length}}" scroll-x class="category-scroll">
     <button class="chip category {{category === '' ? 'selected' : ''}}" data-id="" bindtap="onCategory">全部</button>
     <button wx:for="{{categories}}" wx:key="id" class="chip category {{category === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="onCategory">{{item.name}}</button>
   </scroll-view>
   <view wx:if="{{loading}}" class="card loading-state">正在获取云端内容…</view>
   <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重试加载</button></view>
-  <view wx:if="{{!loading && !error && !items.length}}" class="card empty"><view class="empty-symbol">录</view><view>暂无{{title}}</view><view class="muted">没有记录不等于任务已完成，也不代表接口错误。</view></view>
+  <view wx:if="{{!loading && !error && !items.length}}" class="card empty"><view class="empty-symbol">录</view><view>{{isLearningCollection ? '当前筛选暂无内容' : '暂无记录'}}</view><view class="muted">{{isLearningCollection && hasMore ? '已加载内容中暂未找到匹配项，可继续加载下一页。' : '没有记录不等于任务已完成，也不代表接口错误。'}}</view></view>
   <view wx:for="{{items}}" wx:key="id" class="card entry" data-id="{{item.id}}" bindtap="openItem" hover-class="pressed">
     <image wx:if="{{item.cover_url}}" class="entry-image" src="{{item.cover_url}}" mode="aspectFill" />
     <view class="entry-main"><view class="row entry-meta"><text class="chip">{{item.category || title}}</text><text class="muted">{{item.status}}</text></view><view class="section-title">{{item.title}}</view><view wx:if="{{item.body}}" class="muted summary">{{item.body}}</view>
       <view wx:if="{{item.progress !== null}}" class="progress">云端进度 {{item.progress}}<text wx:if="{{item.target !== null}}"> / {{item.target}}</text></view>
       <view wx:if="{{item.amount !== null}}" class="progress">奖励经验 {{item.amount}}</view>
-      <view wx:if="{{item.scoreText}}" class="score">{{item.scoreText}} · {{item.passedText}}</view>
-      <view class="row entry-footer"><text class="muted">{{item.time}}</text><text class="arrow">查看 →</text></view></view>
+      <view wx:if="{{item.scoreText || item.passedText}}" class="score">{{item.passedText}}<text wx:if="{{item.scoreText}}"> · {{item.scoreText}}</text></view>
+      <view wx:if="{{item.passedAt}}" class="muted learning-date">通过时间 {{item.passedAt}}</view>
+      <view wx:if="{{item.lastAttemptAt}}" class="muted learning-date">最近作答 {{item.lastAttemptAt}}</view>
+      <view wx:if="{{item.sourceNotice}}" class="muted learning-date">{{item.sourceNotice}}</view>
+      <view class="row entry-footer"><text wx:if="{{kind !== 'quiz-history'}}" class="muted">{{item.time}}</text><text class="arrow">查看 →</text></view></view>
   </view>
   <button wx:if="{{hasMore}}" class="button-secondary" loading="{{loadingMore}}" disabled="{{loadingMore}}" bindtap="loadMore">加载更多</button>
   <view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view>

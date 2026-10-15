@@ -2,15 +2,18 @@ const { definePage } = require('../../shared/page');
 const model = require('./model');
 
 Page(definePage({
-  data: { kind: '', title: '', query: '', category: '', categories: [], items: [], freshness: '', hasMore: false, loadingMore: false, checkin: null, checkingIn: false, checkinNotice: '' },
+  data: { kind: '', title: '', query: '', category: '', categories: [], items: [], allItems: [], mastery: 'all', loadedSummary: '', pagingNote: '', isLearningCollection: false, freshness: '', hasMore: false, loadingMore: false, checkin: null, checkingIn: false, checkinNotice: '' },
   onLoad(options) {
     const kind = options.kind || 'my-library';
     const section = model.sections[kind];
-    this.setData({ kind, title: section ? section.title : '内容暂不可用' });
+    this._hidden = false;
+    this.setData({ kind, title: section ? section.title : '内容暂不可用', isLearningCollection: model.learningCollection(kind) });
     wx.setNavigationBarTitle({ title: this.data.title });
     return this.load();
   },
-  onShow() { if (this._request) return this.load(); },
+  onShow() { const hidden = this._hidden; this._hidden = false; if (this._request && (!this.data.isLearningCollection || hidden || this._loadedIdentity !== model.scope(this))) return this.load(); },
+  onHide() { if (this.data.isLearningCollection) model.hideLearning(this); },
+  onUnload() { if (this.data.isLearningCollection) model.hideLearning(this); this._gone = true; },
   onPullDownRefresh() { return this.load().finally(() => wx.stopPullDownRefresh()); },
   load() {
     const section = model.sections[this.data.kind];
@@ -23,12 +26,22 @@ Page(definePage({
     }, (data) => {
       if (this.data.kind === 'check-ins') return this.showCheckin(data);
       if (this.data.kind === 'tasks') data = model.taskItems(data);
+      if (this.data.isLearningCollection) {
+        model.showLearning(this, data, 0, false);
+        this.setData({ categories: [], freshness: model.freshness(data) });
+        return;
+      }
       this.setData({ items: model.items(data), categories: model.categories(data), freshness: model.freshness(data), hasMore: model.pagination(this, data, 0) });
-    }, { items: [], hasMore: false, freshness: '', checkin: null, checkinNotice: '' });
+    }, { items: [], allItems: [], loadedSummary: '', pagingNote: '', hasMore: false, loadingMore: false, freshness: '', checkin: null, checkinNotice: '' });
   },
   params() { return model.listParams(this.data.kind, this.data.query.trim(), this.data.category); },
   onSearchInput(event) { this.setData({ query: event.detail.value }); },
-  onSearch() { return this.load(); },
+  onSearch() { return this.data.isLearningCollection ? model.filterLearning(this) : this.load(); },
+  onMastery(event) {
+    const mastery = event.currentTarget.dataset.mastery;
+    if (['all', 'pending', 'mastered'].indexOf(mastery) < 0) return;
+    this.setData({ mastery }); model.filterLearning(this);
+  },
   onCategory(event) { this.setData({ category: event.currentTarget.dataset.id }); return this.load(); },
   loadMore() {
     return model.loadMore(this, model.sections[this.data.kind].action, this.params());
@@ -61,6 +74,7 @@ Page(definePage({
     if (this.data.kind === 'check-ins') return;
     const id = event.currentTarget.dataset.id;
     const item = this.data.items.find((entry) => entry.id === id);
+    if (this.data.isLearningCollection) return model.openLearning(this, item);
     const kind = this.data.kind === 'my-library' ? model.libraryKind(item) : (this.data.kind === 'conversations' ? 'conversation' : this.data.kind);
     return this.navigate(model.detailUrl(kind, id));
   },

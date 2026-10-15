@@ -26,4 +26,7 @@
 .score-total { color: #737780; font-size: 32rpx; font-weight: 400; }
 .result-card button { margin-top: 36rpx; }
 .review .section-title { margin-top: 0; font-size: 30rpx; }
+.review .chip { margin-bottom: 20rpx; }
+.review-answer { font-size: 32rpx; line-height: 1.7; margin-top: 18rpx; word-break: break-all; }
+.review-note { line-height: 1.7; font-size: 28rpx; margin: 28rpx 0; }
 .loading-state { text-align: center; padding: 48rpx; color: #737780; }

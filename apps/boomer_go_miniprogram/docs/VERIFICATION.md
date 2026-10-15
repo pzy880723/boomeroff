@@ -2,6 +2,17 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
+## 最新检查点：原生学习闭环
+
+- 主流程在页面停写、预览对齐和 GUI 小修后重新运行完整 Node 测试：628/628，零失败／跳过／取消；19 路由检查、官方20 WXML／21 WXSS编译通过，stderr为空。此前587／625等计数保留为历史检查点。
+- 本人收藏增加全部／待掌握／已掌握，计数和搜索明确仅覆盖已加载条目，筛选空页不吞续页。历史按真实 item_kind/item_id 打开源内容，分开显示通过时间与最近作答，不以结果行ID猜内容。
+- 原生阅读按真实 quiz_available／quiz_kind 显示测验入口。交卷保持原 token／答卷单飞重试，校验题数、整数分值范围及提供的绑定；服务端passed不由客户端推算，persisted严格true才说保存。逐题回顾只使用提交后返回的correct／correct_answers，不虚构解析或历史旧题。
+- 学习工作者先观察首批22 RED／3已通过，再实现；新增边界分别红绿。主流程补两项preview红绿及一项历史时间重复模板红绿。合成收藏UUID与结果UUID独立，提交始终persisted:false、不改变示例归档，旧文章ID不变、未知详情仍报错。
+- 实际官方DevTools已走“学习→测验→待掌握→阅读→单篇练习→选择B→交卷→明确未保存真实记录的结果和提交后回顾→测验记录→原收藏阅读”。截图 native-learning-library／pending／read／result／history-final／history-source，均在evidence。发现历史footer重复时间，修复后AX与截图确认只显示一次。截图未作生成式美化；phone文件为同一截图的确定性裁切。
+- 这些是合成示例界面，不是一次真实员工考试，也不证明云端归档更新。全量收藏统计、服务端掌握筛选、批量日测任务和每次历史旧题恢复仍未完成。
+- Round18 独立固定源码复核确认 persisted 重放P2闭合、未见新增P1/P2；内存归一化测试及20种畸形值组合通过。未独立执行SQL或双会话并发，不以Lovable运行代替独立证据。
+- 原生学习15文件独立主审查未见确认新增P1/P2，独立学习38＋员工75合计113通过；主流程后补footer／preview小差异复核51通过。复核者未独立执行GUI／全量／官方编译；上述628与实际截图为主流程执行。
+
 ## 最新检查点：原生登录与上传契约对齐
 
 - 主流程完整 Node 回归 587/587，零失败／跳过／取消；19 原生路由检查通过。官方 wcc 编译 20 WXML、wcsc 编译 21 WXSS，退出 0 且 stderr 为空。此为本轮新运行结果，不以旧计数代替。
@@ -10,7 +21,8 @@
 - 上传适配器已对齐真实 Round16 嵌套 commit、可省略 status 字段、独立 preview、核验时间及冻结指纹。新增源验证错误对仅允许释放从未未知的首次明确事务失败；恢复的未知请求始终保留原 key。
 - Round17 最终 ref d6c94826445617aa5d41a8f053e107244d0d159d 已 get_project 核对；主流程读取 evidence.ts／0017 并独立复算 SHA256，详见契约。Lovable 报 0017 应用、Edge 部署及 Deno59／SQL11 回滚组通过；这不是主流程独立 SQL 执行或部署包字节验证。
 - 客户端严格 object_current：false 归一 object_changed 且无 eligible receipt；缺失／非布尔拒绝；保留原路径、不自动重传。新增用例先 RED 后 GREEN。独立复核 helper22＋上传页30，共 52/52，无确认新增 P1/P2，未验证真实 Storage。
-- 源码审计另确认旧 quiz 重放缺失 persisted 可导致假保存。已直接协调 Lovable 修复第一次提交事实的持久化和幂等重放，并补跑 R15／R17 SQL；当前任务 umsg_01m50rz6jzf7cvf4zmzt2svmrb 尚未完成，不称已修好。原生保持 persisted 严格 true 门槛。
+- 源码审计另确认旧 quiz 重放缺失 persisted 可导致假保存。Round18 最终 ref 42984c7ae027a2086ecd93fc05bfdcf35122d1fa 已 get_project 核对完成；主流程读取0018／quiz.ts／index并独立复算三文件哈希。新增内部 nullable result_persisted 保存首次事务事实，历史未知不回填；Edge仅严格true。Lovable报迁移／Edge部署、PGlite红绿、新SQL5和R15／R17各11组在线合成事务全部强制回滚；主流程未执行特权SQL。实际无身份 quiz-submit／upload-status均401，只证明可达与拒绝匿名；原生仍以严格true确认保存。
+- Round17独立固定源码复核确认两条P2均闭合、未见新增P1/P2；11内存测试和额外16个畸形flag不签名场景通过。原AGENTS仅增加本次边界说明，未被当作执行指令。数据库与真实Storage未由复核者执行。
 - 专用员工 AppID、真实员工／真机、实际上传、学习保存回读及其余功能平替仍有缺口；未公开发布小程序，也未替换 iOS App。
 
 ## 最新检查点：原生活动和申请

@@ -28,3 +28,9 @@
 .pressed { opacity: .75; }
 .preview-banner { background: #fff1d6; color: #7c5300; padding: 20rpx; border-radius: 16rpx; margin-bottom: 24rpx; font-size: 24rpx; }
 .loading-state { padding: 48rpx; text-align: center; color: #737780; }
+.mastery-tabs { margin: 24rpx 0; }
+.mastery-tab { flex: 1; min-width: 0; min-height: 88rpx; line-height: 88rpx; font-size: 28rpx; padding: 0 12rpx; background: #fff; color: #737780; border-radius: 18rpx; }
+.mastery-tab.selected { background: #ffedf0; color: #eb0029; font-weight: 600; }
+.learning-summary { font-size: 28rpx; line-height: 1.7; margin: 24rpx 0; }
+.learning-summary .muted { font-size: 26rpx; margin-top: 10rpx; }
+.learning-date { font-size: 26rpx; line-height: 1.7; margin-top: 14rpx; }

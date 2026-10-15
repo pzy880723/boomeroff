@@ -1,6 +1,29 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const{createPreview}=require('../miniprogram/shared/preview');
 test('development samples load without false live-sales or persistence',async()=>{const p=createPreview({});const data=await p.api.sales();assert.equal(data.achieved_cents,null);assert.equal(data.complete,false);assert.ok(data.as_of);const dashboard=await p.api.action('dashboard');assert.equal(dashboard.shift.title,'早班');const result=await p.api.action('quiz-submit',{});assert.equal(result.persisted,false);await assert.rejects(p.api.invoke('surprise-marketing-video',{}));});
 test('preview never substitutes an unrelated article or claims a real check-in',async()=>{const p=createPreview({});await assert.rejects(p.api.action('knowledge-detail',{id:'missing'}),/不存在/);const data=await p.api.action('checkin-status');assert.equal(data.checked_today,false);assert.ok(Array.isArray(data.history.items));await assert.rejects(p.api.action('checkin-submit'));});
+test('learning preview uses distinct favorite and result identities with explicit mastery and original content',async()=>{
+ const p=createPreview({}), library=await p.api.action('my-library');
+ assert.equal(library.page,0);assert.equal(library.has_more,false);
+ assert.deepEqual(library.items.map(x=>x.passed),[false,true]);
+ for(const row of library.items){
+  assert.match(row.id,/^[0-9a-f-]{36}$/);assert.notEqual(row.id,row.source_id);assert.equal(row.quiz_kind,'favorite');
+  const detail=await p.api.action('knowledge-detail',{kind:'favorite',id:row.id});
+  assert.equal(detail.item.id,row.id);assert.equal(detail.item.kind,'favorite');assert.equal(detail.item.raw.favorite.id,row.id);
+  assert.equal(detail.item.raw.source_available,true);assert.match(detail.item.body,/示例/);
+ }
+ const history=await p.api.action('quiz-history');assert.equal(history.items.length,2);
+ assert.ok(history.items.every(r=>r.id!==r.item_id&&library.items.some(f=>f.id===r.item_id)));
+ assert.equal(history.items[0].passed_at,null);assert.ok(history.items[1].passed_at);
+ await assert.rejects(p.api.action('knowledge-detail',{kind:'favorite',id:'missing'}));
+});
+test('development quiz review stays synthetic and never changes archive or saves a real result',async()=>{
+ const p=createPreview({}),before=await p.api.action('my-library');
+ const started=await p.api.action('quiz-start',{kind:'favorite',id:before.items[0].id});
+ assert.equal(started.questions[0].correct_answers,undefined);assert.equal(started.questions[0].correctIndex,undefined);
+ const result=await p.api.action('quiz-submit',{quiz_token:started.quiz_token,answers:[1]});
+ assert.equal(result.persisted,false);assert.equal(result.total,1);assert.deepEqual(result.correct,[true]);assert.deepEqual(result.correct_answers,[1]);
+ assert.deepEqual((await p.api.action('my-library')).items.map(x=>x.passed),[false,true]);
+});
 test('staff DM preview has separate synthetic contacts and history but never sends real messages', async()=>{
   const p=createPreview({});
   const contacts=await p.api.action('dm-contacts');

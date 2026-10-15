@@ -2,9 +2,25 @@ Base snapshot from GO Lovable commit 0fbc3474e059e1622fc26df7cbccea196c712309, p
 
 # go-mini-api 服务端契约（小程序 / 原生共用）
 
+## Round18 Quiz Persistence Fact
+
+Final source ref `42984c7ae027a2086ecd93fc05bfdcf35122d1fa` was confirmed with get_project (`agentFinished:true`); the response prose's `77fa0e02` was an intermediate snapshot. Main read 0018, quiz.ts and index.ts at the final ref and independently recomputed raw UTF-8 hashes, matching the report:
+
+| File | SHA256 |
+| --- | --- |
+| 0018 migration | 69ea2c58c0db7eb38a719537104962f44eb213248c2dcda9b28f307e940d6a89 |
+| quiz.ts | 610d43d764755e2bc2c3f68174e7b5111494ccd1dd04defacdc464d9e9d32fa8 |
+| index.ts | 1e56e64d9cb1380e422e044de9486ee1b0b0dec230e18921d8f86cd8f36ce9ee |
+
+0018 adds nullable internal `result_persisted` to the existing private-attempt workflow; historical rows are not backfilled. The first submission locks the attempt and atomically records whether it wrote the knowledge result. Normal first/replay returns true; a deleted favorite first/replay returns false; pre-migration submitted attempts with unknown fact return null. Replay uses this recorded fact, not the current existence of a result row. An insertion error rolls the whole transaction back. Existing TTL, first-result freeze, ownership and service-only submit authority remain unchanged.
+
+Edge `normalizeQuizSubmit` returns true only for strict database true; missing/null/malformed flags are false. The native page likewise never reports a saved grade without strict true. This supersedes the old default-to-true behavior and earlier generic claims that persistence was fully repaired.
+
+Lovable reports 0018 applied and Edge redeployed, observed local PGlite RED-to-GREEN, quiz SQL5/R15 SQL11/R17 SQL11 synthetic groups executed with forced rollback through its privileged backend tool, Deno59 and existing Web/knowledge/community regressions passing. Main did not execute privileged SQL or compare deployed bundle bytes. Post-deployment public-key-only requests to quiz-submit and publication-upload-status each returned 401 unauthorized; this proves reachability and anonymous denial only. Independent fixed-source review confirmed the P2 closed with no confirmed new P1/P2, running the normalization test and twenty malformed-value combinations in memory. The reviewer did not execute SQL or true concurrent sessions. Real employee/device acceptance remains separate.
+
 ## Stage2 Evidence Source Checkpoint
 
-Fixed ref `302281df8b2b00962b5b3759578ca8c37d3fa7f8` is the final Round16 GO Lovable source read by main. Lovable reports `0016_go_evidence_upload_native.sql` applied and `go-mini-api` deployed. Main independently recomputed the UTF-8 hashes below; these match the reported files from ref 4385f6ff, but do not prove equality to the deployed bundle bytes. Independent review confirmed two P2 gaps: consumed historical attestations could sign a changed current object, and associated-image reads/detail omitted original activity/shop binding after rebind. Round17 fixed source is `d6c94826445617aa5d41a8f053e107244d0d159d`, confirmed by get_project. Main read its evidence handler and additive 0017 migration; Lovable reports migration application and Edge redeployment. Independent backend closure review remains a separate check from deployment reports.
+Fixed ref `302281df8b2b00962b5b3759578ca8c37d3fa7f8` is the final Round16 GO Lovable source read by main. Lovable reports `0016_go_evidence_upload_native.sql` applied and `go-mini-api` deployed. Main independently recomputed the UTF-8 hashes below; these match the reported files from ref 4385f6ff, but do not prove equality to the deployed bundle bytes. Independent review confirmed two P2 gaps: consumed historical attestations could sign a changed current object, and associated-image reads/detail omitted original activity/shop binding after rebind. Round17 fixed source is `d6c94826445617aa5d41a8f053e107244d0d159d`, confirmed by get_project. Main read its evidence handler and additive 0017 migration; Lovable reports migration application and Edge redeployment. Independent fixed-source review confirmed both P2s closed with no confirmed new P1/P2; eleven in-memory tests and sixteen malformed-flag signing probes passed. The reviewer did not execute database SQL or real Storage I/O.
 
 | File | SHA256 |
 | --- | --- |

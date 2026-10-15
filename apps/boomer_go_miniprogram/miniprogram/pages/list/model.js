@@ -25,6 +25,7 @@ const sections = {
 };
 
 function listParams(kind, query, category, source) {
+  if (learningCollection(kind)) return { page_size: 20 };
   if (kind === 'check-ins') return { page_size: 20 };
   if (kind === 'tasks') return {};
   if (kind === 'knowledge' || kind === 'official') return { kind, q: query, category, source: kind === 'official' ? 'official' : source || 'product' };
@@ -39,6 +40,7 @@ function scope(page) {
 }
 
 function remote(page, request, apply, clear) {
+  if (page._hidden) return Promise.resolve();
   const identity = scope(page);
   const serial = (page._request || 0) + 1;
   page._request = serial;
@@ -47,9 +49,12 @@ function remote(page, request, apply, clear) {
     if (!identity) throw new Error('员工登录已失效，请重新登录');
     try {
       const data = await request();
-      if (!page._gone && page._request === serial && scope(page) === identity) apply(data);
+      if (!page._gone && !page._hidden && page._request === serial && scope(page) === identity) {
+        page._loadedIdentity = identity;
+        apply(data);
+      }
     } catch (error) {
-      if (!page._gone && page._request === serial && scope(page) === identity) throw error;
+      if (!page._gone && !page._hidden && page._request === serial && scope(page) === identity) throw error;
     }
   });
 }
@@ -116,6 +121,80 @@ function libraryKind(item) {
   return item && ['knowledge', 'favorite', 'official', 'history', 'recognition'].indexOf(item.kind) >= 0 ? item.kind : 'favorite';
 }
 
+function learningCollection(kind) {
+  return ['quiz', 'my-library', 'favorites', 'favorite', 'quiz-history'].indexOf(kind) >= 0;
+}
+
+function learningRows(page, data) {
+  const rows = items(data);
+  const history = page.data.kind === 'quiz-history';
+  const names = { official: '官方知识测验', knowledge: '商品知识测验', favorite: '收藏知识测验' };
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return rows.map((row, index) => {
+    const raw = data.items[index];
+    if (raw.user_id != null && raw.user_id !== page.session.get().userId) throw new Error('学习记录身份不一致，请重新加载');
+    const passedAt = typeof raw.passed_at === 'string' ? formatTime(raw.passed_at) : '';
+    const lastAttemptAt = typeof raw.last_attempt_at === 'string' ? formatTime(raw.last_attempt_at) : '';
+    const state = raw.passed_at != null ? (passedAt ? 'mastered' : 'unknown')
+      : (history ? (raw.passed_at === null ? 'pending' : 'unknown') : (typeof raw.passed === 'boolean' ? (raw.passed ? 'mastered' : 'pending') : 'unknown'));
+    let detailKind = raw.source_type == null ? libraryKind(row) : (['official', 'recognition', 'product'].indexOf(raw.source_type) >= 0 ? 'favorite' : '');
+    let detailId = row.id;
+    if (history) {
+      const knownKind = ['official', 'knowledge', 'favorite'].indexOf(raw.item_kind) >= 0;
+      detailKind = knownKind && typeof raw.item_id === 'string' && uuid.test(raw.item_id) ? raw.item_kind : '';
+      detailId = detailKind ? raw.item_id : '';
+      row.title = knownKind ? names[raw.item_kind] : '测验记录';
+      row.time = lastAttemptAt ? '最近作答 ' + lastAttemptAt : '作答时间未提供';
+    } else if (raw.kind && ['knowledge', 'favorite', 'official', 'history', 'recognition'].indexOf(raw.kind) < 0) detailKind = '';
+    return Object.assign(row, {
+      detailKind, detailId, masteryState: state,
+      quizKind: ['official', 'favorite', 'knowledge'].indexOf(raw.quiz_kind) >= 0 ? raw.quiz_kind : '',
+      passedText: state === 'mastered' ? '已掌握' : (state === 'pending' ? '待掌握' : '掌握状态待确认'),
+      passedAt, lastAttemptAt,
+      sourceNotice: detailKind ? '' : '来源信息缺失或不支持，无法阅读或重测'
+    });
+  });
+}
+
+function filterLearning(page) {
+  if (page._hidden || page._gone) return;
+  if (page._loadedIdentity && page._loadedIdentity !== scope(page)) {
+    page.setData({ items: [], allItems: [], loadedSummary: '', hasMore: false, error: '员工登录身份已变化，请重新加载学习记录' });
+    return;
+  }
+  const all = page.data.allItems || [];
+  const query = (page.data.query || '').trim().toLowerCase();
+  const mastery = page.data.mastery || 'all';
+  const history = page.data.kind === 'quiz-history';
+  const visible = all.filter((row) => (history || mastery === 'all' || row.masteryState === mastery)
+    && (!query || (row.title + ' ' + row.body).toLowerCase().indexOf(query) >= 0));
+  const mastered = all.filter((row) => row.masteryState === 'mastered').length;
+  const pending = all.filter((row) => row.masteryState === 'pending').length;
+  page.setData({ items: visible, loadedSummary: '已加载 ' + all.length + ' 条 · 待掌握 ' + pending + ' · 已掌握 ' + mastered + (all.length > mastered + pending ? ' · 状态待确认 ' + (all.length - mastered - pending) : '') });
+}
+
+function showLearning(page, data, requestedPage, append) {
+  if (data.page != null && data.page !== requestedPage) throw new Error('学习分页回执不一致，请刷新列表');
+  if (data.has_more != null && typeof data.has_more !== 'boolean') throw new Error('学习分页状态不完整，请刷新列表');
+  const rows = learningRows(page, data);
+  const existing = append ? page.data.allItems || [] : [];
+  const combined = existing.concat(rows.filter((row) => !existing.some((old) => old.id === row.id)));
+  page.setData({ allItems: combined, hasMore: pagination(page, data, requestedPage), pagingNote: typeof data.has_more === 'boolean' ? '筛选与搜索仅针对已加载内容，不代表全量统计。' : '筛选与搜索仅针对已加载内容；服务器未提供续页状态。' });
+  filterLearning(page);
+}
+
+function openLearning(page, item) {
+  if (page._hidden || page._gone || page._loadedIdentity !== scope(page)) return;
+  if (!item || !item.detailKind || !item.detailId) { page.setData({ error: '来源信息缺失或不支持，无法阅读或重测' }); return; }
+  return page.navigate(detailUrl(item.detailKind, item.detailId));
+}
+
+function hideLearning(page) {
+  page._hidden = true;
+  page._request = (page._request || 0) + 1;
+  page.setData({ loadingMore: false });
+}
+
 function quizUrl(kind, id) {
   return '/pages/quiz/index?kind=' + encodeURIComponent(kind) + '&id=' + encodeURIComponent(id);
 }
@@ -148,7 +227,8 @@ function pagination(page, data, requestedPage) {
 }
 
 async function loadMore(page, action, params) {
-  if (!page.data.hasMore || page.data.loadingMore) return;
+  if (page._hidden || !page.data.hasMore || page.data.loadingMore) return;
+  if (learningCollection(page.data.kind) && page._loadedIdentity !== scope(page)) return filterLearning(page);
   const serial = page._request;
   const identity = scope(page);
   const nextPage = page._nextPage;
@@ -156,13 +236,14 @@ async function loadMore(page, action, params) {
   try {
     const response = await page.api.action(action, Object.assign({}, params, { cursor: page._cursor, page: nextPage }));
     const data = action === 'checkin-status' ? checkinHistory(response) : response;
-    if (page._gone || identity !== scope(page) || serial !== page._request) return;
+    if (page._gone || page._hidden || identity !== scope(page) || serial !== page._request) return;
+    if (learningCollection(page.data.kind)) return showLearning(page, data, nextPage, true);
     const existing = page.data.items;
     const next = items(data).filter((item) => !existing.some((old) => old.id === item.id));
     page.setData({ items: existing.concat(next), hasMore: pagination(page, data, nextPage) });
   } catch (error) {
-    if (!page._gone && identity === scope(page) && serial === page._request) page.setData({ error: error.message || '加载更多失败，请重试' });
-  } finally { if (!page._gone) page.setData({ loadingMore: false }); }
+    if (!page._gone && !page._hidden && identity === scope(page) && serial === page._request) page.setData({ error: error.message || '加载更多失败，请重试' });
+  } finally { if (!page._gone && !page._hidden && identity === scope(page) && serial === page._request) page.setData({ loadingMore: false }); }
 }
 
-module.exports = { sections, scope, remote, items, categories, detailUrl, quizUrl, freshness, formatTime, notificationCategory, value, pagination, loadMore, listParams, checkinHistory, libraryKind, taskItems };
+module.exports = { sections, scope, remote, items, categories, detailUrl, quizUrl, freshness, formatTime, notificationCategory, value, pagination, loadMore, listParams, checkinHistory, libraryKind, taskItems, learningCollection, showLearning, filterLearning, openLearning, hideLearning };

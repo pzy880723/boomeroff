@@ -175,10 +175,10 @@ test('quiz strips answer keys and explanation before grading; duplicate submissi
   assert.equal(submits.length, 1);
   assert.equal(submits[0].quiz_token, 'private-quiz-capability');
   assert.equal(submits[0].answers[0], 0);
-  finish({ score: 40, total: 100, passed: false, persisted: true });
+  finish({ score: 1, total: 1, passed: false, persisted: true });
   await first;
   await duplicate;
-  assert.equal(page.data.result.score, 40, 'only server score is rendered');
+  assert.equal(page.data.result.score, 1, 'only valid server count is rendered; passing is not inferred');
   assert.equal(page.data.result.passed, false);
   await page.submit();
   assert.equal(submits.length, 1, 'completed attempts must not be submitted again');
@@ -218,11 +218,13 @@ test('sales missing values are not zero and freshness is explicit', async () => 
 test('generic native list covers original employee entry routes and preserves encoded ids', async () => {
   const kinds = ['sop', 'qa', 'objectives', 'tasks', 'community', 'activities', 'vouchers', 'my-library', 'favorites', 'history', 'quiz-history'];
   for (const kind of kinds) {
-    const page = nativePage('list', async () => ({ items: [{ id: 'a/b ?中', title: '条目' }] }));
+    const contentId = kind === 'quiz-history' ? '00000000-0000-4000-8000-000000000012' : 'a/b ?中';
+    const page = nativePage('list', async () => ({ items: [{ id: 'a/b ?中', title: '条目', ...(kind === 'quiz-history' ? { item_kind: 'official', item_id: contentId, passed_at: null } : {}) }] }));
     await page.onLoad({ kind });
     page.openItem(event({ id: 'a/b ?中' }));
     assert.match(page.navigations[0], kind === 'community' ? /\/pages\/community\/index\?id=/ : kind === 'activities' ? /\/pages\/activity\/index\?id=/ : /\/pages\/detail\/index\?kind=/);
-    assert.ok(page.navigations[0].includes(encodeURIComponent('a/b ?中')));
+    assert.ok(page.navigations[0].includes(encodeURIComponent(contentId)));
+    if (kind === 'quiz-history') assert.match(page.navigations[0], /kind=official/, 'result ID is not a content ID');
   }
 });
 

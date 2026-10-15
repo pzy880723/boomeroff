@@ -5,9 +5,15 @@
   <view class="muted intro">把商品故事，变成自己的专业。</view>
   <view class="search-box row">
     <text class="search-symbol">⌕</text>
-    <input class="search-input" placeholder="搜索知识、培训与测验" value="{{query}}" bindinput="onSearchInput" bindconfirm="onSearch" confirm-type="search" />
+    <input class="search-input" placeholder="{{kind === 'quiz' || kind === 'quiz-history' ? '搜索已加载内容' : '搜索知识与培训'}}" value="{{query}}" bindinput="onSearchInput" bindconfirm="onSearch" confirm-type="search" />
     <button class="search-button" bindtap="onSearch">搜索</button>
   </view>
+  <view wx:if="{{kind === 'quiz'}}" class="row mastery-tabs">
+    <button class="mastery-tab {{mastery === 'all' ? 'selected' : ''}}" data-mastery="all" bindtap="onMastery">全部已加载</button>
+    <button class="mastery-tab {{mastery === 'pending' ? 'selected' : ''}}" data-mastery="pending" bindtap="onMastery">待掌握</button>
+    <button class="mastery-tab {{mastery === 'mastered' ? 'selected' : ''}}" data-mastery="mastered" bindtap="onMastery">已掌握</button>
+  </view>
+  <view wx:if="{{loadedSummary}}" class="learning-summary"><view>{{loadedSummary}}</view><view class="muted">{{pagingNote}}</view></view>
   <view wx:if="{{kind === 'knowledge'}}" class="row source-tabs"><button class="source-tab {{source === 'product' ? 'source-active' : ''}}" data-source="product" bindtap="onSource">商品知识</button><button class="source-tab {{source === 'official' ? 'source-active' : ''}}" data-source="official" bindtap="onSource">官方知识库</button></view>
   <view class="filter-tabs row">
     <button wx:for="{{filters}}" wx:key="kind" class="filter-tab {{kind === item.kind ? 'active' : ''}}" data-kind="{{item.kind}}" bindtap="onFilter">{{item.label}}</button>
@@ -19,7 +25,7 @@
   <view wx:if="{{loading}}" class="card loading-state">正在同步学习内容…</view>
   <view wx:if="{{error}}" class="error card"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重新加载</button></view>
   <view wx:if="{{!loading && !error && !items.length}}" class="card empty">
-    <view class="empty-symbol">知</view><view>这里还没有内容</view><view class="muted">换个关键词或分类试试，已完成记录以服务器为准。</view>
+    <view class="empty-symbol">知</view><view>当前筛选暂无内容</view><view class="muted">{{hasMore ? '已加载内容中暂未找到匹配项，可继续加载下一页。' : '换个关键词或分类试试，已完成记录以服务器为准。'}}</view>
   </view>
   <view wx:for="{{items}}" wx:key="id" class="card knowledge-card" data-id="{{item.id}}" bindtap="openItem" hover-class="card-pressed">
     <image wx:if="{{item.cover_url}}" src="{{item.cover_url}}" class="cover" mode="aspectFill" />
@@ -28,8 +34,11 @@
       <view class="section-title item-title">{{item.title}}</view>
       <view wx:if="{{item.body}}" class="muted summary">{{item.body}}</view>
       <view wx:if="{{item.progress !== null}}" class="progress-note">云端进度 {{item.progress}}<text wx:if="{{item.target !== null}}"> / {{item.target}}</text></view>
-      <view wx:if="{{item.scoreText}}" class="result-line">{{item.scoreText}} · {{item.passedText}}</view>
-      <view class="item-footer row"><text class="muted">{{item.time}}</text><text class="read-link">{{kind === 'quiz' ? '查看测验资格' : '查看内容'}} →</text></view>
+      <view wx:if="{{item.passedText}}" class="result-line">{{item.passedText}}<text wx:if="{{item.scoreText}}"> · {{item.scoreText}}</text></view>
+      <view wx:if="{{item.passedAt}}" class="muted learning-date">通过时间 {{item.passedAt}}</view>
+      <view wx:if="{{item.lastAttemptAt}}" class="muted learning-date">最近作答 {{item.lastAttemptAt}}</view>
+      <view wx:if="{{item.sourceNotice}}" class="muted learning-date">{{item.sourceNotice}}</view>
+      <view class="item-footer row"><text wx:if="{{kind !== 'quiz-history'}}" class="muted">{{item.time}}</text><text class="read-link">{{kind === 'quiz' ? '查看测验资格' : '查看内容'}} →</text></view>
     </view>
   </view>
   <view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view>

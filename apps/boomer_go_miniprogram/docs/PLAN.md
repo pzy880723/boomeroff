@@ -68,8 +68,16 @@
 - [x] Close the independently reproduced selected-file/CAS-conflict deadlock with red-green regressions; unknown upload intents remain non-discardable.
 - [x] Run 550/550 native tests, 19-route checks and official 20 WXML/21 WXSS compilation; inspect actual read-only example upload/help/answers controls without production uploads.
 - [x] Push mini-only client checkpoint b6e33e092cf0f5c95c40a718aec733ef731ab55a and verify identical remote SHA; preserve the current Flutter branch and empty normal index.
-- [ ] Finish the same GO Lovable backend task, inspect fixed source/actor gate/policies and align the exact final upload DTO. Current client tests do not prove deployment or real employee uploads.
+- [x] Finish the same GO Lovable backend task, inspect fixed Round16/17 source/actor gate/policies and align the exact final upload DTO. Independent review closed both new P2s and passed 52 helper/page tests; full 587 tests and official compilers passed. Deployment remains Lovable-reported, not an online bundle-byte or real-upload acceptance claim.
 - [ ] Complete original-byte Storage, dedicated-AppID, real employee/device and legacy Web compatibility acceptance before formal release.
+
+## Follow-up: Account Login And Learning
+
+- [x] Source-audit the existing phone/username/email password paths, implement remote candidate-user validation and unchanged ERP scope recovery, then native mode/help/error states with RED-to-GREEN tests.
+- [x] Independently review shared authentication and native login, run 587 tests and official native compilers, and inspect actual DevTools OTP/password/help/local-error screens without real credentials or SMS.
+- [x] Push mini-only checkpoint `93334663d24dcc9da2a616fb2badb1ee58d87b89`, verify identical remote SHA and empty normal index; preserve the Flutter worktree.
+- [x] Implement the bounded own-library/read/server-quiz/archive/history workflow in LEARNING_NATIVE_PLAN.md. Main ran628 tests and actual labeled GUI through reading, synthetic quiz/review/history/source reopening. Loaded-only filtering and latest-per-content history are explicit; real employee persistence remains unverified.
+- [x] Verify fixed Round18 source for first-submit persisted fact/replay; a missing flag is no longer saved-grade success. Independent review closed the P2. Lovable reports deployment and SQL rollback runs, not main-executed SQL or online bundle equality.
 
 ## Shared Worker Contract (Reference)
 
