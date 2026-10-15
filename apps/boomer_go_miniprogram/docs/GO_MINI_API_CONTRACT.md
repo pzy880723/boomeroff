@@ -405,3 +405,34 @@ title trim必填，正文允许空；双层码点限长不截断。tags字符串
 精确错误：400 invalid_params；401 unauthorized；403 forbidden/shop_forbidden/erp_scope_not_ready/account_suspended；404 not_found；409 version_conflict/request_id_conflict；422 invalid_category/title_too_long/body_too_long/invalid_tags；500 db_error。SQL无catch吞错，RAISE整体回滚；客户端只对首次从未未知且无receipt的七对400/404/version_conflict/四种422释放槽位并保稿重读。request_id_conflict、401403、500、transport、恢复历史unknown及回执后回读失败绝不释放。后台文案“重新发起”不授权丢弃原请求。
 
 旧knowledge-detail SOP/QA/training已收窄当前工作店或共享NULL，其他来源不变。旧learning列表未因此全局收紧，旧Web AI和自动创建分类未改，不作为新原生AI能力；现有kb_ingest_queue触发器仍照旧随真实知识写入运行。
+
+## 本店 AI 草拟 Round 23/24
+
+R23最终 `ad2e6e81cbdf0ef39aa7bc3840b96435fc8e5967`；R24最终 `e564fc300f51aa072e73da7c2d1b32203603a1c5`，均get_project确认finished。主流程在最终ref读回并独立复算UTF8 SHA256：
+
+- `supabase/functions/go-mini-api/kbdraft.ts`: `d2fc2bf62ec2e77127e84637e603ab2ac907e14cb4cfa16fd7953f067c104bb3`
+- `supabase/functions/go-mini-api/index.ts`: `0a525828886e9da74ee6a6e2e634c9a9eec604d11c20189dc17c0ac41a8b28d1`
+- `drizzle/migrations/0020_go_kb_draft_context_native.sql`: `57498fa36aefbaa6358f2a619e9b73260ee97a89f14c69e90f52b0ebadfa3eee`
+- `tests/go-mini-kb-draft.test.ts`: `9ba7a17f75421ad13b6e0a7d698d9d38249bbc8878d43fe7519eb6e0eb25af01`
+
+`kb-draft {shop_id:uuid,type:'sop'|'qa',topic:string,hint?:string|null}` 只消费四个权威参数；topic trim1..200码点，hint省略/null转空、trim0..2000。额外的model/URL/categories/references/actor/shop_name等不能注入权威上下文。返回：
+
+```text
+{shop_id,type,topic,hint,
+ draft:{title,body,tags:string[],category_id:uuid|null},
+ categories:[{id,shop_id,type,name,sort_order}],
+ sources:[{id,source_type,source_id:text|null,shop_id,title}],
+ reference_state:'matched'|'none',generated_at:ISO,persisted:false}
+```
+
+不是保存接口。新路径无entry/category/receipt写入，不创建分类，不调旧特权match_kb，不service业务读取。先caller-JWT现有cap严格can_write，再embedding，再INVOKER `go_kb_draft_context_v1(uuid,text,public.vector)`重检cap／RLS读取，completion后再cap。SQL固定copy/current或共享NULL，显式1536维／有限／非零；先cosine最近15条，weighted similarity>=0.55后按距离和id取5，标题200／参考正文2000码点，元数据不透传。模型只从现有分类枚举选ID或NULL。原kb_documents按档案店的RLS保持，因此调店或HQ可能只读到共享参考；不扩RLS兜底。
+
+provider结构输出严格一个emit_kb_entry、四个字段、title/body非空且200/40000内，tags规范化20x40内且禁止okr-highlight。reference_state:none仅检索成功的零命中；嵌入／检索失败明确报错，不降级为无参考成功。来源仅返回白名单元数据，客户端仅展示标题；正文／任意metadata/provider trace不返回或日志。
+
+R24统一handler45s deadline覆盖全部RPC和provider headers/body，RPC可用时绑定abortSignal，同时有界await防止底层不理取消。embedding8s、completion30s受总时限约束，迟到回包不推进后续调用；finally清timer并abort。此为handler界限，不包括前置认证、客户端续租或网络延迟，也不保证底层计费取消。客户端生成前先一次现有session.restore完整续租；其它普通读取freshness不变。
+
+精确新增错误：400 invalid_params；provider前401/403沿用原闸门及500 db_error；provider启动后权限／门店变化403 draft_scope_changed；402 ai_budget_exhausted；429 ai_rate_limited；502 ai_unavailable/ai_invalid_response/reference_unavailable；504 ai_timeout。draft_scope_changed不会触发客户端旧erp_scope_not_ready的一次自动续租重发。任何AI失败只保稿并等待明确操作，不能宣称保存。
+
+topic/hint是受系统事实／权限／固定SOPQA结构和工具schema约束的writing_request；categories/references是只读不可信reference_data，内部指令不执行。保留旧SOP200-400/QA200-300风格提示，不编造价格／地址／时间／售后，不把销售设为考核。生成模型仍为旧google/gemini-2.5-pro，嵌入为旧google/gemini-embedding-001以匹配已存向量。已核对[Lovable官方模型文档](https://docs.lovable.dev/features/ai)及[Google弃用说明](https://ai.google.dev/gemini-api/docs/deprecations/)；目录状态不代替本项目实际模型可用性和质量验收，也没有擅自切到其他模型。
+
+Lovable报告R23迁移应用、SQL23组强制回滚、R24 Edge部署和Deno104＋quiz Vitest5通过；SQL RED未观察到，R24未重跑SQL，无真并发或真AI。独立R23实际源码10组＋4组通过但复现deadline P2；R24原3RPC复现约22/24/22ms在20ms预算退出，provider次数0/1/2不再推进，实际源码16组＋25额外mock通过、无unhandled rejection／自建timer残留，P2已闭合。主流程在线匿名kb-draft返回401；没有线上bundle字节下载比对、真实员工或付费provider执行。

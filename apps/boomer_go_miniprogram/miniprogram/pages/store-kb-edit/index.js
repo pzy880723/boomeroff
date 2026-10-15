@@ -1,15 +1,17 @@
 const { definePage } = require('../../shared/page');
 const model = require('../store-kb/model');
-function empty() { return { title: '', body: '', tagsText: '', categoryId: null, categoryIndex: 0, categories: [], categoryNames: [], shopName: '', typeLabel: '', scopeLabel: '', editable: false, canSave: false, canDelete: false, pending: false, canRetrySame: false, receiptConfirmed: false, saved: false, conflict: false, loading: false, sending: false, confirming: false, error: '', validation: '', notice: '', readbackError: '' }; }
+const aiDraft = require('./ai-draft');
+function empty() { return { title: '', body: '', tagsText: '', categoryId: null, categoryIndex: 0, categories: [], categoryNames: [], shopName: '', typeLabel: '', scopeLabel: '', editable: false, canSave: false, canDelete: false, pending: false, canRetrySame: false, receiptConfirmed: false, saved: false, conflict: false, loading: false, sending: false, confirming: false, error: '', validation: '', notice: '', readbackError: '', aiOpen: false, aiHint: '', aiHintCount: 0, aiBusy: false, aiCandidate: null, aiStale: false, aiError: '', aiInputError: '', canGenerate: false, canAdopt: false }; }
 Page(definePage({
   data: empty(),
-  onLoad(query) { this._type = query.type; this._id = query.id || ''; this._epoch = 0; this._edit = 0; this._visible = false; this._scope = model.scope(this); },
+  onLoad(query) { this._type = query.type; this._id = query.id || ''; this._epoch = 0; this._edit = 0; this._visible = false; this._scope = model.scope(this); this._aiSeq = 0; this._aiHint = ''; this._aiHintVersion = 0; },
   onShow() { this._visible = true; return this.refresh(); },
   onHide() { this.pause(); },
-  onUnload() { this.pause(); this._draft = null; this._base = null; this._server = null; this._pending = null; },
-  pause() { this._visible = false; this._epoch++; this._modal = null; this._flight = null; this._read = null; this._authorized = false; if (this._pending && !this._pending.receipt) this._pending.unknown = true; this.setData(empty()); },
+  onUnload() { this.pause(); this._draft = null; this._base = null; this._server = null; this._pending = null; this._aiFlight = null; this._aiHint = ''; },
+  pause() { this._visible = false; this._epoch++; this.invalidateAI(); this._aiOpen = false; this._modal = null; this._flight = null; this._read = null; this._authorized = false; if (this._pending && !this._pending.receipt) this._pending.unknown = true; this.setData(empty()); },
   syncScope() {
     const scope = model.scope(this); if (scope === this._scope) return false;
+    this.invalidateAI(); this._aiFlight = null; this._aiHint = ''; this._aiHintVersion++; this._aiOpen = false;
     this._scope = scope; this._epoch++; this._edit++; this._draft = null; this._base = null; this._server = null; this._pending = null; this._completed = null; this._writeConflict = false; this._caps = null; this._authorized = false; this._modal = null; this._flight = null; this._read = null; this.setData(empty()); return true;
   },
   current(c) { this.syncScope(); return model.active(this, c); },
@@ -17,6 +19,7 @@ Page(definePage({
   async failure(e, c, readback) {
     if (!this.current(c)) return;
     if (e.status === 401 || e.status === 403) {
+      this.invalidateAI();
       this._authorized = false; this.setData(empty());
       if (e.status === 401) return this.run(async () => { throw e; }, { silent: true });
       this.setData({ error: '当前账号或门店权限不可用，请重新核验。' }); return;
@@ -26,6 +29,7 @@ Page(definePage({
   async refresh(adopt) {
     if (!this._visible || this._gone) return;
     this.syncScope(); if (this._read || this._flight || this._modal) return;
+    this.invalidateAI();
     const c = model.capture(this); this._read = c; this._authorized = false;
     this.setData({ loading: true, canSave: false, canDelete: false, editable: false, canRetrySame: false, error: '' });
     try {
@@ -56,12 +60,12 @@ Page(definePage({
       this.render();
       if (this._pending && this._pending.receipt) await this.readback(this._pending, c);
     } catch (e) { if (this.current(c)) { this._authorized = false; this.setData({ canSave: false, canDelete: false, editable: false }); } await this.failure(e, c, !!(this._pending && this._pending.receipt)); }
-    finally { if (this._read === c) { this._read = null; if (this.current(c)) this.setData({ loading: false }); } }
+    finally { if (this._read === c) { this._read = null; if (this.current(c)) { this.setData({ loading: false }); this.renderAI(); } } }
   },
   restorePending() {
     const record = model.ram(getApp())[model.key(this)];
     if (!record) return;
-    if (this._pending !== record) { record.unknown = true; this._pending = record; }
+    if (this._pending !== record) { this.invalidateAI(); record.unknown = true; this._pending = record; }
     const p = record.payload;
     model.check(p.shop_id === model.binding(this).shop_id && p.type === this._type && (p.entry_id || '') === this._id, '原请求与当前页面不匹配');
     if (p.operation !== 'delete' && (!this._id || this._server)) this._draft = { title: p.title, body: p.body, tagsText: p.tags.join(', '), categoryId: p.category_id };
@@ -77,9 +81,63 @@ Page(definePage({
     let validation = ''; if (d) try { model.normalizeDraft(d, this._categories || []); } catch (e) { validation = e.message; }
     this.setData({ title: d ? d.title : '', body: d ? d.body : '', tagsText: d ? d.tagsText : '', categoryId: d ? d.categoryId : null, categories, categoryNames: categories.map(x => x.name), categoryIndex,
       shopName: this.session.get().shop.name || '当前授权门店', typeLabel: this._type === 'sop' ? '门店 SOP' : '门店问答', scopeLabel: shared ? '共享 · 只读' : '本店',
-      editable: !!(allowed && !pending && !this.data.saved), canSave: !!(allowed && !pending && !this.data.saved && !conflict && !validation && !this.isPreview()),
-      canDelete: !!(caps.canWrite && s && s.canDelete && !pending && !conflict && !this.data.saved && !this.isPreview()), pending: !!pending, conflict, validation,
+      editable: !!(allowed && !pending && !this.data.saved), canSave: !!(allowed && !pending && !this._aiFlight && !this.data.saved && !conflict && !validation && !this.isPreview()),
+      canDelete: !!(caps.canWrite && s && s.canDelete && !pending && !this._aiFlight && !conflict && !this.data.saved && !this.isPreview()), pending: !!pending, conflict, validation,
       receiptConfirmed: !!(pending && pending.receipt), notice: pending ? pending.receipt ? '本次操作回执已确认，请只读回查详情。' : '存在结果待确认的原请求，请显式只读核对，不会自动重发。' : conflict ? '服务器版本已变化，草稿保留。请明确载入最新版本后再提交。' : this.isPreview() ? '合成示例：可以编辑草稿，不会保存或删除。' : shared ? '共享内容只读，不在本店维护。' : !caps.canWrite ? '当前账号仅可阅读。' : '' });
+    this.renderAI();
+  },
+  invalidateAI() { this._aiSeq = (this._aiSeq || 0) + 1; this._aiCandidate = null; if (this._visible && !this._gone) this.setData({ aiCandidate: null, aiStale: false, canAdopt: false, aiError: '' }); },
+  aiAllowed() {
+    const s = this._server, session = this.session.get();
+    return !!(this._visible && !this._gone && this._authorized && this._caps && this._caps.canWrite === true && this._draft && session && session.shop && (!this._id || s && s.canEdit && s.entry.shop_id === session.shop.id) && !this._writeConflict && !(s && this._base && s.version !== this._base.version) && !this._pending && !model.ram(getApp())[model.key(this)] && !this._completed && !this.data.saved && !this.data.receiptConfirmed && !this._read && !this._flight && !this._modal && !this.isPreview());
+  },
+  aiMatches(candidate) { const c = candidate.context; return c.seq === this._aiSeq && c.edit === this._edit && c.hint === this._aiHintVersion && c.base === this._base && c.version === (this._base && this._base.version); },
+  renderAI() {
+    if (!this._visible || this._gone || !this._authorized) return;
+    const candidate = this._aiCandidate, stale = !!(candidate && !this.aiMatches(candidate));
+    let aiInputError = ''; try { aiDraft.input(model.binding(this), this._draft ? this._draft.title : '', this._aiHint || ''); } catch (e) { aiInputError = e.message; }
+    const allowed = this.aiAllowed();
+    this.setData({ aiOpen: !!this._aiOpen, aiHint: this._aiHint || '', aiHintCount: Array.from(this._aiHint || '').length, aiInputError, aiBusy: !!this._aiFlight, aiStale: stale,
+      aiCandidate: candidate ? candidate.view : null, canGenerate: allowed && !this._aiFlight && !aiInputError, canAdopt: !!(allowed && !this._aiFlight && candidate && !stale) });
+  },
+  toggleAI() { if (this.syncScope() || !this._visible || !this._authorized) return; this._aiOpen = !this._aiOpen; this.renderAI(); },
+  onAIHint(e) {
+    if (this.syncScope() || !this._visible || !this._authorized || !this.data.editable || this._pending || this._flight || this._read) return;
+    if (this._aiHint !== e.detail.value) { this._aiHint = e.detail.value; this._aiHintVersion++; }
+    this.setData({ aiError: '' }); this.renderAI();
+  },
+  async generateDraft() {
+    if (this.syncScope() || !this.aiAllowed() || this._aiFlight) return;
+    let p;
+    try { p = aiDraft.input(model.binding(this), this._draft.title, this._aiHint || ''); } catch (e) { this.setData({ aiInputError: e.message }); return; }
+    const context = { page: model.capture(this), seq: ++this._aiSeq, edit: this._edit, hint: this._aiHintVersion, base: this._base, version: this._base && this._base.version };
+    const flight = { context, params: Object.freeze(p) }, tags = Array.isArray(this._draft.tags) ? this._draft.tags.slice() : this._draft.tagsText.split(/[,，]/).map(x => x.trim());
+    this._aiFlight = flight; this._aiCandidate = null; this._aiOpen = true; this.setData({ aiError: '' }); this.render();
+    try {
+      const raw = await this.api.action('kb-draft', flight.params);
+      if (!this.current(context.page) || context.seq !== this._aiSeq || this._aiFlight !== flight || !this.aiAllowed()) return;
+      const parsed = aiDraft.parse(raw, p, tags);
+      const view = { title: parsed.title, body: parsed.body, tags: parsed.tags.slice(), categoryName: parsed.categoryName, blocks: parsed.blocks, sources: parsed.sources, referenceLabel: parsed.referenceLabel, preservedHighlight: parsed.preservedHighlight };
+      this._aiCandidate = { context, parsed, view };
+    } catch (e) {
+      if (this.current(context.page) && context.seq === this._aiSeq && this._aiFlight === flight) {
+        if (e.status === 401 || e.status === 403) {
+          await this.failure(e, context.page);
+          if (e.status === 403 && e.code === 'draft_scope_changed' && this.current(context.page)) this.setData({ error: aiDraft.errorMessage(e) });
+        } else this.setData({ aiError: aiDraft.errorMessage(e) });
+      }
+    } finally {
+      if (this._aiFlight === flight) { this._aiFlight = null; if (this._visible && !this._gone && model.scope(this) === context.page.scope) { if (this._authorized) this.render(); else this.setData({ aiBusy: false, canGenerate: false, canAdopt: false }); } }
+    }
+  },
+  async adoptDraft() {
+    if (this.syncScope() || !this.aiAllowed() || this._aiFlight || !this._aiCandidate || !this.aiMatches(this._aiCandidate)) return;
+    const candidate = this._aiCandidate, c = model.capture(this);
+    const accepted = await this.modal(c, '采用 AI 草稿', '将替换标题、正文、标签和分类，仅修改本页草稿，不会保存。请核实内容后再单独确认保存。');
+    if (!accepted || !this.current(c) || !this.aiAllowed() || this._aiCandidate !== candidate || !this.aiMatches(candidate)) return;
+    const d = candidate.parsed;
+    this._draft = { title: d.title, body: d.body, tags: d.tags.slice(), tagsText: d.tags.join(', '), categoryId: d.categoryId };
+    this._categories = d.categories.slice(); this._edit++; this.invalidateAI(); this.setData({ aiError: '' }); this.render();
   },
   edit(field, value) {
     if (this.syncScope() || !this._visible || !this._authorized || !this._draft || !this.data.editable || this._pending || this._read || this._flight) return;
@@ -104,14 +162,14 @@ Page(definePage({
   save() { return this.confirmOperation(this._id ? 'update' : 'create'); },
   remove() { return this.confirmOperation('delete'); },
   async confirmOperation(operation) {
-    if (this.syncScope() || !this._visible || this._gone || this.isPreview() || !this._authorized || this._pending || this._flight || this._read || this._modal || !(operation === 'delete' ? this.data.canDelete : this.data.canSave)) return;
+    if (this.syncScope() || !this._visible || this._gone || this.isPreview() || !this._authorized || this._pending || this._aiFlight || this._flight || this._read || this._modal || !(operation === 'delete' ? this.data.canDelete : this.data.canSave)) return;
     if (model.ram(getApp())[model.key(this)]) { this.restorePending(); this.render(); return; }
     const c = model.capture(this), base = this._base;
     let draft; try { if (operation !== 'delete') draft = model.normalizeDraft(this._draft, this._categories); } catch (e) { await this.failure(e, c); return; }
     const accepted = await this.modal(c, operation === 'delete' ? '删除本店知识' : '保存本店知识', operation === 'delete' ? '确认删除“' + this.data.title + '”？此操作不会删除共享内容。' : '将保存到“' + this.data.shopName + '”的' + this.data.typeLabel + '。请确认标题、正文、标签和分类。');
     if (!accepted || !this.current(c) || this.isPreview() || !this._authorized || base !== this._base || !(operation === 'delete' ? this.data.canDelete : this.data.canSave)) return;
     if (model.ram(getApp())[model.key(this)]) { this.restorePending(); this.render(); return; }
-    const payload = { ...model.binding(this), request_id: model.requestId(), operation };
+    this.invalidateAI(); const payload = { ...model.binding(this), request_id: model.requestId(), operation };
     if (operation !== 'create') { payload.entry_id = this._id; payload.expected_version = base.version; }
     if (draft) Object.assign(payload, draft);
     const record = { payload: model.freezePayload(payload), unknown: false, retryBlocked: false, receipt: null };

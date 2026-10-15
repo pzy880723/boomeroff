@@ -2,6 +2,16 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
+## 最新检查点：原生 SOP/QA AI 草拟
+
+- 主流程停写后新跑760/760，零失败／跳过／取消；22路由检查、官方23WXML／24WXSS编译退出0且stderr为空。五Tab和原手工保存／权限边界不变。
+- AI面板默认折叠，标题作为主题、说明最多2000码点；显式生成完整候选，再独立modal采用，仅改RAM，之后仍需保存确认／回执／回读。分类仅现有ID或NULL、不自动创建；保留原okr-highlight并展示，模型不得新增该业务标记。生成不锁手改，但编辑／hint变化使候选过期；scope/revision/epoch/resource/base/edit/hint/seq及确认回调隔离已测。
+- AI首批24RED→GREEN，source_id按实际text/null及安全错误修复后28项；原CRUD38保留。主流程共享层3RED→GREEN25项，生成前续租追加2RED→GREEN26项，避免以半程租约开始付费生成。独立客户端91及续租26通过，未见新增确认P1/P2；未知／失权不自动重发或显示provider原文。
+- 实际DevTools查看折叠／展开面板、预览禁用生成，并键入中文标题、23字自然语言hint、多行Markdown正文及标签。native-kb-ai-collapsed／ai-open／ai-input／manual-input和phone裁切在evidence，补齐上轮输入缺口。候选生成／采用竞态仍为VM测试，没有真实AI、知识保存或删除；预览不请求付费生成或制造成功候选。
+- R23固定ad2e6e81新增INVOKER上下文RPC，保留caller RLS、当前店／共享copy和现有写权限。Lovable报0020已应用、SQL23组强制回滚及Edge部署；主流程未重跑SQL。旧kb_documents仍按档案店RLS，调店／HQ可无本店参考，不fallback service；旧特权入口／match_kb未全局修复。
+- 独立复现R23三个RPC等待不受总deadline约束的P2；R24最终e564fc300f51aa072e73da7c2d1b32203603a1c5已get_project确认finished、读回/hash。统一handler45s覆盖3RPC和provider headers/body，合法writing_request与不可信reference_data分层。独立20ms原复现约22/24/22ms退出，provider0/1/2；实际TS转译16组＋补充25组通过，0 unhandled rejection／自建timer残留，P2闭合。
+- Lovable报R24 Deno104＋quiz Vitest5及重新部署，无新SQL或SQL重跑；这不是主流程真实AI/特权SQL执行。主流程在线kb-draft匿名请求401，只证明可达及拒绝。源码hash不等于线上bundle；handler有界退出不保证底层忽略abort的请求／计费取消，也不是从点击起45秒的整条网络保证。真实模型质量／员工和手机验收仍缺。
+
 ## 最新检查点：本店 SOP 与问答维护
 
 - 主流程在停写后新跑728/728，零失败／跳过／取消；22原生路由检查通过。官方wcc编译23WXML、wcsc编译24WXSS，退出0且stderr为空。五Tab保持工作台／学习／识物／消息／我的，无H5替代。

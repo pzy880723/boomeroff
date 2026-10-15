@@ -19,6 +19,37 @@
   <view wx:if="{{categories.length}}" class="card editor-card">
     <view class="field-label">标题 <text class="muted">必填 · 最多 200 字</text></view>
     <input class="field title-input" value="{{title}}" maxlength="-1" disabled="{{!editable || loading || sending}}" bindinput="onTitle" placeholder="输入流程或问题标题" />
+    <view class="ai-panel">
+      <button class="ai-toggle row" bindtap="toggleAI"><text>AI 辅助草拟</text><text class="muted">{{aiOpen ? '收起 −' : '展开 +'}}</text></button>
+      <block wx:if="{{aiOpen}}">
+        <view class="muted ai-help">主题取上方标题。先生成候选，再明确采用；不会自动保存或创建分类。</view>
+        <textarea class="field ai-hint" value="{{aiHint}}" maxlength="-1" disabled="{{!editable || loading || sending}}" bindinput="onAIHint" placeholder="可选：说明希望覆盖的场景、步骤或注意事项" auto-height />
+        <view class="muted ai-count">说明 {{aiHintCount}} / 2000 字</view>
+        <view wx:if="{{aiInputError}}" class="validation">{{aiInputError}}</view>
+        <view wx:if="{{preview}}" class="preview-banner">示例模式不调用 AI，也不生成虚假候选。</view>
+        <button class="button-secondary" disabled="{{!canGenerate}}" loading="{{aiBusy}}" bindtap="generateDraft">{{aiBusy ? '正在生成候选' : aiStale ? '按当前内容重新生成' : '生成候选'}}</button>
+        <view wx:if="{{aiBusy}}" class="muted ai-help">可继续手工编辑；编辑后本次候选不可直接采用。暂不能保存或删除。离开页面不代表网络或计费已停止。</view>
+        <view wx:if="{{aiError}}" class="error ai-error">{{aiError}}</view>
+        <view wx:if="{{aiCandidate}}" class="ai-candidate">
+          <view class="badge">AI 候选 · 尚未采用或保存</view>
+          <view wx:if="{{aiStale}}" class="notice">生成期间或之后内容有修改，当前候选已过期。请按当前内容重新生成，不会覆盖你的修改。</view>
+          <view class="ai-candidate-title">{{aiCandidate.title}}</view>
+          <view class="muted">分类：{{aiCandidate.categoryName}}</view>
+          <view class="ai-tags"><text wx:for="{{aiCandidate.tags}}" wx:key="*this" class="ai-tag {{item === 'okr-highlight' ? 'ai-highlight' : ''}}">{{item}}</text></view>
+          <view wx:if="{{aiCandidate.preservedHighlight}}" class="muted ai-help">保留原有 okr-highlight 业务标记；AI 不会新增该标记，只有手工编辑才会移除。</view>
+          <view class="divider"></view>
+          <block wx:for="{{aiCandidate.blocks}}" wx:key="index" wx:for-item="block">
+            <scroll-view wx:if="{{block.kind === 'table'}}" scroll-x class="ai-table"><view class="ai-table-inner"><view wx:for="{{block.rows}}" wx:key="index" wx:for-item="row" class="ai-table-row {{row.header ? 'ai-table-header' : ''}}"><view wx:for="{{row.cells}}" wx:key="index" wx:for-item="cell" class="ai-table-cell"><rich-text nodes="{{cell}}" /></view></view></view></scroll-view>
+            <view wx:else class="ai-markdown ai-markdown-{{block.kind}}"><text wx:if="{{block.kind === 'list'}}" class="ai-list-marker">·</text><rich-text nodes="{{block.nodes}}" /></view>
+          </block>
+          <view class="divider"></view>
+          <view class="muted">{{aiCandidate.referenceLabel}}</view>
+          <view wx:for="{{aiCandidate.sources}}" wx:key="index" class="ai-source">{{index + 1}}. {{item.title}}</view>
+          <view class="muted ai-help">AI 内容需人工核实。采用仅替换本页草稿；保存还需单独确认。</view>
+          <button class="button" disabled="{{!canAdopt || confirming}}" bindtap="adoptDraft">采用草稿</button>
+        </view>
+      </block>
+    </view>
     <view class="field-label">已有分类</view>
     <picker mode="selector" range="{{categoryNames}}" value="{{categoryIndex}}" disabled="{{!editable || loading || sending}}" bindchange="onCategory"><view class="field row"><text>{{categoryNames[categoryIndex]}}</text><text class="muted">选择 ›</text></view></picker>
     <view class="field-label">正文 <text class="muted">可为空 · 最多 40000 字</text></view>

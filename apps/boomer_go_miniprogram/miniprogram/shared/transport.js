@@ -2,7 +2,11 @@ const MESSAGES = {
   otp_invalid: '验证码不正确，请重新输入', otp_expired: '验证码已过期，请重新获取', otp_already_used: '验证码已使用，请重新获取',
   phone_not_registered: '手机号尚未关联员工，请联系总部', sms_send_failed: '短信发送失败，请稍后重试',
   phone_lookup_unavailable: '员工登录服务繁忙，请稍后重试', otp_store_unavailable: '验证码服务繁忙，请稍后重试',
-  scope_sync_required: '员工权限待同步，请返回登录页重试连接', feature_unavailable: '该功能后台尚未接通，请稍后再试'
+  scope_sync_required: '员工权限待同步，请返回登录页重试连接', feature_unavailable: '该功能后台尚未接通，请稍后再试',
+  ai_budget_exhausted: 'AI 额度不足，请联系管理员；原稿未改动', ai_rate_limited: 'AI 起草请求过于频繁，请稍后再试；原稿未改动',
+  ai_unavailable: 'AI 起草服务暂不可用；原稿未改动', ai_invalid_response: 'AI 未返回完整草稿，请重试；原稿未改动',
+  reference_unavailable: '门店知识参考暂时无法读取；原稿未改动', ai_timeout: 'AI 起草超时；原稿未改动，请确认后再次生成',
+  draft_scope_changed: '生成过程中门店或权限已变化，候选已停止接收；原稿未改动'
 };
 function createTransport(wx, config, token) {
   return function request(name, body, options = {}) {
@@ -14,7 +18,7 @@ function createTransport(wx, config, token) {
     if (authUser && (typeof options.accessToken !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(options.accessToken))) return Promise.reject(new Error('缺少待核验的登录凭证'));
     const rpc = name.startsWith('rpc:');
     const scoped = name === 'erp-scope-sync';
-    const longRequest = name === 'recognize-product' || name === 'spirit-chat' || (name === 'go-mini-api' && body && ['conversation-send', 'quiz-start', 'recognition-save', 'profile-update'].includes(body.action));
+    const longRequest = name === 'recognize-product' || name === 'spirit-chat' || (name === 'go-mini-api' && body && ['conversation-send', 'quiz-start', 'recognition-save', 'profile-update', 'kb-draft'].includes(body.action));
     let url = config.supabaseUrl + (authUser ? '/auth/v1/user' : name === 'auth:password' ? '/auth/v1/token?grant_type=password' : refresh ? '/auth/v1/token?grant_type=refresh_token' : rpc ? '/rest/v1/rpc/' + name.slice(4) : '/functions/v1/' + name);
     if (scoped) url += '?forceFunctionRegion=' + encodeURIComponent(config.scopeRegion);
     const bearer = authUser ? options.accessToken : options.public || refresh || authPassword ? config.publicKey : token() || config.publicKey;

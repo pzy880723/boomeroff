@@ -90,3 +90,25 @@ test('legacy SOP QA training detail requires store context without blocking ordi
  assert.equal(calls.length,0);await api.action('knowledge-detail',{kind:'official',id:'x'});assert.equal(calls.length,1);
  shop={id:'current'};await api.action('knowledge-detail',{kind:'sop',id:'x',shop_id:'foreign'});assert.equal(calls[1].params.shop_id,'current');
 });
+test('AI knowledge drafting binds the verified store without automatic post-provider scope retry',async()=>{
+ let shop=null,restores=0;const calls=[];
+ const session={get:()=>({userId:'u',shop}),restore:async()=>{restores++;}};
+ const api=createApi({wx:{},config:{},session,invoke:async(name,body)=>{calls.push(body);if(body.params.hint==='scope-loss')throw Object.assign(new Error('changed'),{status:403,code:'draft_scope_changed'});return {data:{persisted:false}};}});
+ await assert.rejects(api.action('kb-draft',{shop_id:'foreign',type:'sop',topic:'开店'}),/授权工作门店/);
+ assert.equal(calls.length,0);shop={id:'current'};
+ const input={shop_id:'foreign',type:'qa',topic:'商品品相',hint:'如实介绍'};
+ await api.action('kb-draft',input);assert.deepEqual(calls[0].params,{...input,shop_id:'current'});assert.equal(input.shop_id,'foreign');
+ await assert.rejects(api.action('kb-draft',{type:'qa',topic:'品相',hint:'scope-loss'}),e=>e.status===403&&e.code==='draft_scope_changed');
+ assert.equal(calls.length,2);assert.equal(restores,3,'one pre-generation renewal per attempt, never another renewal after provider scope loss');
+});
+test('paid draft preparation renews once even inside the ordinary freshness window and blocks stale scope before provider',async()=>{
+ let restores=0,ensureFresh=0,revision=1;const calls=[];
+ const session={get:()=>({userId:'u',shop:{id:'current'},scopeVersion:1}),revision:()=>revision,ensureFresh:async()=>{ensureFresh++;},restore:async()=>{restores++;}};
+ const api=createApi({wx:{},config:{},session,invoke:async(name,body)=>{calls.push(body);return {data:{persisted:false}};}});
+ await api.action('profile');assert.equal(ensureFresh,1);assert.equal(restores,0);
+ await api.action('kb-draft',{type:'sop',topic:'开店'});assert.equal(ensureFresh,1);assert.equal(restores,1);assert.equal(calls.length,2);
+ session.restore=async()=>{restores++;revision++;};
+ await assert.rejects(api.action('kb-draft',{type:'sop',topic:'开店'}),e=>e.code==='stale_operation');assert.equal(calls.length,2);
+ session.restore=async()=>{restores++;throw new Error('renewal unavailable');};
+ await assert.rejects(api.action('kb-draft',{type:'sop',topic:'开店'}),/renewal unavailable/);assert.equal(calls.length,2);
+});
