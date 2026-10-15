@@ -11,6 +11,7 @@
 - 实际DevTools用两条明确合成待练内容完成总览→阅读第一条→作答→明确未保存的结果→显式第二条阅读→返回清单→确认跳过→确认退出。计数始终保留一条，跳过不计完成且下一轮仍可开始。截图native-practice-overview／read-first／first-result／read-second／resumed／skipped／exited在evidence；phone为确定性裁切，无生成式美化。五条整组和跳转栈边界为源码/单测证据，GUI只走了两条。
 - 后端最终a8e36ee6已finished并读回/hash；主流程实际函数复现/修复回放确认深层答案不再透传，浅层摘要不变。Lovable报Deno73与Edge部署，无新DB/RLS/权限。独立R20实际源码mock10项及截断边界、R21实际sanitizer/handler45组合＋4边界通过，两项深层P2已闭合。客户端午夜补丁独立复现确认闭合、相关178项通过、未见新增P1/P2；这些不冒充独立Deno73／全套686或真机执行。
 - 新后台practice-library无身份请求401，只证明可达与匿名拒绝；没有真实员工测验、持久进度或云归档E2E，也没有Mini公开发布。下一缺口当前店SOP/QA维护已单独源码审计，见OPERATIONS_KB_AUDIT.md，尚未新增写权限或CRUD。
+- 连续练习feature提交d3b995a1a38bbf65a160956b43e942ccdf15b34f仅27个小程序路径，已非强推到codex/go-mini-workbench并ls-remote读回同SHA。当前Flutter分支不变、正常index为空、独立index与工作区小程序源一致。没有把其他原生修改带入，亦未解决旧main/Lovable分叉或将小程序称为正式发布。
 
 ## 最新检查点：原生学习闭环
 
