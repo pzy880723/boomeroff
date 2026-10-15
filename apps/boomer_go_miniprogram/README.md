@@ -41,7 +41,7 @@ Current API origins are the existing GO Lovable Cloud project and `https://erp.b
 - Marketing uses existing script and video jobs. Exiting a page does not issue a cancellation. Cover, video and frozen publishing copy have separate native controls.
 - Voucher templates and customer claims are distinct. The native redemption entry scans only to query; mutation requires a separate confirmation and a matching server receipt. An uncertain request is reconciled by its original key, never silently replaced or automatically resent.
 - Schedule viewing distinguishes explicit rest from missing data. Coworker views require the server's existing permission and exact selected store; this does not grant schedule editing authority.
-- Activity applications require existing same-store management authority. Publication confirmation is separate from approval, voucher issuance, redemption and social publishing. Current native evidence editing retains/removes original references only; new evidence upload is not implemented. Fixed-source review and backend deployment reports do not replace real employee acceptance.
+- Activity applications require existing same-store management authority. Publication confirmation is separate from approval, voucher issuance, redemption and social publishing. Stage1 retains/removes original references; the Stage2 client now adds original-file selection/upload/status recovery against a frozen contract, but backend implementation and fixed-source alignment are still pending. This is not a verified live employee uploader. Fixed-source review and backend deployment reports do not replace real employee acceptance.
 
 ## Verification And Remaining Acceptance
 

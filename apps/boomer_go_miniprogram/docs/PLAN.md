@@ -61,6 +61,16 @@
 - [x] Push mini-only activity checkpoint `38dd2c66` after final verification and confirm the same remote SHA; preserve Flutter work, current branch and the empty normal Git index.
 - [ ] Implement and verify Stage2 bound original evidence upload; Stage1 does not complete that target or real employee acceptance.
 
+## Follow-up: Activity Stage2 Client Checkpoint
+
+- [x] Freeze the native original-file protocol and shared five-method adapter before implementation; keep caller-JWT Storage transport and explicit publication association separate.
+- [x] Implement and independently review original-file selection, progress, immutable local request identity, unknown-state recovery and native draft/CAS integration.
+- [x] Close the independently reproduced selected-file/CAS-conflict deadlock with red-green regressions; unknown upload intents remain non-discardable.
+- [x] Run 550/550 native tests, 19-route checks and official 20 WXML/21 WXSS compilation; inspect actual read-only example upload/help/answers controls without production uploads.
+- [x] Push mini-only client checkpoint b6e33e092cf0f5c95c40a718aec733ef731ab55a and verify identical remote SHA; preserve the current Flutter branch and empty normal index.
+- [ ] Finish the same GO Lovable backend task, inspect fixed source/actor gate/policies and align the exact final upload DTO. Current client tests do not prove deployment or real employee uploads.
+- [ ] Complete original-byte Storage, dedicated-AppID, real employee/device and legacy Web compatibility acceptance before formal release.
+
 ## Shared Worker Contract (Reference)
 
 Root: `/Users/boomer/Documents/BOOMER GO Native/apps/boomer_go_miniprogram`.

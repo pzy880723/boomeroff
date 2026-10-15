@@ -109,6 +109,7 @@ npm run check
 - 实际 GUI 走查：工作台 → 我的 → 我的活动 → 活动详情 → 发布确认；示例显示脱敏申请、原路径保留、禁用原图上传、只读答案与禁用保存。新截图 `evidence/native-application-upload-disabled-phone.png` 和 `native-application-upload-help-phone.png` 来自真实开发者工具，没有生成式美化。
 - GUI 没有启用生产上传，也没有证明真实选图／进度／状态核对成功。这些状态目前由 VM／模拟适配器回归覆盖，需真实员工、专用 AppID 和测试环境验收。
 - GO Lovable 后台任务 `umsg_01m50nwzmwewa8f3w8rc2wy9sd` 约 05:15 因平台 credit check-in 暂停，主流程在原编辑器点击 Continue 后恢复同一任务，没有修改持续额度偏好、重启任务或要求用户转述。后台实现尚未完成，客户端暂未与其最终固定源码对齐，不宣称迁移已应用或部署已完成。
+- mini-only 客户端提交 `b6e33e092cf0f5c95c40a718aec733ef731ab55a` 非强推成功，ls-remote 已读回同 SHA，18 个变更路径均位于小程序目录。正常 index 仍为空；没有混入 Flutter/iOS 修改。其源码归档 `/private/tmp/BOOMER-GO-wechat-upload-client-20261016.zip` 通过完整 unzip 检查，SHA256 为 `2fc003ca1e4a7fac66f837948366112fe599bf811d21a6a389f0a207b973ed45`。归档是客户端检查点，不是后台部署包或正式体验版。
 
 ## 尚未完成的验收
 
