@@ -22,7 +22,7 @@ Page(definePage({
       { title: '协作与服务', entries: [
         { label: 'BOOMER 圈', icon: '圈', url: '/pages/list/index?kind=community' },
         { label: '我的活动', icon: '约', url: '/pages/list/index?kind=activities' },
-        { label: '我的券包', icon: '券', url: '/pages/list/index?kind=vouchers' },
+        { label: '门店优惠券', icon: '券', url: '/pages/list/index?kind=vouchers' },
         { label: '营销工作台', icon: 'M', url: '/pages/marketing/index' },
         { label: 'AI 助手', icon: 'AI', url: '/pages/assistant/index' },
         { label: '个人资料', icon: '人', url: '/pages/detail/index?kind=profile' },

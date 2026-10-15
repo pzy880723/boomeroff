@@ -259,3 +259,32 @@ params `{page?, page_size?:1..50, snapshot_id?:uuid}`；新原生首屏不传 sn
 - 空集也返回有效 snapshot_id（total_at_snapshot=0）。新消息需刷新首屏（新 snapshot）才出现。
 - 错误：非 uuid / 不存在 / 他人 / 过期 → 统一 409 `snapshot_expired`（不区分原因、不泄露他人信息），客户端重新拉首屏。
 - 合成验证（真实 SQL，单事务合成账号，最后强制回滚）：6 会话 page_size=2 三页无重无漏；首屏后插入 created_at 早于 snapshot_at 的新会话 H 与 B 的更新消息（等价晚提交）→ 后页顺序不变、H 不出现、B 槽位仍为冻结消息；同微秒按 id desc；删除 C 的消息 → 第三页仅跳过该槽（skipped_slots=1，ord 不变），第二页不漂移；A 伪造含 b↔c 消息 id 的快照 → 不回读、不含正文；owner 伪造为 B → 被强制为 A；新首屏可见 H 与 B 新消息；随机 id/他人 id/过期均 snapshot_expired；B 看不到也删不掉 A 的快照；A 清理不动 B 的过期快照；客户端 UPDATE 被拒；空集有效；anon 不可执行；删除账号级联清除快照。脚本：tests/sql/go-dm-snapshot-v3.sql。
+
+## 原生券 Round 13
+
+固定源码 `a4b3eb9f99aa13d0672a20df5e9be0718ddcea47`；Lovable 报告迁移 `drizzle/migrations/0013_go_voucher_redeem_native.sql` 已应用，`go-mini-api` 已部署。主流程已按固定 ref 读取迁移、BFF、voucher.ts 和契约；独立权限复核与真实员工验收分开记录。
+
+独立源码复核未发现可确认的新增 P1/P2。该 ref 的单文件 index.ts UTF-8 SHA256 为 `330cfa9c73c7731c4bef80aaa1b178a1fa2e8b311c4fb3dfda319ea96b9ef546`，主流程已用 Node crypto 对固定 ref 返回的原文独立复算一致。Lovable 后续撤回之前无法复算的 `bc78c1...` 和 Round14 `27129b...` 两条所谓部署指纹，二者不是有效证据。源码哈希不等于可读取的线上 bundle 哈希；没有线上源码下载比对，不能宣称部署包已逐字节对齐。主流程本轮匿名请求新 action 收到 `401 unauthorized`，仅证明匿名被拒。
+
+- 四个 action 均要求当前已验证 `shop_id`。RPC 自身再检查 auth.uid、未停用、fresh ERP scope、非空且已授权门店，以及既有 voucher 权限；不新增整表 GRANT/RLS，不使用管理员 Edge 客户端读取券。
+- `voucher-capabilities {shop_id}` → `{shop_id,can_lookup,can_redeem,can_manage}`。查券使用现有 redeem OR manage；manage-only 不获得核销权限。
+- `voucher-lookup {shop_id,code}`：code 为 trim 后转大写的八位 ASCII 字母数字。返回 `{shop_id,claim:{id,code,status,claimed_at,expires_at,redeemed_at,recipient_name_masked,recipient_phone_tail,voucher:{id,name,threshold_type,discount_amount,min_spend,template_terms,starts_at,ends_at,active}},can_redeem,reason,server_time}`。不返回原姓名/手机号。其他店、NULL 店、不存在统一 `404 not_found`。
+- 核销条件是已领取且未核销/作废/过期、模板启用且未软删且在有效期内；期限等于服务器 now 也不可用。模板结束返回 `voucher_unavailable`；claim 到期返回 `expired`。manage-only 的 reason 是 `no_redeem_permission`，不由客户端猜测可核销性。
+- `voucher-redeem {shop_id,code,request_id:uuid}` → `{request_id,shop_id,claim_id,code,status:'redeemed',redeemed_at,redeemed_by_me:true,replay:boolean}`。条件 UPDATE 的实际 RETURNING 行与私有幂等回执同一事务提交；回执仅存核对字段，不含领取人 PII。相同 key/本人/店/码回原回执，不同 payload 或 actor 使用已存在 key → `409 request_id_conflict`；重放仍重验当前权限。
+- `voucher-redeem-status {shop_id,code,request_id}` 只读且仅本人：`{state:'not_found'}` 或 `{state:'succeeded',...原回执}`。not_found 不证明原请求失败，其他请求已核销也不证明本次成功。客户端不得据此自动换 key 或重发。
+- 合法错误包含 `400 invalid_params/shop_required`、`403 forbidden/shop_forbidden/account_suspended/erp_scope_not_ready`、`404 not_found`、`409 already_redeemed/void/not_claimed/voucher_unavailable/request_id_conflict`、`410 expired`；未知数据库错误统一 `500 db_error`，不外泄数据库原文。
+- 既有原生 `activities/activity-detail/vouchers/voucher-detail` 现在强制精确选店，活动通过 voucher_id 归属；列表 created_at DESC,id DESC。优惠券列表仍受原 RLS 限制，是门店模板，不是客户个人券包；无原模板读权限可得到空列表，不能借核销权限扩读。
+- Lovable 回报新券 Deno 6/6、DM 12/12、media 9/9、shop 5/5、community scope 1/1、Web 15/15、quiz 4/4 及类型检查通过；`tests/sql/go-voucher-redeem.sql` 12 组单事务合成数据验证后强制回滚。主流程未代替其重跑 SQL；没有真实双会话并发测试，没有真实券核销/SMS。
+- 旧 Web/旧 voucher-redeem/activity-review、全店 PII RPC、旧 manage RLS 和截图桶绑定风险仍存在，未在本轮声称全局修复；腾讯 Web 未因此自动发布。
+
+## 原生排班 Round 14
+
+固定源码 `5a4cdf6da4bd3d61279bc78d40141b8c8bd52aeb`。Lovable 回报 Edge 已部署、无迁移／GRANT／RLS 变更；先前 `27129b...` 指纹已明确撤回。主流程已读取 schedule.ts、index.ts handler、原 RPC migration 与新契约，独立源码复核未见确认新增 P1/P2。对固定 ref 原文用 Node crypto 独立复算：index.ts SHA256 `20fe3e81491116f9a90ad788c02f5b3375edcacde213aac2df8ea9aa8cf14305`，schedule.ts SHA256 `b1a00f3a0a4bf6989b6d0bd13b035ad3c69ca8f792db1603dd73aec97f267e55`。这些证明固定源码原文身份，不证明可下载的线上函数字节。
+
+- `schedule {month?:'YYYY-MM',shop_id:uuid,view?:'mine'|'shop'}`。缺省 month 为上海当月，非法 month/view 为 400 invalid_params；选店必填且当前 fresh scope 内，缺省 400 shop_required，越店 403 shop_forbidden。固定整月日期闭区间 28/29/30/31 天，不超过既有 RPC 上限。
+- 返回 `{month,shop_id,view,can_view_shop:boolean,rows:[{work_date,shop_id,shop_name,user_id,display_name,shift_code,shift_name,start_time,end_time,source,is_rest,is_self}],conflicts:[{work_date,user_id,count}],schedules,shift_defs}`。
+- 数据源为既有 `list_shift_schedules_v1`。mine 传 `_shop_id:null`，后续按已验证 uid 仅投影本人 rows/conflicts，可含本人真实调店安排。shop 传精确选店，RPC 的 work/rest 在 merged_json 前已按该店收窄；服务端 can_view_shop 严格 true 才放行，否则 403 forbidden。客户端不传权限，不把同事读取当排班写权限。
+- RPC 既有权限：HQ，或 schedule.view_shop，或 staff.read；无新角色和权限。真实 shop_name/display_name 不由本地会话覆盖。is_rest:true 表示明确休息，班次和时间 null；没有行不等于休息、缺勤或请假。
+- 原 shift_schedules 有 UNIQUE(work_date,user_id)，RPC 展示按同人同日去重且上班优先；冲突独立返回，不能从展示行数推断没有冲突。整月无 RPC 行数截断。兼容 schedules/shift_defs 仅本人，当月查询上限为 1000。
+- RPC 42501 shop not authorized → 403 shop_forbidden；42501 ERP mapping → 403 erp_scope_not_ready；22023 → 400 invalid_params；28000 → 401 unauthorized；其他 → 500 db_error。
+- Lovable 报告 Deno 排班 8/8、其余券／DM／媒体／店／社区／Web／quiz 回归均通过；`tests/sql/go-schedule-readonly.sql` 5 组合成 SQL 强制回滚后无残留。主流程未重跑 SQL，没有真实员工或真实排班 E2E。

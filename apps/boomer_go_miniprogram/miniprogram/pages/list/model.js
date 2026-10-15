@@ -10,7 +10,7 @@ const sections = {
   tasks: { title: '每日任务', action: 'tasks' },
   community: { title: 'BOOMER 圈', action: 'community' },
   activities: { title: '我的活动', action: 'activities' },
-  vouchers: { title: '我的券包', action: 'vouchers' },
+  vouchers: { title: '门店优惠券', action: 'vouchers' },
   'my-library': { title: '我的知识库', action: 'my-library' },
   favorites: { title: '我的收藏', action: 'my-library' },
   favorite: { title: '我的收藏', action: 'my-library' },

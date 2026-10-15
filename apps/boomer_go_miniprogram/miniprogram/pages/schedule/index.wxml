@@ -1,15 +1,26 @@
 <view class="page schedule-page">
   <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成排班，不代表真实出勤安排</view>
-  <view class="eyebrow">BOOMER / SCHEDULE</view><view class="page-title">我的排班</view><view class="muted intro">整月安排，心中有数。</view>
+  <view class="eyebrow">BOOMER / SCHEDULE</view><view class="page-title">{{view === 'shop' ? '本店排班' : '我的排班'}}</view><view class="muted intro">整月安排，心中有数。仅查看，不修改排班。</view>
+  <view class="row view-switch">
+    <button class="view-option {{view === 'mine' ? 'active' : ''}}" data-view="mine" bindtap="onViewChange">我的</button>
+    <button wx:if="{{canViewShop || view === 'shop'}}" class="view-option {{view === 'shop' ? 'active' : ''}}" data-view="shop" bindtap="onViewChange" disabled="{{!canViewShop}}">本店同事</button>
+  </view>
+  <view wx:if="{{notice}}" class="card notice">{{notice}}</view>
   <view class="card calendar"><view class="row calendar-header"><button class="month-arrow" bindtap="previousMonth" aria-label="上个月">‹</button><picker mode="date" fields="month" value="{{month}}" bindchange="onMonthChange"><view class="month-title">{{month}} <text class="muted">⌄</text></view></picker><button class="month-arrow" bindtap="nextMonth" aria-label="下个月">›</button></view>
     <view class="calendar-grid"><view wx:for="{{weekdays}}" wx:key="*this" class="weekday">{{item}}</view></view>
-    <view class="calendar-grid"><view wx:for="{{days}}" wx:key="key" class="day-cell {{item.selected ? 'selected' : ''}} {{!item.date ? 'blank' : ''}}" data-date="{{item.date}}" bindtap="selectDay"><view class="day-number">{{item.day}}</view><view wx:if="{{item.shifts.length}}" class="shift-dot"></view><view wx:if="{{item.shifts.length}}" class="shift-count">{{item.shifts.length}} 班</view></view></view>
-    <view class="muted calendar-note">红点为已同步排班；无红点不代表休息或请假。</view>
+    <view class="calendar-grid"><view wx:for="{{days}}" wx:key="key" class="day-cell {{item.selected ? 'selected' : ''}} {{!item.date ? 'blank' : ''}}" data-date="{{item.date}}" bindtap="selectDay"><view class="day-number">{{item.day}}</view><view wx:if="{{item.shifts.length}}" class="shift-dot"></view><view wx:if="{{item.shifts.length}}" class="shift-count">{{item.shifts.length}} {{view === 'shop' ? '人在岗' : '班'}}</view><view wx:if="{{item.restCount}}" class="rest-label">{{view === 'shop' ? item.restCount + '人休息' : '休息'}}</view></view></view>
+    <view class="muted calendar-note">红点为已同步上班安排，灰字为明确休息；无标记不代表休息或请假。</view>
   </view>
-  <view class="row list-heading"><view class="section-title">{{selectedDate || '本月全部'}} · {{visibleItems.length}} 班</view><button wx:if="{{selectedDate}}" class="show-all" bindtap="showMonth">查看整月</button></view>
+  <view class="row list-heading"><view class="section-title">{{selectedDate || '本月全部'}} · {{visibleItems.length}} 条安排</view><button wx:if="{{selectedDate}}" class="show-all" bindtap="showMonth">查看整月</button></view>
   <view wx:if="{{loading}}" class="card loading-state">正在同步整月排班…</view>
   <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重试同步</button></view>
-  <view wx:if="{{!loading && !error && !visibleItems.length}}" class="card empty">{{selectedDate ? '当天暂无已同步排班' : '本月暂无已同步排班'}}<view class="muted">请以门店确认的排班为准。</view></view>
-  <view wx:for="{{visibleItems}}" wx:key="id" class="card shift-card row"><view class="date-rail">{{item.date}}</view><view class="shift-main"><view class="section-title shift-title">{{item.title}}</view><view class="shift-time">{{item.start || '时间待同步'}}<text wx:if="{{item.end}}"> – {{item.end}}</text></view><view wx:if="{{item.shop}}" class="muted">{{item.shop}}</view><view wx:if="{{item.note}}" class="muted shift-note">{{item.note}}</view></view></view>
+  <view wx:if="{{!loading && !error && !visibleItems.length}}" class="card empty">{{selectedDate ? '当天暂无已同步安排' : '本月暂无已同步安排'}}<view class="muted">无记录不等于休息，请以门店确认的排班为准。</view></view>
+  <view wx:if="{{visibleConflicts.length}}" class="card conflict-notice"><view class="section-title">排班有冲突，请联系管理人员</view><view wx:for="{{visibleConflicts}}" wx:key="index" class="conflict-line">{{item.date}} · 同人当日 {{item.count}} 条安排</view><view class="muted">列表已去重，不代表冲突已解决。</view></view>
+  <block wx:if="{{view === 'mine'}}">
+    <view wx:for="{{visibleItems}}" wx:key="id" class="card shift-card row {{item.isRest ? 'rest-card' : ''}}"><view class="date-rail">{{item.date}}</view><view class="shift-main"><view class="section-title shift-title">{{item.title}}</view><view wx:if="{{!item.isRest}}" class="shift-time">{{item.start || '时间待同步'}}<text wx:if="{{item.end}}"> – {{item.end}}</text></view><view wx:if="{{item.isRest}}" class="muted rest-description">服务器已明确标记休息</view><view wx:if="{{item.shop}}" class="muted shift-shop">{{item.shop}}</view><view wx:if="{{item.note}}" class="muted shift-note">{{item.note}}</view></view></view>
+  </block>
+  <block wx:if="{{view === 'shop'}}">
+    <view wx:for="{{groups}}" wx:key="key" wx:for-item="group" class="card shop-group {{group.isRest ? 'rest-card' : ''}}"><view class="group-date">{{group.date}}<text wx:if="{{group.shop}}" class="muted group-shop">{{group.shop}}</text></view><view class="row group-heading"><view class="section-title">{{group.title}}</view><text class="muted">{{group.members.length}} 人{{group.isRest ? '休息' : '在岗'}}</text></view><view wx:if="{{!group.isRest}}" class="shift-time">{{group.start || '时间待同步'}}<text wx:if="{{group.end}}"> – {{group.end}}</text></view><view class="members"><text wx:for="{{group.members}}" wx:key="id" class="member {{item.isSelf ? 'member-self' : ''}}">{{item.name}}{{item.isSelf ? '（我）' : ''}}</text></view></view>
+  </block>
   <view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view>
 </view>

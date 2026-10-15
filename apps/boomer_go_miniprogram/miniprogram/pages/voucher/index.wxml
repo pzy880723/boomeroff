@@ -1,0 +1,51 @@
+<view class="page voucher-page">
+  <view wx:if="{{preview}}" class="preview-banner">操作示例 · 非真实券，不执行核销</view>
+  <view class="shop-block">
+    <view class="muted">当前核销门店</view>
+    <view class="shop-name">{{shopName || '尚未确认授权门店'}}</view>
+  </view>
+  <button class="button scan-button" bindtap="scan" disabled="{{!canLookup || selecting || pending || confirming || checking}}">{{selecting ? '等待扫码结果' : '扫码读取券码'}}</button>
+  <view class="query-row">
+    <input class="field code-field" value="{{codeInput}}" bindinput="onInput" placeholder="或输入券码" confirm-type="search" bindconfirm="query" disabled="{{pending || confirming || !canLookup}}" aria-label="券码" />
+    <button class="button-secondary query-button" bindtap="query" disabled="{{!canLookup || checking || pending || confirming}}">{{checking ? '查询中' : '查询'}}</button>
+  </view>
+  <view wx:if="{{loading}}" class="loading">正在核验券操作权限…</view>
+  <button wx:if="{{capsLoaded && !canLookup}}" class="button-secondary" bindtap="load" disabled="{{loading}}">重新核验查券权限</button>
+  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary retry-button" bindtap="refresh" disabled="{{loading || checking || sending || checkingStatus}}">{{pending ? '只读核对状态' : '重试'}}</button></view>
+  <view wx:if="{{receipt}}" class="receipt-card">
+    <view class="receipt-title">核销回执已确认</view>
+    <view>券码 {{receipt.code}}</view>
+    <view class="muted">服务器核销时间 {{receipt.time}}</view>
+  </view>
+  <view wx:if="{{lookup}}" class="card voucher-card">
+    <view class="voucher-name">{{lookup.title}}</view>
+    <view class="voucher-amount">{{lookup.amount}}</view>
+    <view class="voucher-rule">{{lookup.rule}}</view>
+    <view class="divider"></view>
+    <view class="detail-line">券码：<text class="code-text">{{lookup.code}}</text></view>
+    <view class="detail-line">状态：{{lookup.status}}<text wx:if="{{!lookupVerified}}"> · 详情未确认</text></view>
+    <view class="detail-line">领取时间：{{lookup.claimedAt}}</view>
+    <view class="detail-line">有效期至：{{lookup.expiresAt}}</view>
+    <view class="detail-line">领取人：{{lookup.recipient}}<text wx:if="{{lookup.phoneTail}}"> · 手机尾号 {{lookup.phoneTail}}</text></view>
+    <view class="muted checked-time">服务器核验 {{lookup.checkedAt}}</view>
+  </view>
+  <view wx:if="{{lookup}}" class="card terms-card">
+    <view class="terms-title">使用规则</view>
+    <view class="terms-body">{{lookup.terms}}</view>
+    <view class="detail-line">模板状态：{{lookup.active}}</view>
+    <view class="detail-line">模板开始：{{lookup.startsAt}}</view>
+    <view class="detail-line">模板结束：{{lookup.endsAt}}</view>
+    <view wx:if="{{lookup.reason}}" class="reason">{{lookup.reason}}</view>
+  </view>
+  <view wx:if="{{detailError}}" class="error">{{detailError}}<button class="button-secondary retry-button" bindtap="retryReadback" disabled="{{checking}}">重新读取详情</button></view>
+  <view wx:if="{{notice}}" class="notice">{{notice}}</view>
+  <view wx:if="{{!lookup && !loading && !error && canLookup}}" class="empty">扫码或输入券码查看详情。查询不会核销。</view>
+  <view wx:if="{{pending}}" class="pending-actions">
+    <button class="button-secondary" bindtap="checkStatus" disabled="{{sending || checkingStatus || confirming}}">{{checkingStatus ? '核对中' : '只读核对此次核销状态'}}</button>
+    <button wx:if="{{canRetrySame}}" class="button-secondary same-key" bindtap="retrySame" disabled="{{sending || checkingStatus || confirming}}">再次确认并按原请求重试</button>
+  </view>
+  <view wx:else class="confirm-area">
+    <view class="muted confirmation-note">先核对券规则与工作门店。<view>点击后仍需二次确认，不会自动核销。</view></view>
+    <button class="button" bindtap="confirmRedeem" disabled="{{!canSubmit || sending || confirming || preview}}">{{preview ? '示例不可核销' : confirming ? '等待确认' : '确认核销'}}</button>
+  </view>
+</view>

@@ -28,7 +28,16 @@ function createPreview(wx) {
     const stamp = new Date().toISOString();
     if (name === 'dashboard') return bootstrap;
     if (name === 'profile') return { profile, staff: profile, role: { role_code: 'staff' }, erp_scope: { scope: 'store', shop_ids: [shop.id] }, experience: { total_exp: 0 } };
-    if (name === 'schedule') return { month: params.month || date.slice(0, 7), schedules: bootstrap.shifts, shift_defs: bootstrap.shift_definitions, as_of: stamp };
+    if (name === 'schedule') {
+      const month = params.month || date.slice(0, 7), view = params.view || 'mine';
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !['mine', 'shop'].includes(view)) throw Object.assign(new Error('排班月份或视图不合法'), { status: 400, code: 'invalid_params' });
+      if ((params.shop_id && params.shop_id !== shop.id) || view === 'shop') throw Object.assign(new Error('示例账号无其他门店或同事排班权限'), { status: 403, code: 'forbidden' });
+      const common = { shop_id: shop.id, shop_name: shop.name, user_id: current.userId, display_name: profile.display_name, is_self: true };
+      return { month, shop_id: shop.id, view, can_view_shop: false, rows: [
+        Object.assign({}, common, { work_date: month + '-01', shift_code: 'early', shift_name: '早班', start_time: '10:00', end_time: '18:00', source: 'schedule', is_rest: false }),
+        Object.assign({}, common, { work_date: month + '-02', shift_code: null, shift_name: '休息', start_time: null, end_time: null, source: 'day_off', is_rest: true })
+      ], conflicts: [], schedules: bootstrap.shifts, shift_defs: bootstrap.shift_definitions, as_of: stamp, persisted: false };
+    }
     if (name === 'knowledge-detail') { const item = articles.find(a => a.id === params.id); if (!item) throw new Error('该示例条目不存在'); return { item }; }
     if (name === 'knowledge' || name === 'learning') return { items: articles.filter(a => !params.query || (a.title + a.body).includes(params.query)), categories: [{ id: 'porcelain', name: '瓷器餐具' }, { id: 'service', name: '门店服务' }], page: 0, has_more: false, as_of: stamp };
     if (name === 'notifications') { const page = params.page || 0, n = params.page_size || 20; return { items: notifications.slice(page * n, (page + 1) * n), page, page_size: n, has_more: (page + 1) * n < notifications.length, as_of: stamp }; }
@@ -69,6 +78,13 @@ function createPreview(wx) {
       if (params.peer_id !== peer.user_id) throw new Error('该示例同事不存在');
       const found = messages.filter(m => (params.message_ids || []).includes(m.id));
       return { peer_id: peer.user_id, statuses: found.map(m => ({ id: m.id, read_at: m.read_at })), ignored_ids: (params.message_ids || []).filter(id => !found.some(m => m.id === id)) };
+    }
+    if (name === 'voucher-capabilities' || name === 'voucher-lookup') {
+      if (params.shop_id && params.shop_id !== shop.id) throw Object.assign(new Error('示例模式不能访问其他门店'), { status: 403, code: 'shop_forbidden' });
+      if (name === 'voucher-capabilities') return { shop_id: shop.id, can_lookup: true, can_redeem: false, can_manage: false };
+      if (String(params.code || '').trim().toUpperCase() !== 'DEMO1234') throw Object.assign(new Error('该示例券不存在，请输入 DEMO1234'), { status: 404, code: 'not_found' });
+      return { shop_id: shop.id, claim: { id: '00000000-0000-4000-8000-000000000021', code: 'DEMO1234', status: 'claimed', claimed_at: stamp, expires_at: null, redeemed_at: null, recipient_name_masked: '顾客（示例，脱敏）', recipient_phone_tail: null,
+        voucher: { id: '00000000-0000-4000-8000-000000000022', name: '中古好物体验券（示例）', threshold_type: 'min_spend', discount_amount: 20, min_spend: 100, template_terms: '仅用于原生界面展示，不是真实优惠券，不可核销。', starts_at: null, ends_at: null, active: true } }, can_redeem: false, reason: 'development_preview', server_time: stamp };
     }
     if (name === 'tasks') return { date, pending_exp: 0, claimed_today: [], today_counts: { scans: 0, quiz_attempts: 0, community_posts: 0 }, items: [{ id: 'example-learn', title: '读懂一件商品，再讲好它的故事', body: '先进入学习页，了解可观察、可核实的商品信息。', status: '示例待办' }], as_of: stamp };
     if (name === 'quiz-start') return { quiz_token: 'development-example-only', attempt_id: 'development-example-only', questions: [{ id: 'q1', index: 0, stem: '商品年代无法确认时，应当如何介绍？', options: ['直接说是古董', '如实说明暂无法确认', '声称绝版', '只说价格'] }] };

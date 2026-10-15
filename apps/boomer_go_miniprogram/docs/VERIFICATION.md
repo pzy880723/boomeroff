@@ -2,7 +2,21 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
-## 后续集成检查点：同事消息和社区
+## 最新检查点：券核销和排班
+
+- 主流程在两组页面修复停写后重新运行 `npm test`：414/414，通过，0 失败／跳过／取消。券页 48 项、排班升级 68 项，旧员工页 74 项未降低预期。
+- `npm run check`：17 个原生路由通过；官方 wcc 编译全部 18 WXML、wcsc 编译全部 19 WXSS，退出 0、stderr 为空。没有 H5 或服务端密钥标记。
+- 新原生券页：安全八位券码／批准域名解析；扫码只查券；门店与服务端能力核验；独立规则和脱敏领取人；二次确认、精确核销回执与写后详情回读。未知结果不自动重发、不换 key。最小 App RAM 在同账号／同店重新授权后恢复核对依据，不落磁盘、不保存 PII。已修复卸载／403 丢失原 key 和首次明确 abort 永久锁住下一券这两项审查问题；最终独立复核确认闭合，48/48 通过，未见确认新增 P1/P2。
+- 新排班使用已有 RPC 的只读 DTO，保留整月及选日、区分休息和未同步、本人实际调店、获权同店分组及冲突。旧 DTO 显式身份冲突会整包拒绝，同店 conflict 必须关联同日合法人员行；不增加排班写权限。最终独立复核确认 legacy P2 闭合及 conflict 关联已补，68/68 通过，未见确认新增 P1/P2。
+- 实际 DevTools 已沿“我的 → 门店优惠券 → 扫码核销”进入原生页面，查询只读 DEMO1234，看到金额、规则、脱敏信息及禁用核销状态；曾输入不完整码会明确报错，不触发操作。没有扫描真实顾客券或真实核销。
+- 实际 DevTools 已看到 31 日月历、明确休息日无工时、选择无记录日显示“无记录不等于休息”。当前示例账号没有同事权限，按钮不出现；有权限的同店视图目前仅经过合成 VM 测试，未冒充实际员工 GUI 验收。
+- 截图临时原件位于 `/private/tmp/go-mini-native-evidence-20261016/`：native-voucher-query.png、native-schedule-v2-month.png、native-schedule-v2-rest.png、native-schedule-v2-empty.png；均为实际工具截图，无生成式修改。
+- Round13 固定 ref `a4b3eb9f99aa13d0672a20df5e9be0718ddcea47`：主流程读取迁移、BFF、voucher.ts、契约与测试脚本，独立后台源码复核无确认新增 P1/P2。Lovable 报告迁移 0013 已应用／Edge 已部署、Deno 券 6、DM 12、media 9、shop 5、社区 scope 1、Web 15、quiz 4 均通过，12 组合成 SQL 强制回滚；主流程未重跑 SQL，不是两会话并发或真员工核销。
+- 主流程本轮匿名请求新 voucher action 收到 `401 unauthorized`。此前 `bc78c1...` 和 `27129b...` 两条所谓部署指纹无法复算，已由 Lovable 明确撤回，不再作为有效证据。主流程对固定 ref 原文独立复算：Round13 index.ts `330cfa9c...`；Round14 index.ts `20fe3e81...`、schedule.ts `b1a00f3a...`，均与后续可复算报告一致。完整哈希见契约；没有下载线上函数源码比对，不能声称 bundle 字节已对齐，也不直接认定部署错误。
+- Round14 固定 ref `5a4cdf6da4bd3d61279bc78d40141b8c8bd52aeb` 已读取 schedule.ts、index.ts handler、原 RPC migration 和契约：mine 调 RPC 的店参数为 NULL 后仅投影本人；shop 先传精确选店，原 SQL 的 work/rest 均先收窄再生成冲突；can_view_shop 严格 true。独立源码复核无确认新增 P1/P2。Lovable 回报已部署，无迁移／GRANT／RLS 变更；Deno 排班 8、券 6、DM 12、media 9、shop 5、社区 1、Web 15、quiz 4 及类型检查均通过，5 组只读合成 SQL 强制回滚、无残留。SQL 未由主流程重跑，不能从匿名 401 或该报告推导真实员工 E2E。
+- 旧 Web 的核销、全店 PII RPC、manage RLS 和截图桶路径风险未在本轮全局修复；旧腾讯 Web 附件兼容适配也仍未上线。专用 AppID、合法域名和真实身份／设备验收仍是独立门槛。
+
+## 前一检查点：同事消息和社区
 
 - 主流程重新运行 `npm test`：292/292 通过，失败、跳过均为 0；其中 DM 45、社区 31、原文件聊天媒体 9 项。旧的 199 项为首批基线，不是当前总数。
 - `npm run check`：16 个原生路由通过。官方 DevTools `wcc` 编译全部 17 个 WXML、`wcsc` 编译全部 18 个 WXSS，退出码均为 0、stderr 为空；包含自定义 Tab 和全局样式。

@@ -1,6 +1,6 @@
 function createApi({ wx, config, session, invoke: transport }) {
   const saveRequests = [];
-  const shopActions = new Set(['learning', 'objectives', 'objective-update', 'marketing-assets', 'marketing-detail']);
+  const shopActions = new Set(['learning', 'objectives', 'objective-update', 'marketing-assets', 'marketing-detail', 'activities', 'activity-detail', 'vouchers', 'voucher-detail', 'voucher-capabilities', 'voucher-lookup', 'voucher-redeem', 'voucher-redeem-status', 'schedule']);
   function snapshot() {
     const value = typeof session.get === 'function' ? session.get() : null;
     return { revision: session.revision ? session.revision() : null, identity: value ? JSON.stringify([value.userId, value.shop && value.shop.id, value.scopeVersion]) : '' };

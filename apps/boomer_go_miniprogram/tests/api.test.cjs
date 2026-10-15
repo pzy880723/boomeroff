@@ -37,3 +37,30 @@ test('a pre-handler stale ERP lease is renewed and retried once, never a general
  const api=createApi({wx:{},config:{},session,invoke:async()=>{if(++requests===1){const error=new Error('stale lease');error.status=403;error.code='erp_scope_not_ready';throw error;}return {data:{items:[]}};}});
  await api.action('profile');assert.equal(requests,2);assert.equal(renewals,1);
 });
+test('voucher operations and activity reads refuse an unverified missing working shop',async()=>{
+ const calls=[];
+ const api=createApi({wx:{},config:{},session:{get:()=>({userId:'u',shop:null})},invoke:async(name,body)=>{calls.push(body);return {data:{}};}});
+ for(const name of ['voucher-capabilities','voucher-lookup','voucher-redeem','voucher-redeem-status','activities','activity-detail','vouchers','voucher-detail']){
+  await assert.rejects(api.action(name,{shop_id:'other-shop',code:'ABCD2345'}),/授权工作门店/);
+ }
+ assert.equal(calls.length,0);
+});
+test('voucher operations always use the current verified shop and preserve the same write intent',async()=>{
+ const calls=[];
+ const api=createApi({wx:{},config:{},session:{get:()=>({userId:'u',shop:{id:'own-shop'}})},invoke:async(name,body)=>{calls.push(body);return {data:{state:'not_found'}};}});
+ const params={shop_id:'other-shop',code:'ABCD2345',request_id:'44444444-4444-4444-8444-000000000001'};
+ await api.action('voucher-redeem',params);
+ await api.action('voucher-redeem-status',params);
+ assert.ok(calls.every(body=>body.params.shop_id==='own-shop'));
+ assert.ok(calls.every(body=>body.params.request_id===params.request_id&&body.params.code===params.code));
+ assert.equal(params.shop_id,'other-shop','caller input must not be mutated');
+});
+test('schedule views require and send only the verified selected working shop',async()=>{
+ let selected=null;const calls=[];
+ const api=createApi({wx:{},config:{},session:{get:()=>({userId:'u',shop:selected})},invoke:async(name,body)=>{calls.push(body);return {data:{rows:[]}};}});
+ await assert.rejects(api.action('schedule',{month:'2026-10',view:'shop',shop_id:'foreign'}),/授权工作门店/);
+ assert.equal(calls.length,0);
+ selected={id:'own'};
+ await api.action('schedule',{month:'2026-10',view:'mine',shop_id:'foreign'});
+ assert.deepEqual(calls[0].params,{month:'2026-10',view:'mine',shop_id:'own'});
+});

@@ -74,3 +74,35 @@ test('DM preview v3 snapshot ids stay fixed, expire, and never cross preview ses
     await assert.rejects(p.api.action('dm-conversations',{snapshot_id:first.snapshot_id}),e=>e.status===409&&e.code==='snapshot_expired');
   } finally { Date.now=now; }
 });
+test('voucher preview exposes a labeled read-only claim and never fabricates a redemption',async()=>{
+  const p=createPreview({});
+  const shop_id=p.session.get().shop.id;
+  const caps=await p.api.action('voucher-capabilities',{shop_id});
+  assert.equal(caps.shop_id,shop_id);
+  assert.equal(caps.can_lookup,true);
+  assert.equal(caps.can_redeem,false);
+  const data=await p.api.action('voucher-lookup',{shop_id,code:'demo1234'});
+  assert.equal(data.claim.code,'DEMO1234');
+  assert.equal(data.can_redeem,false);
+  assert.equal(data.reason,'development_preview');
+  assert.match(data.claim.voucher.name,/示例/);
+  assert.equal(data.claim.recipient_name,undefined);
+  assert.equal(data.claim.recipient_phone,undefined);
+  await assert.rejects(p.api.action('voucher-lookup',{shop_id,code:'NOTEXIST'}),e=>e.status===404);
+  await assert.rejects(p.api.action('voucher-capabilities',{shop_id:'other'}),e=>e.status===403);
+  await assert.rejects(p.api.action('voucher-redeem',{shop_id,code:'DEMO1234'}));
+  await assert.rejects(p.api.action('voucher-redeem-status',{shop_id,code:'DEMO1234'}));
+});
+test('schedule preview preserves explicit rest semantics without claiming shop permission or attendance',async()=>{
+ const p=createPreview({}),shop=p.session.get().shop;
+ const data=await p.api.action('schedule',{month:'2028-02',shop_id:shop.id,view:'mine'});
+ assert.equal(data.month,'2028-02');assert.equal(data.shop_id,shop.id);assert.equal(data.view,'mine');
+ assert.equal(data.can_view_shop,false);assert.equal(data.persisted,false);
+ assert.ok(data.rows.length>1);assert.ok(data.rows.every(r=>r.work_date.startsWith('2028-02-')&&r.is_self===true&&r.shop_name===shop.name));
+ const rest=data.rows.find(r=>r.is_rest===true);assert.ok(rest);assert.equal(rest.start_time,null);assert.equal(rest.end_time,null);assert.equal(rest.source,'day_off');
+ assert.deepEqual(data.conflicts,[]);
+ await assert.rejects(p.api.action('schedule',{month:'2028-02',shop_id:'foreign'}),e=>e.status===403);
+ await assert.rejects(p.api.action('schedule',{month:'2028-02',view:'shop'}),e=>e.status===403);
+ await assert.rejects(p.api.action('schedule',{month:'2028-13'}),e=>e.status===400);
+ await assert.rejects(p.api.action('schedule',{month:'2028-02',view:'invalid'}),e=>e.status===400);
+});

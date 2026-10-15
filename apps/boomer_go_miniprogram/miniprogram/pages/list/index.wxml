@@ -2,6 +2,7 @@
   <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成演示数据，非真实员工记录</view>
   <view class="eyebrow">BOOMER / WORK · LEARN</view><view class="page-title">{{title}}</view>
   <view wx:if="{{kind === 'objectives'}}" class="notice">门店工作协作目标；营业额不计入知识考试、员工考核或处罚。</view>
+  <view wx:if="{{kind === 'vouchers'}}" class="notice">这里展示当前门店的优惠券模板，不是顾客已领取的个人券包。顾客出示兑换码后，先查询核对，再确认核销。<button class="button-secondary" data-url="/pages/voucher/index" bindtap="go">扫码核销</button></view>
   <view wx:if="{{kind === 'community'}}" class="notice">从自己的知识库选择已保存商品，在商品详情中分享到 BOOMER 圈。<button class="button-secondary" data-url="/pages/list/index?kind=my-library" bindtap="go">选择商品分享</button></view>
   <button wx:if="{{kind === 'conversations'}}" class="button-secondary" data-url="/pages/detail/index?kind=conversation" bindtap="go">新建 BOOMER 助手对话</button>
   <view wx:if="{{kind === 'check-ins'}}" class="notice">每日成长签到不是考勤，不用于出勤判断。日期以服务器的中国时区为准。</view>

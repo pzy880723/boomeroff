@@ -24,3 +24,15 @@ test('community entries open the native interactive post detail',()=>{
   const model=require('../miniprogram/pages/list/model');
   assert.equal(model.detailUrl('community','post-123'),'/pages/community/index?id=post-123');
 });
+test('voucher templates stay distinct from the native customer-code redemption flow',()=>{
+  const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
+  assert.ok(app.pages.includes('pages/voucher/index'));
+  assert.equal(app.tabBar.list.length,5);
+  const list=fs.readFileSync(path.join(root,'pages/list/index.wxml'),'utf8');
+  assert.match(list,/kind === 'vouchers'/);
+  assert.match(list,/data-url="\/pages\/voucher\/index"/);
+  assert.match(list,/扫码核销/);
+  const mine=fs.readFileSync(path.join(root,'pages/mine/index.js'),'utf8');
+  assert.match(mine,/门店优惠券/);
+  assert.doesNotMatch(mine,/label: '我的券包'/);
+});
