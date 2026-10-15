@@ -69,7 +69,7 @@ npm run check
 - 原同步 UI 报密钥保护拦截和双边历史分叉。未绕过保护、未恢复会覆盖 278 条 Lovable 提交的旧保存、未强推或断开项目。
 - 干净小程序源码单独存入 `codex/go-mini-workbench`；它不修复原 main/Lovable 的历史同步问题，也不代表 Lovable 当前后端代码已全部进入 GitHub main。
 - 本地原生 Flutter/iOS 及其他已有修改没有被暂存、撤销或混入新提交。
-- 后续原生补丁仅 32 个小程序路径文件，另行沿用该干净分支追加；不覆盖 GitHub main，也不表示 Lovable 的后台源码同步冲突已解决。真实工具截图保留在本地 evidence（被 Git 忽略），不是生成图。
+- 后续原生补丁 `5aec64a1f69489fa66b9172f9b39b12a2d0447c2` 仅 32 个小程序路径文件，已推送同一仓库的 `codex/go-mini-workbench` 并用 ls-remote 验证一致；不覆盖 GitHub main，也不表示 Lovable 的后台源码同步冲突已解决。真实工具截图保留在本地 evidence（被 Git 忽略），不是生成图。
 
 ## 尚未完成的验收
 

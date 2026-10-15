@@ -30,7 +30,7 @@
 - [x] Add failing native interaction tests, then implement messages filters and native chat. Preserve private drafts on failure, stop polling off-screen and discard old-identity responses.
 - [x] Integrate shared transport/preview and native route registration; verify backend DTOs, not guessed mock contracts.
 - [x] Compile and visually inspect the native flow; update the coverage matrix. Official compilers passed all WXML/WXSS; synthetic contact, chat failure and community states have real DevTools screenshots.
-- [ ] Push an isolated follow-up commit. Real two-employee acceptance remains a separate gate.
+- [x] Push the isolated follow-up commit `5aec64a1` to `pzy880723/boomeroff` branch `codex/go-mini-workbench`; verify the same SHA with ls-remote. Real two-employee acceptance remains a separate gate.
 
 ## Follow-up: Community and Release Gates
 
