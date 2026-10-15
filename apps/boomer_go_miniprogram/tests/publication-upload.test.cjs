@@ -17,6 +17,8 @@ const file = { file_path: 'wxfile://tmp/original.jpg', name: 'original.jpg', for
 const intent = () => ({ ...binding, actor_id: USER, request_id: REQ, intent_id: INTENT, format: 'jpg', byte_size: 40, digest_sha1: digest,
   path: `publish/${APP}/go-native-evidence-${INTENT}.jpg`, expires_at: '2026-10-16T23:00:00.000Z', replay: false });
 const receipt = () => ({ ...intent(), object_id: OBJECT, object_version: 'object-version-1', sha256: 'b'.repeat(64), state: 'verified', preview: { path: intent().path, signed_url: null, error: 'sign_failed' } });
+const wireReceipt = () => { const { state, preview, ...value } = receipt(); return { ...value, verified_at: '2026-10-16T22:55:00.000Z' }; };
+const wireCommit = () => ({ ...binding, request_id: REQ, intent_id: INTENT, state: 'verified', receipt: wireReceipt() });
 const bytes = values => Uint8Array.from(values).buffer;
 const jpeg = () => bytes([255, 216, 255, 224, ...Array(36).fill(0)]);
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
@@ -50,9 +52,12 @@ test('format detection reads original headers and distinguishes AVIF-compatible 
   assert.equal(detectImageFormat(bytes(ascii('GIF89a'))), 'gif');
   assert.equal(detectImageFormat(bytes([...ascii('RIFF'), 12, 0, 0, 0, ...ascii('WEBPVP8 ')])), 'webp');
   assert.equal(detectImageFormat(ftyp('mif1', ['heic'])), 'heic');
+  assert.equal(detectImageFormat(ftyp('heim')), 'heic');
   assert.equal(detectImageFormat(ftyp('mif1')), 'heif');
   assert.equal(detectImageFormat(ftyp('mif1', ['avif'])), 'avif');
   assert.equal(detectImageFormat(ftyp('isom')), null);
+  assert.equal(detectImageFormat(ftyp('isom', ['avif'])), null);
+  assert.equal(detectImageFormat(ftyp('avif', ['heic'])), null);
   assert.equal(detectImageFormat(bytes(ascii('<svg onload=evil>'))), null);
   assert.equal(detectImageFormat(bytes([0, 0, 1, 0, ...ascii('ftypheic')])) , null);
 });
@@ -147,7 +152,7 @@ test('wrong upload receipt and timeout remain failures without automatic transfe
 });
 
 test('commit/status bind the original request and preserve verified paths when signing fails', async () => {
-  const h = harness({ transport: async (_, body) => ({ data: body.action === 'publication-upload-commit' ? receipt() : { ...binding, request_id: REQ, state: 'verified', intent: intent(), receipt: receipt() } }) });
+  const h = harness({ transport: async (_, body) => ({ data: body.action === 'publication-upload-commit' ? wireCommit() : { ...binding, request_id: REQ, state: 'verified', object_current: true, intent: intent(), receipt: wireReceipt(), preview: receipt().preview } }) });
   assert.equal(typeof h.api.commitPublicationUpload, 'function');
   const verified = await h.api.commitPublicationUpload(intent()); assert.deepEqual(verified, receipt());
   const status = await h.api.publicationUploadStatus({ ...binding, request_id: REQ, intent_id: INTENT }); assert.deepEqual(status.receipt, verified);
@@ -179,12 +184,59 @@ test('raw upload actions require the selected verified working shop', async () =
 
 test('status rejects contradictory state receipts and changed frozen intent expiry', async () => {
   for (const patch of [
-    { state: 'verified', receipt: { ...receipt(), state: 'consumed' } },
-    { state: 'pending', receipt: receipt() },
-    { state: 'verified', receipt: { ...receipt(), expires_at: '2026-10-17T23:00:00.000Z' } }
+    { state: 'verified', receipt: { ...wireReceipt(), state: 'consumed' } },
+    { state: 'pending', receipt: wireReceipt() },
+    { state: 'verified', receipt: { ...wireReceipt(), expires_at: '2026-10-17T23:00:00.000Z' } }
   ]) {
     const h = harness({ transport: async () => ({ data: { ...binding, request_id: REQ, intent: intent(), receipt: null, ...patch } }) });
     await assert.rejects(h.api.publicationUploadStatus({ ...binding, request_id: REQ }));
+  }
+});
+
+test('a verified status projects its exact separate preview and rejects an incomplete attestation', async () => {
+  const signed = { path: intent().path, signed_url: 'https://project.test/storage/v1/object/sign/voucher-screenshots/' + intent().path + '?token=synthetic-token', error: null };
+  const h = harness({ transport: async () => ({ data: { ...binding, request_id: REQ, state: 'verified', object_current: true, intent: intent(), receipt: wireReceipt(), preview: signed } }) });
+  const result = await h.api.publicationUploadStatus({ ...binding, request_id: REQ });
+  assert.deepEqual(result.receipt.preview, signed);
+  for (const patch of [{ verified_at: null }, { object_id: 'not-uuid' }, { object_version: '' }, { sha256: 'not-a-digest' }]) {
+    const bad = harness({ transport: async () => ({ data: { ...wireCommit(), receipt: { ...wireReceipt(), ...patch } } }) });
+    await assert.rejects(bad.api.commitPublicationUpload(intent()));
+  }
+});
+
+test('status requires strict current-object proof before accepting a verified or consumed receipt', async () => {
+  const signed = { path: intent().path, signed_url: 'https://project.test/storage/v1/object/sign/voucher-screenshots/' + intent().path + '?token=synthetic-token', error: null };
+  for (const state of ['verified', 'consumed']) {
+    const base = { ...binding, request_id: REQ, state, intent: intent(), receipt: wireReceipt(), preview: signed };
+    const changed = harness({ transport: async () => ({ data: { ...base, object_current: false } }) });
+    const result = await changed.api.publicationUploadStatus({ ...binding, request_id: REQ });
+    assert.equal(result.state, 'object_changed'); assert.equal(result.receipt, null);
+    assert.equal(result.intent.path, intent().path);
+    for (const object_current of [undefined, null, 'true', 1]) {
+      const malformed = harness({ transport: async () => ({ data: { ...base, object_current } }) });
+      await assert.rejects(malformed.api.publicationUploadStatus({ ...binding, request_id: REQ }));
+    }
+    const current = harness({ transport: async () => ({ data: { ...base, object_current: true } }) });
+    assert.deepEqual((await current.api.publicationUploadStatus({ ...binding, request_id: REQ })).receipt.preview, signed);
+  }
+});
+
+test('deployed nested commit binds its outer envelope as well as the attestation', async () => {
+  for (const patch of [{ activity_id: APP }, { application_id: ACT }, { shop_id: ACT }, { request_id: OBJECT }, { intent_id: OBJECT }, { state: 'pending' }, { receipt: { ...wireReceipt(), digest_sha1: 'c'.repeat(40) } }]) {
+    const h = harness({ transport: async () => ({ data: { ...wireCommit(), ...patch } }) });
+    await assert.rejects(h.api.commitPublicationUpload(intent()));
+  }
+});
+
+test('deployed omitted status fields normalize to null and historical expired receipts do not become eligible', async () => {
+  for (const state of ['not_found', 'pending', 'uploaded_unverified', 'expired', 'object_changed']) {
+    const data = { ...binding, request_id: REQ, state };
+    if (state !== 'not_found') data.intent = intent();
+    if (['expired', 'object_changed'].includes(state)) data.receipt = wireReceipt();
+    const h = harness({ transport: async () => ({ data }) });
+    const result = await h.api.publicationUploadStatus({ ...binding, request_id: REQ });
+    assert.equal(result.state, state); assert.equal(result.receipt, null);
+    assert.equal(result.intent && result.intent.intent_id, state === 'not_found' ? null : INTENT);
   }
 });
 

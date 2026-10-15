@@ -2,6 +2,34 @@ Base snapshot from GO Lovable commit 0fbc3474e059e1622fc26df7cbccea196c712309, p
 
 # go-mini-api 服务端契约（小程序 / 原生共用）
 
+## Stage2 Evidence Source Checkpoint
+
+Fixed ref `302281df8b2b00962b5b3759578ca8c37d3fa7f8` is the final Round16 GO Lovable source read by main. Lovable reports `0016_go_evidence_upload_native.sql` applied and `go-mini-api` deployed. Main independently recomputed the UTF-8 hashes below; these match the reported files from ref 4385f6ff, but do not prove equality to the deployed bundle bytes. Independent review confirmed two P2 gaps: consumed historical attestations could sign a changed current object, and associated-image reads/detail omitted original activity/shop binding after rebind. Round17 fixed source is `d6c94826445617aa5d41a8f053e107244d0d159d`, confirmed by get_project. Main read its evidence handler and additive 0017 migration; Lovable reports migration application and Edge redeployment. Independent backend closure review remains a separate check from deployment reports.
+
+| File | SHA256 |
+| --- | --- |
+| index.ts | e34eda73a07f04de9d4eae7f2dffce57f2eed0938c5058ebb33b3fdf31435095 |
+| evidence.ts | b2fb3d80cfa7d95c3209112e7de4c5d7ea1aa3f28c8e3f7a67e7d3126db664f2 |
+| activity.ts | a6251904da8bce602b9ae57232fa2926e3396b89470cd07b3c7f50a44481e55e |
+| 0016 migration | 5605c563b2770624c907c0a5c6b5a1c2671c56fbf6cbf5fa3ece3c6eba06c981 |
+
+Round17 independently recomputed UTF-8 hashes: evidence.ts `f2b1e6cf374dba5f7f02ca237496333e1aafb0281b37f46149ffa357647e8ddf`; 0017 migration `2308f89e08e1a99da0ae0b118ec33a19f42f9e6fc9b6ec5a9ecdbbe5ecec43b7`. The SQL status now returns strict boolean `object_current`, independent of the historical consumed state. Only verified/consumed plus strict true can be signed; unverified/missing/nonboolean flags cannot sign. Associated Storage reads and detail attestation now require the intent's original activity and shop to match the current application relation. Rebinding retains old paths but cannot turn them into verified cross-store previews.
+
+The native status adapter requires that strict current-object proof too. Explicit false is projected to local `object_changed` with retained path and no eligible receipt; missing/nonboolean proof rejects. This also prevents the existing consumed-associated page branch from accepting a changed object. A RED-to-GREEN regression and independent 52-test helper/page run cover this local projection; real Storage and device acceptance remain unverified.
+
+The 0016 section supersedes Stage1's no-new-upload restriction, not its authority or original-reference preservation. Capability has strict boolean `can_upload_evidence` and `upload_policy` with 10485760 bytes, 9 pending unassociated new intents, 600-second intent lifetime and jpg/png/webp/gif/heic/heif/avif. Existing screenshot totals are not capped at nine.
+
+- All three upload actions bind `shop_id/activity_id/application_id/request_id`; commit also requires `intent_id`, status optionally checks it. Caller identity, current fresh same-store manage authority and application relation are rechecked.
+- `publication-upload-intent` additionally takes `format/byte_size/digest_sha1` and returns the flat intent metadata, `created_at/expires_at/replay`. Server-issued path is exactly `publish/<application>/go-native-evidence-<intent>.<format>`. Replays do not extend expiry. No upload URL/token is returned.
+- Upload uses caller-JWT `wx.uploadFile` to the existing GO origin's Storage endpoint, with `x-upsert:false` and unchanged original bytes. Transfer success is not verification.
+- Raw commit returns `{...binding,intent_id,state:'verified'|'consumed',receipt:<attestation>}`. The attestation has no nested state or preview; it binds actor, request/resource identities, file fingerprint, object id/version, full SHA256, `verified_at`, expiry and replay. Commit does not issue a preview signature.
+- Raw status returns `{...binding,state,intent?,receipt?,preview?}`. Optional fields may be absent. Preview is separate from receipt. Expired/object_changed states may retain a historical attestation; this does not make that image eligible for a new publication. Status priority is consumed, expired, verified/object_changed, uploaded_unverified, pending.
+- The shared native adapter validates the outer envelope and attestation, flattens only verified/consumed receipts into the already frozen page contract, supplies nullable fields, and independently validates an exact same-path/project preview. Missing signing does not drop the path. Noneligible historical receipts are not exposed as eligible page receipts.
+- `publication-confirm` adds optional `new_evidence_intents` (default empty). Exact original paths remain preservable/removable. New paths require included own verified/unconsumed/unexpired/current-version intents; unused IDs reject. Consumption, CAS and receipt are atomic. No new IDs preserves v2 receipt hashing; new IDs use v3. The old nine-argument RPC was dropped.
+- New source-verified first-send transaction-abort pairs are 422 evidence_invalid/evidence_not_included, 409 evidence_not_verified/evidence_consumed/object_changed, and 410 intent_expired. These never release a request that was already unknown/restored. No automatic mutating retry is authorized.
+
+Trusted attestation is service-only and rechecks the explicit actor's current equivalent gate; service credentials do not read Storage, sign images or read arbitrary business tables. Four restrictive policies narrow only new marker paths, AND existing permissive policies; legacy paths remain unchanged. Platform owner/service bypass remains a trust boundary, not absolute immutability. Actual Storage-service insertion/signing, real concurrency, employee/device acceptance and legacy Web fresh-session compatibility have not been verified.
+
 ## Round15 Activity Stage1 Source Checkpoint
 
 ### Follow-up 0015 (Current Interface)
@@ -42,7 +70,7 @@ Fixed source: `2c1566fecb7a78c02924cb3f349a2340d84f9a5d`. Main read `activity.ts
 4. `erp_scope_fresh_v1()` 为 false（租约 > 60s）→ `403 erp_scope_not_ready`
 5. 之后才判断 action；未知 → `400 unknown_action`（无数据）
 
-所有业务读写用调用者 JWT（RLS）。service_role 只用于 `go_quiz_attempt_create/submit`。
+所有一般业务读写用调用者 JWT（RLS）。service_role 用于 `go_quiz_attempt_create/submit`，Stage2 另仅调用 `go_evidence_attest_v1` 写入可信 Edge 的字节核验事实；不便利读取 Storage 或业务表。
 
 ## 通用类型
 ```ts

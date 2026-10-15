@@ -2,6 +2,17 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
+## 最新检查点：原生登录与上传契约对齐
+
+- 主流程完整 Node 回归 587/587，零失败／跳过／取消；19 原生路由检查通过。官方 wcc 编译 20 WXML、wcsc 编译 21 WXSS，退出 0 且 stderr 为空。此为本轮新运行结果，不以旧计数代替。
+- 原生登录保持验证码默认，新增现有手机号／用户名／邮箱密码登录。候选 token 先 GET Auth user 验证精确 subject，再安装凭据、执行原 ERP 同步；不增加员工或跨店权限。原始密码不落盘，页面隐藏／退出／模式切换清理秘密，scope 失败仅续同步。共享 14 项和页面 18 项测试覆盖；独立只读审查未确认新增 P1/P2。
+- 实际 DevTools 已查看 OTP／密码页、忘记密码原生说明、空账号本地校验；截图为 native-login-otp、native-login-password-current、native-login-forgot-help、native-login-local-validation，均在 evidence。未提交真实密码或短信。密码掩码有源码和 VM 断言，未得到含输入圆点的实际截图，因此不冒充该项 GUI 验收。误命名的帮助弹窗截图已改名。
+- 上传适配器已对齐真实 Round16 嵌套 commit、可省略 status 字段、独立 preview、核验时间及冻结指纹。新增源验证错误对仅允许释放从未未知的首次明确事务失败；恢复的未知请求始终保留原 key。
+- Round17 最终 ref d6c94826445617aa5d41a8f053e107244d0d159d 已 get_project 核对；主流程读取 evidence.ts／0017 并独立复算 SHA256，详见契约。Lovable 报 0017 应用、Edge 部署及 Deno59／SQL11 回滚组通过；这不是主流程独立 SQL 执行或部署包字节验证。
+- 客户端严格 object_current：false 归一 object_changed 且无 eligible receipt；缺失／非布尔拒绝；保留原路径、不自动重传。新增用例先 RED 后 GREEN。独立复核 helper22＋上传页30，共 52/52，无确认新增 P1/P2，未验证真实 Storage。
+- 源码审计另确认旧 quiz 重放缺失 persisted 可导致假保存。已直接协调 Lovable 修复第一次提交事实的持久化和幂等重放，并补跑 R15／R17 SQL；当前任务 umsg_01m50rz6jzf7cvf4zmzt2svmrb 尚未完成，不称已修好。原生保持 persisted 严格 true 门槛。
+- 专用员工 AppID、真实员工／真机、实际上传、学习保存回读及其余功能平替仍有缺口；未公开发布小程序，也未替换 iOS App。
+
 ## 最新检查点：原生活动和申请
 
 - 主流程在最终页面停写后独立运行全套 Node 测试：502/502，0 失败／跳过／取消。活动根页 45 项，申请编辑页 39 项；旧员工页 75 项，保留既有业务预期并增加原生活动路由。

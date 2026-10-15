@@ -12,7 +12,7 @@ function detectImageFormat(buffer) {
   const b = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : ArrayBuffer.isView(buffer) ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength) : null;
   if (!b) return null;
   const ascii = (offset, length) => Array.from(b.slice(offset, offset + length)).map(n => String.fromCharCode(n)).join('');
-  if (b.length >= 3 && b[0] === 255 && b[1] === 216 && b[2] === 255) return 'jpg';
+  if (b.length >= 4 && b[0] === 255 && b[1] === 216 && b[2] === 255) return 'jpg';
   if (b.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((n, i) => b[i] === n)) return 'png';
   if (b.length >= 6 && ['GIF87a', 'GIF89a'].includes(ascii(0, 6))) return 'gif';
   if (b.length >= 16 && ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP' && ['VP8 ', 'VP8L', 'VP8X'].includes(ascii(12, 4))) return 'webp';
@@ -21,9 +21,12 @@ function detectImageFormat(buffer) {
   if (size < 16 || size > b.length || size % 4) return null;
   const brands = [ascii(8, 4)];
   for (let i = 16; i < size; i += 4) brands.push(ascii(i, 4));
-  if (brands.some(v => ['avif', 'avis'].includes(v))) return 'avif';
-  if (brands.some(v => ['heic', 'heix', 'hevc', 'hevx'].includes(v))) return 'heic';
-  return brands.some(v => ['mif1', 'msf1'].includes(v)) ? 'heif' : null;
+  const avif = v => ['avif', 'avis'].includes(v), heic = v => ['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx'].includes(v);
+  const hasAvif = brands.some(avif), hasHeic = brands.some(heic), major = brands[0];
+  if (avif(major)) return hasHeic ? null : 'avif';
+  if (heic(major)) return hasAvif ? null : 'heic';
+  if (!['mif1', 'msf1'].includes(major) || (hasAvif && hasHeic)) return null;
+  return hasAvif ? 'avif' : hasHeic ? 'heic' : 'heif';
 }
 
 function createPublicationUploads({ wx, config, session, transport, snapshot, settled, ensureFresh }) {
@@ -62,6 +65,10 @@ function createPublicationUploads({ wx, config, session, transport, snapshot, se
     const value = intent(row, expected);
     if (!['verified', 'consumed'].includes(row.state) || !uuid(row.object_id) || typeof row.object_version !== 'string' || !row.object_version || row.object_version.length > 200 || typeof row.sha256 !== 'string' || !SHA256.test(row.sha256) || row.expires_at !== expected.expires_at) throw failure('服务器尚未确认该原图的字节与归属');
     return Object.assign(value, { object_id: row.object_id, object_version: row.object_version, sha256: row.sha256, state: row.state, preview: preview(row.preview, value.path) });
+  }
+  function attestation(row, state, signedPreview, expected) {
+    if (!row || !iso(row.verified_at) || (row.state !== undefined && row.state !== state)) throw failure('原图核验回执缺失或状态不一致');
+    return verified(Object.assign({}, row, { state, preview: signedPreview }), expected);
   }
   async function request(action, params, before, options) {
     await ready(before, options);
@@ -129,7 +136,9 @@ function createPublicationUploads({ wx, config, session, transport, snapshot, se
   async function commitPublicationUpload(frozen, options) {
     const before = snapshot(), value = intent(frozen, frozen);
     const params = { shop_id: value.shop_id, activity_id: value.activity_id, application_id: value.application_id, request_id: value.request_id, intent_id: value.intent_id };
-    return verified(await request('publication-upload-commit', params, before, options), value);
+    const row = await request('publication-upload-commit', params, before, options);
+    if (!row || !Object.keys(params).every(key => row[key] === params[key]) || !['verified', 'consumed'].includes(row.state)) throw failure('原图提交回执与冻结请求不一致');
+    return attestation(row.receipt, row.state, row.preview, value);
   }
   async function publicationUploadStatus(params, options) {
     const before = snapshot(), scope = selected(params);
@@ -141,9 +150,12 @@ function createPublicationUploads({ wx, config, session, transport, snapshot, se
     const result = Object.assign({}, scope, { request_id: query.request_id, state: row.state, intent: null, receipt: null });
     if (row.state === 'not_found') { if (row.intent || row.receipt) throw failure('原图核对结果不完整'); return result; }
     result.intent = intent(row.intent, query);
-    if (row.receipt) result.receipt = verified(row.receipt, result.intent);
-    if (result.receipt && result.receipt.state !== row.state) throw failure('原图核对状态与核验回执不一致');
-    if (['verified', 'consumed'].includes(row.state) && !result.receipt) throw failure('原图核验回执缺失，请继续核对原请求');
+    if (['verified', 'consumed'].includes(row.state)) {
+      if (typeof row.object_current !== 'boolean') throw failure('服务器尚未确认当前存储对象，请重新核对');
+      if (row.object_current) result.receipt = attestation(row.receipt, row.state, row.preview, result.intent);
+      else result.state = 'object_changed';
+    }
+    else if (['pending', 'uploaded_unverified'].includes(row.state) && row.receipt) throw failure('原图核对状态与核验回执不一致');
     return result;
   }
   return { inspectPublicationFile, createPublicationUpload, transferPublicationFile, commitPublicationUpload, publicationUploadStatus };

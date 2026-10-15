@@ -5,7 +5,7 @@ Native WeChat WXML/WXSS/JavaScript initial implementation. It does not embed the
 ## Current Delivery State
 
 - Five approved native tabs: 工作台 / 学习 / 识物 / 消息 / 我的.
-- Nineteen native routes, including phone login, month schedule, knowledge detail, server-graded quiz, sales, assistant, video generation, asset delivery, staff chat, community detail, customer-code voucher lookup/redemption and native activity/application pages.
+- Nineteen native routes, including OTP/account-password login, month schedule, knowledge detail, server-graded quiz, sales, assistant, video generation, asset delivery, staff chat, community detail, customer-code voucher lookup/redemption and native activity/application pages.
 - Source and interaction tests run locally; the five tabs and schedule have been inspected in the official WeChat DevTools simulator.
 - Real requests use the existing GO identity, fresh ERP scope and original backend records. Preview fixtures are separate, explicitly labeled, development-only and never an API-error fallback.
 - This is **not a published or real-device-accepted mini-program**. The project currently uses `touristappid`; a dedicated BOOMER GO employee AppID, domain configuration, privacy declarations and a genuine authenticated acceptance session are still required.
@@ -15,7 +15,7 @@ Native WeChat WXML/WXSS/JavaScript initial implementation. It does not embed the
 
 Import this directory in the official WeChat DevTools. The project configuration points to `miniprogram/`. Select the native initial-preview compilation condition or use the clearly labeled preview button on the native login page. All preview employee/store/shift values are synthetic.
 
-The real login condition uses existing phone OTP and ERP scope synchronization; it does not use a test password or bypass ERP authorization. Do not repeatedly consume an OTP after an uncertain network response. A retained authenticated session can retry scope synchronization without requesting another SMS.
+The real login condition defaults to existing phone OTP and also supports the existing employee phone/username/email password entry. Both remotely validate Auth identity and require ERP scope synchronization; neither uses a test password or bypasses ERP authorization. Do not repeatedly consume an OTP after an uncertain network response. A retained authenticated session can retry scope synchronization without requesting another SMS or resending its password. Passwords are never persisted.
 
 ## Configure And Check
 
@@ -31,7 +31,7 @@ Current API origins are the existing GO Lovable Cloud project and `https://erp.b
 
 ## Authorization And Data
 
-- A verified OTP session must complete `erp-scope-sync` with matching identity, a renewed lease, stable scope version and fresh shop context.
+- A verified Auth session must complete `erp-scope-sync` with matching identity, a renewed lease, stable scope version and fresh shop context.
 - Store employees see only the backend-authorized working store; only verified headquarters scope permits authorized store selection.
 - GO shop IDs are mapped through ERP `/session` to ERP location IDs. They are never guessed from names or passed as ERP IDs.
 - Knowledge, schedules, notifications and user records come from their existing tables. The additive `go-mini-api` is coordinated directly with Lovable.
@@ -41,7 +41,7 @@ Current API origins are the existing GO Lovable Cloud project and `https://erp.b
 - Marketing uses existing script and video jobs. Exiting a page does not issue a cancellation. Cover, video and frozen publishing copy have separate native controls.
 - Voucher templates and customer claims are distinct. The native redemption entry scans only to query; mutation requires a separate confirmation and a matching server receipt. An uncertain request is reconciled by its original key, never silently replaced or automatically resent.
 - Schedule viewing distinguishes explicit rest from missing data. Coworker views require the server's existing permission and exact selected store; this does not grant schedule editing authority.
-- Activity applications require existing same-store management authority. Publication confirmation is separate from approval, voucher issuance, redemption and social publishing. Stage1 retains/removes original references; the Stage2 client now adds original-file selection/upload/status recovery against a frozen contract, but backend implementation and fixed-source alignment are still pending. This is not a verified live employee uploader. Fixed-source review and backend deployment reports do not replace real employee acceptance.
+- Activity applications require existing same-store management authority. Publication confirmation is separate from approval, voucher issuance, redemption and social publishing. Stage2 adds original-file selection/upload/status recovery, now aligned to fixed Round16/17 source. Lovable reports the additive migrations and Edge deployed. Strict current-object proof and original activity/shop binding preserve historical paths without signing changed or rebound objects. This is not a verified live employee uploader; fixed-source review and deployment reports do not replace real employee acceptance.
 
 ## Verification And Remaining Acceptance
 

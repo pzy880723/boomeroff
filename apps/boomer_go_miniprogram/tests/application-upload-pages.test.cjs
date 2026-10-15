@@ -334,3 +334,39 @@ test('unknown uploads cannot be omitted in conflict, including a terminal record
   assert.equal(h.page.data.uploads[0].state, 'unknown'); assert.equal(h.page.data.uploads[0].canRemove, false);
   const before = h.calls.length; h.page.removeUpload(event(0)); assert.equal(h.page.data.uploads[0].included, true); assert.equal(h.calls.length, before);
 });
+
+test('first confirmed upload expiry abort releases only publication intent and allows explicit status/omission/save recovery', async () => {
+  let i, published, writes = 0;
+  const h = await loaded({
+    createPublicationUpload: async (b, f, r) => (i = intent(b, f, r)),
+    publicationUploadStatus: async p => ({ shop_id: p.shop_id, activity_id: p.activity_id, application_id: p.application_id, request_id: p.request_id, state: 'expired', intent: i, receipt: null }),
+    action: async (a, p) => {
+      if (a === 'activity-capabilities') return caps();
+      if (a === 'publication-confirm') {
+        if (++writes === 1) throw Object.assign(Error('intent expired'), { status: 410, code: 'intent_expired' });
+        published = p;
+        return { request_id: p.request_id, shop_id: p.shop_id, application_id: APP, activity_id: ACT, target_confirmed: true, confirmed_at: NOW, confirmed_by: USER, version: V2, replay: false };
+      }
+      const d = detail();
+      if (published) { d.version = V2; d.application.publish = { confirmed: true, confirmed_at: NOW, confirmed_by: USER, note: published.note, url: published.url, screenshots: published.screenshots.map(path => ({ path, signed_url: null, error: 'sign_failed' })) }; }
+      return d;
+    }
+  });
+  h.page.onNote(ev('原草稿未丢失')); h.page.onUrl(ev('https://example.test/kept'));
+  await h.select(); await h.page.uploadOriginal(event(0)); assert.equal(h.page.data.uploads[0].state, 'ready');
+  const uploadRam = JSON.stringify(h.app._applicationUploads); await h.page.confirmPublish();
+  const first = h.methods('action').find(c => c.args[0] === 'publication-confirm').args[1];
+  assert.equal(Object.keys(h.app._applicationPending).length, 0); assert.equal(h.page.data.pending, false);
+  assert.equal(JSON.stringify(h.app._applicationUploads), uploadRam, 'publication abort cannot erase the upload intent');
+  assert.equal(h.page.data.note, '原草稿未丢失'); assert.equal(h.page.data.verified, false); assert.equal(h.page.data.canSubmit, false);
+  const beforeFresh = h.calls.length; await h.page.checkUpload(event(0)); await h.page.confirmPublish(); assert.equal(h.calls.length, beforeFresh);
+  await h.page.refresh(); assert.equal(h.methods('publicationUploadStatus').length, 0); assert.equal(writes, 1);
+  await h.page.checkUpload(event(0)); assert.equal(h.page.data.uploads[0].state, 'blocked'); assert.equal(h.page.data.canSubmit, false);
+  const beforeOmit = h.calls.length; h.page.removeUpload(event(0)); assert.equal(h.calls.length, beforeOmit);
+  assert.equal(h.page.data.canSubmit, true); assert.equal(h.page.data.note, '原草稿未丢失'); assert.equal(h.page.data.url, 'https://example.test/kept');
+  assert.equal(h.page.data.images.length, 1); assert.equal(writes, 1);
+  await h.page.confirmPublish();
+  assert.equal(writes, 2); assert.notEqual(published.request_id, first.request_id); assert.equal(published.new_evidence_intents, undefined);
+  assert.deepEqual(Array.from(published.screenshots), [ORIGINAL]); assert.equal(h.page.data.saved, true);
+  for (const name of ['createPublicationUpload', 'transferPublicationFile', 'commitPublicationUpload', 'publicationUploadStatus']) assert.equal(h.methods(name).length, 1);
+});

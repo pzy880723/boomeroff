@@ -9,7 +9,7 @@ const APP = '00000000-0000-4000-8000-000000000032', ACT = '00000000-0000-4000-80
 const V1 = '1'.repeat(64), V2 = '2'.repeat(64), NOW = '2026-10-16T09:20:00+08:00';
 const QUERY = { id: APP, activityId: ACT };
 const PATH = 'publish/' + APP + '/original.jpg';
-const ABORT_PAIRS = [[400, 'invalid_params'], [404, 'not_found'], [409, 'version_conflict'], [422, 'screenshot_not_allowed'], [422, 'note_too_long'], [422, 'invalid_url']];
+const ABORT_PAIRS = [[400, 'invalid_params'], [404, 'not_found'], [409, 'version_conflict'], [422, 'screenshot_not_allowed'], [422, 'note_too_long'], [422, 'invalid_url'], [422, 'evidence_invalid'], [422, 'evidence_not_included'], [409, 'evidence_not_verified'], [409, 'evidence_consumed'], [409, 'object_changed'], [410, 'intent_expired']];
 const caps = extra => ({ shop_id: SHOP, can_manage: true, can_confirm_publish: true, can_upload_evidence: false, ...extra });
 const detail = extra => ({ shop_id: SHOP, application: { id: APP, activity_id: ACT, status: 'approved', created_at: NOW, reviewed_at: null, applicant_name_masked: '顾*', applicant_phone_tail: '1234', applicant_name: 'RAW_PRIVATE_NAME', applicant_phone: '13887654321', profile: { name: 'RAW_PROFILE' }, form_data: { unknown: 'RAW_UNKNOWN', __profile_check: 'RAW_CHECK' }, voucher_claim_id: null,
   publish: { confirmed: false, confirmed_at: null, confirmed_by: null, note: '原备注', url: 'https://example.test/post', screenshots: [{ path: PATH, signed_url: null, error: 'sign_failed' }] },
@@ -279,8 +279,8 @@ test('conflicting request remains blocked after RAM recovery and only source-ver
   await next.start(); await next.page.reconcile(); await next.page.retrySame();
   assert.equal(next.page.data.canRetrySame, false); assert.equal(next.calls.filter(c => c.action === 'publication-confirm').length, 0);
   for (const [status, code] of ABORT_PAIRS) {
-    assert.equal(model.transactionAborted({ status, code }), true, '0015 source-verified first-abort pair');
-    for (const wrong of [400, 404, 409, 422, 401, 403, 500, String(status)]) if (wrong !== status) assert.equal(model.transactionAborted({ status: wrong, code }), false);
+    assert.equal(model.transactionAborted({ status, code }), true, '0015/0016 source-verified first publication-abort pair');
+    for (const wrong of [400, 404, 409, 410, 422, 401, 403, 500, String(status)]) if (wrong !== status) assert.equal(model.transactionAborted({ status: wrong, code }), false);
     assert.equal(model.transactionAborted({ status, code: code.toUpperCase() }), false);
   }
   for (const error of [null, {}, Error('timeout'), { state: 'not_found' }, { status: 400, code: 'shop_required' }, { status: 409, code: 'request_id_conflict' }, { status: 500, code: 'db_error' }, { status: 500, code: 'internal' }]) assert.equal(model.transactionAborted(error), false);

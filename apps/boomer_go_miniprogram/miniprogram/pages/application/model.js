@@ -77,7 +77,7 @@ function readbackMatches(server, confirmed) {
   return server.version === r.version && p.confirmed === body.target_confirmed && p.confirmed_at === r.confirmed_at && p.confirmed_by === r.confirmed_by && (p.note || '').trim() === (body.note || '') && (p.url || '').trim() === (body.url || '') && JSON.stringify(orderedPaths(p.screenshots)) === JSON.stringify(orderedPaths(body.screenshots));
 }
 function transactionAborted(error) {
-  return !!(error && ((error.status === 400 && error.code === 'invalid_params') || (error.status === 404 && error.code === 'not_found') || (error.status === 409 && error.code === 'version_conflict') || (error.status === 422 && ['screenshot_not_allowed', 'note_too_long', 'invalid_url'].includes(error.code))));
+  return !!(error && ((error.status === 400 && error.code === 'invalid_params') || (error.status === 404 && error.code === 'not_found') || (error.status === 409 && ['version_conflict', 'evidence_not_verified', 'evidence_consumed', 'object_changed'].includes(error.code)) || (error.status === 422 && ['screenshot_not_allowed', 'note_too_long', 'invalid_url', 'evidence_invalid', 'evidence_not_included'].includes(error.code)) || (error.status === 410 && error.code === 'intent_expired')));
 }
 function requestId() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const n = Math.floor(Math.random() * 16); return (c === 'x' ? n : (n & 3) | 8).toString(16); }); }
 module.exports = { UUID, VERSION, timestamp, time, scope, image, imageView, parseDetail, draftFrom, normalizeDraft, receiptValid, readbackMatches, transactionAborted, requestId };

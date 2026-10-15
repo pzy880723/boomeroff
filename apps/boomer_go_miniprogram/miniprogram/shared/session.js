@@ -1,3 +1,4 @@
+const { loginIdentity } = require('./login-identity');
 const KEY = 'boomer-go-mini.session.v1';
 function jwtPayload(token, wx) {
   const encoded = String(token).split('.')[1];
@@ -102,6 +103,35 @@ function createSession({ wx, request, onClear = () => {} }) {
       if (!response.ok || !issued || !issued.user || issued.access_token !== response.access_token || issued.refresh_token !== response.refresh_token) throw new Error('登录会话不完整，请重新获取验证码');
       validToken(issued); persist(issued);
       return synchronize();
+      }).finally(() => { if (signingIn === login) signingIn = null; });
+      signingIn = login;
+      return login;
+    },
+    signInWithPassword(account, password) {
+      let identity;
+      try {
+        identity = loginIdentity(account);
+        if (typeof password !== 'string' || password.length < 6 || password.length > 72) throw new Error('密码需为 6–72 位，请检查输入');
+      } catch (error) { return Promise.reject(error); }
+      if (signingIn) return Promise.reject(new Error('登录正在进行，请稍候'));
+      const attempt = ++generation;
+      revision++; current = null; credentials = null; wx.removeStorageSync(KEY); onClear();
+      const login = Promise.resolve().then(async () => {
+        if (attempt !== generation) throw new Error('登录已退出');
+        const response = await request(identity.phone ? 'phone-password-login' : 'auth:password', Object.assign({}, identity, { password }), { public: true });
+        if (attempt !== generation) throw new Error('登录已退出');
+        if (!response || (identity.phone && response.ok !== true) || typeof response.access_token !== 'string' || !response.access_token || typeof response.refresh_token !== 'string' || !response.refresh_token.trim()) throw new Error('登录会话不完整，请重新登录');
+        const candidate = { access_token: response.access_token, refresh_token: response.refresh_token };
+        const payload = jwtPayload(candidate.access_token, wx);
+        if (typeof payload.sub !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.sub) || !Number.isFinite(payload.exp) || payload.exp * 1000 <= Date.now()) throw new Error('登录会话已失效，请重新登录');
+        const user = await request('auth:user', undefined, { accessToken: candidate.access_token });
+        if (attempt !== generation) throw new Error('登录已退出');
+        if (!user || typeof user.id !== 'string' || user.id !== payload.sub) throw new Error('登录身份核验失败，请重新登录');
+        const accepted = Object.assign(candidate, { user: { id: user.id } });
+        validToken(accepted); persist(accepted);
+        const result = await synchronize();
+        if (attempt !== generation || !result) throw new Error('登录已退出');
+        return result;
       }).finally(() => { if (signingIn === login) signingIn = null; });
       signingIn = login;
       return login;
