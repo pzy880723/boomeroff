@@ -1,0 +1,35 @@
+<view class="page asset-page">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 不代表真实素材生成、保存或发布</view>
+  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary" bindtap="retry" disabled="{{loading}}">重试加载</button></view>
+  <view wx:if="{{notice}}" class="notice">{{notice}}</view>
+  <view wx:if="{{loading}}" class="muted">正在与服务端确认…</view>
+  <block wx:if="{{asset}}">
+    <view class="section-title">{{asset.title}}</view><view class="muted">{{asset.statusLabel}} · 只领取服务端已保存的原素材</view>
+    <view wx:if="{{asset.sourceError}}" class="error">{{asset.sourceError}}</view>
+    <view class="card media-card">
+      <video wx:if="{{asset.videoUrl}}" src="{{asset.videoUrl}}" poster="{{asset.coverUrl}}" controls class="asset-video" />
+      <image wx:if="{{asset.imageUrl}}" src="{{asset.imageUrl}}" mode="widthFix" class="asset-image" />
+      <view wx:if="{{!asset.ready && !asset.sourceError && asset.kind !== 'copy'}}" class="empty">当前尚无可领取的完整文件，请返回视频任务刷新进度。</view>
+      <button wx:if="{{asset.ready}}" class="button" bindtap="saveVideo" disabled="{{loading}}">{{asset.kind === 'video' ? '保存原视频到相册' : '保存原图片到相册'}}</button>
+    </view>
+    <view class="card"><view class="section-title">视频封面</view><view wx:if="{{asset.coverError}}" class="error">{{asset.coverError}}</view><image wx:if="{{asset.coverUrl}}" src="{{asset.coverUrl}}" mode="widthFix" class="asset-cover" /><view wx:elif="{{!asset.coverError}}" class="empty">服务端尚未提供独立封面</view><button wx:if="{{asset.coverUrl}}" class="button-secondary" bindtap="saveCover" disabled="{{loading}}">保存独立封面</button></view>
+    <view class="card"><view class="section-title">已保存文案</view><text wx:if="{{asset.copyText}}" selectable class="copy-text">{{asset.copyText}}</text><view wx:else class="empty">暂无已保存文案，不会自动编造</view><button wx:if="{{asset.copyText}}" class="button-secondary" bindtap="copyText" disabled="{{loading}}">复制完整文案</button></view>
+    <view wx:if="{{asset.kind === 'video' && asset.ready && !publishJobId}}" class="card">
+      <view class="section-title">提交门店发布任务</view><view class="muted">手动确认文案和账号，提交队列不等于平台发布成功。</view>
+      <view class="field-label">发布标题</view><input class="field" value="{{publishTitle}}" bindinput="publishInput" data-field="publishTitle" maxlength="200" disabled="{{loading}}" />
+      <view class="field-label">发布正文</view><textarea class="field" value="{{publishBody}}" bindinput="publishInput" data-field="publishBody" maxlength="5000" auto-height disabled="{{loading}}" />
+      <view class="field-label">话题，以空格分隔</view><input class="field" value="{{publishTags}}" bindinput="publishInput" data-field="publishTags" maxlength="500" disabled="{{loading}}" />
+      <button class="button-secondary" bindtap="loadAccounts" disabled="{{loading}}">{{accountsLoaded ? '刷新在线账号' : '加载门店发布账号'}}</button>
+      <view wx:if="{{accountsLoaded && !accounts.length}}" class="empty">当前门店没有已配置的发布账号</view>
+      <button wx:for="{{accounts}}" wx:key="id" class="account-option {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="selectAccount" disabled="{{loading || !item.eligible}}"><view>{{item.name}} · {{item.platform}}</view><view class="muted">{{item.eligible ? (item.selected ? '已选择' : '在线，可选择') : '离线或登录失效，不能发布'}}</view></button>
+      <button class="button" bindtap="publish" disabled="{{loading || !selectedAccountIds.length || !publishTitle}}">确认并提交发布队列</button>
+    </view>
+  </block>
+  <view wx:if="{{publishJobId}}" class="card publish-status">
+    <view class="row"><view class="section-title">发布任务</view><button class="button-secondary" bindtap="refreshPublish" disabled="{{loading}}">刷新</button></view>
+    <view class="muted">{{publishJobId}}</view><view wx:if="{{publishJob}}">服务端状态：{{publishJob.status}}</view><view class="muted">以平台目标的服务端回执为准，不把入队或重试视为发布成功。</view>
+    <view wx:for="{{targets}}" wx:key="id" class="publish-target"><view>{{item.name || item.platform}}</view><view class="muted">{{item.status}} · {{item.progress}}%</view><view wx:if="{{item.error}}" class="error">{{item.error}}</view><button wx:if="{{item.status === 'failed'}}" class="button-secondary" bindtap="retryTarget" data-id="{{item.id}}" disabled="{{loading}}">重试该失败目标</button></view>
+    <button wx:if="{{publishJob.status === 'scheduled' || publishJob.status === 'queued'}}" class="button-secondary" bindtap="cancelPublish" disabled="{{loading}}">取消未派单任务</button>
+  </view>
+  <view wx:if="{{loaded && !asset && !publishJobId}}" class="empty">素材不存在或当前账号无权访问</view>
+</view>

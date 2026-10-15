@@ -1,0 +1,46 @@
+.workbench-page { padding-bottom: 180rpx; }
+.top-line { margin: 0 0 12rpx; flex-wrap: wrap; }
+.eyebrow { color: #eb0029; font-size: 21rpx; letter-spacing: 2rpx; }
+.date { font-size: 23rpx; }
+.greeting { font-size: 40rpx; font-weight: 700; line-height: 1.3; }
+.shop-line { justify-content: flex-start; margin: 8rpx 0 22rpx; }
+.shop-dot { width: 12rpx; height: 12rpx; border-radius: 50%; background: #eb0029; }
+.shop-picker { flex: 1; min-width: 0; }
+.shop-selector { display: flex; align-items: center; min-height: 88rpx; font-size: 32rpx; }
+.shop-current { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.shop-switch { color: #315acb; font-size: 26rpx; margin-left: 16rpx; }
+.shift-card { padding: 14rpx 26rpx 24rpx; }
+.card-header .section-title { margin: 0; font-size: 30rpx; }
+.text-link { background: transparent; color: #315acb; font-size: 25rpx; padding: 18rpx 0; min-height: 88rpx; text-align: left; margin: 0; display: flex; align-items: center; }
+.shift-rail { border-left: 5rpx solid #eb0029; padding-left: 20rpx; margin-top: 0; }
+.shift-summary { justify-content: flex-start; flex-wrap: wrap; }
+.shift-name { font-size: 30rpx; font-weight: 600; }
+.shift-time { font-size: 34rpx; font-weight: 600; margin: 0; }
+.shift-note { margin-top: 14rpx; line-height: 1.7; }
+.compact-empty { padding: 0 0 8rpx; text-align: left; line-height: 1.7; }
+.sales-card { background: #fff; padding: 20rpx 26rpx; }
+.sales-label { font-size: 26rpx; }
+.display-badge { background: #fff0f3; color: #eb0029; font-size: 22rpx; padding: 6rpx 14rpx; border-radius: 10rpx; }
+.sales-value { font-size: 40rpx; color: #202125; font-weight: 600; line-height: 1.4; margin: 0; }
+.sales-value.missing-value { color: #737780; font-size: 30rpx; font-weight: 400; }
+.sales-freshness { margin-top: 0; font-size: 22rpx; }
+.sales-links { margin: 0; }
+.sales-summary { min-height: 88rpx; }
+.compact-sales-error { margin-top: -8rpx; }
+.error-summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 24rpx; }
+.compact-notice { font-size: 24rpx; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.section-heading .section-title { font-size: 32rpx; margin: 14rpx 0; }
+.agenda-row { display: flex; align-items: flex-start; padding: 22rpx 26rpx; margin-bottom: 16rpx; }
+.agenda-dot { width: 14rpx; height: 14rpx; margin: 16rpx 22rpx 0 0; background: #eb0029; border-radius: 50%; }
+.agenda-main { flex: 1; min-width: 0; }
+.agenda-title { font-size: 30rpx; font-weight: 600; line-height: 1.6; margin-bottom: 10rpx; }
+.agenda-progress { color: #315acb; font-size: 24rpx; margin-top: 12rpx; }
+.agenda-arrow { color: #737780; font-size: 32rpx; padding: 6rpx 0 0 16rpx; }
+.tools-grid { display: flex; flex-wrap: wrap; margin: 0 -8rpx; }
+.tool-card { width: 25%; padding: 24rpx 6rpx; text-align: center; min-height: 164rpx; }
+.tool-icon { width: 80rpx; height: 80rpx; line-height: 80rpx; font-size: 30rpx; font-weight: 600; background: #fff; color: #eb0029; border: 1rpx solid #edeef2; border-radius: 22rpx; margin: 0 auto 16rpx; }
+.tool-label { font-size: 24rpx; line-height: 1.5; }
+.freshness { margin-top: 30rpx; text-align: center; font-size: 22rpx; }
+.empty .muted { margin-top: 16rpx; }
+.pressed { opacity: .75; }
+.loading-state { padding: 48rpx; text-align: center; color: #737780; }

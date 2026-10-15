@@ -1,0 +1,24 @@
+.recognition-page { padding-bottom: 190rpx; }
+.recognition-header { margin-bottom: 24rpx; }
+.viewfinder { height: 650rpx; position: relative; overflow: hidden; background: #202125; border-radius: 28rpx; }
+.camera { width: 100%; height: 100%; }
+.camera-caption { position: absolute; bottom: 20rpx; left: 20rpx; right: 20rpx; color: #fff; background: rgba(0,0,0,.6); border-radius: 16rpx; padding: 14rpx; font-size: 24rpx; text-align: center; }
+.camera-message { position: absolute; top: 35%; left: 30rpx; right: 30rpx; color: #fff; text-align: center; line-height: 1.7; }
+.capture-controls { justify-content: space-between; gap: 16rpx; padding: 22rpx 0; }
+.capture-controls button { margin: 0; }
+.capture-count { min-width: 140rpx; text-align: center; }
+.shutter { border: 5rpx solid #eb0029; border-radius: 100%; width: 120rpx; height: 120rpx; padding: 10rpx; background: #fff; display: flex; align-items: center; justify-content: center; }
+.shutter-core { border-radius: 100%; background: #eb0029; width: 86rpx; height: 86rpx; }
+.shutter[disabled] { opacity: .45; }
+.photo-strip { white-space: nowrap; margin: 8rpx 0 24rpx; }
+.photo-tile { display: inline-block; width: 140rpx; margin-right: 16rpx; }
+.photo-tile image { display: block; width: 140rpx; height: 140rpx; border-radius: 16rpx; }
+.remove-photo { width: 140rpx; min-height: 88rpx; padding: 0; font-size: 24rpx; background: transparent; color: #737780; }
+.remove-photo::after, .shutter::after { border: 0; }
+.hint-input { min-height: 150rpx; width: 100%; padding: 18rpx 0; box-sizing: border-box; }
+.result-card { line-height: 1.8; }
+.result-section { margin: 28rpx 0; white-space: pre-wrap; }
+.facts { margin-top: 24rpx; }
+.facts view { display: flex; gap: 24rpx; padding: 12rpx 0; border-bottom: 1rpx solid #f0f1f3; }
+.facts .muted { flex-shrink: 0; width: 90rpx; }
+.selling-point { margin: 12rpx 0; }

@@ -1,0 +1,22 @@
+<view class="page sales-page">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成营业额与榜单，不代表真实业绩</view>
+  <view class="eyebrow">BOOMER / SALES</view><view class="page-title">营业数据<text class="display-badge">只读</text></view><view class="muted shop-name">{{shopName}}</view>
+  <view class="notice">营业额与榜单仅用于信息展示，不计入知识考试、员工考核、处罚或销售目标评定。</view>
+  <view class="row period-row"><button wx:for="{{periods}}" wx:key="id" class="period {{period === item.id ? 'selected' : ''}}" data-period="{{item.id}}" bindtap="onPeriod">{{item.label}}</button></view>
+  <view class="row type-tabs"><button class="type-tab {{kind === 'summary' ? 'active' : ''}}" data-kind="summary" bindtap="onKind">数据概览</button><button class="type-tab {{kind === 'leaderboard' ? 'active' : ''}}" data-kind="leaderboard" bindtap="onKind">业绩榜单</button></view>
+  <view wx:if="{{loading}}" class="card loading-state">正在同步 ERP 数据…</view>
+  <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重新同步</button></view>
+  <block wx:if="{{kind === 'summary'}}">
+    <view wx:if="{{salesError}}" class="card error"><text>{{salesError}}</text><button class="button-secondary" bindtap="retry">重试营业数据</button></view>
+    <view wx:if="{{salesNotice}}" class="notice source-notice">{{salesNotice}}</view>
+    <view wx:if="{{!loading && !error && !metrics.length}}" class="card empty">暂无已同步营业数据</view>
+    <view class="metrics-grid"><view wx:for="{{metrics}}" wx:key="label" class="card metric"><view class="muted metric-label">{{item.label}}</view><view class="metric-value">{{item.value}}</view></view></view><view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view>
+  </block>
+  <block wx:if="{{kind === 'leaderboard'}}">
+    <view wx:if="{{leaderboardError}}" class="card error"><text>{{leaderboardError}}</text><button class="button-secondary" bindtap="retry">重试榜单</button></view>
+    <view wx:if="{{leaderboardNotice}}" class="notice source-notice">{{leaderboardNotice}}</view>
+    <view wx:if="{{!loading && !error && !leaderboardError && !items.length}}" class="card empty">暂无可展示榜单<view class="muted">没有排名不代表营业额为零。</view></view>
+    <view wx:if="{{items.length}}" class="card leaderboard"><view class="row leaderboard-head"><text class="rank">排名</text><text class="staff-name">员工 / 门店</text><text>付款毛额</text></view><view wx:for="{{items}}" wx:key="id" class="row leaderboard-row"><text class="rank rank-value">{{item.rank}}</text><text class="staff-name">{{item.name}}</text><text class="revenue">{{item.value}}</text></view></view><view wx:if="{{leaderboardFreshness}}" class="muted freshness">{{leaderboardFreshness}}</view>
+  </block>
+  <view class="muted data-note">数值缺失显示“暂无数据”，不会按零处理。范围、归属及更新时间以 ERP 服务器为准。</view>
+</view>

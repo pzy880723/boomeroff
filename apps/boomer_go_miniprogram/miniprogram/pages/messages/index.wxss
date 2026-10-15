@@ -1,0 +1,26 @@
+.messages-page { padding-bottom: 180rpx; }
+.eyebrow { margin: 12rpx 0 16rpx; font-size: 22rpx; letter-spacing: 3rpx; color: #eb0029; }
+.page-title { font-size: 52rpx; font-weight: 700; }
+.unread-count { color: #eb0029; font-size: 26rpx; }
+.intro { margin-top: 14rpx; margin-bottom: 32rpx; }
+.controls { margin-bottom: 28rpx; }
+.filters { justify-content: flex-start; }
+.filter { min-height: 88rpx; line-height: 88rpx; padding: 0 28rpx; font-size: 28rpx; background: #fff; color: #737780; border-radius: 20rpx; }
+.filter.selected { color: #eb0029; background: #ffedf0; font-weight: 600; }
+.mark-all { background: transparent; color: #315acb; font-size: 26rpx; min-height: 88rpx; line-height: 88rpx; padding: 0; }
+.message-card { padding: 0; overflow: hidden; }
+.unread-card { border-left: 6rpx solid #eb0029; }
+.message-main { padding: 28rpx 28rpx 12rpx; }
+.message-category { font-size: 24rpx; color: #737780; }
+.unread-dot { width: 14rpx; height: 14rpx; border-radius: 50%; background: #eb0029; }
+.message-title { margin-top: 16rpx; margin-bottom: 12rpx; font-size: 32rpx; }
+.message-body { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.8; }
+.message-time { margin-top: 20rpx; font-size: 23rpx; }
+.message-actions { padding: 0 28rpx; border-top: 1rpx solid #f1f2f5; }
+.read-content, .read-button { min-height: 88rpx; line-height: 88rpx; font-size: 26rpx; background: transparent; padding: 0; margin: 0; color: #315acb; }
+.read-button { color: #737780; }
+.empty-symbol { width: 96rpx; line-height: 96rpx; background: #ffedf0; color: #eb0029; border-radius: 24rpx; margin: 0 auto 24rpx; font-size: 36rpx; }
+.empty .muted { margin-top: 16rpx; }
+.freshness { text-align: center; font-size: 22rpx; margin-top: 30rpx; }
+.pressed { opacity: .75; }
+.loading-state { padding: 48rpx; text-align: center; color: #737780; }

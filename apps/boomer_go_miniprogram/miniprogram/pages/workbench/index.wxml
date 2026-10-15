@@ -1,0 +1,20 @@
+<view class="page workbench-page">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成门店、班次与业绩，非真实业务数据</view>
+  <view class="row top-line"><text class="eyebrow">BOOMER / WORKBENCH</text><text class="muted date">{{date}}</text></view>
+  <view class="greeting">你好，{{name || '同事'}}</view><view class="row shop-line"><text class="shop-dot"></text><picker wx:if="{{isHeadquarters && shops.length}}" class="shop-picker" range="{{shops}}" range-key="name" value="{{shopIndex}}" bindchange="onShopChange"><view class="shop-selector"><text class="shop-current">{{shopName}}</text><text class="shop-switch">切换 ⌄</text></view></picker><text wx:else class="muted">{{shopName}}</text></view>
+  <view wx:if="{{loading}}" class="card loading-state">正在同步门店工作安排…</view>
+  <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重试工作台</button></view>
+  <view class="card shift-card"><view class="row card-header"><view class="section-title">今日班次</view><button class="text-link" data-url="/pages/schedule/index" bindtap="go">整月排班 →</button></view>
+    <view wx:if="{{shift}}" class="shift-rail"><view class="row shift-summary"><view class="shift-name">{{shift.title}}</view><view class="shift-time">{{shift.start || '时间待同步'}}<text wx:if="{{shift.end}}"> – {{shift.end}}</text></view></view><view wx:if="{{shift.note}}" class="muted shift-note">{{shift.note}}</view></view>
+    <view wx:elif="{{!loading && !error}}" class="empty compact-empty">今日暂无已同步班次，请以门店安排为准。</view>
+  </view>
+  <view class="card sales-card"><view class="row"><view class="sales-label">今日{{salesLabel}}</view><text class="display-badge">只读</text></view><view class="row sales-summary"><view class="sales-value {{salesValue === '暂无数据' ? 'missing-value' : ''}}">{{salesLoading ? '同步中…' : salesValue}}</view><view class="row sales-links"><button class="text-link" data-url="/pages/sales/index" bindtap="go">详情</button><button class="text-link" data-url="/pages/sales/index?kind=leaderboard" bindtap="go">榜单 →</button></view></view><view wx:if="{{salesError}}" class="row compact-sales-error"><text class="muted error-summary">{{salesError}}</text><button class="text-link" bindtap="loadSales">重试</button></view><view wx:elif="{{salesNotice}}" class="muted compact-notice">{{salesNotice}}</view><view wx:if="{{salesFreshness}}" class="muted sales-freshness">{{salesFreshness}}</view></view>
+  <view class="row section-heading"><view class="section-title">今日任务与待领经验</view><button class="text-link" data-url="/pages/list/index?kind=tasks" bindtap="go">全部 →</button></view>
+  <view wx:if="{{agendaLoading}}" class="muted">正在同步真实任务…</view>
+  <view wx:if="{{agendaError}}" class="card error"><text>{{agendaError}}</text><view wx:if="{{agenda.length}}" class="muted">以下保留最近一次已同步任务，状态可能已变化。</view><button class="button-secondary" bindtap="loadAgenda">重试任务</button></view>
+  <view wx:if="{{!loading && !agendaLoading && !agendaError && !agenda.length}}" class="card empty">暂无已同步任务<view class="muted">学习页的推荐知识不代表必修任务。</view></view>
+  <view wx:for="{{agenda}}" wx:key="url" class="card agenda-row" data-url="{{item.url}}" bindtap="go" hover-class="pressed"><view class="agenda-dot"></view><view class="agenda-main"><view class="agenda-title">{{item.title}}</view><view class="muted">{{item.category}} · {{item.status}}<text wx:if="{{item.amount !== null}}"> · {{item.amount}} 经验</text></view><view wx:if="{{item.progress !== null}}" class="agenda-progress">进度 {{item.progress}}<text wx:if="{{item.target !== null}}"> / {{item.target}}</text></view></view><text class="agenda-arrow">→</text></view>
+  <view wx:if="{{agendaFreshness}}" class="muted">{{agendaFreshness}}</view>
+  <view class="section-title">门店工具</view><view class="tools-grid"><view wx:for="{{tools}}" wx:key="url" class="tool-card" data-url="{{item.url}}" bindtap="go" hover-class="pressed"><view class="tool-icon">{{item.icon}}</view><view class="tool-label">{{item.label}}</view></view></view>
+  <view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view>
+</view>

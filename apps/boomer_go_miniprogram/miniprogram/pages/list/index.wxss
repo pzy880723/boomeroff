@@ -1,0 +1,30 @@
+.list-page { padding-bottom: 64rpx; }
+.eyebrow { color: #eb0029; font-size: 22rpx; letter-spacing: 2rpx; margin: 12rpx 0 16rpx; }
+.page-title { color: #202125; font-size: 48rpx; font-weight: 700; margin-bottom: 32rpx; }
+.notice { padding: 24rpx; font-size: 26rpx; line-height: 1.7; color: #315acb; background: #edf2ff; border-radius: 20rpx; margin-bottom: 24rpx; }
+.checkin-card .section-title { font-size: 32rpx; margin: 0; }
+.checkin-card .chip { font-size: 23rpx; margin: 0; }
+.checkin-stats { padding: 30rpx 0; text-align: center; }
+.checkin-number { color: #eb0029; font-size: 40rpx; font-weight: 600; margin-top: 12rpx; }
+.checkin-card .notice { margin: 24rpx 0 0; }
+.search-box { padding: 8rpx 12rpx 8rpx 24rpx; border: 1rpx solid #e2e5eb; background: #fff; border-radius: 24rpx; margin-bottom: 24rpx; }
+.search-box input { flex: 1; min-width: 0; height: 88rpx; font-size: 30rpx; }
+.search-box button { background: #eb0029; color: #fff; min-height: 88rpx; line-height: 88rpx; font-size: 28rpx; margin: 0; padding: 0 24rpx; border-radius: 16rpx; }
+.search-box button::after { border: none; }
+.category-scroll { white-space: nowrap; width: 100%; margin-bottom: 20rpx; }
+.category { display: inline-block; min-height: 88rpx; line-height: 88rpx; padding: 0 24rpx; margin: 0 16rpx 8rpx 0; font-size: 26rpx; background: #fff; color: #737780; }
+.category.selected { color: #eb0029; background: #ffedf0; }
+.entry { padding: 0; overflow: hidden; margin-bottom: 24rpx; }
+.entry-image { width: 100%; height: 280rpx; display: block; background: #e6e8ed; }
+.entry-main { padding: 28rpx; }
+.entry-meta { justify-content: space-between; margin-bottom: 20rpx; font-size: 24rpx; }
+.summary { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 14rpx; line-height: 1.7; }
+.entry-footer { justify-content: space-between; margin-top: 24rpx; font-size: 24rpx; }
+.arrow, .progress { color: #315acb; }
+.score, .progress { font-size: 26rpx; margin-top: 20rpx; }
+.freshness { text-align: center; font-size: 22rpx; margin-top: 32rpx; }
+.empty-symbol { color: #eb0029; background: #ffedf0; width: 96rpx; border-radius: 24rpx; line-height: 96rpx; margin: 0 auto 24rpx; font-size: 36rpx; }
+.empty .muted { margin-top: 16rpx; line-height: 1.7; }
+.pressed { opacity: .75; }
+.preview-banner { background: #fff1d6; color: #7c5300; padding: 20rpx; border-radius: 16rpx; margin-bottom: 24rpx; font-size: 24rpx; }
+.loading-state { padding: 48rpx; text-align: center; color: #737780; }

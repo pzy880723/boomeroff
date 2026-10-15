@@ -1,0 +1,67 @@
+{
+  "appid": "touristappid",
+  "projectname": "BOOMER GO 员工工作台",
+  "description": "员工工作台原生微信小程序，不复用消费者小程序 AppID",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "miniprogram/",
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "urlCheck": true,
+    "minifyWXML": true,
+    "minifyWXSS": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "packOptions": {
+    "ignore": [
+      {
+        "value": "tests",
+        "type": "folder"
+      },
+      {
+        "value": "docs",
+        "type": "folder"
+      },
+      {
+        "value": "evidence",
+        "type": "folder"
+      }
+    ],
+    "include": []
+  },
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "原生五入口 · 示例预览",
+          "pathName": "pages/workbench/index",
+          "query": "preview=1"
+        },
+        {
+          "name": "真实员工登录",
+          "pathName": "pages/login/index",
+          "query": ""
+        }
+      ]
+    }
+  },
+  "simulatorPluginLibVersion": {},
+  "editorSetting": {}
+}

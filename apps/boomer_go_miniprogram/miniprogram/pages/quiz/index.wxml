@@ -1,0 +1,22 @@
+<view class="page quiz-page">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成题目与评分，非真实测验记录</view>
+  <view class="eyebrow">BOOMER / PRACTICE</view><view class="page-title">{{title}}</view>
+  <view class="muted intro">只考知识与专业，不以营业额评分。</view>
+  <view wx:if="{{loading && !submitting}}" class="card loading-state">正在获取服务器题目…</view>
+  <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" disabled="{{submitting}}" bindtap="retry">{{locked ? '重试同一答卷' : '重新加载'}}</button></view>
+  <view wx:if="{{!loading && !error && !questions.length}}" class="card empty">暂无可用题目，请返回知识库选择其他内容。</view>
+  <block wx:if="{{currentQuestion && !result}}">
+    <view class="row progress-label"><text class="chip">第 {{current + 1}} / {{questions.length}} 题</text><text class="muted">已答 {{answered}} 题</text></view>
+    <view class="card question-card"><view class="question-stem">{{currentQuestion.stem}}</view>
+      <button wx:for="{{choices}}" wx:key="index" class="choice {{item.selected ? 'chosen' : ''}}" data-index="{{item.index}}" bindtap="choose" disabled="{{locked}}"><text class="choice-letter">{{item.letter}}</text><text class="choice-text">{{item.text}}</text><text wx:if="{{item.selected}}" class="check">✓</text></button>
+    </view>
+    <view class="row question-nav"><button class="button-secondary" bindtap="previous" disabled="{{current === 0}}">上一题</button><button class="button-secondary" bindtap="next" disabled="{{current === questions.length - 1}}">下一题</button></view>
+    <view class="answer-grid"><button wx:for="{{answers}}" wx:key="index" class="answer-dot {{item >= 0 ? 'answered' : ''}} {{current === index ? 'current' : ''}}" data-index="{{index}}" bindtap="jump">{{index + 1}}</button></view>
+    <view wx:if="{{hint}}" class="hint">{{hint}}</view>
+    <view wx:if="{{locked && !submitting}}" class="muted lock-note">答卷已锁定。若网络中断，仅重试同一份答卷，避免重复记录。</view>
+    <button class="button submit" bindtap="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '服务器评分中' : (locked ? '重试原答卷' : '提交答卷')}}</button>
+    <view class="muted server-note">评分、通过状态与记录保存均由服务器确认。</view>
+  </block>
+  <view wx:if="{{result}}" class="card result-card"><view class="result-symbol">{{result.passed ? '✓' : '再练'}}</view><view class="result-title">{{result.passed ? '本次已通过' : '继续积累，再试一次'}}</view><view class="score">{{result.score}}<text class="score-total"> / {{result.total}}</text></view><view class="muted">{{resultNote}}</view><button class="button-secondary" data-url="/pages/list/index?kind=quiz-history" bindtap="go">查看测验记录</button></view>
+  <view wx:for="{{review}}" wx:key="index" class="card review"><view class="section-title">{{item.stem}}</view><view class="body">{{item.explanation}}</view></view>
+</view>

@@ -1,0 +1,32 @@
+{
+  "pages": [
+    "pages/workbench/index", "pages/learn/index", "pages/recognize/index",
+    "pages/messages/index", "pages/mine/index", "pages/login/index",
+    "pages/schedule/index", "pages/list/index", "pages/detail/index",
+    "pages/quiz/index", "pages/sales/index", "pages/assistant/index",
+    "pages/marketing/index", "pages/asset/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "BOOMER GO",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F5F6F8",
+    "backgroundTextStyle": "dark",
+    "enablePullDownRefresh": false
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#737780",
+    "selectedColor": "#EB0029",
+    "backgroundColor": "#FFFFFF",
+    "list": [
+      { "pagePath": "pages/workbench/index", "text": "工作台" },
+      { "pagePath": "pages/learn/index", "text": "学习" },
+      { "pagePath": "pages/recognize/index", "text": "识物" },
+      { "pagePath": "pages/messages/index", "text": "消息" },
+      { "pagePath": "pages/mine/index", "text": "我的" }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

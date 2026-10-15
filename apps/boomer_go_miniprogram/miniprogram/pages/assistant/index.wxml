@@ -1,0 +1,15 @@
+<view class="page assistant-page">
+  <view wx:if="{{preview}}" class="chip">开发预览 · 非真实 AI 对话</view>
+  <view class="row assistant-header"><view><view class="section-title">BOOMER 助手</view><view class="muted">围绕门店工作提问，重要信息请核实</view></view><button class="button-secondary" bindtap="newConversation">新对话</button></view>
+  <scroll-view scroll-y scroll-into-view="{{scrollTarget}}" class="conversation" scroll-with-animation>
+    <view wx:if="{{!messages.length}}" class="empty"><view class="section-title">今天有什么需要一起解决？</view><view>商品知识、门店工作、视频想法，都可以从一个问题开始。</view></view>
+    <view wx:for="{{messages}}" wx:key="index" id="message-{{index}}" class="message {{item.role === 'user' ? 'message-user' : 'message-assistant'}}">
+      <view class="muted">{{item.role === 'user' ? '我' : 'BOOMER'}}</view>
+      <text selectable class="message-text">{{item.content || (item.failed ? '本次未获得回复' : '正在等待回复…')}}</text>
+      <view wx:if="{{item.failed}}" class="error">回复未完成，原问题已保留</view>
+      <button wx:if="{{item.role === 'assistant' && item.content && !item.failed}}" class="copy-message" data-index="{{index}}" bindtap="copyMessage">复制回复</button>
+    </view>
+  </scroll-view>
+  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary" bindtap="retry" disabled="{{sending}}">重试当前问题</button></view>
+  <view class="composer card"><textarea value="{{input}}" bindinput="input" maxlength="4000" placeholder="输入你的问题" auto-height disabled="{{sending}}" /><button class="button" bindtap="send" loading="{{sending}}" disabled="{{sending || !input}}">发送</button></view>
+</view>

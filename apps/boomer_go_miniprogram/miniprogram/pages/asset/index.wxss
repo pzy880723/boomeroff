@@ -1,0 +1,13 @@
+.asset-page .section-title { margin-top: 12rpx; }
+.asset-page > .muted { margin-bottom: 24rpx; }
+.notice { padding: 22rpx; margin-bottom: 22rpx; background: #eef3ff; color: #315acb; border-radius: 18rpx; }
+.asset-video { width: 100%; height: 680rpx; border-radius: 20rpx; background: #202125; }
+.asset-image { width: 100%; border-radius: 20rpx; }
+.asset-cover { width: 240rpx; display: block; border-radius: 16rpx; margin-bottom: 24rpx; }
+.copy-text { white-space: pre-wrap; line-height: 1.9; word-break: break-word; }
+.card > button { margin-top: 22rpx; }
+.field-label { margin: 22rpx 0 10rpx; font-size: 26rpx; color: #737780; }
+.field { min-height: 100rpx; height: auto; line-height: 1.7; }
+.account-option { padding: 24rpx; border: 2rpx solid #eef0f3; border-radius: 18rpx; background: #f5f6f8; text-align: left; width: 100%; }
+.account-option.selected { border-color: #eb0029; background: #fff0f3; }
+.publish-target { padding: 24rpx 0; border-top: 1rpx solid #eef0f3; margin-top: 24rpx; }

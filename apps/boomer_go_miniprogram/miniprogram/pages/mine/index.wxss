@@ -1,0 +1,28 @@
+.mine-page { padding-bottom: 180rpx; }
+.eyebrow { font-size: 22rpx; color: #eb0029; letter-spacing: 3rpx; margin: 12rpx 0 16rpx; }
+.page-title { font-size: 52rpx; font-weight: 700; margin-bottom: 32rpx; }
+.identity-card { border-top: 6rpx solid #eb0029; }
+.identity-row { padding: 10rpx 0 28rpx; }
+.avatar { width: 100rpx; height: 100rpx; border-radius: 28rpx; background: #fff0f3; flex-shrink: 0; }
+.initial { color: #eb0029; font-size: 44rpx; font-weight: 600; text-align: center; line-height: 100rpx; }
+.identity-main { flex: 1; min-width: 0; }
+.employee-name { font-size: 38rpx; font-weight: 700; }
+.identity-role { margin-top: 10rpx; }
+.employee-badge { color: #eb0029; background: #fff0f3; border-radius: 10rpx; padding: 6rpx 14rpx; font-size: 22rpx; }
+.shop-block { padding-top: 24rpx; border-top: 1rpx solid #eceef2; }
+.shop-label { font-size: 23rpx; margin-bottom: 10rpx; }
+.shop-name { font-size: 32rpx; font-weight: 600; line-height: 1.6; }
+.switch-shop { color: #315acb; font-size: 26rpx; min-height: 88rpx; padding: 24rpx 0; }
+.experience-row { border-top: 1rpx solid #eceef2; margin-top: 24rpx; padding-top: 24rpx; }
+.experience { font-size: 30rpx; color: #315acb; font-weight: 600; }
+.group-title { font-size: 30rpx; margin: 36rpx 0 20rpx; }
+.menu-group { padding: 0 28rpx; }
+.menu-row { min-height: 112rpx; border-bottom: 1rpx solid #eef0f3; padding: 20rpx 0; }
+.menu-row:last-child { border-bottom: none; }
+.menu-icon { width: 56rpx; line-height: 56rpx; background: #f7f8fa; border-radius: 16rpx; text-align: center; font-size: 23rpx; color: #eb0029; }
+.menu-label { flex: 1; font-size: 29rpx; }
+.menu-arrow { color: #a5a9b2; font-size: 36rpx; }
+.logout { color: #eb0029; margin-top: 32rpx; }
+.freshness, .privacy-note { font-size: 22rpx; text-align: center; margin-top: 28rpx; }
+.pressed { opacity: .75; }
+.loading-state { padding: 48rpx; text-align: center; color: #737780; }

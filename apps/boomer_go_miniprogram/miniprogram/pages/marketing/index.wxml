@@ -1,0 +1,77 @@
+<template name="clip-editor">
+  <view class="clip-editor">
+    <view class="row"><view class="section-title">{{label}}</view><text class="muted">{{clip.duration_s ? clip.duration_s + ' 秒' : ''}}</text></view>
+    <view class="muted">画面</view><textarea class="field" value="{{clip.scene || clip.video_prompt || ''}}" bindinput="editScript" data-part="{{part}}" data-index="{{index}}" data-field="scene" auto-height maxlength="4000" disabled="{{loading}}" />
+    <view class="muted">动作</view><textarea class="field" value="{{clip.action || ''}}" bindinput="editScript" data-part="{{part}}" data-index="{{index}}" data-field="action" auto-height maxlength="2000" disabled="{{loading}}" />
+    <view class="muted">口播</view><textarea class="field" value="{{clip.dialogue || ''}}" bindinput="editScript" data-part="{{part}}" data-index="{{index}}" data-field="dialogue" auto-height maxlength="2000" disabled="{{loading}}" />
+    <view class="muted">字幕随最终口播同步，由服务端校验</view><text selectable>{{clip.dialogue || ''}}</text>
+    <view class="muted">运镜</view><input class="field" value="{{clip.motion || ''}}" bindinput="editScript" data-part="{{part}}" data-index="{{index}}" data-field="motion" maxlength="200" disabled="{{loading}}" />
+  </view>
+</template>
+<view class="page marketing-page">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 示例任务不代表真实生成、保存或发布</view>
+  <view class="section-title">BOOMER 帮我拍</view><view class="muted">真实门店素材 → 确认脚本 → 生成视频 → 领取与发布</view>
+  <view class="row marketing-tabs"><button class="chip {{tab === 'create' ? 'active' : ''}}" bindtap="switchTab" data-tab="create">智能视频</button><button class="chip {{tab === 'library' ? 'active' : ''}}" bindtap="switchTab" data-tab="library">素材库</button></view>
+  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary" bindtap="retry" disabled="{{loading}}">重新加载</button></view>
+  <view wx:if="{{notice}}" class="notice">{{notice}}</view>
+  <view wx:if="{{loading}}" class="muted loading-state">正在与服务端确认，请稍候…</view>
+  <block wx:if="{{tab === 'create'}}">
+    <view wx:if="{{!scriptJobId && !videoJobId}}" class="card">
+      <view class="section-title">这次想拍什么？</view><view class="muted">从当前门店已入库的真实图片中选材，生成 15 秒 / 1080p 视频脚本。</view>
+      <view class="scope-options"><button wx:for="{{scopes}}" wx:key="key" class="chip {{contentScope === item.key ? 'active' : ''}}" data-key="{{item.key}}" bindtap="selectScope" disabled="{{loading}}">{{item.label}}</button></view>
+      <button class="button" bindtap="startScript" disabled="{{loading}}" loading="{{loading}}">准备视频脚本</button>
+      <view class="muted task-hint">不生成虚构库存、价格或销售成绩。素材不足时会显示服务端原因。</view>
+    </view>
+    <view wx:if="{{scriptJobId || videoJobId}}" class="card">
+      <view class="row"><view class="section-title">{{statusLabel}}</view><button class="button-secondary" bindtap="refreshTask" disabled="{{loading}}">刷新</button></view>
+      <view class="muted">任务 {{videoJobId || scriptJobId}}</view><view wx:if="{{progress}}" class="muted">分段进度 {{progress}}</view>
+      <view wx:if="{{taskError}}" class="error">{{taskError}}</view><view class="muted task-hint">任务在服务端继续，离开后再回来可恢复。生成入队不代表已生成或已发布。</view>
+      <view wx:if="{{status === 'ready_to_stitch'}}" class="error">分段尚未拼成完整视频。当前原生入口不伪造拼接结果，请等待成片服务完成。</view>
+      <video wx:if="{{videoUrl}}" src="{{videoUrl}}" poster="{{coverUrl}}" controls class="render-video" />
+      <image wx:if="{{coverUrl}}" src="{{coverUrl}}" mode="widthFix" class="render-cover" />
+      <button wx:if="{{videoUrl}}" class="button" bindtap="saveVideo" disabled="{{loading}}">保存视频到相册</button>
+      <button wx:if="{{videoJobId}}" class="button-secondary" bindtap="switchTab" data-tab="library" disabled="{{loading}}">到素材库领取封面、文案与发布</button>
+    </view>
+    <view wx:if="{{script && status === 'script_ready' && !videoJobId}}" class="card">
+      <view class="row"><view class="section-title">确认脚本</view><text class="chip">{{dirty ? '有未保存修改' : '已恢复云端脚本'}}</text></view>
+      <view class="muted">可直接改画面、口播和字幕。生成前会先将当前编辑内容保存到服务端。</view>
+      <view class="section-title">连续口播</view><text selectable class="script-transcript">{{script.continuous_dialogue || ''}}</text><view class="muted">在下方逐段修改口播，全文会同步更新。服务端会检查字数与事实。</view>
+      <template wx:if="{{script.hook}}" is="clip-editor" data="{{clip:script.hook, part:'hook', label:'开场', loading:loading}}" />
+      <block wx:for="{{script.scenes}}" wx:key="index"><template is="clip-editor" data="{{clip:item, part:'scene', index:index, label:'中段 ' + (index + 1), loading:loading}}" /></block>
+      <template wx:if="{{script.outro}}" is="clip-editor" data="{{clip:script.outro, part:'outro', label:'收尾', loading:loading}}" />
+      <view class="section-title">真实参考图</view>
+      <scroll-view scroll-x class="references"><image wx:for="{{references}}" wx:key="url" src="{{item.url}}" mode="aspectFill" /></scroll-view>
+      <button class="button-secondary" bindtap="openReferences" disabled="{{loading}}">从门店素材库调整参考图</button>
+      <view wx:if="{{referencePicker}}" class="reference-picker">
+        <view class="muted">已选 {{selectedReferences.length}} / 8，服务端会核验门店归属；提交前确认原图高度大于宽度。</view>
+        <view wx:if="{{referenceError}}" class="error">{{referenceError}}</view>
+        <button wx:if="{{referenceError && referencePage < 0}}" class="button-secondary" bindtap="openReferences" disabled="{{loading || referenceLoading}}">重试加载参考图</button>
+        <view wx:if="{{!referenceItems.length && !referenceLoading && !referenceError && !referenceHasMore}}" class="empty">暂无可用实景图片，请先将真实门店照片入库。</view>
+        <view class="reference-grid"><button wx:for="{{referenceItems}}" wx:key="id" class="reference-option {{item.selected ? 'selected' : ''}}" bindtap="toggleReference" data-url="{{item.originalUrl}}" disabled="{{loading}}"><image src="{{item.originalUrl}}" mode="aspectFill" /><text>{{item.selected ? '已选' : '选择'}}</text></button></view>
+        <view wx:if="{{referenceLoading}}" class="muted">正在加载参考图…</view>
+        <button wx:if="{{referenceHasMore}}" class="button-secondary" bindtap="loadMoreReferences" disabled="{{loading || referenceLoading}}">{{referenceError ? '重试加载更多参考图' : '加载更多参考图'}}</button>
+        <view class="row"><button class="button-secondary" bindtap="closeReferences" disabled="{{loading}}">取消调整</button><button class="button" bindtap="saveReferences" disabled="{{loading || !selectedReferences.length}}">确认参考图</button></view>
+      </view>
+      <view class="section-title">和 BOOMER 一起改稿</view>
+      <view wx:for="{{conversation}}" wx:key="index" class="script-message"><view class="muted">{{item.role === 'user' ? '我' : 'BOOMER'}}</view><text selectable>{{item.content}}</text></view>
+      <view wx:if="{{pendingChanges.length}}" class="pending-changes"><view class="muted">待应用意见</view><view wx:for="{{pendingChanges}}" wx:key="index">{{item}}</view><view class="row"><button class="button-secondary" bindtap="clearConversation" disabled="{{loading}}">取消意见</button><button class="button-secondary" bindtap="applyConversation" disabled="{{loading}}">应用到脚本</button></view></view>
+      <textarea class="field" value="{{chatInput}}" bindinput="chatInput" placeholder="例如：保留门头，多展示杯盘，不要夸大商品年代" maxlength="1000" auto-height disabled="{{loading}}" />
+      <button class="button-secondary" bindtap="sendScriptMessage" disabled="{{loading || !chatInput}}">发送修改意见</button>
+      <view class="action-stack"><button class="button-secondary" bindtap="saveScript" disabled="{{loading}}">保存当前脚本</button><button class="button" bindtap="generateVideo" disabled="{{loading || pendingChanges.length}}">确认脚本，生成 15 秒视频</button></view>
+      <view class="muted task-hint">该操作会向真实生成服务提交任务，是否完成以服务端结果为准。</view>
+    </view>
+    <button wx:if="{{scriptJobId || (videoJobId && (status === 'failed' || statusLabel === '已完成'))}}" class="button-secondary" bindtap="finishTask" disabled="{{loading}}">{{videoJobId ? '结束当前任务' : '丢弃当前脚本'}}</button>
+  </block>
+  <block wx:else>
+    <view class="row"><view class="section-title">门店素材库</view><button class="button-secondary" bindtap="loadLibrary" disabled="{{loading}}">刷新</button></view>
+    <view wx:if="{{libraryError}}" class="error">{{libraryError}}</view>
+    <button wx:if="{{libraryError && libraryPage < 0}}" class="button-secondary" bindtap="loadLibrary" disabled="{{loading || libraryLoading}}">重试加载素材库</button>
+    <view wx:if="{{libraryLoading}}" class="muted">正在加载素材…</view>
+    <view wx:if="{{libraryLoaded && !items.length && !libraryLoading && !libraryError}}" class="empty">暂无服务端素材。视频完成后会在这里领取。</view>
+    <view wx:for="{{items}}" wx:key="id" class="card library-item" bindtap="openAsset" data-id="{{item.id}}">
+      <image wx:if="{{item.coverUrl || item.imageUrl}}" src="{{item.coverUrl || item.imageUrl}}" mode="aspectFill" />
+      <view class="library-summary"><view class="section-title">{{item.title}}</view><view class="muted">{{item.kind === 'video' ? '视频' : item.kind === 'photo' ? '图片' : '文案'}} · {{item.statusLabel}}</view><view class="muted">查看原文件、封面与发布文案</view></view>
+    </view>
+    <button wx:if="{{libraryHasMore}}" class="button-secondary" bindtap="loadMoreLibrary" disabled="{{loading || libraryLoading}}">{{libraryError ? '重试加载更多素材' : '加载更多素材'}}</button>
+  </block>
+</view>

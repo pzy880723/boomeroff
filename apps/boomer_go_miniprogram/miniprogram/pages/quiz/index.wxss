@@ -1,0 +1,29 @@
+.quiz-page { padding-bottom: 70rpx; }
+.eyebrow { font-size: 22rpx; color: #eb0029; letter-spacing: 3rpx; margin: 12rpx 0 16rpx; }
+.page-title { font-size: 46rpx; font-weight: 700; line-height: 1.4; }
+.intro { margin: 16rpx 0 32rpx; }
+.progress-label { margin-bottom: 24rpx; }
+.question-stem { font-size: 36rpx; font-weight: 600; line-height: 1.65; margin: 6rpx 0 32rpx; }
+.choice { display: flex; align-items: center; text-align: left; padding: 24rpx; min-height: 104rpx; background: #f7f8fa; border: 2rpx solid #e8eaee; border-radius: 20rpx; margin: 0 0 20rpx; color: #202125; }
+.choice-letter { font-size: 28rpx; margin-right: 22rpx; color: #737780; }
+.choice-text { flex: 1; font-size: 30rpx; line-height: 1.6; }
+.chosen { border-color: #eb0029; background: #fff0f3; }
+.chosen .choice-letter, .check { color: #eb0029; font-weight: 700; }
+.choice[disabled] { opacity: 1; }
+.question-nav button { width: 47%; margin: 0; }
+.answer-grid { display: flex; flex-wrap: wrap; margin: 30rpx -6rpx 24rpx; }
+.answer-dot { width: 88rpx; height: 88rpx; margin: 6rpx; border: 2rpx solid #e1e3e8; font-size: 26rpx; line-height: 84rpx; background: #fff; padding: 0; color: #737780; }
+.answer-dot.answered { background: #ffedf0; color: #eb0029; }
+.answer-dot.current { border-color: #eb0029; }
+.hint { padding: 24rpx; background: #fff1d6; color: #805700; border-radius: 16rpx; margin-bottom: 24rpx; }
+.submit { width: 100%; margin-top: 24rpx; }
+.server-note { text-align: center; font-size: 23rpx; margin-top: 20rpx; }
+.lock-note { line-height: 1.7; }
+.result-card { padding: 56rpx 30rpx; text-align: center; }
+.result-symbol { width: 100rpx; line-height: 100rpx; border-radius: 30rpx; background: #fff0f3; color: #eb0029; font-size: 36rpx; margin: 0 auto 28rpx; }
+.result-title { font-size: 36rpx; font-weight: 600; }
+.score { color: #eb0029; font-size: 80rpx; font-weight: 700; margin: 24rpx 0 12rpx; }
+.score-total { color: #737780; font-size: 32rpx; font-weight: 400; }
+.result-card button { margin-top: 36rpx; }
+.review .section-title { margin-top: 0; font-size: 30rpx; }
+.loading-state { text-align: center; padding: 48rpx; color: #737780; }

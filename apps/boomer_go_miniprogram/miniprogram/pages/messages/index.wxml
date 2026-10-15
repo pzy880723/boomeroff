@@ -1,0 +1,15 @@
+<view class="page messages-page">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成通知，不会修改真实已读记录</view>
+  <view class="eyebrow">BOOMER / INBOX</view><view class="row heading"><view class="page-title">消息</view><text class="unread-count">{{unread}} 条未读</text></view>
+  <view class="muted intro">门店动态、工作提醒，在这里同步。</view>
+  <button class="button-secondary" data-url="/pages/list/index?kind=conversations" bindtap="go">BOOMER 助手会话 →</button>
+  <view class="row controls"><view class="row filters"><button class="filter {{filter === 'all' ? 'selected' : ''}}" data-kind="all" bindtap="onFilter">全部</button><button class="filter {{filter === 'unread' ? 'selected' : ''}}" data-kind="unread" bindtap="onFilter">未读</button></view><button class="mark-all" bindtap="markAll" disabled="{{!unread || marking}}" loading="{{marking}}">全部已读</button></view>
+  <view wx:if="{{loading}}" class="card loading-state">正在同步消息…</view>
+  <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重新同步</button></view>
+  <view wx:if="{{!loading && !error && !visibleItems.length}}" class="card empty"><view class="empty-symbol">信</view><view>{{filter === 'unread' ? '没有未读消息' : '暂时没有消息'}}</view><view class="muted">有新通知时会显示在这里。</view></view>
+  <view wx:for="{{visibleItems}}" wx:key="id" class="card message-card {{!item.read ? 'unread-card' : ''}}">
+    <view class="message-main" data-id="{{item.id}}" bindtap="openItem" hover-class="pressed"><view class="row message-meta"><text class="message-category">{{item.category || '门店通知'}}</text><text wx:if="{{!item.read}}" class="unread-dot"></text><text wx:else class="muted">已读</text></view><view class="section-title message-title">{{item.title}}</view><view class="muted message-body">{{item.body}}</view><view class="muted message-time">{{item.time}}</view></view>
+    <view class="row message-actions"><button class="read-content" data-id="{{item.id}}" bindtap="openItem">查看详情 →</button><button wx:if="{{!item.read}}" class="read-button" data-id="{{item.id}}" bindtap="markRead" disabled="{{marking}}">标为已读</button></view>
+  </view>
+  <view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view>
+</view>

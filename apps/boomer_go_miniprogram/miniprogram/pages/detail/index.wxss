@@ -1,0 +1,47 @@
+.detail-page { padding-bottom: 80rpx; }
+.resolved-state .section-title { font-size: 32rpx; line-height: 1.7; margin: 0 0 28rpx; }
+.article-heading { padding: 12rpx 0 28rpx; }
+.article-title { font-size: 48rpx; font-weight: 700; line-height: 1.5; margin: 24rpx 0 20rpx; word-break: break-all; }
+.freshness { margin-top: 16rpx; font-size: 23rpx; }
+.article-cover { width: 100%; border-radius: 24rpx; margin-bottom: 24rpx; background: #e8eaee; }
+.article { font-size: 32rpx; line-height: 1.9; overflow: hidden; word-break: break-all; }
+.article rich-text { display: block; }
+.section-title { margin-top: 0; font-size: 32rpx; }
+.field-row { border-bottom: 1rpx solid #eceef2; padding: 24rpx 0; }
+.field-row:last-child { border-bottom: none; }
+.field-label { margin-bottom: 10rpx; }
+.field-value { font-size: 30rpx; line-height: 1.7; white-space: pre-wrap; word-break: break-all; }
+.business-entry { padding: 22rpx 0; border-bottom: 1rpx solid #eceef2; }
+.business-entry:last-child { border-bottom: none; padding-bottom: 0; }
+.business-entry:first-of-type { padding-top: 0; }
+.business-tag { margin-bottom: 14rpx; color: #eb0029; background: #fff0f3; font-size: 24rpx; }
+.business-entry-title { font-size: 32rpx; font-weight: 600; line-height: 1.7; margin-bottom: 10rpx; }
+.business-entry-body { display: block; font-size: 32rpx; line-height: 1.9; white-space: pre-wrap; word-break: break-all; }
+.business-image { display: block; width: 100%; border-radius: 20rpx; margin-top: 20rpx; }
+.business-video { width: 100%; border-radius: 20rpx; }
+.result-row { padding: 20rpx 0; border-bottom: 1rpx solid #eceef2; }
+.result-marker { width: 48rpx; height: 48rpx; border-radius: 14rpx; background: #f0f2f6; color: #737780; text-align: center; line-height: 48rpx; }
+.result-marker.done { color: #315acb; background: #edf2ff; }
+.result-text { flex: 1; font-size: 30rpx; line-height: 1.6; }
+.task-links { margin-top: 24rpx; }
+.task-links button { width: 47%; margin: 0; }
+.notice { background: #edf2ff; color: #315acb; padding: 24rpx; border-radius: 20rpx; font-size: 26rpx; line-height: 1.8; margin-top: 24rpx; }
+.action-status { margin-top: 32rpx; }
+.cloud-actions { margin-top: 24rpx; }
+.action-hint { margin-top: 16rpx; line-height: 1.7; }
+.avatar-editor { justify-content: flex-start; margin: 24rpx 0; }
+.profile-avatar { width: 120rpx; height: 120rpx; border-radius: 30rpx; background: #fff0f3; flex-shrink: 0; }
+.avatar-empty { line-height: 120rpx; text-align: center; color: #eb0029; font-size: 28rpx; }
+.profile-label { margin-bottom: 16rpx; }
+.profile-save { margin-top: 28rpx; }
+.objective-editor { margin-top: 24rpx; }
+.draft-row { min-height: 100rpx; border-bottom: 1rpx solid #eceef2; padding: 18rpx 0; }
+.draft-title { flex: 1; font-size: 30rpx; }
+.action-textarea, .message-input { min-height: 180rpx; width: 100%; margin: 24rpx 0; }
+.message-bubble { margin: 24rpx 32rpx 24rpx 0; padding: 28rpx; border-radius: 24rpx 24rpx 24rpx 4rpx; background: #fff; border: 1rpx solid #eceef2; }
+.message-bubble.from-user { margin: 24rpx 0 24rpx 32rpx; border-radius: 24rpx 24rpx 4rpx 24rpx; background: #fff0f3; }
+.message-role { font-size: 23rpx; margin-bottom: 16rpx; }
+.message-content { font-size: 32rpx; line-height: 1.8; white-space: pre-wrap; word-break: break-all; }
+.message-time { margin-top: 16rpx; font-size: 22rpx; }
+.message-composer { margin-top: 32rpx; }
+.loading-state { padding: 48rpx; text-align: center; color: #737780; }

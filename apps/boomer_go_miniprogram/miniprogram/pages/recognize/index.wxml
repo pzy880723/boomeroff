@@ -1,0 +1,41 @@
+<view class="page recognition-page">
+  <view wx:if="{{preview}}" class="chip">开发预览 · 不代表真实识别或保存</view>
+  <view class="recognition-header"><view class="section-title">拍图识物</view><view class="muted">整体、细节、底款，最多拍 5 张</view></view>
+  <view class="viewfinder">
+    <camera wx:if="{{cameraActive}}" class="camera" device-position="back" flash="off" bindinitdone="cameraReady" binderror="cameraError" />
+    <view wx:if="{{cameraError}}" class="camera-message">{{cameraError}}</view>
+    <view class="camera-caption">{{photos.length}} / 5 · 拍下即加入，不用逐张确认</view>
+  </view>
+  <view class="capture-controls row">
+    <button class="button-secondary" bindtap="pickAlbum" disabled="{{loading || photos.length >= 5}}">相册添加</button>
+    <button class="shutter" bindtap="takePhoto" aria-label="拍摄并加入照片" disabled="{{loading || !cameraReady || photos.length >= 5}}"><view class="shutter-core" /></button>
+    <view class="muted capture-count">{{photos.length >= 5 ? '已满 5 张' : '连续拍摄'}}</view>
+  </view>
+  <scroll-view wx:if="{{photos.length}}" scroll-x class="photo-strip">
+    <view wx:for="{{photos}}" wx:key="*this" class="photo-tile">
+      <image src="{{item}}" mode="aspectFill" data-index="{{index}}" bindtap="previewPhoto" />
+      <button class="remove-photo" data-index="{{index}}" bindtap="removePhoto" disabled="{{loading}}" aria-label="移除照片">移除</button>
+    </view>
+  </scroll-view>
+  <view class="card">
+    <view class="section-title">补充线索 <text class="muted">选填</text></view>
+    <textarea class="hint-input" value="{{hint}}" bindinput="hintInput" maxlength="500" placeholder="例如：底款文字、购入地点或想确认的细节" disabled="{{loading}}" />
+    <button class="button" bindtap="recognize" loading="{{loading}}" disabled="{{loading || !photos.length}}">{{result ? '重新识别' : '开始识别'}}</button>
+  </view>
+  <view wx:if="{{error}}" class="error">{{error}}<view class="muted">照片不会因识别失败被清空。</view></view>
+  <view wx:if="{{result}}" class="card result-card">
+    <view class="section-title">{{result.name}}</view>
+    <view class="muted">AI 识别仅作参考，年代、产地与真伪请结合实物核验</view>
+    <view wx:if="{{result.description}}" class="result-section"><view class="section-title">商品故事</view><text selectable>{{result.description}}</text></view>
+    <view class="facts">
+      <view><text class="muted">材质</text><text selectable>{{result.material || '服务未提供'}}</text></view>
+      <view><text class="muted">产地</text><text selectable>{{result.origin || '服务未提供'}}</text></view>
+      <view><text class="muted">工艺</text><text selectable>{{result.craft || '服务未提供'}}</text></view>
+      <view wx:if="{{result.era}}"><text class="muted">年代</text><text selectable>{{result.era}}</text></view>
+    </view>
+    <view wx:if="{{sellingPoints.length}}" class="result-section"><view class="section-title">销售亮点</view><view wx:for="{{sellingPoints}}" wx:key="*this" class="selling-point"><text selectable>{{index + 1}}. {{item}}</text></view></view>
+    <view wx:if="{{result.pitch.opener || result.pitch.highlight || result.pitch.story}}" class="result-section"><view class="section-title">讲给顾客听</view><view wx:if="{{result.pitch.opener}}"><text selectable>{{result.pitch.opener}}</text></view><view wx:if="{{result.pitch.highlight}}"><text selectable>{{result.pitch.highlight}}</text></view><view wx:if="{{result.pitch.story}}"><text selectable>{{result.pitch.story}}</text></view></view>
+    <button class="button" bindtap="saveResult" disabled="{{loading || savedId}}">{{savedId ? '已保存到云端' : '保存到云端识物记录'}}</button>
+    <view wx:if="{{notice}}" class="muted">{{notice}}</view>
+  </view>
+</view>
