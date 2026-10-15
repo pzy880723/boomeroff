@@ -12,6 +12,7 @@
 - 实际DevTools沿工作台SOP入口查看列表、本店正文／粗体／列表／表格、原生新增编辑控件和禁用保存／删除、共享只读以及QA切换。截图native-kb-list／read／editor／shared-readonly／qa-list在evidence，均为明确标注合成数据；phone是确定性裁切。编辑输入值未取得实际截图，不冒充GUI输入验收；正文编辑、草稿保留及写状态由VM测试覆盖，仍需真实手机验收。没有真实SOP新增、修改、删除或AI调用。
 - 后台固定ref37e0466774995fac4ead86325d223b641a57dbe1经get_project确认finished，实际读回kb.ts／index.ts／0019并复算UTF8哈希，与报告和独立复核一致。读RPC为INVOKER保留RLS，write/status为窄SECDEF，fresh／当前工作店／已有动作权限全检；分类FOR SHARE、同actor/request锁、receipt-before-CAS及删除后状态恢复已源审。Lovable报告0019已应用、Edge已部署、Deno87+quiz5与SQL60强制回滚通过；主流程未执行特权SQL、真并发或下载线上bundle，不将报告冒充独立运行。
 - 主流程向在线kb-write发无身份请求返回401 unauthorized，仅证明可达与匿名拒绝。店员当天无有效工作店时新接口403，未加单店兜底或跨店权限。AI草稿、分类管理、其他角色功能及真实账号／设备验收仍是剩余迁移工作，未发布微信。
+- 本轮feature提交8f852817e40cbc05fe824ffa09670a432a6f5e10仅26个小程序路径，已非强推至codex/go-mini-workbench并ls-remote读回同SHA；正常index为空，当前Flutter分支未切换。截图保持本地ignored，不把开发工具画面或本机配置放入源码分支。交付文档后续提交不改变本轮代码验证结果。
 
 ## 最新检查点：连续练习
 
