@@ -123,7 +123,9 @@ function createPreview(wx) {
     if (['vouchers', 'scan-history', 'marketing-assets', 'conversation-list', 'conversation-messages'].includes(name)) return { items: [], as_of: stamp };
     return unavailable();
   }
-  return { session, api: { action, invoke: unavailable, assistant: unavailable, uploadChatAttachment: unavailable, openChatAttachment: unavailable, copy: text => new Promise((resolve, reject) => wx.setClipboardData({ data: String(text), success: resolve, fail: reject })), saveMedia: unavailable,
+  return { session, api: { action, invoke: unavailable, assistant: unavailable, uploadChatAttachment: unavailable, openChatAttachment: unavailable,
+    inspectPublicationFile: unavailable, createPublicationUpload: unavailable, transferPublicationFile: unavailable, commitPublicationUpload: unavailable, publicationUploadStatus: unavailable,
+    copy: text => new Promise((resolve, reject) => wx.setClipboardData({ data: String(text), success: resolve, fail: reject })), saveMedia: unavailable,
     recognize: async () => ({ name: '识物结果示例 · 日常瓷杯', era: '未作年代鉴定', origin: '仅示例，非照片识别结论', material: '瓷', craft: '釉面装饰', description: '正式登录后，这里会根据拍摄的整体、底款和细节照片展示商品故事。遇到不确定的年代、产地或品牌，会明确标注，不能仅凭图片作保证。', sellingPoints: ['先观察器型与釉面', '向客人如实说明品相', '可补拍底款和细节'] }),
     sales: async () => ({ complete: false, reason: 'development_preview', message: '初版示例模式不展示虚构销售金额', date, last_synced_at: stamp, achieved_cents: null, as_of: stamp, sales_assessment: false }),
     leaderboard: async () => ({ complete: false, reason: 'employee_attribution_unavailable', message: '真实订单尚未接通员工销售归属，暂不生成排名', rows: [], sales_assessment: false, as_of: stamp })

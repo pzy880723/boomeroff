@@ -33,6 +33,7 @@ function harness(handler, options = {}) {
   vm.runInNewContext(fs.readFileSync(path.join(root, 'index.js'), 'utf8'), {
     require(id) {
       if (id === '../../shared/page') { const m = { exports: {} }; vm.runInNewContext(fs.readFileSync(path.resolve(root, '../../shared/page.js'), 'utf8'), { module: m, getApp: () => app, wx }); return m.exports; }
+      if (id === './uploads') { const m = { exports: {} }; vm.runInNewContext(fs.readFileSync(path.join(root, 'uploads.js'), 'utf8'), { module: m, require: id => require(path.resolve(root, id)), getApp: () => app, wx }); return m.exports; }
       return require(path.resolve(root, id));
     }, Page(value) { spec = value; }, wx, getApp: () => app, Date, Math, Object
   });
@@ -247,10 +248,10 @@ test('real shared preview DTO renders masked evidence errors but all true/false/
   assert.equal(h.calls.filter(c => c.action === 'publication-confirm').length, 0); assert.equal(h.page.data.canSubmit, false);
 });
 
-test('native application files are compiler-safe and do not add storage, direct RPC, H5, uploads or approval side effects', () => {
+test('native application files are compiler-safe and do not add disk storage, direct RPC, H5, transport or approval side effects', () => {
   for (const f of ['index.js', 'model.js', 'index.wxml', 'index.wxss', 'index.json']) assert.ok(fs.existsSync(path.join(root, f)), f);
-  const js = fs.readFileSync(path.join(root, 'index.js'), 'utf8') + fs.readFileSync(path.join(root, 'model.js'), 'utf8');
-  assert.doesNotMatch(js, /setStorage|writeFile|api\.invoke|activity-review|voucher-redeem|chooseMedia|uploadFile|navigateTo\(|new URL\(/);
+  const js = ['index.js', 'model.js', 'uploads.js', 'upload-model.js'].map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
+  assert.doesNotMatch(js, /setStorage|writeFile|api\.invoke|activity-review|voucher-redeem|uploadFile|navigateTo\(|new URL\(/);
   const xml = fs.readFileSync(path.join(root, 'index.wxml'), 'utf8'); assert.doesNotMatch(xml, /&amp;&amp;|\.includes\(|<web-view/); assert.match(xml, /bindtap="reconcile"/); assert.match(xml, /bindtap="reloadLatest"/);
 });
 

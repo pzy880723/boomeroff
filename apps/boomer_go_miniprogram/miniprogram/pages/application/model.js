@@ -80,4 +80,4 @@ function transactionAborted(error) {
   return !!(error && ((error.status === 400 && error.code === 'invalid_params') || (error.status === 404 && error.code === 'not_found') || (error.status === 409 && error.code === 'version_conflict') || (error.status === 422 && ['screenshot_not_allowed', 'note_too_long', 'invalid_url'].includes(error.code))));
 }
 function requestId() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const n = Math.floor(Math.random() * 16); return (c === 'x' ? n : (n & 3) | 8).toString(16); }); }
-module.exports = { UUID, VERSION, timestamp, time, scope, imageView, parseDetail, draftFrom, normalizeDraft, receiptValid, readbackMatches, transactionAborted, requestId };
+module.exports = { UUID, VERSION, timestamp, time, scope, image, imageView, parseDetail, draftFrom, normalizeDraft, receiptValid, readbackMatches, transactionAborted, requestId };

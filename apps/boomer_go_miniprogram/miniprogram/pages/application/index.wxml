@@ -1,7 +1,7 @@
 <view class="page application-page">
   <view wx:if="{{preview}}" class="preview-banner">操作示例 · 非真实申请，不执行发布确认</view>
   <view wx:if="{{loading}}" class="loading">正在核验权限与申请详情…</view>
-  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary retry-button" bindtap="refresh" disabled="{{loading || sending || checkingStatus}}">重新核验并读取</button></view>
+  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary retry-button" bindtap="refresh" disabled="{{loading || uploadBusy || sending || checkingStatus}}">重新核验并读取</button></view>
   <block wx:if="{{view}}">
     <view class="title activity-name">{{view.title}}</view>
     <view class="muted store-label">{{view.shopName}} · 申请记录</view>
@@ -11,20 +11,35 @@
       <view class="muted status-line">申请审核：{{view.applicationStatus}}（独立状态）</view>
     </view>
     <view class="field-title">发布链接</view>
-    <input class="field url-field" value="{{url}}" bindinput="onUrl" placeholder="填写已发布内容的完整链接" maxlength="-1" disabled="{{loading || pending || receipt || !canManage}}" />
+    <input class="field url-field" value="{{url}}" bindinput="onUrl" placeholder="填写已发布内容的完整链接" maxlength="-1" disabled="{{loading || uploadBusy || pending || receipt || !canManage}}" />
     <view class="url-note row"><text class="muted">只支持显式复制，不跳转网页</text><button wx:if="{{url}}" class="copy-button" bindtap="copyUrl">复制</button></view>
     <view class="field-title">确认备注</view>
-    <textarea class="field note-field" value="{{note}}" bindinput="onNote" placeholder="补充核对情况，失败时保留原稿" maxlength="-1" disabled="{{loading || pending || receipt || !canManage}}" />
+    <textarea class="field note-field" value="{{note}}" bindinput="onNote" placeholder="补充核对情况，失败时保留原稿" maxlength="-1" disabled="{{loading || uploadBusy || pending || receipt || !canManage}}" />
     <view class="muted field-help">备注最多 200 字 · 发布链接最多 500 字符</view>
     <view class="field-title">发布截图 <text class="muted">{{images.length}} 张</text></view>
     <view wx:if="{{!images.length}}" class="empty evidence-empty">没有发布截图；不影响按服务器规则确认。</view>
     <view class="evidence-grid">
       <view wx:for="{{images}}" wx:key="index" class="evidence-card">
-        <button class="image-button" bindtap="previewEvidence" data-index="{{index}}"><image wx:if="{{item.available}}" src="{{item.url}}" mode="aspectFill" class="evidence-image" /><view>{{item.status}}</view></button>
-        <button wx:if="{{!pending && !receipt}}" class="remove-button" bindtap="removeEvidence" data-index="{{index}}" disabled="{{loading}}">移除引用</button>
+        <button class="image-button" bindtap="previewEvidence" data-index="{{index}}" disabled="{{loading || uploadBusy}}"><image wx:if="{{item.available}}" src="{{item.url}}" mode="aspectFill" class="evidence-image" /><view>{{item.status}}</view></button>
+        <button wx:if="{{!pending && !receipt}}" class="remove-button" bindtap="removeEvidence" data-index="{{index}}" disabled="{{loading || uploadBusy || !canSubmit}}">移除引用</button>
       </view>
     </view>
-    <view class="muted evidence-help">本阶段仅保留或移除既有图片引用，不上传、不删除原图。</view>
+    <button class="upload-tile" bindtap="chooseOriginal" disabled="{{!canChoose || loading}}"><view class="upload-plus">+</view><view>{{preview ? '示例不可上传' : canChoose ? '添加原图' : '当前不可添加原图'}}</view><view class="muted">相册或拍摄 · 原格式 · 单张 ≤10MiB</view></button>
+    <view wx:if="{{uploadError}}" class="error">{{uploadError}}</view>
+    <view wx:for="{{uploads}}" wx:key="index" class="card upload-card">
+      <view class="upload-name">{{item.name}}</view><view class="upload-state">{{item.label}}</view>
+      <progress wx:if="{{item.progress !== null}}" percent="{{item.progress}}" activeColor="#EB0029" stroke-width="4" />
+      <view wx:if="{{item.progress === 100 && item.state !== 'ready'}}" class="muted">传输完成不代表验证成功</view>
+      <view wx:if="{{item.error}}" class="upload-error">{{item.error}}</view>
+      <view class="upload-actions">
+        <button class="button-secondary" bindtap="previewUpload" data-index="{{index}}" disabled="{{uploadBusy || loading}}">预览原图</button>
+        <button wx:if="{{item.state === 'selected'}}" class="button-secondary" bindtap="uploadOriginal" data-index="{{index}}" disabled="{{uploadBusy || loading || preview}}">上传原图</button>
+        <button wx:if="{{item.state === 'unknown' || item.state === 'blocked' || item.state === 'ready'}}" class="button-secondary" bindtap="checkUpload" data-index="{{index}}" disabled="{{uploadBusy || loading || pending || receipt || preview}}">只读核对上传状态</button>
+        <button wx:if="{{item.canRetry}}" class="button-secondary" bindtap="retryUpload" data-index="{{index}}" disabled="{{uploadBusy || loading || preview}}">再次确认并继续原请求</button>
+        <button wx:if="{{item.canRemove && item.included}}" class="button-secondary" bindtap="removeUpload" data-index="{{index}}" disabled="{{uploadBusy || loading || pending || receipt || confirming || !verified || !canManage}}">不用于此次保存</button>
+      </view>
+    </view>
+    <view class="muted evidence-help">上传只准备原图，不代表发布记录已保存。移除引用不删除原图；新增待处理最多 9 张，既有图片不受此数量限制。</view>
     <view wx:if="{{view.answers.length}}" class="card answers-card">
       <view class="field-title answers-title">申请提交信息（只读）</view>
       <view wx:for="{{view.answers}}" wx:key="key" class="answer-row"><view class="muted">{{item.label}}</view><view wx:if="{{item.type !== 'image'}}" class="answer-value">{{item.value || '未提供'}}</view><button wx:if="{{item.image}}" class="button-secondary answer-image" bindtap="previewAnswer" data-index="{{index}}">{{item.image.status}}</button></view>

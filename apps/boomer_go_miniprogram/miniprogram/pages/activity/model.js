@@ -22,8 +22,8 @@ function basic(response, context) {
 
 function capabilities(response, shopId) {
   if (!response || response.shop_id !== shopId || typeof response.can_manage !== 'boolean' || typeof response.can_confirm_publish !== 'boolean'
-    || response.can_upload_evidence !== false) throw new Error('活动管理权限尚未确认，请重试。');
-  return { canManage: response.can_manage, canConfirmPublish: response.can_confirm_publish, canUploadEvidence: false };
+    || typeof response.can_upload_evidence !== 'boolean') throw new Error('活动管理权限尚未确认，请重试。');
+  return { canManage: response.can_manage, canConfirmPublish: response.can_confirm_publish, canUploadEvidence: response.can_upload_evidence };
 }
 
 function application(row, context) {

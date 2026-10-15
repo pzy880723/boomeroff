@@ -137,7 +137,7 @@ for (const last of ['activity-detail', 'activity-capabilities']) {
   });
 }
 
-for (const patch of [{ shop_id: OTHER_SHOP }, { can_confirm_publish: 'true' }, { can_upload_evidence: true }]) {
+for (const patch of [{ shop_id: OTHER_SHOP }, { can_confirm_publish: 'true' }, { can_upload_evidence: 'true' }]) {
   test('mismatched capability contract cannot start application reads: ' + JSON.stringify(patch), async () => {
     const f = fixture({ 'activity-capabilities': () => caps(SHOP, patch) }); await f.open();
     assert.equal(f.p.data.activity.id, ACT); assert.equal(f.p.data.canManage, false);
@@ -145,6 +145,14 @@ for (const patch of [{ shop_id: OTHER_SHOP }, { can_confirm_publish: 'true' }, {
     assert.equal(f.calls.filter(x => x[0] === 'activity-applications').length, 0);
   });
 }
+
+test('the activity list remains usable when the backend enables native evidence upload', async () => {
+  const f = fixture({ 'activity-capabilities': () => caps(SHOP, { can_upload_evidence: true,
+    upload_policy: { max_bytes: 10485760, max_pending: 9, intent_ttl_seconds: 600, formats: ['jpg', 'png', 'webp', 'gif', 'heic', 'heif', 'avif'] } }) });
+  await f.open();
+  assert.equal(f.p.data.capabilitiesError, ''); assert.equal(f.p.data.canManage, true);
+  assert.equal(f.p.data.canUploadEvidence, true); assert.equal(f.p.data.applications.length, 1);
+});
 
 test('all/unconfirmed/confirmed use publish booleans, never approval status filters', async () => {
   const f = fixture(); await f.open();

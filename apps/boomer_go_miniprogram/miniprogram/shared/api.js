@@ -1,6 +1,8 @@
+const { createPublicationUploads } = require('./publication-upload');
+
 function createApi({ wx, config, session, invoke: transport }) {
   const saveRequests = [];
-  const shopActions = new Set(['learning', 'objectives', 'objective-update', 'marketing-assets', 'marketing-detail', 'activities', 'activity-detail', 'vouchers', 'voucher-detail', 'voucher-capabilities', 'voucher-lookup', 'voucher-redeem', 'voucher-redeem-status', 'schedule', 'activity-capabilities', 'activity-applications', 'application-detail', 'publication-confirm', 'publication-confirm-status']);
+  const shopActions = new Set(['learning', 'objectives', 'objective-update', 'marketing-assets', 'marketing-detail', 'activities', 'activity-detail', 'vouchers', 'voucher-detail', 'voucher-capabilities', 'voucher-lookup', 'voucher-redeem', 'voucher-redeem-status', 'schedule', 'activity-capabilities', 'activity-applications', 'application-detail', 'publication-confirm', 'publication-confirm-status', 'publication-upload-intent', 'publication-upload-commit', 'publication-upload-status']);
   function snapshot() {
     const value = typeof session.get === 'function' ? session.get() : null;
     return { revision: session.revision ? session.revision() : null, identity: value ? JSON.stringify([value.userId, value.shop && value.shop.id, value.scopeVersion]) : '' };
@@ -238,6 +240,6 @@ function createApi({ wx, config, session, invoke: transport }) {
     if (!wx.shareFileMessage) throw new Error('此文件类型暂不能原生预览，当前微信也不支持文件分享');
     return settled(before, new Promise((resolve, reject) => wx.shareFileMessage({ filePath: temp, fileName: String(att.name || '附件'), success: resolve, fail: () => reject(new Error('文件分享未完成，原文件未修改')) })));
   }
-  return { action, invoke, recognize, assistant, saveMedia, copy, sales, leaderboard, uploadChatAttachment, openChatAttachment };
+  return Object.assign({ action, invoke, recognize, assistant, saveMedia, copy, sales, leaderboard, uploadChatAttachment, openChatAttachment }, createPublicationUploads({ wx, config, session, transport, snapshot, settled, ensureFresh }));
 }
 module.exports = { createApi };
