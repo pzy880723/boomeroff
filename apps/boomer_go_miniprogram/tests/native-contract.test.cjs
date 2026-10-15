@@ -13,6 +13,12 @@ test('continuous learning is a native secondary route, never a sixth tab',()=>{
  const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
  assert.ok(app.pages.includes('pages/practice/index'));assert.equal(app.tabBar.list.length,5);
 });
+test('store SOP and QA maintenance use dedicated native secondary routes',()=>{
+ const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
+ assert.ok(app.pages.includes('pages/store-kb/index'));
+ assert.ok(app.pages.includes('pages/store-kb-edit/index'));
+ assert.equal(app.tabBar.list.length,5);
+});
 test('native source never embeds or navigates to a web page',()=>{
   function walk(dir){return fs.existsSync(dir)?fs.readdirSync(dir,{withFileTypes:true}).flatMap(x=>x.isDirectory()?walk(path.join(dir,x.name)):[path.join(dir,x.name)]):[];}
   const files=walk(root).filter(x=>/\.(js|wxml|json)$/.test(x));

@@ -1,0 +1,35 @@
+<view class="page editor-page">
+  <view wx:if="{{preview}}" class="preview-banner">合成示例 · 仅本页编辑草稿 · 保存和删除不可用</view>
+  <view class="muted">{{shopName}} · {{typeLabel}}</view>
+  <view class="title">维护知识</view>
+  <view wx:if="{{scopeLabel}}" class="badge">{{scopeLabel}}</view>
+  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary" disabled="{{sending || confirming}}" bindtap="retry">重新读取</button></view>
+  <view wx:if="{{loading}}" class="loading">正在核验服务器内容…</view>
+  <view wx:if="{{notice}}" class="notice {{saved ? 'verified-notice' : ''}}">{{notice}}</view>
+  <button wx:if="{{saved}}" class="button-secondary" data-url="{{returnUrl}}" bindtap="go">返回本店知识列表</button>
+  <view wx:if="{{conflict && !pending}}" class="card conflict-card"><view>服务器版本与当前草稿不同</view><view class="muted">草稿没有丢失。载入最新将放弃未保存修改。</view><button class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="reloadLatest">明确载入最新</button></view>
+  <view wx:if="{{pending}}" class="card pending-card">
+    <view class="section-title">{{receiptConfirmed ? '回执已确认' : '原请求结果待确认'}}</view>
+    <view class="muted">{{receiptConfirmed ? '不会再次提交。只读取服务器详情核验保存或删除结果。' : '原编号和内容已冻结在本次应用内存中，不会自动重发。'}}</view>
+    <view wx:if="{{readbackError}}" class="error">{{readbackError}}</view>
+    <button wx:if="{{receiptConfirmed}}" class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="retryReadback">只读回查详情</button>
+    <button wx:else class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="reconcile">只读核对原请求</button>
+    <button wx:if="{{canRetrySame && !receiptConfirmed}}" class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="retrySame">再次确认后按原请求重试</button>
+  </view>
+  <view wx:if="{{categories.length}}" class="card editor-card">
+    <view class="field-label">标题 <text class="muted">必填 · 最多 200 字</text></view>
+    <input class="field title-input" value="{{title}}" maxlength="-1" disabled="{{!editable || loading || sending}}" bindinput="onTitle" placeholder="输入流程或问题标题" />
+    <view class="field-label">已有分类</view>
+    <picker mode="selector" range="{{categoryNames}}" value="{{categoryIndex}}" disabled="{{!editable || loading || sending}}" bindchange="onCategory"><view class="field row"><text>{{categoryNames[categoryIndex]}}</text><text class="muted">选择 ›</text></view></picker>
+    <view class="field-label">正文 <text class="muted">可为空 · 最多 40000 字</text></view>
+    <textarea class="field body-input" value="{{body}}" maxlength="-1" disabled="{{!editable || loading || sending}}" bindinput="onBody" placeholder="可使用标题、粗体、列表和表格 Markdown" auto-height />
+    <view class="muted input-help">保留原文编辑。共享内容只读；门店与内容类型不可在此修改。</view>
+    <view class="field-label">标签 <text class="muted">最多 20 个 · 每个 40 字</text></view>
+    <textarea class="field tags-input" value="{{tagsText}}" maxlength="-1" disabled="{{!editable || loading || sending}}" bindinput="onTags" placeholder="使用逗号分隔标签" auto-height />
+    <view class="muted input-help">包括 okr-highlight 在内的现有标签会保留，只有明确修改才改变。</view>
+    <view wx:if="{{validation}}" class="validation">{{validation}}</view>
+    <button class="button save-button" disabled="{{!canSave || loading || sending || confirming}}" loading="{{sending}}" bindtap="save">确认保存</button>
+    <button class="button-secondary delete-button" disabled="{{!canDelete || loading || sending || confirming}}" bindtap="remove">删除本店内容</button>
+  </view>
+  <view class="muted storage-note">未发送草稿仅保留在当前页面内存；未决请求仅在本次应用运行内保留，不保证关闭微信后恢复。</view>
+</view>

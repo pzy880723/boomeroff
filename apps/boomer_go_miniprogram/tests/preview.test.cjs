@@ -1,5 +1,35 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const{createPreview}=require('../miniprogram/shared/preview');
 test('development samples load without false live-sales or persistence',async()=>{const p=createPreview({});const data=await p.api.sales();assert.equal(data.achieved_cents,null);assert.equal(data.complete,false);assert.ok(data.as_of);const dashboard=await p.api.action('dashboard');assert.equal(dashboard.shift.title,'早班');const result=await p.api.action('quiz-submit',{});assert.equal(result.persisted,false);await assert.rejects(p.api.invoke('surprise-marketing-video',{}));});
+test('SOP and QA preview preserve scope, Markdown and shared read-only details without writing',async()=>{
+ const p=createPreview({}),shop_id=p.session.get().shop.id;
+ for(const type of ['sop','qa']){
+  const caps=await p.api.action('kb-capabilities',{shop_id,type});
+  assert.equal(caps.shop_id,shop_id);assert.equal(caps.type,type);assert.equal(caps.can_write,true);
+  assert.deepEqual(caps.limits,{title_chars:200,body_chars:40000,tags:20,tag_chars:40,query_chars:200});
+  const list=await p.api.action('kb-list',{shop_id,type});
+  assert.equal(list.type,type);assert.equal(list.page,0);assert.equal(list.has_more,false);assert.ok(list.as_of);
+  assert.ok(list.items.some(row=>row.shop_id===shop_id));assert.ok(list.items.some(row=>row.shop_id===null));
+  for(const row of list.items){
+   assert.match(row.id,/^[0-9a-f-]{36}$/);assert.equal(row.type,type);assert.equal(row.body,undefined);assert.ok(row.body_preview.length<=400);
+   const d=await p.api.action('kb-detail',{shop_id,type,id:row.id});
+   assert.equal(d.entry.id,row.id);assert.equal(d.entry.type,type);assert.match(d.entry.title,/示例/);assert.match(d.version,/^[0-9a-f]{64}$/);
+   assert.equal(d.can_edit,row.shop_id===shop_id);assert.equal(d.can_delete,row.shop_id===shop_id);
+   assert.ok(d.entry.body.includes('**'));assert.ok(d.categories.every(c=>c.type===type&&(c.shop_id===shop_id||c.shop_id===null)));
+  }
+  const own=list.items.find(row=>row.shop_id===shop_id);
+  if(type==='sop')assert.ok((await p.api.action('kb-detail',{shop_id,type,id:own.id})).entry.tags.includes('okr-highlight'));
+  const filtered=await p.api.action('kb-list',{shop_id,type,q:own.title,page:0,page_size:1});assert.equal(filtered.items.length,1);assert.equal(filtered.query,own.title);
+  assert.deepEqual((await p.api.action('kb-list',{shop_id,type,q:'% literal absent'})).items,[]);
+  assert.deepEqual((await p.api.action('kb-list',{shop_id,type,page:1})).items,[]);
+  await assert.rejects(p.api.action('kb-detail',{shop_id,type,id:'missing'}),e=>e.status===404);
+  await assert.rejects(p.api.action('kb-write',{shop_id,type,operation:'create',title:'不能保存'}));
+  await assert.rejects(p.api.action('kb-write-status',{shop_id,type,request_id:'missing'}));
+ }
+ await assert.rejects(p.api.action('kb-list',{shop_id:'foreign',type:'sop'}),e=>e.status===403);
+ await assert.rejects(p.api.action('kb-list',{shop_id,type:'training'}),e=>e.status===400);
+ await assert.rejects(p.api.action('kb-list',{shop_id,type:'sop',page:-1}),e=>e.status===400);
+ await assert.rejects(p.api.action('kb-list',{shop_id,type:'sop',page_size:51}),e=>e.status===400);
+});
 test('preview never substitutes an unrelated article or claims a real check-in',async()=>{const p=createPreview({});await assert.rejects(p.api.action('knowledge-detail',{id:'missing'}),/不存在/);const data=await p.api.action('checkin-status');assert.equal(data.checked_today,false);assert.ok(Array.isArray(data.history.items));await assert.rejects(p.api.action('checkin-submit'));});
 test('learning preview uses distinct favorite and result identities with explicit mastery and original content',async()=>{
  const p=createPreview({}), library=await p.api.action('my-library');

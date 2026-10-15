@@ -2,6 +2,17 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
+## 最新检查点：本店 SOP 与问答维护
+
+- 主流程在停写后新跑728/728，零失败／跳过／取消；22原生路由检查通过。官方wcc编译23WXML、wcsc编译24WXSS，退出0且stderr为空。五Tab保持工作台／学习／识物／消息／我的，无H5替代。
+- 新增store-kb列表／阅读和store-kb-edit页；工作台、学习及我的SOP/QA入口指向原生维护流程。现有shop.kb.write权限决定新增／编辑／删除，共享NULL条目永远只读。不写分类、不允许改门店／type／creator／排序，完整保留Markdown源文和标签（含okr-highlight），正文可空，超长明确阻止而非截断。
+- 首批页面24失败和后补边界4失败经修复；主流程API两项、路由／preview两项均观察RED→GREEN。实际GUI发现两页28处wx:if缺动态绑定导致错误框／加载／阅读同时出现：已加RED回归并修正，实际截图复查关闭。官方编译本身不能发现这种语义错误。
+- 最终页面focused38项、全部728项通过；独立复核38项及后台真实源码纯mock11+25项通过，未发现新增可确认P1/P2。独立复核未重跑全套／官方编译／SQL或GUI。
+- 仅从未未知的首次请求允许精确七对明确事务失败释放槽位并保稿，必须重新读取；version_conflict内部锁跨刷新／隐藏保留，仅明确adopt且成功读回才清除。历史unknown、request_id_conflict、401/403、500、transport以及成功回执后的回读失败不释放，不换key、不自动重发。原请求保存在user/shop/type/resource隔离App RAM，不声称关闭微信后恢复。
+- 实际DevTools沿工作台SOP入口查看列表、本店正文／粗体／列表／表格、原生新增编辑控件和禁用保存／删除、共享只读以及QA切换。截图native-kb-list／read／editor／shared-readonly／qa-list在evidence，均为明确标注合成数据；phone是确定性裁切。编辑输入值未取得实际截图，不冒充GUI输入验收；正文编辑、草稿保留及写状态由VM测试覆盖，仍需真实手机验收。没有真实SOP新增、修改、删除或AI调用。
+- 后台固定ref37e0466774995fac4ead86325d223b641a57dbe1经get_project确认finished，实际读回kb.ts／index.ts／0019并复算UTF8哈希，与报告和独立复核一致。读RPC为INVOKER保留RLS，write/status为窄SECDEF，fresh／当前工作店／已有动作权限全检；分类FOR SHARE、同actor/request锁、receipt-before-CAS及删除后状态恢复已源审。Lovable报告0019已应用、Edge已部署、Deno87+quiz5与SQL60强制回滚通过；主流程未执行特权SQL、真并发或下载线上bundle，不将报告冒充独立运行。
+- 主流程向在线kb-write发无身份请求返回401 unauthorized，仅证明可达与匿名拒绝。店员当天无有效工作店时新接口403，未加单店兜底或跨店权限。AI草稿、分类管理、其他角色功能及真实账号／设备验收仍是剩余迁移工作，未发布微信。
+
 ## 最新检查点：连续练习
 
 - 主流程在页面停写及午夜恢复修复后新跑686/686，零失败／跳过／取消；20原生路由检查、官方21WXML／22WXSS编译通过，stderr为空。五Tab未变。

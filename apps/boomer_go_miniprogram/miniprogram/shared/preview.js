@@ -32,11 +32,44 @@ function createPreview(wx) {
     { id: '00000000-0000-4000-8000-000000000012', sender_id: current.userId, receiver_id: peer.user_id, mine: true, body: '收到，我先去知识库复习一下。这是合成消息。', attachment: null, created_at: date + 'T09:01:00+08:00', read_at: null, cursor: 'example-dm-12' }
   ];
   const snapshots = new Map();
+  const kbCategories = ['sop', 'qa'].flatMap((type, i) => [
+    { id: '00000000-0000-4000-8000-0000000001' + i + '1', shop_id: shop.id, type, name: '门店服务（示例）', sort_order: 0 },
+    { id: '00000000-0000-4000-8000-0000000001' + i + '2', shop_id: null, type, name: '共享知识（示例）', sort_order: 1 }
+  ]);
+  const kbEntries = ['sop', 'qa'].flatMap((type, i) => [
+    { id: '00000000-0000-4000-8000-0000000002' + i + '1', shop_id: shop.id, type, category_id: kbCategories[i * 2].id,
+      title: type === 'sop' ? '开店前的三项检查（示例）' : '客人询问商品年代，怎样回答？（示例）',
+      body: type === 'sop' ? '## 开店准备\n\n1. **先看通道**：确保出入通畅。\n2. 核对价签与可见品相。\n3. 整理当日学习资料。\n\n| 检查项 | 做法 |\n| --- | --- |\n| 价签 | 一件一价，核对实物 |\n| 品相 | 如实说明使用痕迹 |\n\n这是合成示例，不是真实门店作业记录。' : '**先说能确认的信息**，再说明暂无法判断的部分。\n\n- 展示可见底款与工艺。\n- 不把猜测当作年代或真伪保证。\n\n这是合成问答示例，不是鉴定结论。',
+      tags: type === 'sop' ? ['开店', 'okr-highlight', '示例'] : ['接待', '示例'], sort_order: 0, created_by: current.userId, created_at: stamp, updated_at: stamp },
+    { id: '00000000-0000-4000-8000-0000000002' + i + '2', shop_id: null, type, category_id: kbCategories[i * 2 + 1].id,
+      title: type === 'sop' ? '共享品相说明规范（示例，只读）' : '共享服务问答（示例，只读）',
+      body: '**共享内容保持只读**。\n\n请如实介绍可见品相，不编造折扣和未经核实的商品故事。\n\n本条仅供原生界面预览。', tags: ['共享', '示例'], sort_order: 1, created_by: null, created_at: stamp, updated_at: stamp }
+  ]);
   const session = { get: () => current, token: () => null, require: async () => current, hasCredentials: () => false, signOut() {} };
   const unavailable = () => Promise.reject(new Error('初版示例模式不会提交真实数据或付费任务，请使用员工账号登录后操作'));
   async function action(name, params = {}) {
     const stamp = new Date().toISOString();
     if (name === 'dashboard') return bootstrap;
+    if (['kb-capabilities', 'kb-list', 'kb-detail'].includes(name)) {
+      const invalid = () => Object.assign(new Error('知识库示例参数不合法'), { status: 400, code: 'invalid_params' });
+      if (!['sop', 'qa'].includes(params.type)) throw invalid();
+      if (params.shop_id !== shop.id) throw Object.assign(new Error('示例模式只展示当前门店'), { status: 403, code: 'shop_forbidden' });
+      const common = { shop_id: shop.id, type: params.type };
+      const categories = kbCategories.filter(row => row.type === params.type).map(row => Object.assign({}, row));
+      if (name === 'kb-capabilities') return Object.assign(common, { can_write: true, limits: { title_chars: 200, body_chars: 40000, tags: 20, tag_chars: 40, query_chars: 200 } });
+      if (name === 'kb-detail') {
+        const entry = kbEntries.find(row => row.type === params.type && row.id === params.id);
+        if (!entry) throw Object.assign(new Error('该知识库示例不存在'), { status: 404, code: 'not_found' });
+        return Object.assign(common, { entry: Object.assign({}, entry, { tags: entry.tags.slice() }), categories, version: 'a'.repeat(64), can_edit: entry.shop_id === shop.id, can_delete: entry.shop_id === shop.id, as_of: stamp });
+      }
+      const page = params.page === undefined ? 0 : params.page, page_size = params.page_size === undefined ? 20 : params.page_size;
+      if (!Number.isInteger(page) || page < 0 || !Number.isInteger(page_size) || page_size < 1 || page_size > 50 || (params.q !== undefined && typeof params.q !== 'string')) throw invalid();
+      const query = (params.q || '').trim(), category_id = params.category_id || null;
+      if (Array.from(query).length > 200 || (category_id && !categories.some(row => row.id === category_id))) throw invalid();
+      const rows = kbEntries.filter(row => row.type === params.type && (!category_id || row.category_id === category_id) && [row.title, row.body].concat(row.tags).some(text => text.toLowerCase().includes(query.toLowerCase())));
+      const items = rows.slice(page * page_size, (page + 1) * page_size).map(row => ({ id: row.id, shop_id: row.shop_id, type: row.type, category_id: row.category_id, title: row.title, body_preview: row.body.slice(0, 400), tags: row.tags.slice(), sort_order: row.sort_order, updated_at: row.updated_at }));
+      return Object.assign(common, { query, category_id, items, categories, page, page_size, has_more: (page + 1) * page_size < rows.length, as_of: stamp });
+    }
     if (name === 'profile') return { profile, staff: profile, role: { role_code: 'staff' }, erp_scope: { scope: 'store', shop_ids: [shop.id] }, experience: { total_exp: 0 } };
     if (name === 'schedule') {
       const month = params.month || date.slice(0, 7), view = params.view || 'mine';

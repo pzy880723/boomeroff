@@ -381,3 +381,27 @@ params `{page?, page_size?:1..50, snapshot_id?:uuid}`；新原生首屏不传 sn
 - 原 shift_schedules 有 UNIQUE(work_date,user_id)，RPC 展示按同人同日去重且上班优先；冲突独立返回，不能从展示行数推断没有冲突。整月无 RPC 行数截断。兼容 schedules/shift_defs 仅本人，当月查询上限为 1000。
 - RPC 42501 shop not authorized → 403 shop_forbidden；42501 ERP mapping → 403 erp_scope_not_ready；22023 → 400 invalid_params；28000 → 401 unauthorized；其他 → 500 db_error。
 - Lovable 报告 Deno 排班 8/8、其余券／DM／媒体／店／社区／Web／quiz 回归均通过；`tests/sql/go-schedule-readonly.sql` 5 组合成 SQL 强制回滚后无残留。主流程未重跑 SQL，没有真实员工或真实排班 E2E。
+
+## 本店 SOP/QA Round 22
+
+固定源码 `37e0466774995fac4ead86325d223b641a57dbe1`，get_project确认finished。主流程与独立审查实际读回源码、复算UTF8 SHA256：
+
+- `supabase/functions/go-mini-api/kb.ts`: `521224a7b2a7629e782d51b562c965324da4f8369c21489d8379b2f793a9d4d2`
+- `supabase/functions/go-mini-api/index.ts`: `078af542492a5a9e511ae1f16139b5c1310580eb23fd63cd5e724eb48a6961c6`
+- `drizzle/migrations/0019_go_kb_maintain_native.sql`: `2ed5bc553de41ea739212ed925e89503d5e6865174af02333a75e3042f3c758f`
+
+Lovable报告迁移已应用、go-mini-api已部署、Deno87+quiz5及SQL60合成强制回滚通过。独立实际源码转译mock11+handler25通过；没有独立SQL/双会话并发/真实员工验收，也没有下载线上bundle比对。主流程无身份kb-write请求401 unauthorized只证明匿名拒绝。
+
+所有新action要求非NULL `shop_id` 和 `type:'sop'|'qa'`。现有身份／停用／fresh闸门不变。SQL独立重验当前店：store只认当天 `current_shop_context_v1().effective_shop`，无有效工作店即403，不加单授权店兜底；HQ只在原ERP授权店内选择。读RPC SECURITY INVOKER保留RLS；write/status窄SECURITY DEFINER，固定search_path且必须现有 `can_write_scoped(shop,'shop.kb.write') IS TRUE`。无新整表／分类／跨店权限，不使用service业务读取。
+
+1. `kb-capabilities {shop_id,type}` → `{shop_id,type,can_write:boolean,limits:{title_chars:200,body_chars:40000,tags:20,tag_chars:40,query_chars:200}}`。
+2. `kb-list {shop_id,type,q?,category_id?,page?:0,page_size?:20}` → `{shop_id,type,query,category_id,items,categories,page,page_size,has_more,as_of}`。size1..50；仅当前店或共享NULL。items白名单id/shop_id/type/category_id/title/body_preview最多400码点/tags/sort_order/updated_at；categories为id/shop_id/type/name/sort_order。q trim后最多200，SQL strpos(lower())按标题／正文／每标签字面子串搜索；固定sort_order ASC,updated_at DESC,id DESC。不编造总数或快照。
+3. `kb-detail {shop_id,type,id}` → `{shop_id,type,entry,categories,version,can_edit,can_delete,as_of}`。entry白名单id/shop_id/type/category_id/title/body/tags/sort_order/created_by/created_at/updated_at；version为行及scope canonical SHA256，时间用epoch微秒，不由客户端推测。共享NULL永远只读。
+4. `kb-write {shop_id,type,request_id,operation:'create'|'update'|'delete',entry_id?,expected_version?,category_id?,title?,body?,tags?}` → `{shop_id,type,request_id,operation,actor_id,entry_id,version,deleted,recorded_at,replay}`。create无entry/version，服务器分配id/actor/time，sort_order0。update/delete必须同非NULL店/type/id及64hex版本。update整体替换category/title/body/tags，省略body为空、tags为空、category为空；原生始终传全，保留原creator/sort/store/type。delete不带内容字段，回执版本为被删行版本。
+5. `kb-write-status {shop_id,type,request_id,operation,entry_id?}` → `{shop_id,type,request_id,operation,requested_entry_id:null|uuid,state:'succeeded'|'not_found',receipt:null|receipt}`。先当前fresh/写权限，再本人精确回执，不要求目标行仍存在。not_found不证明未知写入失败或取消。
+
+title trim必填，正文允许空；双层码点限长不截断。tags字符串数组trim去空／精确去重保序。分类仅NULL或同type本店／共享，事务FOR SHARE锁校验，不创建分类。私有receipt仅canonical全payload hash和元数据，无正文/tags或客户端权限。同actor/request事务advisory锁，精确重放先于CAS，变更与receipt原子提交。
+
+精确错误：400 invalid_params；401 unauthorized；403 forbidden/shop_forbidden/erp_scope_not_ready/account_suspended；404 not_found；409 version_conflict/request_id_conflict；422 invalid_category/title_too_long/body_too_long/invalid_tags；500 db_error。SQL无catch吞错，RAISE整体回滚；客户端只对首次从未未知且无receipt的七对400/404/version_conflict/四种422释放槽位并保稿重读。request_id_conflict、401403、500、transport、恢复历史unknown及回执后回读失败绝不释放。后台文案“重新发起”不授权丢弃原请求。
+
+旧knowledge-detail SOP/QA/training已收窄当前工作店或共享NULL，其他来源不变。旧learning列表未因此全局收紧，旧Web AI和自动创建分类未改，不作为新原生AI能力；现有kb_ingest_queue触发器仍照旧随真实知识写入运行。

@@ -73,3 +73,20 @@ test('activity management never accepts a caller-selected foreign shop or a miss
  for(const action of actions) await api.action(action,{shop_id:'foreign',application_id:'app',request_id:'intent'});
  assert.ok(calls.every(r=>r.params.shop_id==='own'&&r.params.application_id==='app'&&r.params.request_id==='intent'));
 });
+test('store KB reads and writes require the verified selected store and preserve frozen operation fields',async()=>{
+ let shop=null;const calls=[];const api=createApi({wx:{},config:{},session:{get:()=>({userId:'u',shop})},invoke:async(name,body)=>{calls.push(body);return {data:{}};}});
+ const names=['kb-capabilities','kb-list','kb-detail','kb-write','kb-write-status'];
+ for(const name of names)await assert.rejects(api.action(name,{shop_id:'foreign',type:'sop'}),/授权工作门店/);
+ assert.equal(calls.length,0);shop={id:'current'};
+ const params={shop_id:'foreign',type:'qa',request_id:'request',operation:'update',entry_id:'entry',expected_version:'version',title:'draft',body:'body',tags:['tag']};
+ for(const name of names)await api.action(name,params);
+ assert.ok(calls.every(x=>x.params.shop_id==='current'&&x.params.request_id==='request'&&x.params.expected_version==='version'&&x.params.body==='body'));
+ assert.equal(params.shop_id,'foreign');
+});
+test('legacy SOP QA training detail requires store context without blocking ordinary knowledge',async()=>{
+ let shop=null;const calls=[];const api=createApi({wx:{},config:{},session:{get:()=>({userId:'u',shop})},invoke:async(name,body)=>{calls.push(body);return {data:{id:'x',title:'content'}};}});
+ for(const kind of ['sop','qa','training'])await assert.rejects(api.action('knowledge-detail',{kind,id:'x',shop_id:'foreign'}),/授权工作门店/);
+ await assert.rejects(api.action('knowledge-detail',{source:'sop',id:'x'}),/授权工作门店/);
+ assert.equal(calls.length,0);await api.action('knowledge-detail',{kind:'official',id:'x'});assert.equal(calls.length,1);
+ shop={id:'current'};await api.action('knowledge-detail',{kind:'sop',id:'x',shop_id:'foreign'});assert.equal(calls[1].params.shop_id,'current');
+});

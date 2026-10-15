@@ -10,8 +10,8 @@ Page(definePage({
     name: '', shopName: '', shops: [], shopIndex: 0, isHeadquarters: false, date: '', shift: null, agenda: [], salesValue: '暂无数据', salesLabel: '付款毛额（未扣退款）', salesFreshness: '', salesError: '', salesLoading: false, salesNotice: '', freshness: '',
     agendaLoading: false, agendaError: '', agendaFreshness: '',
     tools: [
-      { label: '门店 SOP', icon: 'S', url: '/pages/list/index?kind=sop' },
-      { label: '门店问答', icon: 'Q', url: '/pages/list/index?kind=qa' },
+      { label: '门店 SOP', icon: 'S', url: '/pages/store-kb/index?type=sop' },
+      { label: '门店问答', icon: 'Q', url: '/pages/store-kb/index?type=qa' },
       { label: '每日任务', icon: '待', url: '/pages/list/index?kind=tasks' },
       { label: '门店 OKR', icon: 'O', url: '/pages/list/index?kind=objectives' },
       { label: 'BOOMER 圈', icon: '圈', url: '/pages/list/index?kind=community' },

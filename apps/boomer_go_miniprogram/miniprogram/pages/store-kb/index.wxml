@@ -1,0 +1,40 @@
+<view class="page kb-page">
+  <view wx:if="{{preview}}" class="preview-banner">合成示例 · 非真实门店知识 · 不会保存或删除</view>
+  <view class="muted">{{shopName}}</view>
+  <view class="row kb-header"><view class="title">{{typeLabel}}</view><button wx:if="{{!reading && canCreate}}" class="button new-button" bindtap="create">新增</button></view>
+  <block wx:if="{{!reading}}">
+    <view class="row kb-tabs"><button class="kb-tab {{type === 'sop' ? 'selected' : ''}}" data-type="sop" bindtap="switchType">SOP 流程</button><button class="kb-tab {{type === 'qa' ? 'selected' : ''}}" data-type="qa" bindtap="switchType">门店问答</button></view>
+    <view class="search row"><input value="{{query}}" maxlength="-1" placeholder="搜索标题、正文和标签" bindinput="onQuery" bindconfirm="search" confirm-type="search" /><button class="search-button" bindtap="search">搜索</button></view>
+    <scroll-view scroll-x class="category-scroll"><view class="category-line"><button class="chip {{selectedCategory === null ? 'active' : ''}}" bindtap="category">全部分类</button><button wx:for="{{categories}}" wx:key="id" class="chip {{selectedCategory === item.id ? 'active' : ''}}" data-id="{{item.id}}" bindtap="category">{{item.name}}</button></view></scroll-view>
+    <view class="muted scope-help">本店内容与共享内容 · 搜索由服务器执行</view>
+  </block>
+  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary" bindtap="retry">重新读取</button></view>
+  <view wx:if="{{loading}}" class="loading">正在读取…</view>
+  <block wx:if="{{!reading}}">
+    <view wx:for="{{items}}" wx:key="id" class="card kb-item" data-id="{{item.id}}" bindtap="open">
+      <view class="row"><text class="badge">{{item.scopeLabel}}</text><text class="muted small">{{item.updatedAt}}</text></view>
+      <view class="item-title">{{item.title}}</view><view class="muted item-preview">{{item.bodyPreview}}</view>
+      <view class="tags"><text wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" class="tag {{tag === 'okr-highlight' ? 'highlight' : ''}}">{{tag}}</text></view>
+      <view class="link item-link">阅读内容 ›</view>
+    </view>
+    <view wx:if="{{!loading && !error && !items.length}}" class="empty">当前筛选下暂无内容。<view>可更换分类或搜索词后重试。</view></view>
+    <button wx:if="{{hasMore}}" class="button-secondary" loading="{{loading}}" disabled="{{loading}}" bindtap="loadMore">加载更多</button>
+    <view wx:if="{{items.length}}" class="muted loaded-count">已加载 {{items.length}} 条 · {{hasMore ? '还有更多' : '当前筛选已读完'}}</view>
+  </block>
+  <block wx:if="{{reading && entry}}">
+    <view class="card article">
+      <text class="badge">{{entry.scopeLabel}}</text><view class="article-title">{{entry.title}}</view>
+      <view class="muted">更新 {{entry.updatedAt}}</view>
+      <view class="tags"><text wx:for="{{entry.tags}}" wx:key="*this" class="tag {{item === 'okr-highlight' ? 'highlight' : ''}}">{{item}}</text></view>
+      <view class="divider"></view>
+      <view wx:if="{{!blocks.length}}" class="empty">正文为空</view>
+      <block wx:for="{{blocks}}" wx:key="index" wx:for-item="block">
+        <scroll-view wx:if="{{block.kind === 'table'}}" scroll-x class="markdown-table"><view class="table-inner"><view wx:for="{{block.rows}}" wx:key="index" wx:for-item="row" class="table-row {{row.header ? 'table-header' : ''}}"><view wx:for="{{row.cells}}" wx:key="index" wx:for-item="cell" class="table-cell"><rich-text nodes="{{cell}}" /></view></view></view></scroll-view>
+        <view wx:else class="markdown-block markdown-{{block.kind}}"><text wx:if="{{block.kind === 'list'}}" class="list-marker">·</text><rich-text nodes="{{block.nodes}}" /></view>
+      </block>
+    </view>
+    <button wx:if="{{canEdit}}" class="button" bindtap="edit">编辑本店内容</button>
+    <view wx:else class="muted readonly-note">{{entry.shop_id === null ? '共享内容只读，不能在本店修改或删除。' : '当前账号仅可阅读。'}}</view>
+  </block>
+  <view wx:if="{{asOf}}" class="muted loaded-count">本次读取 {{asOf}}</view>
+</view>

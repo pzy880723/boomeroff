@@ -16,8 +16,8 @@ Page(definePage({
         { label: '我的收藏', icon: '藏', url: '/pages/list/index?kind=favorites' },
         { label: '识物记录', icon: '识', url: '/pages/list/index?kind=history' },
         { label: '知识测验记录', icon: '测', url: '/pages/list/index?kind=quiz-history' },
-        { label: '门店 SOP', icon: 'S', url: '/pages/list/index?kind=sop' },
-        { label: '门店问答', icon: 'Q', url: '/pages/list/index?kind=qa' }
+        { label: '门店 SOP', icon: 'S', url: '/pages/store-kb/index?type=sop' },
+        { label: '门店问答', icon: 'Q', url: '/pages/store-kb/index?type=qa' }
       ] },
       { title: '协作与服务', entries: [
         { label: 'BOOMER 圈', icon: '圈', url: '/pages/list/index?kind=community' },

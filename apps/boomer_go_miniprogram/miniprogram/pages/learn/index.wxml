@@ -44,5 +44,5 @@
   </view>
   <view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view>
   <button wx:if="{{hasMore}}" class="button-secondary" loading="{{loadingMore}}" disabled="{{loadingMore}}" bindtap="loadMore">加载更多学习内容</button>
-  <view class="row footer-links"><button class="button-secondary" data-url="/pages/list/index?kind=sop" bindtap="go">门店 SOP</button><button class="button-secondary" data-url="/pages/list/index?kind=qa" bindtap="go">门店问答</button></view>
+  <view class="row footer-links"><button class="button-secondary" data-url="/pages/store-kb/index?type=sop" bindtap="go">门店 SOP</button><button class="button-secondary" data-url="/pages/store-kb/index?type=qa" bindtap="go">门店问答</button></view>
 </view>
