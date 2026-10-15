@@ -2,6 +2,26 @@ Base snapshot from GO Lovable commit 0fbc3474e059e1622fc26df7cbccea196c712309, p
 
 # go-mini-api 服务端契约（小程序 / 原生共用）
 
+## Round19-21 Continuous Practice Window
+
+Final ref `a8e36ee6a14b3577b68764b0b7452f6623d15e4d` was confirmed finished by get_project. New read-only `practice-library {}` reuses the caller-JWT authenticated/fresh ERP gate and reads only caller-owned favorites, ordered created_at/id descending. It takes301 and returns the latest300, with `{items,window_limit:300,has_older:boolean,as_of}`. Item projection matches my-library plus strict passed derived only from the caller's favorite results for window IDs, queried in batches of100. Any favorite/result query error fails the whole request; no false unmastered fallback. Client actor parameters do not select an identity. No migration, RLS, grant or service business read was added; existing my-library is unchanged.
+
+This is not a server daily quota, task ledger or transactional snapshot. The native coordinator selects the oldest five pending within this window, then excludes this device/account/store/Shanghai-day's confirmed attempted IDs. Both failed and passed saved attempts count as practiced, not necessarily mastered. The current queue is RAM-only and does not refill automatically; ordinary favorite quizzes count too. Cross-device and half-question restoration are not claimed.
+
+R19 practice snapshot stripping and the old index knowledge stripper returned the original subtree past depth12. Main and independent actual-function synthetic reproductions confirmed deep answer keys survived. R20/R21 now retain primitive values but replace over-depth objects/arrays with null. Main replayed the original14-layer input against final index: no answer survives and shallow summary remains. The first attempted node_repl dynamic-code run was blocked by its host and is not execution evidence; the successful reproductions used Node CLI on the actual function with only TS annotations removed.
+
+Independently recomputed UTF-8 hashes at final ref:
+
+| File | SHA256 |
+| --- | --- |
+| index.ts | 0c1a76390de6f34a565ca6d59512daaa39f8b4a9abd90a87077c68440b31ea3d |
+| practice.ts | 49db094409b4c4ce69160e732bd9683f76bd3f67dd47f3ba06fb3404277ead3c |
+| knowledge-strip test | 3ff20214ed6f0788af8e665699274a7cfcd40e5a2a91c915ae80d7ac8e9d32f5 |
+
+Lovable reports read-only synthetic RED/GREEN tests, Deno73 with type checking and Edge deployment. New tests drive actual knowledge-detail handlers for official/knowledge/favorite-official/favorite-recognition/history at12/13/14 depths, mixed-case answer keys and arrays; ordinary list regression is not deep-strip coverage because that list does not call stripAnswers. recognition-save shares the fixed stripper but lacks a new dedicated deep test. Main did not execute these Deno tests or compare deployed bundle bytes. Anonymous practice-library returned401 unauthorized, proving denial/reachability only. No real employee exam or business record was touched.
+
+Independent fixed-source review confirmed R20 and R21 P2 closure without a new confirmed P1/P2: R20 actual-source mock10 plus extra cutoff probes; R21 forty-five synthetic sanitizer/detail-handler combinations and four boundary assertions passed. These are Node-based independent executions, not the reported Deno73 or actual production employee requests.
+
 ## Round18 Quiz Persistence Fact
 
 Final source ref `42984c7ae027a2086ecd93fc05bfdcf35122d1fa` was confirmed with get_project (`agentFinished:true`); the response prose's `77fa0e02` was an intermediate snapshot. Main read 0018, quiz.ts and index.ts at the final ref and independently recomputed raw UTF-8 hashes, matching the report:

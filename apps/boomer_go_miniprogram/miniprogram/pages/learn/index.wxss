@@ -38,3 +38,4 @@
 .learning-summary { font-size: 28rpx; line-height: 1.7; margin: 24rpx 0; }
 .learning-summary .muted { font-size: 26rpx; margin-top: 10rpx; }
 .learning-date { font-size: 26rpx; line-height: 1.7; margin-top: 14rpx; }
+.practice-entry .muted { font-size: 28rpx; line-height: 1.7; margin: 14rpx 0 22rpx; }

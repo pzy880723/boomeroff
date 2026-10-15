@@ -81,6 +81,8 @@
 
 ## Shared Worker Contract (Reference)
 
+Latest follow-up: DAILY_PRACTICE_PLAN.md migrates the actual Web latest300/oldest5 continuous-learning workflow, not a new server daily quota. Helper/app/preview and native pages are implemented; main686 tests,20 routes,21WXML/22WXSS and actual two-item GUI passed. Independent178 client tests closed midnight unknown-retry; fixed-source R20/R21 deep projection fixes closed with independent synthetic execution. Current-store SOP/QA maintenance is the next audited missing workflow in OPERATIONS_KB_AUDIT.md; no write authority was granted. Dedicated AppID and real employee/hardware acceptance remain unfinished.
+
 Root: `/Users/boomer/Documents/BOOMER GO Native/apps/boomer_go_miniprogram`.
 Native root: `miniprogram/`. Import `const { definePage } = require('../../shared/page'); Page(definePage({...}));`.
 Shared page helper installs `this.api`, `this.session`, `this.preview`, `this.run(async()=>{}, {silent:false})`, `this.go(event)` (`data-url` native route), `this.navigate(url)`, and `this.copy(event)` (`data-text`). It wraps lifecycle without overwriting worker handlers and exposes data `loading,error,preview`.

@@ -4,6 +4,8 @@
 
 ## 当前集成检查点
 
+连续练习检查点：新增第20原生路由，五Tab不变；本人最新300窗口→最旧5条待掌握→按user/shop/上海日本机已练排除，显式阅读／测试／下一条／跳过／退出。正式保存回执才计练过，不本地判分或设置每日限额，未通过也可记练过；普通favorite测试同样计入。主流程686项、官方编译和实际两条合成GUI通过。午夜未知原答卷恢复已修，旧stamp不计新日。后端新只读practice-library和深层投影修复已固定源码/hash核对，Lovable报部署；真实员工验收仍缺。
+
 学习闭环检查点：本人收藏支持已加载范围的待掌握／已掌握筛选、阅读资格、单篇服务端测试、严格保存回执和提交后逐题回顾；历史按真实题源回看并可重新练习。主流程628/628、19路由及官方编译通过，实际合成GUI已走通并修掉重复时间。全量统计、服务端筛选、每日批量／断点任务及每次旧题恢复未完成。Round18持久化事实修复已固定源码读回、独立复核闭合，Lovable报已部署及合成SQL回滚通过；真实员工学习保存回读仍未验收。
 
 登录／上传对齐检查点：已新增原生账号密码登录，保留验证码默认；手机号、用户名、邮箱均走既有 Auth 再 ERP 同步，不增加权限。主流程全套 587/587、19 路由和官方 20 WXML／21 WXSS 编译通过，mini-only 提交 `93334663d24dcc9da2a616fb2badb1ee58d87b89` 已非强推并 ls-remote 核对。上传已对齐固定 Round16/17 嵌套回执及严格 object_current，Lovable 报迁移／Edge 部署。独立复核确认两条后台 P2 闭合、客户端52项通过；主流程未运行特权 SQL 或真实员工上传。旧 quiz 结果重放 persisted 缺失已另交 Lovable 修复，尚未验收。此段取代下方“后台尚未结束”的历史状态，不代表正式发布。
@@ -131,7 +133,7 @@ Stage2 客户端检查点（约 05:18）：原生申请编辑器已新增原图�
 | `/library` 官方知识、类别、搜索 | `/pages/learn/index` 的知识筛选、产品/官方源切换 | `G(knowledge,{kind,source,query,category,page})` | 实际已接（客户端）＋只读，支持续页。Web 网格/列表、年代/产地/IP/排序等多维筛选没有全部迁移。 |
 | `/library/:id` 官方知识详情 | `D(official,id)` / `D(knowledge,id)` | `G(knowledge-detail,{kind,id,view:'detail'})` | 正文/封面/字段阅读与测验入口已写。原 Web 一句话话术、分层卡片、语音朗读、底款图库及管理员编辑并非全部等价。 |
 | 收藏/取消收藏 | 知识或官方详情；`D(favorites,id)` | `G(knowledge-favorite,{id,favorite})` | 后端已确认仅支持 official source_id；跨 product/recognition/favorite 包装来源仍有不匹配，不能把按钮当全来源收藏能力。 |
-| `/my-library` 我的知识、已掌握归档、每日批量测验 | `L(my-library)`、`L(favorites)`、学习 Tab 测验筛选 | `G(my-library,{page,page_size})`、`G(quiz-history,...)` | 两个菜单为同一本人收藏源；已加载待掌握／已掌握筛选与返回云刷新已接。不是服务端全量筛选或统计。每日批量／断点任务和AI补知识卡仍缺；真实归档回读待验。 |
+| `/my-library` 我的知识、已掌握归档、每日连续测验 | `L(my-library)`、`L(favorites)`、学习Tab及原生practice页 | `G(my-library,{page,page_size})`、`G(practice-library,{})`、`G(quiz-history,...)` | 两菜单为同一本人收藏；已加载掌握筛选及云刷新、最新300窗口连续每组最多5条已接。本机已练按账号/店/上海日隔离，正式回执后更新；不是服务器日配额、全量统计或跨设备／题目级断点。AI补知识卡仍缺；真实归档和本机恢复待验。 |
 | 已有商品加入个人知识库 | 有 `_productId` 的通用详情 | `G(knowledge-save,{product_id})` | 客户端按钮已接，主流程称后端已部署。只收藏既有商品，不创建产品/上传图片，不可冒充识物保存。 |
 | 培训、门店 SOP `/me/sop`；Flutter TrainingScreen | 学习 Tab 培训；`L(sop)` → `D(sop,id)` | `G(learning,{kind:'training',...})`；SOP 菜单当前错用 `knowledge`、详情 `knowledge-detail` | 已确认学习后端源为 shop_kb_entries 的 SOP/QA；菜单 action 与 type/category_id 参数待对齐。未见课程报名、课时/观看进度/证书 API，不能把 SOP 阅读称为 LMS 完整培训。 |
 | 顾客问答 `/me/qa` | `L(qa)` → `D(qa,id)` | `G(knowledge,{kind:'qa',...})`、`knowledge-detail` | 只读。Web `shop.kb.write` 用户可 AI 草拟、新增、编辑、删除 SOP/QA；小程序没有对应写入和分类管理。 |

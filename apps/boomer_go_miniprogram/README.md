@@ -5,7 +5,7 @@ Native WeChat WXML/WXSS/JavaScript initial implementation. It does not embed the
 ## Current Delivery State
 
 - Five approved native tabs: 工作台 / 学习 / 识物 / 消息 / 我的.
-- Nineteen native routes, including OTP/account-password login, month schedule, knowledge detail, server-graded quiz, sales, assistant, video generation, asset delivery, staff chat, community detail, customer-code voucher lookup/redemption and native activity/application pages.
+- Twenty native routes, including OTP/account-password login, month schedule, knowledge detail, server-graded single/continuous practice, sales, assistant, video generation, asset delivery, staff chat, community detail, customer-code voucher lookup/redemption and native activity/application pages.
 - Source and interaction tests run locally; the five tabs and schedule have been inspected in the official WeChat DevTools simulator.
 - Real requests use the existing GO identity, fresh ERP scope and original backend records. Preview fixtures are separate, explicitly labeled, development-only and never an API-error fallback.
 - This is **not a published or real-device-accepted mini-program**. The project currently uses `touristappid`; a dedicated BOOMER GO employee AppID, domain configuration, privacy declarations and a genuine authenticated acceptance session are still required.
@@ -36,6 +36,7 @@ Current API origins are the existing GO Lovable Cloud project and `https://erp.b
 - GO shop IDs are mapped through ERP `/session` to ERP location IDs. They are never guessed from names or passed as ERP IDs.
 - Knowledge, schedules, notifications and user records come from their existing tables. The additive `go-mini-api` is coordinated directly with Lovable.
 - Personal learning has loaded-only pending/mastered filters, exact content-source history routing and a read/single-quiz/refresh loop. Server pagination remains visible even when a local filter is empty. Historical results are latest-per-content, not a recovered archive of every old question.
+- Continuous practice uses the same latest300 favorite window as Web and at most five items per round, not a daily cap. Saved server-confirmed attempts update only minimal user/store/Shanghai-day device progress; failed tests count as practiced, not mastered. Unknown answers retry the original token; they never advance a new-day queue. Explicit skip is not completion, and preview progress is RAM-only.
 - Correct quiz answers remain on the server. Grading and the first submitted result are frozen by an atomic server operation. The client never claims persistence when the server did not confirm it.
 - Recognition uses native `<camera>` and `takePhoto`; each successful photo goes straight into the tray, up to five photos. Album selection is a separate action.
 - Image/video album saving reports success only after WeChat confirms it. OS/WeChat privacy or album permission cannot be silently bypassed.

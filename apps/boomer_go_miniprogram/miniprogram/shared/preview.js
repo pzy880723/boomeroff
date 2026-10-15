@@ -10,12 +10,14 @@ function createPreview(wx) {
     { id: 'example-porcelain', title: '从底款读懂瓷器：产地、年代与工艺', category: '瓷器餐具', quiz_kind: 'official', quiz_available: true, quiz_persisted: false, kind: 'official', summary: '看釉色、看底款，再把商品故事讲清楚。', body: '先看器型与釉色，再观察底款。底款只能作为判断线索，不能单独证明年代、产地或真伪。\n\n向客人介绍时，把可见的工艺、用途和品相讲清楚；不能确认的信息，明确说明暂无法判断。\n\n中古商品可能有自然使用痕迹。请引导客人查看实物，不承诺未经核实的材质与年代。', updated_at: date },
     { id: 'example-service', title: '热情但不打扰：中古杂货店的服务节奏', category: '门店服务', summary: '一句欢迎、一个观察、一次恰到好处的介绍。', body: '客人进店时友好招呼，留出自由探索的空间。\n\n发现客人持续关注某件商品，再提供具体且有依据的介绍：用途、材质、工艺和可见品相。\n\n价格以当前门店标签为准，不编造折扣，不夸大稀缺性。', updated_at: date }
   ];
-  const library = articles.map((article, index) => ({
+  const libraryArticles = articles.concat([{ title: '价签与品相：介绍前先核实', summary: '一件一价，真实说明看得见的使用痕迹。', body: '合成门店学习示例。介绍价格前先核对当前价签。\n\n请客人查看实物品相，如实说明可见的磕碰、划痕与自然使用痕迹，不承诺未经核实的原价或折扣。' }]);
+  const library = libraryArticles.map((article, index) => ({
     id: '00000000-0000-4000-8000-00000000006' + (index + 1), source_type: 'official',
-    source_id: '00000000-0000-4000-8000-00000000006' + (index + 3),
+    source_id: '00000000-0000-4000-8000-00000000007' + (index + 1),
     snapshot: { name: article.title, summary: article.summary }, created_at: stamp,
     quiz_kind: 'favorite', quiz_available: true, passed: index === 1
   }));
+  let quizBinding = null;
   const notifications = [
     { id: 'example-shift', title: '下周排班已更新', body: '这是一条示例排班通知。真实排班以 ERP 发布结果为准。', category: 'notice', created_at: date + 'T09:20:00+08:00', read: false },
     { id: 'example-training', title: '新课程：中古商品的年代辨识', body: '在学习页查看知识内容，完成后可参加知识测验。此处为界面示例。', category: 'notice', created_at: date + 'T08:30:00+08:00', read: false }
@@ -49,7 +51,7 @@ function createPreview(wx) {
     if (name === 'knowledge-detail') {
       const favorite = params.kind === 'favorite' && library.find(row => row.id === params.id);
       if (favorite) {
-        const source = Object.assign({}, articles[library.indexOf(favorite)], { id: favorite.source_id });
+        const source = Object.assign({}, libraryArticles[library.indexOf(favorite)], { id: favorite.source_id });
         return { item: { id: favorite.id, kind: 'favorite', title: source.title, body: '合成学习示例，不代表真实员工收藏或成绩。\n\n' + source.body,
           quiz_kind: 'favorite', quiz_available: true, raw: { favorite, source, source_available: true, is_favorite: true, favorite_id: favorite.id } } };
       }
@@ -103,13 +105,17 @@ function createPreview(wx) {
         voucher: { id: '00000000-0000-4000-8000-000000000022', name: '中古好物体验券（示例）', threshold_type: 'min_spend', discount_amount: 20, min_spend: 100, template_terms: '仅用于原生界面展示，不是真实优惠券，不可核销。', starts_at: null, ends_at: null, active: true } }, can_redeem: false, reason: 'development_preview', server_time: stamp };
     }
     if (name === 'tasks') return { date, pending_exp: 0, claimed_today: [], today_counts: { scans: 0, quiz_attempts: 0, community_posts: 0 }, items: [{ id: 'example-learn', title: '读懂一件商品，再讲好它的故事', body: '先进入学习页，了解可观察、可核实的商品信息。', status: '示例待办' }], as_of: stamp };
-    if (name === 'quiz-start') return { quiz_token: 'development-example-only', attempt_id: 'development-example-only', questions: [{ id: 'q1', index: 0, stem: '商品年代无法确认时，应当如何介绍？', options: ['直接说是古董', '如实说明暂无法确认', '声称绝版', '只说价格'] }] };
+    if (name === 'quiz-start') {
+      if (params.kind === 'favorite' && !library.some(row => row.id === params.id)) throw new Error('该示例收藏不存在');
+      quizBinding = params.kind && params.id ? { kind: params.kind, id: params.id } : null;
+      return { quiz_token: 'development-example-only', attempt_id: 'development-example-only', questions: [{ id: 'q1', index: 0, stem: '商品年代无法确认时，应当如何介绍？', options: ['直接说是古董', '如实说明暂无法确认', '声称绝版', '只说价格'] }] };
+    }
     if (name === 'quiz-submit') {
       const correct = !Array.isArray(params.answers) || params.answers[0] === 1;
-      return { score: correct ? 1 : 0, total: 1, passed: correct, persisted: false, correct: [correct], correct_answers: [1], message: '示例答卷不记入真实考核' };
+      return Object.assign({ score: correct ? 1 : 0, total: 1, passed: correct, persisted: false, correct: [correct], correct_answers: [1], message: '示例答卷不记入真实考核' }, quizBinding, Array.isArray(params.answers) ? { submitted: params.answers.slice() } : {});
     }
-    if (name === 'quiz-history') return { items: params.page ? [] : library.map((favorite, index) => ({
-      id: '00000000-0000-4000-8000-00000000006' + (index + 5), item_kind: 'favorite', item_id: favorite.id,
+    if (name === 'quiz-history') return { items: params.page ? [] : library.slice(0, 2).map((favorite, index) => ({
+      id: '00000000-0000-4000-8000-00000000008' + (index + 1), item_kind: 'favorite', item_id: favorite.id,
       score: index, total: 1, passed_at: favorite.passed ? stamp : null, last_attempt_at: stamp
     })), page: params.page || 0, page_size: 20, has_more: false, as_of: stamp };
     if (name === 'checkin-status') return { date, timezone: 'Asia/Shanghai', checked_today: false, today: null, stats: { current_streak: 0, longest_streak: 0, total_check_ins: 0 }, history: { items: [], page: 0, page_size: 20, has_more: false } };
@@ -140,6 +146,7 @@ function createPreview(wx) {
       return { post_id: 'example-community', order: 'asc', items: params.cursor ? [] : [{ id: 'example-comment', post_id: 'example-community', author: { user_id: peer.user_id, name: peer.name, avatar_url: null }, mine: false, content: '示例评论：下次接待时，我会先引导客人看品相。', created_at: date + 'T09:01:00+08:00', cursor: 'example-comment-cursor' }], page_size: params.page_size || 20, has_more: false, next_cursor: 'example-comment-cursor' };
     }
     if (name === 'my-library') return { items: params.page ? [] : library.map(row => Object.assign({}, row)), page: params.page || 0, page_size: 20, has_more: false, as_of: stamp };
+    if (name === 'practice-library') return { items: library.map(row => Object.assign({}, row)), window_limit: 300, has_older: false, as_of: stamp };
     if (['vouchers', 'scan-history', 'marketing-assets', 'conversation-list', 'conversation-messages'].includes(name)) return { items: [], as_of: stamp };
     return unavailable();
   }

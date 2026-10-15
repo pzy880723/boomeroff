@@ -1,0 +1,35 @@
+<view class="page practice-page">
+  <view wx:if="{{preview || practice.preview}}" class="preview-banner">开发预览 · 合成练习，仅在内存演示，不保存真实成绩或进度</view>
+  <view class="eyebrow">BOOMER / PRACTICE</view>
+  <view class="page-title">一轮，懂五件</view>
+  <view class="muted intro">每轮最多 5 条收藏，先读故事，再把知识讲明白。</view>
+  <view class="card progress-card">
+    <view class="row progress-heading"><text class="section-title">本机今日已练</text><text class="chip">{{practice.date || '日期待确认'}}</text></view>
+    <view class="practice-count">{{practice.attemptedCount}}<text class="count-unit"> 条</text></view>
+    <view class="muted">完整作答且服务器确认保存后计入，通过与否都算练过。不是每日限额，也不代表全部掌握。</view>
+  </view>
+  <view wx:if="{{practice.progressError}}" class="error card">{{practice.progressError}}</view>
+  <view wx:if="{{loading}}" class="card loading-state">正在读取最近 300 条收藏范围…</view>
+  <view wx:if="{{error}}" class="error card"><view>{{error}}</view><button class="button-secondary" bindtap="retry">重新读取</button></view>
+  <view wx:if="{{readReady && practice.ready}}" class="window-note muted">本次窗口 {{practice.libraryCount}} 条 · {{practice.hasOlder ? '还有更早收藏未纳入' : '本次未发现更早收藏'}}<view>仅在最近最多 300 条中推荐，不是全库统计或固定服务器日任务。</view><view wx:if="{{updatedText}}">窗口读取 {{updatedText}}</view></view>
+  <view wx:if="{{practice.active}}" class="card queue-card">
+    <view class="row queue-heading"><view class="section-title">{{practice.finished ? '本轮已结束' : '本轮清单'}}</view><text class="chip">已练 {{practice.completedCount}} / {{practice.queue.length}}</text></view>
+    <view wx:if="{{practice.skippedCount}}" class="muted skip-note">跳过 {{practice.skippedCount}} 条，不计练过或掌握。</view>
+    <view wx:for="{{practice.queue}}" wx:key="id" class="queue-row row">
+      <view class="queue-number {{index === practice.index ? 'current' : ''}}">{{index + 1}}</view>
+      <view class="queue-title">{{item.title}}</view>
+      <text class="queue-state {{item.state === 'completed' ? 'completed' : ''}}">{{item.state === 'completed' ? '已练' : (item.state === 'skipped' ? '已跳过' : (index === practice.index ? '当前' : '待练'))}}</text>
+    </view>
+    <button wx:if="{{!practice.finished}}" class="button" disabled="{{loading || !readReady || error}}" bindtap="continuePractice">{{practice.current.state === 'completed' ? '进入下一条' : '继续阅读当前知识'}}</button>
+    <button wx:if="{{practice.current && practice.current.state === 'ready'}}" class="button-secondary" disabled="{{loading}}" bindtap="skipPractice">跳过当前条目</button>
+    <button class="text-button" disabled="{{loading}}" bindtap="exitPractice">结束本轮，保留已练进度</button>
+  </view>
+  <view wx:if="{{readReady && !practice.active && practice.recommendations.length}}" class="card recommendation-card">
+    <view class="section-title">这轮从这些故事开始</view>
+    <view wx:for="{{practice.recommendations}}" wx:key="id" class="recommendation-row"><text class="muted">{{index + 1}}.</text><text>{{item.title}}</text></view>
+  </view>
+  <button wx:if="{{readReady && (!practice.active || practice.finished) && practice.recommendations.length}}" class="button" disabled="{{loading || error}}" bindtap="startPractice">{{practice.finished ? '开始新一轮' : '开始本轮练习'}}</button>
+  <view wx:if="{{!loading && !error && readReady && !practice.recommendations.length && (!practice.active || practice.finished)}}" class="card empty"><view class="section-title">当前窗口暂无待练推荐</view><view class="muted">可能已练过、已掌握或来源不可用；不代表全部收藏都已掌握。</view></view>
+  <button wx:if="{{!loading}}" class="button-secondary" bindtap="retry">刷新收藏与推荐</button>
+  <view class="muted footer-note">本机进度按账号、门店及中国日期隔离；换设备不会同步本机进度。正式成绩以服务器记录为准。</view>
+</view>

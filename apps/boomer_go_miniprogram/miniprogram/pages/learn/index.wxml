@@ -3,6 +3,7 @@
   <view class="eyebrow">BOOMER / LEARN</view>
   <view class="page-title">每天懂多一点</view>
   <view class="muted intro">把商品故事，变成自己的专业。</view>
+  <view class="card practice-entry"><view class="section-title">一轮，懂五件</view><view class="muted">每轮最多 5 条收藏，完整作答后记录本机今日已练；不是每日限额。</view><button class="button-secondary" data-url="/pages/practice/index" bindtap="go">进入连续练习</button></view>
   <view class="search-box row">
     <text class="search-symbol">⌕</text>
     <input class="search-input" placeholder="{{kind === 'quiz' || kind === 'quiz-history' ? '搜索已加载内容' : '搜索知识与培训'}}" value="{{query}}" bindinput="onSearchInput" bindconfirm="onSearch" confirm-type="search" />

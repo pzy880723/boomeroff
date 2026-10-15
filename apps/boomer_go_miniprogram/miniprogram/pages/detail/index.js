@@ -2,6 +2,7 @@ const { definePage } = require('../../shared/page');
 const model = require('../list/model');
 const { businessContent } = require('./content');
 const learningKinds = ['knowledge', 'official', 'sop', 'qa', 'training', 'favorite', 'favorites', 'my-library', 'history', 'recognition'];
+function practiceCoordinator() { const app = typeof getApp === 'function' ? getApp() : null; return app && app.dailyPractice; }
 
 function contentNodes(item) {
   if (Array.isArray(item.nodes)) return item.nodes;
@@ -13,8 +14,8 @@ function contentNodes(item) {
 
 Page(definePage({
   data: { kind: '', id: '', item: null, nodes: '', fields: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], freshness: '', quizUrl: '', unavailable: '', favorite: null, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, canSave: false, canShare: false, busy: false, actionNotice: '', resolvedMessage: '', resolvedUrl: '', keyActionsDraft: '', draftResults: [], messages: [], messageDraft: '', profileNameDraft: '', avatarPreview: '' },
-  onLoad(options) { this._hidden = false; this.setData({ kind: options.kind || 'knowledge', id: options.id || '' }); return this.load(); },
-  onShow() { const hidden = this._hidden; this._hidden = false; if (this._request && (this._identity !== model.scope(this) || (hidden && learningKinds.indexOf(this.data.kind) >= 0))) return this.load(); },
+  onLoad(options) { this._hidden = false; this._practiceRequested = options.practice === '1'; this.setData({ kind: options.kind || 'knowledge', id: options.id || '', practiceRequested: this._practiceRequested }); this.syncPractice(); return this.load(); },
+  onShow() { const hidden = this._hidden; this._hidden = false; this._practiceRedirecting = false; this.syncPractice(); if (this._request && (this._identity !== model.scope(this) || (hidden && learningKinds.indexOf(this.data.kind) >= 0))) return this.load(); },
   onHide() { if (learningKinds.indexOf(this.data.kind) >= 0) { model.hideLearning(this); this.setData({ quizUrl: '' }); } },
   onUnload() { this.onHide(); this._gone = true; },
   onPullDownRefresh() { return this.load().finally(() => wx.stopPullDownRefresh()); },
@@ -33,6 +34,7 @@ Page(definePage({
       return Promise.resolve();
     }
     return model.remote(this, () => {
+      if (this._practiceRequested && (kind !== 'favorite' || !practiceCoordinator() || !practiceCoordinator().matches(this.data.id))) throw new Error('本轮连续练习条目已变化，请返回清单核对');
       if (!section) throw new Error('该原生详情类型未开放');
       if (!this.data.id && kind !== 'profile' && kind !== 'settings') throw new Error('缺少内容 ID，请从列表重新打开');
       const knowledge = learningKinds.indexOf(kind) >= 0;
@@ -124,8 +126,26 @@ Page(definePage({
   },
   openQuiz(event) {
     if (this._hidden || this._gone || model.scope(this) !== this._loadedIdentity || !this.data.quizUrl || event.currentTarget.dataset.url !== this.data.quizUrl) return;
+    if (this._practiceRequested) {
+      const helper = practiceCoordinator();
+      if (!helper || !helper.matches(this.data.id)) { this.setData({ error: '本轮条目已变化，请返回清单核对', quizUrl: '' }); return; }
+      return this.redirectPractice(this.data.quizUrl + '&practice=1');
+    }
     return this.navigate(this.data.quizUrl);
   },
+  syncPractice() {
+    if (!this._practiceRequested) { this.setData({ practiceMode: false, practiceNote: '' }); return; }
+    const helper = practiceCoordinator(), view = helper && helper.view();
+    const valid = this.data.kind === 'favorite' && helper && helper.matches(this.data.id);
+    this.setData({ practiceMode: !!valid, practiceNote: valid ? '本轮 ' + (view.index + 1) + ' / ' + view.queue.length + ' · 先阅读，再显式开始测验。练过不等于已掌握。' : '本轮条目已变化或失效，请返回清单核对。' });
+  },
+  redirectPractice(url) {
+    if (this._practiceRedirecting || this._hidden || this._gone || this._identity !== model.scope(this)) return;
+    const identity = this._identity;
+    this._practiceRedirecting = true;
+    wx.redirectTo({ url, fail: () => { if (!this._hidden && !this._gone && identity === model.scope(this)) { this._practiceRedirecting = false; this.setData({ error: '页面未能打开，请重试或返回本轮清单' }); } } });
+  },
+  returnPractice() { if (this._practiceRequested) return this.redirectPractice('/pages/practice/index'); },
   showTask(row, freshness) {
     this._taskKey = row.task_key || '';
     this._pendingId = row.pending_id || '';

@@ -2,6 +2,7 @@ const config = require('./config');
 const { createSession } = require('./shared/session');
 const { createTransport } = require('./shared/transport');
 const { createApi } = require('./shared/api');
+const { createDailyPractice } = require('./shared/daily-practice');
 App({
   preview: false,
   onLaunch(options) {
@@ -11,9 +12,10 @@ App({
   },
   configure() {
     const invoke = createTransport(wx, this.config, () => this.session && this.session.token());
-    this.session = createSession({ wx, request: invoke, onClear: () => { this._restore = null; } });
+    this.session = createSession({ wx, request: invoke, onClear: () => { this._restore = null; if (this.dailyPractice) this.dailyPractice.clear(); } });
     this.session.require = async () => { if (await this.ensureSession()) return this.session.get(); throw new Error('请先登录员工账号'); };
     this.api = createApi({ wx, config: this.config, session: this.session, invoke });
+    this.dailyPractice = createDailyPractice({ wx, session: this.session });
   },
   enablePreview() {
     const info = wx.getAccountInfoSync && wx.getAccountInfoSync();
@@ -21,6 +23,7 @@ App({
     const { createPreview } = require('./shared/preview');
     const adapter = createPreview(wx);
     this.preview = true; this.api = adapter.api; this.session = adapter.session;
+    this.dailyPractice = createDailyPractice({ wx, session: this.session, preview: true });
     wx.setStorageSync('go-mini.preview-opt-in', true);
     return true;
   },

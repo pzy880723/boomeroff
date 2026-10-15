@@ -4,7 +4,7 @@ test('preview never substitutes an unrelated article or claims a real check-in',
 test('learning preview uses distinct favorite and result identities with explicit mastery and original content',async()=>{
  const p=createPreview({}), library=await p.api.action('my-library');
  assert.equal(library.page,0);assert.equal(library.has_more,false);
- assert.deepEqual(library.items.map(x=>x.passed),[false,true]);
+ assert.deepEqual(library.items.map(x=>x.passed),[false,true,false]);
  for(const row of library.items){
   assert.match(row.id,/^[0-9a-f-]{36}$/);assert.notEqual(row.id,row.source_id);assert.equal(row.quiz_kind,'favorite');
   const detail=await p.api.action('knowledge-detail',{kind:'favorite',id:row.id});
@@ -22,7 +22,16 @@ test('development quiz review stays synthetic and never changes archive or saves
  assert.equal(started.questions[0].correct_answers,undefined);assert.equal(started.questions[0].correctIndex,undefined);
  const result=await p.api.action('quiz-submit',{quiz_token:started.quiz_token,answers:[1]});
  assert.equal(result.persisted,false);assert.equal(result.total,1);assert.deepEqual(result.correct,[true]);assert.deepEqual(result.correct_answers,[1]);
- assert.deepEqual((await p.api.action('my-library')).items.map(x=>x.passed),[false,true]);
+ assert.deepEqual((await p.api.action('my-library')).items.map(x=>x.passed),[false,true,false]);
+});
+test('continuous-practice preview uses the same three favorites and exact window metadata',async()=>{
+ const p=createPreview({}), data=await p.api.action('practice-library');
+ assert.equal(data.window_limit,300);assert.equal(data.has_older,false);assert.ok(Date.parse(data.as_of));
+ assert.equal(data.items.length,3);assert.deepEqual(data.items.map(x=>x.id),(await p.api.action('my-library')).items.map(x=>x.id));
+ const favorite=data.items.find(x=>!x.passed);const start=await p.api.action('quiz-start',{kind:'favorite',id:favorite.id});
+ const result=await p.api.action('quiz-submit',{quiz_token:start.quiz_token,answers:[1]});
+ assert.equal(result.kind,'favorite');assert.equal(result.id,favorite.id);assert.deepEqual(result.submitted,[1]);assert.equal(result.persisted,false);
+ assert.equal((await p.api.action('practice-library')).items.find(x=>x.id===favorite.id).passed,false);
 });
 test('staff DM preview has separate synthetic contacts and history but never sends real messages', async()=>{
   const p=createPreview({});

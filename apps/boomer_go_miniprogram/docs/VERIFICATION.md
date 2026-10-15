@@ -2,6 +2,16 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
+## 最新检查点：连续练习
+
+- 主流程在页面停写及午夜恢复修复后新跑686/686，零失败／跳过／取消；20原生路由检查、官方21WXML／22WXSS编译通过，stderr为空。五Tab未变。
+- 新原生连续练习页从本人最新最多300收藏中取最旧五条未掌握，再剔除本机当日已练。普通favorite及连续模式均只在有效保存回执后记练过，不因通过与否改变计数，不本地提升掌握状态；不设置服务器日限额。
+- 本机存储按user/shop/上海日隔离，仅version/date/收藏ID，不存题目、答案、token、成绩或快照。revision／身份／店／跨日清RAM队列；storage失败显示内存保留提醒，不声称持久保存。Preview完全RAM-only。
+- Helper19项、app/route及preview均观察红绿。页面首批25RED／2已过，最终33项；独立review175项通过并复现午夜未知重试P2。已用3项新增红绿修复：首次仍验队列，原未知答卷在同身份/revision可重试同token/answers；旧stamp不计新日／不next。实际session自己的跨日失效规则未放宽。
+- 实际DevTools用两条明确合成待练内容完成总览→阅读第一条→作答→明确未保存的结果→显式第二条阅读→返回清单→确认跳过→确认退出。计数始终保留一条，跳过不计完成且下一轮仍可开始。截图native-practice-overview／read-first／first-result／read-second／resumed／skipped／exited在evidence；phone为确定性裁切，无生成式美化。五条整组和跳转栈边界为源码/单测证据，GUI只走了两条。
+- 后端最终a8e36ee6已finished并读回/hash；主流程实际函数复现/修复回放确认深层答案不再透传，浅层摘要不变。Lovable报Deno73与Edge部署，无新DB/RLS/权限。独立R20实际源码mock10项及截断边界、R21实际sanitizer/handler45组合＋4边界通过，两项深层P2已闭合。客户端午夜补丁独立复现确认闭合、相关178项通过、未见新增P1/P2；这些不冒充独立Deno73／全套686或真机执行。
+- 新后台practice-library无身份请求401，只证明可达与匿名拒绝；没有真实员工测验、持久进度或云归档E2E，也没有Mini公开发布。下一缺口当前店SOP/QA维护已单独源码审计，见OPERATIONS_KB_AUDIT.md，尚未新增写权限或CRUD。
+
 ## 最新检查点：原生学习闭环
 
 - 主流程在页面停写、预览对齐和 GUI 小修后重新运行完整 Node 测试：628/628，零失败／跳过／取消；19 路由检查、官方20 WXML／21 WXSS编译通过，stderr为空。此前587／625等计数保留为历史检查点。
