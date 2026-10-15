@@ -11,6 +11,7 @@
 - R23固定ad2e6e81新增INVOKER上下文RPC，保留caller RLS、当前店／共享copy和现有写权限。Lovable报0020已应用、SQL23组强制回滚及Edge部署；主流程未重跑SQL。旧kb_documents仍按档案店RLS，调店／HQ可无本店参考，不fallback service；旧特权入口／match_kb未全局修复。
 - 独立复现R23三个RPC等待不受总deadline约束的P2；R24最终e564fc300f51aa072e73da7c2d1b32203603a1c5已get_project确认finished、读回/hash。统一handler45s覆盖3RPC和provider headers/body，合法writing_request与不可信reference_data分层。独立20ms原复现约22/24/22ms退出，provider0/1/2；实际TS转译16组＋补充25组通过，0 unhandled rejection／自建timer残留，P2闭合。
 - Lovable报R24 Deno104＋quiz Vitest5及重新部署，无新SQL或SQL重跑；这不是主流程真实AI/特权SQL执行。主流程在线kb-draft匿名请求401，只证明可达及拒绝。源码hash不等于线上bundle；handler有界退出不保证底层忽略abort的请求／计费取消，也不是从点击起45秒的整条网络保证。真实模型质量／员工和手机验收仍缺。
+- 本轮feature840afd5e50d6bab4f6324a645694d6806d73733d仅15个小程序路径，非强推并ls-remote读回同SHA。正常index未暂存，Flutter分支未切换；ignored截图和本机配置不进源码。文档交付提交不改变上述代码验证结果，仍未发布微信。
 
 ## 最新检查点：本店 SOP 与问答维护
 

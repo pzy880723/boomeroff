@@ -51,7 +51,7 @@ Proposed errors to confirm from final source:400 invalid_params;401/403 original
 - [x] Page worker observed RED then28 AI tests GREEN; retained38 manual receipt tests. Full candidates, stale edits, confirmation races, reserved tag, lifecycle/scope, no automatic writes and preview exclusions covered.
 - [x] Main shared changes observed3RED→GREEN25, plus pre-generation lease renewal2RED→GREEN26. Ordinary freshness unchanged; post-provider scope loss never auto-retries. Final wire aligned. Git delivery remains below.
 - [x] Independent native and backend review complete. Main760/full22/static23WXML+24WXSS passed; independent16 source groups＋25 extra timeout mocks closed P2. Actual synthetic GUI showed AI panel and Chinese title/hint/Markdown/tags typing. Real provider quality/employee/device acceptance remain separate.
-- [ ] Mini-only source commit/push/readback/archive with original Git index and unrelated files preserved. Do not mark full migration/publication complete from this feature.
+- [x] Mini-only feature840afd5e50d6bab4f6324a645694d6806d73733d contains15 native-project paths, non-forced push and exact remote readback verified. Original Git index/Flutter checkout preserved. The source archive is a derived artifact, not mini-program publication or full-migration acceptance.
 
 ## Acceptance Commands
 
