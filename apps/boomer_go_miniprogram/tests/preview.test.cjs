@@ -106,3 +106,23 @@ test('schedule preview preserves explicit rest semantics without claiming shop p
  await assert.rejects(p.api.action('schedule',{month:'2028-13'}),e=>e.status===400);
  await assert.rejects(p.api.action('schedule',{month:'2028-02',view:'invalid'}),e=>e.status===400);
 });
+test('activity preview uses native UUID routes and masked read-only applications without fake confirmations',async()=>{
+ const p=createPreview({}),shop_id=p.session.get().shop.id;
+ const activities=await p.api.action('activities',{shop_id});const id=activities.items[0].id;
+ assert.match(id,/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+ const basic=await p.api.action('activity-detail',{shop_id,id});assert.equal(basic.item.id,id);assert.equal(basic.item.shop_id,shop_id);
+ const caps=await p.api.action('activity-capabilities',{shop_id});assert.equal(caps.can_manage,true);assert.equal(caps.can_upload_evidence,false);
+ const list=await p.api.action('activity-applications',{shop_id,activity_id:id});
+ assert.equal(list.shop_id,shop_id);assert.equal(list.activity_id,id);assert.equal(list.order,'desc');assert.equal(list.has_more,false);assert.equal(list.next_cursor,null);
+ assert.equal(list.items[0].applicant_name,undefined);assert.equal(list.items[0].applicant_phone,undefined);
+ const app_id=list.items[0].id;const detail=await p.api.action('application-detail',{shop_id,application_id:app_id});
+ assert.equal(detail.application.id,app_id);assert.equal(detail.application.activity_id,id);assert.match(detail.version,/^[0-9a-f]{64}$/);
+ assert.equal(detail.application.applicant_name,undefined);assert.equal(detail.application.form_data,undefined);
+ assert.equal(detail.application.publish.screenshots[0].signed_url,null);assert.ok(detail.application.publish.screenshots[0].path);
+ assert.equal((await p.api.action('activity-applications',{shop_id,activity_id:id,publish_confirmed:true})).items.length,0);
+ await assert.rejects(p.api.action('application-detail',{shop_id,application_id:'missing'}),e=>e.status===404);
+ await assert.rejects(p.api.action('activity-capabilities',{shop_id:'foreign'}),e=>e.status===403);
+ await assert.rejects(p.api.action('activity-applications',{shop_id,activity_id:id,publish_confirmed:'false'}),e=>e.status===400);
+ await assert.rejects(p.api.action('publication-confirm',{shop_id,application_id:app_id}));
+ await assert.rejects(p.api.action('publication-confirm-status',{shop_id,application_id:app_id}));
+});

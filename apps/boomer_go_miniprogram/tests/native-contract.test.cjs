@@ -36,3 +36,11 @@ test('voucher templates stay distinct from the native customer-code redemption f
   assert.match(mine,/门店优惠券/);
   assert.doesNotMatch(mine,/label: '我的券包'/);
 });
+test('activity management and manual publication confirmation stay native under the same five tabs',()=>{
+  const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
+  assert.ok(app.pages.includes('pages/activity/index'));
+  assert.ok(app.pages.includes('pages/application/index'));
+  assert.equal(app.tabBar.list.length,5);
+  const model=require('../miniprogram/pages/list/model');
+  assert.equal(model.detailUrl('activities','a/b ?中'),'/pages/activity/index?id='+encodeURIComponent('a/b ?中'));
+});

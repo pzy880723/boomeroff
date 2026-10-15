@@ -1,0 +1,38 @@
+<view class="page activity-page">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 只读管理流程示例，非真实员工权限或申请记录</view>
+  <view class="eyebrow">BOOMER / ACTIVITY</view>
+  <view wx:if="{{basicLoading}}" class="card muted loading-state">正在读取活动信息…</view>
+  <view wx:if="{{basicError}}" class="card error"><text>{{basicError}}</text><button class="button-secondary" bindtap="retryBasic">重试活动信息</button></view>
+  <view wx:if="{{activity}}" class="card activity-info">
+    <view class="row"><text class="chip">{{activity.statusLabel}}</text><text wx:if="{{activity.platform}}" class="muted">{{activity.platform}}</text></view>
+    <view class="activity-title">{{activity.name}}</view>
+    <image wx:if="{{activity.coverUrl}}" class="activity-cover" src="{{activity.coverUrl}}" mode="widthFix" />
+    <text wx:if="{{activity.description}}" class="description" selectable>{{activity.description}}</text>
+    <view class="metadata"><view class="metadata-row"><text class="muted">开始时间</text><text>{{activity.startsAt}}</text></view><view class="metadata-row"><text class="muted">结束时间</text><text>{{activity.endsAt}}</text></view><view class="metadata-row"><text class="muted">创建时间</text><text>{{activity.createdAt}}</text></view><view wx:if="{{activity.maxApplications !== null}}" class="metadata-row"><text class="muted">申请上限</text><text>{{activity.maxApplications}}</text></view><view wx:if="{{activity.reviewLabel}}" class="metadata-row"><text class="muted">报名审核设置</text><text>{{activity.reviewLabel}}</text></view><view wx:if="{{activity.minFollowers !== null}}" class="metadata-row"><text class="muted">粉丝数要求</text><text>{{activity.minFollowers}}</text></view><view wx:if="{{activity.fieldLabels}}" class="metadata-row"><text class="muted">收集项目</text><text>{{activity.fieldLabels}}</text></view></view>
+    <image wx:if="{{activity.posterUrl}}" class="activity-poster" src="{{activity.posterUrl}}" mode="widthFix" />
+  </view>
+  <view wx:if="{{capabilitiesLoading}}" class="card muted">正在确认申请管理权限…</view>
+  <view wx:if="{{capabilitiesError}}" class="card error"><text>{{capabilitiesError}}</text><button class="button-secondary" bindtap="retryCapabilities">重试权限读取</button></view>
+  <view wx:if="{{capabilitiesLoaded && !canManage}}" class="card empty">当前没有申请管理权限<view class="muted">活动基本信息仍可查看，申请资料仅限获授权人员。</view></view>
+  <view wx:if="{{activity && canManage}}" class="applications-section">
+    <view class="section-title">申请与发布确认</view>
+    <view class="muted section-hint">发布确认与报名审核是不同状态；待确认不等于待审核。</view>
+    <view class="row filters"><button class="filter {{filter === 'all' ? 'selected' : ''}}" data-filter="all" bindtap="onFilterChange">全部</button><button class="filter {{filter === 'unconfirmed' ? 'selected' : ''}}" data-filter="unconfirmed" bindtap="onFilterChange">待确认</button><button class="filter {{filter === 'confirmed' ? 'selected' : ''}}" data-filter="confirmed" bindtap="onFilterChange">已确认</button></view>
+    <view wx:for="{{applications}}" wx:key="id" class="card application-card">
+      <view class="row person"><text class="person-name">{{item.maskedName}}</text><text class="muted">{{item.phoneTail ? '手机号尾号 ' + item.phoneTail : '手机号尾号未提供'}}</text></view>
+      <view class="status-row">
+        <view class="approval-status"><text class="chip">审核：{{item.statusLabel}}</text></view>
+        <view class="publication-status"><text class="publish-status {{item.publishConfirmed ? 'confirmed' : ''}}">发布：{{item.publishConfirmed ? '已确认' : '待确认'}}</text></view>
+      </view>
+      <view class="muted application-time">申请时间 {{item.createdAt}}</view><view wx:if="{{item.publishConfirmedAt}}" class="muted application-time">确认时间 {{item.publishConfirmedAt}}</view>
+      <view class="muted evidence-summary">{{item.hasPublishUrl ? '有发布链接' : '无发布链接'}} · {{item.screenshotCount}} 张发布截图</view>
+      <button class="button-secondary" data-id="{{item.id}}" bindtap="openApplication">查看申请详情</button>
+    </view>
+    <view wx:if="{{applicationsLoading}}" class="card muted loading-state">正在读取申请…</view>
+    <view wx:if="{{applicationsError}}" class="card error"><text>{{applicationsError}}</text><button class="button-secondary" bindtap="retryApplications">{{applicationsLoaded ? '重试当前续页' : '重试申请列表'}}</button></view>
+    <view wx:if="{{applicationsLoaded && !applicationsLoading && !applicationsError && !applications.length}}" class="card empty">当前发布筛选下暂无申请</view>
+    <button wx:if="{{hasMore && !applicationsError}}" class="button-secondary more" bindtap="loadMoreApplications" disabled="{{applicationsLoading}}" loading="{{applicationsLoading}}">加载更多申请</button>
+    <view wx:if="{{applicationsLoaded && !hasMore && applications.length}}" class="muted list-end">已加载当前筛选的全部申请</view>
+    <view class="card muted section-hint">确认发布不等于审核通过或发券。仅已有同店管理权限可查看申请；普通员工仅查看活动基本信息。</view>
+  </view>
+</view>

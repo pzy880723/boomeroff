@@ -51,7 +51,17 @@
 - [ ] Finish native activity applications/publication confirmation and remaining employee parity. Existing read-only activity detail is not a completed management workflow.
 - [ ] Complete dedicated-AppID, employee and hardware acceptance. Withdrawn deployment fingerprints are not evidence; fixed-source hashes and backend deployment reports remain distinct from online byte comparison.
 
-## Shared Worker Contract
+## Follow-up: Activity Stage1
+
+- [x] Audit actual Web form schema, publish semantics and screenshot paths; preserve approval/claim/redemption boundaries.
+- [x] Create and inspect editable native activity/application frames in the same design file; Stage1 has no active upload button.
+- [x] Implement native activity list/detail and application editor with focused red-green tests, original-path preservation, explicit intent and per-scope unresolved recovery.
+- [x] Integrate native routes/preview and independently run 502 tests, 19-route checks and all official WXML/WXSS compilers; inspect actual labeled GUI filters, masked answers, draft preservation and disabled writes.
+- [x] Verify backend 0015 fixes for activity-context binding and safe declared-field projection, then enable only six source-audited first-abort error pairs; historical unknown requests remain frozen.
+- [ ] Push the isolated mini-only checkpoint after final verification, preserving Flutter work and the normal Git index.
+- [ ] Implement and verify Stage2 bound original evidence upload; Stage1 does not complete that target or real employee acceptance.
+
+## Shared Worker Contract (Reference)
 
 Root: `/Users/boomer/Documents/BOOMER GO Native/apps/boomer_go_miniprogram`.
 Native root: `miniprogram/`. Import `const { definePage } = require('../../shared/page'); Page(definePage({...}));`.

@@ -2,6 +2,35 @@ Base snapshot from GO Lovable commit 0fbc3474e059e1622fc26df7cbccea196c712309, p
 
 # go-mini-api 服务端契约（小程序 / 原生共用）
 
+## Round15 Activity Stage1 Source Checkpoint
+
+### Follow-up 0015 (Current Interface)
+
+Fixed ref `171330bf87cfa05885edb89d28ce2cc6a8b3b5ec` adds `0015_go_activity_publish_bind_activity_and_projection.sql` without rewriting applied 0014. Both `publication-confirm` and `publication-confirm-status` now require **activity_id** alongside shop/application/request IDs. Confirm locks and validates the current relation, hashes canonical `publication-confirm/v2` including activity, and requires request/current/receipt activity agreement before replay. Status applies the same binding. Relation mismatch is 404 not_found, not success. Old RPC signatures without activity were dropped; only the new narrow signatures receive authenticated EXECUTE.
+
+SQL and Edge both whitelist six actual field types, the two actual optional roles, nonempty non-reserved keys and scalar values. Returned schema is projected; internal reserved keys and unknown-type/object/array values cannot pass through a declaration or JSON stringify fallback. Existing phone masking and original-path preservation remain.
+
+Lovable reports 0015 applied and Edge deployed, eight Deno tests, eleven synthetic SQL rollback groups and existing regressions passing, with no residual synthetic rows. SQL changes were not red-tested against the old deployed schema before migration; Deno red/green was observed by Lovable. Main and independent fixed-source review confirmed both P2s closed, with no additional confirmed P1/P2. The reviewer reran the original projection reproduction against the actual Edge function in memory, not the database. Actual employee and online bundle-byte acceptance are not implied.
+
+Main independently recomputed raw UTF-8 SHA256 from that ref: activity.ts `0eb941f66da44315c1bdab83605c184c1acb2bee43d18588ed12a59935b301f6`; index.ts `fded66bb4f94b2648d1325a8c30d97335b851562fccca97b17dc8aee777d071b`; 0015 migration `79a80d6663596ed0e4c1da680a5f8f858468067fb757c37ae64c9f1a02e29d06`. All match reported workspace-file hashes. Opaque deployment source_sha256 is not a reproducible source fingerprint and was not used for equality claims.
+
+For the first send of a never-unknown UUID only, exact trusted confirm responses `(400,invalid_params)`, `(404,not_found)`, `(409,version_conflict)` and `(422,screenshot_not_allowed|note_too_long|invalid_url)` prove that call did not commit. Optional `(400,shop_required)` is pre-RPC rejection, not a database abort. These pairs were checked against 0015 and activity.ts error mapping. They never release a historical/restored unknown intent. 401/403, request_id_conflict, db_error, transport/unknown errors and read-only status not_found remain excluded. Relation not_found cannot be used to infer that no historical receipt exists.
+
+The following 0014 section is retained as audit history; the required activity binding and safe projection above supersede its earlier request shape and open findings.
+
+Fixed source: `2c1566fecb7a78c02924cb3f349a2340d84f9a5d`. Main read `activity.ts`, the index handler and `0014_go_activity_publish_confirm_native.sql`. Lovable reports the migration applied and Edge deployment successful. Independent review is still in progress; this checkpoint is not real employee acceptance or online-bundle byte verification.
+
+- `activity-capabilities {shop_id}` returns exact shop and strict `can_manage`, `can_confirm_publish`, `can_upload_evidence:false`. Existing `voucher.manage` is required for application data and confirmation; ordinary/redeem-only staff do not gain access.
+- `activity-applications {shop_id,activity_id?,publish_confirmed?,limit?,cursor?}` returns shop/activity/filter echoes, masked items, opaque `next_cursor`, `has_more` and `order:'desc'`. Pagination retains database microseconds, ordered by created_at/id descending. Limit 1-50, default 20.
+- `application-detail {shop_id,application_id}` returns masked application, declared form answers, activity schema, six publish fields, a 64-hex version and server time. Phone-type answers are masked in SQL. Raw form_data is not returned. Original evidence paths remain even if signing fails; only same-row `publish/<application>/filename` and `activity/<activity>/filename` can receive caller-JWT 600-second signatures.
+- `publication-confirm {shop_id,application_id,request_id,expected_version,target_confirmed,note,url,screenshots}` uses explicit boolean target, normalized note <=200 code points, URL <=500 code points, and only exact current original screenshot members. Keep/reorder/remove references is supported; no new uploads and no Storage deletion. False saves note/URL/references and clears actor/time, matching Web semantics; approval, claim, SMS and social publishing are untouched.
+- The write uses current identity/fresh scope/exact shop/manage checks, row lock, private idempotency receipt lookup before six-field CAS, UPDATE RETURNING and atomic metadata-only receipt. Status lookup is read-only; not_found does not prove an uncertain write failed. Native code must retain the original key and never auto-resend.
+- Errors: 401 unauthorized; 403 account_suspended/erp_scope_not_ready/shop_forbidden/forbidden; 400 shop_required/invalid_params/invalid_cursor; 404 not_found; 409 version_conflict/request_id_conflict; 422 note_too_long/invalid_url/screenshot_not_allowed; 500 db_error with fixed messages.
+- Source hashes independently recomputed from the fixed ref's raw UTF-8: index.ts `fded66bb4f94b2648d1325a8c30d97335b851562fccca97b17dc8aee777d071b`; activity.ts `b739493daf473cfadd90fbdc77c959342214d57b679255aca9570cd6a962f621`; migration `2f405d3124e688991d45b46b37d01190587126c2665955eed017c4578ae26557`. These match the reported workspace-file hashes, not an opaque deployment fingerprint.
+- Lovable reports seven focused Deno tests and nine synthetic SQL rollback groups passing, plus existing voucher/schedule/DM/media/shop/community/Web/quiz regressions. Main has not rerun privileged SQL or two-session concurrency. No real applications, customer evidence or employee data were accessed.
+- Open review items: revalidate current activity relation on receipt replay/status; exclude reserved/unsupported form fields independently of schema declaration. Do not regard this source checkpoint as final security sign-off.
+- Stage2 new evidence upload remains required. Existing global Web manage RLS, direct client confirmation and broad screenshot-bucket policies were not globally repaired by these narrow native endpoints.
+
 入口：`POST /functions/v1/go-mini-api`，请求头 `Authorization: Bearer <用户JWT>`、`apikey: <anon>`。
 请求体：`{ "action": string, "params"?: object }`。
 成功：`HTTP 200 { "ok": true, "data": <DTO> }`；失败：`HTTP 4xx/5xx { "ok": false, "code": string, "message": string }`。

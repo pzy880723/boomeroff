@@ -5,7 +5,7 @@ Native WeChat WXML/WXSS/JavaScript initial implementation. It does not embed the
 ## Current Delivery State
 
 - Five approved native tabs: 工作台 / 学习 / 识物 / 消息 / 我的.
-- Seventeen native routes, including phone login, month schedule, knowledge detail, server-graded quiz, sales, assistant, video generation, asset delivery, staff chat, community detail and customer-code voucher lookup/redemption.
+- Nineteen native routes, including phone login, month schedule, knowledge detail, server-graded quiz, sales, assistant, video generation, asset delivery, staff chat, community detail, customer-code voucher lookup/redemption and native activity/application pages.
 - Source and interaction tests run locally; the five tabs and schedule have been inspected in the official WeChat DevTools simulator.
 - Real requests use the existing GO identity, fresh ERP scope and original backend records. Preview fixtures are separate, explicitly labeled, development-only and never an API-error fallback.
 - This is **not a published or real-device-accepted mini-program**. The project currently uses `touristappid`; a dedicated BOOMER GO employee AppID, domain configuration, privacy declarations and a genuine authenticated acceptance session are still required.
@@ -41,6 +41,7 @@ Current API origins are the existing GO Lovable Cloud project and `https://erp.b
 - Marketing uses existing script and video jobs. Exiting a page does not issue a cancellation. Cover, video and frozen publishing copy have separate native controls.
 - Voucher templates and customer claims are distinct. The native redemption entry scans only to query; mutation requires a separate confirmation and a matching server receipt. An uncertain request is reconciled by its original key, never silently replaced or automatically resent.
 - Schedule viewing distinguishes explicit rest from missing data. Coworker views require the server's existing permission and exact selected store; this does not grant schedule editing authority.
+- Activity applications require existing same-store management authority. Publication confirmation is separate from approval, voucher issuance, redemption and social publishing. Current native evidence editing retains/removes original references only; new evidence upload is not implemented. Fixed-source review and backend deployment reports do not replace real employee acceptance.
 
 ## Verification And Remaining Acceptance
 

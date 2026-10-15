@@ -33,6 +33,18 @@ Round13 fixed source: `a4b3eb9f99aa13d0672a20df5e9be0718ddcea47`. Independent ba
 
 ## Step 2: Activity Publication Confirmation
 
+### Execution Boundary: Stage 1 And Stage 2
+
+Stage 1 implements scoped activity/application reads, manual publication confirmation/cancellation, CAS, idempotent receipt and read-only reconciliation. It accepts only exact members of the application's current stored publish_screenshots, preserving order after deduplication. A manager may retain or explicitly remove a reference even when its signature fails; removal never deletes the Storage object. Do not add a total-nine limit to existing legitimate records. New uploads are Stage 2, remain in the complete migration goal, and are not falsely exposed through can_upload_evidence in Stage 1.
+
+Both target=true and target=false save the submitted normalized note, URL and selected original paths. The server owns confirmed actor/time, clearing only those confirmation fields for false. No application approval, SMS, claim issuance, coupon invalidation or new paused/status restriction is implied.
+
+Every operation, including replay/status, revalidates current auth, non-suspended fresh ERP scope, non-NULL authorized selected shop, existing voucher.manage and exact application -> activity -> voucher.store relation. After that gate, inspect the caller+UUID receipt before testing the original expected version; successful replay must not fail just because its own write changed that version. Canonical payload identity binds application/activity/store, strict target, expected version, trimmed note/URL and ordered deduplicated paths. A first write uses a locked row, compares a server SHA256 of the six publish fields, and commits actual UPDATE RETURNING plus the private receipt atomically. Receipts retain metadata/hash rather than arbitrary note, URL, screenshots or answers.
+
+Known form schema types are text/phone/url/image/textarea/select; known roles are profile_screenshot/xhs_profile_url. Phone answers must be masked by the actual type, not an invented phone role. Unknown form_data keys and __profile_check are never returned wholesale. Only currently bound row paths with the matching application/activity prefix are signed, by the caller JWT, for 600 seconds; all original references remain in the editor even when un-signable.
+
+An exact accepted receipt proves this request was committed, not that nobody changed the row afterward. If readback differs, retain the committed receipt and show the newer-state conflict; never label it an original write failure, silently adopt a new expected version or rebuild the old payload from current state. Historical unknown requests remain frozen across page destruction/authorization errors in account+shop+application-scoped App RAM, never on disk; restoration requires fresh capabilities and does not dispatch a mutation.
+
 - [ ] Obtain the accurate native management DTO and private evidence binding/upload contract before implementation. Do not guess existing endpoint names or reuse the global definer list as the native scoped API.
 - [ ] Basic detail and paginated applications remain distinct. Only same-store manage authority may read applications, submitted fields and evidence.
 - [ ] Server supplies confirmation actor/time and an opaque version. Confirmation/false cancellation is a fixed target, not toggle; compare the expected version and return conflicts instead of overwriting another manager's changes.

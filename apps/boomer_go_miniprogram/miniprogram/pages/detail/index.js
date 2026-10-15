@@ -296,12 +296,16 @@ Page(definePage({
       });
     } finally { this._writing = false; if (!this._gone) this.setData({ busy: false }); }
   },
+  openActivity() {
+    if (this._gone || this.data.kind !== 'activities' || this._identity !== model.scope(this) ||
+        !this.data.item || String(this.data.item.id) !== this.data.id) return;
+    return this.navigate(model.detailUrl('activities', this.data.id));
+  },
   explainUnavailable() {
     const kind = this.data.kind;
     const descriptions = {
       community: '可从自己的已保存商品详情分享到社区。当前接口不提供任意文本帖子和评论，不会本地模拟发布。',
       vouchers: '当前 API 契约未开放员工券核销和分享写入。券状态以服务器为准，不会在本地模拟核销。',
-      activities: '当前 API 契约未开放原生活动报名/签到写入。活动信息与参与状态以服务器为准。',
       favorites: '收藏移除仅作用于本人收藏行，不会删除原商品或官方知识。测验可用性以服务器为准。'
     };
     this.setData({ unavailable: descriptions[kind] || '昵称和头像请前往个人资料修改；真实姓名、手机号、角色和门店由 ERP 管理，不可在此编辑。' });

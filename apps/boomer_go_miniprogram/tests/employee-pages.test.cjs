@@ -221,7 +221,7 @@ test('generic native list covers original employee entry routes and preserves en
     const page = nativePage('list', async () => ({ items: [{ id: 'a/b ?中', title: '条目' }] }));
     await page.onLoad({ kind });
     page.openItem(event({ id: 'a/b ?中' }));
-    assert.match(page.navigations[0], kind === 'community' ? /\/pages\/community\/index\?id=/ : /\/pages\/detail\/index\?kind=/);
+    assert.match(page.navigations[0], kind === 'community' ? /\/pages\/community\/index\?id=/ : kind === 'activities' ? /\/pages\/activity\/index\?id=/ : /\/pages\/detail\/index\?kind=/);
     assert.ok(page.navigations[0].includes(encodeURIComponent('a/b ?中')));
   }
 });
@@ -476,6 +476,16 @@ test('activities and vouchers use their dedicated native detail actions', async 
     await page.onLoad({ kind, id: 'one' });
     assert.equal(calls[0], expected);
   }
+});
+test('legacy activity detail exposes only its currently loaded native activity entry', async () => {
+  const id='00000000-0000-4000-8000-000000000031';
+  const page=nativePage('detail',async()=>({item:{id,title:'活动'}}));
+  await page.onLoad({kind:'activities',id});
+  assert.equal(typeof page.openActivity,'function');
+  page.openActivity();assert.equal(page.navigations[0],'/pages/activity/index?id='+id);
+  page._identity='old-scope';page.openActivity();assert.equal(page.navigations.length,1);
+  page._identity=require('../miniprogram/pages/list/model').scope(page);page.data.item={id:'foreign'};
+  page.openActivity();assert.equal(page.navigations.length,1);
 });
 
 test('conversation native send preserves draft on failure and clears only after confirmed reply', async () => {

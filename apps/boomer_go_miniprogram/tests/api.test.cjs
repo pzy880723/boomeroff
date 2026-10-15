@@ -64,3 +64,12 @@ test('schedule views require and send only the verified selected working shop',a
  await api.action('schedule',{month:'2026-10',view:'mine',shop_id:'foreign'});
  assert.deepEqual(calls[0].params,{month:'2026-10',view:'mine',shop_id:'own'});
 });
+test('activity management never accepts a caller-selected foreign shop or a missing verified shop',async()=>{
+ let selected=null;const calls=[];
+ const api=createApi({wx:{},config:{},session:{get:()=>({userId:'u',shop:selected})},invoke:async(name,body)=>{calls.push(body);return {data:{shop_id:'own'}};}});
+ const actions=['activity-capabilities','activity-applications','application-detail','publication-confirm','publication-confirm-status'];
+ for(const action of actions) await assert.rejects(api.action(action,{shop_id:'foreign'}),/授权工作门店/);
+ assert.equal(calls.length,0);selected={id:'own'};
+ for(const action of actions) await api.action(action,{shop_id:'foreign',application_id:'app',request_id:'intent'});
+ assert.ok(calls.every(r=>r.params.shop_id==='own'&&r.params.application_id==='app'&&r.params.request_id==='intent'));
+});

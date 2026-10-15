@@ -1,0 +1,40 @@
+<view class="page application-page">
+  <view wx:if="{{preview}}" class="preview-banner">操作示例 · 非真实申请，不执行发布确认</view>
+  <view wx:if="{{loading}}" class="loading">正在核验权限与申请详情…</view>
+  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary retry-button" bindtap="refresh" disabled="{{loading || sending || checkingStatus}}">重新核验并读取</button></view>
+  <block wx:if="{{view}}">
+    <view class="title activity-name">{{view.title}}</view>
+    <view class="muted store-label">{{view.shopName}} · 申请记录</view>
+    <view class="card identity-card">
+      <view class="applicant">申请人：{{view.name}}<text wx:if="{{view.phoneTail}}"> · 尾号 {{view.phoneTail}}</text></view>
+      <view class="muted status-line">发布记录：{{view.publishStatus}}</view>
+      <view class="muted status-line">申请审核：{{view.applicationStatus}}（独立状态）</view>
+    </view>
+    <view class="field-title">发布链接</view>
+    <input class="field url-field" value="{{url}}" bindinput="onUrl" placeholder="填写已发布内容的完整链接" maxlength="-1" disabled="{{loading || pending || receipt || !canManage}}" />
+    <view class="url-note row"><text class="muted">只支持显式复制，不跳转网页</text><button wx:if="{{url}}" class="copy-button" bindtap="copyUrl">复制</button></view>
+    <view class="field-title">确认备注</view>
+    <textarea class="field note-field" value="{{note}}" bindinput="onNote" placeholder="补充核对情况，失败时保留原稿" maxlength="-1" disabled="{{loading || pending || receipt || !canManage}}" />
+    <view class="muted field-help">备注最多 200 字 · 发布链接最多 500 字符</view>
+    <view class="field-title">发布截图 <text class="muted">{{images.length}} 张</text></view>
+    <view wx:if="{{!images.length}}" class="empty evidence-empty">没有发布截图；不影响按服务器规则确认。</view>
+    <view class="evidence-grid">
+      <view wx:for="{{images}}" wx:key="index" class="evidence-card">
+        <button class="image-button" bindtap="previewEvidence" data-index="{{index}}"><image wx:if="{{item.available}}" src="{{item.url}}" mode="aspectFill" class="evidence-image" /><view>{{item.status}}</view></button>
+        <button wx:if="{{!pending && !receipt}}" class="remove-button" bindtap="removeEvidence" data-index="{{index}}" disabled="{{loading}}">移除引用</button>
+      </view>
+    </view>
+    <view class="muted evidence-help">本阶段仅保留或移除既有图片引用，不上传、不删除原图。</view>
+    <view wx:if="{{view.answers.length}}" class="card answers-card">
+      <view class="field-title answers-title">申请提交信息（只读）</view>
+      <view wx:for="{{view.answers}}" wx:key="key" class="answer-row"><view class="muted">{{item.label}}</view><view wx:if="{{item.type !== 'image'}}" class="answer-value">{{item.value || '未提供'}}</view><button wx:if="{{item.image}}" class="button-secondary answer-image" bindtap="previewAnswer" data-index="{{index}}">{{item.image.status}}</button></view>
+    </view>
+    <view wx:if="{{conflict && !receipt}}" class="conflict"><view>服务器记录已变化。草稿仍保留，请核对后显式载入最新。</view><button class="button-secondary" bindtap="reloadLatest" disabled="{{pending || loading || confirming}}">载入最新并放弃当前修改</button></view>
+    <view wx:if="{{receipt}}" class="receipt-card"><view class="receipt-title">本次操作回执已确认</view><view>{{receipt.target}}</view><view class="muted">{{receipt.time}}</view><view wx:if="{{saved}}">服务器详情已回读一致</view></view>
+    <view wx:if="{{readbackError}}" class="error">{{readbackError}}<button class="button-secondary retry-button" bindtap="refresh" disabled="{{loading}}">只读重读详情</button></view>
+    <view wx:if="{{notice}}" class="notice">{{notice}}</view>
+    <view wx:if="{{pending}}" class="actions"><button class="button-secondary" bindtap="reconcile" disabled="{{checkingStatus || sending || loading || confirming}}">{{checkingStatus ? '核对中' : '只读核对此次操作状态'}}</button><button wx:if="{{canRetrySame}}" class="button-secondary secondary-action" bindtap="retrySame" disabled="{{loading || sending || checkingStatus || confirming}}">再次确认并按原请求重试</button></view>
+    <view wx:elif="{{!receipt}}" class="actions"><view class="muted confirmation-help">只更新本申请的发布记录，不审批、不发券、不发短信。</view><button class="button" bindtap="confirmPublish" disabled="{{!canSubmit || loading || sending || confirming || preview}}">{{preview ? '示例不可保存' : confirming ? '等待二次确认' : '保存并确认发布'}}</button><button wx:if="{{view.confirmed}}" class="button-secondary secondary-action" bindtap="cancelPublish" disabled="{{!canSubmit || loading || sending || confirming || preview}}">撤销发布确认</button></view>
+    <view class="muted checked-time">服务器核验 {{view.checkedAt}}</view>
+  </block>
+</view>

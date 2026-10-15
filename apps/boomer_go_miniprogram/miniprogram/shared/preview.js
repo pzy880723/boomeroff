@@ -16,6 +16,8 @@ function createPreview(wx) {
   ];
   const bootstrap = { date, profile, staff_profile: profile, user_role: { role_code: 'staff' }, shop_context: { date, scope: 'store', status: 'scheduled', effective_shop: shop, authorized_shops: [shop] }, shifts: [{ id: 'example-shift', work_date: date, shift_code: 'early', shop_id: shop.id }], shift_definitions: [{ shop_id:shop.id, code: 'early', name: '早班', start_time: '10:00', end_time: '18:00' }], shift: { title:'早班',start_time:'10:00',end_time:'18:00',shop_name:shop.name }, tasks:[{id:'example-task',title:'检查价签与品相说明',status:'示例待办'}], learning:[articles[0]], okrs: [], checked_today: false };
   const current = { userId: 'example-employee', profile, shop, shops: [shop], isHeadquarters: false, bootstrap, permissions: [], scopeFresh: true };
+  const activity = { id: '00000000-0000-4000-8000-000000000031', shop_id: shop.id, name: '门店内容共创日（示例）', description: '用真实商品与门店照片分享好物故事。管理区是只读示例，不读取真实顾客资料、不发券或保存确认。', status: 'active', platform: null, starts_at: null, ends_at: null, cover_url: null, poster_url: null, voucher_id: '00000000-0000-4000-8000-000000000034', requires_review: false, max_applications: null, min_followers: null, share_token: null, created_at: date + 'T00:00:00+08:00', form_fields: [{ key: 'experience', label: '希望分享的内容', type: 'textarea' }, { key: 'contact', label: '联系电话', type: 'phone' }, { key: 'profile_image', label: '主页截图', type: 'image', role: 'profile_screenshot' }] };
+  const applicationId = '00000000-0000-4000-8000-000000000032';
   const peer = { user_id: '00000000-0000-4000-8000-000000000001', name: '门店伙伴 A（示例）', avatar_url: null, position: '门店伙伴（示例）', shop_id: shop.id, shop_name: shop.name, is_contact: true };
   const messages = [
     { id: '00000000-0000-4000-8000-000000000011', sender_id: peer.user_id, receiver_id: current.userId, mine: false, body: '今天新到的瓷器已整理好。这是界面示例，不是真实员工私信。', attachment: null, created_at: date + 'T09:00:00+08:00', read_at: null, cursor: 'example-dm-11' },
@@ -92,7 +94,22 @@ function createPreview(wx) {
     if (name === 'quiz-history') return { items: [], as_of: stamp };
     if (name === 'checkin-status') return { date, timezone: 'Asia/Shanghai', checked_today: false, today: null, stats: { current_streak: 0, longest_streak: 0, total_check_ins: 0 }, history: { items: [], page: 0, page_size: 20, has_more: false } };
     if (name === 'objectives') return { items: [{ id: 'example-okr', title: '本周：商品知识与门店体验', objective: '完善商品介绍，保持门店整洁，让伙伴掌握服务要点。', key_results: [{ title: '学习商品知识', done: false }, { title: '检查价签与品相说明', done: false }], body: '这是运营目标的界面示例，不涉及销售业绩考核。' }], as_of: stamp };
-    if (name === 'activities') return { items: [{ id: 'example-activity', name: '门店内容共创日', title: '门店内容共创日', body: '用真实商品与门店照片分享好物故事。此活动仅用于界面展示。', status: '示例活动' }], as_of: stamp };
+    if (['activities', 'activity-detail', 'activity-capabilities', 'activity-applications', 'application-detail'].includes(name)) {
+      if (params.shop_id && params.shop_id !== shop.id) throw Object.assign(new Error('示例模式不能访问其他门店'), { status: 403, code: 'shop_forbidden' });
+      const missing = () => Object.assign(new Error('该活动或申请示例不存在'), { status: 404, code: 'not_found' });
+      if (name === 'activities') return { shop_id: shop.id, items: [Object.assign({}, activity)], page: 0, has_more: false, as_of: stamp };
+      if (name === 'activity-detail') { if (params.id !== activity.id) throw missing(); return { item: Object.assign({}, activity) }; }
+      if (name === 'activity-capabilities') return { shop_id: shop.id, can_manage: true, can_confirm_publish: true, can_upload_evidence: false };
+      if (name === 'activity-applications') {
+        if (params.activity_id && params.activity_id !== activity.id) throw missing();
+        if ((params.publish_confirmed !== undefined && typeof params.publish_confirmed !== 'boolean') || params.cursor || (params.limit !== undefined && (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > 50))) throw Object.assign(new Error('示例列表参数不合法'), { status: 400, code: 'invalid_params' });
+        return { shop_id: shop.id, activity_id: params.activity_id || null, publish_confirmed: params.publish_confirmed === undefined ? null : params.publish_confirmed, items: params.publish_confirmed === true ? [] : [{ id: applicationId, activity_id: activity.id, activity_name: activity.name, status: 'approved', created_at: date + 'T00:00:00+08:00', applicant_name_masked: '顾客（示例，脱敏）', applicant_phone_tail: '1234', publish_confirmed: false, publish_confirmed_at: null, has_publish_url: false, publish_screenshot_count: 1 }], next_cursor: null, has_more: false, order: 'desc' };
+      }
+      if (params.application_id !== applicationId) throw missing();
+      return { shop_id: shop.id, application: { id: applicationId, activity_id: activity.id, status: 'approved', created_at: date + 'T00:00:00+08:00', reviewed_at: null, applicant_name_masked: '顾客（示例，脱敏）', applicant_phone_tail: '1234', voucher_claim_id: null,
+        publish: { confirmed: false, confirmed_at: null, confirmed_by: null, note: '示例备注：仅用于界面预览', url: null, screenshots: [{ path: 'publish/' + applicationId + '/example.jpg', signed_url: null, error: 'sign_failed' }] },
+        answers: [{ key: 'experience', label: '希望分享的内容', type: 'textarea', role: null, value: '分享昭和玩具的整理方法（示例）', image: null }, { key: 'contact', label: '联系电话', type: 'phone', role: null, value: '***1234', image: null }, { key: 'profile_image', label: '主页截图', type: 'image', role: 'profile_screenshot', value: null, image: { path: 'activity/' + activity.id + '/example.jpg', signed_url: null, error: 'sign_failed' } }] }, activity: { id: activity.id, name: activity.name, platform: activity.platform, form_fields: activity.form_fields }, version: '1'.repeat(64), server_time: stamp };
+    }
     if (name === 'community') return { items: [{ id: 'example-community', title: '今天学到一个新的瓷器底款知识', body: '分享观察方法，让每一位伙伴都能把商品故事讲得更准确。', user_id: 'example-employee' }], as_of: stamp };
     if (name === 'community-detail') {
       if (params.id !== 'example-community') throw new Error('该示例帖子不存在');

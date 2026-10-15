@@ -1,0 +1,29 @@
+.activity-page { color: #202125; font-size: 32rpx; padding-bottom: calc(48rpx + env(safe-area-inset-bottom)); }
+.eyebrow { color: #eb0029; font-size: 22rpx; letter-spacing: 3rpx; margin: 12rpx 0 28rpx; }
+.activity-title { font-size: 44rpx; line-height: 1.4; font-weight: 700; margin: 24rpx 0; word-break: break-all; }
+.description { display: block; white-space: pre-wrap; line-height: 1.8; word-break: break-all; }
+.activity-cover, .activity-poster { width: 100%; border-radius: 20rpx; margin: 12rpx 0 24rpx; }
+.activity-poster { margin-top: 28rpx; }
+.metadata { border-top: 1rpx solid #eceef1; margin-top: 28rpx; padding-top: 8rpx; }
+.metadata-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 24rpx; line-height: 1.7; margin-top: 20rpx; }
+.metadata-row .muted { flex-shrink: 0; font-size: 26rpx; }
+.metadata-row text:last-child { text-align: right; word-break: break-all; }
+.applications-section { margin-top: 36rpx; }
+.section-hint { font-size: 26rpx; line-height: 1.7; margin: 12rpx 0 24rpx; }
+.filters { gap: 8rpx; background: #ffffff; padding: 8rpx; border-radius: 20rpx; margin-bottom: 24rpx; }
+.filter { flex: 1; min-height: 88rpx; line-height: 1.5; padding: 22rpx 8rpx; font-size: 28rpx; color: #737780; background: transparent; }
+.filter.selected { color: #eb0029; background: #fff0f3; font-weight: 600; }
+.person { flex-wrap: wrap; gap: 16rpx; align-items: flex-start; }
+.person-name { font-size: 34rpx; font-weight: 600; word-break: break-all; }
+.person .muted { font-size: 26rpx; line-height: 1.7; }
+.status-row { display: flex; flex-direction: column; gap: 16rpx; align-items: flex-start; margin: 24rpx 0; }
+.publish-status { font-size: 26rpx; color: #737780; }
+.publish-status.confirmed { color: #b30020; }
+.application-time, .evidence-summary { font-size: 26rpx; line-height: 1.8; word-break: break-all; }
+.application-card .button-secondary { margin-top: 24rpx; }
+.button-secondary { min-height: 88rpx; font-size: 30rpx; line-height: 1.6; padding: 20rpx 24rpx; white-space: normal; }
+.error text { display: block; word-break: break-all; line-height: 1.8; }
+.error .button-secondary { margin-top: 20rpx; }
+.empty .muted { font-size: 26rpx; line-height: 1.8; margin-top: 16rpx; }
+.loading-state { text-align: center; padding: 40rpx 24rpx; }
+.list-end { text-align: center; font-size: 24rpx; padding: 24rpx 0; }
