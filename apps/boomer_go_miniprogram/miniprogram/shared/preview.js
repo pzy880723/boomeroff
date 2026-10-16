@@ -16,6 +16,7 @@ function createPreview(wx) {
     { id: '00000000-0000-4000-8000-000000000833', name: '中古首饰品相说明（示例）', category: 'vintage_jewelry', ip_name: '胸针', brand: '合成知识示例', era: '年代待核实', origin: '产地待核实', summary: '核对结构、工艺和使用痕迹，真实介绍商品细节。', body: '这是合成官方知识示例。\n\n展示首饰的可见结构和使用痕迹，不编造材质、品牌与年代。' }
   ];
   const libraryArticles = articles.concat([{ title: '价签与品相：介绍前先核实', summary: '一件一价，真实说明看得见的使用痕迹。', body: '合成门店学习示例。介绍价格前先核对当前价签。\n\n请客人查看实物品相，如实说明可见的磕碰、划痕与自然使用痕迹，不承诺未经核实的原价或折扣。' }]);
+  officialArticles.forEach(row => { row.updated_at = stamp; });
   const library = libraryArticles.map((article, index) => ({
     id: '00000000-0000-4000-8000-00000000006' + (index + 1), source_type: 'official',
     source_id: '00000000-0000-4000-8000-00000000007' + (index + 1),
@@ -181,7 +182,7 @@ function createPreview(wx) {
       const items = officialArticles.filter(row => ['category', 'ip_name', 'era', 'origin'].every(key => filters[key] === null || row[key] === filters[key])
         && (!q || [row.name, row.ip_name, row.summary].some(value => value.toLowerCase().includes(q)))).sort((a, b) => b.id.localeCompare(a.id)).slice(0, 60).map(row => ({
         id: row.id, name: row.name, category: row.category, ip_name: row.ip_name, summary: row.summary, era: row.era, origin: row.origin,
-        cover_url: null, selling_points: null, tips: null, view_count: 0, favorite_count: 0, importance_score: null, updated_at: stamp
+        cover_url: null, selling_points: null, tips: null, view_count: 0, favorite_count: 0, importance_score: null, updated_at: row.updated_at
       }));
       return { items, filters, requested_sort, effective_sort, window_limit: 60, as_of: stamp, persisted: false };
     }

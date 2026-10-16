@@ -8,6 +8,14 @@ const MESSAGES = {
   reference_unavailable: '门店知识参考暂时无法读取；原稿未改动', ai_timeout: 'AI 起草超时；原稿未改动，请确认后再次生成',
   draft_scope_changed: '生成过程中门店或权限已变化，候选已停止接收；原稿未改动'
 };
+const KNOWLEDGE_CHAT_MESSAGES = {
+  ai_budget_exhausted: 'AI 额度不足，请联系管理员；问题已保留', ai_rate_limited: '提问过于频繁，请稍后再试；问题已保留',
+  ai_unavailable: 'AI 问答服务暂不可用；问题已保留', ai_invalid_response: '未收到完整回答；问题已保留，不会自动重发',
+  ai_timeout: '本次回答超时；问题已保留，不会自动重发', knowledge_chat_scope_changed: '回答期间权限或词条已变化，请刷新词条后再提问',
+  not_found: '词条不存在或当前不可读取，请返回列表核对', db_unavailable: '词条资料暂时无法读取，请稍后再试',
+  scope_unavailable: '员工权限暂时无法确认，请稍后再试', erp_scope_not_ready: '员工权限需要重新同步，请刷新后再提问',
+  account_suspended: '员工账号已停用，请联系管理员'
+};
 function createTransport(wx, config, token) {
   return function request(name, body, options = {}) {
     if (!/^(?:[a-z][a-z0-9-]*|rpc:[a-z][a-z0-9_]*|auth:(?:refresh|password|user))$/.test(name)) return Promise.reject(new Error('无效的服务入口'));
@@ -18,7 +26,8 @@ function createTransport(wx, config, token) {
     if (authUser && (typeof options.accessToken !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(options.accessToken))) return Promise.reject(new Error('缺少待核验的登录凭证'));
     const rpc = name.startsWith('rpc:');
     const scoped = name === 'erp-scope-sync';
-    const longRequest = name === 'recognize-product' || name === 'spirit-chat' || (name === 'go-mini-api' && body && ['conversation-send', 'quiz-start', 'recognition-save', 'profile-update', 'kb-draft'].includes(body.action));
+    const knowledgeChat = name === 'go-mini-api' && body && body.action === 'official-knowledge-chat';
+    const longRequest = knowledgeChat || name === 'recognize-product' || name === 'spirit-chat' || (name === 'go-mini-api' && body && ['conversation-send', 'quiz-start', 'recognition-save', 'profile-update', 'kb-draft'].includes(body.action));
     let url = config.supabaseUrl + (authUser ? '/auth/v1/user' : name === 'auth:password' ? '/auth/v1/token?grant_type=password' : refresh ? '/auth/v1/token?grant_type=refresh_token' : rpc ? '/rest/v1/rpc/' + name.slice(4) : '/functions/v1/' + name);
     if (scoped) url += '?forceFunctionRegion=' + encodeURIComponent(config.scopeRegion);
     const bearer = authUser ? options.accessToken : options.public || refresh || authPassword ? config.publicKey : token() || config.publicKey;
@@ -31,7 +40,7 @@ function createTransport(wx, config, token) {
           if (response.statusCode < 200 || response.statusCode >= 300 || (data && (data.ok === false || data.error))) {
             const code = authPassword ? response.statusCode === 429 ? 'auth_rate_limited' : response.statusCode >= 500 ? 'auth_unavailable' : 'invalid_credentials' : data && (data.code || data.error_code);
             const authMessage = response.statusCode === 429 ? '登录过于频繁，请稍后重试' : response.statusCode >= 500 ? '员工登录服务暂不可用，请稍后重试' : '账号或密码错误，请检查输入';
-            const error = new Error(authPassword ? authMessage : MESSAGES[code] || (response.statusCode === 401 ? '登录已过期，请重新登录' : response.statusCode === 403 ? '当前员工没有此操作权限' : '服务暂不可用，请稍后重试'));
+            const error = new Error(authPassword ? authMessage : (knowledgeChat ? KNOWLEDGE_CHAT_MESSAGES[code] : MESSAGES[code]) || (response.statusCode === 401 ? '登录已过期，请重新登录' : response.statusCode === 403 ? '当前员工没有此操作权限' : '服务暂不可用，请稍后重试'));
             error.code = code; error.status = response.statusCode; error.retryAfter = Number(data && data.retry_after_seconds || 0);
             return reject(error);
           }

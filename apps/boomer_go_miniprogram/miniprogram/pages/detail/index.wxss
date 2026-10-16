@@ -47,3 +47,20 @@
 .loading-state { padding: 48rpx; text-align: center; color: #737780; }
 .official-filter-links { display: flex; flex-wrap: wrap; gap: 16rpx; }
 .official-filter-links button { margin: 0; min-height: 88rpx; max-width: 100%; white-space: normal; word-break: break-all; }
+.knowledge-chat { padding: 0; margin-top: 24rpx; overflow: hidden; }
+.qa-heading { display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; min-height: 112rpx; margin: 0; padding: 28rpx; border-radius: 24rpx; text-align: left; background: #fff; line-height: 1.6; }
+.qa-heading::after { border: none; }
+.qa-heading-copy { flex: 1; min-width: 0; margin-right: 16rpx; }
+.qa-heading .section-title { margin: 0 0 10rpx; font-size: 32rpx; }
+.qa-heading .muted { font-size: 26rpx; white-space: normal; }
+.qa-toggle { flex-shrink: 0; color: #eb0029; font-size: 28rpx; }
+.qa-panel { padding: 0 28rpx 28rpx; border-top: 1rpx solid #eceef2; }
+.qa-caption, .qa-empty { font-size: 28rpx; line-height: 1.8; margin-top: 24rpx; }
+.qa-notice, .qa-error { padding: 24rpx; margin-top: 24rpx; border-radius: 16rpx; font-size: 28rpx; line-height: 1.8; word-break: break-all; background: #fff3df; color: #7c4300; }
+.qa-error { background: #fff0f3; color: #a6001d; }
+.qa-message { box-sizing: border-box; max-width: 100%; margin: 24rpx 28rpx 0 0; padding: 24rpx; border: 1rpx solid #eceef2; border-radius: 20rpx 20rpx 20rpx 4rpx; background: #f6f7f9; }
+.qa-message.qa-mine { margin: 24rpx 0 0 28rpx; background: #fff0f3; border-color: #ffdde3; border-radius: 20rpx 20rpx 4rpx 20rpx; }
+.qa-role { font-size: 24rpx; line-height: 1.6; margin-bottom: 12rpx; }
+.qa-message-text { display: block; font-size: 32rpx; line-height: 1.8; white-space: pre-wrap; word-break: break-all; }
+.qa-input { box-sizing: border-box; width: 100%; min-height: 176rpx; padding: 24rpx; margin-top: 28rpx; background: #f6f7f9; border: 1rpx solid #e1e3e8; border-radius: 16rpx; font-size: 32rpx; line-height: 1.7; }
+.qa-send, .qa-reset, .qa-earlier { margin-top: 24rpx; min-height: 88rpx; font-size: 30rpx; }

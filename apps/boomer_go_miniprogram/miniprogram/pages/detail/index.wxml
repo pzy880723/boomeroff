@@ -16,6 +16,21 @@
     <view wx:if="{{gallery.length}}" class="card"><view class="section-title">商品图片</view><image wx:for="{{gallery}}" wx:key="*this" class="business-image" src="{{item}}" mode="widthFix" /></view>
     <view wx:if="{{backstampUrl}}" class="card"><view class="section-title">底款细节</view><image class="business-image" src="{{backstampUrl}}" mode="widthFix" /></view>
     <view wx:if="{{videoUrl}}" class="card"><view class="section-title">商品视频</view><video class="business-video" src="{{videoUrl}}" controls /></view>
+    <view wx:if="{{kind === 'official' && qaVisible}}" class="card knowledge-chat">
+      <button class="qa-heading" bindtap="toggleKnowledgeChat"><view class="qa-heading-copy"><view class="section-title">围绕这条知识提问</view><view class="muted">仅本页临时对话 · AI 回答仅供参考</view></view><text class="qa-toggle">{{qaOpen ? '收起 −' : '展开 ＋'}}</text></button>
+      <view wx:if="{{qaOpen}}" class="qa-panel">
+        <view class="muted qa-caption">{{qaNotice}}</view>
+        <view wx:if="{{qaUnavailable}}" class="qa-notice">{{qaUnavailable}}</view>
+        <button wx:if="{{qaHasEarlier}}" class="button-secondary qa-earlier" bindtap="showEarlierKnowledgeMessages">查看更早 20 条记录（本页 {{qaTotalCount}} 条）</button>
+        <view wx:for="{{qaMessages}}" wx:key="id" class="qa-message {{item.role === 'user' ? 'qa-mine' : ''}}"><view class="muted qa-role">{{item.role === 'user' ? '我' : '本条知识 AI 问答'}}</view><text selectable class="qa-message-text">{{item.content}}</text></view>
+        <view wx:if="{{!qaMessages.length && !qaBusy}}" class="muted qa-empty">可以询问材质、年代或讲解方式，回答会基于本条官方知识展开。</view>
+        <view wx:if="{{qaBusy}}" class="qa-notice">正在等待完整回答，不会自动重发。切到后台后不展示迟到结果；已发出的请求不代表已取消。</view>
+        <view wx:if="{{qaError}}" class="qa-error"><text>{{qaError}}</text></view>
+        <textarea class="qa-input" value="{{qaDraft}}" bindinput="onKnowledgeQuestion" maxlength="-1" auto-height placeholder="输入问题，最多 2000 字；失败保留原问题" disabled="{{qaBusy || loading || error || (!preview && qaUnavailable)}}" />
+        <button class="button qa-send" bindtap="sendKnowledgeQuestion" loading="{{qaBusy}}" disabled="{{!qaCanSend || qaBusy || qaModal || loading || error || preview}}">{{qaBusy ? '正在等待回答…' : '提问'}}</button>
+        <button class="button-secondary qa-reset" bindtap="newKnowledgeConversation" disabled="{{qaBusy || qaModal || loading || preview || (!qaTotalCount && !qaDraft)}}">开始新对话</button>
+      </view>
+    </view>
     <view wx:if="{{results.length}}" class="card"><view class="section-title">关键结果</view><view wx:for="{{results}}" wx:key="index" class="result-row row"><text class="result-marker {{item.completed ? 'done' : ''}}">{{item.completed ? '✓' : '·'}}</text><text class="result-text">{{item.title}}</text></view></view>
     <button wx:if="{{quizUrl}}" class="button" data-url="{{quizUrl}}" bindtap="openQuiz">练习这条知识</button>
     <view wx:if="{{learningNotice}}" class="notice">{{learningNotice}}</view>

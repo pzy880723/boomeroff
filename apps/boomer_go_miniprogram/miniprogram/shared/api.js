@@ -60,7 +60,7 @@ function createApi({ wx, config, session, invoke: transport }) {
   }
   async function action(name, params = {}) {
     const before = snapshot();
-    if (name === 'kb-draft' && session.restore) {
+    if (['kb-draft', 'official-knowledge-chat'].includes(name) && session.restore) {
       // Reserve a fresh ERP lease before a paid generation, not halfway through one.
       await session.restore();
       assertState(before);
@@ -75,7 +75,7 @@ function createApi({ wx, config, session, invoke: transport }) {
     }
     const storeKbDetail = name === 'knowledge-detail' && ['sop', 'qa', 'training'].includes(params.kind || params.source);
     if ((shopActions.has(name) || storeKbDetail) && !selected) throw new Error('请先选择当前授权工作门店');
-    let payload = Object.assign({}, params, selected && name !== 'official-library' ? { shop_id: selected.id } : {});
+    let payload = Object.assign({}, params, selected && !['official-library', 'official-knowledge-chat'].includes(name) ? { shop_id: selected.id } : {});
     if (name === 'profile-update') {
       const userId = session.get().userId;
       payload = Object.assign({}, params);
@@ -104,7 +104,7 @@ function createApi({ wx, config, session, invoke: transport }) {
     try { response = await settled(before, transport('go-mini-api', { action: name, params: payload })); }
     catch (error) {
       // This code is returned only by the BFF gate before a handler can read or mutate data.
-      if (error.status !== 403 || error.code !== 'erp_scope_not_ready' || !session.restore) throw error;
+      if (name === 'official-knowledge-chat' || error.status !== 403 || error.code !== 'erp_scope_not_ready' || !session.restore) throw error;
       await session.restore();
       assertState(before);
       response = await settled(before, transport('go-mini-api', { action: name, params: payload }));

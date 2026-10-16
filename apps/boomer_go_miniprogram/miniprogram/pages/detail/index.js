@@ -4,8 +4,10 @@ const { businessContent } = require('./content');
 const objective = require('./objective');
 const knowledgeCategories = require('../../shared/knowledge-categories');
 const { urlForFilters } = require('../../shared/official-library');
+const knowledgeChat = require('../../shared/knowledge-chat');
 const learningKinds = ['knowledge', 'official', 'sop', 'qa', 'training', 'favorite', 'favorites', 'my-library', 'history', 'recognition'];
 function practiceCoordinator() { const app = typeof getApp === 'function' ? getApp() : null; return app && app.dailyPractice; }
+function chatFor(page) { if (!page._knowledgeChat) page._knowledgeChat = knowledgeChat.create(page, { scope: () => model.scope(page), wx }); return page._knowledgeChat; }
 
 function contentNodes(item) {
   if (Array.isArray(item.nodes)) return item.nodes;
@@ -28,9 +30,10 @@ function officialFilters(raw) {
 
 Page(definePage({
   data: { kind: '', id: '', item: null, nodes: '', fields: [], officialFilters: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], freshness: '', quizUrl: '', unavailable: '', favorite: null, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, canSave: false, canShare: false, busy: false, actionNotice: '', resolvedMessage: '', resolvedUrl: '', keyActionsDraft: '', draftResults: [], messages: [], messageDraft: '', profileNameDraft: '', avatarPreview: '' },
-  onLoad(options) { this._hidden = false; this._practiceRequested = options.practice === '1'; this.setData({ kind: options.kind || 'knowledge', id: options.id || '', practiceRequested: this._practiceRequested }); this.syncPractice(); return this.load(); },
+  onLoad(options) { this._hidden = false; this._practiceRequested = options.practice === '1'; this.setData(Object.assign({}, knowledgeChat.fields, { kind: options.kind || 'knowledge', id: options.id || '', practiceRequested: this._practiceRequested })); this.syncPractice(); return this.load(); },
   onShow() { const hidden = this._hidden; this._hidden = false; this._practiceRedirecting = false; this.syncPractice(); if (this.data.kind === 'objectives') { if (hidden || this._objectiveIdentity !== model.scope(this)) return this.loadObjective(); return; } if (this._request && (this._identity !== model.scope(this) || (hidden && learningKinds.indexOf(this.data.kind) >= 0))) return this.load(); },
   onHide() {
+    if (this._knowledgeChat) this._knowledgeChat.hide();
     if (this.data.kind === 'objectives') { this._hidden = true; this.clearObjective(); }
     if (learningKinds.indexOf(this.data.kind) >= 0) {
       model.hideLearning(this);
@@ -38,11 +41,13 @@ Page(definePage({
       if (this._gone) Object.assign(this.data, { quizUrl: '', officialFilters: [] }); else this.setData({ quizUrl: '', officialFilters: [] });
     }
   },
-  onUnload() { this.onHide(); this._gone = true; },
+  onUnload() { this.onHide(); if (this._knowledgeChat) this._knowledgeChat.unload(); this._gone = true; },
   onPullDownRefresh() { return Promise.resolve(this.data.kind === 'objectives' ? this.reloadObjective() : this.load()).finally(() => wx.stopPullDownRefresh()); },
   load() {
     const kind = this.data.kind;
     if (kind === 'objectives') return this.loadObjective();
+    if (kind === 'official' && (this._gone || this._hidden)) return Promise.resolve();
+    if (kind === 'official' || this._knowledgeChat) chatFor(this).loadStart();
     const section = model.sections[kind];
     if (learningKinds.indexOf(kind) >= 0) this.setData({ learningNotice: '' });
     this._identity = model.scope(this);
@@ -148,9 +153,15 @@ Page(definePage({
         claimed: item.claimed === true, canSave: !!this._productId, canShare: !!this._productId, canFavorite, canRemoveFavorite: !!this._favoriteRowId,
         keyActionsDraft: item.key_actions || '', draftResults: results.map((result) => ({ title: result.title, completed: result.completed }))
       });
+      if (kind === 'official') chatFor(this).mount(item);
       wx.setNavigationBarTitle({ title: item.title || section.title });
     }, { item: null, nodes: '', fields: [], officialFilters: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], quizUrl: '', canSave: false, canShare: false, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, freshness: '', unavailable: '', actionNotice: '', resolvedMessage: '', resolvedUrl: '', messages: [] });
   },
+  toggleKnowledgeChat() { if (this._knowledgeChat) this._knowledgeChat.toggle(); },
+  onKnowledgeQuestion(event) { if (this._knowledgeChat) this._knowledgeChat.input(event.detail.value); },
+  sendKnowledgeQuestion() { if (this._knowledgeChat) return this._knowledgeChat.send(); },
+  showEarlierKnowledgeMessages() { if (this._knowledgeChat) this._knowledgeChat.earlier(); },
+  newKnowledgeConversation() { if (this._knowledgeChat) return this._knowledgeChat.newConversation(); },
   openOfficialFilter(event) {
     if (this._hidden || this._gone || this.data.loading || this.data.error || this.data.kind !== 'official' || this.data.id !== this._officialId || model.scope(this) !== this._loadedIdentity) return;
     const key = event.currentTarget.dataset.key;
