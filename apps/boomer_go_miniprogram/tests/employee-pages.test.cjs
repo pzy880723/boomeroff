@@ -35,7 +35,7 @@ function nativePage(name, action = async () => ({ items: [] }), extra = {}) {
       if (id === '../../shared/page') return { definePage: (page) => page };
       return require(path.resolve(path.dirname(file), id));
     },
-    Page(page) { definition = page; }, wx, console, Date, setTimeout, clearTimeout,
+    Page(page) { definition = page; }, wx, console, Date, setTimeout: ['workbench', 'sales'].includes(name) ? () => 0 : setTimeout, clearTimeout,
     getApp: () => ({ session: { get: () => employee } })
   }, { filename: file });
   const page = Object.assign({}, definition, {

@@ -1,5 +1,6 @@
 const { definePage } = require('../../shared/page');
 const model = require('../list/model');
+const { createVisibleRead } = require('../../shared/visible-financial-read');
 
 function agendaItems(data) {
   return model.items(model.taskItems(data)).map((item) => Object.assign(item, { url: model.detailUrl('tasks', item.id) }));
@@ -20,13 +21,18 @@ Page(definePage({
       { label: '我的活动', icon: '约', url: '/pages/list/index?kind=activities' }
     ]
   },
-  onLoad() { this._initialShow = true; return this.load(); },
+  onLoad() { this._hidden = false; this._initialShow = true; this._initialRead = this.load(); return this._initialRead; },
   onShow() {
-    if (this._initialShow) { this._initialShow = false; return; }
-    if (this._request) return this.load();
+    const first = this._initialShow; this._initialShow = false; this._hidden = false;
+    if (first && this._agendaScope === model.scope(this)) return this._initialRead;
+    return this.load({ financialNow: true });
   },
+  onHide() { this._hidden = true; this._initialShow = false; this._request = (this._request || 0) + 1; this._agendaRequest = (this._agendaRequest || 0) + 1; if (this._salesReader) this._salesReader.stop(); },
+  onUnload() { this._gone = true; this.onHide(); },
   onPullDownRefresh() { return this.load().finally(() => wx.stopPullDownRefresh()); },
-  load() {
+  load(options = {}) {
+    if (this._hidden || this._gone) return Promise.resolve();
+    if (this._salesReader) this._salesReader.stop();
     const session = this.session.get();
     const identity = model.scope(this);
     const sameScope = this._agendaScope === identity;
@@ -44,11 +50,13 @@ Page(definePage({
       if (Array.isArray(dashboard.tasks)) this.setData({ agenda: agendaItems({ items: dashboard.tasks, pending_items: dashboard.pending_items }) });
     }, { shift: null, shiftStatus: '', shiftNotice: '', agenda: sameScope ? this.data.agenda : [], agendaFreshness: sameScope ? this.data.agendaFreshness : '', agendaError: '', agendaLoading: false, salesValue: '暂无数据', salesLabel: '付款毛额（未扣退款）', salesLoading: false, salesFreshness: '', salesError: '', salesNotice: '', freshness: '' });
     const request = this._request;
+    const financial = options.financialNow ? this.loadSales() : null;
     return pending.then(() => {
-      if (!this._gone && identity === model.scope(this) && request === this._request) return Promise.all([this.loadSales(), this.loadAgenda()]);
+      if (!this._gone && !this._hidden && identity === model.scope(this) && request === this._request) return Promise.all([financial || this.loadSales(), this.loadAgenda()]);
     });
   },
   onShopChange(event) {
+    if (this._gone || this._hidden) return Promise.resolve();
     return this.run(async () => {
       const session = this.session.get();
       const shop = this.data.shops[Number(event.detail.value)];
@@ -57,28 +65,45 @@ Page(definePage({
       await this.load();
     });
   },
-  async loadSales() {
-    const identity = model.scope(this);
-    if (!identity || this._gone) return;
-    const request = this._request;
+  financialEnabled() { const s = this.session.get(); return !this._gone && !this._hidden && !this.preview && !this.data.preview && !!(s && s.userId && s.shop && s.shop.id); },
+  loadSales() {
+    if (this._gone || this._hidden) return Promise.resolve();
+    if (this._salesIdentity !== model.scope(this)) this.setData({ salesValue: '暂无数据', salesFreshness: '', salesNotice: '', salesError: '' });
+    this._salesIdentity = model.scope(this);
+    if (!this.financialEnabled()) {
+      if (this._salesReader) this._salesReader.stop();
+      this.setData({ salesValue: '暂无数据', salesFreshness: '', salesError: '', salesLoading: false, salesNotice: this.preview || this.data.preview ? '开发预览不读取真实 ERP 业绩。' : '暂无已验证工作门店，不读取营业额。' }); return Promise.resolve();
+    }
+    if (!this._salesReader) this._salesReader = createVisibleRead({ enabled: () => this.financialEnabled(), key: () => model.scope(this) + ':' + this._request,
+      read: active => this.readSales(active), setTimeout, clearTimeout });
+    return this._salesReader.refresh();
+  },
+  async readSales(active) {
+    if (!active()) return;
     this.setData({ salesLoading: true, salesError: '' });
     try {
       const sales = await this.api.sales({ period: 'today' });
-      if (this._gone || identity !== model.scope(this) || request !== this._request) return;
+      if (!active()) return;
       this.setData({ salesValue: model.value(sales && sales.revenue, true), salesLabel: sales.source_label || '付款毛额（未扣退款）', salesFreshness: model.freshness(sales), salesNotice: sales.complete === false ? sales.message || 'ERP 数据尚未完整同步' : '' });
     } catch (error) {
-      if (!this._gone && identity === model.scope(this) && request === this._request) this.setData({ salesError: error.message || '营业数据暂不可用' });
+      if (!active()) return;
+      this.setData({ salesValue: '暂无数据', salesFreshness: '', salesNotice: '', salesError: error.message || '营业数据暂不可用' });
+      if (error.status === 401) {
+        this._salesReader.stop(); this.setData({ salesLoading: false });
+        const safe = new Error('员工登录已失效，请重新登录'); safe.status = 401; safe.code = error.code; safe.requestRevision = error.requestRevision;
+        await this.run(async () => { throw safe; }, { silent: true });
+      }
     } finally {
-      if (!this._gone && request === this._request) this.setData({ salesLoading: false });
+      if (active()) this.setData({ salesLoading: false });
     }
   },
   async loadAgenda() {
     const identity = model.scope(this);
-    if (!identity || this._gone) return;
+    if (!identity || this._gone || this._hidden) return;
     const request = this._request;
     const serial = (this._agendaRequest || 0) + 1;
     this._agendaRequest = serial;
-    const active = () => !this._gone && identity === model.scope(this) && request === this._request && serial === this._agendaRequest;
+    const active = () => !this._gone && !this._hidden && identity === model.scope(this) && request === this._request && serial === this._agendaRequest;
     this.setData({ agendaLoading: true, agendaError: '' });
     try {
       const data = await this.api.action('tasks', {});

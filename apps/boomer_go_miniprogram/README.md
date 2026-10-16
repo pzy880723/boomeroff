@@ -10,6 +10,7 @@ Native WeChat WXML/WXSS/JavaScript initial implementation. It does not embed the
 - Real requests use the existing GO identity, fresh ERP scope and original backend records. Preview fixtures are separate, explicitly labeled, development-only and never an API-error fallback.
 - This is **not a published or real-device-accepted mini-program**. The project currently uses `touristappid`; a dedicated BOOMER GO employee AppID, domain configuration, privacy declarations and a genuine authenticated acceptance session are still required.
 - Missing sales attribution is not fabricated. Personal rankings remain unavailable until ERP records sales ownership. Sales do not contribute to employee assessment.
+- Workbench sales and the sales/leaderboard screen refresh only while visible, about30seconds after each channel finishes. Returning reads immediately; hidden/unloaded/old identity/store/period results are ignored. Both channels settle independently, and failures clear their old snapshot instead of claiming it is current. Server timestamps remain the freshness source. Preview and missing-store contexts never invoke financial ERP adapters. Date/period and Shanghai day/month rollover mismatches are rejected. This is polling, not an instantaneous source stream; month summary and genuine employee attribution remain incomplete.
 
 ## Open The Initial Version
 

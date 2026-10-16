@@ -2,6 +2,15 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
+## 最新检查点：前台业绩刷新与周期核对
+
+- 源码与独立归档复现原问题：两页不定时刷新，sales同身份回页不重读；销售先完成也会等待慢榜单；workbench同request手工并发可被旧回包覆盖；current401被局部catch吞掉。复用原五入口/卡片，只增加前台只读更新，不改ERP/数据库/权限/考核。
+- 新小helper统一每通道单飞、前次settle后约30秒再读。销售与榜单独立显示，工作台tick不重跑bootstrap/tasks；回页立即刷新财务，hide/unload停timer且丢旧回包，不宣称已中止旧网络。period/identity/store变化清旧范围，旧finally不解锁新请求；current401走真实共享保护，旧401不登出新身份。失败清该通道旧值与freshness，不用轮询时间冒充源更新时间；preview/no-shop零财务适配器请求。本月汇总与销售归属缺口保留。
+- worker首轮26RED及补2RED后修复；GUI实测工作台内外预览说明重复，新增1RED后仅隐藏外重复hint。最终刷新专项40/40。旧employee-pages/dashboard-shift只注入惰性timer，原断言保持；新40项用真实shared shell和可推进fake clock，不以惰性timer证明轮询。
+- 父级API专项先5RED+1control，补3个上海日/月切换RED后最终9/9；精确核对daily-summary请求date、leaderboard真实DTO的period/date，并拒绝回包时已过期的业务日/月。旧mapping fixture仅改为回显请求date，范围与金额断言保留；GO→ERP映射及门店核对不改。跨午夜不一致安全拒绝需刷新，不编造新日期。
+- 父级及独立全套1595/1595，失败/跳过/取消均0；独立刷新40+API9组合49通过，无确认新增P1/P2。25路由检查及官方26WXML/27WXSS退出0、stderr空。实际DevTools核对工作台去重后卡片、营业概览、榜单空状态及五入口；native-workbench/sales/leaderboard-visible-refresh-preview及phone为真实截图与确定裁切。示例不请求真实ERP，计时/401/竞态与非空数据由VM验证，不冒充GUI实账号轮询验收。
+- 当前ERP公开session/daily-summary/leaderboard匿名probe均401 missing_token，仅证明路由可达与拒绝，未读员工业务。R36仍停20.3积分人工检查点；AppID、真实员工/设备、数据源延迟、月汇总/个人归属与完整迁移/微信发布仍未完成。没有绕过Lovable暂停、没有手机操作或后端部署。
+
 ## 最新检查点：识物历史搜索与保存多图
 
 - 固定Web813c1284实际读取并与a4d6edb0候选BFF对照，确认旧搜索框传query/category而后台只处理分页，输入关键词仍显示原记录。history/recognition仅增加本人已加载窗口的真实文本过滤，续页仍取服务器page/has_more，不用零匹配冒充结束。保留清空搜索、分页失败和重复ID语义；材质/工艺字段、服务端类别及管理权限仍缺，见RECOGNITION_HISTORY_PREFLIGHT.md，不把小修替代完整迁移。

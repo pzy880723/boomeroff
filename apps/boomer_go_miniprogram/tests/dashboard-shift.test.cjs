@@ -126,7 +126,7 @@ function page(value) {
   const shared = { exports: {} };
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../miniprogram/shared/page.js'), 'utf8'), { module: shared, wx, getApp: () => app });
   const file = path.resolve(__dirname, '../miniprogram/pages/workbench/index.js');
-  vm.runInNewContext(fs.readFileSync(file, 'utf8'), { require(id) { return id === '../../shared/page' ? shared.exports : require(path.resolve(path.dirname(file), id)); }, Page(p) { definition = p; }, wx, getApp: () => app });
+  vm.runInNewContext(fs.readFileSync(file, 'utf8'), { require(id) { return id === '../../shared/page' ? shared.exports : require(path.resolve(path.dirname(file), id)); }, Page(p) { definition = p; }, wx, getApp: () => app, setTimeout: () => 0, clearTimeout() {} });
   const view = { ...definition, data: structuredClone(definition.data), setData(patch) { Object.assign(this.data, patch); } };
   return { ...h, view, salesCalls: () => salesCalls };
 }

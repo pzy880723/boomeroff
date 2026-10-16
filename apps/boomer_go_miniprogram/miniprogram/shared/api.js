@@ -152,6 +152,7 @@ function createApi({ wx, config, session, invoke: transport }) {
     const id = await location(before);
     const date = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
     const raw = await erp('daily-summary', { date, location_id: id }, before);
+    if (!raw || raw.date !== date || date !== new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10)) throw new Error('业绩返回日期不一致，已停止展示，请刷新');
     if (!raw.scope || !Array.isArray(raw.scope.location_ids) || raw.scope.location_ids.length !== 1 || raw.scope.location_ids[0] !== id || !Array.isArray(raw.stores) || raw.stores.length !== 1 || raw.stores[0].location_id !== id) throw new Error('业绩返回门店不一致，已停止展示');
     const totals = raw.totals || {}, state = raw.completeness || {};
     const store = raw.stores[0], source = store.completeness || {};
@@ -163,8 +164,11 @@ function createApi({ wx, config, session, invoke: transport }) {
   }
   async function leaderboard(params = {}) {
     const before = snapshot();
+    const period = params.period || 'today';
     const id = await location(before);
-    const raw = await erp('leaderboard', { period: params.period || 'today', location_id: id }, before);
+    const date = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, period === 'month' ? 7 : 10);
+    const raw = await erp('leaderboard', { period, location_id: id }, before);
+    if (!raw || raw.period !== period || raw.date !== date || date !== new Date(Date.now() + 8 * 3600000).toISOString().slice(0, period === 'month' ? 7 : 10)) throw new Error('榜单返回日期或周期不一致，已停止展示，请刷新');
     if (!raw.shop || raw.shop.id !== id || raw.sales_assessment !== false) throw new Error('榜单返回范围不一致，已停止展示');
     return Object.assign({}, raw, { items: raw.complete === true && Array.isArray(raw.rows) ? raw.rows.map(row => ({ rank: row.rank, name: row.display_name, revenue: Number.isSafeInteger(row.achieved_cents) ? row.achieved_cents / 100 : null })) : [] });
   }
