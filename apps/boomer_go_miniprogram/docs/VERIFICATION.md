@@ -10,6 +10,7 @@
 - Mine增加现有25级称号、进度/差额/满级与全部阈值折叠规则，非“10级”残留标签。只消费真实profile.total_exp；缺失/非法不补零，负数保留余额并说明不算等级；不编造奖励率、活动计数、鉴定资格或销售考核。worker51RED后通过，独立复现首显重复读取可覆盖成功的P2，再3RED后修到54通过。独立原14探针及54合68通过，隐藏返回/身份店/revision真实刷新不退化。
 - 父级最终1734/1734，0失败/跳过/取消；26路由/syntax/JSON/no-H5通过，官方27WXML/28WXSS退出0、stderr空。真实DevTools查看Mine卡/展开25级/滚到底/收起，营销→发布记录→分平台详情→关闭保留列表；native-growth-level/rules和native-publish-history/status原件及phone为实际截图及确定裁切。所有数据显式合成；只读真实RLS/员工/平台回执和真机验收仍缺，不把GUI预览当生产成功。
 - Figma30:2/30:15为已渲染可编辑设计。R36本轮再次读取同一handle仍awaiting_input、a4d6edb0、20.3credits，无新决定未绕过。无数据库/权限/腾讯部署、短信、付费AI、员工业务写入或手机操作。专用AppID/真实员工设备/完整功能迁移/微信发布未完成，目标未标完成。
+- 本轮源码2534d3b9d9c5c63060bd37ccd821c40830b74099仅31个Mini路径，非强推并远端读回一致。归档/private/tmp/BOOMER-GO-wechat-history-growth-20261016.zip为18481962字节，SHA256为35243cdfdc2255949866bb23a3bf1e0c824463065268203189017cd047b44521；干净解压/private/tmp/go-mini-history-growth-verify-78YcJT重跑1734项、26路由及官方27WXML/28WXSS通过、stderr空。正常index为空，原Flutter分支/数据不变。后续证据文档不改变该包代码，不代表main合并或微信发布。
 
 ## 最新检查点：识物商品收藏与主动学习
 

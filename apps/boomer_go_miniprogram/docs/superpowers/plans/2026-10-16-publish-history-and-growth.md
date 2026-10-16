@@ -39,5 +39,5 @@ Owner worker B: `pages/mine/index.{js,wxml,wxss}`, narrow growth helper and focu
 
 - [x] Independent cross-review, parent full1734/1734,26 native routes and official27WXML/28WXSS compilation; no remaining confirmed new P1/P2.
 - [x] Actual DevTools synthetic history/detail and Mine/rules screenshots; do not claim real employee/release acceptance from preview. Native close/expand/scroll/collapse were operated, no real writes.
-- [ ] Update current parity and verification, exact-path alternate-index commit and non-force GitHub readback. Preserve normal index/Flutter branch and phone data.
-- [ ] Generate immutable source archive and clean-extraction test/check/compiler rerun; retain AppID/real-user/budget/full migration gates.
+- [x] Update current parity and verification, exact-path alternate-index commit2534d3b9 and non-force GitHub readback. Preserve normal index/Flutter branch and phone data.
+- [x] Generate immutable source archive and clean-extraction test/check/compiler rerun:1734 tests,26 routes,27WXML/28WXSS; hash and size recorded in VERIFICATION.md. AppID/real-user/budget/full migration gates remain open.
