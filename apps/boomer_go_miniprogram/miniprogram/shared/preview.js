@@ -152,7 +152,21 @@ function createPreview(wx) {
       return { shop_id: shop.id, claim: { id: '00000000-0000-4000-8000-000000000021', code: 'DEMO1234', status: 'claimed', claimed_at: stamp, expires_at: null, redeemed_at: null, recipient_name_masked: '顾客（示例，脱敏）', recipient_phone_tail: null,
         voucher: { id: '00000000-0000-4000-8000-000000000022', name: '中古好物体验券（示例）', threshold_type: 'min_spend', discount_amount: 20, min_spend: 100, template_terms: '仅用于原生界面展示，不是真实优惠券，不可核销。', starts_at: null, ends_at: null, active: true } }, can_redeem: false, reason: 'development_preview', server_time: stamp };
     }
-    if (name === 'tasks') return { date, pending_exp: 0, claimed_today: [], today_counts: { scans: 0, quiz_attempts: 0, community_posts: 0 }, items: [{ id: 'example-learn', title: '读懂一件商品，再讲好它的故事', body: '先进入学习页，了解可观察、可核实的商品信息。', status: '示例待办' }], as_of: stamp };
+    if (name === 'tasks') {
+      const pending = [
+        { id: '00000000-0000-4000-8000-000000000991', title: '学习分享奖励（示例）', amount: 5, source: 'learning', created_at: date + 'T09:00:00+08:00' },
+        { id: '00000000-0000-4000-8000-000000000992', title: '完善商品档案（示例）', amount: 10, source: 'recognition', created_at: date + 'T08:00:00+08:00' }
+      ];
+      const daily = [
+        { task_key: 'daily_first_scan', title: '完成 1 次识别（示例）', amount: 5, target: 1, progress: 1, completed: true },
+        { task_key: 'daily_3_scans', title: '完成 3 次识别（示例）', amount: 10, target: 3, progress: 1, completed: false },
+        { task_key: 'daily_quiz', title: '通过一次知识测试（示例）', amount: 15, target: 1, progress: 0, completed: false },
+        { task_key: 'daily_post', title: '发一条 BOOMER 圈帖子（示例）', amount: 5, target: 1, progress: 0, completed: false }
+      ];
+      return { date, pending_exp: pending, claimed_today: [], today_counts: { scans: 1, quiz_passed: 0, quiz_attempts: 0, community_posts: 0 },
+        items: daily.map(row => Object.assign({ id: row.task_key, claimed: false }, row)),
+        pending_items: pending.map(row => Object.assign({ pending_id: row.id, completed: true, claimed: false }, row)), persisted: false, as_of: stamp };
+    }
     if (name === 'quiz-start') {
       if (params.kind === 'favorite' && !library.some(row => row.id === params.id)) throw new Error('该示例收藏不存在');
       const token = 'development-example-' + (quizAttempts.size + 1);

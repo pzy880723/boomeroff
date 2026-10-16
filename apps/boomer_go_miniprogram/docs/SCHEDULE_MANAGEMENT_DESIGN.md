@@ -37,7 +37,7 @@ These are migration requirements, not optional features removed by the first bou
 
 Current read RPC cannot authorize writes or supply management CAS/receipts. New action names are not frozen and must not be called from production UI until implemented and verified.
 
-The independent R28 Stage1 build request is recorded in SCHEDULE_MANAGER_STAGE1_CONTRACT.md. It does not approve or implement the separate pending R27 content-home proposal. R28 has since returned fixed source and a deployment report; independent review found three SQL P2 issues, now assigned directly to the backend owner as R29. SCHEDULE_MANAGER_STAGE1_AUDIT.md records the exact source, evidence and unresolved issues. No native management endpoint is wired while these remain open.
+The independent R28 Stage1 build request is recorded in SCHEDULE_MANAGER_STAGE1_CONTRACT.md. It does not approve or implement the separate pending R27 content-home proposal. R28 returned fixed source and a deployment report; independent review found three SQL P2 issues. R29 closes lock/gate and hidden-rule problems in source, but candidate filtering still exposes hidden suspension through a DEFINER predicate. That residual is assigned directly as R30. SCHEDULE_MANAGER_STAGE1_AUDIT.md records exact evidence. No native management endpoint is wired while this remains open.
 
 Capabilities must independently report view, arrange, shift, day-off, swap, clear and AI authority for the requested shop. Bootstrap permissions may suggest an entry, not authorize an operation. Role names and can_view_shop never imply write permission.
 

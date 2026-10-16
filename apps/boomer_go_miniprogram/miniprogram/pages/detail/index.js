@@ -269,7 +269,7 @@ Page(definePage({
     return this.writeAction('knowledge-save', { product_id: this._productId });
   },
   async claimTask() {
-    if (this._writing || !this.data.item || this.data.claimed || !this.data.completed) return;
+    if (this.preview || this.data.preview || this._writing || !this.data.item || this.data.claimed || !this.data.completed) return;
     const pendingId = this._pendingId;
     const taskKey = this._taskKey;
     if (!pendingId && !taskKey) return;

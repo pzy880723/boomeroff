@@ -1,6 +1,6 @@
 # Schedule Manager Stage 1 Contract
 
-Status: original independent R28 implementation request, not acceptance evidence. This does not approve, reject or implement the pending R27 content-home plan. At dispatch, GO ref f68fd864 differed from 813c128 only in .lovable/plan.md. R28 later returned source/deployment reports; SCHEDULE_MANAGER_STAGE1_AUDIT.md records the fixed final source and three unresolved SQL P2 findings sent as R29. The native write entry is not enabled.
+Status: original independent R28 implementation request, not acceptance evidence. This does not approve, reject or implement the pending R27 content-home plan. At dispatch, GO ref f68fd864 differed from 813c128 only in .lovable/plan.md. R28 and R29 later returned source/deployment reports; SCHEDULE_MANAGER_STAGE1_AUDIT.md records the reviewed sources and residual hidden-suspension inference sent as R30. The native write entry is not enabled.
 
 Goal: a genuinely authorized manager can view a week and create/change/remove one employee/date assignment using existing GO scheduling data and permissions. The full SCHEDULE_MANAGEMENT_DESIGN.md target remains; swap, week clear, definitions, blocked days and AI follow separately rather than being dropped.
 

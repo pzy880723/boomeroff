@@ -8,6 +8,24 @@
   <view wx:if="{{kind === 'check-ins'}}" class="notice">每日成长签到不是考勤，不用于出勤判断。日期以服务器的中国时区为准。</view>
   <view wx:if="{{checkin}}" class="card checkin-card"><view class="row"><view class="section-title">{{checkin.date}}</view><text class="chip">{{checkin.checkedToday ? '今日已成长签到' : '今日未成长签到'}}</text></view><view class="row checkin-stats"><view><view class="muted">连续天数</view><view class="checkin-number">{{checkin.currentStreak}}</view></view><view><view class="muted">最长连续</view><view class="checkin-number">{{checkin.longestStreak}}</view></view><view><view class="muted">累计天数</view><view class="checkin-number">{{checkin.total}}</view></view></view><button class="button" bindtap="submitCheckin" disabled="{{checkingIn || loading || checkin.checkedToday}}" loading="{{checkingIn}}">{{checkin.checkedToday ? '云端已确认今日成长签到' : '每日成长签到'}}</button><view wx:if="{{checkinNotice}}" class="notice">{{checkinNotice}}</view></view>
   <view wx:if="{{kind === 'tasks'}}" class="notice">每日任务与待领经验均以云端状态为准。完成条件、奖励资格和领取结果由服务器核验。</view>
+  <view wx:if="{{kind === 'tasks' && rewardSummary}}" class="card reward-card">
+    <view class="row reward-heading"><view class="section-title">当前已加载奖励</view><text class="chip">{{rewardSummary.date}}</text></view>
+    <view class="reward-counts">待领事件 {{rewardSummary.pendingCount}} 项 · 每日达标 {{rewardSummary.dailyCount}} 项</view>
+    <view class="muted reward-help">只读取本人最新最多 50 条待领事件及 4 条每日任务，不代表全部历史。本页已提交项目不重复加入队列。</view>
+    <button class="button reward-action" bindtap="confirmRewards" loading="{{rewardBusy}}" disabled="{{preview || rewardBusy || rewardModal || loading || rewardNeedsRefresh || !rewardCanClaim}}">{{rewardBusy ? '正在逐项核对领取…' : '领取当前已加载奖励'}}</button>
+    <view wx:if="{{preview}}" class="muted reward-help">开发预览只展示合成内容，不能领取真实经验。</view>
+  </view>
+  <view wx:if="{{kind === 'tasks' && rewardOutcomes.length}}" class="card reward-results">
+    <view class="row reward-heading"><view class="section-title">本次逐项结果</view><text class="muted">{{rewardProgress}}</text></view>
+    <view class="reward-total">已确认经验变动 <text>{{rewardTotalText}}</text></view>
+    <view class="muted reward-help">确认时服务器日期 {{rewardBatchDate}}。回包不含领取日期，不能保证跨日仍属该日；本次不是原子批次。</view>
+    <view class="reward-counts">已确认 {{rewardCounts.confirmed}} · 拒绝 {{rewardCounts.rejected}} · 未确认 {{rewardCounts.unknown}} · 未提交 {{rewardCounts.untouched}}</view>
+    <view wx:for="{{rewardOutcomes}}" wx:key="key" class="reward-outcome {{item.status}}"><view class="reward-item-title">{{item.title}}</view><view class="row reward-item-result"><text>{{item.statusText}}</text><text wx:if="{{item.status === 'confirmed'}}">{{item.amountText}} 经验</text></view><view wx:if="{{item.dateUnverified}}" class="muted reward-help">日期跨界，服务端领取日期未核验</view></view>
+    <view class="muted reward-help">拒绝不算新增奖励，也不代表从未领取。未确认项目不会自动重试；列表窗口移动或条目消失不能证明本次领取成功。</view>
+    <button class="button-secondary reward-action" bindtap="retry" disabled="{{rewardBusy || loading}}">只读刷新云端状态</button>
+  </view>
+  <view wx:if="{{kind === 'tasks' && rewardNotice}}" class="notice reward-notice">{{rewardNotice}}</view>
+  <view wx:if="{{kind === 'tasks' && rewardRefreshError}}" class="card error"><view>{{rewardRefreshError}}</view></view>
   <view wx:if="{{kind !== 'check-ins' && kind !== 'tasks'}}" class="search-box row"><input placeholder="{{isLearningCollection ? '搜索已加载内容' : '搜索当前内容'}}" value="{{query}}" bindinput="onSearchInput" bindconfirm="onSearch" confirm-type="search" /><button bindtap="onSearch">搜索</button></view>
   <view wx:if="{{isLearningCollection && kind !== 'quiz-history'}}" class="row mastery-tabs">
     <button class="mastery-tab {{mastery === 'all' ? 'selected' : ''}}" data-mastery="all" bindtap="onMastery">全部已加载</button>

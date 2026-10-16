@@ -8,6 +8,7 @@ const root = path.join(__dirname, '../miniprogram/pages');
 const names = ['workbench', 'learn', 'messages', 'mine', 'schedule', 'list', 'detail', 'quiz', 'sales'];
 const event = (dataset) => ({ currentTarget: { dataset } });
 const employee = { userId: 'employee-a', shop: { id: 'shop-a', name: '测试门店' }, profile: { display_name: '同事' } };
+const pendingExpId = '00000000-0000-4000-8000-000000000091';
 
 // Native lifecycle/handler harness: only the shared shell and wx platform are mocked.
 function nativePage(name, action = async () => ({ items: [] }), extra = {}) {
@@ -218,10 +219,10 @@ test('sales missing values are not zero and freshness is explicit', async () => 
 test('generic native list covers original employee entry routes and preserves encoded ids', async () => {
   const kinds = ['sop', 'qa', 'objectives', 'tasks', 'community', 'activities', 'vouchers', 'my-library', 'favorites', 'history', 'quiz-history'];
   for (const kind of kinds) {
-    const contentId = kind === 'quiz-history' ? '00000000-0000-4000-8000-000000000012' : 'a/b ?中';
-    const page = nativePage('list', async () => ({ items: [{ id: 'a/b ?中', title: '条目', ...(kind === 'quiz-history' ? { item_kind: 'official', item_id: contentId, passed_at: null } : {}) }] }));
+    const contentId = kind === 'tasks' ? pendingExpId : (kind === 'quiz-history' ? '00000000-0000-4000-8000-000000000012' : 'a/b ?中');
+    const page = nativePage('list', async () => kind === 'tasks' ? roundSixTasks() : ({ items: [{ id: 'a/b ?中', title: '条目', ...(kind === 'quiz-history' ? { item_kind: 'official', item_id: contentId, passed_at: null } : {}) }] }));
     await page.onLoad({ kind });
-    page.openItem(event({ id: 'a/b ?中' }));
+    page.openItem(event({ id: kind === 'tasks' ? pendingExpId : 'a/b ?中' }));
     assert.match(page.navigations[0], kind === 'community' ? /\/pages\/community\/index\?id=/ : kind === 'activities' ? /\/pages\/activity\/index\?id=/ : /\/pages\/detail\/index\?kind=/);
     assert.ok(page.navigations[0].includes(encodeURIComponent(contentId)));
     if (kind === 'quiz-history') assert.match(page.navigations[0], /kind=official/, 'result ID is not a content ID');
@@ -969,14 +970,14 @@ test('profile error retry retries the preserved draft instead of reloading and d
 });
 
 function roundSixTasks() {
-  return { date: '2026-10-16', pending_exp: [{ id: 'pending-exp', source: 'growth', amount: 20, title: '学习经验', created_at: '2026-10-16T01:00:00Z' }], claimed_today: [],
+  return { date: '2026-10-16', pending_exp: [{ id: pendingExpId, source: 'growth', amount: 20, title: '学习经验', created_at: '2026-10-16T01:00:00Z' }], claimed_today: [],
     today_counts: { scans: 1, quiz_passed: 0, quiz_attempts: 0, community_posts: 0 },
     items: [
       { id: 'daily_first_scan', task_key: 'daily_first_scan', title: '完成 1 次识别', progress: 1, target: 1, completed: true, claimed: false, amount: 5 },
       { id: 'daily_3_scans', task_key: 'daily_3_scans', title: '完成 3 次识别', progress: 1, target: 3, completed: false, claimed: false, amount: 10 },
       { id: 'daily_quiz', task_key: 'daily_quiz', title: '通过一次知识测试', progress: 0, target: 1, completed: false, claimed: false, amount: 15 },
       { id: 'daily_post', task_key: 'daily_post', title: '发一条BOOMER 圈帖子', progress: 0, target: 1, completed: false, claimed: false, amount: 5 }
-    ], pending_items: [{ id: 'pending-exp', pending_id: 'pending-exp', title: '学习经验', amount: 20, completed: true, claimed: false, source: 'growth', created_at: '2026-10-16T01:00:00Z' }]
+    ], pending_items: [{ id: pendingExpId, pending_id: pendingExpId, title: '学习经验', amount: 20, completed: true, claimed: false, source: 'growth', created_at: '2026-10-16T01:00:00Z' }]
   };
 }
 
@@ -987,10 +988,24 @@ test('round-six task list includes all four real tasks plus pending experience, 
   assert.equal(page.data.items[0].amount, 5);
   assert.equal(page.data.items[0].completed, true);
   assert.equal(page.data.items[1].completed, false);
-  assert.equal(page.data.items[4].pendingId, 'pending-exp');
+  assert.equal(page.data.items[4].pendingId, pendingExpId);
   assert.equal(page.data.items[4].amount, 20);
   assert.equal(page.data.items[4].progress, null, 'pending experience is not fabricated task progress');
   assert.equal(page.data.error, '');
+});
+
+test('synthetic individual reward detail cannot submit even through its direct claim handler', async () => {
+  let writes = 0;
+  const page = nativePage('detail', async action => {
+    if (action === 'task-claim') { writes++; return { ok: true, amount: 5 }; }
+    return roundSixTasks();
+  }, { preview: true });
+  await page.onLoad({ kind: 'tasks', id: 'daily_first_scan' });
+  page.data.preview = true;
+  await page.claimTask();
+  assert.equal(writes, 0);
+  const source = fs.readFileSync(path.join(root, 'detail/index.wxml'), 'utf8');
+  assert.match(source, /bindtap="claimTask" disabled="\{\{[^}]*preview/);
 });
 
 test('daily task claim is single-flight and waits for claimed true in server readback', async () => {
@@ -1028,11 +1043,11 @@ test('pending experience detail matches pending_items and confirms consumption w
     if (action === 'task-claim') { writes.push(params); snapshot.pending_items = []; return { ok: true, amount: 20 }; }
     return snapshot;
   });
-  await page.onLoad({ kind: 'tasks', id: 'pending-exp' });
+  await page.onLoad({ kind: 'tasks', id: pendingExpId });
   assert.equal(page.data.item && page.data.item.title, '学习经验');
   assert.equal(page.data.completed, true);
   await page.claimTask();
-  assert.equal(writes[0].pending_id, 'pending-exp');
+  assert.equal(writes[0].pending_id, pendingExpId);
   assert.equal(writes[0].task_key, undefined);
   assert.equal(page.data.error, '');
   assert.equal(page.data.item, null);
@@ -1100,7 +1115,7 @@ test('pending claim cannot confuse a missing pending_items field with confirmed 
     if (submitted) delete snapshot.pending_items;
     return snapshot;
   });
-  await page.onLoad({ kind: 'tasks', id: 'pending-exp' });
+  await page.onLoad({ kind: 'tasks', id: pendingExpId });
   await page.claimTask();
   assert.equal(page.data.item.title, '学习经验');
   assert.equal(page.data.claimed, false);
@@ -1249,9 +1264,9 @@ test('workbench real bootstrap without agenda paints before independent tasks an
   await pending;
   assert.equal(page.data.agenda.length, 5);
   assert.equal(page.data.agenda[0].id, 'daily_first_scan');
-  assert.equal(page.data.agenda.at(-1).pendingId, 'pending-exp');
+  assert.equal(page.data.agenda.at(-1).pendingId, pendingExpId);
   assert.equal(page.data.agenda.at(-1).status, '可领取');
-  assert.match(page.data.agenda.at(-1).url, /kind=tasks&id=pending-exp$/);
+  assert.equal(page.data.agenda.at(-1).url, '/pages/detail/index?kind=tasks&id=' + pendingExpId);
   assert.equal(page.data.agendaLoading, false);
 });
 

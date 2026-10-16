@@ -1,4 +1,14 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const{createPreview}=require('../miniprogram/shared/preview');
+test('reward inbox preview uses four real daily keys and labeled pending events without any mutation',async()=>{
+ const p=createPreview({}),tasks=await p.api.action('tasks');
+ assert.match(tasks.date,/^\d{4}-\d{2}-\d{2}$/);assert.equal(tasks.persisted,false);
+ assert.deepEqual(tasks.items.map(row=>row.task_key),['daily_first_scan','daily_3_scans','daily_quiz','daily_post']);
+ assert.equal(tasks.items.length,4);assert.equal(tasks.pending_items.length,2);
+ for(const row of tasks.items.concat(tasks.pending_items)){assert.match(row.title,/示例/);assert.equal(typeof row.completed,'boolean');assert.equal(typeof row.claimed,'boolean');assert.ok(Number.isSafeInteger(row.amount));}
+ assert.ok(tasks.pending_items.every(row=>/^[0-9a-f-]{36}$/.test(row.pending_id)&&row.id===row.pending_id&&row.completed&&!row.claimed));
+ for(const row of [tasks.items[0],tasks.pending_items[0]])await assert.rejects(p.api.action('task-claim',row.pending_id?{pending_id:row.pending_id}:{task_key:row.task_key}));
+ const after=await p.api.action('tasks');assert.deepEqual(after.items,tasks.items);assert.deepEqual(after.pending_items,tasks.pending_items);assert.deepEqual(after.claimed_today,tasks.claimed_today);
+});
 test('objective preview follows paged shop-bound reads and cannot persist a draft',async()=>{
  const p=createPreview({}),shop=p.session.get().shop;
  const list=await p.api.action('objectives',{page:0,page_size:50});

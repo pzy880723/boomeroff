@@ -29,3 +29,27 @@ These findings are grounded in fixed-source interleavings and existing RLS, not 
 ## Direct Follow-Up
 
 R29 was sent directly to the same GO Lovable project in normal build mode, message `umsg_01m515v9eefxjvcya5jmvq9nba`, thread `main`. It requests a subsequent repair migration, RED/GREEN tests, deployment, fixed SHA/full hashes and explicit concurrency limitations. Do not restart this task while it is running or treat its accepted state as a completed repair. Freeze the native DTO and wire the UI only after the final repaired source is independently verified.
+
+## R29 Fixed-Source Review
+
+R29 completed at fixed GO commit `d0ba9153f3a430c5b3eaf7e8f2b3e17903c770de`. Main workflow read the final source and independently recomputed:
+
+| File | SHA-256 |
+| --- | --- |
+| drizzle/migrations/0024_go_schedule_manage_recheck_locks_visibility.sql | be32210b55402c551b3c405ad304438829f64b648b8291faa2a7ad55e7a0208b |
+| supabase/functions/go-mini-api/schedmanage.ts | 34ea680af4a105ed30fa59c2010969ec7ab14b292967e90d126e1f2545078d17 |
+| supabase/functions/go-mini-api/index.ts, unchanged | b578784478beb56b434eec09884a7e38be8746992beb51dc81ec9b82d1fd2eac |
+| tests/go-mini-schedule-manage.test.ts | 779c38a49c47b639fd0ff6f7cc94de798d971a093062b94c5a7df20345dcdec7 |
+| tests/sql/go-schedule-manage-r29.sql | cba0fc14f5516f20cd8e9e7ff5ec83db85a30b2b213afcc3945b2eb6a7198653 |
+
+Main workflow independently replayed the original Edge tests in the same isolated Node-transpiled harness: 9/9. The only Edge change is strict projection of rules_visible. Independent SQL review confirms the post-request/business-lock gate and wall-clock freshness repair, and SHARE table locks for shift/day-off/role phantoms plus target-profile/actor-ERP row locks. Profile/day-off facts the caller cannot read are omitted from warnings and the v2 cell-version hash. rules_visible describes profile-rule visibility, not permission to read every possible rule source.
+
+The original 0006 fresh helper is independent of the global enabled flag, so the suspected flag-off regression was disproved; it is not an open finding.
+
+Owner reports migration 0024 applied and Edge redeployed, R29 SQL 18/18 after 11 RED failures, old SQL 60/60, Deno 120/120, quiz 5/5 and zero synthetic residuals. The attempted two-session test did not establish overlapping sessions and proves no concurrency interleaving. These database/deployment reports were not rerun by the main workflow; it did not download the live bundle.
+
+## Residual P2 And R30
+
+The unchanged private candidate predicate still reads hidden user_roles.suspended. For an actor with staff.read but no user.read, active_users membership, facts.candidate and cell.can_save can change when a visible employee's hidden suspension changes. The original Web uses caller-JWT user_roles SELECT, which is self/user.read only, so this bypass is not equivalent to Web behavior. Masking target_active alone is insufficient.
+
+This was sent directly as R30, message `umsg_01m51702crfyrrafkat5zxtqzy`, thread main, normal build mode. Public eligibility projections must respect role-row visibility while private writes retain suspension protection; no RLS/permission widening is allowed. At this checkpoint the handle is confirmed running, not a completed fix. Keep the native manager entry unwired until the final source review closes this finding.
