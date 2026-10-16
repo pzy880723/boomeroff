@@ -39,9 +39,11 @@ GO R32 message umsg_01m519gajne2cs0cnpevr3q34k on main completed at fixed ref cc
 - [x] Implement exact supported filters on learn and secondary official list; detail metadata opens the native secondary list with original filter values. Do not use switchTab query strings or H5. Do not derive full era/origin catalog options from one result window; those values originate in actual detail metadata.
 - [x] Consume optional caller-RLS source_metadata only for current owned favorites. Distinguish missing/invisible source from query error; preserve snapshot/quiz/passed. Add source badges and loaded-only category grouping, with unknown string categories retained. No new source filter or all-library count.
 - [x] Independent review, full tests/route check/official compilers, actual labeled GUI states and screenshot evidence.
-- [ ] Isolated Mini-only commit/non-force push/readback and clean archive verification.
+- [x] Isolated Mini-only commit/non-force push/readback and clean archive verification.
 
 Phase2 local checkpoint: parent and independent full1321/1321, no failures/skips/cancellations;24 routes and25 WXML/26 WXSS passed. Four focused worker suites90/90, related independent regressions152/152. Parent API tests2 RED then4 GREEN; preview3 RED plus ordering1 RED then GREEN; detail8 RED then8 GREEN plus3 lifecycle. Three old official fixtures now use the fixed DTO/local window while a separate product server-pagination regression remains. Actual DevTools checked all/hot/category/IP, detail metadata era-only native refilter and chip clear back to3 rows, and owned groups2 other+1日瓷. All fixture data is explicitly synthetic; no real employee or paid generation.
+
+Source checkpoint dcf2798a5ce120519883af9b3577ca94af50be19 contains31 Mini-only paths and was non-force pushed/read back identical. Clean archive /private/tmp/BOOMER-GO-wechat-learning-filters-20261016.zip:1018174 bytes, SHA256548a62e2aaf8a75a25842f392831f260a920a2d44e39bdebc0dc74bfbb5bb2bf. Independent extraction passed1321/1321 and24 route checks. Normal Git index remains untouched; no claim of main merge or live WeChat release.
 
 ## Unchanged Gates
 

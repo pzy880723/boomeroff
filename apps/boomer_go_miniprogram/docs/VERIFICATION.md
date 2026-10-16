@@ -10,6 +10,7 @@
 - 实际DevTools核对全部分类、窗口热度、日瓷1条、品牌窑口1条、详情四个关联按钮、昭和单条件二级页、移除年代后3条，以及收藏“其他2条/日瓷1条”。native-official-library-all/hot/category/ip、native-official-detail-filters/era-result、native-owned-library-groups及phone裁切为真实截图，不是设计生成图。20/40/60边界和非平局排序仅由合成测试覆盖，GUI仅3条示例。
 - R32固定后端ccaaf0ae670ef234cba432a83ff20abb9b8274a8，实际读取并复算迁移0026/Edge哈希，独立Node隔离重跑27+6项。Lovable报告迁移应用、Edge部署、SQL强制回滚及Deno测试；主流程没有特权SQL/真实员工读写。新action在线匿名401 unauthorized只证明可达与拒绝。详见OFFICIAL_LIBRARY_NATIVE.md。
 - 原Web词条关联AI追问另以R33直接协调，尚未原生接入或独立源码验收；不以通用助手代替。R27可信内容归属、人类审批、专用AppID/真机/真实业务/完整角色迁移缺口仍保留。
+- 本轮源码dcf2798a5ce120519883af9b3577ca94af50be19只含31个Mini路径，非强推且远端同SHA。源码包/private/tmp/BOOMER-GO-wechat-learning-filters-20261016.zip为1018174字节，SHA256548a62e2aaf8a75a25842f392831f260a920a2d44e39bdebc0dc74bfbb5bb2bf；干净解压/private/tmp/go-mini-learning-verify-oDf10b重新通过1321/1321及24路由。后续交付文档提交不改变已验证JS/WXML/WXSS。原Flutter checkout和正常index保留；不是main合并或微信发布。
 
 ## 最新检查点：原生七天排班和单格管理
 
