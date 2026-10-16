@@ -26,6 +26,7 @@ const sections = {
 };
 
 function listParams(kind, query, category, source) {
+  if (historyCollection(kind)) return { page_size: 20 };
   if (learningCollection(kind)) return { page_size: 20 };
   if (kind === 'check-ins') return { page_size: 20 };
   if (kind === 'tasks') return {};
@@ -127,6 +128,30 @@ function libraryKind(item) {
 
 function learningCollection(kind) {
   return ['quiz', 'my-library', 'favorites', 'favorite', 'quiz-history'].indexOf(kind) >= 0;
+}
+
+function historyCollection(kind) { return kind === 'history' || kind === 'recognition'; }
+
+function filterHistory(page) {
+  if (page._gone || page._hidden) return;
+  if (!page._loadedIdentity) return;
+  if (page._loadedIdentity !== scope(page)) {
+    page.setData({ items: [], allItems: [], loadedSummary: '', pagingNote: '', hasMore: false, error: '员工登录身份已变化，请重新加载识物记录' });
+    return;
+  }
+  const all = page.data.allItems || [], query = (page.data.query || '').trim().toLowerCase();
+  page.setData({ items: all.filter(row => !query || row.searchText.indexOf(query) >= 0), loadedSummary: '已加载 ' + all.length + ' 条识物记录', pagingNote: '只搜索已加载的名称、类别、年代及介绍；不是全部历史。' + (page.data.hasMore ? '可继续加载更多。' : '当前没有更多页面。') });
+}
+
+function showHistory(page, data, requestedPage, append) {
+  if (data.page != null && data.page !== requestedPage || data.has_more != null && typeof data.has_more !== 'boolean') throw new Error('识物记录分页回执不一致，请刷新');
+  const rows = items(data).map((row, index) => {
+    const raw = data.items[index];
+    return Object.assign(row, { searchText: [raw.name, raw.category, knowledgeCategories.label(raw.category), raw.era, raw.description].filter(value => typeof value === 'string').join(' ').toLowerCase() });
+  });
+  const existing = append ? page.data.allItems || [] : [];
+  page.setData({ allItems: existing.concat(rows.filter(row => !existing.some(old => old.id === row.id))), hasMore: pagination(page, data, requestedPage) });
+  filterHistory(page);
 }
 
 function learningRows(page, data) {
@@ -250,6 +275,7 @@ function pagination(page, data, requestedPage) {
 
 async function loadMore(page, action, params) {
   if (page._hidden || !page.data.hasMore || page.data.loadingMore) return;
+  if (historyCollection(page.data.kind) && page._loadedIdentity !== scope(page)) return filterHistory(page);
   if (learningCollection(page.data.kind) && page._loadedIdentity !== scope(page)) return filterLearning(page);
   const serial = page._request;
   const identity = scope(page);
@@ -259,6 +285,7 @@ async function loadMore(page, action, params) {
     const response = await page.api.action(action, Object.assign({}, params, { cursor: page._cursor, page: nextPage }));
     const data = action === 'checkin-status' ? checkinHistory(response) : response;
     if (page._gone || page._hidden || identity !== scope(page) || serial !== page._request) return;
+    if (historyCollection(page.data.kind)) return showHistory(page, data, nextPage, true);
     if (learningCollection(page.data.kind)) return showLearning(page, data, nextPage, true);
     const existing = page.data.items;
     const next = items(data).filter((item) => !existing.some((old) => old.id === item.id));
@@ -268,4 +295,4 @@ async function loadMore(page, action, params) {
   } finally { if (!page._gone && !page._hidden && identity === scope(page) && serial === page._request) page.setData({ loadingMore: false }); }
 }
 
-module.exports = { sections, scope, remote, items, categories, detailUrl, quizUrl, freshness, formatTime, notificationCategory, value, pagination, loadMore, listParams, checkinHistory, libraryKind, taskItems, learningCollection, showLearning, filterLearning, openLearning, hideLearning };
+module.exports = { sections, scope, remote, items, categories, detailUrl, quizUrl, freshness, formatTime, notificationCategory, value, pagination, loadMore, listParams, checkinHistory, libraryKind, taskItems, learningCollection, showLearning, filterLearning, openLearning, hideLearning, historyCollection, showHistory, filterHistory };

@@ -39,6 +39,66 @@ function pageData(items, page = 0, has_more = false) { return { items, page, pag
 function start() { return { quiz_token: 'private-capability', questions: [{ index: 0, stem: '哪种材质？', options: ['陶', '木', '铜', '铁'], correctIndex: 3, explanation: 'never expose' }] }; }
 function result(overrides = {}) { return Object.assign({ kind: 'favorite', id, score: 0, total: 1, passed: false, persisted: true, submitted: [1], correct: [false], correct_answers: [2] }, overrides); }
 
+for (const kind of ['history', 'recognition']) {
+  test(kind + ' searches the loaded recognition window without resending unsupported query', async () => {
+    const calls = [];
+    const page = nativePage('list', async (action, params) => { calls.push({ action, params }); return pageData([{ id, name: '昭和瓷杯', era: '昭和', category: 'jp_porcelain', description: '手绘花纹' }, { id: sourceId, name: '黑胶唱片', category: 'media_record' }], 0, true); });
+    await page.onLoad({ kind });
+    page.onSearchInput({ detail: { value: '花纹' } }); await page.onSearch();
+    assert.equal(page.data.items.length, 1); assert.equal(page.data.items[0].id, id);
+    assert.equal(calls.length, 1); assert.equal(calls[0].action, 'scan-history');
+    assert.equal(calls[0].params.query, undefined); assert.equal(page.data.hasMore, true);
+    assert.match(page.data.pagingNote, /已加载/); assert.match(page.data.loadedSummary, /2/);
+  });
+}
+
+test('recognition search keeps empty matches pageable and applies the same literal query after append', async () => {
+  const calls = [];
+  const page = nativePage('list', async (action, params) => { calls.push(params); return params.page === 0 ? pageData([{ id, name: '瓷杯' }], 0, true) : pageData([{ id, name: '重复原行' }, { id: sourceId, name: '100% 复古杯' }], 1, false); });
+  await page.onLoad({ kind: 'history' });
+  page.onSearchInput({ detail: { value: '100%' } }); await page.onSearch();
+  assert.equal(page.data.items.length, 0); assert.equal(page.data.hasMore, true);
+  await page.loadMore(); assert.equal(page.data.items.length, 1); assert.equal(page.data.items[0].id, sourceId);
+  assert.doesNotMatch(page.data.pagingNote, /可继续加载/);
+  assert.equal(calls.length, 2); assert.equal(calls[1].page, 1); assert.equal(calls[1].query, undefined);
+  page.onSearchInput({ detail: { value: '' } }); await page.onSearch();
+  assert.equal(page.data.items.length, 2); assert.equal(page.data.items[0].title, '瓷杯');
+});
+
+test('recognition search does not expose a retained previous identity window or navigate a forged row', async () => {
+  const page = nativePage('list', async () => pageData([{ id, name: '瓷杯' }]));
+  await page.onLoad({ kind: 'history' }); page.changeIdentity();
+  page.onSearchInput({ detail: { value: '瓷' } }); await page.onSearch();
+  assert.equal(page.data.items.length, 0); assert.equal(page.data.allItems.length, 0);
+  page.openItem(event({ id })); assert.equal(page.navigations.length, 0);
+});
+
+test('hidden recognition list drops late search and pagination callbacks', async () => {
+  const d = deferred(); let count = 0;
+  const page = nativePage('list', async () => ++count === 1 ? pageData([{ id, name: '瓷杯' }], 0, true) : d.promise);
+  await page.onLoad({ kind: 'history' }); const more = page.loadMore(); page.onHide();
+  page.onSearchInput({ detail: { value: '晚到' } }); const hiddenSearch = page.onSearch();
+  d.resolve(pageData([{ id: sourceId, name: '晚到记录' }], 1, false)); await more; await hiddenSearch;
+  assert.equal(page.data.query, ''); assert.equal(page.data.items.some(row => row.id === sourceId), false);
+  page.openItem(event({ id })); assert.equal(page.navigations.length, 0);
+});
+
+test('recognition search typed before first response is retained without a false identity error', async () => {
+  const d = deferred(), page = nativePage('list', () => d.promise);
+  const first = page.onLoad({ kind: 'history' });
+  page.onSearchInput({ detail: { value: '瓷' } }); await page.onSearch();
+  d.resolve(pageData([{ id, name: '瓷杯' }, { id: sourceId, name: '黑胶' }])); await first;
+  assert.equal(page.data.error, ''); assert.equal(page.data.query, '瓷');
+  assert.equal(page.data.items.length, 1); assert.equal(page.data.items[0].id, id);
+});
+
+test('recognition search without a loaded window preserves a genuine first-read error', async () => {
+  const page = nativePage('list', async () => { throw new Error('真实读取失败'); });
+  await page.onLoad({ kind: 'history' });
+  page.onSearchInput({ detail: { value: '瓷' } }); await page.onSearch();
+  assert.equal(page.data.error, '真实读取失败'); assert.equal(page.data.query, '瓷');
+});
+
 for (const name of ['learn', 'list']) {
   test(name + ' filters only loaded own-library rows while continuing real pages', async () => {
     const calls = [];

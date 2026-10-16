@@ -10,14 +10,14 @@ Page(definePage({
     const kind = options.kind || 'my-library';
     const section = model.sections[kind];
     this._hidden = false;
-    this.setData(Object.assign({}, official.fields, { kind, title: section ? section.title : '内容暂不可用', isLearningCollection: model.learningCollection(kind) }));
+    this.setData(Object.assign({}, official.fields, { kind, title: section ? section.title : '内容暂不可用', isLearningCollection: model.learningCollection(kind), isHistoryCollection: model.historyCollection(kind) }));
     if (kind === 'official') official.reset(this, options);
     wx.setNavigationBarTitle({ title: this.data.title });
     return this.load();
   },
   onShow() { const hidden = this._hidden; this._hidden = false; if (this.data.kind === 'tasks') { if (this._taskIdentity && this._taskIdentity !== model.scope(this)) this.clearTasks(); if (hidden || !this._taskSnapshot) return this.loadTasks(); return; } if (this.isOfficialKnowledge()) { if (hidden || this._loadedIdentity !== model.scope(this) && !(this.data.loading && this._officialReadIdentity === model.scope(this))) return this.load(); return; } if (this._request && (!this.data.isLearningCollection || hidden || this._loadedIdentity !== model.scope(this))) return this.load(); },
-  onHide() { official.discard(this); if (this.data.kind === 'tasks') { this._hidden = true; this.clearTasks(); } if (this.data.isLearningCollection || this.isOfficialKnowledge()) model.hideLearning(this); },
-  onUnload() { official.discard(this); if (this.data.kind === 'tasks') { this._hidden = true; this.clearTasks(); } if (this.data.isLearningCollection || this.isOfficialKnowledge()) model.hideLearning(this); this._gone = true; },
+  onHide() { official.discard(this); if (this.data.kind === 'tasks') { this._hidden = true; this.clearTasks(); } if (this.data.isLearningCollection || this.data.isHistoryCollection || this.isOfficialKnowledge()) model.hideLearning(this); },
+  onUnload() { official.discard(this); if (this.data.kind === 'tasks') { this._hidden = true; this.clearTasks(); } if (this.data.isLearningCollection || this.data.isHistoryCollection || this.isOfficialKnowledge()) model.hideLearning(this); this._gone = true; },
   onPullDownRefresh() { return this.load().finally(() => wx.stopPullDownRefresh()); },
   load() {
     if (this.data.kind === 'tasks') return this.loadTasks();
@@ -34,6 +34,11 @@ Page(definePage({
       return this.api.action(section.action, params);
     }, (data) => {
       if (this.data.kind === 'check-ins') return this.showCheckin(data);
+      if (this.data.isHistoryCollection) {
+        model.showHistory(this, data, 0, false);
+        this.setData({ categories: [], freshness: model.freshness(data) });
+        return;
+      }
       if (this.data.isLearningCollection) {
         model.showLearning(this, data, 0, false);
         this.setData({ categories: [], freshness: model.freshness(data) });
@@ -44,7 +49,7 @@ Page(definePage({
   },
   params() { return model.listParams(this.data.kind, this.data.query.trim(), this.data.category); },
   onSearchInput(event) { if (!this._gone && !this._hidden) this.setData({ query: event.detail.value }); },
-  onSearch() { return this.data.isLearningCollection ? model.filterLearning(this) : this.load(); },
+  onSearch() { if (this.data.isHistoryCollection) return model.filterHistory(this); return this.data.isLearningCollection ? model.filterLearning(this) : this.load(); },
   onMastery(event) {
     const mastery = event.currentTarget.dataset.mastery;
     if (['all', 'pending', 'mastered'].indexOf(mastery) < 0) return;
@@ -215,6 +220,7 @@ Page(definePage({
     if (this.data.kind === 'check-ins') return;
     const id = event.currentTarget.dataset.id;
     const item = this.data.items.find((entry) => entry.id === id);
+    if (this.data.isHistoryCollection && (this._gone || this._hidden || this._loadedIdentity !== model.scope(this) || !item)) return;
     if (this.isOfficialKnowledge() && (!official.ready(this, model) || !item)) return;
     if (this.data.isLearningCollection) return model.openLearning(this, item);
     const kind = this.data.kind === 'my-library' ? model.libraryKind(item) : (this.data.kind === 'conversations' ? 'conversation' : this.data.kind);

@@ -118,7 +118,8 @@ Page(definePage({
           || (isFavorite && favorite.user_id != null && favorite.user_id !== userId)
           || (['history', 'recognition'].indexOf(kind) >= 0 && raw.created_by != null && raw.created_by !== userId)) throw new Error('学习详情来源或身份不一致，请返回列表刷新');
       }
-      const business = businessContent(isFavorite && raw.source ? source : raw);
+      const recognitionPhotos = ['history', 'recognition'].indexOf(kind) >= 0 || (isFavorite && raw.source_available === true && ['recognition', 'product'].indexOf(favorite.source_type) >= 0);
+      const business = businessContent(isFavorite && raw.source ? source : raw, { recognitionPhotos });
       if (learningKinds.indexOf(kind) >= 0) this.setData({ learningNotice: raw.source_available === false || raw.source_missing === true ? '收藏源内容不存在或当前不可读取，保留快照供查看；无法开始测验。' : (!favoriteSourceValid || (item.quiz_available === true && !quizAllowed) ? '测验来源信息不一致，当前无法开始测验。' : '') });
       const fields = (Array.isArray(item.fields) ? item.fields : []).map((field) => ({ label: field.label, value: field.value == null ? '未提供' : String(field.value) }));
       fields.push(...business.fields);

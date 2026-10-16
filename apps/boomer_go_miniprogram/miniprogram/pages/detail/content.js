@@ -15,7 +15,7 @@ function unique(values) { return values.filter((value, index) => value && values
 function media(value) { return /^https:\/\/[^\s/@]+\//i.test(text(value)) ? text(value) : ''; }
 
 // Project only known business fields. Raw source metadata and quiz material stay out of view data.
-function businessContent(value) {
+function businessContent(value, options = {}) {
   const raw = record(value);
   const analysis = record(raw.ai_analysis);
   const legacy = record(analysis.result);
@@ -75,10 +75,15 @@ function businessContent(value) {
   addSection('商品故事', unique(stories).map((body) => ({ body })));
   addSection('介绍话术', pitches);
 
+  const gallery = unique(array(raw.gallery).map((image) => media(typeof image === 'string' ? image : image && image.url)));
+  const saved = record(analysis.__go_mini);
+  const photos = array(saved.image_urls);
+  const savedPhotos = options.recognitionPhotos === true && saved.client_submitted === true && photos.length > 0 && photos.length <= 5 && photos.every(image => typeof image === 'string' && media(image)) ? photos.map(media) : [];
+
   return {
     fields, sections,
     body: text(raw.body) || text(raw.description) || cards.map((card) => text(card.body) || text(card.summary)).find(Boolean) || '',
-    gallery: unique(array(raw.gallery).map((image) => media(typeof image === 'string' ? image : image && image.url))),
+    gallery: gallery.length ? gallery : unique(savedPhotos),
     backstampUrl: media(raw.backstamp_url), videoUrl: media(raw.video_url)
   };
 }

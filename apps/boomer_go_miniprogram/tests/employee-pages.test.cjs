@@ -624,6 +624,18 @@ test('flat recognition analysis and enriched card remain visible after round fou
   assert.equal(page.data.quizUrl, '');
 });
 
+for (const kind of ['history', 'favorite', 'official']) {
+  test(kind + ' detail enables saved-photo fallback only for validated recognition sources', async () => {
+    const images = ['https://example.invalid/storage/v1/object/public/product-images/owner/a.jpg', 'https://example.invalid/storage/v1/object/public/product-images/owner/b.jpg'];
+    const source = { id: 'gallery-id', image_url: images[0], ai_analysis: { story: '识物故事', __go_mini: { client_submitted: true, image_urls: images } } };
+    const raw = kind === 'favorite' ? { favorite: { user_id: employee.userId, source_type: 'product' }, source, source_available: true } : source;
+    const page = nativePage('detail', async () => ({ id: 'gallery-id', kind, title: '图库', quiz_available: false, raw }));
+    await page.onLoad({ kind, id: 'gallery-id' });
+    assert.deepEqual(page.data.gallery, kind === 'official' ? [] : images);
+    assert.doesNotMatch(JSON.stringify(page.data.businessSections), /__go_mini/);
+  });
+}
+
 test('save and community share require raw products id, never a knowledge row or guessed source id', async () => {
   const writes = [];
   const page = nativePage('detail', async (action, params) => {
