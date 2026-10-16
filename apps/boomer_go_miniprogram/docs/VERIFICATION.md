@@ -9,6 +9,7 @@
 - 保存多图的已存在metadata未接图库，先2RED+1旧图库control后修复；再补来源/整组校验2RED与官方来源1RED。最终4helper+3实际detail集成共7通过，独立7/7及264相关通过。旧gallery优先；只在已验证识物或可用product/recognition收藏开启1-5有效HTTPS字符串fallback。合法其他来源收藏不强绑当前uid；不新增API、签名或权限，不声称强域路径验证。
 - 父级与独立新跑全套1546/1546，失败/跳过/取消均0。实际DevTools沿我的→识物记录核对原生搜索占位、已加载0条/范围说明/无更多页空状态，native-recognition-history-loaded-scope及phone为真实截图与确定裁切。非空搜索、分页、图库和竞态由VM测试覆盖；预览没有伪造历史商品或付费AI结果，未展示真实商品照片，不能冒充GUI图库/员工/真机验收。
 - R36仍awaiting_input，20.3积分人工检查点未获新决定；本轮只读状态核对，没有Continue/Finish up或新任务绕过。AppID/真实员工/设备/微信发布和完整功能迁移缺口保留。原Flutter/iOS与手机数据未动。
+- 源码31ee62a695c4bf828612208dcbf6559eb6d2a922仅14个Mini路径，非强推并远端读回同SHA。归档/private/tmp/BOOMER-GO-wechat-recognition-history-20261016.zip为6511985字节，SHA256为bb5a6fa8525da411f3657b6eb0134df72f7e3183ea5fb2aa3b3c54c8e878f614；干净解压/private/tmp/go-mini-recognition-history-verify-6pVlbZ再跑1546项及25路由通过，官方26WXML/27WXSS退出0、stderr空。正常index为空，DevTools返回工作台；后续文档不改变归档代码，不代表main合并、后台部署或微信发布。
 
 ## 最新检查点：原生活动编辑器开发预览
 
