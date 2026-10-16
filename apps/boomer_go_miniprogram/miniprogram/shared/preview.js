@@ -10,11 +10,17 @@ function createPreview(wx) {
     { id: 'example-porcelain', title: '从底款读懂瓷器：产地、年代与工艺', category: '瓷器餐具', quiz_kind: 'official', quiz_available: true, quiz_persisted: false, kind: 'official', summary: '看釉色、看底款，再把商品故事讲清楚。', body: '先看器型与釉色，再观察底款。底款只能作为判断线索，不能单独证明年代、产地或真伪。\n\n向客人介绍时，把可见的工艺、用途和品相讲清楚；不能确认的信息，明确说明暂无法判断。\n\n中古商品可能有自然使用痕迹。请引导客人查看实物，不承诺未经核实的材质与年代。', updated_at: date },
     { id: 'example-service', title: '热情但不打扰：中古杂货店的服务节奏', category: '门店服务', summary: '一句欢迎、一个观察、一次恰到好处的介绍。', body: '客人进店时友好招呼，留出自由探索的空间。\n\n发现客人持续关注某件商品，再提供具体且有依据的介绍：用途、材质、工艺和可见品相。\n\n价格以当前门店标签为准，不编造折扣，不夸大稀缺性。', updated_at: date }
   ];
+  const officialArticles = [
+    { id: '00000000-0000-4000-8000-000000000831', name: '日瓷底款观察（示例）', category: 'jp_porcelain', ip_name: '品牌窑口', brand: '合成知识示例', era: '昭和', origin: '日本', summary: '先观察器型、釉色与底款，不把推测当成鉴定结论。', body: '这是合成官方知识示例，不是真实鉴定资料。\n\n先看器型与釉色，再核实可见底款；无法确认的年代应当明确说明。' },
+    { id: '00000000-0000-4000-8000-000000000832', name: '欧瓷花纹介绍（示例）', category: 'eu_porcelain', ip_name: '花纹', brand: '合成知识示例', era: '年代待核实', origin: '欧洲', summary: '介绍可见的花纹与用途，具体产地以可靠资料为准。', body: '这是合成官方知识示例。\n\n向客人介绍可观察的花纹和品相，不承诺未经核实的产地或价值。' },
+    { id: '00000000-0000-4000-8000-000000000833', name: '中古首饰品相说明（示例）', category: 'vintage_jewelry', ip_name: '胸针', brand: '合成知识示例', era: '年代待核实', origin: '产地待核实', summary: '核对结构、工艺和使用痕迹，真实介绍商品细节。', body: '这是合成官方知识示例。\n\n展示首饰的可见结构和使用痕迹，不编造材质、品牌与年代。' }
+  ];
   const libraryArticles = articles.concat([{ title: '价签与品相：介绍前先核实', summary: '一件一价，真实说明看得见的使用痕迹。', body: '合成门店学习示例。介绍价格前先核对当前价签。\n\n请客人查看实物品相，如实说明可见的磕碰、划痕与自然使用痕迹，不承诺未经核实的原价或折扣。' }]);
   const library = libraryArticles.map((article, index) => ({
     id: '00000000-0000-4000-8000-00000000006' + (index + 1), source_type: 'official',
     source_id: '00000000-0000-4000-8000-00000000007' + (index + 1),
     snapshot: { name: article.title, summary: article.summary }, created_at: stamp,
+    source_metadata: { name: article.title + '（示例）', category: index === 0 ? 'jp_porcelain' : 'other', cover_url: null },
     quiz_kind: 'favorite', quiz_available: true, passed: index === 1
   }));
   const quizAttempts = new Map();
@@ -143,6 +149,9 @@ function createPreview(wx) {
       ], conflicts: [], schedules: bootstrap.shifts, shift_defs: bootstrap.shift_definitions, as_of: stamp, persisted: false };
     }
     if (name === 'knowledge-detail') {
+      const official = params.kind === 'official' && officialArticles.find(row => row.id === params.id);
+      if (official) return { item: { id: official.id, kind: 'official', title: official.name, body: official.body,
+        category: official.category, quiz_kind: 'official', quiz_available: true, quiz_persisted: false, raw: Object.assign({}, official) }, persisted: false };
       const favorite = params.kind === 'favorite' && library.find(row => row.id === params.id);
       if (favorite) {
         const source = Object.assign({}, libraryArticles[library.indexOf(favorite)], { id: favorite.source_id });
@@ -150,6 +159,43 @@ function createPreview(wx) {
           quiz_kind: 'favorite', quiz_available: true, raw: { favorite, source, source_available: true, is_favorite: true, favorite_id: favorite.id } } };
       }
       const item = articles.find(a => a.id === params.id); if (!item) throw new Error('该示例条目不存在'); return { item };
+    }
+    if (name === 'official-library') {
+      const invalid = () => Object.assign(new Error('参数不合法'), { status: 400, code: 'invalid_params' });
+      const limits = { q: 80, category: 80, ip_name: 120, era: 120, origin: 120 };
+      if (Object.keys(params).some(key => !Object.prototype.hasOwnProperty.call(limits, key) && key !== 'sort')) throw invalid();
+      const filters = {};
+      for (const key of Object.keys(limits)) {
+        let value = params[key];
+        if (value == null) value = '';
+        if (typeof value !== 'string') throw invalid();
+        if (key === 'q') value = value.trim();
+        const points = Array.from(value);
+        if (points.length > limits[key] || value.includes('\u0000') || points.some(c => c.length === 1 && c.charCodeAt(0) >= 0xd800 && c.charCodeAt(0) <= 0xdfff)) throw invalid();
+        filters[key] = value === '' ? null : value;
+      }
+      const requested_sort = params.sort == null ? 'latest' : params.sort;
+      if (!['latest', 'hot', 'important'].includes(requested_sort)) throw invalid();
+      const effective_sort = filters.category ? 'latest' : requested_sort;
+      const q = (filters.q || '').toLowerCase();
+      const items = officialArticles.filter(row => ['category', 'ip_name', 'era', 'origin'].every(key => filters[key] === null || row[key] === filters[key])
+        && (!q || [row.name, row.ip_name, row.summary].some(value => value.toLowerCase().includes(q)))).sort((a, b) => b.id.localeCompare(a.id)).slice(0, 60).map(row => ({
+        id: row.id, name: row.name, category: row.category, ip_name: row.ip_name, summary: row.summary, era: row.era, origin: row.origin,
+        cover_url: null, selling_points: null, tips: null, view_count: 0, favorite_count: 0, importance_score: null, updated_at: stamp
+      }));
+      return { items, filters, requested_sort, effective_sort, window_limit: 60, as_of: stamp, persisted: false };
+    }
+    if (name === 'knowledge' && params.source === 'official') {
+      const page = Number.isInteger(params.page) && params.page >= 0 ? params.page : 0;
+      const page_size = Math.min(Math.max(Number.isInteger(params.page_size) ? params.page_size : 20, 1), 50);
+      const q = typeof params.q === 'string' ? params.q.trim().slice(0, 40).replace(/[%,()*]/g, '').toLowerCase() : '';
+      const category = typeof params.category === 'string' && /^[a-z_]{2,30}$/.test(params.category) ? params.category : '';
+      const filtered = officialArticles.filter(row => (!category || row.category === category) && (!q || [row.name, row.ip_name, row.brand].some(value => value.toLowerCase().includes(q))));
+      const items = filtered.slice(page * page_size, (page + 1) * page_size).map(row => {
+        const { body, ...summary } = row;
+        return Object.assign({}, summary, { quiz_kind: 'official', quiz_available: true, quiz_persisted: false, passed: false, last_score: null });
+      });
+      return { source: 'official', items, page, page_size, has_more: (page + 1) * page_size < filtered.length, as_of: stamp, persisted: false };
     }
     if (name === 'knowledge' || name === 'learning') return { items: articles.filter(a => !params.query || (a.title + a.body).includes(params.query)), categories: [{ id: 'porcelain', name: '瓷器餐具' }, { id: 'service', name: '门店服务' }], page: 0, has_more: false, as_of: stamp };
     if (name === 'notifications') { const page = params.page || 0, n = params.page_size || 20; return { items: notifications.slice(page * n, (page + 1) * n), page, page_size: n, has_more: (page + 1) * n < notifications.length, as_of: stamp }; }

@@ -2,6 +2,15 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
+## 最新检查点：官方知识筛选和个人收藏分类
+
+- 固定17分类和Web对应IP/细分，支持80码点字面搜索、全部分类的最近更新/重要度/最新窗口热度。选分类强制最近更新并清IP；年代/产地来自实际详情，分别原值回筛到原生二级页。结构化JSON路由先解析、否则仅解码一次，保留字面%20、加号和空白，畸形输入不回退全部。
+- 新official-library严格六键请求不自动加shop_id；仍需fresh Auth/ERP。回包逐行精确绑定分类/IP/年代/产地、UUID、排序和60上限；本地20/40/60展示不再请求服务器页。商品知识保留原服务器分页。列表不带题库、正文或答案。收藏仅当前源元数据优先、快照兜底，来源标签和按已加载分类数量分组不改passed/quiz或原history来源。
+- Phase1分类37项及真实shared/page卸载3项已过；Phase2四专项90/90、独立相关152/152。父级API2 RED→4 GREEN，preview3 RED及排序1 RED→GREEN，详情8 RED→8 GREEN及卸载3 GREEN。最终父流程与独立审查全套1321/1321，0失败/跳过/取消；24路由检查通过；官方25 WXML/26 WXSS退出0、stderr空。独立审查未确认新增P1/P2。
+- 实际DevTools核对全部分类、窗口热度、日瓷1条、品牌窑口1条、详情四个关联按钮、昭和单条件二级页、移除年代后3条，以及收藏“其他2条/日瓷1条”。native-official-library-all/hot/category/ip、native-official-detail-filters/era-result、native-owned-library-groups及phone裁切为真实截图，不是设计生成图。20/40/60边界和非平局排序仅由合成测试覆盖，GUI仅3条示例。
+- R32固定后端ccaaf0ae670ef234cba432a83ff20abb9b8274a8，实际读取并复算迁移0026/Edge哈希，独立Node隔离重跑27+6项。Lovable报告迁移应用、Edge部署、SQL强制回滚及Deno测试；主流程没有特权SQL/真实员工读写。新action在线匿名401 unauthorized只证明可达与拒绝。详见OFFICIAL_LIBRARY_NATIVE.md。
+- 原Web词条关联AI追问另以R33直接协调，尚未原生接入或独立源码验收；不以通用助手代替。R27可信内容归属、人类审批、专用AppID/真机/真实业务/完整角色迁移缺口仍保留。
+
 ## 最新检查点：原生七天排班和单格管理
 
 - 新增第24个原生路由，底部仍为工作台、学习、识物、消息、我的。个人月历独立加载，不等管理权限查询；无当前授权店时管理零请求，不猜主店。入口按新鲜独立 can_view/can_arrange 显示读写或只读，不从角色名称、can_view_shop 或权限列表推断。

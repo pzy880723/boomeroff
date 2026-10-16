@@ -6,7 +6,7 @@
   <view class="card practice-entry"><view class="section-title">一轮，懂五件</view><view class="muted">每轮最多 5 条收藏，完整作答后记录本机今日已练；不是每日限额。</view><button class="button-secondary" data-url="/pages/practice/index" bindtap="go">进入连续练习</button></view>
   <view class="search-box row">
     <text class="search-symbol">⌕</text>
-    <input class="search-input" placeholder="{{kind === 'quiz' || kind === 'quiz-history' ? '搜索已加载内容' : '搜索知识与培训'}}" value="{{query}}" bindinput="onSearchInput" bindconfirm="onSearch" confirm-type="search" />
+    <input class="search-input" maxlength="{{isOfficial ? -1 : 140}}" placeholder="{{isOfficial ? '搜索官方知识，最多80字' : (kind === 'quiz' || kind === 'quiz-history' ? '搜索已加载内容' : '搜索知识与培训')}}" value="{{query}}" bindinput="onSearchInput" bindconfirm="onSearch" confirm-type="search" />
     <button class="search-button" bindtap="onSearch">搜索</button>
   </view>
   <view wx:if="{{kind === 'quiz'}}" class="row mastery-tabs">
@@ -19,7 +19,12 @@
   <view class="filter-tabs row">
     <button wx:for="{{filters}}" wx:key="kind" class="filter-tab {{kind === item.kind ? 'active' : ''}}" data-kind="{{item.kind}}" bindtap="onFilter">{{item.label}}</button>
   </view>
-  <scroll-view wx:if="{{categories.length}}" scroll-x class="category-scroll">
+  <picker wx:if="{{isOfficial}}" class="official-category-picker" range="{{officialCategoryOptions}}" range-key="label" value="{{officialCategoryIndex}}" bindtap="beginOfficialCategory" bindchange="onOfficialCategory" disabled="{{loading || loadingMore || error}}"><view class="official-category-field"><view class="muted official-category-caption">官方知识分类</view><view class="row official-category-value"><text>{{officialCategoryLabel}}</text><text class="official-category-control">选择 ›</text></view></view></picker>
+  <picker wx:if="{{isOfficial && (category || officialIPLabel !== '全部细分')}}" range="{{officialIPOptions}}" range-key="label" value="{{officialIPIndex}}" bindtap="beginOfficialIP" bindchange="onOfficialIP" disabled="{{loading || error}}"><view class="official-category-field"><view class="muted official-category-caption">IP / 细分</view><view class="row official-category-value"><text>{{officialIPLabel}}</text><text class="official-category-control">选择 ›</text></view></view></picker>
+  <view wx:if="{{isOfficial && !category}}" class="row official-sorts"><button class="{{officialRequestedSort === 'latest' ? 'selected' : ''}}" data-sort="latest" data-request="{{officialRequest}}" bindtap="onOfficialSort" disabled="{{loading || error}}">最近更新</button><button class="{{officialRequestedSort === 'hot' ? 'selected' : ''}}" data-sort="hot" data-request="{{officialRequest}}" bindtap="onOfficialSort" disabled="{{loading || error}}">窗口内热度</button><button class="{{officialRequestedSort === 'important' ? 'selected' : ''}}" data-sort="important" data-request="{{officialRequest}}" bindtap="onOfficialSort" disabled="{{loading || error}}">重要度</button></view>
+  <view wx:if="{{isOfficial && (officialEra || officialOrigin)}}" class="official-chips"><button wx:if="{{officialEra}}" class="chip" data-field="era" data-request="{{officialRequest}}" bindtap="onOfficialClear" disabled="{{loading || error}}">年代：{{officialEra}} ×</button><button wx:if="{{officialOrigin}}" class="chip" data-field="origin" data-request="{{officialRequest}}" bindtap="onOfficialClear" disabled="{{loading || error}}">产地：{{officialOrigin}} ×</button></view>
+  <view wx:if="{{isOfficial && officialWindowNote}}" class="muted official-window-note">{{officialWindowNote}}</view>
+  <scroll-view wx:if="{{!isOfficial && kind !== 'knowledge' && categories.length}}" scroll-x class="category-scroll">
     <button class="category chip {{category === '' ? 'selected' : ''}}" data-id="" bindtap="onCategory">全部分类</button>
     <button wx:for="{{categories}}" wx:key="id" class="category chip {{category === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="onCategory">{{item.name}}</button>
   </scroll-view>
@@ -28,12 +33,21 @@
   <view wx:if="{{!loading && !error && !items.length}}" class="card empty">
     <view class="empty-symbol">知</view><view>当前筛选暂无内容</view><view class="muted">{{hasMore ? '已加载内容中暂未找到匹配项，可继续加载下一页。' : '换个关键词或分类试试，已完成记录以服务器为准。'}}</view>
   </view>
+  <block wx:for="{{learningGroups}}" wx:for-item="group" wx:key="category">
+    <view class="row library-group-heading"><text>{{group.label}}</text><text class="muted">当前已加载 {{group.count}} 条</text></view>
+    <view wx:for="{{group.items}}" wx:key="id" class="card knowledge-card" data-id="{{item.id}}" bindtap="openItem" hover-class="card-pressed">
+      <image wx:if="{{item.cover_url}}" src="{{item.cover_url}}" class="cover" mode="aspectFill" />
+      <view class="knowledge-content"><view class="row library-source-row"><text class="chip">{{item.sourceBadge}}</text><text class="result-line">{{item.passedText}}</text></view><view class="section-title item-title">{{item.title}}</view><view wx:if="{{item.body}}" class="muted summary">{{item.body}}</view><view wx:if="{{item.passedAt}}" class="muted learning-date">通过时间 {{item.passedAt}}</view><view wx:if="{{item.lastAttemptAt}}" class="muted learning-date">最近作答 {{item.lastAttemptAt}}</view><view wx:if="{{item.sourceNotice}}" class="muted learning-date">{{item.sourceNotice}}</view><view class="item-footer row"><text class="muted">{{item.time}}</text><text class="read-link">查看测验资格 →</text></view></view>
+    </view>
+  </block>
+  <block wx:if="{{!learningGroups.length}}">
   <view wx:for="{{items}}" wx:key="id" class="card knowledge-card" data-id="{{item.id}}" bindtap="openItem" hover-class="card-pressed">
     <image wx:if="{{item.cover_url}}" src="{{item.cover_url}}" class="cover" mode="aspectFill" />
     <view class="knowledge-content">
-      <view class="row"><text class="chip">{{item.category || '学习内容'}}</text><text wx:if="{{item.status}}" class="muted">{{item.status}}</text></view>
+      <view class="row"><text class="chip">{{item.categoryLabel || item.category || '学习内容'}}</text><text wx:if="{{item.status}}" class="muted">{{item.status}}</text></view>
       <view class="section-title item-title">{{item.title}}</view>
       <view wx:if="{{item.body}}" class="muted summary">{{item.body}}</view>
+      <view wx:if="{{isOfficial && (item.ipName || item.era || item.origin)}}" class="muted official-row-metadata"><text wx:if="{{item.ipName}}">{{item.ipName}} </text><text wx:if="{{item.era}}">{{item.era}} </text><text wx:if="{{item.origin}}">{{item.origin}}</text></view>
       <view wx:if="{{item.progress !== null}}" class="progress-note">云端进度 {{item.progress}}<text wx:if="{{item.target !== null}}"> / {{item.target}}</text></view>
       <view wx:if="{{item.passedText}}" class="result-line">{{item.passedText}}<text wx:if="{{item.scoreText}}"> · {{item.scoreText}}</text></view>
       <view wx:if="{{item.passedAt}}" class="muted learning-date">通过时间 {{item.passedAt}}</view>
@@ -42,6 +56,7 @@
       <view class="item-footer row"><text wx:if="{{kind !== 'quiz-history'}}" class="muted">{{item.time}}</text><text class="read-link">{{kind === 'quiz' ? '查看测验资格' : '查看内容'}} →</text></view>
     </view>
   </view>
+  </block>
   <view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view>
   <button wx:if="{{hasMore}}" class="button-secondary" loading="{{loadingMore}}" disabled="{{loadingMore}}" bindtap="loadMore">加载更多学习内容</button>
   <view class="row footer-links"><button class="button-secondary" data-url="/pages/store-kb/index?type=sop" bindtap="go">门店 SOP</button><button class="button-secondary" data-url="/pages/store-kb/index?type=qa" bindtap="go">门店问答</button></view>

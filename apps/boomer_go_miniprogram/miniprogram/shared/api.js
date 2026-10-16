@@ -75,7 +75,7 @@ function createApi({ wx, config, session, invoke: transport }) {
     }
     const storeKbDetail = name === 'knowledge-detail' && ['sop', 'qa', 'training'].includes(params.kind || params.source);
     if ((shopActions.has(name) || storeKbDetail) && !selected) throw new Error('请先选择当前授权工作门店');
-    let payload = Object.assign({}, params, selected ? { shop_id: selected.id } : {});
+    let payload = Object.assign({}, params, selected && name !== 'official-library' ? { shop_id: selected.id } : {});
     if (name === 'profile-update') {
       const userId = session.get().userId;
       payload = Object.assign({}, params);

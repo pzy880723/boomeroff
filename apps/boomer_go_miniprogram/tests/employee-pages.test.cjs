@@ -9,6 +9,12 @@ const names = ['workbench', 'learn', 'messages', 'mine', 'schedule', 'list', 'de
 const event = (dataset) => ({ currentTarget: { dataset } });
 const employee = { userId: 'employee-a', shop: { id: 'shop-a', name: '测试门店' }, profile: { display_name: '同事' } };
 const pendingExpId = '00000000-0000-4000-8000-000000000091';
+const officialId = index => '00000000-0000-4000-8000-' + String(index).padStart(12, '0');
+function officialWindow(params, count = 1) {
+  const filters = Object.fromEntries(['q', 'category', 'ip_name', 'era', 'origin'].map(key => [key, params[key] || null]));
+  return { items: Array.from({ length: count }, (_, index) => ({ id: officialId(index + 1), name: '官方器物', category: filters.category || 'jp_porcelain', ip_name: filters.ip_name, era: filters.era, origin: filters.origin, summary: null, cover_url: null, selling_points: null, tips: null, view_count: null, favorite_count: null, importance_score: null, updated_at: null })),
+    filters, requested_sort: params.sort || 'latest', effective_sort: filters.category ? 'latest' : params.sort || 'latest', window_limit: 60, as_of: '2026-10-16T09:00:00+08:00' };
+}
 
 // Native lifecycle/handler harness: only the shared shell and wx platform are mocked.
 function nativePage(name, action = async () => ({ items: [] }), extra = {}) {
@@ -72,14 +78,18 @@ test('learning sends search and category filters to adapter, not synthetic local
   const calls = [];
   const page = nativePage('learn', async (action, params) => {
     calls.push({ action, params });
-    return { items: [{ id: 'k1', title: '陶瓷' }], categories: [{ id: 'c1', name: '器物' }] };
+    if (action === 'official-library') return officialWindow(params);
+    return { items: [{ id: 'k1', title: '陶瓷' }] };
   });
   await page.onLoad({});
+  await page.onSource(event({ source: 'official' }));
   page.onSearchInput({ detail: { value: '陶瓷' } });
   await page.onSearch();
-  await page.onCategory(event({ id: 'c1' }));
+  page.beginOfficialCategory();
+  await page.onOfficialCategory({ detail: { value: 1 } });
   assert.equal(calls.at(-1).params.q, '陶瓷');
-  assert.equal(calls.at(-1).params.category, 'c1');
+  assert.equal(calls.at(-1).action, 'official-library');
+  assert.equal(calls.at(-1).params.category, 'jp_porcelain');
   await page.onFilter(event({ kind: 'quiz-history' }));
   assert.equal(calls.at(-1).action, 'quiz-history');
   assert.equal(page.data.items.length, 1);
@@ -382,31 +392,50 @@ test('learning source switch preserves official identity for native details and 
   const calls = [];
   const page = nativePage('learn', async (action, params) => {
     calls.push({ action, params });
+    if (action === 'official-library') return officialWindow(params);
     return { items: [{ id: 'off1', title: '官方知识', quiz_kind: 'official' }] };
   });
   await page.onLoad({});
   await page.onSource(event({ source: 'official' }));
-  assert.equal(calls.at(-1).params.source, 'official');
-  page.openItem(event({ id: 'off1' }));
+  assert.equal(calls.at(-1).action, 'official-library');
+  page.openItem(event({ id: officialId(1) }));
   assert.match(page.navigations[0], /kind=official/);
   await page.onFilter(event({ kind: 'quiz' }));
   assert.equal(calls.at(-1).action, 'my-library');
 });
 
-test('learning can load every server page and keeps the current query and category', async () => {
+test('official learning expands its accepted local window without requesting another server page', async () => {
   const calls = [];
   const page = nativePage('learn', async (action, params) => {
-    calls.push(params);
+    calls.push({ action, params });
+    if (action === 'official-library') return officialWindow(params, 40);
     return { items: [{ id: 'page-' + params.page, title: '知识' }], page: params.page, has_more: params.page < 1 };
   });
   await page.onLoad({});
+  await page.onSource(event({ source: 'official' }));
   page.onSearchInput({ detail: { value: '器物' } });
-  await page.onCategory(event({ id: 'ceramic' }));
+  page.beginOfficialCategory();
+  await page.onOfficialCategory({ detail: { value: 1 } });
+  assert.equal(page.data.items.length, 20);
+  const reads = calls.length;
   await page.loadMore();
-  assert.equal(calls.at(-1).page, 1);
-  assert.equal(calls.at(-1).q, '器物');
-  assert.equal(calls.at(-1).category, 'ceramic');
-  assert.equal(page.data.items.length, 2);
+  assert.equal(calls.length, reads);
+  assert.equal(calls.at(-1).action, 'official-library');
+  assert.equal(calls.at(-1).params.page, undefined);
+  assert.equal(calls.at(-1).params.q, '器物');
+  assert.equal(calls.at(-1).params.category, 'jp_porcelain');
+  assert.equal(page.data.items.length, 40);
+  assert.equal(page.data.hasMore, false);
+});
+
+test('product learning retains server pagination and query without unsupported category filtering', async () => {
+  const calls = [], page = nativePage('learn', async (action, params) => {
+    calls.push({ action, params });
+    return { items: [{ id: 'page-' + params.page, title: '商品知识' }], page: params.page, has_more: params.page < 1 };
+  });
+  await page.onLoad({}); page.onSearchInput({ detail: { value: '器物' } }); await page.onSearch(); await page.loadMore();
+  assert.equal(calls.at(-1).action, 'knowledge'); assert.equal(calls.at(-1).params.source, 'product');
+  assert.equal(calls.at(-1).params.q, '器物'); assert.equal(calls.at(-1).params.page, 1); assert.equal(page.data.items.length, 2);
 });
 
 test('official favorites and product library writes use their real source contracts', async () => {

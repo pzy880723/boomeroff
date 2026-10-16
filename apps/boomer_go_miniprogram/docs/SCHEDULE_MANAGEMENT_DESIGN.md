@@ -1,6 +1,6 @@
 # Native Schedule Management Design
 
-Status: source-backed candidate design, not an implemented manager page or deployed BFF. Fixed Web comparison `813c12840f12a904fd07e6bc3a8bb08359b01090`. The existing personal-month read fix is independent of this work.
+Status: Stage1 seven-day/single-cell manager is implemented and independently reviewed; advanced operations below remain source-backed candidate requirements, not deployed bulk endpoints. Fixed Web comparison `813c12840f12a904fd07e6bc3a8bb08359b01090`. The existing personal-month read fix is independent of this work.
 
 ## Editable Design Review
 
@@ -27,7 +27,7 @@ Retain the approved five tabs and current read-only month page. A separately aut
 2. Shift definitions by UUID/store with independent shift.write, reference checks and explicit shared-scope rules; never update all stores by code.
 3. Blocked days with independent dayoff.write; no bundled phone, role or employee-store authorization editing.
 4. Atomic two-cell swap with both versions checked; no temporary all-zero employee ID.
-5. Week clear with schedule.clear, exact target count and set-version check; do not remove assignments added after confirmation.
+5. Week clear with the actual Web schedule.write authority, exact target count and locked set-version check; do not expand deletion to newly added rows. schedule.clear is registered but not currently enforced by Web; requiring it additionally would be a separate authority-tightening decision, not faithful migration by default.
 6. AI schedule with schedule.ai, candidate preview and explicit adoption; no old privileged direct-write endpoint and no five-day cap.
 7. Existing holiday maintenance retains independent holiday.write.
 

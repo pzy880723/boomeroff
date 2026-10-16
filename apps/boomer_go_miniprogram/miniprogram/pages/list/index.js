@@ -1,23 +1,30 @@
 const { definePage } = require('../../shared/page');
 const model = require('./model');
 const rewards = require('./rewards');
+const knowledgeCategories = require('../../shared/knowledge-categories');
+const official = require('../../shared/official-library');
 
 Page(definePage({
-  data: { kind: '', title: '', query: '', category: '', categories: [], items: [], allItems: [], mastery: 'all', loadedSummary: '', pagingNote: '', isLearningCollection: false, freshness: '', hasMore: false, loadingMore: false, checkin: null, checkingIn: false, checkinNotice: '', rewardSummary: null, rewardOutcomes: [], rewardCounts: {}, rewardTotal: 0, rewardTotalText: '0', rewardProgress: '', rewardNotice: '', rewardRefreshError: '', rewardBusy: false, rewardModal: false, rewardCanClaim: false, rewardNeedsRefresh: false, rewardBatchDate: '' },
+  data: { kind: '', title: '', query: '', category: '', categories: [], items: [], allItems: [], mastery: 'all', loadedSummary: '', pagingNote: '', isLearningCollection: false, freshness: '', hasMore: false, loadingMore: false, checkin: null, checkingIn: false, checkinNotice: '', rewardSummary: null, rewardOutcomes: [], rewardCounts: {}, rewardTotal: 0, rewardTotalText: '0', rewardProgress: '', rewardNotice: '', rewardRefreshError: '', rewardBusy: false, rewardModal: false, rewardCanClaim: false, rewardNeedsRefresh: false, rewardBatchDate: '', isOfficial: false, officialCategoryOptions: knowledgeCategories.OPTIONS, officialCategoryIndex: 0, officialCategoryLabel: '全部分类' },
   onLoad(options) {
     const kind = options.kind || 'my-library';
     const section = model.sections[kind];
     this._hidden = false;
-    this.setData({ kind, title: section ? section.title : '内容暂不可用', isLearningCollection: model.learningCollection(kind) });
+    this.setData(Object.assign({}, official.fields, { kind, title: section ? section.title : '内容暂不可用', isLearningCollection: model.learningCollection(kind) }));
+    if (kind === 'official') official.reset(this, options);
     wx.setNavigationBarTitle({ title: this.data.title });
     return this.load();
   },
-  onShow() { const hidden = this._hidden; this._hidden = false; if (this.data.kind === 'tasks') { if (this._taskIdentity && this._taskIdentity !== model.scope(this)) this.clearTasks(); if (hidden || !this._taskSnapshot) return this.loadTasks(); return; } if (this._request && (!this.data.isLearningCollection || hidden || this._loadedIdentity !== model.scope(this))) return this.load(); },
-  onHide() { if (this.data.kind === 'tasks') { this._hidden = true; this.clearTasks(); } if (this.data.isLearningCollection) model.hideLearning(this); },
-  onUnload() { if (this.data.kind === 'tasks') { this._hidden = true; this.clearTasks(); } if (this.data.isLearningCollection) model.hideLearning(this); this._gone = true; },
+  onShow() { const hidden = this._hidden; this._hidden = false; if (this.data.kind === 'tasks') { if (this._taskIdentity && this._taskIdentity !== model.scope(this)) this.clearTasks(); if (hidden || !this._taskSnapshot) return this.loadTasks(); return; } if (this.isOfficialKnowledge()) { if (hidden || this._loadedIdentity !== model.scope(this) && !(this.data.loading && this._officialReadIdentity === model.scope(this))) return this.load(); return; } if (this._request && (!this.data.isLearningCollection || hidden || this._loadedIdentity !== model.scope(this))) return this.load(); },
+  onHide() { official.discard(this); if (this.data.kind === 'tasks') { this._hidden = true; this.clearTasks(); } if (this.data.isLearningCollection || this.isOfficialKnowledge()) model.hideLearning(this); },
+  onUnload() { official.discard(this); if (this.data.kind === 'tasks') { this._hidden = true; this.clearTasks(); } if (this.data.isLearningCollection || this.isOfficialKnowledge()) model.hideLearning(this); this._gone = true; },
   onPullDownRefresh() { return this.load().finally(() => wx.stopPullDownRefresh()); },
   load() {
     if (this.data.kind === 'tasks') return this.loadTasks();
+    if (this.isOfficialKnowledge()) return official.load(this, model);
+    if (this.isOfficialKnowledge() && (this._gone || this._hidden)) return Promise.resolve();
+    this.syncOfficialCategory();
+    if (this.isOfficialKnowledge()) this._officialReadIdentity = model.scope(this);
     const section = model.sections[this.data.kind];
     const params = Object.assign({}, this.params(), { page: 0 });
     this._cursor = null;
@@ -33,19 +40,33 @@ Page(definePage({
         return;
       }
       this.setData({ items: model.items(data), categories: model.categories(data), freshness: model.freshness(data), hasMore: model.pagination(this, data, 0) });
-    }, { items: [], allItems: [], loadedSummary: '', pagingNote: '', hasMore: false, loadingMore: false, freshness: '', checkin: null, checkinNotice: '' });
+    }, { items: [], allItems: [], learningGroups: [], loadedSummary: '', pagingNote: '', hasMore: false, loadingMore: false, freshness: '', checkin: null, checkinNotice: '' });
   },
   params() { return model.listParams(this.data.kind, this.data.query.trim(), this.data.category); },
-  onSearchInput(event) { this.setData({ query: event.detail.value }); },
+  onSearchInput(event) { if (!this._gone && !this._hidden) this.setData({ query: event.detail.value }); },
   onSearch() { return this.data.isLearningCollection ? model.filterLearning(this) : this.load(); },
   onMastery(event) {
     const mastery = event.currentTarget.dataset.mastery;
     if (['all', 'pending', 'mastered'].indexOf(mastery) < 0) return;
     this.setData({ mastery }); model.filterLearning(this);
   },
-  onCategory(event) { this.setData({ category: event.currentTarget.dataset.id }); return this.load(); },
+  isOfficialKnowledge() { return this.data.kind === 'official'; },
+  syncOfficialCategory() {
+    official.sync(this);
+  },
+  officialCategoryReady() { return official.ready(this, model); },
+  beginOfficialCategory() { official.begin(this, model, 'category'); },
+  onOfficialCategory(event) { return official.choose(this, model, 'category', event); },
+  beginOfficialIP() { official.begin(this, model, 'ip'); },
+  onOfficialIP(event) { return official.choose(this, model, 'ip', event); },
+  onOfficialSort(event) { return official.sort(this, model, event); },
+  onOfficialClear(event) { return official.clear(this, model, event); },
+  onCategory(event) { if (this.data.kind === 'knowledge' || this.isOfficialKnowledge()) return; this.setData({ category: event.currentTarget.dataset.id }); return this.load(); },
   loadMore() {
     if (this.data.kind === 'tasks') return Promise.resolve();
+    if (this.isOfficialKnowledge()) return official.more(this, model);
+    if (this.isOfficialKnowledge() && (this._gone || this._hidden || this.data.loading || this._loadedIdentity !== model.scope(this))) return;
+    this._officialPicker = null;
     return model.loadMore(this, model.sections[this.data.kind].action, this.params());
   },
   taskContext() { return { epoch: this._taskEpoch, identity: model.scope(this) }; },
@@ -194,6 +215,7 @@ Page(definePage({
     if (this.data.kind === 'check-ins') return;
     const id = event.currentTarget.dataset.id;
     const item = this.data.items.find((entry) => entry.id === id);
+    if (this.isOfficialKnowledge() && (!official.ready(this, model) || !item)) return;
     if (this.data.isLearningCollection) return model.openLearning(this, item);
     const kind = this.data.kind === 'my-library' ? model.libraryKind(item) : (this.data.kind === 'conversations' ? 'conversation' : this.data.kind);
     return this.navigate(model.detailUrl(kind, id));

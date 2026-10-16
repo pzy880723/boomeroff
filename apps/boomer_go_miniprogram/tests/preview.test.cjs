@@ -1,4 +1,18 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const{createPreview}=require('../miniprogram/shared/preview');
+test('official category preview uses actual source/category/q fields and exact detail identity rather than unrelated articles',async()=>{
+ const p=createPreview({}),all=await p.api.action('knowledge',{source:'official',page:0,page_size:20});
+ assert.ok(all.items.length>=2);assert.equal(all.persisted,false);assert.equal(all.page_size,20);
+ assert.equal(all.categories,undefined,'official picker options must not depend on fake server categories');
+ assert.ok(all.items.every(row=>/示例/.test(row.name)&&/^[0-9a-f-]{36}$/.test(row.id)));
+ const chosen=all.items[0],same=await p.api.action('knowledge',{source:'official',category:chosen.category,q:chosen.name,page:0,page_size:20});
+ assert.deepEqual(same.items.map(row=>row.id),[chosen.id]);
+ const detail=await p.api.action('knowledge-detail',{kind:'official',id:chosen.id});
+ assert.equal(detail.item.id,chosen.id);assert.equal(detail.item.kind,'official');assert.equal(detail.item.raw.category,chosen.category);
+ assert.deepEqual((await p.api.action('knowledge',{source:'official',category:'missing_fixture'})).items,[]);
+ assert.deepEqual((await p.api.action('knowledge',{source:'official',q:'absent-literal-phrase'})).items,[]);
+ assert.deepEqual((await p.api.action('knowledge',{source:'official',page:1,page_size:20})).items,[]);
+ const products=await p.api.action('knowledge',{source:'product'});assert.ok(products.items.every(row=>!all.items.some(other=>row.id===other.id)));
+});
 test('schedule management preview binds valid synthetic UUIDs, week/cell/candidates and remains read-only',async()=>{
  const p=createPreview({}),user=p.session.get(),shop_id=user.shop.id,uuid=/^[0-9a-f-]{36}$/;
  assert.match(user.userId,uuid);assert.match(shop_id,uuid);

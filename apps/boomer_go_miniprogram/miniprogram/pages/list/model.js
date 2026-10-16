@@ -1,3 +1,4 @@
+const knowledgeCategories = require('../../shared/knowledge-categories');
 const sections = {
   knowledge: { title: '商品知识', action: 'knowledge' },
   official: { title: '官方知识库', action: 'knowledge' },
@@ -64,11 +65,14 @@ function items(data) {
   const firstText = (...values) => values.find((value) => typeof value === 'string' && value.trim()) || '';
   return data.items.map((item) => {
     const snapshot = item.snapshot && typeof item.snapshot === 'object' ? item.snapshot : {};
+    const rawCategory = firstText(item.category, snapshot.category);
+    const categoryLabel = knowledgeCategories.label(rawCategory);
     return {
     id: String(item.id == null ? item.key || '' : item.id),
     title: firstText(item.title, item.name, item.product_name, snapshot.name) || '未命名条目',
     body: firstText(item.summary, item.body, item.description, item.story, snapshot.summary),
-    category: firstText(item.category, snapshot.category),
+    category: rawCategory,
+    categoryLabel: categoryLabel !== rawCategory ? categoryLabel : '',
     cover_url: firstText(item.cover_url, item.image_url, snapshot.cover_url, snapshot.image_url),
     kind: item.kind || '',
     quizKind: item.quiz_kind || (item.favorite_id ? 'favorite' : ''),
@@ -133,6 +137,19 @@ function learningRows(page, data) {
   return rows.map((row, index) => {
     const raw = data.items[index];
     if (raw.user_id != null && raw.user_id !== page.session.get().userId) throw new Error('学习记录身份不一致，请重新加载');
+    if (!history) {
+      const metadata = raw.source_metadata;
+      const current = raw.source_type === 'official' || raw.source_type === 'product';
+      if (current && metadata != null && (!metadata || Object.prototype.toString.call(metadata) !== '[object Object]' || ['name', 'category', 'cover_url'].some(key => metadata[key] !== null && typeof metadata[key] !== 'string'))) throw new Error('知识来源显示信息不完整，请重新读取');
+      const snapshot = raw.snapshot && typeof raw.snapshot === 'object' ? raw.snapshot : {};
+      const text = (...values) => values.find(value => typeof value === 'string' && value.trim()) || '';
+      const source = current && metadata || {};
+      row.title = text(source.name, snapshot.name, raw.title, raw.name, raw.product_name) || '未命名条目';
+      row.category = text(source.category, snapshot.category, raw.category) || 'other';
+      const label = knowledgeCategories.label(row.category); row.categoryLabel = label !== row.category ? label : '';
+      row.cover_url = text(source.cover_url, snapshot.cover_url, snapshot.image_url, raw.cover_url, raw.image_url);
+      row.sourceBadge = raw.source_type === 'official' ? '官方' : (raw.source_type === 'recognition' ? '识别' : (raw.source_type === 'product' ? '历史' : '收藏'));
+    }
     const passedAt = typeof raw.passed_at === 'string' ? formatTime(raw.passed_at) : '';
     const lastAttemptAt = typeof raw.last_attempt_at === 'string' ? formatTime(raw.last_attempt_at) : '';
     const state = raw.passed_at != null ? (passedAt ? 'mastered' : 'unknown')
@@ -159,7 +176,7 @@ function learningRows(page, data) {
 function filterLearning(page) {
   if (page._hidden || page._gone) return;
   if (page._loadedIdentity && page._loadedIdentity !== scope(page)) {
-    page.setData({ items: [], allItems: [], loadedSummary: '', hasMore: false, error: '员工登录身份已变化，请重新加载学习记录' });
+    page.setData({ items: [], allItems: [], learningGroups: [], loadedSummary: '', hasMore: false, error: '员工登录身份已变化，请重新加载学习记录' });
     return;
   }
   const all = page.data.allItems || [];
@@ -170,7 +187,12 @@ function filterLearning(page) {
     && (!query || (row.title + ' ' + row.body).toLowerCase().indexOf(query) >= 0));
   const mastered = all.filter((row) => row.masteryState === 'mastered').length;
   const pending = all.filter((row) => row.masteryState === 'pending').length;
-  page.setData({ items: visible, loadedSummary: '已加载 ' + all.length + ' 条 · 待掌握 ' + pending + ' · 已掌握 ' + mastered + (all.length > mastered + pending ? ' · 状态待确认 ' + (all.length - mastered - pending) : '') });
+  const groups = new Map();
+  if (!history) visible.forEach(row => {
+    if (!groups.has(row.category)) groups.set(row.category, { category: row.category, label: knowledgeCategories.label(row.category), count: 0, items: [], order: groups.size });
+    const group = groups.get(row.category); group.items.push(row); group.count++;
+  });
+  page.setData({ items: visible, learningGroups: Array.from(groups.values()).sort((a, b) => b.count - a.count || a.order - b.order), loadedSummary: '已加载 ' + all.length + ' 条 · 待掌握 ' + pending + ' · 已掌握 ' + mastered + (all.length > mastered + pending ? ' · 状态待确认 ' + (all.length - mastered - pending) : '') });
 }
 
 function showLearning(page, data, requestedPage, append) {
@@ -192,7 +214,7 @@ function openLearning(page, item) {
 function hideLearning(page) {
   page._hidden = true;
   page._request = (page._request || 0) + 1;
-  page.setData({ loadingMore: false });
+  if (page._gone) Object.assign(page.data, { loadingMore: false }); else page.setData({ loadingMore: false });
 }
 
 function quizUrl(kind, id) {

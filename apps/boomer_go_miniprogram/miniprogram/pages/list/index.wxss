@@ -14,6 +14,21 @@
 .category-scroll { white-space: nowrap; width: 100%; margin-bottom: 20rpx; }
 .category { display: inline-block; min-height: 88rpx; line-height: 88rpx; padding: 0 24rpx; margin: 0 16rpx 8rpx 0; font-size: 26rpx; background: #fff; color: #737780; }
 .category.selected { color: #eb0029; background: #ffedf0; }
+.official-category-field { padding: 20rpx 24rpx; margin-bottom: 24rpx; min-height: 88rpx; box-sizing: border-box; border: 1rpx solid #e4e6eb; border-radius: 20rpx; background: #fff; }
+.official-category-caption { font-size: 26rpx; margin-bottom: 12rpx; }
+.official-category-value { justify-content: space-between; align-items: center; font-size: 32rpx; line-height: 1.5; }
+.official-category-control { color: #eb0029; font-size: 28rpx; }
+.official-category-value text:first-child { flex: 1; min-width: 0; word-break: break-all; margin-right: 16rpx; }
+.official-category-control { flex-shrink: 0; }
+.official-sorts { margin: 0 0 24rpx; }
+.official-sorts button { flex: 1; min-width: 0; padding: 0 8rpx; min-height: 88rpx; line-height: 88rpx; font-size: 28rpx; background: #fff; color: #737780; }
+.official-sorts .selected { background: #ffedf0; color: #eb0029; }
+.official-chips button { display: inline-block; max-width: 100%; min-height: 88rpx; line-height: 1.6; padding: 20rpx; margin: 0 12rpx 20rpx 0; white-space: normal; word-break: break-all; background: #ffedf0; color: #a6001d; font-size: 28rpx; }
+.official-window-note, .official-row-metadata { font-size: 26rpx; line-height: 1.7; margin: 12rpx 0 24rpx; word-break: break-all; }
+.library-group-heading { justify-content: space-between; font-size: 34rpx; font-weight: 600; margin: 32rpx 0 20rpx; }
+.library-group-heading .muted { font-size: 26rpx; font-weight: 400; }
+.library-source-row { justify-content: space-between; margin-bottom: 20rpx; }
+.library-source-row .score { margin-top: 0; }
 .entry { padding: 0; overflow: hidden; margin-bottom: 24rpx; }
 .entry-image { width: 100%; height: 280rpx; display: block; background: #e6e8ed; }
 .entry-main { padding: 28rpx; }

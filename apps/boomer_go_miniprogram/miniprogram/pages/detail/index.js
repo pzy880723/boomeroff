@@ -2,6 +2,8 @@ const { definePage } = require('../../shared/page');
 const model = require('../list/model');
 const { businessContent } = require('./content');
 const objective = require('./objective');
+const knowledgeCategories = require('../../shared/knowledge-categories');
+const { urlForFilters } = require('../../shared/official-library');
 const learningKinds = ['knowledge', 'official', 'sop', 'qa', 'training', 'favorite', 'favorites', 'my-library', 'history', 'recognition'];
 function practiceCoordinator() { const app = typeof getApp === 'function' ? getApp() : null; return app && app.dailyPractice; }
 
@@ -13,11 +15,29 @@ function contentNodes(item) {
   return String(body).split('\n').map((text) => ({ name: 'p', children: [{ type: 'text', text }] }));
 }
 
+function officialFilters(raw) {
+  const result = [];
+  for (const key of ['category', 'ip_name', 'era', 'origin']) {
+    if (typeof raw[key] !== 'string' || !raw[key]) continue;
+    const filters = key === 'ip_name' && typeof raw.category === 'string' && raw.category ? { category: raw.category, ip_name: raw[key] } : { [key]: raw[key] };
+    try { result.push({ key, label: key === 'category' ? knowledgeCategories.label(raw[key]) : raw[key], url: urlForFilters(filters) }); }
+    catch (_) { /* Invalid source metadata cannot become a navigation filter. */ }
+  }
+  return result;
+}
+
 Page(definePage({
-  data: { kind: '', id: '', item: null, nodes: '', fields: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], freshness: '', quizUrl: '', unavailable: '', favorite: null, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, canSave: false, canShare: false, busy: false, actionNotice: '', resolvedMessage: '', resolvedUrl: '', keyActionsDraft: '', draftResults: [], messages: [], messageDraft: '', profileNameDraft: '', avatarPreview: '' },
+  data: { kind: '', id: '', item: null, nodes: '', fields: [], officialFilters: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], freshness: '', quizUrl: '', unavailable: '', favorite: null, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, canSave: false, canShare: false, busy: false, actionNotice: '', resolvedMessage: '', resolvedUrl: '', keyActionsDraft: '', draftResults: [], messages: [], messageDraft: '', profileNameDraft: '', avatarPreview: '' },
   onLoad(options) { this._hidden = false; this._practiceRequested = options.practice === '1'; this.setData({ kind: options.kind || 'knowledge', id: options.id || '', practiceRequested: this._practiceRequested }); this.syncPractice(); return this.load(); },
   onShow() { const hidden = this._hidden; this._hidden = false; this._practiceRedirecting = false; this.syncPractice(); if (this.data.kind === 'objectives') { if (hidden || this._objectiveIdentity !== model.scope(this)) return this.loadObjective(); return; } if (this._request && (this._identity !== model.scope(this) || (hidden && learningKinds.indexOf(this.data.kind) >= 0))) return this.load(); },
-  onHide() { if (this.data.kind === 'objectives') { this._hidden = true; this.clearObjective(); } if (learningKinds.indexOf(this.data.kind) >= 0) { model.hideLearning(this); this.setData({ quizUrl: '' }); } },
+  onHide() {
+    if (this.data.kind === 'objectives') { this._hidden = true; this.clearObjective(); }
+    if (learningKinds.indexOf(this.data.kind) >= 0) {
+      model.hideLearning(this);
+      this._officialLinks = [];
+      if (this._gone) Object.assign(this.data, { quizUrl: '', officialFilters: [] }); else this.setData({ quizUrl: '', officialFilters: [] });
+    }
+  },
   onUnload() { this.onHide(); this._gone = true; },
   onPullDownRefresh() { return Promise.resolve(this.data.kind === 'objectives' ? this.reloadObjective() : this.load()).finally(() => wx.stopPullDownRefresh()); },
   load() {
@@ -26,6 +46,8 @@ Page(definePage({
     const section = model.sections[kind];
     if (learningKinds.indexOf(kind) >= 0) this.setData({ learningNotice: '' });
     this._identity = model.scope(this);
+    this._officialLinks = [];
+    this._officialId = '';
     this._productId = '';
     this._favoriteTargetId = '';
     this._favoriteRowId = '';
@@ -76,6 +98,8 @@ Page(definePage({
       }
       if (!item) return;
       const raw = item.raw && typeof item.raw === 'object' ? item.raw : {};
+      this._officialLinks = kind === 'official' ? officialFilters(Object.assign({}, raw, { category: raw.category || item.category })) : [];
+      this._officialId = kind === 'official' ? this.data.id : '';
       const favorite = raw.favorite && typeof raw.favorite === 'object' ? raw.favorite : {};
       const source = raw.source && typeof raw.source === 'object' ? raw.source : {};
       const isFavorite = ['favorite', 'favorites', 'my-library'].indexOf(kind) >= 0 || item.kind === 'favorite';
@@ -116,7 +140,8 @@ Page(definePage({
       const favoriteRowId = isFavorite ? favorite.id || raw.favorite_id || (item.kind === 'favorite' ? item.id : '') : '';
       this._favoriteRowId = typeof favoriteRowId === 'string' ? favoriteRowId : '';
       this.setData({
-        item: { id: item.id || this.data.id, title: item.title || section.title, category: kind === 'notifications' ? model.notificationCategory(item.category) : item.category || raw.category || section.title, author: item.author_name || '', cover_url: item.cover_url || '' },
+        item: { id: item.id || this.data.id, title: item.title || section.title, category: kind === 'notifications' ? model.notificationCategory(item.category) : (kind === 'official' ? knowledgeCategories.label(item.category || raw.category) : item.category || raw.category) || section.title, author: item.author_name || '', cover_url: item.cover_url || '' },
+        officialFilters: this._officialLinks.map(link => ({ key: link.key, label: link.label })),
         nodes: contentNodes(Object.assign({}, item, { body: item.body || business.body })), fields, businessSections: business.sections, gallery: business.gallery, backstampUrl: business.backstampUrl, videoUrl: business.videoUrl,
         results, freshness: model.freshness(Object.assign({}, raw, item)), quizUrl: quizAllowed ? model.quizUrl(item.quiz_kind, item.id || this.data.id) : '',
         favorite: typeof raw.is_favorite === 'boolean' ? raw.is_favorite : (typeof item.is_favorite === 'boolean' ? item.is_favorite : (typeof item.favorite === 'boolean' ? item.favorite : (['favorite', 'favorites', 'my-library'].indexOf(kind) >= 0 ? true : null))),
@@ -124,7 +149,13 @@ Page(definePage({
         keyActionsDraft: item.key_actions || '', draftResults: results.map((result) => ({ title: result.title, completed: result.completed }))
       });
       wx.setNavigationBarTitle({ title: item.title || section.title });
-    }, { item: null, nodes: '', fields: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], quizUrl: '', canSave: false, canShare: false, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, freshness: '', unavailable: '', actionNotice: '', resolvedMessage: '', resolvedUrl: '', messages: [] });
+    }, { item: null, nodes: '', fields: [], officialFilters: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], quizUrl: '', canSave: false, canShare: false, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, freshness: '', unavailable: '', actionNotice: '', resolvedMessage: '', resolvedUrl: '', messages: [] });
+  },
+  openOfficialFilter(event) {
+    if (this._hidden || this._gone || this.data.loading || this.data.error || this.data.kind !== 'official' || this.data.id !== this._officialId || model.scope(this) !== this._loadedIdentity) return;
+    const key = event.currentTarget.dataset.key;
+    const link = (this._officialLinks || []).find(item => item.key === key);
+    if (link) return this.navigate(link.url);
   },
   openQuiz(event) {
     if (this._hidden || this._gone || model.scope(this) !== this._loadedIdentity || !this.data.quizUrl || event.currentTarget.dataset.url !== this.data.quizUrl) return;
