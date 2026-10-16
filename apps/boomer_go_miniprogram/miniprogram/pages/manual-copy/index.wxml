@@ -1,0 +1,35 @@
+<view class="page manual-copy-page">
+  <view wx:if="{{preview}}" class="preview-banner">合成预览 · 草稿可编辑，保存、删除和真实核对已关闭</view>
+  <view class="eyebrow">BOOMER / MATERIALS</view>
+  <view class="heading-row"><view class="title">手动文案</view><text class="chip">{{assetId ? '已有文案' : '新建'}}</text></view>
+  <view class="muted shop-name">{{shopName}}</view>
+  <view class="scope-note">本人 · 当前门店 · 仅文字素材。不调用 AI，不发起发布。</view>
+  <view wx:if="{{loading}}" class="card loading-state">正在核对当前账号与文案…</view>
+  <view wx:if="{{error}}" class="card error"><view>{{error}}</view><button wx:if="{{!pending && !saved}}" class="button-secondary" bindtap="reloadLatest" disabled="{{loading || sending || confirming}}">重新读取</button></view>
+  <view wx:if="{{notice && !preview}}" class="notice {{saved ? 'confirmed-notice' : ''}}">{{notice}}</view>
+  <view wx:if="{{pending}}" class="card pending-card">
+    <view class="section-title">{{receiptConfirmed ? '已收到匹配返回' : '原操作待确认'}}</view>
+    <view class="muted intent-id" selectable>{{assetId}}</view>
+    <view class="muted">仅在本次 App 进程内保留原操作。进程退出后无法保证恢复，不代表持久回执或恰好执行一次。</view>
+    <button class="button-secondary" bindtap="reconcile" disabled="{{preview || loading || sending || confirming}}" loading="{{loading}}">只读核对原操作</button>
+  </view>
+  <view wx:if="{{conflict}}" class="card conflict-card"><view class="section-title">内容已变化</view><view class="muted">本地草稿未覆盖。请明确放弃草稿并载入最新内容，再决定是否修改。</view></view>
+  <view wx:if="{{editable || pending || saved || conflict}}" class="card editor-card">
+    <view wx:if="{{candidateNames.length > 1}}" class="candidate-section">
+      <view class="field-label">选择已有候选</view>
+      <picker range="{{candidateNames}}" value="{{candidateIndex}}" bindchange="onCandidate" disabled="{{!editable || sending || confirming}}"><view class="field candidate-picker">{{candidateNames[candidateIndex]}}<text>⌄</text></view></picker>
+      <view class="muted input-help">仅修改选中候选，其他候选、原有标签和未知字段保持不变。</view>
+    </view>
+    <view class="field-label">标题<text class="muted">可留空</text></view>
+    <input class="field title-input" value="{{title}}" bindinput="onTitle" maxlength="-1" placeholder="为这条文案起个标题" disabled="{{!editable || sending || confirming}}" />
+    <view class="muted input-count">{{titleCount}} / 60</view>
+    <view class="field-label">正文</view>
+    <textarea class="field body-input" value="{{body}}" bindinput="onBody" maxlength="-1" placeholder="输入已经确认的文案正文" disabled="{{!editable || sending || confirming}}" />
+    <view class="muted input-count">{{bodyCount}} / 1000 · 超长会保留草稿，不会截断</view>
+    <view wx:if="{{validation && editable}}" class="validation">{{validation}}</view>
+    <button wx:if="{{!saved && !pending}}" class="button save-button" bindtap="save" disabled="{{!canSave || loading || sending || confirming}}" loading="{{sending}}">确认保存</button>
+    <button wx:if="{{!saved && !pending && assetId}}" class="button-secondary delete-button" bindtap="remove" disabled="{{!canDelete || loading || sending || confirming}}">删除这条文案</button>
+    <button wx:if="{{!saved && !pending}}" class="button-secondary reload-button" bindtap="reloadLatest" disabled="{{loading || sending || confirming}}">放弃草稿并载入最新内容</button>
+  </view>
+  <button class="button-secondary library-button" bindtap="returnLibrary" disabled="{{confirming}}">返回素材库</button>
+</view>

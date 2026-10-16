@@ -28,6 +28,11 @@ Page(definePage({
   onUnload() { this.persistDraftInBackground(); this.invalidateAssetReads(); this._disposed = true; this._epoch++; this.stopPolling(); },
   invalidateAssetReads() { this._assetReads = {}; this._referenceSave = null; this.setData({ libraryLoading: false, referenceLoading: false }); },
   shopId() { const session = this.session.get(); if (!session || !session.shop || !session.shop.id) throw new Error('请先登录并绑定门店'); return session.shop.id; },
+  newManualCopy() {
+    if (this._disposed || !this._visible || this._scope !== scopeKey(this.session)) return;
+    const user = this.session.get();
+    if (user && user.shop && user.shop.id) return this.navigate('/pages/manual-copy/index');
+  },
   stopPolling() { if (this._timer) clearTimeout(this._timer); this._timer = null; },
   schedulePoll() {
     this.stopPolling();

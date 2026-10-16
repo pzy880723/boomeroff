@@ -5,14 +5,15 @@
   <view wx:if="{{loading}}" class="muted">正在与服务端确认…</view>
   <block wx:if="{{asset}}">
     <view class="section-title">{{asset.title}}</view><view class="muted">{{asset.statusLabel}} · 只领取服务端已保存的原素材</view>
+    <button wx:if="{{asset.canEditManual}}" class="button-secondary" bindtap="openManualCopy" disabled="{{loading}}">编辑这条手工文案</button>
     <view wx:if="{{asset.sourceError}}" class="error">{{asset.sourceError}}</view>
-    <view class="card media-card">
+    <view wx:if="{{asset.kind !== 'copy'}}" class="card media-card">
       <video wx:if="{{asset.videoUrl}}" src="{{asset.videoUrl}}" poster="{{asset.coverUrl}}" controls class="asset-video" />
       <image wx:if="{{asset.imageUrl}}" src="{{asset.imageUrl}}" mode="widthFix" class="asset-image" />
       <view wx:if="{{!asset.ready && !asset.sourceError && asset.kind !== 'copy'}}" class="empty">当前尚无可领取的完整文件，请返回视频任务刷新进度。</view>
       <button wx:if="{{asset.ready}}" class="button" bindtap="saveVideo" disabled="{{loading}}">{{asset.kind === 'video' ? '保存原视频到相册' : '保存原图片到相册'}}</button>
     </view>
-    <view class="card"><view class="section-title">视频封面</view><view wx:if="{{asset.coverError}}" class="error">{{asset.coverError}}</view><image wx:if="{{asset.coverUrl}}" src="{{asset.coverUrl}}" mode="widthFix" class="asset-cover" /><view wx:elif="{{!asset.coverError}}" class="empty">服务端尚未提供独立封面</view><button wx:if="{{asset.coverUrl}}" class="button-secondary" bindtap="saveCover" disabled="{{loading}}">保存独立封面</button></view>
+    <view wx:if="{{asset.kind !== 'copy'}}" class="card"><view class="section-title">视频封面</view><view wx:if="{{asset.coverError}}" class="error">{{asset.coverError}}</view><image wx:if="{{asset.coverUrl}}" src="{{asset.coverUrl}}" mode="widthFix" class="asset-cover" /><view wx:elif="{{!asset.coverError}}" class="empty">服务端尚未提供独立封面</view><button wx:if="{{asset.coverUrl}}" class="button-secondary" bindtap="saveCover" disabled="{{loading}}">保存独立封面</button></view>
     <view class="card"><view class="section-title">已保存文案</view><text wx:if="{{asset.copyText}}" selectable class="copy-text">{{asset.copyText}}</text><view wx:else class="empty">暂无已保存文案，不会自动编造</view><button wx:if="{{asset.copyText}}" class="button-secondary" bindtap="copyText" disabled="{{loading}}">复制完整文案</button></view>
     <view wx:if="{{asset.kind === 'video' && asset.ready && !publishJobId}}" class="card">
       <view class="section-title">提交门店发布任务</view><view class="muted">手动确认文案和账号，提交队列不等于平台发布成功。</view>

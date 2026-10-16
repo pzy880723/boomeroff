@@ -1,6 +1,6 @@
 # Current Native Migration State
 
-2026-10-16. Current source has 26 native routes and exactly five tabs: 工作台 / 学习 / 识物 / 消息 / 我的. The activity editor is an isolated development preview, not an accepted production entry. This matrix supersedes historical counts and open items in FEATURE_PARITY.md; it does not supersede the detailed evidence in VERIFICATION.md. Base Web comparison is fixed GO ref `813c12840f12a904fd07e6bc3a8bb08359b01090`; publish-history and growth follow-up also read fixeda4d6edb0.
+2026-10-16. Current source has 27 native routes and exactly five tabs: 工作台 / 学习 / 识物 / 消息 / 我的. The activity editor is an isolated development preview, not an accepted production entry. This matrix supersedes historical counts and open items in FEATURE_PARITY.md; it does not supersede the detailed evidence in VERIFICATION.md. Base Web comparison is fixed GO ref `813c12840f12a904fd07e6bc3a8bb08359b01090`; publish-history, growth and manual-copy follow-up also read fixeda4d6edb0.
 
 | Area | Native implementation | Remaining acceptance or migration |
 | --- | --- | --- |
@@ -17,6 +17,7 @@
 | Communication | Notifications, confirmed read state, staff contacts/conversations/text/original attachments, community detail/like/comment | Real two-employee and legacy Web attachment interoperability; notification/content administration remain |
 | Recognition | Native multi-shot tray up to five, recognition story/selling points, explicit cloud save; identity-bound loaded-history text search with real paging; saved-photo fallback in existing authorized detail gallery; exact receipt/source-verified personal collection and explicit native reading, known-ID read-only reconciliation | Collection receipt is page RAM only, not persistent/exactly-once. Real camera/privacy/AI/save/media acceptance; category/material/craft search, admin all-history capability, full history editing/removal, AI-card/refinement/realtime and local-note parity remain. See RECOGNITION_HISTORY_PREFLIGHT.md |
 | Video | Unified script/reference/video job, exit/resume, separate original video/cover/frozen copy delivery, existing-account publishing queue/status; native current-store latest50 publishing records and inline exact-ID read-only status recovery | Real paid generation/device album and caller-RLS/status acceptance; complete/realtime history, historical retry/cancel integration, original asset upload/management and account lifecycle remain |
+| Manual copy materials | Native library creation and caller-owned current-store manual text editing/removal, candidate selection, explicit confirmation and independent exact-ID readback; existing caller-JWT/RLS, no model call or separate AI-copy menu | Synthetic tests/preview only; real employee CRUD acceptance remains. Output-text equality is not a full-row version CAS. Unknown intent survives page unload only in scoped App RAM, not process restart; absent row alone never confirms unknown deletion. Generated/other-user/admin bulk asset management is not included |
 
 ## Priorities
 

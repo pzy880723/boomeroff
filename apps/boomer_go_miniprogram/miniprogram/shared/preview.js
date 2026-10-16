@@ -32,6 +32,13 @@ function createPreview(wx) {
   ];
   const bootstrap = { date, profile, staff_profile: profile, user_role: { role_code: 'staff' }, shop_context: { date, scope: 'store', status: 'scheduled', effective_shop: shop, authorized_shops: [shop] }, shifts: [{ id: 'example-shift', work_date: date, shift_code: 'early', shop_id: shop.id }], shift_definitions: [{ shop_id:shop.id, code: 'early', name: '早班', start_time: '10:00', end_time: '18:00' }], shift: { title:'早班',start_time:'10:00',end_time:'18:00',shop_name:shop.name }, tasks:[{id:'example-task',title:'检查价签与品相说明',status:'示例待办'}], learning:[articles[0]], okrs: [], checked_today: false };
   const current = { userId: '00000000-0000-4000-8000-000000000902', profile, shop, shops: [shop], isHeadquarters: false, bootstrap, permissions: [], scopeFresh: true };
+  const manualCopy = { id: '00000000-0000-4000-8000-000000000861', user_id: current.userId, shop_id: shop.id, kind: 'copy', created_at: stamp,
+    output_text: JSON.stringify([{ title: '把好物故事讲清楚（手工文案示例）', body: '先看器型与花纹，再核对实物品相和门店价签。这是原生素材库的合成示例，不是真实发布文案。', hashtags: ['中古杂货'], platform: 'example' },
+      { title: '分享一种发现好物的快乐（示例）', body: '发现喜欢的小物，先认真观察，再慢慢挑选。合成示例，仅用于检查候选文案切换。', hashtags: ['门店好物'] }]), meta: { source: 'manual_upload', asset_class: 'upload' } };
+  const readManualCopy = async id => {
+    if (id !== manualCopy.id) throw Object.assign(new Error('该手工文案示例不存在'), { status: 404, code: 'not_found' });
+    return JSON.parse(JSON.stringify(manualCopy));
+  };
   const publishJob = { id: '00000000-0000-4000-8000-000000000851', shop_id: shop.id, title: '瓷器好物探店（发布示例）', kind: 'video', status: 'partial', created_at: stamp, schedule_at: null,
     social_publish_targets: [{ platform: 'xiaohongshu' }, { platform: 'douyin' }] };
   const publishTargets = [
@@ -349,10 +356,13 @@ function createPreview(wx) {
     if (name === 'my-library') return { items: params.page ? [] : library.map(row => Object.assign({}, row)), page: params.page || 0, page_size: 20, has_more: false, as_of: stamp };
     if (name === 'practice-library') return { items: library.map(row => Object.assign({}, row)), window_limit: 300, has_older: false, as_of: stamp };
     if (name === 'scan-history') return { items: params.page ? [] : [Object.assign({}, recognition)], page: params.page || 0, page_size: 20, has_more: false, as_of: stamp, persisted: false };
-    if (['vouchers', 'marketing-assets', 'conversation-list', 'conversation-messages'].includes(name)) return { items: [], as_of: stamp };
+    if (name === 'marketing-assets') return { items: params.page || params.kind && params.kind !== 'copy' ? [] : [await readManualCopy(manualCopy.id)], page: params.page || 0, page_size: params.page_size || 20, has_more: false, as_of: stamp, persisted: false };
+    if (name === 'marketing-detail') return { item: await readManualCopy(params.id), persisted: false };
+    if (['vouchers', 'conversation-list', 'conversation-messages'].includes(name)) return { items: [], as_of: stamp };
     return unavailable();
   }
   return { session, api: { action, invoke: unavailable, assistant: unavailable, uploadChatAttachment: unavailable, openChatAttachment: unavailable,
+    manualCopyRead: readManualCopy, manualCopyWrite: unavailable,
     publishHistory: async () => publishingRead.history([publishJob], shop.id),
     publishStatus: async id => { if (id !== publishJob.id) throw new Error('该发布任务示例不存在'); return publishingRead.detail({ job: publishJob, targets: publishTargets }, shop.id, id); },
     inspectPublicationFile: unavailable, createPublicationUpload: unavailable, transferPublicationFile: unavailable, commitPublicationUpload: unavailable, publicationUploadStatus: unavailable,

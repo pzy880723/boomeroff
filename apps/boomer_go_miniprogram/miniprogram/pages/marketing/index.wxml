@@ -65,6 +65,7 @@
   </block>
   <block wx:else>
     <view class="row"><view class="section-title">门店素材库</view><button class="button-secondary" bindtap="loadLibrary" disabled="{{loading}}">刷新</button></view>
+    <button class="button-secondary" bindtap="newManualCopy" disabled="{{loading}}">新增手工文案</button>
     <view wx:if="{{libraryError}}" class="error">{{libraryError}}</view>
     <button wx:if="{{libraryError && libraryPage < 0}}" class="button-secondary" bindtap="loadLibrary" disabled="{{loading || libraryLoading}}">重试加载素材库</button>
     <view wx:if="{{libraryLoading}}" class="muted">正在加载素材…</view>

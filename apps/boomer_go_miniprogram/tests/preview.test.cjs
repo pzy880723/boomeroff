@@ -1,4 +1,19 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const{createPreview}=require('../miniprogram/shared/preview');
+test('manual copy preview is an explicit scoped sample and never saves or deletes',async()=>{
+ const p=createPreview({}),user=p.session.get();
+ const list=await p.api.action('marketing-assets',{page:0,page_size:20});
+ const item=list.items.find(row=>row.kind==='copy');assert.ok(item);assert.match(item.output_text,/示例/);
+ assert.equal(item.user_id,user.userId);assert.equal(item.shop_id,user.shop.id);assert.equal(item.meta.source,'manual_upload');
+ const row=await p.api.manualCopyRead(item.id);assert.equal(row.id,item.id);assert.equal(row.meta.asset_class,'upload');
+ row.meta.source='changed';assert.equal((await p.api.manualCopyRead(item.id)).meta.source,'manual_upload');
+ assert.equal((await p.api.action('marketing-detail',{id:item.id})).item.id,item.id);
+ assert.deepEqual((await p.api.action('marketing-assets',{kind:'photo',page:0})).items,[]);
+ assert.deepEqual((await p.api.action('marketing-assets',{page:1})).items,[]);
+ await assert.rejects(p.api.manualCopyRead('missing'));
+ await assert.rejects(p.api.action('marketing-detail',{id:'missing'}));
+ await assert.rejects(p.api.manualCopyWrite({operation:'create'}));
+ assert.equal((await p.api.manualCopyRead(item.id)).meta.source,'manual_upload');
+});
 test('official category preview uses actual source/category/q fields and exact detail identity rather than unrelated articles',async()=>{
  const p=createPreview({}),all=await p.api.action('knowledge',{source:'official',page:0,page_size:20});
  assert.ok(all.items.length>=2);assert.equal(all.persisted,false);assert.equal(all.page_size,20);

@@ -9,32 +9,57 @@ Page(definePage({
   data: { id: '', asset: null, loaded: false, notice: '', accounts: [], accountsLoaded: false, selectedAccountIds: [], publishTitle: '', publishBody: '', publishTags: '', publishJobId: '', publishJob: null, targets: [] },
   onLoad(options) {
     this._disposed = false;
+    this._visible = true;
     this._scope = scopeKey(this.session);
     this.setData({ id: options.id || '', publishJobId: options.jobId || '' });
     return this.data.id ? this.load() : this.data.publishJobId ? this.refreshPublish() : this.run(async () => { throw new Error('缺少素材或发布任务标识'); });
   },
   onShow() {
+    const hidden = this._visible === false;
+    this._visible = true;
     const scope = scopeKey(this.session);
     if (scope !== this._scope) this.setData({ asset: null, loaded: false, accounts: [], accountsLoaded: false, selectedAccountIds: [], publishTitle: '', publishBody: '', publishTags: '', publishJobId: '', publishJob: null, targets: [], notice: '', error: '' });
     this._scope = scope;
-    if (!this.data.loaded && this.data.id) return this.load();
+    if (this.data.id && (!this.data.loaded || hidden && this.data.asset && this.data.asset.kind === 'copy')) return this.load();
     if (this.data.publishJobId) return this.refreshPublish();
   },
-  onUnload() { this._disposed = true; },
+  onHide() { this._visible = false; this._manualCopyContext = null; this._assetLoad = null; },
+  onUnload() { this.onHide(); this._disposed = true; },
   async fetchAsset() {
     const scope = scopeKey(this.session);
     const response = checked(await this.api.action('marketing-detail', { id: this.data.id }), '素材暂不可用');
-    if (this._disposed || scope !== scopeKey(this.session)) return null;
+    if (this._disposed || !this._visible || scope !== scopeKey(this.session)) return null;
     const row = response.item;
     if (!row || !row.id || row.id !== this.data.id) throw new Error('素材已撤回或暂无访问权限');
-    return assetView(row);
+    const asset = assetView(row), user = this.session.get();
+    asset.canEditManual = !!(user && user.shop && row.user_id === user.userId && row.shop_id === user.shop.id && row.kind === 'copy' && row.meta && row.meta.source === 'manual_upload' && row.meta.asset_class === 'upload');
+    return asset;
   },
   load() {
-    return this.run(async () => {
-      const asset = await this.fetchAsset();
-      if (!asset || this._disposed) return;
-      this.setData({ asset, loaded: true, publishTitle: asset.copyTitle, publishBody: asset.copyBody, publishTags: asset.copyTags.join(' ') });
-    });
+    if (this._disposed || !this._visible) return;
+    const scope = scopeKey(this.session);
+    if (this._assetLoad && this._assetLoad.scope === scope) return this._assetLoad.promise;
+    const read = { scope };
+    this._assetLoad = read;
+    this._manualCopyContext = null;
+    if (this.data.asset && this.data.asset.kind === 'copy') this.setData({ asset: null, loaded: false, publishTitle: '', publishBody: '', publishTags: '' });
+    read.promise = this.run(async () => {
+      try {
+        const asset = await this.fetchAsset();
+        if (!asset || this._disposed || !this._visible || this._assetLoad !== read || scope !== scopeKey(this.session)) return;
+        this._manualCopyContext = asset.canEditManual ? { id: asset.id, scope } : null;
+        this.setData({ asset, loaded: true, publishTitle: asset.copyTitle, publishBody: asset.copyBody, publishTags: asset.copyTags.join(' ') });
+      } catch (error) {
+        if (this._disposed || !this._visible || this._assetLoad !== read || scope !== scopeKey(this.session)) return;
+        throw error;
+      }
+    }).finally(() => { if (this._assetLoad === read) this._assetLoad = null; });
+    return read.promise;
+  },
+  openManualCopy() {
+    const context = this._manualCopyContext;
+    if (this._disposed || !this._visible || this.data.loading || !context || context.scope !== scopeKey(this.session) || context.id !== this.data.id) return;
+    return this.navigate('/pages/manual-copy/index?id=' + encodeURIComponent(context.id));
   },
   saveVideo() { return this.saveOriginal(false); },
   saveCover() { return this.saveOriginal(true); },

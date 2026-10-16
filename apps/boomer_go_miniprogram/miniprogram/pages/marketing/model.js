@@ -42,7 +42,11 @@ function assetView(row) {
     try {
       const parsed = JSON.parse(text(row.output_text));
       copy = copyFrom(Array.isArray(parsed) ? parsed[0] : parsed);
-    } catch (_) { copy = { title: '', body: text(row.output_text), tags: [], fullText: text(row.output_text) }; }
+    } catch (_) {
+      const title = meta.source === 'manual_upload' && Array.isArray(meta.candidates) ? text(meta.candidates[0] && meta.candidates[0].title) : '';
+      const body = text(row.output_text);
+      copy = { title, body, tags: [], fullText: [title, body].filter(Boolean).join('\n\n') };
+    }
   }
   const source = mediaSource(row.output_url);
   const cover = mediaSource(meta.poster_url || meta.cover_url || row.cover_url);
@@ -63,7 +67,7 @@ function assetView(row) {
     id: row.id, kind: row.kind, title: text(row.title) || copy.title || text(meta.title || meta.topic) || '未命名素材',
     originalUrl: url, videoUrl: row.kind === 'video' && ready ? url : '', coverUrl: coverError ? '' : cover.url, sourceError, coverError,
     imageUrl: row.kind === 'photo' && ready ? url : '', copyText: copy.fullText, copyTitle: copy.title, copyBody: copy.body, copyTags: copy.tags,
-    ready, status, statusLabel: sourceError || (ready ? '可领取' : ({ queued: '排队中', running: '生成中', stitching: '待拼接', failed: '生成失败', expired: '链接已过期', cancelled: '已取消' }[status] || '尚未完成')),
+    ready, status, statusLabel: sourceError || (row.kind === 'copy' && copy.fullText && !status ? '文案已保存' : ready ? '可领取' : ({ queued: '排队中', running: '生成中', stitching: '待拼接', failed: '生成失败', expired: '链接已过期', cancelled: '已取消' }[status] || '尚未完成')),
   };
 }
 function renderView(response) {
