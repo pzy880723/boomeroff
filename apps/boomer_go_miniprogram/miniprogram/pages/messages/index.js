@@ -1,23 +1,29 @@
 const { definePage } = require('../../shared/page');
 const model = require('../list/model');
 const dm = require('./dm');
+const { banner } = require('../../shared/notification-read');
+const notificationTypes = [{ value: 'all', label: '全部类型' }, { value: 'announcement', label: '公告' }, { value: 'policy', label: '制度' }, { value: 'activity', label: '活动' }, { value: 'urgent', label: '紧急' },
+  { value: 'store_update', label: '门店动态' }, { value: 'store_open', label: '新店开业' }, { value: 'hot_item', label: '好物推荐' }, { value: 'official_event', label: '官方活动' }, { value: 'industry', label: '行业资讯' }, { value: 'staff_story', label: '伙伴故事' }];
 
 function notificationItems(data) {
-  return model.items(data).map((item) => Object.assign({}, item, { category: model.notificationCategory(item.category) }));
+  const raw = new Map((data.items || []).map(row => [String(row.id), row]));
+  return model.items(data).map((item) => Object.assign({}, item, { category: model.notificationCategory(item.category), isNews: item.category === 'news',
+    notificationType: raw.get(item.id).type || '', cover_url: banner(item.cover_url) }));
 }
 function conversationHead(data) {
   return JSON.stringify([data.total_at_snapshot, data.unread_total, data.items.map((row) => [row.peer && row.peer.user_id, row.last_message && row.last_message.id, row.unread_count])]);
 }
 
 Page(definePage({
-  data: { section: 'notifications', peopleItems: [], contactGroups: [], contactQuery: '', dmHasMore: false, dmUnreadTotal: null, dmTotal: null, dmSyncError: '', conversationUpdate: false, conversationExpired: false, readNotice: '', items: [], visibleItems: [], filter: 'all', unread: 0, marking: false, freshness: '', hasMore: false, loadingMore: false, moreError: '' },
-  onLoad() { this._visible = true; this._epoch = 0; this._scope = model.scope(this); this._initialShow = true; return this.load(); },
+  data: { section: 'notifications', canManageNotifications: false, notificationGroup: 'all', notificationQuery: '', notificationTypes, notificationTypeIndex: 0, peopleItems: [], contactGroups: [], contactQuery: '', dmHasMore: false, dmUnreadTotal: null, dmTotal: null, dmSyncError: '', conversationUpdate: false, conversationExpired: false, readNotice: '', items: [], visibleItems: [], filter: 'all', unread: 0, marking: false, freshness: '', hasMore: false, loadingMore: false, moreError: '' },
+  onLoad() { this._visible = true; this._epoch = 0; this._scope = model.scope(this); this._initialShow = true; this.syncManageEntry(); return this.load(); },
   onShow() {
     if (this._initialShow) { this._initialShow = false; return; }
     this._visible = true;
+    this.syncManageEntry();
     if (this._scope !== model.scope(this)) {
       this._conversationSnapshot = null; this._conversationTotal = null; this._conversationHead = null; this._peopleNext = 0;
-      this.setData({ items: [], visibleItems: [], peopleItems: [], contactGroups: [], unread: 0, dmUnreadTotal: null, dmTotal: null, dmHasMore: false, conversationUpdate: false, conversationExpired: false, contactQuery: '' });
+      this.setData({ items: [], visibleItems: [], peopleItems: [], contactGroups: [], unread: 0, dmUnreadTotal: null, dmTotal: null, dmHasMore: false, conversationUpdate: false, conversationExpired: false, contactQuery: '', notificationQuery: '', notificationTypeIndex: 0, notificationGroup: 'all' });
     }
     this._scope = model.scope(this);
     if (this.data.section === 'conversations' && this.data.conversationExpired) return;
@@ -28,7 +34,13 @@ Page(definePage({
   pause() {
     this._visible = false; this._epoch = (this._epoch || 0) + 1; this._request = (this._request || 0) + 1;
     clearTimeout(this._timer); this._peopleFlight = null; this._marking = null;
-    if (!this._gone) this.setData({ loading: false, loadingMore: false, marking: false });
+    if (!this._gone) this.setData({ loading: false, loadingMore: false, marking: false, canManageNotifications: false });
+  },
+  manageEntryAllowed() { const user = this.session.get(); return this.preview === true || !!(user && user.scopeFresh === true && Array.isArray(user.permissions) && user.permissions.includes('role.manage')); },
+  syncManageEntry() { this._manageIdentity = model.scope(this); this.setData({ canManageNotifications: this.manageEntryAllowed() }); },
+  openNotificationManage() {
+    if (this._gone || this._visible === false || this._manageIdentity !== model.scope(this) || !this.manageEntryAllowed()) return;
+    return this.navigate('/pages/notification-manage/index');
   },
   onSection(event) {
     const section = event.currentTarget.dataset.section;
@@ -149,8 +161,14 @@ Page(definePage({
   },
   applyFilter() {
     const entries = this.data.items;
-    this.setData({ unread: entries.filter((item) => !item.read).length, visibleItems: this.data.filter === 'unread' ? entries.filter((item) => !item.read) : entries.slice() });
+    const query = this.data.notificationQuery.trim().toLowerCase(), type = notificationTypes[this.data.notificationTypeIndex].value;
+    this.setData({ unread: entries.filter((item) => !item.read).length, visibleItems: entries.filter(item => (this.data.filter !== 'unread' || !item.read)
+      && (this.data.notificationGroup === 'all' || (this.data.notificationGroup === 'news' ? item.isNews : !item.isNews)) && (type === 'all' || item.notificationType === type)
+      && (!query || (item.title + ' ' + item.body).toLowerCase().includes(query))) });
   },
+  onNotificationGroup(event) { const group = event.currentTarget.dataset.group; if (!['all', 'notice', 'news'].includes(group) || this._visible === false || this._gone) return; this.setData({ notificationGroup: group }); this.applyFilter(); },
+  onNotificationSearch(event) { if (this._visible === false || this._gone) return; this.setData({ notificationQuery: event.detail.value }); this.applyFilter(); },
+  onNotificationType(event) { const index = Number(event.detail.value); if (!Number.isInteger(index) || !notificationTypes[index] || this._visible === false || this._gone) return; this.setData({ notificationTypeIndex: index }); this.applyFilter(); },
   onFilter(event) { this.setData({ filter: event.currentTarget.dataset.kind }); this.applyFilter(); },
   markRead(event) { return this.writeRead([String(event.currentTarget.dataset.id)]); },
   async markAll() {

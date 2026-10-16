@@ -1,4 +1,5 @@
 const { restRequest: manualCopyRequest } = require('./manual-copy-api');
+const { restRequest: notificationManageRequest } = require('./notification-manage-api');
 const MESSAGES = {
   otp_invalid: '验证码不正确，请重新输入', otp_expired: '验证码已过期，请重新获取', otp_already_used: '验证码已使用，请重新获取',
   phone_not_registered: '手机号尚未关联员工，请联系总部', sms_send_failed: '短信发送失败，请稍后重试',
@@ -19,13 +20,19 @@ const KNOWLEDGE_CHAT_MESSAGES = {
 };
 function createTransport(wx, config, token) {
   return function request(name, body, options = {}) {
-    if (!/^(?:[a-z][a-z0-9-]*|rpc:[a-z][a-z0-9_]*|auth:(?:refresh|password|user)|rest:publish-history|rest:manual-copy-(?:read|create|update|delete))$/.test(name)) return Promise.reject(new Error('无效的服务入口'));
+    if (!/^(?:[a-z][a-z0-9-]*|rpc:[a-z][a-z0-9_]*|auth:(?:refresh|password|user)|rest:publish-history|rest:manual-copy-(?:read|create|update|delete)|rest:notification-manage-(?:list|read|create|update|delete))$/.test(name)) return Promise.reject(new Error('无效的服务入口'));
     if (!config.publicKey) return Promise.reject(new Error('员工服务尚未配置，请运行项目配置命令'));
     const manual = name.startsWith('rest:manual-copy-'), manualToken = manual ? token() : '';
     let manualRequest;
     if (manual) {
       if (typeof manualToken !== 'string' || !manualToken || /\s/.test(manualToken)) return Promise.reject(new Error('手工文案操作需要员工登录凭证'));
       try { manualRequest = manualCopyRequest(name, body); } catch (error) { return Promise.reject(error); }
+    }
+    const notification = name.startsWith('rest:notification-manage-'), notificationToken = notification ? token() : '';
+    let notificationRequest;
+    if (notification) {
+      if (typeof notificationToken !== 'string' || !notificationToken || /\s/.test(notificationToken)) return Promise.reject(new Error('通知管理需要员工登录凭证'));
+      try { notificationRequest = notificationManageRequest(name, body); } catch (error) { return Promise.reject(error); }
     }
     const refresh = name === 'auth:refresh';
     const history = name === 'rest:publish-history';
@@ -42,11 +49,12 @@ function createTransport(wx, config, token) {
     let url = config.supabaseUrl + (authUser ? '/auth/v1/user' : name === 'auth:password' ? '/auth/v1/token?grant_type=password' : refresh ? '/auth/v1/token?grant_type=refresh_token' : rpc ? '/rest/v1/rpc/' + name.slice(4) : '/functions/v1/' + name);
     if (history) url = config.supabaseUrl + '/rest/v1/social_publish_jobs?select=' + encodeURIComponent('id,shop_id,title,kind,status,created_at,schedule_at,social_publish_targets(platform)') + '&shop_id=eq.' + body.shop_id + '&order=created_at.desc&limit=50';
     if (manual) url = config.supabaseUrl + manualRequest.path;
+    if (notification) url = config.supabaseUrl + notificationRequest.path;
     if (scoped) url += '?forceFunctionRegion=' + encodeURIComponent(config.scopeRegion);
-    const bearer = manual ? manualToken : history ? historyToken : authUser ? options.accessToken : options.public || refresh || authPassword ? config.publicKey : token() || config.publicKey;
+    const bearer = notification ? notificationToken : manual ? manualToken : history ? historyToken : authUser ? options.accessToken : options.public || refresh || authPassword ? config.publicKey : token() || config.publicKey;
     return new Promise((resolve, reject) => {
-      wx.request({url, method: manual ? manualRequest.method : authUser || history ? 'GET' : 'POST', data: manual ? manualRequest.data : authUser || history ? undefined : body, timeout: longRequest ? 65000 : 20000,
-        header: { apikey: config.publicKey, Authorization: 'Bearer ' + bearer, 'Content-Type': 'application/json', ...(scoped ? { 'x-region': config.scopeRegion } : {}), ...(manual ? manualRequest.headers : {}) },
+      wx.request({url, method: notification ? notificationRequest.method : manual ? manualRequest.method : authUser || history ? 'GET' : 'POST', data: notification ? notificationRequest.data : manual ? manualRequest.data : authUser || history ? undefined : body, timeout: longRequest ? 65000 : 20000,
+        header: { apikey: config.publicKey, Authorization: 'Bearer ' + bearer, 'Content-Type': 'application/json', ...(scoped ? { 'x-region': config.scopeRegion } : {}), ...(manual ? manualRequest.headers : {}), ...(notification ? notificationRequest.headers : {}) },
         success(response) {
           let data = response.data;
           if (typeof data === 'string' && !options.raw) { try { data = JSON.parse(data); } catch (_) { return reject(new Error('服务返回格式异常，请重试')); } }

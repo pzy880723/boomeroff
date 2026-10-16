@@ -260,7 +260,7 @@ function freshness(data) {
 
 function notificationCategory(category) {
   const labels = { notice: '工作通知', schedule: '排班通知', shift: '排班通知', learning: '学习通知', training: '学习通知', quiz: '学习通知', news: '门店动态', message: '助手消息' };
-  return labels[category] || (typeof category === 'string' && /[\u4e00-\u9fff]/.test(category) ? category : '工作通知');
+  return Object.prototype.hasOwnProperty.call(labels, category) ? labels[category] : (typeof category === 'string' && /[\u4e00-\u9fff]/.test(category) ? category : '工作通知');
 }
 
 function value(number, money) {

@@ -27,11 +27,15 @@ function createPreview(wx) {
   }));
   const quizAttempts = new Map();
   const notifications = [
-    { id: 'example-shift', title: '下周排班已更新', body: '这是一条示例排班通知。真实排班以 ERP 发布结果为准。', category: 'notice', created_at: date + 'T09:20:00+08:00', read: false },
-    { id: 'example-training', title: '新课程：中古商品的年代辨识', body: '在学习页查看知识内容，完成后可参加知识测验。此处为界面示例。', category: 'notice', created_at: date + 'T08:30:00+08:00', read: false }
+    { id: 'example-shift', title: '下周排班已更新', body: '这是一条示例排班通知。真实排班以 ERP 发布结果为准。', category: 'notice', type: 'announcement', created_at: date + 'T09:20:00+08:00', read: false },
+    { id: 'example-training', title: '新课程：中古商品的年代辨识', body: '在学习页查看知识内容，完成后可参加知识测验。此处为界面示例。', category: 'news', type: 'staff_story', summary: '合成学习动态摘要，完整正文在原生详情中查看。', created_at: date + 'T08:30:00+08:00', read: false }
   ];
   const bootstrap = { date, profile, staff_profile: profile, user_role: { role_code: 'staff' }, shop_context: { date, scope: 'store', status: 'scheduled', effective_shop: shop, authorized_shops: [shop] }, shifts: [{ id: 'example-shift', work_date: date, shift_code: 'early', shop_id: shop.id }], shift_definitions: [{ shop_id:shop.id, code: 'early', name: '早班', start_time: '10:00', end_time: '18:00' }], shift: { title:'早班',start_time:'10:00',end_time:'18:00',shop_name:shop.name }, tasks:[{id:'example-task',title:'检查价签与品相说明',status:'示例待办'}], learning:[articles[0]], okrs: [], checked_today: false };
   const current = { userId: '00000000-0000-4000-8000-000000000902', profile, shop, shops: [shop], isHeadquarters: false, bootstrap, permissions: [], scopeFresh: true };
+  const managedNotifications = [
+    { id: '00000000-0000-4000-8000-000000000871', title: '商品知识培训提醒（示例）', body: '合成全局通知示例：先阅读知识，再参加测验。业绩不参与培训考核。', type: 'announcement', active: true, expires_at: null, created_by: current.userId, created_at: stamp, image_url: null, category: null, summary: null },
+    { id: '00000000-0000-4000-8000-000000000872', title: '新伙伴入职指引（示例）', body: '合成停用通知示例：仅用于检查原生编辑器，不会发布到真实员工。', type: 'policy', active: false, expires_at: null, created_by: '00000000-0000-4000-8000-000000000873', created_at: stamp, image_url: null, category: 'notice', summary: null }
+  ];
   const manualCopy = { id: '00000000-0000-4000-8000-000000000861', user_id: current.userId, shop_id: shop.id, kind: 'copy', created_at: stamp,
     output_text: JSON.stringify([{ title: '把好物故事讲清楚（手工文案示例）', body: '先看器型与花纹，再核对实物品相和门店价签。这是原生素材库的合成示例，不是真实发布文案。', hashtags: ['中古杂货'], platform: 'example' },
       { title: '分享一种发现好物的快乐（示例）', body: '发现喜欢的小物，先认真观察，再慢慢挑选。合成示例，仅用于检查候选文案切换。', hashtags: ['门店好物'] }]), meta: { source: 'manual_upload', asset_class: 'upload' } };
@@ -363,6 +367,9 @@ function createPreview(wx) {
   }
   return { session, api: { action, invoke: unavailable, assistant: unavailable, uploadChatAttachment: unavailable, openChatAttachment: unavailable,
     manualCopyRead: readManualCopy, manualCopyWrite: unavailable,
+    notificationManageCapabilities: async () => ({ can_manage: true }),
+    notificationManageList: async () => ({ items: JSON.parse(JSON.stringify(managedNotifications)) }),
+    notificationManageRead: async id => JSON.parse(JSON.stringify(managedNotifications.find(row => row.id === id) || null)), notificationManageWrite: unavailable,
     publishHistory: async () => publishingRead.history([publishJob], shop.id),
     publishStatus: async id => { if (id !== publishJob.id) throw new Error('该发布任务示例不存在'); return publishingRead.detail({ job: publishJob, targets: publishTargets }, shop.id, id); },
     inspectPublicationFile: unavailable, createPublicationUpload: unavailable, transferPublicationFile: unavailable, commitPublicationUpload: unavailable, publicationUploadStatus: unavailable,

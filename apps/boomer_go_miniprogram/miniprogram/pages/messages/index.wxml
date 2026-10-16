@@ -4,12 +4,17 @@
   <view class="muted intro">工作通知与同事交接，都在这里。</view>
   <view class="section-tabs"><button class="section-tab {{section === 'notifications' ? 'active' : ''}}" data-section="notifications" bindtap="onSection">通知</button><button class="section-tab {{section === 'conversations' ? 'active' : ''}}" data-section="conversations" bindtap="onSection">会话</button><button class="section-tab {{section === 'contacts' ? 'active' : ''}}" data-section="contacts" bindtap="onSection">联系人</button></view>
   <block wx:if="{{section === 'notifications'}}">
+  <button wx:if="{{canManageNotifications}}" class="button-secondary" bindtap="openNotificationManage">{{preview ? '预览系统通知管理（合成）' : '系统通知管理'}}</button>
+  <view class="row controls"><button class="chip {{notificationGroup === 'all' ? 'active' : ''}}" bindtap="onNotificationGroup" data-group="all">全部内容</button><button class="chip {{notificationGroup === 'notice' ? 'active' : ''}}" bindtap="onNotificationGroup" data-group="notice">通知</button><button class="chip {{notificationGroup === 'news' ? 'active' : ''}}" bindtap="onNotificationGroup" data-group="news">资讯</button></view>
+  <input class="field contact-search" placeholder="在已加载通知中搜索标题或摘要" value="{{notificationQuery}}" bindinput="onNotificationSearch" maxlength="200" />
+  <picker range="{{notificationTypes}}" range-key="label" value="{{notificationTypeIndex}}" bindchange="onNotificationType"><view class="field">{{notificationTypes[notificationTypeIndex].label}} · 已加载范围</view></picker>
   <view class="row controls"><view class="row filters"><button class="filter {{filter === 'all' ? 'selected' : ''}}" data-kind="all" bindtap="onFilter">全部</button><button class="filter {{filter === 'unread' ? 'selected' : ''}}" data-kind="unread" bindtap="onFilter">未读</button></view><button class="mark-all" bindtap="markAll" disabled="{{!unread || marking}}" loading="{{marking}}">标记已加载通知</button></view>
   <view wx:if="{{readNotice}}" class="muted batch-note">{{readNotice}}</view>
   <view wx:if="{{loading}}" class="card loading-state">正在同步消息…</view>
   <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重新同步</button></view>
   <view wx:if="{{!loading && !error && !visibleItems.length}}" class="card empty"><view class="empty-symbol">信</view><view>{{filter === 'unread' ? '已加载通知中暂无未读' : '已加载范围暂无通知'}}</view><view class="muted">{{hasMore ? '后面还有通知，可继续加载。' : '有新通知时会显示在这里。'}}</view></view>
   <view wx:for="{{visibleItems}}" wx:key="id" class="card message-card {{!item.read ? 'unread-card' : ''}}">
+    <image wx:if="{{item.cover_url}}" class="cover" src="{{item.cover_url}}" mode="widthFix" data-id="{{item.id}}" bindtap="openItem" />
     <view class="message-main" data-id="{{item.id}}" bindtap="openItem" hover-class="pressed"><view class="row message-meta"><text class="message-category">{{item.category || '门店通知'}}</text><text wx:if="{{!item.read}}" class="unread-dot"></text><text wx:else class="muted">已读</text></view><view class="section-title message-title">{{item.title}}</view><view class="muted message-body">{{item.body}}</view><view class="muted message-time">{{item.time}}</view></view>
     <view class="row message-actions"><button class="read-content" data-id="{{item.id}}" bindtap="openItem">查看详情 →</button><button wx:if="{{!item.read}}" class="read-button" data-id="{{item.id}}" bindtap="markRead" disabled="{{marking}}">标为已读</button></view>
   </view>

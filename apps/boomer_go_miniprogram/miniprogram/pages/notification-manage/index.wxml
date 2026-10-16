@@ -1,0 +1,44 @@
+<view class="page notification-manage-page">
+  <view wx:if="{{preview}}" class="preview-banner">合成预览 · 可编辑本地草稿，不发布、不删除、不查询真实回执</view>
+  <view class="caption">BOOMER / NOTIFICATIONS</view>
+  <view class="title">系统通知管理</view>
+  <view class="audience">{{audience}}</view>
+  <view class="muted intro">仅管理已有授权的全局系统通知。不调用 AI，不发送短信。</view>
+  <view wx:if="{{loading}}" class="loading">正在核验权限与通知…</view>
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+  <view wx:if="{{notice}}" class="card notice"><text selectable>{{notice}}</text></view>
+  <view class="toolbar"><button class="button-secondary" bindtap="refresh" disabled="{{loading || sending || confirming}}">刷新权限与列表</button><button wx:if="{{canManage}}" class="button" bindtap="newItem" disabled="{{loading || sending || confirming || pending}}">新建通知</button></view>
+  <view wx:if="{{pending}}" class="card pending-card">
+    <view class="section-title">{{receiptConfirmed ? '已收到匹配操作返回' : '原操作待确认'}}</view>
+    <text class="muted intent-id" selectable>{{assetId}}</text>
+    <view class="muted">仅在当前 App 进程保留原操作；不会重发或换新编号。进程重启不保证恢复。</view>
+    <button class="button-secondary" bindtap="reconcile" disabled="{{preview || loading || sending || confirming}}">只读核对原操作</button>
+  </view>
+  <view wx:if="{{editorVisible}}" class="card editor" id="notice-editor">
+    <view class="row"><view class="section-title">{{assetId ? '编辑通知' : '新建通知'}}</view><button class="close-editor" bindtap="closeEditor" disabled="{{loading || sending || confirming}}">关闭</button></view>
+    <view wx:if="{{conflict}}" class="error">服务器内容已变化。草稿未覆盖，请明确载入最新内容。</view>
+    <view class="field-label">标题</view>
+    <input class="field" value="{{title}}" bindinput="onTitle" maxlength="-1" disabled="{{!editable || confirming}}" placeholder="输入全局通知标题" />
+    <view class="caption counter">{{titleCount}} / 60</view>
+    <view class="field-label">正文<text class="caption">可留空</text></view>
+    <textarea class="field notice-body" value="{{body}}" bindinput="onBody" maxlength="-1" disabled="{{!editable || confirming}}" placeholder="输入通知正文，最多 500 字" />
+    <view class="caption counter">{{bodyCount}} / 500 · 超长保留，不会截断</view>
+    <view class="row active-control"><view><view class="field-label">启用</view><view class="caption">停用后员工不再看到本条通知</view></view><switch color="#EB0029" checked="{{active}}" bindchange="onActive" disabled="{{!editable || confirming}}" /></view>
+    <view class="field-label">有效期</view>
+    <picker mode="date" value="{{expiryDate}}" bindchange="onExpiry" disabled="{{!editable || confirming}}"><view class="field expiry-picker">{{expiryDate || '长期有效'}}<text class="muted">选择日期 ›</text></view></picker>
+    <view class="row expiry-help"><view class="caption">仅修改日期时设为上海时间当日 23:59:59；未改保持原值。</view><button class="clear-expiry" bindtap="clearExpiry" disabled="{{!editable || confirming || !expiryDate}}">清除日期</button></view>
+    <view wx:if="{{validation && editable}}" class="validation">{{validation}}</view>
+    <view wx:if="{{!pending && !saved}}" class="editor-actions"><button class="button" bindtap="save" disabled="{{!canSave || loading || sending || confirming}}" loading="{{sending}}">确认保存</button><button wx:if="{{assetId}}" class="button-secondary danger" bindtap="remove" disabled="{{!canDelete || loading || sending || confirming}}">删除通知</button><button class="button-secondary" bindtap="reloadLatest" disabled="{{loading || sending || confirming}}">放弃草稿并载入最新内容</button></view>
+  </view>
+  <block wx:if="{{canManage}}">
+    <view class="row list-heading"><view class="section-title">最新 50 条</view><text class="caption">含已下架与过期通知</text></view>
+    <view wx:if="{{listError}}" class="error">{{listError}}</view>
+    <view wx:if="{{!loading && !listError && !items.length}}" class="card empty">当前读取范围暂无通知</view>
+    <view wx:for="{{items}}" wx:key="id" class="card notice-item">
+      <view class="row"><view class="notice-title">{{item.title}}</view><text class="badge {{item.active ? '' : 'inactive'}}">{{item.active ? '启用' : '已下架'}}</text></view>
+      <view wx:if="{{item.body}}" class="muted notice-preview">{{item.body}}</view>
+      <view class="caption">有效期 · {{item.expiry}}<text wx:if="{{item.expired}}" class="badge">已过期</text></view>
+      <view class="item-actions"><button class="button-secondary" data-id="{{item.id}}" bindtap="openItem" disabled="{{loading || sending || confirming || pending}}">查看与编辑</button><button class="button-secondary" data-id="{{item.id}}" bindtap="toggleItem" disabled="{{preview || loading || sending || confirming || pending}}">{{item.active ? '下架' : '启用'}}</button></view>
+    </view>
+  </block>
+</view>

@@ -5,6 +5,7 @@ const objective = require('./objective');
 const knowledgeCategories = require('../../shared/knowledge-categories');
 const { urlForFilters } = require('../../shared/official-library');
 const knowledgeChat = require('../../shared/knowledge-chat');
+const notificationRead = require('../../shared/notification-read');
 const learningKinds = ['knowledge', 'official', 'sop', 'qa', 'training', 'favorite', 'favorites', 'my-library', 'history', 'recognition'];
 const productUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const knowledgeSaveEmpty = { knowledgeSaveState: '', knowledgeSaveNotice: '', knowledgeSaveError: '', knowledgeSaveBusy: false };
@@ -42,11 +43,16 @@ function officialFilters(raw) {
 Page(definePage({
   data: Object.assign({}, knowledgeSaveEmpty, { kind: '', id: '', item: null, nodes: '', fields: [], officialFilters: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], freshness: '', quizUrl: '', unavailable: '', favorite: null, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, canSave: false, canShare: false, busy: false, actionNotice: '', resolvedMessage: '', resolvedUrl: '', keyActionsDraft: '', draftResults: [], messages: [], messageDraft: '', profileNameDraft: '', avatarPreview: '' }),
   onLoad(options) { this._hidden = false; this._practiceRequested = options.practice === '1'; this.setData(Object.assign({}, knowledgeChat.fields, { kind: options.kind || 'knowledge', id: options.id || '', practiceRequested: this._practiceRequested })); this.syncPractice(); return this.load(); },
-  onShow() { const hidden = this._hidden; this._hidden = false; this._practiceRedirecting = false; this.syncPractice(); if (this.data.kind === 'objectives') { if (hidden || this._objectiveIdentity !== model.scope(this)) return this.loadObjective(); return; } if (this._request && (this._identity !== model.scope(this) || (hidden && learningKinds.indexOf(this.data.kind) >= 0))) return this.load(); },
+  onShow() { const hidden = this._hidden; this._hidden = false; this._practiceRedirecting = false; this.syncPractice(); if (this.data.kind === 'objectives') { if (hidden || this._objectiveIdentity !== model.scope(this)) return this.loadObjective(); return; } if (this._request && (this._identity !== model.scope(this) || (hidden && (learningKinds.indexOf(this.data.kind) >= 0 || this.data.kind === 'notifications')))) return this.load(); },
   onHide() {
     this.clearKnowledgeSaveView();
     if (this._knowledgeChat) this._knowledgeChat.hide();
     if (this.data.kind === 'objectives') { this._hidden = true; this.clearObjective(); }
+    if (this.data.kind === 'notifications') {
+      this._hidden = true; this._request = (this._request || 0) + 1;
+      const clear = { item: null, nodes: [], fields: [], businessSections: [], gallery: [], freshness: '' };
+      if (this._gone) Object.assign(this.data, clear); else this.setData(clear);
+    }
     if (learningKinds.indexOf(this.data.kind) >= 0) {
       model.hideLearning(this);
       this._officialLinks = [];
@@ -86,6 +92,10 @@ Page(definePage({
       if (kind === 'conversation') return this.api.action('conversation-messages', { conversation_id: this.data.id });
       if (kind === 'profile') return this.api.action('profile', {});
       if (kind === 'tasks') return this.api.action('tasks', {});
+      if (kind === 'notifications') {
+        const serial = this._request, identity = model.scope(this);
+        return notificationRead.read(this.api, this.data.id, () => !this._gone && !this._hidden && this._request === serial && model.scope(this) === identity);
+      }
       if (knowledge) return this.api.action('knowledge-detail', { kind: detailKind, id: this.data.id });
       const action = kind === 'activities' ? 'activity-detail' : (kind === 'vouchers' ? 'voucher-detail' : section.action);
       return this.api.action(action, { kind, id: this.data.id, view: 'detail' });
@@ -164,7 +174,7 @@ Page(definePage({
       const favoriteRowId = isFavorite ? favorite.id || raw.favorite_id || (item.kind === 'favorite' ? item.id : '') : '';
       this._favoriteRowId = typeof favoriteRowId === 'string' ? favoriteRowId : '';
       this.setData({
-        item: { id: item.id || this.data.id, title: item.title || section.title, category: kind === 'notifications' ? model.notificationCategory(item.category) : (kind === 'official' ? knowledgeCategories.label(item.category || raw.category) : item.category || raw.category) || section.title, author: item.author_name || '', cover_url: item.cover_url || '' },
+        item: { id: item.id || this.data.id, title: item.title || section.title, category: kind === 'notifications' ? model.notificationCategory(item.category) : (kind === 'official' ? knowledgeCategories.label(item.category || raw.category) : item.category || raw.category) || section.title, author: item.author_name || '', cover_url: item.cover_url || '', summary: kind === 'notifications' && typeof item.summary === 'string' ? item.summary : '' },
         officialFilters: this._officialLinks.map(link => ({ key: link.key, label: link.label })),
         nodes: contentNodes(Object.assign({}, item, { body: item.body || business.body })), fields, businessSections: business.sections, gallery: business.gallery, backstampUrl: business.backstampUrl, videoUrl: business.videoUrl,
         results, freshness: model.freshness(Object.assign({}, raw, item)), quizUrl: quizAllowed ? model.quizUrl(item.quiz_kind, item.id || this.data.id) : '',

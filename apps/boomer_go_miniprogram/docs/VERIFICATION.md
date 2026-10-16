@@ -2,6 +2,15 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
+## 2026-10-17 检查点：通知阅读与原生手工管理
+
+- 固定GO a4d6edb0核对两条实际Web入口及通知表/RLS/权限源。通知为全局内容，不添加shop_id或把HQ/旧admin角色当role.manage。原生API交集为fresh bootstrap权限与同caller user_has_permission严格true，callerJWT继续受原RLS约束；不冒称已统一服务端ERP门禁或验证线上GRANT。独立AI／富文本／图片／草稿功能仍缺，见NOTIFICATIONS_NATIVE.md。
+- 新第28条notification-manage原生页，从消息进入；latest50、手工新增编辑、原生日历／清除有效期、上下架、单独确认删除、原操作AppRAM只读恢复。11已知字段旧值条件不是版本/ABA锁；保留type/category/summary/image_url/creator与未改日期精度。超时不重发或换UUID；未知删除后的不存在不单独确认。原FK级联删除已读行，界面说明，不删除图片文件。
+- API首39RED后实现；独立复现await权限gate完成至REST发送之间身份微任务切换P2，新增真实createApi/transport竞态RED，传入既有同步assertState在每次await后、发送前和返回前检查，最终54项。页面首49RED及2补充RED后51通过；独立复现旧toggle在hide/show/revision/换用户后续接P2，再3RED加visiblecontrol后55通过。各自交叉复核和额外6/10组探针已运行，不是实际服务写入。
+- 员工阅读首7RED、入口/preview2RED、继承分类与过期显示2RED后共11通过。精确ID逐页核对page/page_size/has_more、重复分页和可见上下文，不把第一页缺失当不存在或用其他文章替代。正文不被摘要替换，合法原image_url保留；通知/资讯、类型和文本只筛已加载窗口，未读计数仍是全窗口。隐藏清详情并停旧请求，返回重读。
+- 父级新跑1966/1966，0失败/跳过/取消；28路由/syntax/JSON/noH5检查通过，官方29WXML/30WXSS退出0、stderr空。实际DevTools核对资讯筛选→摘要与全文→返回→系统管理列表→中文标题/正文草稿→原生日历选择2026-10-17→切换确认→已有通知，保存/删除/上下架在合成预览均禁用。native-notification-news/detail/manager-list/manager-draft/manager-expiry/manager-existing-preview及phone为真实截图和确定裁切；后续页命中和真实权限竞态由VM覆盖，不冒充GUI非空续页或真实员工验收。
+- Figma34:2/34:19已渲染检查。DevTools游客/旧selectable/HotReload警告仍有，观察Errors0不等于上线。R36再次核对同handle仍awaiting_input/a4d6edb0/20.3credits，无新授权未绕过；没有后台部署、权限修改、真实通知/短信/付费AI或手机操作。目标仍未完成，缺口及AppID/员工/设备/微信发布门槛保持。
+
 ## 最新检查点：原生手工文案素材
 
 - 新增第27条manual-copy原生路由，五Tab不变；仅素材库内新增与本人本店手工文案详情编辑入口，没有恢复独立AI文案菜单。创建/候选编辑/删除/只读核对都使用原生控件。固定GO a4d6edb0的现有Web合同、表结构和RLS已核对；使用callerJWT窄REST，无SQL、服务密钥、权限扩展或后台部署。

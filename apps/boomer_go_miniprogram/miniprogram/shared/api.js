@@ -2,6 +2,7 @@ const { createPublicationUploads } = require('./publication-upload');
 const { readPersonalSchedule } = require('./personal-schedule');
 const publishingRead = require('./publishing-read');
 const { createManualCopyApi } = require('./manual-copy-api');
+const { createNotificationManageApi } = require('./notification-manage-api');
 
 function dashboardShift(data, user) {
   const date = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
@@ -300,6 +301,6 @@ function createApi({ wx, config, session, invoke: transport }) {
     if (!wx.shareFileMessage) throw new Error('此文件类型暂不能原生预览，当前微信也不支持文件分享');
     return settled(before, new Promise((resolve, reject) => wx.shareFileMessage({ filePath: temp, fileName: String(att.name || '附件'), success: resolve, fail: () => reject(new Error('文件分享未完成，原文件未修改')) })));
   }
-  return Object.assign({ action, invoke, publishHistory, publishStatus, recognize, assistant, saveMedia, copy, sales, leaderboard, uploadChatAttachment, openChatAttachment }, createManualCopyApi({ session, transport, snapshot, settled, ensureFresh }), createPublicationUploads({ wx, config, session, transport, snapshot, settled, ensureFresh }));
+  return Object.assign({ action, invoke, publishHistory, publishStatus, recognize, assistant, saveMedia, copy, sales, leaderboard, uploadChatAttachment, openChatAttachment }, createManualCopyApi({ session, transport, snapshot, settled, ensureFresh }), createNotificationManageApi({ session, transport, snapshot, settled, ensureFresh, assertState }), createPublicationUploads({ wx, config, session, transport, snapshot, settled, ensureFresh }));
 }
 module.exports = { createApi };
