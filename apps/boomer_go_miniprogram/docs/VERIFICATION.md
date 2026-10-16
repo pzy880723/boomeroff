@@ -10,6 +10,7 @@
 - 主流程最终新跑1442/1442，0失败/跳过/取消；24路由/syntax/JSON/no-H5检查通过，官方25WXML/26WXSS退出0且stderr空。UI未改，不伪造这轮DevTools新截图。
 - R35只有源码/元数据报告审计；R36后台请求umsg_01m51fc0a2e9y8kwyc6q9hytde仍running，未拿最终源或宣称部署。不会改公众自动报名/发券、不会真实删除活动或发送短信。当前store精确effective-shop、HQ原授权范围及voucher.manage要求不变；共享NULL模板与其他完整角色迁移仍保留。
 - 以上只是准备检查点。实际编辑页面、最终接口/source review、员工/设备/AppID/微信发布仍未完成；上一知识问答界面交付边界不变。
+- 准备源码cd3f785cb7826bf36ae0ff0ff3810c009a71da7c仅7个Mini路径，非强推并远端读回同SHA。归档/private/tmp/BOOMER-GO-wechat-activity-preparation-20261016.zip为1060206字节、SHA256beb1eddabac8904ef1f3efaaf9d6362fe9fd87d38b881a20b0f33bcf81657b66；干净解压/private/tmp/go-mini-activity-prep-verify-0LA3VT再跑1442/1442及24路由通过。正常index为空、原Flutter/iOS和手机登录数据未动。后续纯证据文档不改变归档代码，不代表main同步、原生编辑页交付或微信发布。
 
 ## 最新检查点：原生词条关联 AI 问答
 
