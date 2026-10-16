@@ -10,6 +10,7 @@
 - 实际DevTools核对单一预览横幅、展开字段、先切选择类型后添加空选项并输入“中古好物故事”、展开并选择本店示例券，以及保存/状态/删除禁用。native-activity-editor-initial/fields/select-options/voucher/disabled-actions为真实运行截图；select-options-phone为确定性裁切。只编辑本地合成草稿，没有顾客数据、真实发券、短信、删除或付费AI操作。游客模式警告仍在，不能称为零警告或真机验收。
 - R36固定候选a4d6edb0已读源码并独立用内存Postgres复现两处P2：保留字段省略未知metadata会被接收；事务等待后now()仍使用事务时间，过期租约未被拦截。两条临时内存修复对照通过，但未改远端、未部署。原handler9项本地隔离重放通过不消除这两个SQL问题。index.ts尚未注册管理action，最终typecheck/完整SQL/部署回报缺失。详见ACTIVITY_MANAGEMENT_BACKEND_AUDIT.md。
 - Lovable任务在20.3积分检查点等待人工预算决定；没有点击Continue/Finish up、没有重发替代任务绕过。R27内容归属审批独立保留。真实员工/设备、专用AppID/域名/隐私和微信发布、其余完整角色迁移仍未完成；既有活动说明AI润色单列为迁移缺口，不冒充已接通。
+- 本轮源码e22dfa744f496b928803a15dc37b109981a7e3ff仅24个Mini路径，非强推并远端读回同SHA。归档/private/tmp/BOOMER-GO-wechat-activity-editor-20261016.zip为5310104字节，SHA256为2be4156bc1a067740956acd765c8e9f25930b4f3cf755732420685d2ba7e6787；干净解压/private/tmp/go-mini-activity-editor-verify-dOCvpn重新通过1532项、25路由及官方26WXML/27WXSS编译。正常index为空，原Flutter分支及手机数据未改；DevTools恢复Ordinary Compilation并显示合成工作台。后续证据文档不改变该包代码，不代表main合并、后端部署或微信发布。
 
 ## 历史检查点：活动管理纯函数与传输准备
 

@@ -70,8 +70,8 @@ node --test tests/activity-form.test.cjs tests/activity-management-pages.test.cj
 - [x] Run all Node tests and route/syntax check; official WXML/WXSS compilers must exit0 with empty stderr:1532 tests,25 routes,26WXML/27WXSS.
 - [x] Capture actual WeChat DevTools synthetic editor/inline voucher selection/field drafting/disabled write states. Recovery/error branches are VM-tested, not claimed as GUI production evidence.
 - [x] Independent client review and regression; resolve confirmed client P1/P2 before checkpoint. Two backend candidate P2s remain open separately.
-- [ ] Check alternate-index diff contains Mini-owned paths only; verify normal index remains empty. Commit/push nonforce to `codex/go-mini-workbench`, read remote SHA back, archive source and rerun in clean extraction.
-- [ ] Update feature parity and evidence with exact source, test counts, archive hash and residual real employee/device/AppID/release gaps.
+- [x] Check alternate-index diff contains Mini-owned paths only; verify normal index remains empty. Sourcee22dfa74 nonforce pushed to `codex/go-mini-workbench`, remote readback matched; clean archive reran1532 tests,25 routes and official compilers.
+- [x] Update feature parity and evidence with exact source, test counts, archive hash and residual real employee/device/AppID/release gaps. Full feature/backend acceptance is still open.
 
 ```sh
 npm run check
@@ -89,6 +89,8 @@ npm test
 ## Current Evidence Boundary
 
 The development editor is now implemented and independently reviewed. Page/helper115 and full1532 tests pass; official26WXML/27WXSS compile. Actual DevTools verified type-first select drafting, Chinese option input, inline voucher selection and disabled synthetic mutation controls. Production list/detail entry remains deliberately closed pending R36 repair, registration and acceptance. Existing Web activity-description AI polishing is still a migration item. See the latest section of VERIFICATION.md; the preparation paragraphs below are historical evidence only.
+
+Source checkpointe22dfa744f496b928803a15dc37b109981a7e3ff is pushed and read back. Archive `/private/tmp/BOOMER-GO-wechat-activity-editor-20261016.zip` is5310104 bytes, SHA256 `2be4156bc1a067740956acd765c8e9f25930b4f3cf755732420685d2ba7e6787`; clean extraction `/private/tmp/go-mini-activity-editor-verify-dOCvpn` repeats1532/25/26WXML/27WXSS successfully. Normal index, original Flutter checkout and phone state remain unchanged. The default DevTools mode is restored to Ordinary Compilation. This is source/preview delivery, not main synchronization, backend repair or publication.
 
 ## Historical Preparation Evidence
 
