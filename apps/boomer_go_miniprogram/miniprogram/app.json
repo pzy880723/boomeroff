@@ -2,7 +2,7 @@
   "pages": [
     "pages/workbench/index", "pages/learn/index", "pages/recognize/index",
     "pages/messages/index", "pages/mine/index", "pages/login/index",
-    "pages/schedule/index", "pages/list/index", "pages/detail/index",
+    "pages/schedule/index", "pages/schedule-manage/index", "pages/list/index", "pages/detail/index",
     "pages/quiz/index", "pages/sales/index", "pages/assistant/index",
     "pages/marketing/index", "pages/asset/index", "pages/chat/index", "pages/community/index", "pages/voucher/index",
     "pages/activity/index", "pages/application/index", "pages/practice/index",

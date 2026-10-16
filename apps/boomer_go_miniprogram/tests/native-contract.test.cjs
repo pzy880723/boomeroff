@@ -13,6 +13,11 @@ test('continuous learning is a native secondary route, never a sixth tab',()=>{
  const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
  assert.ok(app.pages.includes('pages/practice/index'));assert.equal(app.tabBar.list.length,5);
 });
+test('authorized schedule management is a native secondary route without changing the five tabs',()=>{
+ const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
+ assert.ok(app.pages.includes('pages/schedule-manage/index'));assert.equal(app.tabBar.list.length,5);
+ for(const ext of ['js','json','wxml','wxss'])assert.ok(fs.existsSync(path.join(root,'pages/schedule-manage/index.'+ext)));
+});
 test('store SOP and QA maintenance use dedicated native secondary routes',()=>{
  const app=JSON.parse(fs.readFileSync(path.join(root,'app.json'),'utf8'));
  assert.ok(app.pages.includes('pages/store-kb/index'));

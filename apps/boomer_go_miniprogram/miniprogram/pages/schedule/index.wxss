@@ -2,6 +2,9 @@
 .eyebrow { color: #eb0029; font-size: 22rpx; letter-spacing: 3rpx; margin: 12rpx 0 16rpx; }
 .page-title { font-size: 48rpx; font-weight: 700; }
 .intro { margin: 16rpx 0 32rpx; }
+.management-entry .section-title { font-size: 32rpx; margin: 0 0 12rpx; }
+.management-entry .muted { font-size: 26rpx; line-height: 1.7; }
+.management-entry-action { min-height: 88rpx; padding: 22rpx 16rpx; font-size: 30rpx; line-height: 1.5; margin-top: 20rpx; }
 .calendar { padding: 20rpx 16rpx; }
 .calendar-header { margin-bottom: 24rpx; }
 .month-arrow { width: 88rpx; min-height: 88rpx; line-height: 88rpx; padding: 0; font-size: 48rpx; background: #f6f7f9; color: #202125; }

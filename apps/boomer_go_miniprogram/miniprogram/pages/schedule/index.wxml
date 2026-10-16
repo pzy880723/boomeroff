@@ -5,6 +5,7 @@
     <button class="view-option {{view === 'mine' ? 'active' : ''}}" data-view="mine" bindtap="onViewChange">我的</button>
     <button wx:if="{{canViewShop || view === 'shop'}}" class="view-option {{view === 'shop' ? 'active' : ''}}" data-view="shop" bindtap="onViewChange" disabled="{{!canViewShop}}">本店同事</button>
   </view>
+  <view wx:if="{{managementEntryVisible}}" class="card management-entry"><view class="section-title">本周门店排班</view><view class="muted">独立读取当前授权门店权限；进入后会重新核对，个人月历保持只读。</view><button class="button-secondary management-entry-action" bindtap="openManagementEntry">{{managementEntryLabel}}</button></view>
   <view wx:if="{{notice}}" class="card notice">{{notice}}</view>
   <view class="card calendar"><view class="row calendar-header"><button class="month-arrow" bindtap="previousMonth" aria-label="上个月">‹</button><picker mode="date" fields="month" value="{{month}}" bindchange="onMonthChange"><view class="month-title">{{month}} <text class="muted">⌄</text></view></picker><button class="month-arrow" bindtap="nextMonth" aria-label="下个月">›</button></view>
     <view class="calendar-grid"><view wx:for="{{weekdays}}" wx:key="*this" class="weekday">{{item}}</view></view>

@@ -4,7 +4,7 @@ let nextSnapshot = 0;
 function createPreview(wx) {
   const date = businessDate();
   const stamp = new Date().toISOString();
-  const shop = { id: 'example-shop', name: '上海中信泰富店（示例）' };
+  const shop = { id: '00000000-0000-4000-8000-000000000901', name: '上海中信泰富店（示例）' };
   const profile = { display_name: '门店伙伴（示例）', real_name: '门店伙伴（示例）' };
   const articles = [
     { id: 'example-porcelain', title: '从底款读懂瓷器：产地、年代与工艺', category: '瓷器餐具', quiz_kind: 'official', quiz_available: true, quiz_persisted: false, kind: 'official', summary: '看釉色、看底款，再把商品故事讲清楚。', body: '先看器型与釉色，再观察底款。底款只能作为判断线索，不能单独证明年代、产地或真伪。\n\n向客人介绍时，把可见的工艺、用途和品相讲清楚；不能确认的信息，明确说明暂无法判断。\n\n中古商品可能有自然使用痕迹。请引导客人查看实物，不承诺未经核实的材质与年代。', updated_at: date },
@@ -23,10 +23,28 @@ function createPreview(wx) {
     { id: 'example-training', title: '新课程：中古商品的年代辨识', body: '在学习页查看知识内容，完成后可参加知识测验。此处为界面示例。', category: 'notice', created_at: date + 'T08:30:00+08:00', read: false }
   ];
   const bootstrap = { date, profile, staff_profile: profile, user_role: { role_code: 'staff' }, shop_context: { date, scope: 'store', status: 'scheduled', effective_shop: shop, authorized_shops: [shop] }, shifts: [{ id: 'example-shift', work_date: date, shift_code: 'early', shop_id: shop.id }], shift_definitions: [{ shop_id:shop.id, code: 'early', name: '早班', start_time: '10:00', end_time: '18:00' }], shift: { title:'早班',start_time:'10:00',end_time:'18:00',shop_name:shop.name }, tasks:[{id:'example-task',title:'检查价签与品相说明',status:'示例待办'}], learning:[articles[0]], okrs: [], checked_today: false };
-  const current = { userId: 'example-employee', profile, shop, shops: [shop], isHeadquarters: false, bootstrap, permissions: [], scopeFresh: true };
+  const current = { userId: '00000000-0000-4000-8000-000000000902', profile, shop, shops: [shop], isHeadquarters: false, bootstrap, permissions: [], scopeFresh: true };
   const activity = { id: '00000000-0000-4000-8000-000000000031', shop_id: shop.id, name: '门店内容共创日（示例）', description: '用真实商品与门店照片分享好物故事。管理区是只读示例，不读取真实顾客资料、不发券或保存确认。', status: 'active', platform: null, starts_at: null, ends_at: null, cover_url: null, poster_url: null, voucher_id: '00000000-0000-4000-8000-000000000034', requires_review: false, max_applications: null, min_followers: null, share_token: null, created_at: date + 'T00:00:00+08:00', form_fields: [{ key: 'experience', label: '希望分享的内容', type: 'textarea' }, { key: 'contact', label: '联系电话', type: 'phone' }, { key: 'profile_image', label: '主页截图', type: 'image', role: 'profile_screenshot' }] };
   const applicationId = '00000000-0000-4000-8000-000000000032';
   const peer = { user_id: '00000000-0000-4000-8000-000000000001', name: '门店伙伴 A（示例）', avatar_url: null, position: '门店伙伴（示例）', shop_id: shop.id, shop_name: shop.name, is_contact: true };
+  const scheduleShifts = [
+    { id: '00000000-0000-4000-8000-000000000921', shop_id: shop.id, code: 'early', name: '早班（示例）', start_time: '10:00:00', end_time: '18:00:00', version: 'c'.repeat(64), selectable: true },
+    { id: '00000000-0000-4000-8000-000000000922', shop_id: null, code: 'late', name: '晚班（示例）', start_time: '13:00:00', end_time: '21:00:00', version: 'd'.repeat(64), selectable: true }
+  ];
+  function scheduleWeekStart(value) {
+    const day = new Date(value + 'T00:00:00Z');
+    day.setUTCDate(day.getUTCDate() - (day.getUTCDay() + 6) % 7);
+    return day.toISOString().slice(0, 10);
+  }
+  function scheduleRows(start) {
+    return [current.userId, peer.user_id].map((user_id, index) => {
+      const shift = scheduleShifts[index];
+      return { assignment_id: '00000000-0000-4000-8000-00000000091' + (index + 1), user_id,
+        display_name: index ? peer.name : profile.display_name, work_date: new Date(Date.parse(start + 'T00:00:00Z') + (index ? 6 : 4) * 86400000).toISOString().slice(0, 10),
+        shop_id: shop.id, shift_id: shift.id, shift_code: shift.code, shift_status: 'resolved', shift_name: shift.name,
+        start_time: shift.start_time, end_time: shift.end_time, source: 'manual', version: 'a'.repeat(64) };
+    });
+  }
   const messages = [
     { id: '00000000-0000-4000-8000-000000000011', sender_id: peer.user_id, receiver_id: current.userId, mine: false, body: '今天新到的瓷器已整理好。这是界面示例，不是真实员工私信。', attachment: null, created_at: date + 'T09:00:00+08:00', read_at: null, cursor: 'example-dm-11' },
     { id: '00000000-0000-4000-8000-000000000012', sender_id: current.userId, receiver_id: peer.user_id, mine: true, body: '收到，我先去知识库复习一下。这是合成消息。', attachment: null, created_at: date + 'T09:01:00+08:00', read_at: null, cursor: 'example-dm-12' }
@@ -86,6 +104,34 @@ function createPreview(wx) {
       return Object.assign(common, { query, category_id, items, categories, page, page_size, has_more: (page + 1) * page_size < rows.length, as_of: stamp });
     }
     if (name === 'profile') return { profile, staff: profile, role: { role_code: 'staff' }, erp_scope: { scope: 'store', shop_ids: [shop.id] }, experience: { total_exp: 0 } };
+    if (['schedule-manage-capabilities', 'schedule-manage-week', 'schedule-manage-candidates', 'schedule-manage-cell'].includes(name)) {
+      const invalid = () => Object.assign(new Error('排班管理示例参数不合法'), { status: 400, code: 'invalid_params' });
+      if (!params.shop_id) throw invalid();
+      if (params.shop_id !== shop.id) throw Object.assign(new Error('示例模式只展示当前门店'), { status: 403, code: 'shop_forbidden' });
+      const common = { shop_id: shop.id, server_time: stamp, persisted: false };
+      if (name === 'schedule-manage-capabilities') return Object.assign(common, { can_view: true, can_arrange: true,
+        existing_permissions: { shift_write: false, dayoff_write: false, swap: true, clear_week: true, ai_schedule: true }, implemented_operations: ['create', 'update', 'delete'] });
+      const value = name === 'schedule-manage-week' ? params.week_start : params.work_date;
+      if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value + 'T00:00:00Z')) || new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) !== value) throw invalid();
+      const start = scheduleWeekStart(value);
+      if (name === 'schedule-manage-week') {
+        if (value !== start) throw invalid();
+        return Object.assign(common, { week_start: start, week_end: new Date(Date.parse(start + 'T00:00:00Z') + 6 * 86400000).toISOString().slice(0, 10), week_version: 'b'.repeat(64), rows: scheduleRows(start) });
+      }
+      if (name === 'schedule-manage-candidates') {
+        if ((params.q != null && typeof params.q !== 'string') || (params.cursor != null && params.cursor !== '' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.cursor))) throw invalid();
+        const query = (params.q || '').trim();
+        if (Array.from(query).length > 40) throw invalid();
+        const items = [{ user_id: current.userId, display_name: profile.display_name }, { user_id: peer.user_id, display_name: peer.name }]
+          .filter(row => (!params.cursor || row.user_id > params.cursor) && row.display_name.toLowerCase().includes(query.toLowerCase())).sort((a, b) => a.user_id.localeCompare(b.user_id));
+        return Object.assign(common, { work_date: value, items, next_cursor: null, has_more: false });
+      }
+      if (![current.userId, peer.user_id].includes(params.user_id)) throw Object.assign(new Error('该员工示例不存在'), { status: 404, code: 'not_found' });
+      const row = scheduleRows(start).find(row => row.user_id === params.user_id && row.work_date === value);
+      const assignment = row ? { assignment_id: row.assignment_id, user_id: row.user_id, work_date: row.work_date, shop_id: row.shop_id, shift_code: row.shift_code, source: row.source, version: row.version } : null;
+      return Object.assign(common, { user_id: params.user_id, work_date: value, assignment, cell_version: (row ? 'e' : 'f').repeat(64), shifts: scheduleShifts.map(row => Object.assign({}, row)),
+        warnings: params.user_id === peer.user_id && new Date(value + 'T00:00:00Z').getUTCDay() === 0 ? [{ code: 'fixed_rest_weekday', shift_id: null, level: 'soft' }] : [], rules_visible: true, can_save: true, can_delete: !!assignment });
+    }
     if (name === 'schedule') {
       const month = params.month || date.slice(0, 7), view = params.view || 'mine';
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !['mine', 'shop'].includes(view)) throw Object.assign(new Error('排班月份或视图不合法'), { status: 400, code: 'invalid_params' });
@@ -205,7 +251,7 @@ function createPreview(wx) {
         publish: { confirmed: false, confirmed_at: null, confirmed_by: null, note: '示例备注：仅用于界面预览', url: null, screenshots: [{ path: 'publish/' + applicationId + '/example.jpg', signed_url: null, error: 'sign_failed' }] },
         answers: [{ key: 'experience', label: '希望分享的内容', type: 'textarea', role: null, value: '分享昭和玩具的整理方法（示例）', image: null }, { key: 'contact', label: '联系电话', type: 'phone', role: null, value: '***1234', image: null }, { key: 'profile_image', label: '主页截图', type: 'image', role: 'profile_screenshot', value: null, image: { path: 'activity/' + activity.id + '/example.jpg', signed_url: null, error: 'sign_failed' } }] }, activity: { id: activity.id, name: activity.name, platform: activity.platform, form_fields: activity.form_fields }, version: '1'.repeat(64), server_time: stamp };
     }
-    if (name === 'community') return { items: [{ id: 'example-community', title: '今天学到一个新的瓷器底款知识', body: '分享观察方法，让每一位伙伴都能把商品故事讲得更准确。', user_id: 'example-employee' }], as_of: stamp };
+    if (name === 'community') return { items: [{ id: 'example-community', title: '今天学到一个新的瓷器底款知识', body: '分享观察方法，让每一位伙伴都能把商品故事讲得更准确。', user_id: current.userId }], as_of: stamp };
     if (name === 'community-detail') {
       if (params.id !== 'example-community') throw new Error('该示例帖子不存在');
       return { post: { id: 'example-community', name: '从底款读懂一只瓷杯', category: '瓷器餐具', story: '这是社区界面示例。先观察器型与釉面，再看底款；不确定的信息如实说明，不把猜测当作产地或年代的承诺。', description: '分享观察方法，让每一位伙伴都能把商品故事讲得更准确。', selling_points: ['先看品相', '如实介绍工艺'], created_at: date + 'T09:00:00+08:00', author: { user_id: current.userId, name: profile.display_name, avatar_url: null }, mine: true }, liked: false, likes_count: 0, comments_count: 1 };

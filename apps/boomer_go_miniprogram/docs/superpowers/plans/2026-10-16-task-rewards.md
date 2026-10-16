@@ -17,6 +17,6 @@
 - [x] Parent: add a failing preview-contract test, then align shared/preview.js with four daily rules and bounded pending samples; retain disabled mutation behavior. Correct only demonstrably inaccurate old test fixtures.
 - [x] Independently review the final changes, run the full Node suite, route checks and official WXML/WXSS compilers. Fix confirmed regressions before proceeding.
 - [x] Inspect the actual DevTools task list and disabled-preview state; retain real screenshots, not Figma renders as implementation evidence.
-- [ ] Update the current parity matrix and verification record, commit only Mini Program paths through the existing alternate index, non-force push/read back the same SHA, and verify the source archive in a clean extraction.
+- [x] Update the current parity matrix and verification record, commit only Mini Program paths through the existing alternate index, non-force push/read back the same SHA, and verify the source archive in a clean extraction. Reward checkpoint f4f6d6f99ab24ff04c3d914c8c4323d1349973ae; clean archive 1071/1071 and 23-route check passed, SHA256 85a15c86e787f3c6562658aa9d043d280fc90b21ab99891a99169a5cb573cac7.
 
-No step creates new backend permissions, consumes real rewards, sends OTP or operates the existing phone app. The independent R29 scheduling repair continues on its existing handle.
+No step creates new backend permissions, consumes real rewards, sends OTP or operates the existing phone app. The later independent R29/R30 scheduling source review is recorded separately in SCHEDULE_MANAGER_STAGE1_AUDIT.md.

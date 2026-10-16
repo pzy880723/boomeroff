@@ -35,9 +35,9 @@ These are migration requirements, not optional features removed by the first bou
 
 ## Required Backend Contract
 
-Current read RPC cannot authorize writes or supply management CAS/receipts. New action names are not frozen and must not be called from production UI until implemented and verified.
+The original read RPC cannot authorize writes or supply management CAS/receipts. Stage1 now has a separately implemented fixed R30 action contract in SCHEDULE_MANAGER_STAGE1_NATIVE.md. Further swap/clear/settings/day-off/AI actions remain unfrozen and must not be invented by the client.
 
-The independent R28 Stage1 build request is recorded in SCHEDULE_MANAGER_STAGE1_CONTRACT.md. It does not approve or implement the separate pending R27 content-home proposal. R28 returned fixed source and a deployment report; independent review found three SQL P2 issues. R29 closes lock/gate and hidden-rule problems in source, but candidate filtering still exposes hidden suspension through a DEFINER predicate. That residual is assigned directly as R30. SCHEDULE_MANAGER_STAGE1_AUDIT.md records exact evidence. No native management endpoint is wired while this remains open.
+The independent R28 Stage1 build request is recorded in SCHEDULE_MANAGER_STAGE1_CONTRACT.md. It does not approve or implement the separate pending R27 content-home proposal. Independent R29/R30 source review closes the three original SQL P2 findings and residual hidden-suspension inference. SCHEDULE_MANAGER_STAGE1_AUDIT.md records exact evidence and separates deployment reports from independent checks. The native Stage1 manager is now integrated; real authenticated write/readback acceptance is still open.
 
 Capabilities must independently report view, arrange, shift, day-off, swap, clear and AI authority for the requested shop. Bootstrap permissions may suggest an entry, not authorize an operation. Role names and can_view_shop never imply write permission.
 
@@ -49,7 +49,7 @@ Writes bind shop, employee, date, operation, assignment ID, expected cell versio
 
 Edit -> explicit confirm -> freeze UUID/payload -> submit -> validate exact receipt -> exact cell readback. Conflict keeps the draft; only explicit load-latest adopts another version. Unknown operations keep minimal actor/shop/employee/date-bound App RAM intent, never auto-resend or silently replace a key. A confirmed receipt with failed readback retries only the read. Hiding or losing permission hides private UI; recovery first rechecks current capabilities and never moves an old intent to a new store.
 
-Candidate files: pages/schedule-manage/index.js/json/wxml/wxss and model.js; tests/schedule-manager-pages.test.cjs. Shared API, route registration and labeled preview follow a verified server contract. No disabled placeholder manager entry has been shipped.
+Implemented files: pages/schedule-manage/index.js/json/wxml/wxss and model.js; tests/schedule-manager.test.cjs. Shared API, route registration and labeled preview follow the frozen Stage1 contract. The independent month-page entry never blocks personal month loading or infers management authority from role names.
 
 ## Evidence and Verification
 

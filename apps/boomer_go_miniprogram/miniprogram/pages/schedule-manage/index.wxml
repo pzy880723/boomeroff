@@ -1,0 +1,32 @@
+<view class="page manager-page">
+  <view wx:if="{{preview}}" class="preview-banner">开发预览 · 合成排班，非真实员工记录；不可写入</view>
+  <view class="manager-eyebrow">BOOMER / WORK</view><view class="manager-title">门店排班管理</view>
+  <view wx:if="{{shopName}}" class="muted">{{shopName}}</view>
+  <view class="notice">单人单日排班确认后立即生效，不含发布或员工通知。移除排班不等于新增休息或请假。</view>
+  <view class="row week-nav"><button class="button-secondary" data-offset="-7" bindtap="changeWeek" disabled="{{loading || sending || confirming || editorVisible || candidateLoading}}">上一周</button><picker mode="date" value="{{weekStart}}" bindchange="changeWeek" disabled="{{loading || sending || confirming || editorVisible || candidateLoading}}"><view class="week-picker">{{weekStart || '选择周日期'}}<view wx:if="{{weekEnd}}" class="muted">至 {{weekEnd}}</view></view></picker><button class="button-secondary" data-offset="7" bindtap="changeWeek" disabled="{{loading || sending || confirming || editorVisible || candidateLoading}}">下一周</button></view>
+  <view wx:if="{{loading}}" class="card muted">正在核验权限与排班…</view>
+  <view wx:if="{{error}}" class="card error"><view>{{error}}</view><button class="button-secondary" bindtap="retry" disabled="{{loading || sending || confirming}}">只读重试</button></view>
+  <view wx:if="{{notice}}" class="notice">{{notice}}</view>
+  <view wx:if="{{pendingRequests.length}}" class="card"><view class="section-title">原请求待核对</view><button wx:for="{{pendingRequests}}" wx:key="index" class="button-secondary pending-link" data-index="{{item.index}}" bindtap="resume" disabled="{{loading || sending || editorVisible || confirming}}">{{item.date}} · {{item.label}} · {{item.confirmed ? '回执待回读' : '结果待确认'}}</button></view>
+  <view wx:for="{{days}}" wx:for-item="day" wx:key="date" class="card day-card">
+    <view class="row day-heading"><view class="section-title">{{day.weekday}} <text>{{day.date}}</text></view><button wx:if="{{canArrange}}" class="day-add" data-date="{{day.date}}" bindtap="addDay" disabled="{{loading || sending || confirming || editorVisible || candidateLoading}}">安排</button></view>
+    <view wx:if="{{!day.rows.length}}" class="empty-day muted">当前未排班；不据此推断休息</view>
+    <button wx:for="{{day.rows}}" wx:key="assignment_id" class="assignment" data-id="{{item.assignment_id}}" bindtap="openAssignment" disabled="{{loading || sending || confirming || editorVisible || candidateLoading}}"><view class="assignment-name">{{item.name}}</view><view class="muted assignment-shift">{{item.shiftText}}</view><view class="assignment-action">{{canArrange ? '查看 / 改班' : '只读查看'}}</view></button>
+  </view>
+  <view wx:if="{{!loading && !error && !days.length}}" class="card empty">当前没有已核验的周排班，请核对门店与查看权限。</view>
+  <view wx:if="{{candidateVisible}}" id="manager-candidates" class="card candidate-card"><view class="row editor-heading"><view class="section-title">{{targetDate}} · 选择授权员工</view><button class="close-control" bindtap="closeCandidates">关闭</button></view><view class="row candidate-search"><input value="{{query}}" bindinput="onQuery" bindconfirm="searchCandidates" maxlength="-1" placeholder="按姓名搜索，最多40字" confirm-type="search"/><button class="button-secondary" bindtap="searchCandidates">搜索</button></view><view class="muted">服务器按字面搜索，每页最多20人；无候选不代表没有员工。</view><view wx:if="{{candidateLoading}}" class="muted loading-text">读取候选员工…</view><button wx:for="{{candidates}}" wx:key="id" class="candidate-row" data-id="{{item.id}}" bindtap="chooseCandidate" disabled="{{candidateLoading || loading || sending}}">{{item.name}}</button><view wx:if="{{!candidateLoading && !candidates.length}}" class="empty muted">当前搜索暂无可见候选</view><button wx:if="{{candidateMore}}" class="button-secondary" bindtap="loadMoreCandidates" disabled="{{candidateLoading}}">加载更多候选</button></view>
+  <view wx:if="{{editorVisible}}" id="manager-editor" class="card cell-editor"><view class="row editor-heading"><view class="section-title">单格排班</view><button class="close-control" bindtap="cancelEditor" disabled="{{loading || sending || confirming}}">{{pending ? '收起原请求' : '关闭编辑'}}</button></view><view class="target-name">{{targetName}}</view><view class="muted target-date">{{targetDate}} · 员工与日期固定</view>
+    <view wx:if="{{!cellReadable && pending}}" class="notice">当前单格暂不可读；不存在响应不能证明删除成功或原请求未执行。仅可核对原请求状态或回执，不能重发。</view>
+    <view wx:if="{{cellReadable}}"><view class="original-shift">原排班：{{originalShift}}</view>
+    <view class="section-title shift-title">选择班次</view><button wx:for="{{shifts}}" wx:key="id" class="shift-option {{selectedShift === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="chooseShift" disabled="{{!canArrange || !item.selectable || loading || sending || pending || conflict}}"><view>{{item.name}} · {{item.time}}</view><view class="muted">{{item.shop_id === null ? '显式通用班次' : '本店班次'}} · {{item.code}}{{item.selectable ? '' : ' · 代码重复不可选'}}</view></button>
+    <view wx:if="{{hardWarning}}" class="error warning-box">当天存在其他门店排班，不能在此安排；不展示其他门店信息。</view>
+    <view class="muted warning-help">{{rulesVisible ? '当前可见的员工规则已读取。' : '当前无权读取全部员工规则。'}}以下仅为可见提醒，不代表所有私密限制；能提交不保证最终资格。</view>
+    <checkbox-group wx:if="{{visibleWarnings.length}}" bindchange="onWarnings"><label wx:for="{{visibleWarnings}}" wx:key="code" class="warning-row"><checkbox value="{{item.code}}" checked="{{item.checked}}" color="#EB0029" disabled="{{loading || sending || pending || conflict || !canArrange}}"/><text>已知悉：{{item.label}}</text></label></checkbox-group>
+    </view>
+    <view wx:if="{{conflict}}" class="notice">原选择保留。请明确载入最新版本，不能直接覆盖其他修改。</view>
+    <view wx:if="{{readbackError}}" class="error warning-box">{{readbackError}}</view>
+    <view wx:if="{{cellReadable}}"><button class="button manager-action" bindtap="save" loading="{{sending}}" disabled="{{!canSave || loading || sending || confirming || preview}}">确认安排 / 改班</button><button class="button-secondary danger-action" bindtap="remove" disabled="{{!canDelete || loading || sending || confirming || preview}}">移除该日排班</button>
+    <button wx:if="{{!pending}}" class="button-secondary" bindtap="reloadLatest" disabled="{{loading || sending || confirming}}">明确载入最新单格</button></view>
+    <button wx:if="{{pending}}" class="button-secondary manager-action" bindtap="reconcile" disabled="{{loading || sending || confirming || preview}}">{{receiptConfirmed ? '只读回查单格' : '只读核对原请求状态'}}</button><button wx:if="{{canRetrySame}}" class="button-secondary" bindtap="retrySame" disabled="{{loading || sending || confirming || preview}}">再次确认后按同一原请求重试</button>
+  </view>
+</view>

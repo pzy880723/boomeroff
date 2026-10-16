@@ -2,9 +2,16 @@ const { definePage } = require('../../shared/page');
 const model = require('../list/model');
 const schedule = require('./newmodel');
 const pad = (number) => String(number).padStart(2, '0');
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function managementCapability(data, shopId) {
+  return data && data.shop_id === shopId && typeof data.can_view === 'boolean' && typeof data.can_arrange === 'boolean'
+    && Array.isArray(data.implemented_operations) && data.implemented_operations.length === 3
+    && ['create', 'update', 'delete'].every(operation => data.implemented_operations.includes(operation))
+    && typeof data.server_time === 'string' && data.server_time.includes('T') && Number.isFinite(Date.parse(data.server_time));
+}
 
 Page(definePage({
-  data: { month: '', view: 'mine', canViewShop: false, days: [], items: [], visibleItems: [], groups: [], conflicts: [], visibleConflicts: [], selectedDate: '', weekdays: ['一', '二', '三', '四', '五', '六', '日'], freshness: '', notice: '' },
+  data: { month: '', view: 'mine', canViewShop: false, days: [], items: [], visibleItems: [], groups: [], conflicts: [], visibleConflicts: [], selectedDate: '', weekdays: ['一', '二', '三', '四', '五', '六', '日'], freshness: '', notice: '', managementEntryVisible: false, managementEntryLabel: '' },
   onLoad(options) {
     this._hidden = false;
     this._view = 'mine';
@@ -19,13 +26,14 @@ Page(definePage({
   },
   onHide() {
     this._hidden = true;
+    this.clearManagementEntry();
     this._request = (this._request || 0) + 1;
     this._loadingRun = (this._loadingRun || 0) + 1;
     this._shopPermission = '';
     this.setData({ loading: false, error: '', items: [], visibleItems: [], groups: [], conflicts: [], visibleConflicts: [], canViewShop: false, freshness: '', notice: '' });
     this.buildDays([]);
   },
-  onUnload() { this._hidden = true; this._request = (this._request || 0) + 1; this._shopPermission = ''; },
+  onUnload() { this._hidden = true; this.clearManagementEntry(); this._request = (this._request || 0) + 1; this._shopPermission = ''; },
   onPullDownRefresh() { return this.load().finally(() => wx.stopPullDownRefresh()); },
   load() {
     if (this._gone || this._hidden) return Promise.resolve();
@@ -37,7 +45,7 @@ Page(definePage({
     const session = this.session.get();
     const context = { month, view, userId: session && session.userId, shopId: session && session.shop && session.shop.id || null };
     this.buildDays([]);
-    return model.remote(this, async () => {
+    const monthRead = model.remote(this, async () => {
       if (view === 'shop' && !context.shopId) throw new Error('请先选择当前授权工作门店，再同步排班');
       const serial = this._request;
       const identity = this._identity;
@@ -54,6 +62,55 @@ Page(definePage({
         freshness: model.freshness(data), notice: result.revoked ? '本店同事查看权限已撤销，请重新同步我的排班。' : '' });
       this.showEntries();
     }, { view, items: [], visibleItems: [], groups: [], conflicts: [], visibleConflicts: [], canViewShop: false, freshness: '', notice: '' });
+    // Keep the independent capability request outside the personal month's promise and loading state.
+    this.loadManagementEntry();
+    return monthRead;
+  },
+  clearManagementEntry() {
+    this._managementSerial = (this._managementSerial || 0) + 1;
+    this._managementCap = null;
+    this._managementFlight = null;
+    const clear = { managementEntryVisible: false, managementEntryLabel: '' };
+    if (this._gone) Object.assign(this.data, clear); else this.setData(clear);
+  },
+  managementEntryActive(context) {
+    const current = this.session.get();
+    return !this._gone && !this._hidden && !!current && !!current.shop && !!context.identity
+      && current.shop.id === context.shopId && context.identity === model.scope(this) && context.serial === this._managementSerial;
+  },
+  loadManagementEntry() {
+    if (this._gone || this._hidden) return;
+    if (this._managementFlight && this.managementEntryActive(this._managementFlight)) return this._managementFlight.promise;
+    this.clearManagementEntry();
+    const current = this.session.get();
+    if (!current || !current.userId || !current.shop || typeof current.shop.id !== 'string' || !UUID.test(current.shop.id)) return;
+    const context = { identity: model.scope(this), shopId: current.shop.id, serial: this._managementSerial,
+      revision: this.session.revision ? this.session.revision() : null };
+    this._managementFlight = context;
+    context.promise = this.run(async () => {
+      try {
+        const data = await this.api.action('schedule-manage-capabilities', { shop_id: context.shopId });
+        if (!this.managementEntryActive(context) || !managementCapability(data, context.shopId) || !data.can_view) return;
+        this._managementCap = context;
+        this.setData({ managementEntryVisible: true, managementEntryLabel: data.can_arrange ? '管理本周门店排班' : '本周门店排班（只读）' });
+      } catch (error) {
+        if (!this.managementEntryActive(context)) return;
+        this.clearManagementEntry();
+        if (error.status === 401 && (error.requestRevision == null || error.requestRevision === context.revision)) {
+          const safe = new Error('员工登录已失效，请重新登录');
+          safe.status = 401; safe.requestRevision = context.revision; throw safe;
+        }
+      }
+    }, { silent: true }).finally(() => { if (this._managementFlight === context) this._managementFlight = null; });
+    return context.promise;
+  },
+  openManagementEntry() {
+    const context = this._managementCap;
+    if (!context || !this.managementEntryActive(context) || this.data.managementEntryVisible !== true) {
+      if (context || this.data.managementEntryVisible) this.clearManagementEntry();
+      return;
+    }
+    return this.navigate('/pages/schedule-manage/index');
   },
   buildDays(entries) {
     this.setData({ days: schedule.calendar(this.data.month, this.data.selectedDate, entries) });

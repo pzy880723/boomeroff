@@ -1,4 +1,24 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const{createPreview}=require('../miniprogram/shared/preview');
+test('schedule management preview binds valid synthetic UUIDs, week/cell/candidates and remains read-only',async()=>{
+ const p=createPreview({}),user=p.session.get(),shop_id=user.shop.id,uuid=/^[0-9a-f-]{36}$/;
+ assert.match(user.userId,uuid);assert.match(shop_id,uuid);
+ const caps=await p.api.action('schedule-manage-capabilities',{shop_id});
+ assert.equal(caps.can_view,true);assert.equal(caps.can_arrange,true);assert.deepEqual(caps.implemented_operations,['create','update','delete']);
+ const week=await p.api.action('schedule-manage-week',{shop_id,week_start:'2026-10-12'});
+ assert.equal(week.week_end,'2026-10-18');assert.equal(week.rows.length,2);assert.match(week.week_version,/^[0-9a-f]{64}$/);assert.equal(week.persisted,false);
+ assert.ok(week.rows.every(row=>row.shop_id===shop_id&&uuid.test(row.assignment_id)&&uuid.test(row.user_id)&&/示例/.test(row.display_name)));
+ const own=week.rows.find(row=>row.user_id===user.userId),cell=await p.api.action('schedule-manage-cell',{shop_id,user_id:own.user_id,work_date:own.work_date});
+ assert.equal(cell.assignment.assignment_id,own.assignment_id);assert.equal(cell.can_save,true);assert.equal(cell.can_delete,true);assert.equal(cell.rules_visible,true);
+ assert.ok(cell.shifts.every(row=>uuid.test(row.id)&&/^[0-9a-f]{64}$/.test(row.version)&&typeof row.selectable==='boolean'));
+ const empty=await p.api.action('schedule-manage-cell',{shop_id,user_id:user.userId,work_date:'2026-10-12'});assert.equal(empty.assignment,null);assert.equal(empty.can_delete,false);
+ const list=await p.api.action('schedule-manage-candidates',{shop_id,work_date:own.work_date,q:'伙伴'});assert.equal(list.items.length,2);assert.equal(list.has_more,false);assert.equal(list.next_cursor,null);
+ assert.deepEqual((await p.api.action('schedule-manage-candidates',{shop_id,work_date:own.work_date,q:'%'})).items,[]);
+ await assert.rejects(p.api.action('schedule-manage-week',{shop_id,week_start:'2026-10-13'}),e=>e.status===400);
+ await assert.rejects(p.api.action('schedule-manage-cell',{shop_id,user_id:'missing',work_date:own.work_date}),e=>e.status===404);
+ for(const name of ['schedule-manage-capabilities','schedule-manage-week','schedule-manage-candidates','schedule-manage-cell'])await assert.rejects(p.api.action(name,{shop_id:'foreign',week_start:'2026-10-12',user_id:user.userId,work_date:own.work_date}),e=>e.status===403);
+ for(const name of ['schedule-manage-write','schedule-manage-write-status'])await assert.rejects(p.api.action(name,{shop_id}));
+ assert.deepEqual((await p.api.action('schedule-manage-week',{shop_id,week_start:'2026-10-12'})).rows,week.rows);
+});
 test('reward inbox preview uses four real daily keys and labeled pending events without any mutation',async()=>{
  const p=createPreview({}),tasks=await p.api.action('tasks');
  assert.match(tasks.date,/^\d{4}-\d{2}-\d{2}$/);assert.equal(tasks.persisted,false);

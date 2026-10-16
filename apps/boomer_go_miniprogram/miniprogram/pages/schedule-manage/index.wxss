@@ -1,0 +1,37 @@
+.manager-page { padding-bottom: 64rpx; }
+.manager-eyebrow { color: #eb0029; font-size: 24rpx; letter-spacing: 2rpx; margin: 12rpx 0; }
+.manager-title { color: #202125; font-size: 48rpx; font-weight: 700; margin-bottom: 16rpx; }
+.manager-page .notice { background: #fff2f4; color: #803044; padding: 24rpx; font-size: 28rpx; line-height: 1.7; border-radius: 20rpx; margin: 24rpx 0; }
+.preview-banner { color: #7c5300; background: #fff1d6; padding: 24rpx; font-size: 28rpx; line-height: 1.6; border-radius: 16rpx; margin-bottom: 24rpx; }
+.week-nav { justify-content: space-between; align-items: center; margin: 24rpx 0; }
+.week-nav button { margin: 0; padding: 0 20rpx; min-height: 88rpx; font-size: 28rpx; }
+.week-picker { text-align: center; padding: 18rpx 8rpx; min-height: 88rpx; box-sizing: border-box; font-size: 28rpx; }
+.week-picker .muted { font-size: 24rpx; margin-top: 8rpx; }
+.day-heading, .editor-heading { justify-content: space-between; align-items: center; }
+.day-heading .section-title, .editor-heading .section-title { margin: 0; font-size: 32rpx; }
+.day-heading .section-title text { font-size: 26rpx; font-weight: 400; margin-left: 12rpx; }
+.day-add, .close-control { margin: 0; color: #eb0029; background: #fff0f3; padding: 0 20rpx; min-height: 88rpx; line-height: 88rpx; font-size: 28rpx; }
+.empty-day { font-size: 28rpx; line-height: 1.7; padding: 28rpx 0 4rpx; }
+.assignment { width: 100%; box-sizing: border-box; margin-top: 24rpx; padding: 24rpx; background: #f8f8fa; text-align: left; border-radius: 20rpx; line-height: 1.6; }
+.assignment-name, .target-name { font-size: 32rpx; font-weight: 600; word-break: break-all; }
+.assignment-shift { font-size: 28rpx; margin-top: 8rpx; }
+.assignment-action { color: #eb0029; font-size: 26rpx; margin-top: 12rpx; }
+.candidate-search { margin: 24rpx 0; }
+.candidate-search input { flex: 1; min-width: 0; font-size: 30rpx; min-height: 88rpx; background: #f5f6f8; border-radius: 16rpx; padding: 0 20rpx; }
+.candidate-search button { margin-left: 16rpx; font-size: 28rpx; padding: 0 20rpx; }
+.candidate-card .muted, .warning-help { font-size: 28rpx; line-height: 1.7; }
+.candidate-row, .shift-option { width: 100%; box-sizing: border-box; min-height: 100rpx; background: #f8f8fa; text-align: left; border-radius: 18rpx; margin-top: 20rpx; padding: 24rpx; font-size: 32rpx; line-height: 1.6; }
+.shift-option.selected { color: #a6001d; background: #fff0f3; border: 2rpx solid #eb0029; }
+.shift-option .muted { font-size: 26rpx; margin-top: 8rpx; }
+.target-name { margin-top: 28rpx; }
+.target-date { margin-top: 12rpx; font-size: 28rpx; }
+.original-shift { margin: 24rpx 0; font-size: 30rpx; line-height: 1.7; }
+.shift-title { margin-top: 28rpx; }
+.warning-help { margin-top: 28rpx; }
+.warning-row { display: flex; align-items: center; min-height: 100rpx; font-size: 30rpx; line-height: 1.7; padding: 16rpx 0; }
+.warning-row checkbox { margin-right: 16rpx; flex-shrink: 0; }
+.warning-box { padding: 24rpx; font-size: 30rpx; line-height: 1.7; margin: 24rpx 0; }
+.manager-action, .danger-action { min-height: 100rpx; font-size: 32rpx; padding: 24rpx; line-height: 1.6; margin-top: 24rpx; }
+.danger-action { color: #a6001d; background: #fff0f3; }
+.pending-link { font-size: 28rpx; line-height: 1.7; padding: 24rpx; margin-top: 16rpx; }
+.loading-text { padding: 24rpx 0; }

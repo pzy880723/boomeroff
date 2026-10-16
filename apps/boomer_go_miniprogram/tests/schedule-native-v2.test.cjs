@@ -39,11 +39,21 @@ function legacy(month = '2026-10') {
 // Execute the real page and shared lifecycle shell; only app transport/session/wx are synthetic.
 function nativePage(action = async () => dto(), initial = employee()) {
   let definition, current = initial, revision = 1, signOuts = 0;
-  const calls = [], patches = [];
+  const calls = [], managementCalls = [], patches = [];
   const app = {
     preview: false,
     session: { get: () => current, revision: () => revision, signOut() { signOuts++; current = null; revision++; } },
-    api: { async action(name, params) { calls.push({ name, params: plain(params) }); return action(name, params); } },
+    api: { async action(name, params) {
+      if (name === 'schedule-manage-capabilities') {
+        managementCalls.push({ name, params: plain(params) });
+        return { shop_id: params.shop_id, can_view: false, can_arrange: false,
+          existing_permissions: { shift_write: false, dayoff_write: false, swap: false, clear_week: false, ai_schedule: false },
+          implemented_operations: ['create', 'update', 'delete'], server_time: '2026-10-16T02:00:00Z' };
+      }
+      assert.equal(name, 'schedule', 'monthly fixture must not hide unexpected actions');
+      calls.push({ name, params: plain(params) });
+      return action(name, params);
+    } },
     ensureSession: async () => !!current
   };
   const wx = { setNavigationBarTitle() {}, stopPullDownRefresh() {}, reLaunch() {}, showToast() {} };
@@ -63,7 +73,7 @@ function nativePage(action = async () => dto(), initial = employee()) {
     data: structuredClone(definition.data),
     setData(values) { assert.notEqual(this._gone, true, 'unloaded page must not receive setData'); patches.push(plain(values)); Object.assign(this.data, values); }
   });
-  return { page, calls, patches, signOuts: () => signOuts, changeIdentity(value = current) { current = value; revision++; } };
+  return { page, calls, managementCalls, patches, signOuts: () => signOuts, changeIdentity(value = current) { current = value; revision++; } };
 }
 
 function switchView(page, view) {

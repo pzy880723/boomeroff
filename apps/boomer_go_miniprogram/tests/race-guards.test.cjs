@@ -164,7 +164,9 @@ test('a different explicit login rejects while the first OTP login is busy', asy
   }
 });
 
-for (const action of ['learning', 'objectives', 'marketing-assets', 'marketing-detail']) {
+for (const action of ['learning', 'objectives', 'marketing-assets', 'marketing-detail',
+  'schedule-manage-capabilities', 'schedule-manage-week', 'schedule-manage-candidates',
+  'schedule-manage-cell', 'schedule-manage-write', 'schedule-manage-write-status']) {
   test(action + ' requires a selected shop and sends nothing without one', async () => {
     const f = fixture();
     await login(f, 'A', null);
@@ -175,6 +177,25 @@ for (const action of ['learning', 'objectives', 'marketing-assets', 'marketing-d
     await result.done;
     assert.equal(sent.length, 0, 'missing shop must fail before transport');
     rejected(result, action + ' must not silently become an unfiltered request');
+  });
+}
+
+for (const action of ['schedule-manage-capabilities', 'schedule-manage-week', 'schedule-manage-candidates',
+  'schedule-manage-cell', 'schedule-manage-write', 'schedule-manage-write-status']) {
+  test(action + ' uses the selected shop without mutating a frozen original payload and rejects a late foreign context', async () => {
+    const f = fixture(); await login(f);
+    const gate = deferred(), started = deferred(), sent = [];
+    const api = apiFor(f, async (name, body) => { sent.push({ name, body }); started.resolve(); return gate.promise; });
+    const original = Object.freeze({ shop_id: SHOPS[1].id, request_id: '00000000-0000-4000-8000-000000000777' });
+    const result = observe(api.action(action, original));
+    await reached(started, result);
+    assert.equal(sent.length, 1); assert.equal(sent[0].name, 'go-mini-api');
+    assert.equal(sent[0].body.action, action); assert.equal(sent[0].body.params.shop_id, SHOPS[0].id);
+    assert.equal(sent[0].body.params.request_id, original.request_id); assert.equal(original.shop_id, SHOPS[1].id);
+    f.session.selectShop(SHOPS[1].id);
+    gate.resolve({ ok: true, data: { shop_id: SHOPS[0].id } }); await result.done;
+    rejected(result, 'a stale schedule-management response must not enter a new selected shop');
+    assert.equal(result.error.code, 'stale_operation'); assert.equal(sent.length, 1);
   });
 }
 
