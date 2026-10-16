@@ -441,9 +441,14 @@ test('task claim failure never changes progress or claims a successful reward', 
 
 test('objective form writes key actions and results only after explicit save', async () => {
   const writes = [];
+  let row = { id: 'o1', shop_id: employee.shop.id, title: '服务协作', key_actions: '旧行动', key_results: [{ title: '学习', done: false }], updated_at: '2026-10-16T01:00:00Z' };
   const page = nativePage('detail', async (action, params) => {
-    if (action === 'objective-update') { writes.push(params); return { updated: true }; }
-    return { item: { id: 'o1', title: '服务协作', key_actions: '旧行动', key_results: [{ title: '学习', done: false }] } };
+    if (action === 'objective-update') {
+      writes.push(params);
+      row = Object.assign({}, row, params, { updated_at: '2026-10-16T01:01:00Z' });
+      return { id: row.id, key_actions: row.key_actions, key_results: row.key_results, updated_at: row.updated_at };
+    }
+    return { shop_id: employee.shop.id, page: params.page, page_size: params.page_size, has_more: false, items: [row] };
   });
   await page.onLoad({ kind: 'objectives', id: 'o1' });
   page.onKeyActionsInput({ detail: { value: '核对价签' } });
@@ -452,6 +457,7 @@ test('objective form writes key actions and results only after explicit save', a
   await page.saveObjective();
   assert.equal(writes[0].key_actions, '核对价签');
   assert.equal(writes[0].key_results[0].done, true);
+  assert.match(page.data.actionNotice, /已核对一致/);
 });
 
 test('community share submits the existing product id and is single-flight', async () => {

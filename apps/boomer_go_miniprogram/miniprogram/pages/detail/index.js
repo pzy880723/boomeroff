@@ -1,6 +1,7 @@
 const { definePage } = require('../../shared/page');
 const model = require('../list/model');
 const { businessContent } = require('./content');
+const objective = require('./objective');
 const learningKinds = ['knowledge', 'official', 'sop', 'qa', 'training', 'favorite', 'favorites', 'my-library', 'history', 'recognition'];
 function practiceCoordinator() { const app = typeof getApp === 'function' ? getApp() : null; return app && app.dailyPractice; }
 
@@ -15,12 +16,13 @@ function contentNodes(item) {
 Page(definePage({
   data: { kind: '', id: '', item: null, nodes: '', fields: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], freshness: '', quizUrl: '', unavailable: '', favorite: null, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, canSave: false, canShare: false, busy: false, actionNotice: '', resolvedMessage: '', resolvedUrl: '', keyActionsDraft: '', draftResults: [], messages: [], messageDraft: '', profileNameDraft: '', avatarPreview: '' },
   onLoad(options) { this._hidden = false; this._practiceRequested = options.practice === '1'; this.setData({ kind: options.kind || 'knowledge', id: options.id || '', practiceRequested: this._practiceRequested }); this.syncPractice(); return this.load(); },
-  onShow() { const hidden = this._hidden; this._hidden = false; this._practiceRedirecting = false; this.syncPractice(); if (this._request && (this._identity !== model.scope(this) || (hidden && learningKinds.indexOf(this.data.kind) >= 0))) return this.load(); },
-  onHide() { if (learningKinds.indexOf(this.data.kind) >= 0) { model.hideLearning(this); this.setData({ quizUrl: '' }); } },
+  onShow() { const hidden = this._hidden; this._hidden = false; this._practiceRedirecting = false; this.syncPractice(); if (this.data.kind === 'objectives') { if (hidden || this._objectiveIdentity !== model.scope(this)) return this.loadObjective(); return; } if (this._request && (this._identity !== model.scope(this) || (hidden && learningKinds.indexOf(this.data.kind) >= 0))) return this.load(); },
+  onHide() { if (this.data.kind === 'objectives') { this._hidden = true; this.clearObjective(); } if (learningKinds.indexOf(this.data.kind) >= 0) { model.hideLearning(this); this.setData({ quizUrl: '' }); } },
   onUnload() { this.onHide(); this._gone = true; },
-  onPullDownRefresh() { return this.load().finally(() => wx.stopPullDownRefresh()); },
+  onPullDownRefresh() { return Promise.resolve(this.data.kind === 'objectives' ? this.reloadObjective() : this.load()).finally(() => wx.stopPullDownRefresh()); },
   load() {
     const kind = this.data.kind;
+    if (kind === 'objectives') return this.loadObjective();
     const section = model.sections[kind];
     if (learningKinds.indexOf(kind) >= 0) this.setData({ learningNotice: '' });
     this._identity = model.scope(this);
@@ -296,16 +298,101 @@ Page(definePage({
       });
     } finally { this._writing = false; if (!this._gone) this.setData({ busy: false }); }
   },
-  onKeyActionsInput(event) { this.setData({ keyActionsDraft: event.detail.value }); },
-  onKeyResultChange(event) {
-    const index = Number(event.currentTarget.dataset.index);
-    const draft = this.data.draftResults.slice();
-    if (!draft[index] || this.data.busy) return;
-    draft[index] = Object.assign({}, draft[index], { completed: event.detail.value === true });
-    this.setData({ draftResults: draft });
+  clearObjective() {
+    this._objectiveSerial = (this._objectiveSerial || 0) + 1;
+    this._objective = null; this._objectiveDraft = null; this._objectiveIdentity = '';
+    this.setData({ item: null, nodes: '', fields: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], draftResults: [], keyActionsDraft: '', freshness: '', actionNotice: '', error: '', loading: false, busy: false, objectiveDirty: false, objectiveBlocked: false });
   },
-  saveObjective() {
-    return this.writeAction('objective-update', { id: this.data.id, key_actions: this.data.keyActionsDraft, key_results: this.data.draftResults.map((result) => ({ title: result.title, done: result.completed })) });
+  objectiveContext() {
+    const user = this.session.get();
+    return { serial: this._objectiveSerial, identity: model.scope(this), id: this.data.id, shopId: user && user.shop && user.shop.id };
+  },
+  objectiveActive(c) { return !this._gone && !this._hidden && this.data.kind === 'objectives' && c.id === this.data.id && c.serial === this._objectiveSerial && !!c.identity && c.identity === model.scope(this); },
+  async loadObjective() {
+    if (this._gone || this._hidden) return;
+    if (this._objectiveSaving) {
+      this._objectiveResumeRead = this.objectiveContext();
+      this.setData({ loading: true });
+      return;
+    }
+    if (this._objectiveRead && this.objectiveActive(this._objectiveRead)) return;
+    this.clearObjective();
+    const c = this.objectiveContext();
+    this._objectiveRead = c;
+    this.setData({ loading: true });
+    await this.run(async () => {
+      try {
+        if (!c.identity || !c.shopId || !c.id) throw new Error('缺少已验证员工、门店或 OKR ID，请返回列表');
+        const row = await objective.read(this.api, c.id, c.shopId, () => this.objectiveActive(c));
+        if (this.objectiveActive(c)) this.showObjective(row, c.identity);
+      } catch (error) { if (this.objectiveActive(c)) throw error; }
+      finally {
+        if (this._objectiveRead === c) this._objectiveRead = null;
+        if (this.objectiveActive(c)) this.setData({ loading: false });
+      }
+    }, { silent: true });
+  },
+  showObjective(row, identity) {
+    this._objective = objective.clone(row); this._objectiveDraft = objective.clone(row.key_results); this._objectiveIdentity = identity;
+    const fields = [ ['目标说明', row.objective], ['周期开始', row.period_start], ['周期结束', row.period_end] ].filter(field => field[1] != null).map(field => ({ label: field[0], value: String(field[1]) }));
+    this.setData({ item: { id: row.id, title: row.title, category: row.shop_id === null ? '共享 OKR' : '门店 OKR' }, fields, results: objective.views(row.key_results), draftResults: objective.views(row.key_results), keyActionsDraft: row.key_actions || '', freshness: model.freshness(row), objectiveDirty: false, objectiveBlocked: false, error: '' });
+    wx.setNavigationBarTitle({ title: row.title });
+  },
+  objectiveEditable() { return this.objectiveActive(this.objectiveContext()) && this._objectiveIdentity === model.scope(this) && !!this._objective && !!this._objectiveDraft && !this._objectiveSaving && !this.data.loading && !this.data.objectiveBlocked; },
+  objectiveDirty() { return this._objective && (!objective.equal(this._objectiveDraft, this._objective.key_results) || this.data.keyActionsDraft !== (this._objective.key_actions || '')); },
+  onKeyActionsInput(event) {
+    if (this.data.kind !== 'objectives' || !this.objectiveEditable()) return;
+    this.setData({ keyActionsDraft: event.detail.value, error: '', actionNotice: '' });
+    this.setData({ objectiveDirty: !!this.objectiveDirty() });
+  },
+  onKeyResultChange(event) {
+    if (this.data.kind !== 'objectives' || !this.objectiveEditable()) return;
+    const index = Number(event.currentTarget.dataset.index);
+    if (!Number.isInteger(index) || !this.data.draftResults[index] || !this.data.draftResults[index].editable) return;
+    this._objectiveDraft = objective.change(this._objectiveDraft, index, event.detail.value === true);
+    this.setData({ draftResults: objective.views(this._objectiveDraft), objectiveDirty: !!this.objectiveDirty(), error: '', actionNotice: '' });
+  },
+  async saveObjective() {
+    if (!this.objectiveEditable() || this.preview || this.data.preview || !this.objectiveDirty()) return;
+    if (typeof this.data.keyActionsDraft !== 'string' || this.data.keyActionsDraft.length > 4000) { this.setData({ error: '关键行动最多 4000 个字符，草稿未截断' }); return; }
+    const c = this.objectiveContext(), expected = objective.clone(this._objective), params = { id: c.id };
+    if (!objective.equal(this._objectiveDraft, expected.key_results)) params.key_results = expected.key_results = objective.clone(this._objectiveDraft);
+    if (this.data.keyActionsDraft !== (expected.key_actions || '')) params.key_actions = expected.key_actions = this.data.keyActionsDraft;
+    this._objectiveSaving = true;
+    this.setData({ busy: true, error: '', actionNotice: '' });
+    await this.run(async () => {
+      let confirmed = false;
+      try {
+        const receipt = await this.api.action('objective-update', params);
+        if (!this.objectiveActive(c)) return;
+        if (!objective.receipt(receipt, expected)) throw new Error('服务器更新回包未通过核对');
+        confirmed = true;
+        const row = await objective.read(this.api, c.id, c.shopId, () => this.objectiveActive(c));
+        if (!this.objectiveActive(c)) return;
+        if (!objective.matches(row, expected) || Date.parse(row.updated_at) !== Date.parse(receipt.updated_at)) throw new Error('重新读取内容与更新回包不一致');
+        this.showObjective(row, c.identity);
+        this.setData({ actionNotice: '服务器保存字段与重新读取内容已核对一致。此接口无并发版本锁，后续修改请再次读取。' });
+      } catch (error) {
+        if (!this.objectiveActive(c)) return;
+        this.setData({ objectiveBlocked: true, actionNotice: confirmed ? '服务器已返回匹配更新字段，但详情尚未核对；未确认保存完成，禁止重复发送。' : '本次保存未完成核对，草稿保留；不会自动重发。请先重新读取云端状态。' });
+        if (error.status === 401) { this.clearObjective(); throw error; }
+        const safe = new Error(error.status === 403 ? '保存权限由服务器核验，当前未获准保存；草稿保留，请重新读取核对。' : '保存结果未确认，请重新读取核对；草稿已保留。');
+        throw safe;
+      } finally {
+        this._objectiveSaving = false;
+        if (this.objectiveActive(c)) this.setData({ busy: false });
+        const resume = this._objectiveResumeRead;
+        this._objectiveResumeRead = null;
+        if (resume && this.objectiveActive(resume)) await this.loadObjective();
+      }
+    }, { silent: true });
+  },
+  reloadObjective() {
+    if (this._gone || this._hidden || this._objectiveSaving || this.data.loading) return;
+    const c = this.objectiveContext();
+    if (!this.objectiveDirty() && !this.data.objectiveBlocked) return this.loadObjective();
+    const actions = this.data.keyActionsDraft, results = objective.clone(this._objectiveDraft);
+    wx.showModal({ title: '重新读取 OKR', content: '将放弃本页未确认草稿并读取当前云端内容；不会重新发送上次保存，也不能据此证明上次请求失败。', confirmText: '读取最新', success: result => { if (result.confirm && this.objectiveActive(c) && !this._objectiveSaving && this.data.keyActionsDraft === actions && objective.equal(this._objectiveDraft, results)) this.loadObjective(); } });
   },
   confirmShare() {
     if (this.data.busy) return;
@@ -349,5 +436,5 @@ Page(definePage({
     };
     this.setData({ unavailable: descriptions[kind] || '昵称和头像请前往个人资料修改；真实姓名、手机号、角色和门店由 ERP 管理，不可在此编辑。' });
   },
-  retry() { return this.data.kind === 'profile' && this._profileDirty ? this.saveProfile() : this.load(); }
+  retry() { if (this.data.kind === 'objectives') return this.reloadObjective(); return this.data.kind === 'profile' && this._profileDirty ? this.saveProfile() : this.load(); }
 }));

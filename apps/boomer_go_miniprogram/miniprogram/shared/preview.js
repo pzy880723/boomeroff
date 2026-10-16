@@ -169,7 +169,12 @@ function createPreview(wx) {
       score: index, total: 1, passed_at: favorite.passed ? stamp : null, last_attempt_at: stamp
     })), page: params.page || 0, page_size: 20, has_more: false, as_of: stamp };
     if (name === 'checkin-status') return { date, timezone: 'Asia/Shanghai', checked_today: false, today: null, stats: { current_streak: 0, longest_streak: 0, total_check_ins: 0 }, history: { items: [], page: 0, page_size: 20, has_more: false } };
-    if (name === 'objectives') return { items: [{ id: 'example-okr', title: '本周：商品知识与门店体验', objective: '完善商品介绍，保持门店整洁，让伙伴掌握服务要点。', key_results: [{ title: '学习商品知识', done: false }, { title: '检查价签与品相说明', done: false }], body: '这是运营目标的界面示例，不涉及销售业绩考核。' }], as_of: stamp };
+    if (name === 'objectives') {
+      if (params.shop_id && params.shop_id !== shop.id) throw Object.assign(new Error('示例模式只展示当前门店'), { status: 403, code: 'shop_forbidden' });
+      const page = Number.isInteger(params.page) && params.page >= 0 ? params.page : 0;
+      const page_size = Math.min(Math.max(Number.isInteger(params.page_size) ? params.page_size : 20, 1), 50);
+      return { shop_id: shop.id, items: page ? [] : [{ id: 'example-okr', shop_id: shop.id, title: '本周：商品知识与门店体验（示例）', objective: '完善商品介绍，保持门店整洁，让伙伴掌握服务要点。', key_results: [{ name: '学习商品知识', progress: 50 }, { name: '检查价签与品相说明', progress: 100 }], key_actions: '介绍商品前，先核对可观察的品相与当前价签。', updated_at: stamp }], page, page_size, has_more: false, persisted: false, as_of: stamp };
+    }
     if (['activities', 'activity-detail', 'activity-capabilities', 'activity-applications', 'application-detail'].includes(name)) {
       if (params.shop_id && params.shop_id !== shop.id) throw Object.assign(new Error('示例模式不能访问其他门店'), { status: 403, code: 'shop_forbidden' });
       const missing = () => Object.assign(new Error('该活动或申请示例不存在'), { status: 404, code: 'not_found' });

@@ -1,4 +1,15 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const{createPreview}=require('../miniprogram/shared/preview');
+test('objective preview follows paged shop-bound reads and cannot persist a draft',async()=>{
+ const p=createPreview({}),shop=p.session.get().shop;
+ const list=await p.api.action('objectives',{page:0,page_size:50});
+ assert.equal(list.shop_id,shop.id);assert.equal(list.page,0);assert.equal(list.page_size,50);assert.equal(list.has_more,false);
+ assert.equal(list.persisted,false);assert.equal(list.items[0].shop_id,shop.id);assert.match(list.items[0].title,/示例/);
+ const row=await require('../miniprogram/pages/detail/objective').read(p.api,list.items[0].id,shop.id,()=>true);
+ assert.ok(Array.isArray(row.key_results));assert.equal(typeof row.key_actions,'string');assert.ok(Date.parse(row.updated_at));
+ const empty=await p.api.action('objectives',{page:1,page_size:50});assert.deepEqual(empty.items,[]);assert.equal(empty.page,1);
+ await assert.rejects(p.api.action('objectives',{shop_id:'foreign'}),e=>e.status===403);
+ await assert.rejects(p.api.action('objective-update',{id:row.id,key_actions:'不能保存'}));
+});
 test('preview retakes have distinct tokens and replies bind to the submitted attempt',async()=>{
  const p=createPreview({}),library=await p.api.action('my-library');
  const first=await p.api.action('quiz-start',{kind:'favorite',id:library.items[0].id});

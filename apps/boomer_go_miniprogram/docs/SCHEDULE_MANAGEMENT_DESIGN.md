@@ -2,6 +2,15 @@
 
 Status: source-backed candidate design, not an implemented manager page or deployed BFF. Fixed Web comparison `813c12840f12a904fd07e6bc3a8bb08359b01090`. The existing personal-month read fix is independent of this work.
 
+## Editable Design Review
+
+The existing BOOMER GO Figma file now contains two editable 390 x 844 secondary-screen states, with the same typography, red/white cards and readable spacing as the approved five-tab design:
+
+- [Weekly overview](https://www.figma.com/design/SXY4nF6NWwrsw3jxZOIaDU?node-id=16-2): seven day cards, explicit authorized shop and week, no assumption that an unassigned day is a day off.
+- [Single-day editor](https://www.figma.com/design/SXY4nF6NWwrsw3jxZOIaDU?node-id=16-36): fixed employee/date, original assignment, eligible shift choices, a 50px review action and a separate 44px removal action.
+
+Both states use clearly labeled synthetic data. The actual Figma renders were inspected; a collapsed action was corrected and rendered again at the intended touch height. These are design evidence, not Mini Program screenshots, backend write evidence or real-employee acceptance. The next native implementation must preserve the existing secondary-page navigation and require the exact shop/employee/date/original-to-new confirmation described below.
+
 ## Native Interaction
 
 Retain the approved five tabs and current read-only month page. A separately authorized secondary management page uses the existing grey canvas, white cards, BOOMER red, 16px body and 44px touch targets. Do not copy a desktop-wide spreadsheet.
@@ -27,6 +36,8 @@ These are migration requirements, not optional features removed by the first bou
 ## Required Backend Contract
 
 Current read RPC cannot authorize writes or supply management CAS/receipts. New action names are not frozen and must not be called from production UI until implemented and verified.
+
+The independent R28 Stage1 build request is recorded in SCHEDULE_MANAGER_STAGE1_CONTRACT.md. It does not approve or implement the separate pending R27 content-home proposal. R28 has since returned fixed source and a deployment report; independent review found three SQL P2 issues, now assigned directly to the backend owner as R29. SCHEDULE_MANAGER_STAGE1_AUDIT.md records the exact source, evidence and unresolved issues. No native management endpoint is wired while these remain open.
 
 Capabilities must independently report view, arrange, shift, day-off, swap, clear and AI authority for the requested shop. Bootstrap permissions may suggest an entry, not authorize an operation. Role names and can_view_shop never imply write permission.
 
