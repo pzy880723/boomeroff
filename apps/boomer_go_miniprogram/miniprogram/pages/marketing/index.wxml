@@ -11,6 +11,7 @@
 <view class="page marketing-page">
   <view wx:if="{{preview}}" class="preview-banner">开发预览 · 示例任务不代表真实生成、保存或发布</view>
   <view class="section-title">BOOMER 帮我拍</view><view class="muted">真实门店素材 → 确认脚本 → 生成视频 → 领取与发布</view>
+  <button class="button-secondary" data-url="/pages/publish-history/index" bindtap="go">查看本店发布记录</button>
   <view class="row marketing-tabs"><button class="chip {{tab === 'create' ? 'active' : ''}}" bindtap="switchTab" data-tab="create">智能视频</button><button class="chip {{tab === 'library' ? 'active' : ''}}" bindtap="switchTab" data-tab="library">素材库</button></view>
   <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary" bindtap="retry" disabled="{{loading}}">重新加载</button></view>
   <view wx:if="{{notice}}" class="notice">{{notice}}</view>

@@ -1,0 +1,33 @@
+.publish-history-page { font-size: 32rpx; }
+.heading-row, .panel-heading, .history-title, .target-status { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+.heading-row { justify-content: flex-start; }
+.heading-row .page-title { margin-bottom: 0; }
+.readonly-chip { color: #b60020; background: #fff0f3; }
+.shop-name { margin-top: 12rpx; }
+.scope-note { margin: 24rpx 0 32rpx; padding: 24rpx; background: #fff0f3; color: #873745; border-radius: 20rpx; line-height: 1.75; }
+.panel-heading .section-title { margin: 0; }
+.compact-button { margin: 0; min-height: 88rpx; padding: 16rpx 24rpx; flex-shrink: 0; }
+.list-heading { margin-bottom: 24rpx; }
+.selected-detail { border: 2rpx solid #eb0029; }
+.job-id { margin: 16rpx 0 24rpx; word-break: break-all; }
+.job-title { font-size: 34rpx; font-weight: 600; line-height: 1.6; word-break: break-all; }
+.job-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 16rpx; margin-top: 16rpx; }
+.status-label { color: #5d4147; }
+.time-line { margin-top: 12rpx; line-height: 1.6; }
+.target-heading { margin-top: 32rpx; font-weight: 600; }
+.publish-target { margin-top: 24rpx; padding-top: 24rpx; border-top: 1rpx solid #eceef1; }
+.target-name { font-weight: 600; line-height: 1.6; word-break: break-all; }
+.target-status { align-items: flex-start; flex-wrap: wrap; margin-top: 12rpx; line-height: 1.6; }
+.target-error, .detail-error { margin-top: 20rpx; word-break: break-all; }
+.post-link { margin-top: 20rpx; line-height: 1.7; word-break: break-all; }
+.detail-refresh, .error-retry { margin-top: 24rpx; }
+.result-note { margin-top: 20rpx; line-height: 1.7; }
+.history-row { display: block; width: 100%; box-sizing: border-box; text-align: left; min-height: 88rpx; line-height: 1.6; }
+.history-row::after { border: none; }
+.selected-row { border: 2rpx solid #eb0029; }
+.history-title { align-items: flex-start; }
+.history-title .job-title { flex: 1; min-width: 0; }
+.chevron { color: #9a9ca3; font-size: 44rpx; flex-shrink: 0; }
+.platforms { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 20rpx; }
+.platform-name { padding: 4rpx 14rpx; background: #f3f4f6; border-radius: 10rpx; color: #696b73; }
+.snapshot-note { margin: 28rpx 0; line-height: 1.8; }

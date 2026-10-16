@@ -15,6 +15,23 @@
 .switch-shop { color: #315acb; font-size: 26rpx; min-height: 88rpx; padding: 24rpx 0; }
 .experience-row { border-top: 1rpx solid #eceef2; margin-top: 24rpx; padding-top: 24rpx; }
 .experience { font-size: 30rpx; color: #315acb; font-weight: 600; }
+.growth-card { border-top: 6rpx solid #eb0029; }
+.growth-heading { align-items: center; gap: 16rpx; }
+.growth-rules-toggle { margin: 0; padding: 12rpx 16rpx; min-height: 88rpx; line-height: 64rpx; color: #eb0029; background: #fff0f3; border-radius: 14rpx; font-size: 25rpx; flex-shrink: 0; }
+.growth-rules-toggle::after { border: none; }
+.growth-level-row { margin-top: 20rpx; gap: 16rpx; align-items: center; }
+.growth-level { font-size: 38rpx; font-weight: 700; color: #eb0029; }
+.growth-title { font-size: 32rpx; }
+.growth-max { color: #eb0029; background: #fff0f3; border-radius: 10rpx; padding: 6rpx 12rpx; font-size: 22rpx; flex-shrink: 0; }
+.growth-summary { font-size: 24rpx; color: #616672; margin-top: 22rpx; gap: 14rpx; flex-wrap: wrap; }
+.growth-track { height: 12rpx; background: #f1f2f5; border-radius: 8rpx; margin-top: 16rpx; overflow: hidden; }
+.growth-fill { height: 100%; background: #eb0029; border-radius: 8rpx; }
+.growth-rules { margin-top: 28rpx; padding-top: 24rpx; border-top: 1rpx solid #eceef2; }
+.growth-rules .section-title { font-size: 28rpx; margin-bottom: 14rpx; }
+.growth-rule { font-size: 25rpx; line-height: 1.6; min-height: 72rpx; padding: 12rpx; gap: 16rpx; }
+.growth-rule-current { color: #eb0029; background: #fff0f3; border-radius: 12rpx; font-weight: 600; }
+.growth-note, .growth-preview { font-size: 23rpx; line-height: 1.7; margin-top: 20rpx; }
+.growth-unavailable { padding: 22rpx 0 4rpx; font-size: 27rpx; line-height: 1.7; }
 .group-title { font-size: 30rpx; margin: 36rpx 0 20rpx; }
 .menu-group { padding: 0 28rpx; }
 .menu-row { min-height: 112rpx; border-bottom: 1rpx solid #eef0f3; padding: 20rpx 0; }

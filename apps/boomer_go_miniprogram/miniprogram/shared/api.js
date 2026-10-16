@@ -1,5 +1,6 @@
 const { createPublicationUploads } = require('./publication-upload');
 const { readPersonalSchedule } = require('./personal-schedule');
+const publishingRead = require('./publishing-read');
 
 function dashboardShift(data, user) {
   const date = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
@@ -116,6 +117,21 @@ function createApi({ wx, config, session, invoke: transport }) {
     }
     if (['knowledge-detail','marketing-detail','activity-detail','voucher-detail'].includes(name) && data && !data.item) return { item: data };
     return Array.isArray(data) ? { items: data } : data;
+  }
+  async function readPublishing(id) {
+    const before = snapshot();
+    await ensureFresh(before);
+    const shop = session.get().shop;
+    if (!shop || !publishingRead.uuid.test(shop.id)) throw new Error('请先选择当前授权工作门店');
+    if (id !== undefined && (typeof id !== 'string' || !publishingRead.uuid.test(id))) throw new Error('发布任务编号不合法');
+    const data = await settled(before, transport(id === undefined ? 'rest:publish-history' : 'dispatch-job-status', id === undefined ? { shop_id: shop.id } : { job_id: id }));
+    await ensureFresh(before);
+    return id === undefined ? publishingRead.history(data, shop.id) : publishingRead.detail(data, shop.id, id);
+  }
+  function publishHistory() { return readPublishing(); }
+  function publishStatus(id) {
+    if (id === undefined) return Promise.reject(new Error('缺少发布任务编号'));
+    return readPublishing(id);
   }
   async function erp(path, params = {}, before = snapshot()) {
     await ensureFresh(before);
@@ -283,6 +299,6 @@ function createApi({ wx, config, session, invoke: transport }) {
     if (!wx.shareFileMessage) throw new Error('此文件类型暂不能原生预览，当前微信也不支持文件分享');
     return settled(before, new Promise((resolve, reject) => wx.shareFileMessage({ filePath: temp, fileName: String(att.name || '附件'), success: resolve, fail: () => reject(new Error('文件分享未完成，原文件未修改')) })));
   }
-  return Object.assign({ action, invoke, recognize, assistant, saveMedia, copy, sales, leaderboard, uploadChatAttachment, openChatAttachment }, createPublicationUploads({ wx, config, session, transport, snapshot, settled, ensureFresh }));
+  return Object.assign({ action, invoke, publishHistory, publishStatus, recognize, assistant, saveMedia, copy, sales, leaderboard, uploadChatAttachment, openChatAttachment }, createPublicationUploads({ wx, config, session, transport, snapshot, settled, ensureFresh }));
 }
 module.exports = { createApi };

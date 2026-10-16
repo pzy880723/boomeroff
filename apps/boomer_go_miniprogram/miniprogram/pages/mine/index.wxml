@@ -5,6 +5,18 @@
   <view wx:if="{{error}}" class="card error"><text>{{error}}</text><button class="button-secondary" bindtap="retry">重试同步</button></view>
   <view wx:if="{{!loading && !error && !profile}}" class="card empty">暂无已同步员工资料</view>
   <view wx:if="{{profile}}" class="card identity-card"><view class="row identity-row"><image wx:if="{{profile.avatar}}" class="avatar" src="{{profile.avatar}}" mode="aspectFill" /><view wx:else class="avatar initial">{{profile.initial}}</view><view class="identity-main"><view class="employee-name">{{profile.name}}</view><view class="muted identity-role">{{profile.role}}</view></view><text class="employee-badge">员工</text></view><view class="shop-block"><view class="muted shop-label">当前工作门店</view><view class="shop-name">{{profile.shop}}</view><picker wx:if="{{isHeadquarters && shops.length}}" range="{{shops}}" range-key="name" value="{{shopIndex}}" bindchange="onShopChange"><view class="switch-shop">切换已授权门店 →</view></picker></view><view class="row experience-row"><text class="muted">云端成长经验</text><text class="experience">{{profile.experience}}</text></view></view>
+  <view wx:if="{{profile && growth}}" class="card growth-card">
+    <view class="row growth-heading"><view class="section-title">我的成长等级</view><button class="growth-rules-toggle" bindtap="toggleGrowthRules" aria-expanded="{{growthRulesOpen}}">{{growthRulesOpen ? '收起规则' : '等级规则'}}</button></view>
+    <view wx:if="{{preview}}" class="muted growth-preview">合成成长示例，不代表真实员工经验或等级。</view>
+    <block wx:if="{{growth.available}}">
+      <view class="row growth-level-row"><view class="growth-level">Lv.{{growth.level}} <text class="growth-title">{{growth.title}}</text></view><text wx:if="{{growth.isMax}}" class="growth-max">已满级</text></view>
+      <view class="row growth-summary"><text>{{growth.totalExp}} EXP</text><text wx:if="{{growth.isMax}}">已达到当前最高等级</text><text wx:else>距 Lv.{{growth.level + 1}} 还差 {{growth.nextGap}} EXP</text></view>
+      <view class="growth-track"><view class="growth-fill" style="width: {{growth.progressPercent}}%;"></view></view>
+    </block>
+    <view wx:else class="muted growth-unavailable">{{growth.notice}}</view>
+    <view wx:if="{{growthRulesOpen}}" class="growth-rules"><view class="section-title">25 级成长规则</view><view wx:for="{{growthRules}}" wx:key="level" class="row growth-rule {{growth.available && growth.level === item.level ? 'growth-rule-current' : ''}}"><text>Lv.{{item.level}} · {{item.title}}</text><text>{{item.threshold}} EXP</text></view></view>
+    <view class="muted growth-note">成长等级仅按云端经验展示，不代表知识测验成绩，不用于营业额或员工考核。</view>
+  </view>
   <block wx:for="{{groups}}" wx:key="title" wx:for-item="group"><view class="section-title group-title">{{group.title}}</view><view class="card menu-group"><view wx:for="{{group.entries}}" wx:key="url" class="row menu-row" data-url="{{item.url}}" bindtap="go" hover-class="pressed"><text class="menu-icon">{{item.icon}}</text><text class="menu-label">{{item.label}}</text><text class="menu-arrow">›</text></view></view></block>
   <view wx:if="{{freshness}}" class="muted freshness">{{freshness}}</view><button class="button-secondary logout" bindtap="logout" disabled="{{signingOut}}">{{preview ? '退出开发预览' : '退出登录'}}</button><view class="muted privacy-note">工作数据遵循 ERP 员工与门店权限。</view>
 </view>

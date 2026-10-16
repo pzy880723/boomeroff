@@ -1,0 +1,45 @@
+<view class="page publish-history-page">
+  <view wx:if="{{preview}}" class="preview-banner">合成预览 · 仅演示读取，不代表真实发布或平台回执</view>
+  <view class="eyebrow">BOOMER / PUBLISH</view>
+  <view class="heading-row"><view class="page-title">发布记录</view><text class="chip readonly-chip">只读</text></view>
+  <view class="muted shop-name">{{shopName}}</view>
+  <view class="scope-note">当前门店最近 50 条，不是全部历史。仅查看已有任务，不会发起发布、重试或取消。</view>
+  <view wx:if="{{error}}" class="card error">{{error}}</view>
+
+  <view wx:if="{{selectedId}}" class="card selected-detail">
+    <view class="panel-heading"><view class="section-title">任务详情</view><button class="button-secondary compact-button" bindtap="closeDetail">关闭</button></view>
+    <view class="muted job-id" selectable>{{selectedId}}</view>
+    <view wx:if="{{detailLoading}}" class="loading-state">正在读取任务状态…</view>
+    <view wx:if="{{detailError}}" class="error detail-error">{{detailError}}</view>
+    <block wx:if="{{job}}">
+      <view class="job-title">{{job.title}}</view>
+      <view class="job-meta"><text class="chip">{{job.kindLabel}}</text><text class="status-label">{{job.statusLabel}}</text></view>
+      <view class="muted time-line">创建 {{job.createdAt}}</view>
+      <view wx:if="{{job.scheduleAt}}" class="muted time-line">定时 {{job.scheduleAt}}</view>
+      <view class="target-heading">分平台状态</view>
+      <view wx:if="{{!targets.length}}" class="empty">服务器当前未提供发布目标；不代表发布成功。</view>
+      <view wx:for="{{targets}}" wx:key="id" class="publish-target">
+        <view class="target-name">{{item.name}}</view>
+        <view class="target-status"><text>{{item.platform}} · {{item.statusLabel}}</text><text wx:if="{{item.progress !== null}}">{{item.progress}}%</text></view>
+        <view wx:if="{{item.progress === null}}" class="muted">进度未提供</view>
+        <view wx:if="{{item.error}}" class="error target-error">{{item.error}}</view>
+        <view wx:if="{{item.postUrl}}" class="post-link"><view class="muted">平台作品地址（仅文本，不打开网页）</view><text selectable>{{item.postUrl}}</text></view>
+      </view>
+    </block>
+    <button class="button-secondary detail-refresh" bindtap="refreshDetail" disabled="{{detailLoading}}" loading="{{detailLoading}}">{{detailError ? '只读重查该任务' : '刷新任务详情'}}</button>
+    <view class="muted result-note">排队、处理中或重试都不等于平台发布成功；以各目标服务器状态为准。</view>
+  </view>
+
+  <view class="panel-heading list-heading"><view class="section-title">最近 50 条</view><button class="button-secondary compact-button" bindtap="refresh" disabled="{{listLoading}}" loading="{{listLoading}}">刷新列表</button></view>
+  <view wx:if="{{listLoading}}" class="card loading-state">正在读取当前门店发布记录…</view>
+  <view wx:if="{{listError}}" class="card error"><view>{{listError}}</view><button class="button-secondary error-retry" bindtap="refresh" disabled="{{listLoading}}">重新读取列表</button><view wx:if="{{items.length}}" class="muted result-note">下方为上次已读取记录，本次刷新未确认。</view></view>
+  <view wx:if="{{listLoaded && !listLoading && !listError && !items.length}}" class="card empty">当前门店暂无可读取的发布记录。</view>
+  <button wx:for="{{items}}" wx:key="id" class="card history-row {{selectedId === item.id ? 'selected-row' : ''}}" bindtap="selectJob" data-id="{{item.id}}">
+    <view class="history-title"><text class="job-title">{{item.title}}</text><text class="chevron">›</text></view>
+    <view class="job-meta"><text class="chip">{{item.kindLabel}}</text><text class="status-label">{{item.statusLabel}}</text></view>
+    <view wx:if="{{item.platforms.length}}" class="platforms"><text wx:for="{{item.platforms}}" wx:key="*this" class="platform-name">{{item}}</text></view>
+    <view class="muted time-line">创建 {{item.createdAt}}</view>
+    <view wx:if="{{item.scheduleAt}}" class="muted time-line">定时 {{item.scheduleAt}}</view>
+  </button>
+  <view class="muted snapshot-note">只读快照，非实时保证。返回此页会重新读取，也可分别手动刷新列表和任务详情。</view>
+</view>

@@ -2,6 +2,15 @@
 
 日期：2026-10-16，Asia/Shanghai。交付对象为 BOOMER GO 员工微信原生小程序初版，非公开发布、非完整功能平替验收。
 
+## 最新检查点：发布历史恢复与成长等级
+
+- 新增第26条原生publish-history路由，五Tab不变；营销页原生按钮进入本店最近50条、页内只读详情、分别刷新及关闭返回。无需依赖本地任务编号即可重新发现既有任务；不自动发布/重试/取消，不开H5，不把窗口当全量或实时、不把标题相同当未知提交已确认。现有素材页写操作未改，历史写管理与账号生命周期仍缺。
+- 固定GO a4d6edb0读取Web History/dispatch-job-status及level来源。新窄GET只查固定表/字段/当前shop/order/limit，必须caller token，保留现有RLS。状态仍是旧admin/profile门店服务器门禁，不冒称后台已改成ERP fresh/callerRLS；客户端另做读前后fresh、scope/revision和精确job/shop/target投影。真实platform_post_url仅文本显示，不安装worker内部字段；空进度保持null。内容主店与旧服务器门禁风险未扩大或消除。
+- 页worker24初始RED及1跟进RED后26通过；独立发现平台名映射继承属性会送function/object入setData，父级实际页壳1RED后own-property及小红书双别名修复，最终27通过，独立原5探针转绿。API真实transport首16RED后修复，补array ID两RED及未知进度1RED后最终20通过；父级route/preview两RED后通过。独立真实页壳/API组合22及相关79通过；没有真实发布请求。
+- Mine增加现有25级称号、进度/差额/满级与全部阈值折叠规则，非“10级”残留标签。只消费真实profile.total_exp；缺失/非法不补零，负数保留余额并说明不算等级；不编造奖励率、活动计数、鉴定资格或销售考核。worker51RED后通过，独立复现首显重复读取可覆盖成功的P2，再3RED后修到54通过。独立原14探针及54合68通过，隐藏返回/身份店/revision真实刷新不退化。
+- 父级最终1734/1734，0失败/跳过/取消；26路由/syntax/JSON/no-H5通过，官方27WXML/28WXSS退出0、stderr空。真实DevTools查看Mine卡/展开25级/滚到底/收起，营销→发布记录→分平台详情→关闭保留列表；native-growth-level/rules和native-publish-history/status原件及phone为实际截图及确定裁切。所有数据显式合成；只读真实RLS/员工/平台回执和真机验收仍缺，不把GUI预览当生产成功。
+- Figma30:2/30:15为已渲染可编辑设计。R36本轮再次读取同一handle仍awaiting_input、a4d6edb0、20.3credits，无新决定未绕过。无数据库/权限/腾讯部署、短信、付费AI、员工业务写入或手机操作。专用AppID/真实员工设备/完整功能迁移/微信发布未完成，目标未标完成。
+
 ## 最新检查点：识物商品收藏与主动学习
 
 - 固定Web a4d6edb0的实际LiveStreamPanel收藏逻辑为主动收藏，不自动导航或开考。原生页却丢弃favorite_id并重读原商品，坏回执也能显示笼统成功，隐藏或换身份前的旧商品还能提交。只收拢本操作，不重写通用writeAction、官方收藏、分享或测验。

@@ -1,5 +1,6 @@
 // Explicit development-only examples. This adapter never calls a production API.
 const { businessDate } = require('./session');
+const publishingRead = require('./publishing-read');
 let nextSnapshot = 0;
 function createPreview(wx) {
   const date = businessDate();
@@ -31,6 +32,12 @@ function createPreview(wx) {
   ];
   const bootstrap = { date, profile, staff_profile: profile, user_role: { role_code: 'staff' }, shop_context: { date, scope: 'store', status: 'scheduled', effective_shop: shop, authorized_shops: [shop] }, shifts: [{ id: 'example-shift', work_date: date, shift_code: 'early', shop_id: shop.id }], shift_definitions: [{ shop_id:shop.id, code: 'early', name: '早班', start_time: '10:00', end_time: '18:00' }], shift: { title:'早班',start_time:'10:00',end_time:'18:00',shop_name:shop.name }, tasks:[{id:'example-task',title:'检查价签与品相说明',status:'示例待办'}], learning:[articles[0]], okrs: [], checked_today: false };
   const current = { userId: '00000000-0000-4000-8000-000000000902', profile, shop, shops: [shop], isHeadquarters: false, bootstrap, permissions: [], scopeFresh: true };
+  const publishJob = { id: '00000000-0000-4000-8000-000000000851', shop_id: shop.id, title: '瓷器好物探店（发布示例）', kind: 'video', status: 'partial', created_at: stamp, schedule_at: null,
+    social_publish_targets: [{ platform: 'xiaohongshu' }, { platform: 'douyin' }] };
+  const publishTargets = [
+    { id: '00000000-0000-4000-8000-000000000852', job_id: publishJob.id, platform: 'xiaohongshu', status: 'success', progress: 100, account: { account_name: '小红书门店账号（示例）' }, platform_post_url: null, error_message: null },
+    { id: '00000000-0000-4000-8000-000000000853', job_id: publishJob.id, platform: 'douyin', status: 'failed', progress: 40, account: { account_name: '抖音门店账号（示例）' }, platform_post_url: null, error_message: '合成失败原因，仅用于检查界面；未执行真实发布。' }
+  ];
   const recognition = { id: '00000000-0000-4000-8000-000000000841', name: '花纹瓷杯（识物示例）', category: '瓷器餐具', era: '年代待核实',
     description: '合成识物示例：观察杯口、釉色与底款，具体材质和年代需核实。',
     story: '这是一条合成商品故事，仅供检查原生页面。花纹与器型可以成为讲解线索，但不能据此保证年代或产地。',
@@ -115,7 +122,7 @@ function createPreview(wx) {
       const items = rows.slice(page * page_size, (page + 1) * page_size).map(row => ({ id: row.id, shop_id: row.shop_id, type: row.type, category_id: row.category_id, title: row.title, body_preview: row.body.slice(0, 400), tags: row.tags.slice(), sort_order: row.sort_order, updated_at: row.updated_at }));
       return Object.assign(common, { query, category_id, items, categories, page, page_size, has_more: (page + 1) * page_size < rows.length, as_of: stamp });
     }
-    if (name === 'profile') return { profile, staff: profile, role: { role_code: 'staff' }, erp_scope: { scope: 'store', shop_ids: [shop.id] }, experience: { total_exp: 0 } };
+    if (name === 'profile') return { profile, staff: profile, role: { role_code: 'staff' }, erp_scope: { scope: 'store', shop_ids: [shop.id] }, experience: { total_exp: 100 } };
     if (['schedule-manage-capabilities', 'schedule-manage-week', 'schedule-manage-candidates', 'schedule-manage-cell'].includes(name)) {
       const invalid = () => Object.assign(new Error('排班管理示例参数不合法'), { status: 400, code: 'invalid_params' });
       if (!params.shop_id) throw invalid();
@@ -346,6 +353,8 @@ function createPreview(wx) {
     return unavailable();
   }
   return { session, api: { action, invoke: unavailable, assistant: unavailable, uploadChatAttachment: unavailable, openChatAttachment: unavailable,
+    publishHistory: async () => publishingRead.history([publishJob], shop.id),
+    publishStatus: async id => { if (id !== publishJob.id) throw new Error('该发布任务示例不存在'); return publishingRead.detail({ job: publishJob, targets: publishTargets }, shop.id, id); },
     inspectPublicationFile: unavailable, createPublicationUpload: unavailable, transferPublicationFile: unavailable, commitPublicationUpload: unavailable, publicationUploadStatus: unavailable,
     copy: text => new Promise((resolve, reject) => wx.setClipboardData({ data: String(text), success: resolve, fail: reject })), saveMedia: unavailable,
     recognize: async () => ({ name: '识物结果示例 · 日常瓷杯', era: '未作年代鉴定', origin: '仅示例，非照片识别结论', material: '瓷', craft: '釉面装饰', description: '正式登录后，这里会根据拍摄的整体、底款和细节照片展示商品故事。遇到不确定的年代、产地或品牌，会明确标注，不能仅凭图片作保证。', sellingPoints: ['先观察器型与釉面', '向客人如实说明品相', '可补拍底款和细节'] }),

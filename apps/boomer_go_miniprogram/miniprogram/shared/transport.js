@@ -18,9 +18,13 @@ const KNOWLEDGE_CHAT_MESSAGES = {
 };
 function createTransport(wx, config, token) {
   return function request(name, body, options = {}) {
-    if (!/^(?:[a-z][a-z0-9-]*|rpc:[a-z][a-z0-9_]*|auth:(?:refresh|password|user))$/.test(name)) return Promise.reject(new Error('无效的服务入口'));
+    if (!/^(?:[a-z][a-z0-9-]*|rpc:[a-z][a-z0-9_]*|auth:(?:refresh|password|user)|rest:publish-history)$/.test(name)) return Promise.reject(new Error('无效的服务入口'));
     if (!config.publicKey) return Promise.reject(new Error('员工服务尚未配置，请运行项目配置命令'));
     const refresh = name === 'auth:refresh';
+    const history = name === 'rest:publish-history';
+    const historyToken = history ? token() : '';
+    if (history && (!body || Object.keys(body).length !== 1 || !Object.prototype.hasOwnProperty.call(body, 'shop_id') || typeof body.shop_id !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.shop_id)
+      || typeof historyToken !== 'string' || !historyToken.trim() || /\s/.test(historyToken))) return Promise.reject(new Error('发布记录需要已验证的员工与门店'));
     const authUser = name === 'auth:user';
     const authPassword = name === 'auth:password' || name === 'phone-password-login';
     if (authUser && (typeof options.accessToken !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(options.accessToken))) return Promise.reject(new Error('缺少待核验的登录凭证'));
@@ -29,10 +33,11 @@ function createTransport(wx, config, token) {
     const knowledgeChat = name === 'go-mini-api' && body && body.action === 'official-knowledge-chat';
     const longRequest = knowledgeChat || name === 'recognize-product' || name === 'spirit-chat' || (name === 'go-mini-api' && body && ['conversation-send', 'quiz-start', 'recognition-save', 'profile-update', 'kb-draft'].includes(body.action));
     let url = config.supabaseUrl + (authUser ? '/auth/v1/user' : name === 'auth:password' ? '/auth/v1/token?grant_type=password' : refresh ? '/auth/v1/token?grant_type=refresh_token' : rpc ? '/rest/v1/rpc/' + name.slice(4) : '/functions/v1/' + name);
+    if (history) url = config.supabaseUrl + '/rest/v1/social_publish_jobs?select=' + encodeURIComponent('id,shop_id,title,kind,status,created_at,schedule_at,social_publish_targets(platform)') + '&shop_id=eq.' + body.shop_id + '&order=created_at.desc&limit=50';
     if (scoped) url += '?forceFunctionRegion=' + encodeURIComponent(config.scopeRegion);
-    const bearer = authUser ? options.accessToken : options.public || refresh || authPassword ? config.publicKey : token() || config.publicKey;
+    const bearer = history ? historyToken : authUser ? options.accessToken : options.public || refresh || authPassword ? config.publicKey : token() || config.publicKey;
     return new Promise((resolve, reject) => {
-      wx.request({url, method: authUser ? 'GET' : 'POST', data: authUser ? undefined : body, timeout: longRequest ? 65000 : 20000,
+      wx.request({url, method: authUser || history ? 'GET' : 'POST', data: authUser || history ? undefined : body, timeout: longRequest ? 65000 : 20000,
         header: { apikey: config.publicKey, Authorization: 'Bearer ' + bearer, 'Content-Type': 'application/json', ...(scoped ? { 'x-region': config.scopeRegion } : {}) },
         success(response) {
           let data = response.data;
