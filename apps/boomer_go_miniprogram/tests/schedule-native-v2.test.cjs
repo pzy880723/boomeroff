@@ -165,12 +165,12 @@ test('pending contract: strict true opens selected-shop read view and permits no
   assert.equal(page.data.items[0].userId, SELF);
 });
 
-test('selected-shop guard: absent selected shop displays a clear error and never picks an arbitrary shop', async () => {
+test('no-shop personal read does not pick an arbitrary shop or enable coworker view', async () => {
   const { page, calls } = nativePage(async () => dto({ shop_id: null, can_view_shop: true }), employee(null));
   await page.onLoad({ month: '2026-10' });
-  assert.equal(page.data.items.length, 0);
-  assert.match(page.data.error, /门店/);
-  assert.equal(calls.length, 0);
+  assert.equal(page.data.items.length, 1);
+  assert.equal(page.data.error, '');
+  assert.deepEqual(calls, [{ name: 'schedule', params: { month: '2026-10', view: 'mine' } }]);
   assert.equal(page.data.canViewShop, false);
   const before = calls.length;
   await switchView(page, 'shop');

@@ -9,7 +9,7 @@
 | Learning | Search/categories, native article, favorite mastery, server grading, result history, post-submit review, explicit confirmed-result retake and conservative first-expiry restart | Current filter counts are loaded-only; additional Web knowledge filters remain. Unknown answers do not survive a true sign-out/page unload |
 | Continuous practice | Latest300 favorite window, at most five per round, reading/quiz/next/skip, identity/store/Shanghai-day local progress | Not a daily cap, assigned-course system or cross-device progress |
 | SOP/QA | Native search/pagination/Markdown, manual entry CRUD, AI candidate with separate adoption, category CRUD/sort, independent permissions and receipts | Rest/unscheduled employees lack content-shop context. Real authenticated write/readback acceptance remains |
-| Scheduling | Own month, separately authorized same-store view, rest/missing distinction and conflicts | Single-day add/change/remove, atomic swap, week clear, shift settings, blocked days and AI scheduling are not migrated |
+| Scheduling | Own month even without today's working shop, separately authorized same-store view, rest/missing distinction and conflicts | Manager write flows are designed in SCHEDULE_MANAGEMENT_DESIGN.md but not implemented: single-day add/change/remove, atomic swap, week clear, shift settings, blocked days and AI scheduling |
 | Daily operations | Tasks and confirmed experience claim, growth check-in/history, OKR reading/collaborative progress | Not attendance; task configuration and full OKR management remain |
 | Activities | Detail, authorized masked applications, publication confirmation/reversal, original evidence upload/reconciliation | Activity create/edit/remove/status/poster and application approval/rejection/voucher/SMS flows remain |
 | Vouchers | Template reading, strict code parsing, scan-to-query, separately confirmed redemption and reconciliation | Template management, issuance, claim management and share poster remain |
@@ -19,7 +19,7 @@
 
 ## Priorities
 
-1. Verify native retake and expired-attempt recovery without discarding unknown answers.
+1. Native retake/expired-attempt recovery and no-shop personal month are locally verified; real employee/device acceptance remains open.
 2. Separate daily working-shop truth from server-authorized content-shop context. A missing shift must not be treated as absence of all daily content rights; never guess the first/only store.
 3. Add authorized schedule write flows with atomic server operations, explicit independent capabilities, CAS and original-request receipts. Keep seven-day scheduling allowed; do not restore the old five-day cap.
 4. Migrate remaining activity/voucher operations, then marketing asset/account lifecycle. Do not restore rejected separate AI-image/copy/advanced-video menus.

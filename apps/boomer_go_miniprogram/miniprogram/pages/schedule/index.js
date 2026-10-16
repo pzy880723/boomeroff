@@ -35,10 +35,10 @@ Page(definePage({
     this._shopPermission = '';
     const view = this._view || 'mine';
     const session = this.session.get();
-    const context = { month, view, userId: session && session.userId, shopId: session && session.shop && session.shop.id };
+    const context = { month, view, userId: session && session.userId, shopId: session && session.shop && session.shop.id || null };
     this.buildDays([]);
     return model.remote(this, async () => {
-      if (!context.shopId) throw new Error('请先选择当前授权工作门店，再同步排班');
+      if (view === 'shop' && !context.shopId) throw new Error('请先选择当前授权工作门店，再同步排班');
       const serial = this._request;
       const identity = this._identity;
       try { return await this.api.action('schedule', { month, view }); }

@@ -1,4 +1,5 @@
 const { createPublicationUploads } = require('./publication-upload');
+const { readPersonalSchedule } = require('./personal-schedule');
 
 function dashboardShift(data, user) {
   const date = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
@@ -66,6 +67,12 @@ function createApi({ wx, config, session, invoke: transport }) {
       if (!session.get()) throw new Error('请先登录员工账号');
     } else await ensureFresh(before);
     const selected = session.get().shop;
+    if (name === 'schedule' && !selected && (params.view === undefined || params.view === 'mine')) {
+      return settled(before, readPersonalSchedule(params, {
+        userId: session.get().userId, token: session.token && session.token(),
+        request(name, body, options) { assertState(before); return settled(before, transport(name, body, options)); }
+      }));
+    }
     const storeKbDetail = name === 'knowledge-detail' && ['sop', 'qa', 'training'].includes(params.kind || params.source);
     if ((shopActions.has(name) || storeKbDetail) && !selected) throw new Error('请先选择当前授权工作门店');
     let payload = Object.assign({}, params, selected ? { shop_id: selected.id } : {});

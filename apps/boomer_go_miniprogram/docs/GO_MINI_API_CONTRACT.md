@@ -2,6 +2,14 @@ Base snapshot from GO Lovable commit 0fbc3474e059e1622fc26df7cbccea196c712309, p
 
 # go-mini-api 服务端契约（小程序 / 原生共用）
 
+## Native Personal Month Without Selected Shop
+
+Client-only correction against fixed GO `813c128`. The existing BFF `schedule` action still requires selected shop; it was not redeployed. Only native `api.action('schedule', {month,view:'mine'})` with no verified selected shop uses the already-existing authenticated `list_shift_schedules_v1` RPC directly. Selected-shop mine and coworker views retain their original BFF path.
+
+The adapter validates the caller with `auth:user` using the current token, checks `erp_scope_fresh_v1` strictly true before and after the read, and protects every stage with identity/revision snapshots. Request is fixed to `{_from:firstDay,_to:lastDay,_shop_id:null}`; caller-provided user/shop fields do not select scope. The existing SECURITY DEFINER RPC applies its own explicit uid/scope filters and may return authorized coworker rows for managers. The client then whitelists only verified-uid rows/conflicts, recomputes is_self, strips extra fields and returns `{month,view:'mine',shop_id:null,can_view_shop:false,rows,conflicts}` to the existing strict decoder.
+
+Exact source range, scope enum, NULL shop, array/record identity and own-row fields are required; malformed/denied/unfresh replies never become empty calendars or legacy fallbacks. Own historical transfer rows are not filtered by today's shop set. This does not introduce canonical home, manager writes, new backend grants/RLS or an extra employee database. A public anonymous probe returned HTTP401/code42501/no rows; it is denial evidence only, not authenticated employee acceptance.
+
 ## Round19-21 Continuous Practice Window
 
 Final ref `a8e36ee6a14b3577b68764b0b7452f6623d15e4d` was confirmed finished by get_project. New read-only `practice-library {}` reuses the caller-JWT authenticated/fresh ERP gate and reads only caller-owned favorites, ordered created_at/id descending. It takes301 and returns the latest300, with `{items,window_limit:300,has_older:boolean,as_of}`. Item projection matches my-library plus strict passed derived only from the caller's favorite results for window IDs, queried in batches of100. Any favorite/result query error fails the whole request; no false unmastered fallback. Client actor parameters do not select an identity. No migration, RLS, grant or service business read was added; existing my-library is unchanged.

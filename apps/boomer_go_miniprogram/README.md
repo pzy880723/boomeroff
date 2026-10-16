@@ -25,7 +25,7 @@ npm test
 npm run check
 ```
 
-`tools/configure.cjs` reads only the existing **public** Supabase URL and publishable key from the parent repository `.env`. It never copies service-role keys, mini-program AppSecret or server deployment credentials into the mini-program. `miniprogram/config.local.js` is ignored.
+`tools/configure.cjs` writes `miniprogram/config.js` using only the existing **public** Supabase URL and publishable key from the parent repository `.env`. It never copies service-role keys, mini-program AppSecret or server deployment credentials into the mini-program. This is public client configuration, not a server environment file.
 
 Current API origins are the existing GO Lovable Cloud project and `https://erp.boomeroff.com`. Before real-device preview, configure the HTTPS request and download domains in the dedicated employee mini-program console. Chat attachments also require the existing GO Supabase origin as an uploadFile legal domain. Keep URL/TLS checks enabled. Configure required media/privacy declarations in that console rather than inventing `app.json` permission fields.
 
@@ -45,6 +45,7 @@ Current API origins are the existing GO Lovable Cloud project and `https://erp.b
 - Marketing uses existing script and video jobs. Exiting a page does not issue a cancellation. Cover, video and frozen publishing copy have separate native controls.
 - Voucher templates and customer claims are distinct. The native redemption entry scans only to query; mutation requires a separate confirmation and a matching server receipt. An uncertain request is reconciled by its original key, never silently replaced or automatically resent.
 - Schedule viewing distinguishes explicit rest from missing data. Coworker views require the server's existing permission and exact selected store; this does not grant schedule editing authority.
+- Without today's selected working shop, the personal month uses the existing caller-authenticated NULL-shop schedule RPC with verified uid and strict server freshness checks before/after reading. It projects only the caller's work/rest rows and suppresses coworker capability. This does not resolve canonical home or grant schedule management.
 - Workbench shifts use the actual authorized schedule shop, independently of the browsing selection. Ambiguous legacy shift definitions show a notice instead of invented times. Rest-day content access remains an open backend/client item; a mutable profile shop is not silently treated as authoritative home.
 - Activity applications require existing same-store management authority. Publication confirmation is separate from approval, voucher issuance, redemption and social publishing. Stage2 adds original-file selection/upload/status recovery, now aligned to fixed Round16/17 source. Lovable reports the additive migrations and Edge deployed. Strict current-object proof and original activity/shop binding preserve historical paths without signing changed or rebound objects. This is not a verified live employee uploader; fixed-source review and deployment reports do not replace real employee acceptance.
 
