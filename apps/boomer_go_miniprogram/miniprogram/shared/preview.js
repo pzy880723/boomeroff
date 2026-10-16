@@ -17,7 +17,7 @@ function createPreview(wx) {
     snapshot: { name: article.title, summary: article.summary }, created_at: stamp,
     quiz_kind: 'favorite', quiz_available: true, passed: index === 1
   }));
-  let quizBinding = null;
+  const quizAttempts = new Map();
   const notifications = [
     { id: 'example-shift', title: '下周排班已更新', body: '这是一条示例排班通知。真实排班以 ERP 发布结果为准。', category: 'notice', created_at: date + 'T09:20:00+08:00', read: false },
     { id: 'example-training', title: '新课程：中古商品的年代辨识', body: '在学习页查看知识内容，完成后可参加知识测验。此处为界面示例。', category: 'notice', created_at: date + 'T08:30:00+08:00', read: false }
@@ -155,12 +155,14 @@ function createPreview(wx) {
     if (name === 'tasks') return { date, pending_exp: 0, claimed_today: [], today_counts: { scans: 0, quiz_attempts: 0, community_posts: 0 }, items: [{ id: 'example-learn', title: '读懂一件商品，再讲好它的故事', body: '先进入学习页，了解可观察、可核实的商品信息。', status: '示例待办' }], as_of: stamp };
     if (name === 'quiz-start') {
       if (params.kind === 'favorite' && !library.some(row => row.id === params.id)) throw new Error('该示例收藏不存在');
-      quizBinding = params.kind && params.id ? { kind: params.kind, id: params.id } : null;
-      return { quiz_token: 'development-example-only', attempt_id: 'development-example-only', questions: [{ id: 'q1', index: 0, stem: '商品年代无法确认时，应当如何介绍？', options: ['直接说是古董', '如实说明暂无法确认', '声称绝版', '只说价格'] }] };
+      const token = 'development-example-' + (quizAttempts.size + 1);
+      quizAttempts.set(token, params.kind && params.id ? { kind: params.kind, id: params.id } : null);
+      return { quiz_token: token, attempt_id: token, questions: [{ id: 'q1', index: 0, stem: '商品年代无法确认时，应当如何介绍？', options: ['直接说是古董', '如实说明暂无法确认', '声称绝版', '只说价格'] }] };
     }
     if (name === 'quiz-submit') {
+      if (params.quiz_token && !quizAttempts.has(params.quiz_token)) throw Object.assign(new Error('该示例答题凭据不存在'), { status: 404, code: 'invalid_quiz_token' });
       const correct = !Array.isArray(params.answers) || params.answers[0] === 1;
-      return Object.assign({ score: correct ? 1 : 0, total: 1, passed: correct, persisted: false, correct: [correct], correct_answers: [1], message: '示例答卷不记入真实考核' }, quizBinding, Array.isArray(params.answers) ? { submitted: params.answers.slice() } : {});
+      return Object.assign({ score: correct ? 1 : 0, total: 1, passed: correct, persisted: false, correct: [correct], correct_answers: [1], message: '示例答卷不记入真实考核' }, quizAttempts.get(params.quiz_token), Array.isArray(params.answers) ? { submitted: params.answers.slice() } : {});
     }
     if (name === 'quiz-history') return { items: params.page ? [] : library.slice(0, 2).map((favorite, index) => ({
       id: '00000000-0000-4000-8000-00000000008' + (index + 1), item_kind: 'favorite', item_id: favorite.id,

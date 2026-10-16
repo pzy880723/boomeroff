@@ -25,6 +25,11 @@
 .score { color: #eb0029; font-size: 80rpx; font-weight: 700; margin: 24rpx 0 12rpx; }
 .score-total { color: #737780; font-size: 32rpx; font-weight: 400; }
 .result-card button { margin-top: 36rpx; }
+.result-actions { gap: 16rpx; }
+.result-actions button { flex: 1; min-width: 0; padding-left: 16rpx; padding-right: 16rpx; }
+.retake-button, .result-actions button { min-height: 88rpx; }
+.expiry-state .muted { line-height: 1.7; }
+.expiry-state button { margin-top: 24rpx; width: 100%; }
 .review .section-title { margin-top: 0; font-size: 30rpx; }
 .review .chip { margin-bottom: 20rpx; }
 .review-answer { font-size: 32rpx; line-height: 1.7; margin-top: 18rpx; word-break: break-all; }

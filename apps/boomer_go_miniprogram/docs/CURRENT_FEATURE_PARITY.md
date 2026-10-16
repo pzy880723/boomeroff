@@ -1,0 +1,33 @@
+# Current Native Migration State
+
+2026-10-16. Current source has 23 native routes and exactly five tabs: 工作台 / 学习 / 识物 / 消息 / 我的. This matrix supersedes historical counts and open items in FEATURE_PARITY.md; it does not supersede the detailed evidence in VERIFICATION.md. Web comparison is fixed GO ref `813c12840f12a904fd07e6bc3a8bb08359b01090`.
+
+| Area | Native implementation | Remaining acceptance or migration |
+| --- | --- | --- |
+| Identity | OTP/password, existing GO identity, fresh ERP scope, profile, HQ authorized selection, logout isolation | Dedicated employee AppID, real employee/device login and revocation acceptance; no new identity database |
+| Workbench | Shift, tasks, display-only sales and leaderboard entry | Personal ranking needs real employee sales attribution; no fabricated ranks or sales assessment |
+| Learning | Search/categories, native article, favorite mastery, server grading, result history, post-submit review, explicit confirmed-result retake and conservative first-expiry restart | Current filter counts are loaded-only; additional Web knowledge filters remain. Unknown answers do not survive a true sign-out/page unload |
+| Continuous practice | Latest300 favorite window, at most five per round, reading/quiz/next/skip, identity/store/Shanghai-day local progress | Not a daily cap, assigned-course system or cross-device progress |
+| SOP/QA | Native search/pagination/Markdown, manual entry CRUD, AI candidate with separate adoption, category CRUD/sort, independent permissions and receipts | Rest/unscheduled employees lack content-shop context. Real authenticated write/readback acceptance remains |
+| Scheduling | Own month, separately authorized same-store view, rest/missing distinction and conflicts | Single-day add/change/remove, atomic swap, week clear, shift settings, blocked days and AI scheduling are not migrated |
+| Daily operations | Tasks and confirmed experience claim, growth check-in/history, OKR reading/collaborative progress | Not attendance; task configuration and full OKR management remain |
+| Activities | Detail, authorized masked applications, publication confirmation/reversal, original evidence upload/reconciliation | Activity create/edit/remove/status/poster and application approval/rejection/voucher/SMS flows remain |
+| Vouchers | Template reading, strict code parsing, scan-to-query, separately confirmed redemption and reconciliation | Template management, issuance, claim management and share poster remain |
+| Communication | Notifications, confirmed read state, staff contacts/conversations/text/original attachments, community detail/like/comment | Real two-employee and legacy Web attachment interoperability; notification/content administration remain |
+| Recognition | Native multi-shot tray up to five, recognition story/selling points, explicit cloud save | Real camera/privacy/AI/save acceptance; full recognition-history editing/removal remain |
+| Video | Unified script/reference/video job, exit/resume, separate original video/cover/frozen copy delivery, existing-account publishing queue/status | Real paid generation/device album acceptance; original asset upload/management, publish-history recovery and account lifecycle remain |
+
+## Priorities
+
+1. Verify native retake and expired-attempt recovery without discarding unknown answers.
+2. Separate daily working-shop truth from server-authorized content-shop context. A missing shift must not be treated as absence of all daily content rights; never guess the first/only store.
+3. Add authorized schedule write flows with atomic server operations, explicit independent capabilities, CAS and original-request receipts. Keep seven-day scheduling allowed; do not restore the old five-day cap.
+4. Migrate remaining activity/voucher operations, then marketing asset/account lifecycle. Do not restore rejected separate AI-image/copy/advanced-video menus.
+
+## Release Gates
+
+Tourist preview, synthetic screenshots, unit tests and anonymous 401 checks do not prove production employee flows. Dedicated AppID, required WeChat domain/privacy configuration and genuine employee/device acceptance remain mandatory. No public release or full functional parity is claimed.
+
+## Store-Context Finding
+
+Fixed backend `current_shop_context_v1` returns authorized shops but leaves `effective_shop` empty on rest/unscheduled days. Bootstrap separately contains the server-owned `staff_profile.shop_id`. Existing Web marketing accepts only an explicit bound shop that is still visible; it never guesses from list size. New native KB gates require the daily effective shop, so a client-only home fallback would still fail and would not constitute an authorization fix. This is an open coordinated backend/client item, not a completed feature.

@@ -1,4 +1,16 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const{createPreview}=require('../miniprogram/shared/preview');
+test('preview retakes have distinct tokens and replies bind to the submitted attempt',async()=>{
+ const p=createPreview({}),library=await p.api.action('my-library');
+ const first=await p.api.action('quiz-start',{kind:'favorite',id:library.items[0].id});
+ const second=await p.api.action('quiz-start',{kind:'favorite',id:library.items[1].id});
+ assert.notEqual(first.quiz_token,second.quiz_token);
+ assert.equal(first.attempt_id,first.quiz_token);assert.equal(second.attempt_id,second.quiz_token);
+ const result=await p.api.action('quiz-submit',{quiz_token:first.quiz_token,answers:[1]});
+ assert.equal(result.kind,'favorite');assert.equal(result.id,library.items[0].id);assert.equal(result.persisted,false);
+ const next=await p.api.action('quiz-submit',{quiz_token:second.quiz_token,answers:[0]});
+ assert.equal(next.id,library.items[1].id);assert.equal(next.persisted,false);
+ await assert.rejects(p.api.action('quiz-submit',{quiz_token:'missing',answers:[1]}),e=>e.status===404);
+});
 test('development samples load without false live-sales or persistence',async()=>{const p=createPreview({});const data=await p.api.sales();assert.equal(data.achieved_cents,null);assert.equal(data.complete,false);assert.ok(data.as_of);const dashboard=await p.api.action('dashboard');assert.equal(dashboard.shift.title,'早班');const result=await p.api.action('quiz-submit',{});assert.equal(result.persisted,false);await assert.rejects(p.api.invoke('surprise-marketing-video',{}));});
 test('SOP and QA preview preserve scope, Markdown and shared read-only details without writing',async()=>{
  const p=createPreview({}),shop_id=p.session.get().shop.id;
