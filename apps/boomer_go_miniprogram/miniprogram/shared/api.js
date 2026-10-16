@@ -32,6 +32,7 @@ function dashboardShift(data, user) {
 function createApi({ wx, config, session, invoke: transport }) {
   const saveRequests = [];
   const shopActions = new Set(['learning', 'objectives', 'objective-update', 'marketing-assets', 'marketing-detail', 'activities', 'activity-detail', 'vouchers', 'voucher-detail', 'voucher-capabilities', 'voucher-lookup', 'voucher-redeem', 'voucher-redeem-status', 'schedule', 'activity-capabilities', 'activity-applications', 'application-detail', 'publication-confirm', 'publication-confirm-status', 'publication-upload-intent', 'publication-upload-commit', 'publication-upload-status', 'kb-capabilities', 'kb-list', 'kb-detail', 'kb-write', 'kb-write-status', 'kb-draft', 'kb-category-list', 'kb-category-detail', 'kb-category-write', 'kb-category-write-status', 'schedule-manage-capabilities', 'schedule-manage-week', 'schedule-manage-candidates', 'schedule-manage-cell', 'schedule-manage-write', 'schedule-manage-write-status']);
+  for (const name of ['activity-manage-capabilities', 'activity-manage-list', 'activity-manage-voucher-candidates', 'activity-manage-detail', 'activity-manage-write', 'activity-manage-write-status']) shopActions.add(name);
   function snapshot() {
     const value = typeof session.get === 'function' ? session.get() : null;
     return { revision: session.revision ? session.revision() : null, identity: value ? JSON.stringify([value.userId, value.shop && value.shop.id, value.scopeVersion]) : '' };
@@ -103,8 +104,8 @@ function createApi({ wx, config, session, invoke: transport }) {
     let response;
     try { response = await settled(before, transport('go-mini-api', { action: name, params: payload })); }
     catch (error) {
-      // This code is returned only by the BFF gate before a handler can read or mutate data.
-      if (name === 'official-knowledge-chat' || error.status !== 403 || error.code !== 'erp_scope_not_ready' || !session.restore) throw error;
+      // Activity writes can also lose scope after waiting for a database lock; never resend them here.
+      if (name === 'official-knowledge-chat' || name === 'activity-manage-write' || error.status !== 403 || error.code !== 'erp_scope_not_ready' || !session.restore) throw error;
       await session.restore();
       assertState(before);
       response = await settled(before, transport('go-mini-api', { action: name, params: payload }));
