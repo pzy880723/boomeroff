@@ -7,7 +7,7 @@ function agendaItems(data) {
 
 Page(definePage({
   data: {
-    name: '', shopName: '', shops: [], shopIndex: 0, isHeadquarters: false, date: '', shift: null, agenda: [], salesValue: '暂无数据', salesLabel: '付款毛额（未扣退款）', salesFreshness: '', salesError: '', salesLoading: false, salesNotice: '', freshness: '',
+    name: '', shopName: '', shops: [], shopIndex: 0, isHeadquarters: false, date: '', shift: null, shiftStatus: '', shiftNotice: '', agenda: [], salesValue: '暂无数据', salesLabel: '付款毛额（未扣退款）', salesFreshness: '', salesError: '', salesLoading: false, salesNotice: '', freshness: '',
     agendaLoading: false, agendaError: '', agendaFreshness: '',
     tools: [
       { label: '门店 SOP', icon: 'S', url: '/pages/store-kb/index?type=sop' },
@@ -38,10 +38,11 @@ Page(definePage({
       const shift = dashboard.shift;
       this.setData({
         shift: shift ? { title: shift.title || shift.name || '今日排班', start: shift.start_time || '', end: shift.end_time || '', shop: shift.shop_name || '', note: shift.note || '' } : null,
+        shiftStatus: dashboard.shift_status || (shift ? 'scheduled' : 'unscheduled'), shiftNotice: dashboard.shift_notice || '',
         freshness: model.freshness(dashboard)
       });
       if (Array.isArray(dashboard.tasks)) this.setData({ agenda: agendaItems({ items: dashboard.tasks, pending_items: dashboard.pending_items }) });
-    }, { shift: null, agenda: sameScope ? this.data.agenda : [], agendaFreshness: sameScope ? this.data.agendaFreshness : '', agendaError: '', agendaLoading: false, salesValue: '暂无数据', salesLabel: '付款毛额（未扣退款）', salesLoading: false, salesFreshness: '', salesError: '', salesNotice: '', freshness: '' });
+    }, { shift: null, shiftStatus: '', shiftNotice: '', agenda: sameScope ? this.data.agenda : [], agendaFreshness: sameScope ? this.data.agendaFreshness : '', agendaError: '', agendaLoading: false, salesValue: '暂无数据', salesLabel: '付款毛额（未扣退款）', salesLoading: false, salesFreshness: '', salesError: '', salesNotice: '', freshness: '' });
     const request = this._request;
     return pending.then(() => {
       if (!this._gone && identity === model.scope(this) && request === this._request) return Promise.all([this.loadSales(), this.loadAgenda()]);

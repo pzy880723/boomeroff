@@ -1,5 +1,33 @@
 const { createPublicationUploads } = require('./publication-upload');
 
+function dashboardShift(data, user) {
+  const date = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+  const unavailable = notice => ({ shift: null, shift_status: 'unavailable', shift_notice: notice });
+  const context = data.shop_context || {};
+  if (data.date !== date || (context.date !== undefined && context.date !== date)) return unavailable('排班日期已过期或不一致，请重新同步今日安排。');
+  if (!Array.isArray(data.shifts) || data.shifts.some(row => !row || typeof row.work_date !== 'string')) return unavailable('排班记录不完整，暂不能确认今日安排，请重新同步。');
+  const rows = data.shifts.filter(row => row.work_date === date);
+  if (rows.length > 1 || rows.length && context.status === 'rest') return { shift: null, shift_status: 'conflict', shift_notice: '今日排班存在多条或与休息状态冲突，请核对门店安排。' };
+  if (!rows.length && context.status === 'scheduled') return unavailable('今日排班记录与服务器状态不一致，记录不完整，请重新同步。');
+  if (!rows.length) return context.date === date && context.status === 'rest'
+    ? { shift: null, shift_status: 'rest', shift_notice: '' }
+    : { shift: null, shift_status: 'unscheduled', shift_notice: '' };
+  const row = rows[0], own = Object.prototype.hasOwnProperty;
+  if (!user || own.call(row, 'user_id') && row.user_id !== user.userId || own.call(row, 'is_self') && row.is_self !== true) return unavailable('排班人员身份未能核对，请重新同步本人安排。');
+  const shops = (Array.isArray(user.shops) ? user.shops : []).filter(shop => shop && shop.id === row.shop_id && typeof shop.name === 'string' && shop.name.trim());
+  if (!row.shop_id || shops.length !== 1) return unavailable('排班门店未能通过当前授权范围核对，请重新同步。');
+  if (typeof row.shift_code !== 'string' || !row.shift_code.trim()) return unavailable('排班缺少班次代号，请核对门店安排。');
+  const definitions = (Array.isArray(data.shift_definitions) ? data.shift_definitions : []).filter(def => def && def.code === row.shift_code);
+  // The fixed bootstrap omits shop_id on legacy definitions; never choose its first duplicate.
+  const tiers = [definitions.filter(def => def.shop_id === row.shop_id), definitions.filter(def => def.shop_id === null), definitions.filter(def => !own.call(def, 'shop_id'))];
+  const matches = tiers.find(tier => tier.length) || [], definition = matches.length === 1 ? matches[0] : null;
+  const time = value => typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,6})?)?$/.test(value);
+  const complete = definition && time(definition.start_time) && time(definition.end_time);
+  const title = definition && typeof definition.name === 'string' && definition.name.trim() || row.shift_code;
+  return { shift: { title, start_time: complete ? definition.start_time : '', end_time: complete ? definition.end_time : '', shop_id: row.shop_id, shop_name: shops[0].name, note: typeof row.note === 'string' ? row.note : '' },
+    shift_status: 'scheduled', shift_notice: matches.length > 1 ? '班次配置不唯一，时间暂不展示，请核对门店班次。' : !complete ? '班次配置缺失或时间不完整，暂不展示时间，请核对门店班次。' : '' };
+}
+
 function createApi({ wx, config, session, invoke: transport }) {
   const saveRequests = [];
   const shopActions = new Set(['learning', 'objectives', 'objective-update', 'marketing-assets', 'marketing-detail', 'activities', 'activity-detail', 'vouchers', 'voucher-detail', 'voucher-capabilities', 'voucher-lookup', 'voucher-redeem', 'voucher-redeem-status', 'schedule', 'activity-capabilities', 'activity-applications', 'application-detail', 'publication-confirm', 'publication-confirm-status', 'publication-upload-intent', 'publication-upload-commit', 'publication-upload-status', 'kb-capabilities', 'kb-list', 'kb-detail', 'kb-write', 'kb-write-status', 'kb-draft', 'kb-category-list', 'kb-category-detail', 'kb-category-write', 'kb-category-write-status']);
@@ -76,10 +104,7 @@ function createApi({ wx, config, session, invoke: transport }) {
     }
     const data = response && response.data !== undefined ? response.data : response;
     if (name === 'dashboard' && data) {
-      const date = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
-      const row = data.date === date && (data.shifts || []).find(s => s.work_date === date);
-      const shift = row && (data.shift_definitions || []).find(s => s.code === row.shift_code);
-      return Object.assign({}, data, { shift: row ? { title: shift && shift.name || row.shift_code, start_time: shift && shift.start_time || '', end_time: shift && shift.end_time || '', shop_name: selected && selected.name || '' } : null });
+      return Object.assign({}, data, dashboardShift(data, session.get()));
     }
     if (['knowledge-detail','marketing-detail','activity-detail','voucher-detail'].includes(name) && data && !data.item) return { item: data };
     return Array.isArray(data) ? { items: data } : data;

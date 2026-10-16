@@ -5,7 +5,7 @@
 | Area | Native implementation | Remaining acceptance or migration |
 | --- | --- | --- |
 | Identity | OTP/password, existing GO identity, fresh ERP scope, profile, HQ authorized selection, logout isolation | Dedicated employee AppID, real employee/device login and revocation acceptance; no new identity database |
-| Workbench | Shift, tasks, display-only sales and leaderboard entry | Personal ranking needs real employee sales attribution; no fabricated ranks or sales assessment |
+| Workbench | Actual authorized daily shift/shop binding, explicit rest/missing/conflict, tasks, display-only sales and leaderboard entry | Personal ranking needs real employee sales attribution; legacy ambiguous shift definitions need source correction, not guessed times |
 | Learning | Search/categories, native article, favorite mastery, server grading, result history, post-submit review, explicit confirmed-result retake and conservative first-expiry restart | Current filter counts are loaded-only; additional Web knowledge filters remain. Unknown answers do not survive a true sign-out/page unload |
 | Continuous practice | Latest300 favorite window, at most five per round, reading/quiz/next/skip, identity/store/Shanghai-day local progress | Not a daily cap, assigned-course system or cross-device progress |
 | SOP/QA | Native search/pagination/Markdown, manual entry CRUD, AI candidate with separate adoption, category CRUD/sort, independent permissions and receipts | Rest/unscheduled employees lack content-shop context. Real authenticated write/readback acceptance remains |
@@ -31,3 +31,5 @@ Tourist preview, synthetic screenshots, unit tests and anonymous 401 checks do n
 ## Store-Context Finding
 
 Fixed backend `current_shop_context_v1` returns authorized shops but leaves `effective_shop` empty on rest/unscheduled days. Bootstrap separately contains the server-owned `staff_profile.shop_id`. Existing Web marketing accepts only an explicit bound shop that is still visible; it never guesses from list size. New native KB gates require the daily effective shop, so a client-only home fallback would still fail and would not constitute an authorization fix. This is an open coordinated backend/client item, not a completed feature.
+
+Further source audit found that staff_profiles has an own-user INSERT/UPDATE branch without a shop_id constraint; a server-read field is not therefore immutable authority. No canonical home was found in the current ERP mirror contract. CONTENT_CONTEXT_AUDIT.md records this unresolved prerequisite and the unapproved R27 plan. No home fallback, policy change or rest-day authorization expansion has been deployed.
