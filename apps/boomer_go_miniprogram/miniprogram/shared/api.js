@@ -105,7 +105,7 @@ function createApi({ wx, config, session, invoke: transport }) {
     try { response = await settled(before, transport('go-mini-api', { action: name, params: payload })); }
     catch (error) {
       // Activity writes can also lose scope after waiting for a database lock; never resend them here.
-      if (name === 'official-knowledge-chat' || name === 'activity-manage-write' || error.status !== 403 || error.code !== 'erp_scope_not_ready' || !session.restore) throw error;
+      if (name === 'official-knowledge-chat' || name === 'activity-manage-write' || name === 'knowledge-save' || error.status !== 403 || error.code !== 'erp_scope_not_ready' || !session.restore) throw error;
       await session.restore();
       assertState(before);
       response = await settled(before, transport('go-mini-api', { action: name, params: payload }));

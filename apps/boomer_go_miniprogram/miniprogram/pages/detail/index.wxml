@@ -36,7 +36,14 @@
     <view wx:if="{{learningNotice}}" class="notice">{{learningNotice}}</view>
     <view wx:if="{{canFavorite}}" class="cloud-actions"><button class="button-secondary" bindtap="toggleFavorite" disabled="{{busy}}" loading="{{busy}}">{{favorite ? '取消收藏' : '收藏知识'}}</button></view>
     <view wx:if="{{canRemoveFavorite}}" class="cloud-actions"><button class="button-secondary" bindtap="confirmFavoriteRemoval" disabled="{{busy}}" loading="{{busy}}">移除这条收藏</button></view>
-    <view wx:if="{{canSave}}" class="cloud-actions"><button class="button-secondary" bindtap="saveKnowledge" disabled="{{busy}}">保存已有商品到我的知识库</button></view>
+    <view wx:if="{{canSave}}" class="cloud-actions"><button class="button-secondary" bindtap="saveKnowledge" disabled="{{preview || busy || loading || error || knowledgeSaveState}}" loading="{{knowledgeSaveBusy}}">{{preview ? '合成预览不可保存' : '保存已有商品到我的知识库'}}</button></view>
+    <view wx:if="{{knowledgeSaveState}}" class="card">
+      <view class="notice">{{knowledgeSaveNotice}}</view>
+      <view wx:if="{{knowledgeSaveError}}" class="error">{{knowledgeSaveError}}</view>
+      <button wx:if="{{knowledgeSaveState === 'receipt'}}" class="button-secondary" bindtap="retryKnowledgeReadback" disabled="{{knowledgeSaveBusy || loading || preview}}">只读重查收藏详情</button>
+      <button wx:if="{{knowledgeSaveState === 'confirmed'}}" class="button-secondary" bindtap="openSavedKnowledge">打开已核对的收藏</button>
+      <button wx:if="{{knowledgeSaveState === 'unknown'}}" class="button-secondary" bindtap="checkKnowledgeLibrary">去我的知识库手动核对</button>
+    </view>
     <view wx:if="{{canShare}}" class="cloud-actions"><button class="button-secondary" bindtap="confirmShare" disabled="{{busy}}">分享商品到 BOOMER 圈</button></view>
     <view wx:if="{{kind === 'tasks'}}" class="cloud-actions"><button class="button" bindtap="claimTask" disabled="{{preview || busy || claimed || !completed}}" loading="{{busy}}">{{preview ? '示例奖励不可领取' : (claimed ? '云端已领取' : (completed ? '向云端申请领取奖励' : '未达标，继续完成任务'))}}</button><view class="muted action-hint">完成状态和奖励资格由服务器核验，不会本地标记完成。</view></view>
     <view wx:if="{{kind === 'tasks'}}" class="row task-links"><button class="button-secondary" data-url="/pages/recognize/index" bindtap="go">去识物</button><button class="button-secondary" data-url="/pages/learn/index" bindtap="go">去学习</button></view>

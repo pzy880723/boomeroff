@@ -31,6 +31,10 @@ function createPreview(wx) {
   ];
   const bootstrap = { date, profile, staff_profile: profile, user_role: { role_code: 'staff' }, shop_context: { date, scope: 'store', status: 'scheduled', effective_shop: shop, authorized_shops: [shop] }, shifts: [{ id: 'example-shift', work_date: date, shift_code: 'early', shop_id: shop.id }], shift_definitions: [{ shop_id:shop.id, code: 'early', name: '早班', start_time: '10:00', end_time: '18:00' }], shift: { title:'早班',start_time:'10:00',end_time:'18:00',shop_name:shop.name }, tasks:[{id:'example-task',title:'检查价签与品相说明',status:'示例待办'}], learning:[articles[0]], okrs: [], checked_today: false };
   const current = { userId: '00000000-0000-4000-8000-000000000902', profile, shop, shops: [shop], isHeadquarters: false, bootstrap, permissions: [], scopeFresh: true };
+  const recognition = { id: '00000000-0000-4000-8000-000000000841', name: '花纹瓷杯（识物示例）', category: '瓷器餐具', era: '年代待核实',
+    description: '合成识物示例：观察杯口、釉色与底款，具体材质和年代需核实。',
+    story: '这是一条合成商品故事，仅供检查原生页面。花纹与器型可以成为讲解线索，但不能据此保证年代或产地。',
+    selling_points: ['介绍可见花纹和使用方式', '如实说明可见品相，以实物和价签为准'], created_by: current.userId, created_at: stamp, updated_at: stamp };
   const activity = { id: '00000000-0000-4000-8000-000000000031', shop_id: shop.id, name: '门店内容共创日（示例）', description: '用真实商品与门店照片分享好物故事。管理区是只读示例，不读取真实顾客资料、不发券或保存确认。', status: 'active', platform: null, starts_at: null, ends_at: null, cover_url: null, poster_url: null, voucher_id: '00000000-0000-4000-8000-000000000034', requires_review: false, max_applications: null, min_followers: null, share_token: null, created_at: date + 'T00:00:00+08:00', form_fields: [{ key: 'experience', label: '希望分享的内容', type: 'textarea' }, { key: 'contact', label: '联系电话', type: 'phone' }, { key: 'profile_image', label: '主页截图', type: 'image', role: 'profile_screenshot' }] };
   const activityStamp = stamp.replace(/Z$/, '000Z');
   const applicationId = '00000000-0000-4000-8000-000000000032';
@@ -151,6 +155,11 @@ function createPreview(wx) {
       ], conflicts: [], schedules: bootstrap.shifts, shift_defs: bootstrap.shift_definitions, as_of: stamp, persisted: false };
     }
     if (name === 'knowledge-detail') {
+      if (['history', 'recognition'].includes(params.kind)) {
+        if (params.id !== recognition.id) throw new Error('该识物示例不存在');
+        return { item: { id: recognition.id, kind: 'recognition', title: recognition.name, category: recognition.category,
+          body: recognition.description, quiz_available: false, raw: recognition }, persisted: false };
+      }
       const official = params.kind === 'official' && officialArticles.find(row => row.id === params.id);
       if (official) return { item: { id: official.id, kind: 'official', title: official.name, body: official.body,
         category: official.category, quiz_kind: 'official', quiz_available: true, quiz_persisted: false, raw: Object.assign({}, official) }, persisted: false };
@@ -332,7 +341,8 @@ function createPreview(wx) {
     }
     if (name === 'my-library') return { items: params.page ? [] : library.map(row => Object.assign({}, row)), page: params.page || 0, page_size: 20, has_more: false, as_of: stamp };
     if (name === 'practice-library') return { items: library.map(row => Object.assign({}, row)), window_limit: 300, has_older: false, as_of: stamp };
-    if (['vouchers', 'scan-history', 'marketing-assets', 'conversation-list', 'conversation-messages'].includes(name)) return { items: [], as_of: stamp };
+    if (name === 'scan-history') return { items: params.page ? [] : [Object.assign({}, recognition)], page: params.page || 0, page_size: 20, has_more: false, as_of: stamp, persisted: false };
+    if (['vouchers', 'marketing-assets', 'conversation-list', 'conversation-messages'].includes(name)) return { items: [], as_of: stamp };
     return unavailable();
   }
   return { session, api: { action, invoke: unavailable, assistant: unavailable, uploadChatAttachment: unavailable, openChatAttachment: unavailable,

@@ -440,13 +440,15 @@ test('product learning retains server pagination and query without unsupported c
 
 test('official favorites and product library writes use their real source contracts', async () => {
   const calls = [];
+  const productId = '00000000-0000-4000-8000-000000000851', favoriteId = '00000000-0000-4000-8000-000000000852';
   let favorite = false;
   const page = nativePage('detail', async (action, params) => {
     calls.push({ action, params });
     if (action === 'knowledge-favorite') { favorite = params.favorite; return { favorite }; }
-    if (action === 'knowledge-save') return { saved: true };
+    if (action === 'knowledge-save') return { saved: true, favorite_id: favoriteId };
+    if (params.kind === 'favorite') return { item: { kind: 'favorite', id: favoriteId, title: '已收藏杯子', raw: { favorite: { id: favoriteId, source_type: 'recognition', source_id: productId }, source_available: true, source: { id: productId } } } };
     if (params.kind === 'official') return { kind: 'official', id: 'official-a', title: '官方知识', raw: { is_favorite: favorite } };
-    return { kind: 'knowledge', id: 'knowledge-a', title: '杯子', body: '说明', raw: { is_favorite: favorite, product_id: 'product-a' } };
+    return { kind: 'knowledge', id: 'knowledge-a', title: '杯子', body: '说明', raw: { is_favorite: favorite, product_id: productId } };
   });
   await page.onLoad({ kind: 'official', id: 'official-a' });
   await page.toggleFavorite();
@@ -454,7 +456,8 @@ test('official favorites and product library writes use their real source contra
   assert.equal(page.data.favorite, true);
   await page.onLoad({ kind: 'knowledge', id: 'knowledge-a' });
   await page.saveKnowledge();
-  assert.equal(calls.find((call) => call.action === 'knowledge-save').params.product_id, 'product-a');
+  assert.equal(calls.find((call) => call.action === 'knowledge-save').params.product_id, productId);
+  assert.equal(page.data.knowledgeSaveState, 'confirmed');
 });
 
 test('task claim failure never changes progress or claims a successful reward', async () => {
@@ -750,25 +753,29 @@ test('real product, product_knowledge and favorite snapshot list shapes project 
 });
 
 test('real recognition products and product-backed favorite sources carry reliable products ids', async () => {
+  const productId = '00000000-0000-4000-8000-000000000861', favoriteId = '00000000-0000-4000-8000-000000000862';
   const cases = [
-    ['history', { id: 'products-history', name: '识物商品' }, 'products-history'],
-    ['recognition', { id: 'products-recognition', name: '识物商品' }, 'products-recognition'],
-    ['favorites', { favorite: { id: 'favorite-a', source_type: 'recognition', source_id: 'products-a' }, source: { id: 'products-a', name: '源商品' } }, 'products-a'],
-    ['my-library', { favorite: { id: 'favorite-b', source_type: 'product', source_id: 'products-b' }, source: { id: 'products-b', name: '源商品' } }, 'products-b']
+    ['history', { id: productId, name: '识物商品' }, productId],
+    ['recognition', { id: productId, name: '识物商品' }, productId],
+    ['favorites', { favorite: { id: favoriteId, source_type: 'recognition', source_id: productId }, source: { id: productId, name: '源商品' } }, productId],
+    ['my-library', { favorite: { id: favoriteId, source_type: 'product', source_id: productId }, source: { id: productId, name: '源商品' } }, productId]
   ];
   for (const [kind, raw, productId] of cases) {
     const writes = [];
     const page = nativePage('detail', async (action, params) => {
-      if (action === 'knowledge-save' || action === 'community-post') { writes.push({ action, params }); return { ok: true }; }
+      if (action === 'knowledge-save' || action === 'community-post') { writes.push({ action, params }); return action === 'knowledge-save' ? { saved: true, favorite_id: favoriteId } : { ok: true }; }
+      if (params.kind === 'favorite' && params.id === favoriteId) return { item: { kind: 'favorite', id: favoriteId, title: '已收藏商品', raw: { favorite: { id: favoriteId, source_type: 'recognition', source_id: productId }, source_available: true, source: { id: productId } } } };
       return { kind, id: 'display-row-id', title: '商品详情', body: '', raw };
     });
     await page.onLoad({ kind, id: 'display-row-id' });
-    assert.equal(page.data.canSave, true, kind);
+    const alreadyFavorite = ['favorites', 'my-library'].includes(kind);
+    assert.equal(page.data.canSave, !alreadyFavorite, kind);
     assert.equal(page.data.canShare, true, kind);
     await page.saveKnowledge();
     await page.shareCommunity();
-    assert.equal(writes[0].params.product_id, productId);
-    assert.equal(writes[1].params.product_id, productId);
+    assert.equal(writes.filter(row => row.action === 'knowledge-save').length, alreadyFavorite ? 0 : 1);
+    assert.ok(writes.every(row => row.params.product_id === productId));
+    assert.equal(writes.filter(row => row.action === 'community-post').length, 1);
   }
 });
 

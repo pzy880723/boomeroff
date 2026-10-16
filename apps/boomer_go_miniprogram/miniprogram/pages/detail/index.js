@@ -6,6 +6,17 @@ const knowledgeCategories = require('../../shared/knowledge-categories');
 const { urlForFilters } = require('../../shared/official-library');
 const knowledgeChat = require('../../shared/knowledge-chat');
 const learningKinds = ['knowledge', 'official', 'sop', 'qa', 'training', 'favorite', 'favorites', 'my-library', 'history', 'recognition'];
+const productUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const knowledgeSaveEmpty = { knowledgeSaveState: '', knowledgeSaveNotice: '', knowledgeSaveError: '', knowledgeSaveBusy: false };
+function savedFavorite(data, record, userId) {
+  const item = data && data.item, raw = item && item.raw, favorite = raw && raw.favorite;
+  if (!item || item.kind !== 'favorite' || item.id !== record.favoriteId || !favorite || favorite.id !== record.favoriteId
+    || favorite.source_type !== 'recognition' || favorite.source_id !== record.productId
+    || (item.user_id != null && item.user_id !== userId) || (favorite.user_id != null && favorite.user_id !== userId)
+    || typeof raw.source_available !== 'boolean'
+    || (raw.source_available ? !raw.source || raw.source.id !== record.productId : raw.source != null)) throw new Error('收藏来源尚未核对一致');
+  return raw.source_available;
+}
 function practiceCoordinator() { const app = typeof getApp === 'function' ? getApp() : null; return app && app.dailyPractice; }
 function chatFor(page) { if (!page._knowledgeChat) page._knowledgeChat = knowledgeChat.create(page, { scope: () => model.scope(page), wx }); return page._knowledgeChat; }
 
@@ -29,10 +40,11 @@ function officialFilters(raw) {
 }
 
 Page(definePage({
-  data: { kind: '', id: '', item: null, nodes: '', fields: [], officialFilters: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], freshness: '', quizUrl: '', unavailable: '', favorite: null, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, canSave: false, canShare: false, busy: false, actionNotice: '', resolvedMessage: '', resolvedUrl: '', keyActionsDraft: '', draftResults: [], messages: [], messageDraft: '', profileNameDraft: '', avatarPreview: '' },
+  data: Object.assign({}, knowledgeSaveEmpty, { kind: '', id: '', item: null, nodes: '', fields: [], officialFilters: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], freshness: '', quizUrl: '', unavailable: '', favorite: null, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, canSave: false, canShare: false, busy: false, actionNotice: '', resolvedMessage: '', resolvedUrl: '', keyActionsDraft: '', draftResults: [], messages: [], messageDraft: '', profileNameDraft: '', avatarPreview: '' }),
   onLoad(options) { this._hidden = false; this._practiceRequested = options.practice === '1'; this.setData(Object.assign({}, knowledgeChat.fields, { kind: options.kind || 'knowledge', id: options.id || '', practiceRequested: this._practiceRequested })); this.syncPractice(); return this.load(); },
   onShow() { const hidden = this._hidden; this._hidden = false; this._practiceRedirecting = false; this.syncPractice(); if (this.data.kind === 'objectives') { if (hidden || this._objectiveIdentity !== model.scope(this)) return this.loadObjective(); return; } if (this._request && (this._identity !== model.scope(this) || (hidden && learningKinds.indexOf(this.data.kind) >= 0))) return this.load(); },
   onHide() {
+    this.clearKnowledgeSaveView();
     if (this._knowledgeChat) this._knowledgeChat.hide();
     if (this.data.kind === 'objectives') { this._hidden = true; this.clearObjective(); }
     if (learningKinds.indexOf(this.data.kind) >= 0) {
@@ -41,12 +53,15 @@ Page(definePage({
       if (this._gone) Object.assign(this.data, { quizUrl: '', officialFilters: [] }); else this.setData({ quizUrl: '', officialFilters: [] });
     }
   },
-  onUnload() { this.onHide(); if (this._knowledgeChat) this._knowledgeChat.unload(); this._gone = true; },
+  onUnload() { this.onHide(); this._knowledgeSave = null; this._knowledgeBinding = null; if (this._knowledgeChat) this._knowledgeChat.unload(); this._gone = true; },
   onPullDownRefresh() { return Promise.resolve(this.data.kind === 'objectives' ? this.reloadObjective() : this.load()).finally(() => wx.stopPullDownRefresh()); },
   load() {
     const kind = this.data.kind;
     if (kind === 'objectives') return this.loadObjective();
     if (kind === 'official' && (this._gone || this._hidden)) return Promise.resolve();
+    this._knowledgeBinding = null;
+    if (this._knowledgeSave && this._knowledgeSave.state === 'confirmed') this._knowledgeSave.state = 'receipt';
+    this.clearKnowledgeSaveView();
     if (kind === 'official' || this._knowledgeChat) chatFor(this).loadStart();
     const section = model.sections[kind];
     if (learningKinds.indexOf(kind) >= 0) this.setData({ learningNotice: '' });
@@ -141,6 +156,9 @@ Page(definePage({
       const results = (Array.isArray(item.key_results) ? item.key_results : []).map((result) => ({ title: result.title || result.text || String(result), completed: result.completed === true || result.done === true }));
       const productIds = [raw.product_id, ['history', 'recognition'].indexOf(kind) >= 0 ? raw.id : '', isFavorite && ['recognition', 'product'].indexOf(favorite.source_type) >= 0 ? source.id : ''];
       this._productId = (productIds.find((id) => typeof id === 'string' && id.trim()) || '').trim();
+      const canSave = !isFavorite && productUuid.test(this._productId);
+      this._knowledgeBinding = canSave ? { identity: model.scope(this), kind, id: this.data.id, productId: this._productId } : null;
+      if (this._knowledgeSave && (!this._knowledgeBinding || !this.sameKnowledgeSave(this._knowledgeSave))) this._knowledgeSave = null;
       const canFavorite = !isFavorite && (item.kind || kind) === 'official';
       this._favoriteTargetId = canFavorite ? item.id || this.data.id : '';
       const favoriteRowId = isFavorite ? favorite.id || raw.favorite_id || (item.kind === 'favorite' ? item.id : '') : '';
@@ -151,12 +169,15 @@ Page(definePage({
         nodes: contentNodes(Object.assign({}, item, { body: item.body || business.body })), fields, businessSections: business.sections, gallery: business.gallery, backstampUrl: business.backstampUrl, videoUrl: business.videoUrl,
         results, freshness: model.freshness(Object.assign({}, raw, item)), quizUrl: quizAllowed ? model.quizUrl(item.quiz_kind, item.id || this.data.id) : '',
         favorite: typeof raw.is_favorite === 'boolean' ? raw.is_favorite : (typeof item.is_favorite === 'boolean' ? item.is_favorite : (typeof item.favorite === 'boolean' ? item.favorite : (['favorite', 'favorites', 'my-library'].indexOf(kind) >= 0 ? true : null))),
-        claimed: item.claimed === true, canSave: !!this._productId, canShare: !!this._productId, canFavorite, canRemoveFavorite: !!this._favoriteRowId,
+        claimed: item.claimed === true, canSave, canShare: !!this._productId, canFavorite, canRemoveFavorite: !!this._favoriteRowId,
         keyActionsDraft: item.key_actions || '', draftResults: results.map((result) => ({ title: result.title, completed: result.completed }))
       });
       if (kind === 'official') chatFor(this).mount(item);
       wx.setNavigationBarTitle({ title: item.title || section.title });
-    }, { item: null, nodes: '', fields: [], officialFilters: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], quizUrl: '', canSave: false, canShare: false, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, freshness: '', unavailable: '', actionNotice: '', resolvedMessage: '', resolvedUrl: '', messages: [] });
+    }, { item: null, nodes: '', fields: [], officialFilters: [], businessSections: [], gallery: [], backstampUrl: '', videoUrl: '', results: [], quizUrl: '', canSave: false, canShare: false, canFavorite: false, canRemoveFavorite: false, claimed: false, completed: false, freshness: '', unavailable: '', actionNotice: '', resolvedMessage: '', resolvedUrl: '', messages: [] }).then(() => {
+      this.syncKnowledgeSave();
+      if (this._knowledgeSave && this._knowledgeSave.state === 'receipt') return this.retryKnowledgeReadback();
+    });
   },
   toggleKnowledgeChat() { if (this._knowledgeChat) this._knowledgeChat.toggle(); },
   onKnowledgeQuestion(event) { if (this._knowledgeChat) this._knowledgeChat.input(event.detail.value); },
@@ -307,9 +328,74 @@ Page(definePage({
       });
     } finally { this._writing = false; if (!this._gone) this.setData({ busy: false }); }
   },
-  saveKnowledge() {
-    if (!this._productId) return;
-    return this.writeAction('knowledge-save', { product_id: this._productId });
+  clearKnowledgeSaveView() {
+    if (this._gone) Object.assign(this.data, knowledgeSaveEmpty); else this.setData(knowledgeSaveEmpty);
+  },
+  sameKnowledgeSave(record) {
+    return !!record && !this._gone && record.identity === model.scope(this) && record.kind === this.data.kind && record.id === this.data.id
+      && (!this._knowledgeBinding || record.productId === this._knowledgeBinding.productId);
+  },
+  knowledgeSaveReady() {
+    const binding = this._knowledgeBinding;
+    return !!binding && !this._gone && !this._hidden && !this.data.loading && !this.data.error && !!this.data.item
+      && binding.identity === model.scope(this) && binding.identity === this._loadedIdentity && binding.kind === this.data.kind && binding.id === this.data.id;
+  },
+  syncKnowledgeSave() {
+    const record = this._knowledgeSave;
+    if (!this.knowledgeSaveReady() || !this.sameKnowledgeSave(record)) return;
+    const notice = record.state === 'confirmed'
+      ? (record.sourceAvailable ? '已核对收藏在我的知识库中。可打开阅读，测验是否可用以收藏详情为准。' : '已核对收藏在我的知识库中；源内容当前不可读取，无法开始测验。')
+      : record.state === 'receipt' ? '已收到收藏编号，详情尚未核对。重查只读取该编号，不会再次保存。'
+        : record.state === 'unknown' ? '保存结果尚未确认，不会自动或再次发送。请到我的知识库手动核对。' : '正在等待保存回执，不会重复发送。';
+    this.setData({ knowledgeSaveState: record.state, knowledgeSaveNotice: notice, knowledgeSaveError: record.error || '', knowledgeSaveBusy: record.state === 'writing' || !!record.reading });
+  },
+  async saveKnowledge() {
+    if (this.preview || this.data.preview || this._writing || this.data.busy || this._knowledgeSave || !this.knowledgeSaveReady()) return;
+    const record = Object.assign({}, this._knowledgeBinding, { state: 'writing' });
+    this._knowledgeSave = record;
+    this.syncKnowledgeSave();
+    try {
+      const result = await this.api.action('knowledge-save', { product_id: record.productId });
+      if (this._knowledgeSave !== record || !this.sameKnowledgeSave(record)) return;
+      if (!result || result.saved !== true || typeof result.favorite_id !== 'string' || !productUuid.test(result.favorite_id)) throw new Error('保存回执不完整');
+      record.favoriteId = result.favorite_id;
+      record.state = 'receipt';
+    } catch (error) {
+      if (this._knowledgeSave !== record || !this.sameKnowledgeSave(record)) return;
+      record.state = 'unknown';
+      if (error.status === 401 && !this._hidden) await this.run(async () => { throw error; }, { silent: true });
+    }
+    if (this._knowledgeSave !== record || !this.sameKnowledgeSave(record)) return;
+    this.syncKnowledgeSave();
+    if (record.state === 'receipt') return this.retryKnowledgeReadback();
+  },
+  async retryKnowledgeReadback() {
+    const record = this._knowledgeSave;
+    if (!this.knowledgeSaveReady() || !this.sameKnowledgeSave(record) || record.state !== 'receipt' || (record.reading && record.reading.request === this._request) || this.preview || this.data.preview) return;
+    const reading = { request: this._request };
+    const current = () => this._knowledgeSave === record && record.reading === reading && this.sameKnowledgeSave(record) && this.knowledgeSaveReady() && reading.request === this._request;
+    record.reading = reading; record.error = ''; this.syncKnowledgeSave();
+    try {
+      const result = await this.api.action('knowledge-detail', { kind: 'favorite', id: record.favoriteId });
+      if (!current()) return;
+      record.sourceAvailable = savedFavorite(result, record, this.session.get().userId);
+      record.state = 'confirmed';
+    } catch (error) {
+      if (!current()) return;
+      record.error = '收藏详情暂未核对，请只读重查；不会再次保存。';
+      if (error.status === 401) await this.run(async () => { throw error; }, { silent: true });
+    } finally {
+      const visible = current();
+      if (record.reading === reading) record.reading = false;
+      if (visible) this.syncKnowledgeSave();
+    }
+  },
+  openSavedKnowledge() {
+    const record = this._knowledgeSave;
+    if (this.knowledgeSaveReady() && this.sameKnowledgeSave(record) && record.state === 'confirmed') return this.navigate(model.detailUrl('favorite', record.favoriteId));
+  },
+  checkKnowledgeLibrary() {
+    if (this.knowledgeSaveReady() && this.sameKnowledgeSave(this._knowledgeSave) && this._knowledgeSave.state === 'unknown') return this.navigate('/pages/list/index?kind=my-library');
   },
   async claimTask() {
     if (this.preview || this.data.preview || this._writing || !this.data.item || this.data.claimed || !this.data.completed) return;
