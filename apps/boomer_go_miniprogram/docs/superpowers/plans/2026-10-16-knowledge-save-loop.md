@@ -35,5 +35,5 @@ Files: `miniprogram/pages/detail/index.js`, `index.wxml`, optionally one narrowl
 
 - [x] Focused tests and independent review: 35 save cases,1 preview,215 related and18 additional independent probes; parent and independent full suite1631/1631, 25-route check and official26WXML/27WXSS compilers. No new confirmed P1/P2.
 - [x] Real DevTools native preview screenshot; synthetic preview clearly marked and save disabled. No real employee writes or paid AI. Added an explicit synthetic history fixture, not a fake live result; preview contract first failed then passed20 combined tests.
-- [ ] Update parity/verification with receipt lifetime and live-data gaps; exact-path alternate-index commit, non-force push/readback; preserve normal index and phone data.
-- [ ] Create source archive and independently rerun checks from a clean extraction. This is a local native initial build, not upload or release acceptance.
+- [x] Update parity/verification with receipt lifetime and live-data gaps; exact-path alternate-index commit18c5eeea, non-force push/readback; preserve normal index and phone data.
+- [x] Create source archive and independently rerun checks from a clean extraction: 1631 tests,25 routes,26WXML/27WXSS. Archive hash and size are recorded in VERIFICATION.md. This is a local native initial build, not upload or release acceptance.

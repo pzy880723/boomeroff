@@ -10,6 +10,7 @@
 - 父级合成历史预览合同先1 RED，再20组合GREEN。新增一条显式合成记录以检查故事/卖点/布局，示例不能保存，不是付费识物或员工历史。实际DevTools沿我的→识物记录→详情核对，滚动查看完整故事与禁用保存。native-knowledge-save-detail-preview、native-knowledge-save-disabled-preview及phone为真实截图与确定裁切；收藏成功/未知/401/竞态由VM测试，不冒充GUI真实收藏验收。游客/弃用警告仍在。
 - 父级与独立全套1631/1631，0失败/跳过/取消；独立相关215及额外真实共享页壳/API探针18通过，无确认新增P1/P2。25路由检查及官方26WXML/27WXSS编译退出0、stderr空。Figma28:2为可编辑已渲染交互状态示例，不是运行截图。
 - 没有真实员工写入、手机操作、OTP/短信、付费AI或后端部署。R36预算检查点仍未获新决定，未绕过；AppID/真实员工与设备/完整迁移和微信发布门槛保持，不能以此小修称整体目标完成。
+- 本轮源码18c5eeea7e2b66fa811dc3d27ecfbd144bade901仅14个Mini路径，非强推并ls-remote读回一致。归档/private/tmp/BOOMER-GO-wechat-knowledge-save-20261016.zip为12934635字节，SHA256为4de1eded5e2cec73f752a234abda10c5df193b641a64fa7ed1958444a58b6418。干净解压/private/tmp/go-mini-knowledge-save-verify-fr03Dt再次通过1631项、25路由及官方26WXML/27WXSS编译，stderr空；正常index为空，原Flutter分支/数据不变，DevTools返回工作台。后续证据文档不改变包内代码，不代表main合并或正式发布。
 
 ## 最新检查点：前台业绩刷新与周期核对
 
