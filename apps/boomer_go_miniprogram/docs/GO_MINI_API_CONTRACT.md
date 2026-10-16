@@ -436,3 +436,33 @@ R24统一handler45s deadline覆盖全部RPC和provider headers/body，RPC可用�
 topic/hint是受系统事实／权限／固定SOPQA结构和工具schema约束的writing_request；categories/references是只读不可信reference_data，内部指令不执行。保留旧SOP200-400/QA200-300风格提示，不编造价格／地址／时间／售后，不把销售设为考核。生成模型仍为旧google/gemini-2.5-pro，嵌入为旧google/gemini-embedding-001以匹配已存向量。已核对[Lovable官方模型文档](https://docs.lovable.dev/features/ai)及[Google弃用说明](https://ai.google.dev/gemini-api/docs/deprecations/)；目录状态不代替本项目实际模型可用性和质量验收，也没有擅自切到其他模型。
 
 Lovable报告R23迁移应用、SQL23组强制回滚、R24 Edge部署和Deno104＋quiz Vitest5通过；SQL RED未观察到，R24未重跑SQL，无真并发或真AI。独立R23实际源码10组＋4组通过但复现deadline P2；R24原3RPC复现约22/24/22ms在20ms预算退出，provider次数0/1/2不再推进，实际源码16组＋25额外mock通过、无unhandled rejection／自建timer残留，P2已闭合。主流程在线匿名kb-draft返回401；没有线上bundle字节下载比对、真实员工或付费provider执行。
+
+## 本店知识分类 Round 25/26
+
+R25最终b3def8e98b2202e22cd379481374783014e5745c；R26最终813c12840f12a904fd07e6bc3a8bb08359b01090，均get_project确认finished。主流程固定ref读回并复算UTF8哈希；R26再次读取handler/index/0021/tests，确认与R25原文完全一致。仅数据库删除分支后置复查由0022修复，未重新部署未变化的Edge。
+
+| 文件 | SHA256 |
+| --- | --- |
+| supabase/functions/go-mini-api/kbcat.ts | d2ab53cffeb5014aa785c027b76d25475dbdc55f67228891b95bacc9a4f60c1d |
+| supabase/functions/go-mini-api/index.ts | 4a9f89a6d31112dc0743b58ac8e02284e6583dead892ef03768e57f7c9ed02ed |
+| drizzle/migrations/0021_go_kb_category_native.sql | 7550295398b5733570d9a74b5b350a9822c0866086c19a75177dae3b8f0aca11 |
+| drizzle/migrations/0022_go_kb_category_delete_lock_then_guard.sql | 943d358488dd888e79a005b30c5e4ee1e2ae46261c2e630c5875cd44ac07d87d |
+| tests/go-mini-kb-category.test.ts | 7dff01f5194407096384beac16d9c827069e0b2aed76e8f9ac4038e5fda083d3 |
+| tests/sql/go-kb-category.sql（R26） | 69f619d96d473f7ea6d0c8109e84f283f9f093ef84ced7ad27b57f4e04509dcd |
+
+所有action绑定非NULL当前授权shop和sop/qa，读保留原身份／停用／fresh／当前有效工作店或原HQ授权选店门禁，INVOKER保留caller RLS。write/status独立要求can_write_scoped(shop,'shop.kb.category')严格true，不要求shop.kb.write；不由角色名称推测。共享分类永远只读。窄write/status为固定search_path的SECDEF、auth.uid()重验，PUBLIC/anon撤销；既有默认service_role函数EXECUTE未因此变成无身份或停用绕过，未新增表授权或角色动作。
+
+- kb-category-list `{shop_id,type,page?,page_size?}` → `{shop_id,type,items,can_manage,limits,page,page_size,has_more,as_of}`。稳定sort_order ASC,id ASC；当前店及共享NULL。limits精确为`{name_chars:200,sort_min:-2147483648,sort_max:2147483647}`。page0..100000，服务端兼容size1..50，原生固定20。
+- item/category为`{id,shop_id,type,name,sort_order,version}`；version为canonical `{v:1,id,shop_id,type,name,sort_order}`的64lowerhex SHA256，不依赖不存在的updated_at。历史名称完整读取、不截断。
+- kb-category-detail `{shop_id,type,id}` → `{shop_id,type,category,can_manage,limits,as_of}`；共享can_manage:false，缺失404/not_found。
+- kb-category-write `{shop_id,type,request_id,operation,category_id?,expected_version?,name?,sort_order?}` → receipt。create无id/version，服务器分配本店id；update/delete需精确category_id与version。name trim1..200码点，sort严格int32，保留重名／负数／同序。服务端兼容省略sort时create0/update保留；原生始终发送完整名称与排序。不能迁店、改type/id、创建共享分类或调整词条排序。delete不带名称和排序。
+- receipt为`{shop_id,type,request_id,operation,actor_id,category_id,version,deleted,recorded_at,replay}`；metadata/payload-hash-only私有表、无名称或正文。actor/request锁、相同payload重放在CAS之前，变更与回执原子。delete返回被删分类版本。
+- kb-category-write-status `{shop_id,type,request_id,operation,category_id?}` → `{shop_id,type,request_id,operation,requested_category_id,state:'not_found'|'succeeded',receipt:null|receipt}`。先fresh/current/categorypermission，再本人原请求精确绑定，不要求被删目标存在；not_found不证明未知操作失败或取消。
+
+删除目标仅本店同type；共享及外店目标安全404。先锁分类FOR UPDATE阻止新FK引用，随后按id锁全部引用词条，再在后续语句完整检查shop/type（IS DISTINCT FROM），最后DELETE。任何共享／异店／异type引用409/category_reference_conflict，整笔回滚且无成功receipt；不泄漏引用数量／内容。正常FK SET NULL保留词条和原正文／排序，词条category绑定与updated_at变化让旧entry CAS失效；分类仅改名／排序不会让entry CAS变化。旧写入者反向锁序可能死锁，40P01映射500/db_error、整体回滚，不能假报成功。
+
+精确首发明确事务中止仅六对：400/invalid_params、404/not_found、409/version_conflict、409/category_reference_conflict、422/name_too_long、422/invalid_sort_order。客户端仅当前且从未unknown、无receipt、RAM同一record的首次write可释放意图槽，完整保稿并等待全量权限和详情重读；version conflict锁按资源保留，只有明确载入最新且成功读回才清除。request_id_conflict、401/403、500、transport、错误status/code组合、历史unknown、status not_found及回执后回读错误都不释放、不换key、不自动重发。成功必须精确receipt及名称／排序／version回读，或delete＋精确404。
+
+Lovable报告0021/0022均应用，R25 Edge部署；R26仅数据库迁移，SQL68合成强制回滚、Deno110（另function quiz_test一组）及Vitest5通过，合成数据无残留。主流程不执行特权SQL或业务写入。R25独立实际handler7组通过，离线三种旧写入交错确认guard-before-lock P2，R26源码顺序修复另行复核。没有真实双会话PostgreSQL、员工或手机验收，也未下载线上bundle；源码hash和匿名拒绝不能替代这些证据。
+
+R26最终独立复核已确认源码/hash、三种离线删除交错、实际handler7组、分类36/API4和两条loading复现通过，两项原P2在源码/mock层闭合，无新增确认P1/P2；不计为真实SQL双会话或员工验收。主流程四action无身份请求均401/unauthorized，没有执行任何业务操作。

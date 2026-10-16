@@ -50,6 +50,21 @@ function createPreview(wx) {
   async function action(name, params = {}) {
     const stamp = new Date().toISOString();
     if (name === 'dashboard') return bootstrap;
+    if (name === 'kb-category-list' || name === 'kb-category-detail') {
+      const invalid = () => Object.assign(new Error('分类示例参数不合法'), { status: 400, code: 'invalid_params' });
+      if (!['sop', 'qa'].includes(params.type)) throw invalid();
+      if (params.shop_id !== shop.id) throw Object.assign(new Error('示例模式只展示当前门店'), { status: 403, code: 'shop_forbidden' });
+      const common = { shop_id: shop.id, type: params.type, limits: { name_chars: 200, sort_min: -2147483648, sort_max: 2147483647 }, as_of: stamp };
+      const rows = kbCategories.filter(row => row.type === params.type).map(row => Object.assign({}, row, { version: 'b'.repeat(64) }));
+      if (name === 'kb-category-detail') {
+        const category = rows.find(row => row.id === params.id);
+        if (!category) throw Object.assign(new Error('该分类示例不存在'), { status: 404, code: 'not_found' });
+        return Object.assign(common, { category, can_manage: category.shop_id === shop.id });
+      }
+      const page = params.page === undefined ? 0 : params.page, page_size = params.page_size === undefined ? 20 : params.page_size;
+      if (!Number.isSafeInteger(page) || page < 0 || page_size !== 20) throw invalid();
+      return Object.assign(common, { items: rows.slice(page * page_size, (page + 1) * page_size), can_manage: true, page, page_size, has_more: (page + 1) * page_size < rows.length });
+    }
     if (['kb-capabilities', 'kb-list', 'kb-detail'].includes(name)) {
       const invalid = () => Object.assign(new Error('知识库示例参数不合法'), { status: 400, code: 'invalid_params' });
       if (!['sop', 'qa'].includes(params.type)) throw invalid();

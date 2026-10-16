@@ -44,6 +44,7 @@ Page(definePage({
     const type = e.currentTarget.dataset.type; if (!model.typeValid(type) || type === this._type) return;
     this._type = type; this._id = ''; this._query = ''; this._category = null; this.setData({ query: '', selectedCategory: null, error: '' }); return this.refresh();
   },
+  openCategories() { if (this.syncScope() || !this._visible || this._gone) return; try { const b = model.binding(this); this.navigate('/pages/store-kb-categories/index?type=' + b.type); } catch (_) {} },
   open(e) { const id = e.currentTarget.dataset.id; if (this.syncScope() || !this._visible || !this.data.items.some(x => x.id === id)) return; this.navigate('/pages/store-kb/index?type=' + this._type + '&id=' + id); },
   create() { if (!this.syncScope() && this._visible && this.data.canCreate) this.navigate('/pages/store-kb-edit/index?type=' + this._type); },
   edit() { if (!this.syncScope() && this._visible && this.data.canEdit) this.navigate('/pages/store-kb-edit/index?type=' + this._type + '&id=' + this._id); }

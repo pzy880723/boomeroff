@@ -2,7 +2,7 @@ const { createPublicationUploads } = require('./publication-upload');
 
 function createApi({ wx, config, session, invoke: transport }) {
   const saveRequests = [];
-  const shopActions = new Set(['learning', 'objectives', 'objective-update', 'marketing-assets', 'marketing-detail', 'activities', 'activity-detail', 'vouchers', 'voucher-detail', 'voucher-capabilities', 'voucher-lookup', 'voucher-redeem', 'voucher-redeem-status', 'schedule', 'activity-capabilities', 'activity-applications', 'application-detail', 'publication-confirm', 'publication-confirm-status', 'publication-upload-intent', 'publication-upload-commit', 'publication-upload-status', 'kb-capabilities', 'kb-list', 'kb-detail', 'kb-write', 'kb-write-status', 'kb-draft']);
+  const shopActions = new Set(['learning', 'objectives', 'objective-update', 'marketing-assets', 'marketing-detail', 'activities', 'activity-detail', 'vouchers', 'voucher-detail', 'voucher-capabilities', 'voucher-lookup', 'voucher-redeem', 'voucher-redeem-status', 'schedule', 'activity-capabilities', 'activity-applications', 'application-detail', 'publication-confirm', 'publication-confirm-status', 'publication-upload-intent', 'publication-upload-commit', 'publication-upload-status', 'kb-capabilities', 'kb-list', 'kb-detail', 'kb-write', 'kb-write-status', 'kb-draft', 'kb-category-list', 'kb-category-detail', 'kb-category-write', 'kb-category-write-status']);
   function snapshot() {
     const value = typeof session.get === 'function' ? session.get() : null;
     return { revision: session.revision ? session.revision() : null, identity: value ? JSON.stringify([value.userId, value.shop && value.shop.id, value.scopeVersion]) : '' };

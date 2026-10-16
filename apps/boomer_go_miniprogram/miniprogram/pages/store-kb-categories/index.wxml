@@ -1,0 +1,42 @@
+<view class="page category-page">
+  <view wx:if="{{preview}}" class="preview-banner">合成分类示例 · 不是实际门店数据 · 不会保存或删除</view>
+  <view class="muted">{{shopName}}</view>
+  <view class="row category-heading"><view class="title">{{typeLabel}}</view><button wx:if="{{canCreate}}" class="button create-category" disabled="{{loading || sending || confirming || editorVisible}}" bindtap="create">新增</button></view>
+  <view class="muted category-help">按原数字排序展示。同序不自动重编号；共享分类仅可查看。</view>
+  <view wx:if="{{error}}" class="error">{{error}}<button class="button-secondary" disabled="{{sending || confirming}}" bindtap="retry">重新读取</button></view>
+  <view wx:if="{{notice}}" class="category-notice {{saved ? 'verified' : ''}}">{{notice}}</view>
+  <view wx:if="{{loading}}" class="loading">正在读取分类…</view>
+  <view wx:if="{{pendingRequests.length}}" class="card pending-overview">
+    <view class="section-title">原请求待核对</view><view class="muted">仅本次应用内存保留，不会自动重发。</view>
+    <button wx:for="{{pendingRequests}}" wx:key="index" class="button-secondary" data-index="{{item.index}}" disabled="{{loading || sending || confirming || editorVisible}}" bindtap="resume">{{item.label}}</button>
+  </view>
+  <view wx:if="{{editorVisible}}" class="card inline-editor">
+    <view class="row"><view class="section-title">{{scopeLabel === '共享 · 只读' ? '查看共享分类' : '编辑本店分类'}}</view><text class="badge">{{scopeLabel}}</text></view>
+    <view wx:if="{{conflict && !pending}}" class="category-notice">服务器版本已变化，草稿保留。<button class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="reloadLatest">明确载入最新</button></view>
+    <view class="field-label">名称 <text class="muted">必填 · 最多 200 字</text></view>
+    <input class="field" value="{{name}}" maxlength="-1" disabled="{{!editable || loading || sending}}" bindinput="onName" placeholder="分类名称" />
+    <view class="field-label">数字排序</view>
+    <input class="field" value="{{sortText}}" maxlength="-1" disabled="{{!editable || loading || sending}}" bindinput="onSort" placeholder="整数，可使用负数" />
+    <view class="muted category-help">整数范围 -2147483648 至 2147483647；不改变词条排序。</view>
+    <view wx:if="{{validation && !pending}}" class="error">{{validation}}</view>
+    <view wx:if="{{pending}}" class="pending-state">
+      <view class="field-label">{{receiptConfirmed ? '回执已确认，等待回读' : '原请求结果待确认'}}</view>
+      <view wx:if="{{readbackError}}" class="error">{{readbackError}}</view>
+      <button wx:if="{{receiptConfirmed}}" class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="retryReadback">只读回查分类</button>
+      <button wx:else class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="reconcile">只读核对原请求</button>
+      <button wx:if="{{canRetrySame && !receiptConfirmed}}" class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="retrySame">再次确认后按原请求重试</button>
+    </view>
+    <button class="button save-category" disabled="{{!canSave || loading || sending || confirming}}" loading="{{sending}}" bindtap="save">确认保存</button>
+    <button class="button-secondary delete-category" disabled="{{!canDelete || loading || sending || confirming}}" bindtap="remove">删除本店分类</button>
+    <button class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="cancel">{{pending ? '收起原请求，保留待核对' : '取消编辑'}}</button>
+  </view>
+  <view wx:for="{{items}}" wx:key="id" class="card category-item">
+    <view class="row"><text class="badge">{{item.scopeLabel}}</text><text class="muted">排序 {{item.sort_order}}</text></view>
+    <view class="category-name">{{item.name}}</view>
+    <button class="button-secondary" data-id="{{item.id}}" disabled="{{loading || sending || confirming || editorVisible}}" bindtap="open">{{canManage && item.shop_id !== null ? '编辑名称与排序' : '查看分类'}}</button>
+  </view>
+  <view wx:if="{{!loading && !error && !items.length}}" class="empty">暂无可见分类。{{canCreate ? '可明确新增本店分类。' : '当前账号仅可阅读。'}}</view>
+  <button wx:if="{{hasMore}}" class="button-secondary" disabled="{{loading || sending || confirming}}" bindtap="loadMore">加载更多</button>
+  <view wx:if="{{items.length}}" class="muted category-count">已加载 {{items.length}} 个 · {{hasMore ? '还有更多' : '当前列表已读完'}}</view>
+  <view class="muted category-help">分类删除后词条仍保留，变为未分类。未发送修改仅保留于当前页面内存；未决请求不保证关闭应用后恢复。</view>
+</view>
