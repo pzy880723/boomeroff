@@ -10,6 +10,7 @@
 - 客户端36 RED、后补2 RED和预览输入1 RED均修复；helper/pages45项，相关112项。父级API21 RED→GREEN、preview版本1 RED→GREEN。最终父级与独立全套1389/1389，0失败/跳过/取消；24路由和官方25WXML/26WXSS退出0、stderr空，独立复核未确认新增P1/P2。
 - 实际DevTools从学习官方知识进入合成首饰词条，核对默认折叠/展开/原生中文问题输入/禁用预览发送，收起后重新展开仍是同一问题。native-knowledge-chat-collapsed/open/input及phone为真实截图与确定性裁切，无生成式美化、无假AI答复。成功/失败、截断上下文确认、未知重试和旧401由VM覆盖，不冒充GUI生产验收。新action匿名在线401只证明可达与拒绝。
 - 专用AppID、真实员工/真机/模型质量/公开发布、可信内容归属R27及其余角色管理迁移仍独立未完成。固定合同和完整证据见superpowers/plans/2026-10-16-official-knowledge-chat.md。
+- 源码9be89a09e2349537d2264e7559c364e96fa00da5仅16个Mini路径，非强推并远端读回一致。源码包/private/tmp/BOOMER-GO-wechat-knowledge-chat-20261016.zip为1043375字节，SHA25687180b9fa82e512f10d922acee7761cb5f55390b6a39b785ba3025f68975db12；干净解压/private/tmp/go-mini-knowledge-chat-verify-ttF6ec重新通过1389/1389及24路由。正常index/Flutter checkout/手机状态保留；后续交付文档不改验证过的JS/WXML/WXSS，不代表main合并或正式发布。
 
 ## 最新检查点：官方知识筛选和个人收藏分类
 

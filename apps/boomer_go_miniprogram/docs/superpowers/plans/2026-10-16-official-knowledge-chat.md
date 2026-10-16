@@ -35,7 +35,7 @@ R33 uses caller-JWT source reads and45s action-wide bounded waiting for DB/provi
 - [x] Parent preview test RED: valid synthetic official detail exposes its stable updated_at; no fabricated AI answer or persistence. Add only source metadata necessary for the disabled preview card.
 - [x] Independently read R34 final diff/hashes and rerun original backend tests plus old budget repro on repaired source; cap must hold on escaped serialized knowledge_data, including Unicode/escaping. Owner deployment reports and anonymous denial remain separate from real paid/employee acceptance.
 - [x] Freeze worker paths; independent source review; full Mini tests,24-route/noH5 check and25WXML/26WXSS official compilers. Actual DevTools collapsed/open/input/disabled-preview states, existing detail filters and quiz regressions, plus screenshot evidence.
-- [ ] Mini-only isolated index commit, non-force push/readback, archive clean extraction tests/check. Preserve Flutter checkout, normal index and phone state. Keep dedicated AppID/real employee/device/publication and other-role migration gaps explicit.
+- [x] Mini-only isolated index commit, non-force push/readback, archive clean extraction tests/check. Preserve Flutter checkout, normal index and phone state. Keep dedicated AppID/real employee/device/publication and other-role migration gaps explicit.
 
 Parent owns API/transport/preview and their tests/docs/Git. Worker owns new shared/knowledge-chat.js, detail/index.js/wxml/wxss and focused tests. No shared page shell, unrelated source, backend, Git or live calls by the worker. R27 human approval remains untouched.
 
@@ -50,3 +50,7 @@ Independent reviewer also applied the new tests to the old R33 module:11 pass/2 
 Worker36 RED→GREEN; real shared/page loading/local-reset regressions2 RED→GREEN, then2 existing handler regressions and preview input1 RED→GREEN:45 helper/page tests. Related112 passed. Independent45, API/preview75, regressions219 and full1389/1389 passed; parent fresh full1389/1389,24 routes, official25WXML/26WXSS passed. No new confirmed P1/P2.
 
 Actual DevTools walked learning→official sample→detail→collapsed card→open→typed a Chinese source-related question→collapse/reopen with the same draft; send stayed disabled in preview. native-knowledge-chat-collapsed/open/input and deterministic phone crops are actual screenshots, not generated replies. No real AI call, unknown receipt, modal failure or paid generation was exercised in GUI; those branches use VM tests. Online unauthenticated official-knowledge-chat returned401 unauthorized, proving denial only, not deployed-byte equality, employee access or model answer quality.
+
+## Source Archive
+
+Source9be89a09e2349537d2264e7559c364e96fa00da5 contains16 Mini-only paths, non-force pushed and read back identical on codex/go-mini-workbench. Archive /private/tmp/BOOMER-GO-wechat-knowledge-chat-20261016.zip:1043375 bytes, SHA25687180b9fa82e512f10d922acee7761cb5f55390b6a39b785ba3025f68975db12. Clean extraction /private/tmp/go-mini-knowledge-chat-verify-ttF6ec passed1389/1389 and24-route checks. This follow-up documentation does not change verified code or imply main merge, real-device acceptance or WeChat publication.
