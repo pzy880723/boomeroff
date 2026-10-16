@@ -43,6 +43,6 @@
 
 ## 源码入口
 
-仓库 pzy880723/boomeroff，分支 codex/go-mini-workbench，原生目录 apps/boomer_go_miniprogram。各轮已验证源码包及SHA256见VERIFICATION.md。交付分支与main分开，未强行合并或覆盖原Flutter工作区，不应到main查找尚未合并的源码。
+仓库 pzy880723/boomeroff，分支 codex/go-mini-workbench，原生目录 apps/boomer_go_miniprogram。当前已验证源码包为a2742b235b8c1616dbfab46727a22f65c6606872，各轮包路径及SHA256见VERIFICATION.md。交付分支与main分开，未强行合并或覆盖原Flutter工作区，不应到main查找尚未合并的源码。
 
 运行方式、后台契约和验收证据分别见 README.md、GO_MINI_API_CONTRACT.md、VERIFICATION.md。正式发布状态与实际体验版二维码必须单独确认。

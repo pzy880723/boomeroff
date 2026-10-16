@@ -11,6 +11,7 @@
 - 新跑全量1846/1846，失败/跳过/取消0；27路由静态检查通过，官方28WXML/29WXSS退出0且stderr空。独立页面与API交叉审查两P2已修，其他额外8组恢复/权限/删除探针通过，未确认剩余P1/P2。
 - 实际DevTools沿营销→素材库→新建，键入中文标题/正文、确认返回后进入已有文案→编辑→滚轮选择第二候选，正文与计数一致；保存/删除禁用。native-manual-copy-library/draft-input/draft-disabled/candidate/existing-disabled-preview及phone为真实截图与确定裁切，未生成式美化。游客/旧selectable及HotReload警告保留；观察到Errors0不代表生产验收。
 - Figma32:2为可编辑且已渲染设计。真实员工/设备、完整功能迁移、专用AppID及微信体验版发布仍未完成。R36人工费用检查点没有绕过，没有新建替代Lovable任务；未操作手机/短信、真实数据、付费AI或部署。当前目标未标完成，其他缺口见CURRENT_FEATURE_PARITY.md。
+- 源码a2742b235b8c1616dbfab46727a22f65c6606872仅24个Mini路径，非强推并远端读回一致。归档/private/tmp/BOOMER-GO-wechat-manual-copy-20261016.zip为18518504字节，SHA256为aba315640645b8dba490c7b56b298020a3a5d65aec5d0153c7ae25c50db19716。干净解压/private/tmp/go-mini-manual-copy-verify-OuDNZ0再次通过1846项、27路由和官方28WXML/29WXSS，stderr空。正常index为空，原codex/boomer-go-native工作区未切换；后续仅证据文档，不代表main合并、生产CRUD验收或微信发布。
 
 ## 最新检查点：发布历史恢复与成长等级
 
