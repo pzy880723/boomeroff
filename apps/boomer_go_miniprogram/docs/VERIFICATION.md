@@ -12,6 +12,7 @@
 - 实际DevTools沿工作台→整月排班→管理周排班走通，核对七日组、两条合成排班、员工候选、新建/既有单格、班次选中、关闭草稿确认、固定休息星期提醒及切班清空勾选；候选/编辑区自动滚动至可见位置。示例保存/移除始终禁用。evidence/native-schedule-manager-week/candidates/editor/selected/close-confirm/warning及phone为真实工具截图和确定裁切，非生成图。写入、未知回执及404恢复由VM验证，不冒充真实员工GUI操作。
 - R30后端固定源码021a5adbe3e0146cffcae69de5a38e49fcc3949b已完成独立读取/哈希复算和源码复核；匿名Edge401及RPC401/42501只验证拒绝。迁移应用/Edge部署仍为后台所有者报告，未下载线上bundle或复跑SQL/真实并发。详见SCHEDULE_MANAGER_STAGE1_AUDIT.md。R27内容主店方案仍未获人工决定，本轮不批准、不绕过；专用AppID、真员工/真机和公开发布缺口不变。
 - 上一奖励检查点f4f6d6f99ab24ff04c3d914c8c4323d1349973ae已非强推并读回一致。干净解压包重新通过1071项及23路由检查，937222字节，SHA256为85a15c86e787f3c6562658aa9d043d280fc90b21ab99891a99169a5cb573cac7。不是本轮新管理源码包，也不是发布体验版。
+- 本轮源码检查点279ef3d6500acc9d41b2571481e8b35dd26aa451仅25个Mini路径，非强推后ls-remote读回同SHA；没有切换原Flutter分支，正常暂存区仍为空。归档/private/tmp/BOOMER-GO-wechat-schedule-manager-20261016.zip从该提交的Mini子树生成，976206字节，SHA256c9d67051cbeaf0ccde325d2961e3e91acdcbaa03a5dabf01bf6095734363f6df；干净解压目录重新通过1211/1211及24路由检查。此记录的后续文档提交不改变已验证生产JS/WXML/WXSS，也不代表GitHub main/Lovable历史同步冲突已解决。
 
 ## 最新检查点：原生当前奖励收件箱
 
