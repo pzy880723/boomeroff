@@ -1,0 +1,115 @@
+<view class="page activity-editor">
+  <view class="editor-header">
+    <text class="eyebrow">BOOMER GO · ACTIVITY</text>
+    <view class="editor-title">{{createMode ? '创建本店活动' : '维护本店活动'}}</view>
+    <text class="muted">{{shopName || '当前授权门店'}} · 基础资料与状态分别确认</text>
+  </view>
+  <view wx:if="{{!preview}}" class="development-note">研发准备页：后台尚未验收，不代表已部署或正式开放。</view>
+  <view wx:if="{{preview}}" class="preview-note">合成预览 · 后台尚未验收 · 本地草稿不保存、不删除、不查询回执。</view>
+  <view wx:if="{{loading}}" class="card muted">正在核验权限与当前版本…</view>
+  <view wx:if="{{error}}" class="card error">
+    <view>{{error}}</view>
+    <button class="button-secondary" bindtap="retry" disabled="{{loading || sending || confirming}}">重新读取</button>
+  </view>
+  <view wx:if="{{saved}}" class="card result-card">
+    <view class="section-title">{{deleted ? '删除已核对' : '本次保存已核对'}}</view>
+    <text>{{notice}}</text>
+    <view class="muted">以本次原回执及独立回读为依据，不代表发券、审核或通知已执行。</view>
+  </view>
+  <view wx:elif="{{pending}}" class="card recovery-card">
+    <view class="section-title">{{receiptConfirmed ? '回执已确认，待核对详情' : '原请求结果待确认'}}</view>
+    <view>{{notice}}</view>
+    <view wx:if="{{readbackError}}" class="error">{{readbackError}}</view>
+    <button class="button" bindtap="reconcile" disabled="{{!canReconcile}}">{{receiptConfirmed ? '只读回查详情' : '只读核对原请求'}}</button>
+    <button wx:if="{{canRetrySame}}" class="button-secondary" bindtap="retrySame" disabled="{{sending || loading || confirming || preview}}">再次确认后按原请求重试</button>
+    <text class="muted">查不到回执不代表失败、取消或未执行；不会自动重发或建立新编号。</text>
+  </view>
+  <view wx:elif="{{notice}}" class="editor-notice">{{notice}}</view>
+
+  <block wx:if="{{editorVisible && !saved}}">
+    <view class="card">
+      <view class="section-title">基础资料</view>
+      <label class="field-label">活动名称 <text class="muted">最多 50 字</text></label>
+      <input class="editor-input" value="{{name}}" maxlength="-1" disabled="{{!editable}}" data-field="name" bindinput="onText" placeholder="清晰说明本店活动" />
+      <label class="field-label">活动说明 <text class="muted">最多 500 字</text></label>
+      <textarea class="editor-textarea" value="{{description}}" maxlength="-1" disabled="{{!editable}}" data-field="description" bindinput="onText" placeholder="参与方式与注意事项，可留空" auto-height />
+      <label class="field-label">粉丝数要求</label>
+      <input class="editor-input" type="number" value="{{minFollowers}}" maxlength="-1" disabled="{{!editable}}" data-field="min_followers" bindinput="onText" placeholder="非负整数，最高 2147483647" />
+      <view class="muted field-hint">{{reviewLabel}}</view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">关联本店优惠券</view>
+      <view class="voucher-current">{{voucherName}}</view>
+      <view wx:if="{{voucherNotice}}" class="muted field-hint">{{voucherNotice}}</view>
+      <button class="button-secondary" bindtap="openVouchers" disabled="{{!editable || confirming}}">选择本店已有券</button>
+      <view wx:if="{{voucherOpen}}" class="voucher-picker">
+        <view class="row picker-heading"><text>当前可关联优惠券</text><button class="inline-control" bindtap="closeVouchers">收起</button></view>
+        <view wx:if="{{voucherError}}" class="error">{{voucherError}}</view>
+        <button wx:for="{{vouchers}}" wx:key="id" class="voucher-choice" data-id="{{item.id}}" bindtap="chooseVoucher" disabled="{{!editable || voucherLoading}}">
+          <view class="row"><text class="choice-title">{{item.name}}</text><text class="amount">{{item.amountText}}</text></view>
+          <view class="muted">{{item.ruleText}} · {{item.daysText}}</view>
+        </button>
+        <view wx:if="{{voucherLoading}}" class="muted">正在读取本店券…</view>
+        <view wx:elif="{{!vouchers.length && !voucherError}}" class="empty">暂无可关联优惠券，不会创建新券。</view>
+        <button wx:if="{{voucherHasMore}}" class="button-secondary" bindtap="moreVouchers" disabled="{{voucherLoading || !editable}}">继续加载可选券</button>
+        <button wx:elif="{{voucherError && !vouchers.length}}" class="button-secondary" bindtap="openVouchers" disabled="{{!editable}}">重读可选券</button>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">起止时间</view>
+      <text class="muted">北京时间（上海）。旧空值保留，修改时须补全起止日期和时间。</text>
+      <view class="field-label">开始时间</view>
+      <view class="time-pair">
+        <picker mode="date" value="{{startDate}}" disabled="{{!editable}}" data-field="starts_at" data-part="date" bindchange="onDatePart"><view class="editor-input">{{startDate || '未设置日期'}}</view></picker>
+        <picker mode="time" value="{{startTime}}" disabled="{{!editable}}" data-field="starts_at" data-part="time" bindchange="onDatePart"><view class="editor-input">{{startTime || '未设置时间'}}</view></picker>
+      </view>
+      <view class="field-label">结束时间</view>
+      <view class="time-pair">
+        <picker mode="date" value="{{endDate}}" disabled="{{!editable}}" data-field="ends_at" data-part="date" bindchange="onDatePart"><view class="editor-input">{{endDate || '未设置日期'}}</view></picker>
+        <picker mode="time" value="{{endTime}}" disabled="{{!editable}}" data-field="ends_at" data-part="time" bindchange="onDatePart"><view class="editor-input">{{endTime || '未设置时间'}}</view></picker>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">报名字段</view>
+      <text class="muted">姓名、手机号为报名基础项；下方为附加字段。未修改的旧定义原样保留。</text>
+      <view wx:if="{{fieldsMalformed}}" class="editor-notice">旧字段结构暂不可安全编辑，仍保留原值，不影响其他资料的修改。</view>
+      <view wx:for="{{fields}}" wx:key="key" class="form-field">
+        <button class="field-heading" bindtap="toggleField" data-key="{{item.key}}" disabled="{{item.invalid}}"><view class="row"><text class="choice-title">{{index + 1}}. {{item.label}}</text><text class="muted">{{item.expanded ? '收起' : '展开'}}</text></view><view class="muted">{{item.typeLabel}}{{item.required ? ' · 必填' : ''}}</view></button>
+        <view wx:if="{{item.expanded}}" class="field-content">
+          <view wx:if="{{item.readonly}}" class="muted">{{item.typeLabel}} {{item.roleLabel}}。旧定义只读，可明确移除或调整顺序，不会自动转换类型。</view>
+          <block wx:else>
+            <label class="field-label">字段标题</label>
+            <input class="editor-input" value="{{item.label}}" maxlength="-1" disabled="{{!editable}}" data-key="{{item.key}}" data-field="label" bindinput="onFieldText" />
+            <view class="field-label">字段类型</view>
+            <picker range="{{typeOptions}}" range-key="label" value="{{item.typeIndex}}" disabled="{{!editable}}" data-key="{{item.key}}" bindchange="onFieldType"><view class="editor-input">{{item.typeLabel}}</view></picker>
+            <view class="field-label">字段用途</view>
+            <picker range="{{item.roleOptions}}" range-key="label" value="{{item.roleIndex}}" disabled="{{!editable}}" data-key="{{item.key}}" bindchange="onFieldRole"><view class="editor-input">{{item.roleOptions[item.roleIndex].label}}</view></picker>
+            <view wx:if="{{item.roleConflict}}" class="error">当前类型与原用途不兼容，原用途仍保留。请明确选择“普通字段”清除用途，或改回兼容类型后再保存。</view>
+            <view class="row required-row"><text>必填</text><switch checked="{{item.required}}" disabled="{{!editable}}" color="#EB0029" data-key="{{item.key}}" bindchange="onFieldRequired" /></view>
+            <label class="field-label">填写提示</label>
+            <input class="editor-input" value="{{item.placeholder}}" maxlength="-1" disabled="{{!editable}}" data-key="{{item.key}}" data-field="placeholder" bindinput="onFieldText" />
+            <view class="field-label">选择项 <text class="muted">选择类型须有完整选项</text></view>
+            <view wx:for="{{item.options}}" wx:for-item="option" wx:key="index" class="option-row"><input class="editor-input" value="{{option.value}}" maxlength="-1" disabled="{{!editable}}" data-key="{{item.key}}" data-index="{{option.index}}" bindinput="onOption" /><button class="inline-control" data-key="{{item.key}}" data-index="{{option.index}}" bindtap="removeOption" disabled="{{!editable}}">移除</button></view>
+            <button class="button-secondary" data-key="{{item.key}}" bindtap="addOption" disabled="{{!editable}}">添加一个选项</button>
+          </block>
+          <view wx:if="{{!item.invalid}}" class="field-actions"><button class="inline-control" data-key="{{item.key}}" data-direction="up" bindtap="moveField" disabled="{{!editable || index === 0}}">上移</button><button class="inline-control" data-key="{{item.key}}" data-direction="down" bindtap="moveField" disabled="{{!editable || index === fields.length - 1}}">下移</button><button class="inline-control danger-text" data-key="{{item.key}}" bindtap="removeField" disabled="{{!editable}}">移除字段</button></view>
+        </view>
+      </view>
+      <button wx:if="{{!fieldsMalformed}}" class="button-secondary" bindtap="addField" disabled="{{!editable}}">添加报名字段</button>
+    </view>
+
+    <view class="card">
+      <view class="section-title">{{createMode ? '创建时的活动状态' : '活动状态'}}</view>
+      <view wx:if="{{createMode}}" class="status-options"><button class="status-option {{createStatus === 'active' ? 'selected' : ''}}" data-status="active" bindtap="onCreateStatus" disabled="{{!editable}}">上线</button><button class="status-option {{createStatus === 'draft' ? 'selected' : ''}}" data-status="draft" bindtap="onCreateStatus" disabled="{{!editable}}">草稿</button></view>
+      <block wx:else><view class="voucher-current">{{statusLabel}}</view><text class="muted">基础资料有修改时，请先保存或明确放弃，再单独确认状态。</text><view class="status-options"><button class="button-secondary" data-status="active" bindtap="setStatus" disabled="{{!canSetStatus}}">确认改为上线</button><button class="button-secondary" data-status="draft" bindtap="setStatus" disabled="{{!canSetStatus}}">确认改为草稿</button></view></block>
+    </view>
+    <view wx:if="{{validation}}" class="error validation">{{validation}}</view>
+    <view wx:if="{{conflict}}" class="card"><view class="error">{{notice}}</view><button class="button-secondary" bindtap="reloadLatest" disabled="{{pending || loading || sending || confirming}}">明确放弃草稿并载入最新</button></view>
+    <button class="button primary-save" bindtap="save" disabled="{{!canSave}}" loading="{{sending}}">{{createMode ? '确认创建活动' : '确认保存基础资料'}}</button>
+    <button wx:if="{{!pending}}" class="button-secondary" bindtap="reloadLatest" disabled="{{loading || sending || confirming}}">放弃未保存草稿，重新读取</button>
+    <view wx:if="{{!createMode}}" class="card danger-card"><view class="section-title">删除活动</view><text class="muted">活动及其申请记录将一并删除且不可恢复，已发放的优惠券仍然有效。</text><button class="danger-button" bindtap="remove" disabled="{{!canDelete}}">明确删除此活动</button></view>
+  </block>
+</view>

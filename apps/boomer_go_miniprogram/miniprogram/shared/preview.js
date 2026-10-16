@@ -32,6 +32,7 @@ function createPreview(wx) {
   const bootstrap = { date, profile, staff_profile: profile, user_role: { role_code: 'staff' }, shop_context: { date, scope: 'store', status: 'scheduled', effective_shop: shop, authorized_shops: [shop] }, shifts: [{ id: 'example-shift', work_date: date, shift_code: 'early', shop_id: shop.id }], shift_definitions: [{ shop_id:shop.id, code: 'early', name: '早班', start_time: '10:00', end_time: '18:00' }], shift: { title:'早班',start_time:'10:00',end_time:'18:00',shop_name:shop.name }, tasks:[{id:'example-task',title:'检查价签与品相说明',status:'示例待办'}], learning:[articles[0]], okrs: [], checked_today: false };
   const current = { userId: '00000000-0000-4000-8000-000000000902', profile, shop, shops: [shop], isHeadquarters: false, bootstrap, permissions: [], scopeFresh: true };
   const activity = { id: '00000000-0000-4000-8000-000000000031', shop_id: shop.id, name: '门店内容共创日（示例）', description: '用真实商品与门店照片分享好物故事。管理区是只读示例，不读取真实顾客资料、不发券或保存确认。', status: 'active', platform: null, starts_at: null, ends_at: null, cover_url: null, poster_url: null, voucher_id: '00000000-0000-4000-8000-000000000034', requires_review: false, max_applications: null, min_followers: null, share_token: null, created_at: date + 'T00:00:00+08:00', form_fields: [{ key: 'experience', label: '希望分享的内容', type: 'textarea' }, { key: 'contact', label: '联系电话', type: 'phone' }, { key: 'profile_image', label: '主页截图', type: 'image', role: 'profile_screenshot' }] };
+  const activityStamp = stamp.replace(/Z$/, '000Z');
   const applicationId = '00000000-0000-4000-8000-000000000032';
   const peer = { user_id: '00000000-0000-4000-8000-000000000001', name: '门店伙伴 A（示例）', avatar_url: null, position: '门店伙伴（示例）', shop_id: shop.id, shop_name: shop.name, is_contact: true };
   const scheduleShifts = [
@@ -281,6 +282,28 @@ function createPreview(wx) {
       const page = Number.isInteger(params.page) && params.page >= 0 ? params.page : 0;
       const page_size = Math.min(Math.max(Number.isInteger(params.page_size) ? params.page_size : 20, 1), 50);
       return { shop_id: shop.id, items: page ? [] : [{ id: 'example-okr', shop_id: shop.id, title: '本周：商品知识与门店体验（示例）', objective: '完善商品介绍，保持门店整洁，让伙伴掌握服务要点。', key_results: [{ name: '学习商品知识', progress: 50 }, { name: '检查价签与品相说明', progress: 100 }], key_actions: '介绍商品前，先核对可观察的品相与当前价签。', updated_at: stamp }], page, page_size, has_more: false, persisted: false, as_of: stamp };
+    }
+    if (['activity-manage-capabilities', 'activity-manage-list', 'activity-manage-voucher-candidates', 'activity-manage-detail'].includes(name)) {
+      const invalid = () => Object.assign(new Error('活动管理示例参数不合法'), { status: 400, code: 'invalid_params' });
+      const allowed = name === 'activity-manage-capabilities' ? ['shop_id'] : name === 'activity-manage-detail' ? ['shop_id', 'activity_id'] : ['shop_id', 'limit', 'cursor'];
+      if (!params.shop_id) throw invalid();
+      if (params.shop_id !== shop.id) throw Object.assign(new Error('示例模式只展示当前门店'), { status: 403, code: 'shop_forbidden' });
+      if (Object.keys(params).some(key => !allowed.includes(key))) throw invalid();
+      if (name === 'activity-manage-capabilities') return { shop_id: shop.id, can_view: true, can_manage: true };
+      const voucher = { id: activity.voucher_id, name: '探店礼遇券（示例）', active: true, deleted: false };
+      if (name === 'activity-manage-detail') {
+        if (typeof params.activity_id !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(params.activity_id)) throw invalid();
+        if (params.activity_id !== activity.id) throw Object.assign(new Error('该活动管理示例不存在'), { status: 404, code: 'not_found' });
+        return { shop_id: shop.id, activity: { id: activity.id, name: activity.name, description: activity.description, voucher_id: activity.voucher_id,
+          form_fields: JSON.parse(JSON.stringify(activity.form_fields)), status: activity.status, requires_review: activity.requires_review,
+          starts_at: activity.starts_at, ends_at: activity.ends_at, min_followers: 0 }, voucher, version: 'a'.repeat(64), server_time: stamp.replace(/Z$/, '000Z') };
+      }
+      const limit = params.limit === undefined || params.limit === null ? 20 : params.limit;
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50 || params.cursor !== undefined && params.cursor !== null) throw invalid();
+      const item = name === 'activity-manage-list' ? { id: activity.id, name: activity.name, status: activity.status, requires_review: activity.requires_review,
+        starts_at: activity.starts_at, ends_at: activity.ends_at, created_at: activityStamp, updated_at: activityStamp, voucher }
+        : { id: voucher.id, name: voucher.name, threshold_type: 'none', discount_amount: 10, min_spend: null, valid_days: 30, starts_at: null, ends_at: null, created_at: activityStamp };
+      return { shop_id: shop.id, limit, cursor: null, items: [item], has_more: false, next_cursor: null };
     }
     if (['activities', 'activity-detail', 'activity-capabilities', 'activity-applications', 'application-detail'].includes(name)) {
       if (params.shop_id && params.shop_id !== shop.id) throw Object.assign(new Error('示例模式不能访问其他门店'), { status: 403, code: 'shop_forbidden' });

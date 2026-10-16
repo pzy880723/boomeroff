@@ -1,0 +1,42 @@
+.activity-editor { padding-bottom: 56rpx; font-size: 32rpx; }
+.editor-header { margin: 8rpx 0 28rpx; }
+.eyebrow { color: #eb0029; font-size: 22rpx; font-weight: 700; letter-spacing: 2rpx; }
+.editor-title { margin: 12rpx 0; font-size: 46rpx; font-weight: 700; color: #171717; }
+.development-note, .preview-note, .editor-notice { margin: 20rpx 0; padding: 24rpx; border-radius: 18rpx; background: #fff3f4; color: #7c2332; line-height: 1.65; }
+.development-note { background: #f1f3f5; color: #53606e; font-size: 28rpx; }
+.field-label { display: block; margin: 28rpx 0 12rpx; color: #252525; font-weight: 600; }
+.field-label .muted { font-size: 26rpx; font-weight: 400; }
+.editor-input, .editor-textarea { box-sizing: border-box; width: 100%; min-height: 92rpx; height: 92rpx; padding: 20rpx 24rpx; border: 2rpx solid #e5e7eb; border-radius: 14rpx; background: #fafafa; font-size: 32rpx; color: #202020; }
+.editor-textarea { min-height: 180rpx; height: auto; line-height: 1.7; }
+.field-hint { margin-top: 20rpx; line-height: 1.6; }
+.time-pair, .status-options { display: flex; margin-top: 16rpx; }
+.time-pair > picker { flex: 1; min-width: 0; }
+.time-pair > picker + picker { margin-left: 16rpx; }
+.time-pair .editor-input { font-size: 30rpx; }
+.voucher-current { margin: 20rpx 0; font-weight: 600; line-height: 1.6; }
+.voucher-picker { margin-top: 24rpx; border-top: 2rpx solid #ededed; padding-top: 20rpx; }
+.picker-heading { font-weight: 600; }
+.voucher-choice { box-sizing: border-box; width: 100%; margin: 16rpx 0; padding: 24rpx; text-align: left; white-space: normal; background: #fff8f9; border: 2rpx solid #ffe1e7; border-radius: 16rpx; font-size: 32rpx; line-height: 1.65; }
+.voucher-choice::after, .inline-control::after, .field-heading::after, .status-option::after, .danger-button::after { border: none; }
+.choice-title { flex: 1; min-width: 0; word-break: break-all; }
+.amount { margin-left: 16rpx; color: #c60026; font-weight: 700; }
+.inline-control { box-sizing: border-box; flex-shrink: 0; min-width: 88rpx; min-height: 88rpx; margin: 0; padding: 0 16rpx; background: transparent; color: #6b7280; font-size: 28rpx; line-height: 88rpx; }
+.form-field { margin-top: 24rpx; border: 2rpx solid #e8e8e8; border-radius: 16rpx; overflow: hidden; }
+.field-heading { width: 100%; box-sizing: border-box; min-height: 100rpx; margin: 0; padding: 22rpx; text-align: left; white-space: normal; background: #fafafa; font-size: 32rpx; line-height: 1.65; }
+.field-content { padding: 0 22rpx 22rpx; }
+.required-row { min-height: 88rpx; margin-top: 20rpx; }
+.option-row { display: flex; align-items: center; margin-top: 16rpx; }
+.option-row .editor-input { flex: 1; min-width: 0; }
+.field-actions { display: flex; justify-content: flex-end; margin-top: 16rpx; }
+.status-options > button { flex: 1; min-width: 0; margin: 0; }
+.status-options > button + button { margin-left: 16rpx; }
+.status-option { box-sizing: border-box; min-height: 92rpx; border: 2rpx solid #e4e4e4; border-radius: 16rpx; background: #fafafa; color: #505050; font-size: 32rpx; line-height: 88rpx; }
+.status-option.selected { border-color: #eb0029; background: #fff1f4; color: #c80028; font-weight: 700; }
+.result-card { border: 2rpx solid #b8d9c8; }
+.result-card .muted, .recovery-card .muted { display: block; margin-top: 20rpx; }
+.recovery-card { border: 2rpx solid #efd1ac; }
+.validation { margin: 24rpx 0; line-height: 1.7; }
+.primary-save { margin-top: 24rpx; }
+.danger-card { margin-top: 40rpx; border: 2rpx solid #f0d5da; }
+.danger-text { color: #bb1835; }
+.danger-button { box-sizing: border-box; min-height: 92rpx; margin: 24rpx 0 0; border: 2rpx solid #edbdc7; border-radius: 16rpx; background: #fff8f9; color: #b20b2c; font-size: 32rpx; line-height: 88rpx; }

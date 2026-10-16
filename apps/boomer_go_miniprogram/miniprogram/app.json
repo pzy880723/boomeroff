@@ -6,7 +6,7 @@
     "pages/quiz/index", "pages/sales/index", "pages/assistant/index",
     "pages/marketing/index", "pages/asset/index", "pages/chat/index", "pages/community/index", "pages/voucher/index",
     "pages/activity/index", "pages/application/index", "pages/practice/index",
-    "pages/store-kb/index", "pages/store-kb-edit/index", "pages/store-kb-categories/index"
+    "pages/store-kb/index", "pages/store-kb-edit/index", "pages/store-kb-categories/index", "pages/activity-edit/index"
   ],
   "window": {
     "navigationBarTitleText": "BOOMER GO",

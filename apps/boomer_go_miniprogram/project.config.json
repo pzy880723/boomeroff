@@ -58,6 +58,11 @@
           "name": "真实员工登录",
           "pathName": "pages/login/index",
           "query": ""
+        },
+        {
+          "name": "活动管理 · 合成编辑预览",
+          "pathName": "pages/activity-edit/index",
+          "query": "preview=1&id=00000000-0000-4000-8000-000000000031"
         }
       ]
     }

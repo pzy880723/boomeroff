@@ -19,8 +19,8 @@
 
 ## Ownership
 
-- Backend: Lovable R36 message `umsg_01m51fc0a2e9y8kwyc6q9hytde`; no client integration until final fixed source/DTO review.
-- Meitner: only `miniprogram/shared/activity-form.js` and `tests/activity-form.test.cjs` initially. Pure lossless draft/patch/date helpers, no guessed wire envelope.
+- Backend: Lovable R36 message `umsg_01m51fc0a2e9y8kwyc6q9hytde`; production entry remains closed until final fixed source/DTO review. The candidate DTO may be used for isolated native development while its spending check-in awaits a human decision; that is not a frozen/released backend contract.
+- Meitner: completed the pure form helper/tests; now owns only new `miniprogram/pages/activity-edit/*` and `tests/activity-management-pages.test.cjs`, using the actually read candidate DTO. No parent API/preview/routes/list/detail/Git edits.
 - Mill: read-only independent backend/contract audit, no writes or business data.
 - Parent: plan, API/preview/routes/list/detail integration and verification; assign editor ownership explicitly after DTO freeze.
 
@@ -55,10 +55,10 @@ node --test tests/activity-form.test.cjs
 ## Task 3: Native Editor And Recovery
 
 - [ ] Freeze final actual backend envelope before tests/client implementation.
-- [ ] Add RED tests for route/detail/capability bindings, exact patch and receipt decoding, inline candidate pagination, stale identity/store callbacks and preview-zero-write behavior.
-- [ ] Implement the single native editor with explicit create/save/status/delete confirmation; preserve raw originals only in private RAM, render safe view models.
-- [ ] Confirmed operation freezes original UUID/payload/version. Unknown is retained in App RAM by actor/shop/resource. No automatic resend/new key; status not_found or detail404 never proves failure or deletion.
-- [ ] On permission recovery, check original status before requiring a live detail row. Confirmed receipt followed by failed readback permits reads only, not another write.
+- [x] Add RED tests for route/detail/capability bindings, exact patch and receipt decoding, inline candidate pagination, stale identity/store callbacks and preview-zero-write behavior, using the actual candidate DTO for isolated development.
+- [x] Implement the single native editor with explicit create/save/status/delete confirmation; preserve raw originals only in private RAM, render safe view models. Production entry remains closed.
+- [x] Confirmed operation freezes original UUID/payload/version. Unknown is retained in App RAM by actor/shop/resource. No automatic resend/new key; status not_found or detail404 never proves failure or deletion.
+- [x] On permission recovery, check original status before requiring a live detail row. Confirmed receipt followed by failed readback permits reads only, not another write. Independently reproduced detail500 recovery P2 is closed by12 regression cases.
 - [ ] Route existing list/detail to the editor only when fresh capability permits. Existing ordinary activity read/publication flows remain unchanged.
 
 ```sh
@@ -67,9 +67,9 @@ node --test tests/activity-form.test.cjs tests/activity-management-pages.test.cj
 
 ## Task 4: Acceptance And Source Checkpoint
 
-- [ ] Run all Node tests and route/syntax check; official WXML/WXSS compilers must exit0 with empty stderr.
-- [ ] Capture actual WeChat DevTools current-store synthetic list/editor/inline selection/error states. Do not replace runtime screenshots with Figma or AI images.
-- [ ] Independent review and regression; resolve confirmed P1/P2 before checkpoint.
+- [x] Run all Node tests and route/syntax check; official WXML/WXSS compilers must exit0 with empty stderr:1532 tests,25 routes,26WXML/27WXSS.
+- [x] Capture actual WeChat DevTools synthetic editor/inline voucher selection/field drafting/disabled write states. Recovery/error branches are VM-tested, not claimed as GUI production evidence.
+- [x] Independent client review and regression; resolve confirmed client P1/P2 before checkpoint. Two backend candidate P2s remain open separately.
 - [ ] Check alternate-index diff contains Mini-owned paths only; verify normal index remains empty. Commit/push nonforce to `codex/go-mini-workbench`, read remote SHA back, archive source and rerun in clean extraction.
 - [ ] Update feature parity and evidence with exact source, test counts, archive hash and residual real employee/device/AppID/release gaps.
 
@@ -88,7 +88,11 @@ npm test
 
 ## Current Evidence Boundary
 
-R36 is accepted/running; no final backend source, migration result, deployed-byte equality or native editor integration is claimed here. The last implemented UI checkpoint remains official knowledge Q&A source `9be89a09` with docs `8d2bc4bb`. Its synthetic DevTools evidence is not real employee or WeChat release acceptance.
+The development editor is now implemented and independently reviewed. Page/helper115 and full1532 tests pass; official26WXML/27WXSS compile. Actual DevTools verified type-first select drafting, Chinese option input, inline voucher selection and disabled synthetic mutation controls. Production list/detail entry remains deliberately closed pending R36 repair, registration and acceptance. Existing Web activity-description AI polishing is still a migration item. See the latest section of VERIFICATION.md; the preparation paragraphs below are historical evidence only.
+
+## Historical Preparation Evidence
+
+R36 is now paused at a20.3-credit check-in, not running or accepted as complete. Candidate `a4d6edb0` has two confirmed P2s and no BFF registration/final deployment report; see `ACTIVITY_MANAGEMENT_BACKEND_AUDIT.md`. Parent requested a human budget decision without clicking Continue/Finish up or bypassing the pause. No final backend, migration/deployed-byte equality or native editor integration is claimed. The last implemented UI checkpoint remains official knowledge Q&A source `9be89a09` with docs `8d2bc4bb`; its synthetic DevTools evidence is not real employee or WeChat release acceptance.
 
 Preparation now includes `activity-form.js` plus34 tests and19 API transport tests. The transport suite initially had seven failures (six missing-store guards and one implicit write retry); the final19 and combined40 pass. The API binds all six action names to the verified selected shop and never automatically renews/resends `activity-manage-write` after an error. No page calls these new actions yet. Independent review ran103 related tests and extra21 legacy-date probes; no remaining confirmed P1/P2 in this preparation scope.
 
