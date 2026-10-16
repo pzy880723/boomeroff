@@ -10,6 +10,7 @@
 - 父级API专项先5RED+1control，补3个上海日/月切换RED后最终9/9；精确核对daily-summary请求date、leaderboard真实DTO的period/date，并拒绝回包时已过期的业务日/月。旧mapping fixture仅改为回显请求date，范围与金额断言保留；GO→ERP映射及门店核对不改。跨午夜不一致安全拒绝需刷新，不编造新日期。
 - 父级及独立全套1595/1595，失败/跳过/取消均0；独立刷新40+API9组合49通过，无确认新增P1/P2。25路由检查及官方26WXML/27WXSS退出0、stderr空。实际DevTools核对工作台去重后卡片、营业概览、榜单空状态及五入口；native-workbench/sales/leaderboard-visible-refresh-preview及phone为真实截图与确定裁切。示例不请求真实ERP，计时/401/竞态与非空数据由VM验证，不冒充GUI实账号轮询验收。
 - 当前ERP公开session/daily-summary/leaderboard匿名probe均401 missing_token，仅证明路由可达与拒绝，未读员工业务。R36仍停20.3积分人工检查点；AppID、真实员工/设备、数据源延迟、月汇总/个人归属与完整迁移/微信发布仍未完成。没有绕过Lovable暂停、没有手机操作或后端部署。
+- 本轮源码a3c7420781b40abdd9b5a3db25c459234c1b7c26仅21个Mini路径，非强推且远端读回一致；归档/private/tmp/BOOMER-GO-wechat-visible-sales-20261016.zip为10470651字节，SHA256为6ce2f5e552fe29c5fab2d11afd22b348575b4a8c252b24f39d45c35698237339。干净解压/private/tmp/go-mini-visible-sales-verify-Dx1JvD重新通过1595项、25路由及官方26WXML/27WXSS编译，stderr空；正常index为空，原Flutter分支/数据不变。后续证据文档不改变该包代码，不代表main合并或正式发布。
 
 ## 最新检查点：识物历史搜索与保存多图
 
