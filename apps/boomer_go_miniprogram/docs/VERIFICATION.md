@@ -10,6 +10,7 @@
 - 员工阅读首7RED、入口/preview2RED、继承分类与过期显示2RED后共11通过。精确ID逐页核对page/page_size/has_more、重复分页和可见上下文，不把第一页缺失当不存在或用其他文章替代。正文不被摘要替换，合法原image_url保留；通知/资讯、类型和文本只筛已加载窗口，未读计数仍是全窗口。隐藏清详情并停旧请求，返回重读。
 - 父级新跑1966/1966，0失败/跳过/取消；28路由/syntax/JSON/noH5检查通过，官方29WXML/30WXSS退出0、stderr空。实际DevTools核对资讯筛选→摘要与全文→返回→系统管理列表→中文标题/正文草稿→原生日历选择2026-10-17→切换确认→已有通知，保存/删除/上下架在合成预览均禁用。native-notification-news/detail/manager-list/manager-draft/manager-expiry/manager-existing-preview及phone为真实截图和确定裁切；后续页命中和真实权限竞态由VM覆盖，不冒充GUI非空续页或真实员工验收。
 - Figma34:2/34:19已渲染检查。DevTools游客/旧selectable/HotReload警告仍有，观察Errors0不等于上线。R36再次核对同handle仍awaiting_input/a4d6edb0/20.3credits，无新授权未绕过；没有后台部署、权限修改、真实通知/短信/付费AI或手机操作。目标仍未完成，缺口及AppID/员工/设备/微信发布门槛保持。
+- 源码ff6b820a87da3748a442314eb8c5bbb1e73e6f49仅24个Mini路径，非强推且远端读回一致；归档/private/tmp/BOOMER-GO-wechat-notifications-20261017.zip为18557706字节，SHA256为9d3d1d215dfa5f7cfb1e4d290d69f9578111f27702dad09df66d5b10abe5fe85。干净解压/private/tmp/go-mini-notifications-verify-qQINQN再次1966/1966、28路由和官方29WXML/30WXSS通过，stderr空；正常index为空、原Flutter分支未切换，miniprogram目录磁盘占用1636KiB不是官方上传包大小验收。后续仅证据文档，不代表main合并、线上CRUD或微信发布。
 
 ## 最新检查点：原生手工文案素材
 
