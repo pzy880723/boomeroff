@@ -54,10 +54,12 @@ assert.equal(calls[1].header['X-Device-Token'], 'ERP_DEVICE');
 ## Task 3: Verification And Delivery
 
 - [x] Document the inactive adapter and separate backend acceptance gates.
-- [ ] Run `node --test --test-reporter=dot tests/*.test.cjs` and `npm run check`.
-- [ ] Review/commit exact Mini delta via an isolated Git index; preserve dirty
+- [x] Run the complete test suite and `npm run check`.
+  Final run: 1982 passed, zero failed/cancelled/skipped; 28 native routes passed.
+- [x] Review/commit exact Mini delta via an isolated Git index; preserve dirty
   Flutter work and the normal index. No working-tree branch switch.
-- [ ] Report remaining real employee AppID/Donut binding, Tencent ERP issuer,
+  Source commit: `099bce9fa697f31109ad67b6011c1b4bf4b22e37`.
+- [x] Report remaining real employee AppID/Donut binding, Tencent ERP issuer,
   historical mappings, business API, refresh/revocation and device acceptance.
 
 Additional source-only server review found non-atomic OTP consumption/attempts
