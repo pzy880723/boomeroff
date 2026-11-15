@@ -4,6 +4,28 @@ Native WeChat WXML/WXSS/JavaScript initial implementation. It does not embed the
 
 ## Current Delivery State
 
+### Donut And ERP Identity Direction (2026-11-15)
+
+The owner confirmed continuing this native Mini Program with the official
+WeChat multi-platform framework (Donut), reusing it for subsequent iOS/Android
+builds. Do not migrate to Taro or continue modifying the old native apps.
+The final backend/data/files/jobs must be independently hosted on Tencent.
+ERP is the only employee account/password/SMS authority; do not create or sync
+another GO password database. Old author IDs require verified ERP mappings.
+
+`shared/erp-auth.js` is a tested integration component for the existing ERP
+password bootstrap, SMS send/verify and independent ERP identity readback.
+It does not persist passwords, reuse old GO credentials or automatically retry
+SMS/OTP requests. SMS expiry is separate from the resend cooldown. Its tests
+use synthetic responses and send no real SMS.
+
+**Not activated in `App.configure()` yet:** existing GO business APIs still
+expect old GO identities. A working ERP-authorized business/session/refresh/
+revocation contract and Tencent migration must be accepted before switching
+login. This component is not proof of live ERP login, real SMS delivery,
+Donut packaging, three-platform device acceptance or production deployment.
+The employee project remains `touristappid`; the consumer AppID is not reused.
+
 - Five approved native tabs: 工作台 / 学习 / 识物 / 消息 / 我的.
 - Twenty-six native routes, including OTP/account-password login, month schedule, authorized store-week/single-cell scheduling, knowledge detail, server-graded single/continuous practice, sales, assistant, video generation, asset delivery, store publish-history reading, staff chat, community detail, customer-code voucher lookup/redemption, activity/application and current-store SOP/QA entry/category maintenance pages. The additional activity editor is development-preview only; ordinary production navigation remains closed pending backend acceptance.
 - Source and interaction tests run locally; the five tabs and schedule have been inspected in the official WeChat DevTools simulator.
