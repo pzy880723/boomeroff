@@ -24,13 +24,17 @@ expect old GO identities. A working ERP-authorized business/session/refresh/
 revocation contract and Tencent migration must be accepted before switching
 login. This component is not proof of live ERP login, real SMS delivery,
 Donut packaging, three-platform device acceptance or production deployment.
-The employee project remains `touristappid`; the consumer AppID is not reused.
+The owner supplied employee AppID `wx5c4f68873d7f919c` on 2026-11-21, and it is
+now configured in `project.config.json`; the consumer AppID is not reused.
+The AppSecret is server-only and is never placed in the client or repository.
+Account entitlement, Donut binding and release acceptance are separate checks.
+Current priority is the WeChat Mini Program; iOS/Android packaging is deferred.
 
 - Five approved native tabs: 工作台 / 学习 / 识物 / 消息 / 我的.
 - Twenty-six native routes, including OTP/account-password login, month schedule, authorized store-week/single-cell scheduling, knowledge detail, server-graded single/continuous practice, sales, assistant, video generation, asset delivery, store publish-history reading, staff chat, community detail, customer-code voucher lookup/redemption, activity/application and current-store SOP/QA entry/category maintenance pages. The additional activity editor is development-preview only; ordinary production navigation remains closed pending backend acceptance.
 - Source and interaction tests run locally; the five tabs and schedule have been inspected in the official WeChat DevTools simulator.
 - Real requests use the existing GO identity, fresh ERP scope and original backend records. Preview fixtures are separate, explicitly labeled, development-only and never an API-error fallback.
-- This is **not a published or real-device-accepted mini-program**. The project currently uses `touristappid`; a dedicated BOOMER GO employee AppID, domain configuration, privacy declarations and a genuine authenticated acceptance session are still required.
+- This is **not a published or real-device-accepted mini-program**. The project uses the owner-provided BOOMER GO employee AppID; account entitlement, domain configuration, privacy declarations and a genuine authenticated acceptance session still require verification.
 - Missing sales attribution is not fabricated. Personal rankings remain unavailable until ERP records sales ownership. Sales do not contribute to employee assessment.
 - Workbench sales and the sales/leaderboard screen refresh only while visible, about30seconds after each channel finishes. Returning reads immediately; hidden/unloaded/old identity/store/period results are ignored. Both channels settle independently, and failures clear their old snapshot instead of claiming it is current. Server timestamps remain the freshness source. Preview and missing-store contexts never invoke financial ERP adapters. Date/period and Shanghai day/month rollover mismatches are rejected. This is polling, not an instantaneous source stream; month summary and genuine employee attribution remain incomplete.
 

@@ -4,6 +4,14 @@ Date: 2026-11-15
 
 ## Confirmed Direction
 
+2026-11-21 update: the owner supplied employee AppID `wx5c4f68873d7f919c` and
+asked to record its connection. It is now the project configuration value.
+Its server-only credential is stored outside the repository with restrictive
+permissions; no secret value belongs in this document, Git or client code.
+Do not infer verified ownership/Donut binding from a supplied AppID alone.
+The owner prioritizes the Mini Program now and defers iOS/Android packaging;
+retain official Donut architecture and leave the old native apps alone.
+
 The owner confirmed continued development of the existing native WeChat Mini
 Program using WeChat's official multi-platform framework (Donut). The same
 WXML/WXSS/JavaScript business application will target WeChat, Android and iOS.
@@ -29,11 +37,12 @@ author IDs remain historical migration references, not another login identity.
   `codex/go-mini-workbench` at `b1a282f7627de4fd7687ab9242772aa03016ff0b`.
 - Client source: `apps/boomer_go_miniprogram/miniprogram`.
 - Baseline verification today: 1966 tests passed, no failures/skips.
-- `project.config.json` still uses `touristappid`; no
-  `project.miniapp.json` exists. This is not a registered Donut application.
+- At the 2026-11-15 baseline, `project.config.json` used `touristappid` and no
+  `project.miniapp.json` existed. The November 21 update above supersedes the
+  AppID value, not the unverified Donut binding/release state.
 - Installed WeChat DevTools: `2.02.2609250`. Codex CLI authorization completed;
   status reports an unexpired login and matching skill version. Imported GO
-  still uses a tourist AppID; only the separate consumer project has a real ID.
+  used a tourist AppID at that checkpoint; current registration is above.
 - Current client config targets GO Lovable Cloud
   `narqwgwpqglathwtyevz.supabase.co`; ERP URL is `erp.boomeroff.com`.
 - Source-side `get_database_status` confirms this GO database is enabled.
@@ -138,6 +147,5 @@ acceptance is made by this design or the first implementation slice.
 The ERP adapter's 16 synthetic tests pass. A full local run passed 1982 tests
 with zero failures/skips, and the native checker passed all 28 routes. These
 checks cover source behavior only; the adapter remains inactive in the App.
-Official DevTools lists this employee project as a tourist project, which is
-not proof that the owner has not separately registered an employee AppID.
-The dedicated AppID question has been asked without borrowing the consumer ID.
+Official DevTools listed a tourist employee project at the baseline. The owner
+subsequently provided the dedicated employee ID; it is not the consumer ID.

@@ -1,0 +1,29 @@
+[Unit]
+Description=BOOMER GO independent store operations
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=boomer-go-operations
+Group=boomer-go-operations
+WorkingDirectory=/srv/boomer-go-operations/current
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=GO_OPERATIONS_STATE=/srv/boomer-go-operations/state
+Environment=PORT=3987
+Environment=GO_OPERATIONS_READ_ONLY=1
+ExecStart=/usr/bin/python3 server.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/boomer-go-operations/state
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=192M
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target

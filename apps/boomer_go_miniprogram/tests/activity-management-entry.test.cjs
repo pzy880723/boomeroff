@@ -25,7 +25,7 @@ test('activity editor DevTools condition is explicit synthetic development previ
   const preview = createPreview({}), shop_id = preview.session.get().shop.id;
   const value = await preview.api.action('activity-manage-detail', { shop_id, activity_id: query.get('id') });
   assert.match(value.activity.name, /示例/);
-  assert.equal(config.appid, 'touristappid');
+  assert.equal(config.appid, 'wx5c4f68873d7f919c');
   assert.equal(config.setting.urlCheck, true);
 });
 
