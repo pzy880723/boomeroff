@@ -1,0 +1,25 @@
+<view class="page">
+  <view class="row">
+    <view class="brand">BOOMER GO</view>
+    <button size="mini" bindtap="leave">退出登录</button>
+  </view>
+  <view class="title">每日店务</view>
+  <view class="row">
+    <view class="muted">{{shop.name}} · {{date}}</view>
+    <picker wx:if="{{shops.length > 1}}" range="{{shops}}" range-key="name" bindchange="choose">切换门店</picker>
+  </view>
+  <view class="card summary">
+    <view class="row"><view>今日完成</view><text class="count">{{loading || error ? '—' : completed + ' / ' + total}}</text></view>
+    <view class="muted">当前为只读验收版，任务指派、拍照和完成提交暂未开放。</view>
+  </view>
+  <view class="card" wx:if="{{loading}}">正在加载任务…</view>
+  <view class="card" wx:elif="{{error}}"><view class="error">{{error}}</view><button class="button secondary" bindtap="refresh">重新加载</button></view>
+  <view class="card muted" wx:elif="{{!items.length}}">今天暂无店务任务。</view>
+  <view wx:else>
+    <view class="card" wx:for="{{items}}" wx:key="id">
+      <view class="row" bindtap="toggle" data-id="{{item.id}}"><view class="task">{{item.title}}</view><view class="muted">{{item.label}}</view></view>
+      <view class="muted" wx:if="{{openId === item.id}}">{{item.description || '暂无补充说明'}}<view>照片凭证：{{item.photoCount}} / {{item.required_photos}}</view></view>
+    </view>
+    <button class="button secondary" bindtap="refresh">刷新任务</button>
+  </view>
+</view>

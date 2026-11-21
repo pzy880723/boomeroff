@@ -1,0 +1,9 @@
+{
+  "pages": ["pages/login/index", "pages/workbench/index"],
+  "window": {
+    "navigationBarTitleText": "BOOMER GO",
+    "navigationBarTextStyle": "black",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F5F6F8"
+  }
+}

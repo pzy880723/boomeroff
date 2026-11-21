@@ -1,0 +1,3 @@
+.count { font-size: 42rpx; font-weight: 800; color: #d40024; }
+.task { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+.summary .muted { margin-top: 18rpx; }

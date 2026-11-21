@@ -1,0 +1,11 @@
+page { background: #f5f6f8; color: #202125; font-size: 30rpx; }
+.page { padding: 44rpx 36rpx 64rpx; }
+.brand { color: #d40024; font-weight: 900; letter-spacing: 3rpx; }
+.title { margin: 16rpx 0; font-size: 50rpx; font-weight: 800; line-height: 1.2; }
+.muted { color: #626670; font-size: 26rpx; line-height: 1.55; }
+.card { margin-top: 28rpx; padding: 28rpx; background: white; border-radius: 24rpx; }
+.button { margin: 20rpx 0 0; background: #d40024; color: white; border-radius: 14rpx; line-height: 88rpx; font-size: 29rpx; }
+.secondary { background: #f0f1f4; color: #25262b; }
+.button::after { border: 0; }
+.error { color: #ac0020; margin: 16rpx 0; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
