@@ -44,7 +44,7 @@ test('unlisted operations domain does not create an employee session', async t =
     wx: { request(req) { req.fail({ errMsg: 'request:fail url not in domain list' }); } },
     auth: { signInWithPassword: async () => issue() }
   });
-  await assert.rejects(session.signIn('password', 'x', 'y'), /ai\.boomeroff\.com/);
+  await assert.rejects(session.signIn('password', 'x', 'y'), /go\.boomeroff\.com/);
   assert.equal(session.current(), null);
 });
 
@@ -67,7 +67,7 @@ test('ERP identity is confirmed by Tencent before scoped tasks can load', async 
     session.signOut();
   }
   assert.equal(calls.length, 4);
-  assert.ok(calls.every(req => req.url.startsWith('https://ai.boomeroff.com/go-operations/')));
+  assert.ok(calls.every(req => req.url.startsWith('https://go.boomeroff.com/go-operations/')));
   assert.equal(calls[1].header.Authorization, 'Bearer erp-access');
   assert.equal(calls[1].header['X-Device-Token'], 'erp-device');
   await assert.rejects(session.tasks('a', '2026-11-21'), /登录/);

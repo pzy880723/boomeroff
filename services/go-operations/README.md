@@ -18,7 +18,9 @@ schedules, exams and competitions are NOT silently copied into this ledger.
 
 ## API
 
-Public production prefix: `/go-operations/` on `ai.boomeroff.com`.
+New client prefix: `https://go.boomeroff.com/go-operations/`. Keep the existing
+`ai.boomeroff.com` prefix active for previously uploaded clients until their
+replacement is verified. ERP authentication stays at `erp.boomeroff.com`.
 All responses have `Cache-Control: no-store`. Every protected request requires
 both the real ERP `Authorization: Bearer ...` and `X-Device-Token`; they are
 forwarded only to fixed ERP HTTPS endpoints, never persisted or logged.
@@ -52,6 +54,16 @@ Install the systemd unit, check loopback health and anonymous rejection, then
 add only the supplied Nginx location inside the existing HTTPS server. Back up
 the exact active Nginx file first; validate with `nginx -t` before reload. Do
 not modify ERP routing, existing Supabase proxies or the battle service.
+
+For the dedicated GO host, provision a public `go` A record to the existing
+Tencent ingress. Install `deploy/go.boomeroff.com.http.conf` first with the
+ACME webroot `/var/www/boomer-go-acme`; issue the Go-only certificate before
+enabling `deploy/go.boomeroff.com.https.conf`. Install
+`deploy/nginx.location.conf` at `/etc/nginx/snippets/boomer-go-operations.conf`.
+Verify the new hostname with trusted TLS, HTTP 200 at `/go-operations/healthz`
+and HTTP 401 for unauthenticated `/go-operations/v1/session` before uploading
+the updated client. The employee Mini Program request allowlist needs the
+new GO host and the unchanged ERP host.
 
 Rollback code by pointing `current` back to its recorded previous release and
 restarting only `boomer-go-operations`; remove only the new Nginx location if

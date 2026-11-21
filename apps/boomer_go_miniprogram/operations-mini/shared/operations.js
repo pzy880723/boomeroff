@@ -1,5 +1,6 @@
 const { isRequestDomainBlocked } = require('./erp-auth');
-const OPS = 'https://ai.boomeroff.com/go-operations/v1';
+const OPS_HOST = 'go.boomeroff.com';
+const OPS = 'https://' + OPS_HOST + '/go-operations/v1';
 const REFRESH = 'https://erp.boomeroff.com/api/public/handheld/auth/refresh';
 const validToken = value => typeof value === 'string' && /^[A-Za-z0-9_.-]+$/.test(value);
 const day = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
@@ -29,7 +30,7 @@ function createOperations({ wx, auth }) {
       },
       fail(error) {
         if (isRequestDomainBlocked(error)) {
-          const host = url === REFRESH ? 'erp.boomeroff.com' : 'ai.boomeroff.com';
+          const host = url === REFRESH ? 'erp.boomeroff.com' : OPS_HOST;
           return reject(new Error('小程序未配置 ' + host + ' 为请求域名，请联系管理员'));
         }
         reject(new Error('网络连接失败，请重试'));
