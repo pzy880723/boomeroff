@@ -1,3 +1,4 @@
+const { isRequestDomainBlocked } = require('./erp-auth');
 const OPS = 'https://ai.boomeroff.com/go-operations/v1';
 const REFRESH = 'https://erp.boomeroff.com/api/public/handheld/auth/refresh';
 const validToken = value => typeof value === 'string' && /^[A-Za-z0-9_.-]+$/.test(value);
@@ -26,7 +27,13 @@ function createOperations({ wx, auth }) {
         if (statusCode !== 200 || !data || data.ok !== true || !data.data) return reject(new Error('服务未能确认结果，请稍后重试'));
         resolve(data.data);
       },
-      fail() { reject(new Error('网络连接失败，请重试')); }
+      fail(error) {
+        if (isRequestDomainBlocked(error)) {
+          const host = url === REFRESH ? 'erp.boomeroff.com' : 'ai.boomeroff.com';
+          return reject(new Error('小程序未配置 ' + host + ' 为请求域名，请联系管理员'));
+        }
+        reject(new Error('网络连接失败，请重试'));
+      }
     }));
   }
 

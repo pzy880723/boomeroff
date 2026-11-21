@@ -59,3 +59,26 @@ After binding, resume official builds, verify each target's real package
 identity, signing, request domains and runtime, then run real ERP password
 and SMS, store-scope and task-read acceptance on each device. A simulator
 screen or preview QR alone is not proof of those flows.
+
+## Binding recheck and second preview
+
+After the owner reported scanning, the official DevTools `done` action
+still reported that the employee Mini Program was not bound to a
+multi-terminal application. The fresh candidate was opened with employee
+AppID `wx5c4f68873d7f919c`; APK task creation still returned code 1, and
+iOS archive still reported a missing `miniModuleId`. No APK or IPA exists.
+
+The second official WeChat preview succeeded (42,489 bytes). The simulator
+rendered both login modes and rejected an empty phone and an empty password
+locally. DevTools console also showed the real earlier OTP attempt was
+rejected by WeChat request-domain validation before it could reach
+`erp.boomeroff.com`. Configure both `https://erp.boomeroff.com` and
+`https://ai.boomeroff.com` as request domains on the employee Mini Program;
+do not disable domain checks.
+
+The shared client now distinguishes a local domain denial from ambiguous
+SMS delivery, without exposing raw network errors. Operations-domain
+failure does not create a session. 1,991 local tests passed. A public probe
+confirmed the Tencent operations service remained healthy and read-only;
+anonymous session reads return 401, and ERP invalid phone input returns 400.
+These are not authenticated device acceptance.

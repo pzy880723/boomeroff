@@ -38,6 +38,16 @@ function issue() {
     device_token: 'erp-device', expires_at: Date.now() / 1000 + 300 };
 }
 
+test('unlisted operations domain does not create an employee session', async t => {
+  const { code } = prepare(t);
+  const session = code.createOperations({
+    wx: { request(req) { req.fail({ errMsg: 'request:fail url not in domain list' }); } },
+    auth: { signInWithPassword: async () => issue() }
+  });
+  await assert.rejects(session.signIn('password', 'x', 'y'), /ai\.boomeroff\.com/);
+  assert.equal(session.current(), null);
+});
+
 test('ERP identity is confirmed by Tencent before scoped tasks can load', async t => {
   const { code } = prepare(t);
   const calls = [];

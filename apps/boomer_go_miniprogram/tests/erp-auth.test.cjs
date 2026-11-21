@@ -47,6 +47,13 @@ test('SMS send uses ERP login purpose and distinguishes expiry from resend coold
   assert.deepEqual(f.calls[0].data, { phone: '13800138000', purpose: 'login' });
   assert.equal(result.ttlSeconds, 300); assert.equal(result.cooldownSeconds, 60);
 });
+test('WeChat request-domain rejection is not an uncertain SMS delivery', async () => {
+  const f = fixture(r => r.fail({ errMsg: 'request:fail url not in domain list' }));
+  await assert.rejects(f.auth.sendCode('13800138000'), e =>
+    e.code === 'erp_request_domain_blocked' && e.uncertain === false &&
+    e.message.includes('erp.boomeroff.com'));
+  assert.equal(f.calls.length, 1);
+});
 test('code and password use the same ERP installation and canonical employee', async () => {
   const f = fixture(); const code = await f.auth.signInWithCode('13800138000', '123456');
   assert.deepEqual(f.calls[0].data, { phone: '13800138000', code: '123456', install_id: INSTALL });

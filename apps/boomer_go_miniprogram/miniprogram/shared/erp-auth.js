@@ -15,6 +15,10 @@ function userId(user) {
   return uuid(id) ? id : null;
 }
 function invalidResponse() { return failure('ERP 登录结果未能确认，请勿重复提交验证码', 'erp_auth_unconfirmed', true); }
+function isRequestDomainBlocked(error) {
+  return !!error && typeof error.errMsg === 'string' &&
+    /(?:url not in domain list|不在.*合法域名|合法域名校验)/i.test(error.errMsg);
+}
 function createErpAuth({ wx, installId }) {
   if (typeof installId !== 'string' || !/^[a-z0-9_-]{8,64}$/i.test(installId)) throw new Error('缺少有效的安装标识');
   let sending = null, sendingPhone = '', signingIn = null;
@@ -38,7 +42,12 @@ function createErpAuth({ wx, installId }) {
           if (!body || body.ok !== true || !body.data || typeof body.data !== 'object' || Array.isArray(body.data)) return reject(invalidResponse());
           resolve(body.data);
         },
-        fail() { reject(failure('网络响应中断，短信或登录结果未确认，请勿自动重复提交', 'erp_auth_network_unknown', true)); }
+        fail(error) {
+          if (isRequestDomainBlocked(error)) {
+            return reject(failure('小程序未配置 erp.boomeroff.com 为请求域名，请联系管理员', 'erp_request_domain_blocked'));
+          }
+          reject(failure('网络响应中断，短信或登录结果未确认，请勿自动重复提交', 'erp_auth_network_unknown', true));
+        }
       });
     });
   }
@@ -86,4 +95,4 @@ function createErpAuth({ wx, installId }) {
     }
   };
 }
-module.exports = { createErpAuth };
+module.exports = { createErpAuth, isRequestDomainBlocked };
