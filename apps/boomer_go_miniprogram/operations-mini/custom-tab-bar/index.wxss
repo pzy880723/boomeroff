@@ -1,0 +1,4 @@
+.dock{position:fixed;z-index:20;left:30rpx;right:30rpx;bottom:calc(18rpx + env(safe-area-inset-bottom));height:119rpx;box-sizing:border-box;background:#231d1d;color:#f9f1ee;border-radius:50rpx;display:flex;align-items:center;padding:8rpx 9rpx;box-shadow:0 7rpx 20rpx #231d1d21}
+.destination{flex:1;height:96rpx;border-radius:39rpx;display:flex;flex-direction:column;justify-content:center;align-items:center;font-size:21rpx;line-height:1.2;gap:4rpx}
+.destination.selected{background:#c90d26;color:white;font-weight:700}
+.nav-icon{display:block;width:42rpx;height:42rpx}

@@ -1,0 +1,6 @@
+<view class="dock" role="tablist">
+  <view wx:for="{{items}}" wx:key="path" class="destination {{selected === index ? 'selected' : ''}}" bindtap="open" data-index="{{index}}" role="tab" aria-selected="{{selected === index}}">
+    <image class="nav-icon" src="/assets/icons/nav-{{item.icon}}.svg" mode="aspectFit" />
+    <text>{{item.name}}</text>
+  </view>
+</view>

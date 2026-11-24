@@ -18,7 +18,7 @@ function prepare(output) {
       const file = path.join(dir, entry.name);
       if (!/^[a-z0-9_.-]+$/i.test(entry.name) || entry.name.startsWith('.')) throw new Error('Unexpected source: ' + name);
       if (entry.isDirectory()) collect(file, name);
-      else if (entry.isFile() && /\.(?:js|json|wxml|wxss|png)$/.test(name)) files.set(name, fs.readFileSync(file));
+      else if (entry.isFile() && /\.(?:js|json|wxml|wxss|png|svg)$/.test(name)) files.set(name, fs.readFileSync(file));
       else throw new Error('Unexpected source: ' + name);
     }
   }
@@ -27,6 +27,7 @@ function prepare(output) {
   files.set('miniprogram/assets/wordmark.png', fs.readFileSync(path.join(project, 'miniprogram/assets/wordmark.png')));
   for (const [name, bytes] of files) {
     if (name.endsWith('.png')) continue;
+    if (name.endsWith('.svg') && /<script|<foreignObject|href=|url\(|onload/i.test(bytes.toString())) throw new Error('Unsupported SVG in ' + name);
     if (/lovable|supabase|web-view|AppSecret|service_role/i.test(bytes.toString())) throw new Error('Unsupported dependency in ' + name);
     if (name.endsWith('.json')) JSON.parse(bytes);
     if (name.endsWith('.js')) new (require('node:vm').Script)(bytes.toString(), { filename: name });

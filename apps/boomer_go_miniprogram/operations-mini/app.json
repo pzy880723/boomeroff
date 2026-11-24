@@ -1,5 +1,5 @@
 {
-  "pages": ["pages/login/index", "pages/workbench/index", "pages/learning/index", "pages/competition/index", "pages/messages/index", "pages/me/index", "pages/tasks/index"],
+  "pages": ["pages/login/index", "pages/workbench/index", "pages/learning/index", "pages/competition/index", "pages/messages/index", "pages/me/index", "pages/tasks/index", "pages/learning-detail/index", "pages/learning-card/index"],
   "window": {
     "navigationBarTitleText": "BOOMER GO",
     "navigationBarTextStyle": "black",
@@ -7,6 +7,7 @@
     "backgroundColor": "#F5F6F8"
   },
   "tabBar": {
+    "custom": true,
     "color": "#626670",
     "selectedColor": "#D40024",
     "backgroundColor": "#FFFFFF",

@@ -16,6 +16,31 @@ Python 3.12 is the production runtime. New operational tasks use ERP location
 IDs directly, not names or historical GO shop IDs. Existing knowledge,
 schedules, exams and competitions are NOT silently copied into this ledger.
 
+## Independent Learning
+
+The learning ledger is `state/learning.sqlite` (including its WAL sidecars).
+It is separate from the task ledger and uses the same server-verified ERP
+identity. Includes knowledge, training, tests, records, and per-employee
+favorites. Store-specific learning entries are checked against current ERP
+locations. Only `super_admin` may generate or save cards. A generated draft and
+its optional reference photo are private until explicit save. Only the typed
+name and notes are sent to DeepSeek, not photos or ERP credentials.
+
+The approved cutover starts with an empty library. Install
+`deploy/20-learning.conf` to enable fresh-start mode and load the
+root-readable DeepSeek environment file. Store `DEEPSEEK_API_KEY` in
+`/etc/boomer-go-operations/deepseek.env` (0600); do not add it to source,
+client builds or release artifacts. If it is missing, generation remains
+disabled. The health response reports readiness and configuration flags, not
+any secret. An optional `GO_DEEPSEEK_MODEL` overrides the default
+`deepseek-flash`.
+
+`import_learning.py` is a separate offline utility; it is not required or
+invoked on fresh start. It rehearses a reviewed snapshot in private temporary
+storage before optionally applying it. Only accept a known authoritative
+export, verified hashes and row counts, and an individually verified
+one-to-one ERP identity map. No legacy system is queried by this service.
+
 ## API
 
 New client prefix: `https://go.boomeroff.com/go-operations/`. Keep the existing

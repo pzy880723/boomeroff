@@ -1,4 +1,5 @@
 const { isRequestDomainBlocked } = require('./erp-auth');
+const { makeLearningClient } = require('./learning');
 const OPS_HOST = 'go.boomeroff.com';
 const OPS = 'https://' + OPS_HOST + '/go-operations/v1';
 const REFRESH = 'https://erp.boomeroff.com/api/public/handheld/auth/refresh';
@@ -15,11 +16,17 @@ const faults = {
   photos_required: '请先上传要求的照片',
   photo_unavailable: '凭证暂时无法读取，请重新上传原图或联系店长',
   photo_storage_full: '照片存储空间暂时不足，请联系管理员',
+  photo_busy: '相片服务正忙，请稍后重试',
   task_completed: '该任务已完成，请刷新后查看',
   version_conflict: '任务已有更新，请刷新后再提交',
   request_conflict: '这次提交未能确认，请返回工作台核对任务列表',
   not_found: '这条记录已不存在',
-  erp_unavailable: 'ERP 暂时无法确认登录，请稍后重试'
+  erp_unavailable: 'ERP 暂时无法确认登录，请稍后重试',
+  generation_busy: '还有一张卡片正在生成，请稍后再试',
+  generation_unavailable: '暂未开启卡片生成',
+  generation_limit: '已达到生成或重试上限',
+  draft_not_ready: '草稿还没有生成完成',
+  quiz_unavailable: '这条内容暂无可用试题'
 };
 
 function photoType(content) {
@@ -49,7 +56,7 @@ function createOperations({ wx, auth }) {
         'Content-Type': mime },
       success({ statusCode, data }) {
         if (binary && statusCode === 200 && photoType(data)) return resolve(data);
-        if (!binary && (statusCode === 200 || statusCode === 201) && data && data.ok === true && data.data) {
+        if (!binary && [200, 201, 202].includes(statusCode) && data && data.ok === true && data.data) {
           return resolve(data.data);
         }
         const code = data && Object.prototype.hasOwnProperty.call(faults, data.code) ? data.code : '';
@@ -82,7 +89,8 @@ function createOperations({ wx, auth }) {
     const shops = data.shops.filter(shop => shop && typeof shop.id === 'string' && shop.id && typeof shop.name === 'string');
     if (!shops.length || (!hq && shops.length !== 1)) throw new Error('无法确定员工所属门店，请联系管理员核对 ERP 权限');
     return { shops, hq, canManage: data.can_manage_tasks === true, writes: data.task_writes_enabled === true,
-      canUpdate: data.task_writes_enabled === true && data.can_update_tasks === true };
+      canUpdate: data.task_writes_enabled === true && data.can_update_tasks === true,
+      canGenerateCards: data.can_generate_cards === true };
   }
 
   async function fresh(attempt) {
@@ -112,17 +120,17 @@ function createOperations({ wx, auth }) {
 
   async function scoped(shopId, call) {
     if (!scope) throw new Error('请先登录 ERP 员工账号');
-    if (!scope.shops.some(shop => shop.id === shopId)) throw new Error('该门店不在授权范围内');
+    if (shopId !== null && !scope.shops.some(shop => shop.id === shopId)) throw new Error('该门店不在授权范围内');
     const attempt = generation;
     try {
       await fresh(attempt);
       ensureCurrent(attempt);
-      if (!scope.shops.some(shop => shop.id === shopId)) throw new Error('该门店权限已变更');
+      if (shopId !== null && !scope.shops.some(shop => shop.id === shopId)) throw new Error('该门店权限已变更');
       const result = await call();
       ensureCurrent(attempt);
       return result;
     } catch (error) {
-      if (attempt === generation && (error.status === 401 || error.status === 403)) signOut();
+      if (attempt === generation && (error.status === 401 || (error.status === 403 && shopId !== null))) signOut();
       throw error;
     }
   }
@@ -143,6 +151,7 @@ function createOperations({ wx, auth }) {
   }
 
   return {
+    learning: makeLearningClient((path, body, mime, binary) => scoped(null, () => request(OPS + path, credentials, body, mime, binary))),
     sendCode: phone => auth.sendCode(phone),
     current: () => scope || null,
     signOut,

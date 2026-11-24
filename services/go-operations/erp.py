@@ -26,6 +26,10 @@ class Actor:
     def can_write_tasks(self):
         return self.manager or ('store_staff' in self.roles and len(self.shops) == 1)
 
+    @property
+    def can_author_knowledge(self):
+        return 'super_admin' in self.roles
+
     def require_shop(self, shop_id):
         if not isinstance(shop_id, str) or shop_id not in {shop[0] for shop in self.shops}:
             raise Fault(403, 'forbidden')

@@ -1,0 +1,29 @@
+<view class="reader">
+  <view wx:if="{{loading}}" class="card muted">正在读取内容…</view>
+  <view wx:if="{{error}}" class="card error">{{error}}<button wx:if="{{!item}}" class="button secondary" bindtap="load">重试</button></view>
+  <block wx:if="{{item && !run}}">
+    <image class="reader-cover" wx:if="{{cover}}" src="{{cover}}" mode="aspectFill" />
+    <view class="reader-body">
+      <view class="reader-title">{{item.title}}</view>
+      <view class="reader-tags">{{item.category}} {{item.brand}} {{item.origin}} {{item.era}}</view>
+      <view class="reader-callout" wx:if="{{item.summary}}"><text class="reader-caption">简介</text><text>{{item.summary}}</text></view>
+      <view class="reader-text">{{item.details || item.body}}</view>
+      <view wx:for="{{item.sections}}" wx:key="label" class="reader-callout"><text class="reader-caption">{{item.label}}</text><text>{{item.body}}</text></view>
+      <view class="reader-callout" wx:if="{{item.tips}}"><text class="reader-caption">辨识与注意事项</text><text>{{item.tips}}</text></view>
+    </view>
+    <view class="reader-actions">
+      <button class="button secondary" bindtap="favorite" loading="{{busy}}">{{item.favorite ? '取消收藏' : '收藏'}}</button>
+      <button wx:if="{{item.quiz_available}}" class="button" bindtap="start" disabled="{{busy}}">来测一测</button>
+      <button wx:elif="{{item.kind === 'training'}}" class="button" bindtap="completeTraining" disabled="{{busy || item.training_complete}}">{{item.training_complete ? '已完成培训' : '确认完成培训'}}</button>
+    </view>
+  </block>
+  <view class="reader-body" wx:if="{{run && !result}}">
+    <view class="reader-title">{{item.title}}</view>
+    <view wx:for="{{run.questions}}" wx:for-index="qIndex" wx:key="index" class="question">
+      <view class="q-title">{{qIndex + 1}}. {{item.prompt}}</view>
+      <button wx:for="{{item.options}}" wx:for-item="choice" wx:for-index="oIndex" wx:key="index" class="choice {{answers[qIndex] === oIndex ? 'on' : ''}}" bindtap="pick" data-question="{{qIndex}}" data-option="{{oIndex}}">{{choice}}</button>
+    </view>
+    <button class="button" loading="{{busy}}" bindtap="submit">确认提交</button>
+  </view>
+  <view wx:if="{{result}}" class="reader-body"><view class="reader-callout"><text class="reader-caption">结果已保存</text><text class="reader-title">{{result.score}} / {{result.total}}</text></view></view>
+</view>

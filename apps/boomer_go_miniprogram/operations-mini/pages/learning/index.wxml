@@ -1,5 +1,40 @@
-<view class="page" wx:if="{{authorized}}">
-  <image class="wordmark" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" />
-  <view class="title">学习</view>
-  <view class="card muted">知识培训与考试尚未接入小程序。</view>
+<view class="learn-app">
+  <view class="learn-head" style="padding-top: {{safeTop}}px"><image class="learn-wordmark" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" /></view>
+  <view class="learn-content">
+    <view class="learn-segments primary-tabs" role="tablist">
+      <button wx:for="{{tabs}}" wx:key="id" class="seg {{tab === item.id ? 'picked' : ''}}" data-value="{{item.id}}" bindtap="chooseTab" role="tab" aria-selected="{{tab === item.id}}">{{item.label}}</button>
+    </view>
+    <block wx:if="{{tab === 'knowledge'}}">
+      <view class="search-line">
+        <view class="search-box"><image src="/assets/icons/search.svg" /><input placeholder="搜索名称 / IP / 简介" maxlength="100" value="{{query}}" bindinput="input" bindconfirm="search" confirm-type="search" /></view>
+        <button class="square {{grid ? 'red' : ''}}" bindtap="chooseView" data-grid="1" aria-label="大图"><image src="/assets/icons/grid.svg" /></button>
+        <button class="square {{!grid ? 'red' : ''}}" bindtap="chooseView" data-grid="0" aria-label="列表"><image src="/assets/icons/list.svg" /></button>
+      </view>
+      <view class="category-grid">
+        <button wx:for="{{categories}}" wx:key="name" class="category {{category === item.name ? 'chosen' : ''}}" bindtap="chooseCategory" data-value="{{item.name}}">
+          <image src="/assets/icons/{{item.icon}}.svg" /><text>{{item.name}}</text>
+        </button>
+        <button class="category" bindtap="toggleCategories"><image src="/assets/icons/down.svg"/><text>{{expanded ? '收起' : '展开'}}</text></button>
+      </view>
+      <view class="learn-segments"><button wx:for="{{sorts}}" wx:key="id" class="seg {{sort === item.id ? 'picked' : ''}}" data-value="{{item.id}}" bindtap="chooseSort">{{item.label}}</button></view>
+    </block>
+    <view wx:if="{{tab === 'records'}}" class="learn-segments"><button wx:for="{{recordFilters}}" wx:key="id" class="seg {{recordKind === item.id ? 'picked' : ''}}" data-value="{{item.id}}" bindtap="chooseRecord">{{item.label}}</button></view>
+    <view wx:if="{{plannedNotice}}" class="learn-note">{{plannedNotice}}</view>
+    <view wx:if="{{loading && !items.length}}" class="learn-state">正在读取{{title}}…</view>
+    <view wx:elif="{{error}}" class="learn-state">{{error}}<button class="secondary learn-retry" bindtap="refresh">重试</button></view>
+    <view wx:elif="{{!items.length}}" class="learn-state">{{libraryReady ? '暂无' + title + '内容' : '学习服务暂未准备好'}}</view>
+    <view wx:if="{{items.length}}" class="{{grid && (tab === 'knowledge' || tab === 'favorites') ? 'knowledge-grid' : 'knowledge-list'}}">
+      <view wx:for="{{items}}" wx:key="id" class="knowledge-card" role="button" bindtap="open" data-id="{{item.id}}" data-entry="{{item.entry_id}}">
+        <view class="cover" wx:if="{{tab === 'knowledge' || tab === 'favorites'}}">
+          <image wx:if="{{item.cover_url}}" class="cover-photo" src="{{item.cover_url}}" mode="aspectFill" lazy-load />
+          <image wx:else class="cover-mark" src="/assets/icons/layers.svg" mode="aspectFit" />
+          <button class="star {{item.favorite ? 'starred' : ''}}" catchtap="favorite" data-id="{{item.id}}" aria-label="{{item.favorite ? '取消收藏' : '收藏'}}"><image src="/assets/icons/star.svg"/></button>
+        </view>
+        <view class="card-copy"><view class="card-title">{{item.title}}</view><view wx:if="{{item.meta || item.summary}}" class="card-meta">{{item.meta || item.summary}}</view>
+          <view wx:if="{{item.category}}" class="card-category">{{item.category}}</view></view>
+      </view>
+    </view>
+    <button wx:if="{{hasMore}}" class="secondary learn-retry" bindtap="more" loading="{{loading}}" disabled="{{loading}}">查看更多</button>
+  </view>
+  <button class="generate-fab" wx:if="{{canGenerateCards && tab === 'knowledge'}}" bindtap="newCard" aria-label="生成商品卡或知识卡"><image src="/assets/icons/wand.svg" mode="aspectFit" /></button>
 </view>

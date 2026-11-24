@@ -1,0 +1,56 @@
+<view class="author-page">
+  <view wx:if="{{error}}" class="author-error" role="alert">{{error}}</view>
+  <block wx:if="{{stage === 'choose'}}">
+    <text class="face-kicker">仅授权管理员</text><view class="face-title">选一种卡片</view>
+    <view class="muted">填写名称或主题，两种卡都可附参考照片。</view>
+    <button class="type-row" data-kind="product" bindtap="choose"><image src="/assets/icons/bag.svg"/><view><text>商品卡</text><view class="muted">商品简介、卖点和辨识提示</view></view></button>
+    <button class="type-row" data-kind="knowledge" bindtap="choose"><image src="/assets/icons/nav-book.svg"/><view><text>知识卡</text><view class="muted">品牌、品类或 IP 知识与店员话术</view></view></button>
+    <view class="author-note"><view>先生成预览，再确认保存</view><view class="muted">不会自动写入学习内容或修改 ERP 商品。</view></view>
+  </block>
+  <block wx:elif="{{stage === 'form'}}">
+    <view class="type-tabs"><button class="{{kind === 'product' ? 'chosen' : ''}}" bindtap="choose" data-kind="product">商品卡</button><button class="{{kind === 'knowledge' ? 'chosen' : ''}}" bindtap="choose" data-kind="knowledge">知识卡</button></view>
+    <view class="author-label">{{kind === 'product' ? '商品名称' : '知识主题或品牌'}}</view>
+    <input class="author-input" value="{{title}}" placeholder="输入名称" data-field="title" bindinput="input" maxlength="120" />
+    <view class="author-label">已知资料（选填）</view>
+    <textarea class="author-input area" value="{{note}}" placeholder="填写已核实的资料，不确定的留空" data-field="note" bindinput="input" maxlength="1500" auto-height />
+    <button class="type-row" bindtap="choosePhoto"><image src="/assets/icons/wand.svg"/><view><text>{{photo ? '更换参考照片' : '添加参考照片'}}</text><view class="muted">相册或拍摄 · 仅用于核对和封面</view></view></button>
+    <view class="photo-line" wx:if="{{photo}}"><image src="{{photo}}" mode="aspectFill"/><button class="button secondary" bindtap="removePhoto">移除</button></view>
+    <button class="button" bindtap="generate">生成{{kindName}}</button>
+  </block>
+  <block wx:elif="{{stage === 'generating'}}">
+    <view class="face-title">正在整理内容</view><view class="muted">这一步只生成草稿，还没有保存。</view>
+    <view class="author-note">正在生成{{kindName}}，请稍候…</view>
+  </block>
+  <block wx:elif="{{stage === 'failed' || stage === 'waiting'}}">
+    <view class="face-title">{{stage === 'failed' ? '生成没有成功' : '生成结果待确认'}}</view>
+    <button class="button" bindtap="retry">{{stage === 'failed' ? '重新生成' : '查看状态'}}</button>
+    <button class="button secondary" bindtap="revise">返回输入</button>
+  </block>
+  <block wx:elif="{{stage === 'preview'}}">
+    <image class="draft-photo" wx:if="{{photo}}" src="{{photo}}" mode="aspectFill"/>
+    <text class="face-kicker">待确认草稿</text><view class="face-title">{{fields.title}}</view>
+    <view class="author-note"><view>{{kind === 'product' ? '商品简介' : '一句话讲给客人'}}</view><text>{{fields.summary}}</text></view>
+    <view class="author-note"><view>{{kind === 'product' ? '主要卖点' : '速记与话术'}}</view><text>{{fields.details}}</text></view>
+    <view class="author-note" wx:if="{{fields.tips}}"><view>辨识与注意事项</view><text>{{fields.tips}}</text></view>
+    <button class="button" loading="{{busy}}" bindtap="save">确认保存</button>
+    <button class="button secondary" disabled="{{busy}}" bindtap="revise">返回修改内容</button>
+  </block>
+  <block wx:elif="{{stage === 'edit'}}">
+    <view class="author-label">卡片名称</view><input class="author-input" data-field="title" bindinput="edit" value="{{fields.title}}" maxlength="120"/>
+    <view class="author-label">简介</view><textarea class="author-input area" data-field="summary" bindinput="edit" value="{{fields.summary}}" maxlength="550" auto-height/>
+    <view class="author-label">主要内容</view><textarea class="author-input area" data-field="details" bindinput="edit" value="{{fields.details}}" maxlength="3200" auto-height/>
+    <view class="author-label">辨识与注意事项</view><textarea class="author-input area" data-field="tips" bindinput="edit" value="{{fields.tips}}" maxlength="1600" auto-height/>
+    <button class="button" bindtap="preview">回到预览</button>
+  </block>
+  <block wx:elif="{{stage === 'saveWaiting'}}">
+    <view class="face-title">保存结果待确认</view><view class="muted">先核对同一份草稿，不会重复新建。</view>
+    <button class="button" loading="{{busy}}" bindtap="confirmSave">核对保存状态</button>
+  </block>
+  <block wx:elif="{{stage === 'saved'}}">
+    <text class="face-kicker">保存回执</text><view class="face-title">{{kindName}}已保存</view>
+    <view class="author-note success">已加入学习内容。</view>
+    <button class="button" bindtap="back">返回学习</button>
+    <button class="button secondary" bindtap="again">继续生成卡片</button>
+  </block>
+  <block wx:else><view class="face-title">当前账号不能生成卡片</view><button class="button secondary" bindtap="back">返回学习</button></block>
+</view>
