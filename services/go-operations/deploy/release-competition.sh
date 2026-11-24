@@ -8,7 +8,7 @@ go=/srv/boomer-go-operations
 old_battle=$battle/releases/date-fit-f34426cd/boomeroff-battle-tencent-cycle-v1
 old_go=$go/releases/20261125-1
 new_battle=$battle/releases/go-bridge-20261125-2
-new_go=$go/releases/20261125-2
+new_go=$go/releases/20261125-3
 config=/etc/boomer-go-operations/battle-bridge.env
 battle_drop=/etc/systemd/system/boomeroff-battle-python.service.d/30-go-bridge.conf
 go_drop=/etc/systemd/system/boomer-go-operations.service.d/30-go-bridge.conf
@@ -58,5 +58,5 @@ curl -fsS --retry 3 --retry-connrefused --max-time 6 --resolve 'battle.boomeroff
 set_current "$go" "$new_go"
 systemctl restart boomer-go-operations
 curl -fsS --retry 3 --retry-connrefused --max-time 6 http://127.0.0.1:3987/healthz |
-  python3 -c 'import sys,json; j=json.load(sys.stdin); assert j["competition"] and j["learning"] and j["learning_generator_configured"] and not j["read_only"]; print(j["version"])'
+  python3 -c 'import sys,json; j=json.load(sys.stdin); assert j["version"]=="2026.11.25.3" and j["competition"] and j["learning"] and j["learning_generator_configured"] and not j["read_only"]; print(j["version"])'
 trap - ERR

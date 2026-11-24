@@ -16,6 +16,8 @@ class CompetitionTest(unittest.TestCase):
         self.staff = Actor('staff', ('store_staff',), (('store-1', 'Any display name'),))
         self.outside = Actor('staff2', ('store_staff',), (('other', '新天地'),))
         self.hq = Actor('hq', ('hq_operator',), (('store-1', '新天地'),))
+        self.cross_shop = Actor('hq-manager', ('hq_operator', 'store_manager'),
+                                (('store-1', '新天地'), ('other', '其他门店')))
         self.service = Competition(self.key, self.shops, lambda req: self.calls.append(req) or {})
 
     def test_database_identity_not_display_name_and_no_foreign_writes(self):
@@ -25,6 +27,7 @@ class CompetitionTest(unittest.TestCase):
         self.assertTrue(req.full_url.endswith('/api/internal/go/state?date=2026-11-24'))
         self.assertNotIn('staff', str(req.headers))
         for actor, method, route in [(self.outside, 'GET', 'state'), (self.hq, 'POST', 'report'),
+                                     (self.cross_shop, 'POST', 'report'),
                                      (self.staff, 'GET', 'admin/cycle'), (self.admin, 'POST', 'report')]:
             with self.assertRaises(Fault) as failure:
                 self.service.route(actor, method, route, '', lambda: self.fail('BODY_READ'))

@@ -78,17 +78,19 @@ Page({
     if (!d.state || d.loading || d.submitting || (!d.admin && d.home)) return;
     this.setData({ submitting:true, actionError:'', receipt:'' });
     try {
-      const report = reportFields(d.admin ? d.date : d.state.today, d.amount, d.orders);
-      const name = d.admin ? stores[d.editingStore].name : d.shopName;
+      const { admin, editingStore, record } = d;
+      const report = reportFields(admin ? d.date : d.state.today, d.amount, d.orders);
+      const name = admin ? stores[editingStore].name : d.shopName;
       const reason = d.reason.trim();
-      if (d.admin && reason.length < 2) throw new Error('请填写至少两个字的补报或更正原因');
-      const title = d.admin && d.record ? '确认更正赛账' : '确认提交赛账';
+      if (admin && reason.length < 2) throw new Error('请填写至少两个字的补报或更正原因');
+      const payload = admin ? { ...report, store:stores[editingStore].id,
+        reason, expectedVersion:record?.version || null, confirmCorrection:!!record } : report;
+      const title = admin && record ? '确认更正赛账' : '确认提交赛账';
       const ok = await confirm({ title, content:report.date + ' ' + name + '\n实收 ' +
-        money(report.salesCents) + ' · ' + report.orders + ' 单' + (d.admin ? '\n原因：' + reason : '\n提交后不可自行修改') });
+        money(report.salesCents) + ' · ' + report.orders + ' 单' + (admin ? '\n原因：' + reason : '\n提交后不可自行修改') });
       if (!ok) return;
-      const result = d.admin ? await app().competition.correct({ ...report, store:stores[d.editingStore].id,
-        reason, expectedVersion:d.record?.version || null, confirmCorrection:!!d.record })
-        : await app().competition.report(report);
+      const client = app().competition;
+      const result = await (admin ? client.correct(payload) : client.report(payload));
       if (result.ok !== true) throw new Error('未收到填报回执，请刷新核对');
       this.setData({ receipt:report.date + ' · ' + name + ' 已提交 · ' + money(report.salesCents) + ' · ' + report.orders + ' 单',
         amount:'', orders:'', reason:'' });
@@ -123,13 +125,15 @@ Page({
     const d = this.data;
     if (d.submitting || !d.admin || !d.showCycle) return;
     if (d.cycleMode && d.startDate > d.endDate) return this.setData({ cycleError:'结束日期不能早于开始日期' });
+    const { cycleMode, startDate, endDate, cycleVersion } = d;
+    const payload = { mode:modes[cycleMode].id, startDate:cycleMode ? startDate : null,
+      endDate:cycleMode ? endDate : null, expectedVersion:cycleVersion, confirmed:true };
     this.setData({ submitting:true, cycleError:'' });
     try {
-      const ok = await confirm({ title:'确认切换赛期', content:(d.cycleMode ? d.startDate + ' 至 ' + d.endDate : '自然月赛期')
+      const ok = await confirm({ title:'确认切换赛期', content:(cycleMode ? startDate + ' 至 ' + endDate : '自然月赛期')
         + '\n仅重新计算累计战况，不修改历史实收或单量。' });
       if (!ok) return;
-      await app().competition.setCycle({ mode:modes[d.cycleMode].id, startDate:d.cycleMode ? d.startDate : null,
-        endDate:d.cycleMode ? d.endDate : null, expectedVersion:d.cycleVersion, confirmed:true });
+      await app().competition.setCycle(payload);
       this.setData({ showCycle:false });
       await this.refresh();
     } catch (error) { this.setData({ cycleError:error.message }); }

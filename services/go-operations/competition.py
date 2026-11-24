@@ -35,7 +35,8 @@ class Competition:
         shops = {self.stores[key] for key, _ in actor.shops if key in self.stores}
         if 'super_admin' in actor.roles:
             role, scope = 'admin', 'admin'
-        elif len(shops) == 1 and set(actor.roles) & {'store_staff', 'store_manager'}:
+        elif (len(actor.shops) == len(shops) == 1 and 'hq_operator' not in actor.roles
+              and set(actor.roles) & {'store_staff', 'store_manager'}):
             role, scope = 'store', 'store:' + next(iter(shops))
         else:
             raise Fault(403, 'competition_outside_scope')

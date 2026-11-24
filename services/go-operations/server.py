@@ -12,7 +12,7 @@ from learning import ENTRY_ID, LearningStore
 from learning_generator import configured_generator
 from store import MAX_PHOTO, Store
 
-VERSION = '2026.11.25.2'
+VERSION = '2026.11.25.3'
 
 
 def make_server(address, store, erp, read_only=False, learning=None, competition=None):
