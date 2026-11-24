@@ -1,0 +1,5 @@
+<view class="page" wx:if="{{authorized}}">
+  <image class="wordmark" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" />
+  <view class="title">消息</view>
+  <view class="card muted">本版尚未接入消息通知。</view>
+</view>

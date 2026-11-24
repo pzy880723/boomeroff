@@ -1,5 +1,5 @@
 Page({
-  data: { buildVersion: '0.1.3', mode: 'password', passwordVisible: false, account: '', proof: '',
+  data: { buildVersion: '0.2.0', mode: 'password', passwordVisible: false, account: '', proof: '',
     busy: '', error: '', status: '', seconds: 0 },
   onShow() {
     const ops = getApp().operations;

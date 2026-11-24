@@ -1,9 +1,21 @@
 {
-  "pages": ["pages/login/index", "pages/workbench/index"],
+  "pages": ["pages/login/index", "pages/workbench/index", "pages/learning/index", "pages/competition/index", "pages/messages/index", "pages/me/index", "pages/tasks/index"],
   "window": {
     "navigationBarTitleText": "BOOMER GO",
     "navigationBarTextStyle": "black",
     "navigationBarBackgroundColor": "#FFFFFF",
     "backgroundColor": "#F5F6F8"
+  },
+  "tabBar": {
+    "color": "#626670",
+    "selectedColor": "#D40024",
+    "backgroundColor": "#FFFFFF",
+    "list": [
+      { "pagePath": "pages/workbench/index", "text": "工作台" },
+      { "pagePath": "pages/learning/index", "text": "学习" },
+      { "pagePath": "pages/competition/index", "text": "竞赛" },
+      { "pagePath": "pages/messages/index", "text": "消息" },
+      { "pagePath": "pages/me/index", "text": "我的" }
+    ]
   }
 }

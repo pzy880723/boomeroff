@@ -3,6 +3,15 @@ const { createOperations } = require('./shared/operations');
 
 App({
   onLaunch() {
+    if (wx.env?.USER_DATA_PATH && typeof wx.getFileSystemManager === 'function') {
+      const fs = wx.getFileSystemManager();
+      const directory = wx.env.USER_DATA_PATH;
+      fs.readdir({ dirPath: directory, fail() {}, success({ files }) {
+        for (const name of files) {
+          if (/^go-proof-[a-f0-9]{32}\.(jpeg|png|webp)$/.test(name)) fs.unlink({ filePath: directory + '/' + name, fail() {} });
+        }
+      } });
+    }
     const key = 'boomer-go.operations.install';
     let installId;
     try { installId = wx.getStorageSync(key); } catch (_) {}

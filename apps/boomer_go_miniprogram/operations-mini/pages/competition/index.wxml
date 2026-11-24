@@ -1,0 +1,5 @@
+<view class="page" wx:if="{{authorized}}">
+  <image class="wordmark" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" />
+  <view class="title">竞赛</view>
+  <view class="card muted">门店竞赛继续使用现有网页版；小程序尚未接入正式赛事数据。</view>
+</view>

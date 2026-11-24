@@ -28,7 +28,8 @@ forwarded only to fixed ERP HTTPS endpoints, never persisted or logged.
 - `GET /healthz`: service/database readiness, no employee data.
 - `GET /v1/session`: ERP user/roles/current authorized active shop locations.
 - `GET /v1/tasks?shop_id=<ERP-location-id>&date=YYYY-MM-DD`: scoped tasks and counts.
-- `POST /v1/tasks`: manager creation with `shop_id,date,title,description,required_photos`.
+- `POST /v1/tasks`: manager creation with `shop_id,date,title,description,required_photos`
+  and an optional 32-hex `request_id` for safe retry.
 - `GET /v1/tasks/<id>`: task and evidence metadata, no public file paths.
 - `POST /v1/tasks/<id>/photos`: JPEG/PNG/WebP binary, maximum 6 MiB;
   MIME and file signature must agree; images must fully decode, be single-frame
@@ -65,8 +66,10 @@ and HTTP 401 for unauthenticated `/go-operations/v1/session` before uploading
 the updated client. The employee Mini Program request allowlist needs the
 new GO host and the unchanged ERP host.
 
-Rollback code by pointing `current` back to its recorded previous release and
-restarting only `boomer-go-operations`; remove only the new Nginx location if
+Before rolling back, remove the `10-task-writes.conf` systemd override, reload
+systemd, restart only GO, and verify `read_only: true` in loopback health.
+Then point `current` back to the recorded previous release, restart GO again
+and verify the same gate remains closed. Remove only the new Nginx location if
 rolling back the first installation. Do not restore an old database over new
 task writes. This initial schema is additive and needs no ERP migration.
 
@@ -79,9 +82,11 @@ restart and test an isolated restore with SQLite `quick_check` and all photo
 hashes. Never back up a live SQLite main file alone or place archives in a
 public web root. Off-machine backup and a retention policy are still required.
 
-The initial deployed unit explicitly sets `GO_OPERATIONS_READ_ONLY=1`; health
+The base unit explicitly sets `GO_OPERATIONS_READ_ONLY=1`; health
 reports this state. Authenticated reads work, but mutations return
-`release_read_only` until backup/restore and client acceptance pass. Local tests
+`release_read_only` until backup/restore and client acceptance pass. Install the
+separate `deploy/10-task-writes.conf` as a GO-only unit drop-in to enable writes.
+Local tests
 exercise the full write flow against disposable data, never employee records.
 
 ## Outstanding Product Acceptance

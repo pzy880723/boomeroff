@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 from erp import Erp, Fault
 from store import MAX_PHOTO, Store
 
-VERSION = '2026.11.21.2'
+VERSION = '2026.11.24.1'
 
 
 def make_server(address, store, erp, read_only=False):
@@ -86,7 +86,9 @@ def make_server(address, store, erp, read_only=False):
                 raise Fault(503, 'release_read_only')
             if self.command == 'GET' and path == '/v1/session':
                 return self.reply(200, {'ok': True, 'data': {'user_id': actor.user_id, 'roles': actor.roles,
-                    'shops': [{'id': key, 'name': name} for key, name in actor.shops], 'can_manage_tasks': actor.manager}})
+                    'shops': [{'id': key, 'name': name} for key, name in actor.shops],
+                    'can_manage_tasks': actor.manager, 'task_writes_enabled': not read_only,
+                    'can_update_tasks': actor.can_write_tasks}})
             if path == '/v1/tasks' and self.command == 'GET':
                 query = parse_qs(parsed.query)
                 if set(query) != {'shop_id', 'date'} or any(len(v) != 1 for v in query.values()):

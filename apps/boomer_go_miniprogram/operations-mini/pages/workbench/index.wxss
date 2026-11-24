@@ -1,3 +1,16 @@
-.count { font-size: 42rpx; font-weight: 800; color: #d40024; }
-.task { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
-.summary .muted { margin-top: 18rpx; }
+.dashboard { padding: 30rpx 30rpx 64rpx; }
+.heading { margin-top: 26rpx; }
+.store-switch { display: block; max-width: 310rpx; background: #fff; padding: 14rpx 20rpx; border-radius: 14rpx; font-size: 25rpx; font-weight: 600; overflow-wrap: anywhere; }
+.summary { margin-top: 20rpx; padding: 30rpx; background: #bd0024; color: white; border-radius: 24rpx; font-weight: 650; }
+.date { padding: 10rpx 15rpx; font-size: 24rpx; border: 1rpx solid #f07785; border-radius: 12rpx; }
+.count { padding: 18rpx 0; font-size: 62rpx; line-height: 1.2; font-weight: 800; }
+.count text { font-size: 25rpx; font-weight: 500; margin-left: 8rpx; }
+.section { margin-top: 39rpx; min-height: 54rpx; font-size: 32rpx; font-weight: 800; }
+.list-state, .task-card { margin-top: 14rpx; }
+.empty-title { font-weight: 700; margin-bottom: 8rpx; }
+.links { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12rpx; margin-top: 14rpx; }
+.link { min-width: 0; border-radius: 18rpx; display: flex; flex-direction: column; align-items: center; padding: 20rpx 0; background: #fff; font-size: 24rpx; font-weight: 650; }
+.icon { display: block; color: #bd0024; font-size: 40rpx; height: 56rpx; line-height: 48rpx; }
+.task { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.task-title { font-weight: 750; margin-bottom: 6rpx; }
+.chevron { color: #626670; font-size: 37rpx; }

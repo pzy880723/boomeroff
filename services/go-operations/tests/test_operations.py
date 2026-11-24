@@ -67,6 +67,21 @@ class OperationsTests(unittest.TestCase):
         self.assertEqual(content, PHOTO)
         self.assertEqual(mime, 'image/jpeg')
 
+    def test_create_retries_return_same_task_without_duplicate_audit(self):
+        request_id = '2' * 32
+        first = self.create(request_id=request_id)
+        self.assertEqual(self.create(request_id=request_id)['id'], first['id'])
+        self.denied('request_conflict', lambda: self.create(request_id=request_id, title='Other task'))
+        self.assertEqual(len(self.store.list(self.staff, 'shop-a', self.day)), 1)
+        self.assertEqual(len(self.store.audit(self.manager, first['id'])), 1)
+
+    def test_hq_only_can_read_but_cannot_change_task_state(self):
+        hq = Actor('hq', ('hq_operator',), self.staff.shops + self.other.shops)
+        task = self.create()
+        self.assertEqual(self.store.detail(hq, task['id'])['id'], task['id'])
+        self.denied('forbidden', lambda: self.store.photo(hq, task['id'], PHOTO, 'image/jpeg'))
+        self.denied('forbidden', lambda: self.store.complete(hq, task['id'], {'expected_version': 1}))
+
     def test_completion_requires_uploaded_photo_and_version(self):
         task = self.create(required_photos=2)
         self.denied('photos_required', lambda: self.store.complete(self.staff, task['id'], {'expected_version': 1}))
@@ -159,7 +174,10 @@ class OperationsTests(unittest.TestCase):
 
         self.assertEqual(request('/healthz')[0], 200)
         self.assertEqual(request('/v1/session')[0], 401)
-        self.assertEqual(request('/v1/session', 'staff')[1]['data']['shops'][0]['id'], 'shop-a')
+        session = request('/v1/session', 'staff')[1]['data']
+        self.assertEqual(session['shops'][0]['id'], 'shop-a')
+        self.assertTrue(session['task_writes_enabled'])
+        self.assertFalse(session['can_manage_tasks'])
         self.assertEqual(request('/v1/tasks?shop_id=shop-a&date=' + self.day, 'other')[0], 403)
         status, result = request('/v1/tasks', 'manager', dict(shop_id='shop-a', date=self.day,
                                 title='Photo check', required_photos=1))
@@ -189,6 +207,18 @@ class OperationsTests(unittest.TestCase):
 
 
 class ErpTests(unittest.TestCase):
+    def test_ambiguous_non_hq_scope_is_denied_by_the_service(self):
+        def get(path, _headers):
+            if path.endswith('/auth/me'):
+                return {'ok': True, 'data': {'user': {'user_id': 'staff', 'roles': ['store_staff']}, 'device': {'id': 'd'}}}
+            return {'ok': True, 'data': {'items': [
+                {'id': shop, 'name': shop, 'kind': 'shop', 'is_active': True}
+                for shop in ('shop-a', 'shop-b')]}}
+
+        with self.assertRaises(Fault) as error:
+            Erp(get=get).verify({'Authorization': 'Bearer token', 'X-Device-Token': 'device'})
+        self.assertEqual(error.exception.code, 'ambiguous_shop_scope')
+
     def test_erp_verifies_both_identity_and_current_locations(self):
         self.assertIsNotNone(Erp, 'ERP authorization is not implemented')
         calls = []

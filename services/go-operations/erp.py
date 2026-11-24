@@ -22,6 +22,10 @@ class Actor:
     def manager(self):
         return bool(set(self.roles) & {'super_admin', 'store_manager'})
 
+    @property
+    def can_write_tasks(self):
+        return self.manager or ('store_staff' in self.roles and len(self.shops) == 1)
+
     def require_shop(self, shop_id):
         if not isinstance(shop_id, str) or shop_id not in {shop[0] for shop in self.shops}:
             raise Fault(403, 'forbidden')
@@ -74,4 +78,6 @@ class Erp:
                       if isinstance(item, dict) and item.get('kind') == 'shop'
                       and item.get('is_active') is True and isinstance(item.get('id'), str)
                       and isinstance(item.get('name'), str))
+        if not shops or (not set(roles) & {'super_admin', 'hq_operator'} and len(shops) != 1):
+            raise Fault(403, 'ambiguous_shop_scope')
         return Actor(user['user_id'], roles, shops)

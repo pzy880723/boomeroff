@@ -1,0 +1,10 @@
+<view class="page">
+  <image class="wordmark" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" />
+  <view class="title">我的</view>
+  <view class="card"><view class="eyebrow">ERP 权限</view><view>{{role}}</view></view>
+  <view class="card">
+    <view class="eyebrow">授权门店</view>
+    <view class="shop" wx:for="{{shops}}" wx:key="id">{{item.name}}</view>
+  </view>
+  <button class="button secondary" bindtap="signOut">退出登录</button>
+</view>

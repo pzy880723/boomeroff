@@ -1,25 +1,45 @@
-<view class="page">
-  <view class="row">
-    <view class="brand">BOOMER GO</view>
-    <button size="mini" bindtap="leave">退出登录</button>
+<view class="page dashboard">
+  <image class="wordmark" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" />
+  <view class="row heading">
+    <view><view class="eyebrow">门店运营</view><view class="title">工作台</view></view>
+    <picker wx:if="{{shops.length > 1}}" range="{{shops}}" range-key="name" bindchange="choose">
+      <view class="store-switch">{{shop.name}} ▾</view>
+    </picker>
+    <text wx:elif="{{shop}}" class="store-switch">{{shop.name}}</text>
   </view>
-  <view class="title">每日店务</view>
-  <view class="row">
-    <view class="muted">{{shop.name}} · {{date}}</view>
-    <picker wx:if="{{shops.length > 1}}" range="{{shops}}" range-key="name" bindchange="choose">切换门店</picker>
-  </view>
-  <view class="card summary">
-    <view class="row"><view>今日完成</view><text class="count">{{loading || error ? '—' : completed + ' / ' + total}}</text></view>
-    <view class="muted">当前为只读验收版，任务指派、拍照和完成提交暂未开放。</view>
-  </view>
-  <view class="card" wx:if="{{loading}}">正在加载任务…</view>
-  <view class="card" wx:elif="{{error}}"><view class="error">{{error}}</view><button class="button secondary" bindtap="refresh">重新加载</button></view>
-  <view class="card muted" wx:elif="{{!items.length}}">今天暂无店务任务。</view>
-  <view wx:else>
-    <view class="card" wx:for="{{items}}" wx:key="id">
-      <view class="row" bindtap="toggle" data-id="{{item.id}}"><view class="task">{{item.title}}</view><view class="muted">{{item.label}}</view></view>
-      <view class="muted" wx:if="{{openId === item.id}}">{{item.description || '暂无补充说明'}}<view>照片凭证：{{item.photoCount}} / {{item.required_photos}}</view></view>
+  <view class="summary">
+    <view class="row">
+      <view>店务进度</view>
+      <picker mode="date" value="{{date}}" bindchange="chooseDate"><view class="date">{{date}} ▾</view></picker>
     </view>
-    <button class="button secondary" bindtap="refresh">刷新任务</button>
+    <view class="count">{{ready ? completed + ' / ' + total : '…'}} <text>项完成</text></view>
+    <progress wx:if="{{ready}}" percent="{{percent}}" stroke-width="5" border-radius="4" activeColor="#fff" backgroundColor="#f07785" />
+  </view>
+  <view class="section row">
+    <view>每日店务</view>
+    <button wx:if="{{canCreate}}" class="compact primary" bindtap="create">＋ 布置任务</button>
+  </view>
+  <view wx:if="{{!writes && ready}}" class="muted">当前仅能查看任务，暂未开放提交。</view>
+  <view class="card list-state" wx:if="{{loading}}">正在加载任务…</view>
+  <view class="card list-state" wx:elif="{{error}}">
+    <view class="error">{{error}}</view><button class="button secondary" bindtap="refresh">重新加载</button>
+  </view>
+  <view class="card list-state" wx:if="{{ready && total === 0}}">
+    <view class="empty-title">这一天还没有任务</view>
+    <view class="muted">{{canCreate ? '点「布置任务」新建一项。' : '店长布置后，任务会显示在这里。'}}</view>
+  </view>
+  <view wx:if="{{ready && total > 0}}">
+    <view class="card task-card row" wx:for="{{items}}" wx:key="id" bindtap="task" role="button" data-id="{{item.id}}">
+      <view class="task"><view class="task-title">{{item.title}}</view><view class="muted">照片 {{item.photoCount}} / {{item.required_photos}}</view></view>
+      <text class="pill {{item.status}}">{{item.label}}</text><text class="chevron">›</text>
+    </view>
+    <button class="button secondary" open-type="share" data-report="true">分享到微信群</button>
+  </view>
+  <view class="section">门店工具</view>
+  <view class="links">
+    <view class="link" role="button" data-page="learning" bindtap="browse"><text class="icon">▤</text>学习</view>
+    <view class="link" role="button" data-page="competition" bindtap="browse"><text class="icon">◇</text>竞赛</view>
+    <view class="link" role="button" data-page="messages" bindtap="browse"><text class="icon">▱</text>消息</view>
+    <view class="link" role="button" data-page="me" bindtap="browse"><text class="icon">◎</text>我的</view>
   </view>
 </view>

@@ -1,0 +1,5 @@
+<view class="page" wx:if="{{authorized}}">
+  <image class="wordmark" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" />
+  <view class="title">学习</view>
+  <view class="card muted">知识培训与考试尚未接入小程序。</view>
+</view>

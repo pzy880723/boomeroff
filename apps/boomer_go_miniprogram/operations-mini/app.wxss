@@ -9,3 +9,11 @@ page { background: #f5f6f8; color: #202125; font-size: 30rpx; }
 .button::after { border: 0; }
 .error { color: #ac0020; margin: 16rpx 0; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
+.wordmark { width: 228rpx; height: 36rpx; display: block; }
+.eyebrow { color: #626670; font-size: 24rpx; font-weight: 650; }
+.compact { margin: 0; padding: 0 18rpx; font-size: 24rpx; line-height: 54rpx; border-radius: 10rpx; }
+.compact::after { border: 0; }
+.primary { background: #bd0024; color: #fff; }
+.pill { display: inline-block; background: #f1f2f5; color: #4c5059; white-space: nowrap; padding: 7rpx 12rpx; border-radius: 10rpx; font-size: 23rpx; font-weight: 650; }
+.pill.completed { background: #e8f5ed; color: #25623b; }
+.pill.in_progress { background: #fff3da; color: #70520a; }

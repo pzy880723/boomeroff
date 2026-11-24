@@ -30,6 +30,8 @@ test('one isolated employee source snapshot supports all three build targets', t
     }
   }
   assert.ok(!app.pages.some(page => /recognize|marketing/.test(page)));
+  assert.deepEqual(app.tabBar.list.map(tab => tab.text), ['工作台', '学习', '竞赛', '消息', '我的']);
+  assert.ok(app.pages.includes('pages/tasks/index'));
   assert.throws(() => require('../tools/prepare-operations.cjs').prepare(output), /already exists/);
 });
 
@@ -52,7 +54,7 @@ test('new login defaults to password and clears the proof and visibility when se
     getApp() { return { operations: { sendCode: async () => { sendCalls++; return { cooldownSeconds: 60 }; } } }; }
   });
   page.setData = patch => Object.assign(page.data, patch);
-  assert.equal(page.data.buildVersion, '0.1.3');
+  assert.equal(page.data.buildVersion, '0.2.0');
   assert.equal(page.data.mode, 'password');
   page.setData({ account: '13800138000', proof: 'example', error: 'old', status: 'old' });
   page.togglePassword();
@@ -174,4 +176,38 @@ test('foreign task data is rejected and ERP revocation clears the session', asyn
   revoked = true;
   await assert.rejects(session.tasks('a', '2026-11-21'), { status: 403 });
   assert.equal(session.current(), null);
+});
+
+test('authenticated task creation, binary evidence and completion use correct HTTP boundaries', async t => {
+  const { code } = prepare(t);
+  const id = 'a'.repeat(32), photoId = 'b'.repeat(32), date = '2026-11-24';
+  const task = { id, shop_id: 'a', date, title: 'Open', version: 1, status: 'pending', photos: [], required_photos: 1 };
+  const calls = [];
+  let staff = false;
+  const wx = { request(req) {
+    calls.push(req);
+    const data = req.url.endsWith('/session') ? {
+      user_id: employee, roles: [staff ? 'store_staff' : 'store_manager'],
+      shops: [{ id: 'a', name: 'A' }], can_manage_tasks: !staff, task_writes_enabled: true, can_update_tasks: true
+    } : req.url.endsWith('/photos') ? { id: photoId, version: 2 } :
+      req.url.endsWith('/complete') ? { ...task, status: 'completed', version: 3 } : task;
+    const statusCode = req.method === 'POST' && !req.url.endsWith('/complete') ? 201 : 200;
+    req.success({ statusCode, data: { ok: true, data } });
+  } };
+  const session = code.createOperations({ wx, auth: { signInWithPassword: async () => issue() } });
+  await session.signIn('password', 'x', 'y');
+  const form = { shop_id: 'a', date, title: 'Open', required_photos: 1, request_id: id };
+  assert.equal((await session.createTask(form)).id, id);
+  staff = true;
+  await session.signIn('password', 'x', 'y');
+  await assert.rejects(session.createTask(form), /布置任务/);
+  const photo = Uint8Array.from([255, 216, 255, 224, 0, 0, 0, 0, 0, 0, 0, 0]).buffer;
+  await session.uploadPhoto(task, photo);
+  assert.equal(calls.at(-1).data, photo);
+  assert.equal(calls.at(-1).header['Content-Type'], 'image/jpeg');
+  assert.equal(calls.at(-1).header.Authorization, 'Bearer erp-access');
+  await assert.rejects(session.completeTask(task, ''), /先上传/);
+  const done = await session.completeTask({ ...task, version: 2, photos: [{ id: photoId }] }, 'verified');
+  assert.equal(done.status, 'completed');
+  assert.deepEqual(calls.at(-1).data, { expected_version: 2, note: 'verified' });
 });

@@ -1,0 +1,40 @@
+<view class="page task-page">
+  <view class="eyebrow" wx:if="{{shop}}">{{shop.name}} · {{date}}</view>
+  <view class="title">{{!id && shop ? '布置任务' : '任务详情'}}</view>
+  <view wx:if="{{error}}" class="alert error">{{error}}</view>
+  <view wx:if="{{loading}}" class="card muted">正在加载任务…</view>
+  <view wx:elif="{{id && !task}}" class="card"><button class="button secondary" bindtap="refresh">重新加载</button></view>
+  <view wx:elif="{{shop && !id}}" class="card form">
+    <view class="field-title">任务名称</view>
+    <input class="field" placeholder="例如：开店前整理橱窗" value="{{title}}" maxlength="120" disabled="{{!!busy}}" data-field="title" bindinput="input" />
+    <view class="field-title">执行要求</view>
+    <textarea class="field area" placeholder="说明要做什么、拍哪里" value="{{description}}" maxlength="3000" disabled="{{!!busy}}" data-field="description" bindinput="input" />
+    <view class="field-title">至少需要几张照片</view>
+    <picker range="{{counts}}" value="{{required}}" disabled="{{!!busy}}" bindchange="count"><view class="field">{{required}} 张 ▾</view></picker>
+    <button class="button" bindtap="create" loading="{{busy === 'create'}}" disabled="{{!!busy}}">布置给本门店</button>
+  </view>
+  <view wx:elif="{{task}}">
+    <view class="card">
+      <view class="row"><view class="task-name">{{task.title}}</view><text class="pill {{task.status}}">{{task.label}}</text></view>
+      <view class="description">{{task.description || '没有额外的执行要求。'}}</view>
+    </view>
+    <view class="card">
+      <view class="row"><view class="field-title">照片凭证</view><text class="muted">{{task.photos.length}} / {{task.required_photos}} 张</text></view>
+      <view class="muted">至少上传 {{task.required_photos}} 张，最多 9 张。</view>
+      <view class="proofs" wx:if="{{task.photos.length}}">
+        <button class="compact secondary" wx:for="{{task.photos}}" wx:key="id" data-id="{{item.id}}" bindtap="preview" disabled="{{!!busy}}">照片 {{index + 1}}</button>
+      </view>
+      <button wx:if="{{writes && task.status !== 'completed' && task.photos.length < 9}}" class="button secondary" loading="{{busy === 'photo'}}" disabled="{{!!busy}}" bindtap="addPhoto">拍照或从相册选择</button>
+    </view>
+    <view class="card" wx:if="{{task.status === 'completed'}}">
+      <view class="field-title">已完成</view><view class="description">{{task.note || '未填写备注'}}</view>
+    </view>
+    <view class="card" wx:elif="{{writes}}">
+      <view class="field-title">完成备注（选填）</view>
+      <textarea class="field area" placeholder="补充现场情况" value="{{note}}" maxlength="2000" disabled="{{!!busy}}" data-field="note" bindinput="input" />
+      <view wx:if="{{task.photos.length < task.required_photos}}" class="muted hint">还需上传 {{task.required_photos - task.photos.length}} 张照片。</view>
+      <button class="button" disabled="{{!!busy || task.photos.length < task.required_photos}}" loading="{{busy === 'complete'}}" bindtap="complete">勾选完成</button>
+      <button wx:if="{{error}}" class="button secondary" disabled="{{!!busy}}" bindtap="refresh">刷新任务状态</button>
+    </view>
+  </view>
+</view>

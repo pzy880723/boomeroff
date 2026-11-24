@@ -2,6 +2,8 @@ import hashlib
 import io
 import json
 import os
+import re
+import shutil
 import sqlite3
 import uuid
 import threading
@@ -13,6 +15,7 @@ from PIL import Image, UnidentifiedImageError
 from erp import Fault
 
 MAX_PHOTO = 6 * 1024 * 1024
+RESERVED_DISK = 2 * 1024 * 1024 * 1024
 DECODE_SLOT = threading.BoundedSemaphore(1)
 
 
@@ -106,17 +109,28 @@ class Store:
     def create(self, actor, body):
         if not actor.manager:
             raise Fault(403, 'forbidden')
-        fields(body, ('shop_id', 'date', 'title', 'description', 'required_photos'), ('shop_id', 'date', 'title', 'required_photos'))
+        fields(body, ('shop_id', 'date', 'title', 'description', 'required_photos', 'request_id'),
+               ('shop_id', 'date', 'title', 'required_photos'))
         actor.require_shop(body['shop_id'])
         title = text(body['title'], 120, False)
         description = text(body.get('description', ''), 3000)
         count = body['required_photos']
         if type(count) is not int or not 0 <= count <= 9:
             raise Fault(400, 'invalid_body')
-        task_id = uuid.uuid4().hex
+        task_id = body.get('request_id', uuid.uuid4().hex)
+        if not isinstance(task_id, str) or not re.fullmatch(r'[a-f0-9]{32}', task_id):
+            raise Fault(400, 'invalid_body')
+        values = (body['shop_id'], day(body['date']), title, description, count)
         with self.db() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            prior = conn.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
+            if prior:
+                original = tuple(prior[field] for field in ('shop_id', 'date', 'title', 'description', 'required_photos'))
+                if prior['created_by'] != actor.user_id or original != values:
+                    raise Fault(409, 'request_conflict')
+                return self._detail(conn, dict(prior))
             conn.execute('INSERT INTO tasks(id,shop_id,date,title,description,required_photos,status,version,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
-                         (task_id, body['shop_id'], day(body['date']), title, description, count, 'pending', 1, actor.user_id, now()))
+                         (task_id, *values, 'pending', 1, actor.user_id, now()))
             self._audit(conn, task_id, actor, 'created', {'required_photos': count})
             return self._detail(conn, self._task(conn, actor, task_id))
 
@@ -125,11 +139,18 @@ class Store:
             return self._detail(conn, self._task(conn, actor, task_id))
 
     def photo(self, actor, task_id, content, mime):
+        if not actor.can_write_tasks:
+            raise Fault(403, 'forbidden')
+        with self.db() as conn:
+            if self._task(conn, actor, task_id)['status'] == 'completed':
+                raise Fault(409, 'task_completed')
         valid = ((mime == 'image/jpeg' and content.startswith(b'\xff\xd8\xff'))
                  or (mime == 'image/png' and content.startswith(b'\x89PNG\r\n\x1a\n'))
                  or (mime == 'image/webp' and content.startswith(b'RIFF') and content[8:12] == b'WEBP'))
         if not content or len(content) > MAX_PHOTO or not valid:
             raise Fault(400, 'invalid_photo')
+        if shutil.disk_usage(self.root).free < RESERVED_DISK + len(content):
+            raise Fault(503, 'photo_storage_full')
         with DECODE_SLOT:
             try:
                 with Image.open(io.BytesIO(content), formats=['JPEG', 'PNG', 'WEBP']) as image:
@@ -198,6 +219,8 @@ class Store:
         return content
 
     def complete(self, actor, task_id, body):
+        if not actor.can_write_tasks:
+            raise Fault(403, 'forbidden')
         fields(body, ('expected_version', 'note'), ('expected_version',))
         if type(body['expected_version']) is not int or body['expected_version'] < 1:
             raise Fault(400, 'invalid_body')
