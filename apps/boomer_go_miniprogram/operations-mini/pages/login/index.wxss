@@ -1,4 +1,26 @@
-.label { font-weight: 700; }
-.field { height: 84rpx; padding: 0 20rpx; margin-top: 18rpx; background: #f5f6f8; border-radius: 12rpx; }
-.code { flex: 1; min-width: 0; }
-.send { margin: 18rpx 0 0; padding: 0 16rpx; font-size: 24rpx; line-height: 84rpx; background: #f0f1f4; }
+page { background: #faf8f5; }
+.login-page { min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; padding: 34rpx 50rpx 32rpx; color: #201d1c; }
+.login-content { width: 100%; max-width: 440px; margin: 0 auto; }
+.wordmark { width: 380rpx; height: 51.44rpx; display: block; }
+.brand-caption { margin-top: 14rpx; color: #67615e; font-size: 24rpx; }
+.login-heading { margin-top: 38rpx; font-size: 64rpx; font-weight: 800; line-height: 1.2; }
+.login-intro { margin-top: 18rpx; color: #67615e; font-size: 27rpx; line-height: 1.5; }
+.mode-switch { display: flex; margin-top: 38rpx; padding: 8rpx; border-radius: 23rpx; background: #efebe7; }
+.mode-switch button { flex: 1; margin: 0; padding: 0; line-height: 77rpx; font-size: 29rpx; color: #67615e; background: transparent; border-radius: 17rpx; }
+.mode-switch button.active { background: #fff; color: #201d1c; font-weight: 700; }
+.login-page button::after { border: 0; }
+.field-group { margin-top: 36rpx; }
+.field-label { font-size: 27rpx; color: #201d1c; font-weight: 700; line-height: 1.4; }
+.field-shell { display: flex; align-items: center; min-height: 98rpx; margin-top: 14rpx; box-sizing: border-box; border: 1px solid #e1dbd5; border-radius: 22rpx; background: #fff; overflow: hidden; }
+.field-input { flex: 1; min-width: 0; height: 96rpx; box-sizing: border-box; padding: 0 28rpx; font-size: 29rpx; color: #201d1c; }
+.field-action { flex: none; margin: 0; padding: 0 25rpx; line-height: 80rpx; font-size: 25rpx; color: #67615e; background: #fff; border-radius: 0; }
+.send-action { color: #b70020; font-weight: 700; border-left: 1px solid #e1dbd5; line-height: 65rpx; margin-right: 3rpx; }
+.field-action[disabled] { color: #67615e; background: #fff; }
+.login-submit { margin: 52rpx 0 0; line-height: 100rpx; border-radius: 24rpx; padding: 0; background: #d90024; color: #fff; font-size: 34rpx; font-weight: 700; }
+.login-submit[disabled] { background: #a8192f; color: #fff; }
+.notice-error, .notice-status { margin-top: 24rpx; font-size: 26rpx; line-height: 1.55; }
+.notice-error { color: #a7001c; }
+.notice-status { color: #4c5652; }
+.login-help { border-top: 1px solid #e7e1da; margin-top: 58rpx; padding-top: 32rpx; }
+.help-copy { margin-top: 12rpx; font-size: 25rpx; line-height: 1.45; color: #67615e; }
+.login-footer { margin-top: auto; padding-top: 54rpx; text-align: center; color: #67615e; font-size: 22rpx; }

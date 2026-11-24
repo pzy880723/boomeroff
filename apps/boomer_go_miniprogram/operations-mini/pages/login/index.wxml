@@ -1,19 +1,38 @@
-<view class="page">
-  <view class="brand">BOOMER GO</view>
-  <view class="title">员工工作台</view>
-  <view class="muted">使用 ERP 员工账号登录</view>
-  <view class="card">
-    <view class="label">{{mode === 'otp' ? '手机验证码' : '账号密码'}}</view>
-    <input wx:if="{{mode === 'otp'}}" class="field" type="number" maxlength="11" placeholder="ERP 登记手机号" value="{{account}}" bindinput="account" disabled="{{!!busy}}" />
-    <input wx:else class="field" placeholder="ERP 手机号或邮箱" value="{{account}}" bindinput="account" disabled="{{!!busy}}" />
-    <view wx:if="{{mode === 'otp'}}" class="row">
-      <input class="field code" type="number" maxlength="6" placeholder="6 位验证码" value="{{proof}}" bindinput="proof" disabled="{{!!busy}}" />
-      <button class="send" bindtap="send" disabled="{{!!busy || seconds > 0}}">{{busy === 'send' ? '发送中' : seconds > 0 ? seconds + ' 秒后重发' : '获取验证码'}}</button>
+<view class="login-page">
+  <view class="login-content">
+    <image class="wordmark" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" />
+    <view class="brand-caption">员工工作台</view>
+    <view class="login-heading">登录工作台</view>
+    <view class="login-intro">直营与加盟门店员工 · 使用 ERP 账号</view>
+    <view class="mode-switch">
+      <button class="{{mode === 'password' ? 'active' : ''}}" data-mode="password" bindtap="changeMode" disabled="{{!!busy}}">账号密码</button>
+      <button class="{{mode === 'otp' ? 'active' : ''}}" data-mode="otp" bindtap="changeMode" disabled="{{!!busy}}">短信验证码</button>
     </view>
-    <input wx:else class="field" password="{{true}}" placeholder="ERP 密码" value="{{proof}}" bindinput="proof" disabled="{{!!busy}}" />
-    <view wx:if="{{error}}" class="error">{{error}}</view>
-    <view wx:if="{{status}}" class="muted">{{status}}</view>
-    <button class="button" bindtap="submit" disabled="{{!!busy}}" loading="{{busy === 'login'}}">登录</button>
-    <button class="button secondary" bindtap="changeMode" disabled="{{!!busy}}">{{mode === 'otp' ? '使用账号密码' : '使用手机验证码'}}</button>
+    <view class="field-group">
+      <view class="field-label">{{mode === 'otp' ? '手机号' : 'ERP 账号'}}</view>
+      <view class="field-shell">
+        <input wx:if="{{mode === 'otp'}}" class="field-input" type="number" maxlength="11" aria-label="手机号" placeholder="请输入已登记手机号" value="{{account}}" bindinput="account" disabled="{{!!busy}}" />
+        <input wx:else class="field-input" maxlength="255" aria-label="ERP 账号" placeholder="手机号或邮箱" value="{{account}}" bindinput="account" disabled="{{!!busy}}" />
+      </view>
+    </view>
+    <view class="field-group">
+      <view class="field-label">{{mode === 'otp' ? '短信验证码' : '密码'}}</view>
+      <view wx:if="{{mode === 'otp'}}" class="field-shell">
+        <input class="field-input" type="number" maxlength="6" aria-label="短信验证码" placeholder="请输入 6 位验证码" value="{{proof}}" bindinput="proof" disabled="{{!!busy}}" />
+        <button class="field-action send-action" bindtap="send" disabled="{{!!busy || seconds > 0}}">{{busy === 'send' ? '发送中' : seconds > 0 ? seconds + ' 秒后重发' : '获取验证码'}}</button>
+      </view>
+      <view wx:else class="field-shell">
+        <input class="field-input" password="{{!passwordVisible}}" maxlength="-1" aria-label="密码" placeholder="请输入 ERP 密码" value="{{proof}}" bindinput="proof" disabled="{{!!busy}}" />
+        <button class="field-action" bindtap="togglePassword" disabled="{{!!busy}}">{{passwordVisible ? '隐藏' : '显示'}}</button>
+      </view>
+    </view>
+    <view wx:if="{{error}}" class="notice-error">{{error}}</view>
+    <view wx:if="{{status}}" class="notice-status">{{status}}</view>
+    <button class="login-submit" bindtap="submit" disabled="{{!!busy}}" loading="{{busy === 'login'}}">{{busy === 'login' ? '正在验证员工身份' : '登录'}}</button>
+    <view class="login-help">
+      <view class="field-label">登录遇到问题？</view>
+      <view class="help-copy">请联系门店管理员核对 ERP 员工账号。</view>
+    </view>
   </view>
+  <view class="login-footer">BOOMER GO / 员工专用 · {{buildVersion}}</view>
 </view>

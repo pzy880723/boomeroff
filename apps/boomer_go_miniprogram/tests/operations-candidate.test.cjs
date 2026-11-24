@@ -3,6 +3,7 @@ const { test } = require('node:test');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 
 function prepare(t) {
   const tool = '../tools/prepare-operations.cjs';
@@ -30,6 +31,42 @@ test('one isolated employee source snapshot supports all three build targets', t
   }
   assert.ok(!app.pages.some(page => /recognize|marketing/.test(page)));
   assert.throws(() => require('../tools/prepare-operations.cjs').prepare(output), /already exists/);
+});
+
+test('new login package includes the unchanged official wordmark and a visible build number', t => {
+  const { output, receipt } = prepare(t);
+  const entry = 'miniprogram/assets/wordmark.png';
+  assert.ok(receipt.files[entry]);
+  assert.deepEqual(fs.readFileSync(path.join(output, entry)),
+    fs.readFileSync(path.resolve(__dirname, '../', entry)));
+  const markup = fs.readFileSync(path.join(output, 'miniprogram/pages/login/index.wxml'), 'utf8');
+  assert.match(markup, /src="\/assets\/wordmark\.png"[^>]*mode="aspectFit"/);
+  assert.match(markup, /\{\{buildVersion\}\}/);
+});
+
+test('new login defaults to password and clears the proof and visibility when selecting SMS', async t => {
+  const { output } = prepare(t);
+  let page, sendCalls = 0;
+  vm.runInNewContext(fs.readFileSync(path.join(output, 'miniprogram/pages/login/index.js'), 'utf8'), {
+    Page(spec) { page = spec; }, clearTimeout() {}, setTimeout() {},
+    getApp() { return { operations: { sendCode: async () => { sendCalls++; return { cooldownSeconds: 60 }; } } }; }
+  });
+  page.setData = patch => Object.assign(page.data, patch);
+  assert.equal(page.data.buildVersion, '0.1.3');
+  assert.equal(page.data.mode, 'password');
+  page.setData({ account: '13800138000', proof: 'example', error: 'old', status: 'old' });
+  page.togglePassword();
+  assert.equal(page.data.passwordVisible, true);
+  page.changeMode({ currentTarget: { dataset: { mode: 'otp' } } });
+  assert.equal(page.data.mode, 'otp');
+  assert.equal(page.data.account, '13800138000');
+  assert.equal(page.data.proof, '');
+  assert.equal(page.data.passwordVisible, false);
+  assert.equal(page.data.error, '');
+  await page.send();
+  assert.equal(sendCalls, 1);
+  page.changeMode({ currentTarget: { dataset: { mode: 'password' } } });
+  assert.equal(page.data.mode, 'password');
 });
 
 const employee = '8ed15725-9712-447c-acb9-cd98da0c6d31';

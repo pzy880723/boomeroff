@@ -24,6 +24,7 @@ function prepare(output) {
   }
   collect(source, 'miniprogram');
   files.set('miniprogram/shared/erp-auth.js', fs.readFileSync(path.join(project, 'miniprogram/shared/erp-auth.js')));
+  files.set('miniprogram/assets/wordmark.png', fs.readFileSync(path.join(project, 'miniprogram/assets/wordmark.png')));
   for (const [name, bytes] of files) {
     if (name.endsWith('.png')) continue;
     if (/lovable|supabase|web-view|AppSecret|service_role/i.test(bytes.toString())) throw new Error('Unsupported dependency in ' + name);
