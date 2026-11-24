@@ -1,0 +1,20 @@
+--- a/runtime/server.py
++++ b/runtime/server.py
+@@ -9,0 +10 @@
++from competition_bridge import PREFIX as GO_PREFIX,HEX as GO_HEX,bridge_request
+@@ -41,0 +43,2 @@
++ cfg['goBattleKey']=env.get('GO_BATTLE_BRIDGE_KEY')
++ if cfg['goBattleKey'] and not GO_HEX.fullmatch(cfg['goBattleKey']):raise ValueError('Invalid GO Battle key')
+@@ -89,0 +93,5 @@
++   if route.startswith(GO_PREFIX):
++    bridge=bridge_request(self.config,method,route,headers,peer)
++    if not bridge:raise Fault('接口不存在',404)
++    target,actor=bridge
++    with self.lock:return self.api(method,target,parse_qs(u.query,keep_blank_values=True),headers,raw,peer,now,actor)
+@@ -111,3 +119,3 @@
+- def api(self,method,path,query,headers,raw,ip,now):
+-  today=today_at(now);token=None;s=None
+-  for piece in headers.get('cookie','').split(';'):
++ def api(self,method,path,query,headers,raw,ip,now,bridge_actor=None):
++  today=today_at(now);token=None;s=bridge_actor
++  for piece in (headers.get('cookie','') if s is None else '').split(';'):

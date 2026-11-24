@@ -6,15 +6,16 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
+from competition import configured_competition
 from erp import Erp, Fault
 from learning import ENTRY_ID, LearningStore
 from learning_generator import configured_generator
 from store import MAX_PHOTO, Store
 
-VERSION = '2026.11.25.1'
+VERSION = '2026.11.25.2'
 
 
-def make_server(address, store, erp, read_only=False, learning=None):
+def make_server(address, store, erp, read_only=False, learning=None, competition=None):
     slots = threading.BoundedSemaphore(12)
 
     class Handler(BaseHTTPRequestHandler):
@@ -83,6 +84,8 @@ def make_server(address, store, erp, read_only=False, learning=None):
                 with store.db() as conn:
                     conn.execute('SELECT 1').fetchone()
                 health = {'ok': True, 'service': 'boomer-go-operations', 'version': VERSION, 'read_only': read_only}
+                if competition:
+                    health['competition'] = True
                 if learning:
                     with learning.db() as conn:
                         conn.execute('SELECT id FROM entries LIMIT 1').fetchone()
@@ -98,6 +101,12 @@ def make_server(address, store, erp, read_only=False, learning=None):
                     'can_manage_tasks': actor.manager, 'task_writes_enabled': not read_only,
                     'can_update_tasks': actor.can_write_tasks,
                     'can_generate_cards': bool(learning and not read_only and learning.can_generate(actor))}})
+            if path.startswith('/v1/competition/'):
+                if not competition:
+                    raise Fault(503, 'competition_unavailable')
+                return self.reply(201 if self.command == 'POST' and path.endswith('/competition/report') else 200,
+                                  {'ok': True, 'data': competition.route(
+                                      actor, self.command, path[len('/v1/competition/'):], parsed.query, self.body)})
             if learning and path.startswith('/v1/learning'):
                 status, data, mime = self.learning_route(actor, path, parsed.query)
                 if mime:
@@ -213,4 +222,5 @@ if __name__ == '__main__':
     learning = LearningStore(storage.root, configured_generator(), recover=True,
                              fresh_start=os.environ.get('GO_LEARNING_FRESH_START') == '1')
     make_server(('127.0.0.1', int(os.environ.get('PORT', '3987'))), storage, Erp(),
-                read_only=os.environ.get('GO_OPERATIONS_READ_ONLY', '1') != '0', learning=learning).serve_forever()
+                read_only=os.environ.get('GO_OPERATIONS_READ_ONLY', '1') != '0', learning=learning,
+                competition=configured_competition()).serve_forever()

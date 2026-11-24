@@ -1,5 +1,141 @@
-<view class="page" wx:if="{{authorized}}">
-  <image class="wordmark" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" />
-  <view class="title">竞赛</view>
-  <view class="card muted">门店竞赛继续使用现有网页版；小程序尚未接入正式赛事数据。</view>
+<template name="scores">
+  <view wx:for="{{scores}}" wx:key="id" class="match">
+    <view class="match-title"><text>{{item.id}}</text>{{item.title}}</view>
+    <view class="row sides">
+      <view><view class="side-label">{{item.left}}</view><view class="score">{{item.leftAmount}}</view></view>
+      <view class="right"><view class="side-label">{{item.right}}</view><view class="score">{{item.rightAmount}}</view></view>
+    </view>
+    <view class="meter"><view style="width:{{item.width}}%"></view></view>
+    <view class="side-label">{{item.note}}</view>
+  </view>
+</template>
+
+<view class="battle">
+  <view class="battle-heading" style="padding-top:{{safeTop}}px">
+    <image class="battle-logo" src="/assets/wordmark.png" mode="aspectFit" aria-label="BOOMER GO" />
+  </view>
+
+  <view class="battle-content">
+    <view class="hero">
+      <image class="hero-icon" src="/assets/icons/battle-cup.svg" mode="aspectFit" />
+      <view class="hero-tag">SHANGHAI / STORE CHALLENGE</view>
+      <view class="hero-title">上海三店挑战赛</view>
+      <view class="hero-meta" wx:if="{{state}}">{{period}} · {{periodMode}}</view>
+      <view class="row hero-bottom" wx:if="{{state}}">
+        <button class="hero-link" bindtap="openRules">赛制规则 ›</button><text>{{periodStatus}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{error}}" class="panel">
+      <view class="section-title">{{blocked ? '当前门店未参赛' : '暂时无法读取战报'}}</view>
+      <view class="muted">{{error}}</view>
+      <button wx:if="{{!blocked}}" class="button secondary" bindtap="refresh" loading="{{loading}}">重新加载</button>
+    </view>
+    <view wx:elif="{{!state}}" class="panel muted">正在读取原赛账…</view>
+    <block wx:else>
+      <view class="segments">
+        <button wx:for="{{tabs}}" wx:key="id" class="{{tab === item.id ? 'active' : ''}}"
+          data-tab="{{item.id}}" bindtap="switchSection">{{item.name}}</button>
+      </view>
+      <block wx:if="{{tab === 'board'}}">
+        <view class="progress">
+          <view class="row progress-heading"><text>今日报数进度</text><text>{{reported}} / 3 已提交</text></view>
+          <view class="row status-list">
+            <text wx:for="{{progress}}" wx:key="id" class="{{item.reported ? 'reported' : 'waiting'}}">{{item.name}}：{{item.reported ? '已报' : '待报'}}</text>
+          </view>
+          <view class="muted" wx:if="{{state.latest}}">截至 {{state.latest.date}} 的完整战报；三店报齐后更新。</view>
+          <view class="muted" wx:else>本期还没有三店报齐的日期，暂不显示比分。待报不计为零。</view>
+        </view>
+        <template is="scores" data="{{scores: board}}" />
+        <button class="button battle-cta" bindtap="openReport">{{admin ? '查看填报与管理' : (home ? '查看本店填报回执' : '填报本店今日销售')}}</button>
+      </block>
+      <block wx:elif="{{tab === 'history'}}">
+        <view class="panel">
+          <view class="section-title">逐日战报</view>
+          <picker mode="date" value="{{date}}" start="2020-01-01" end="{{state.today}}" bindchange="setDate">
+            <view class="field row"><text>营业日期</text><text>{{date}} ›</text></view>
+          </picker>
+          <view class="muted" wx:if="{{loading}}">正在读取这一天…</view>
+          <block wx:elif="{{state.selected}}">
+            <view wx:for="{{daily}}" wx:key="id" class="row history-row">
+              <text>{{item.name}}</text>
+              <text>{{item.reported ? item.amount + ' · ' + item.orders + ' 单' : '待填报'}}</text>
+            </view>
+            <view class="muted history-note" wx:if="{{!state.selected.includedInCycle}}">该日不在当前赛期，仅显示当日实收和单量。</view>
+          </block>
+          <view class="muted" wx:else>{{admin ? '该日没有填报记录。' : '该日尚无完整战报，三店报齐后可查看。'}}</view>
+        </view>
+        <template wx:if="{{!loading}}" is="scores" data="{{scores: historicBoard}}" />
+      </block>
+      <block wx:else>
+        <view class="panel">
+          <view class="row">
+            <view class="section-title">{{admin ? '三店填报管理' : shopName + ' · 今日填报'}}</view>
+            <button wx:if="{{admin}}" class="compact secondary" bindtap="openCycle" disabled="{{submitting}}">赛期设置</button>
+          </view>
+          <view wx:if="{{receipt}}" class="receipt">{{receipt}}</view>
+          <view wx:if="{{!admin}}" class="muted history-note">上海时间 {{state.today}} · 填当日实际实收和成交单量。</view>
+          <view wx:if="{{home && !admin}}" class="receipt">
+            <view>本店今天已经提交</view><view>实收 {{home.amount}} · {{home.orders}} 单</view>
+          </view>
+          <block wx:else>
+            <block wx:if="{{admin}}">
+              <picker mode="date" value="{{date}}" start="2020-01-01" end="{{state.today}}" bindchange="setDate" disabled="{{submitting}}">
+                <view class="field row"><text>营业日期</text><text>{{date}} ›</text></view>
+              </picker>
+              <picker range="{{stores}}" range-key="name" value="{{editingStore}}" bindchange="setStore" disabled="{{submitting}}">
+                <view class="field row"><text>填报门店</text><text>{{stores[editingStore].name}} ›</text></view>
+              </picker>
+              <view wx:if="{{record}}" class="muted history-note">该店已有记录，提交将作为更正留痕。</view>
+            </block>
+            <view class="field row"><text>实收销售额（元）</text>
+              <input value="{{amount}}" type="digit" maxlength="13" data-key="amount" bindinput="setInput" placeholder="0.00" disabled="{{submitting || loading}}" />
+            </view>
+            <view class="field row"><text>成交单量</text>
+              <input value="{{orders}}" type="number" maxlength="7" data-key="orders" bindinput="setInput" placeholder="输入单量" disabled="{{submitting || loading}}" />
+            </view>
+            <view wx:if="{{admin}}" class="field"><view>补报 / 更正原因</view>
+              <textarea value="{{reason}}" maxlength="500" data-key="reason" bindinput="setInput" placeholder="填写原因（至少两个字）" disabled="{{submitting || loading}}" />
+            </view>
+            <view wx:if="{{actionError}}" class="error">{{actionError}}</view>
+            <button class="button battle-cta" loading="{{submitting}}" disabled="{{loading || submitting}}" bindtap="submit">{{record && admin ? '核对并更正' : '核对并提交'}}</button>
+            <button wx:if="{{actionError && admin}}" class="button secondary" bindtap="refresh" disabled="{{submitting}}">重新读取当前记录</button>
+          </block>
+        </view>
+      </block>
+    </block>
+  </view>
+</view>
+
+<view class="overlay" wx:if="{{showRules || showCycle}}">
+  <view class="sheet">
+    <view class="row">
+      <view class="section-title">{{showRules ? '赛制规则' : '当前赛期设置'}}</view>
+      <button wx:if="{{showRules}}" class="compact secondary" bindtap="closeRules">关闭</button>
+      <button wx:else class="compact secondary" bindtap="closeCycle" disabled="{{submitting}}">关闭</button>
+    </view>
+    <block wx:if="{{showRules}}">
+      <view wx:for="{{rules}}" wx:for-index="ruleIndex" wx:key="ruleIndex" class="rule">
+        <view class="rule-title">{{item[0]}}</view><view class="muted">{{item[1]}}</view>
+      </view>
+    </block>
+    <block wx:else>
+      <picker range="{{modes}}" range-key="name" value="{{cycleMode}}" bindchange="setMode" disabled="{{submitting}}">
+        <view class="field row"><text>赛期模式</text><text>{{modes[cycleMode].name}} ›</text></view>
+      </picker>
+      <block wx:if="{{cycleMode === 1}}">
+        <picker mode="date" value="{{startDate}}" data-key="startDate" bindchange="setCycleDate" disabled="{{submitting}}">
+          <view class="field row"><text>起始日期</text><text>{{startDate}} ›</text></view>
+        </picker>
+        <picker mode="date" value="{{endDate}}" data-key="endDate" bindchange="setCycleDate" disabled="{{submitting}}">
+          <view class="field row"><text>结束日期</text><text>{{endDate}} ›</text></view>
+        </picker>
+      </block>
+      <view class="muted history-note">新赛期只影响累计比分，不改变原有报数。</view>
+      <view wx:if="{{cycleError}}" class="error">{{cycleError}}</view>
+      <button class="button battle-cta" bindtap="saveCycle" loading="{{submitting}}" disabled="{{submitting}}">确认变更</button>
+      <view wx:if="{{recent.length}}" class="rule-title history-note">最近赛期变更</view>
+      <view wx:for="{{recent}}" wx:key="version" class="row history-row"><text>版本 {{item.version}}</text><text>{{item.label}}</text></view>
+    </block>
+  </view>
 </view>
